@@ -292,7 +292,4 @@ class PathSearch : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::PathSearch;
-
 #endif  // QLEVER_SRC_ENGINE_PATHSEARCH_H

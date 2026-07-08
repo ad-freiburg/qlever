@@ -2152,7 +2152,7 @@ TEST(SparqlExpression, groupedVariableIsConstantOutsideOfAggregate) {
     const auto* inner = aggregate->children()[0].get();
     ASSERT_TRUE(inner->isInsideAggregate());
     EXPECT_THAT(inner->evaluate(&ctx.context),
-                ::testing::VariantWith<::Variable>(vocab));
+                ::testing::VariantWith<qlever::Variable>(vocab));
   }
 }
 

@@ -48,21 +48,22 @@ struct SweeperSingleResult {
 using SweeperResult = std::vector<std::vector<SweeperSingleResult>>;
 using SweeperDistResult = std::vector<std::vector<double>>;
 
-using QET = std::shared_ptr<QueryExecutionTree>;
-using QEC = QueryExecutionContext*;
+using QET = std::shared_ptr<qlever::QueryExecutionTree>;
+using QEC = qlever::QueryExecutionContext*;
 using Loc = ad_utility::source_location;
 
-using ValIdToGeomName = ad_utility::HashMap<ValueId, std::string>;
-using GeomNameToValId = ad_utility::HashMap<std::string, ValueId>;
+using ValIdToGeomName = ad_utility::HashMap<qlever::ValueId, std::string>;
+using GeomNameToValId = ad_utility::HashMap<std::string, qlever::ValueId>;
 
 struct SweeperSingleResultWithIds {
   SpatialJoinType sjType_;
-  ValueId left_;
-  ValueId right_;
+  qlever::ValueId left_;
+  qlever::ValueId right_;
   double meterDistance_;
 };
 using SweeperResultWithIds = std::vector<SweeperSingleResultWithIds>;
-using GeoRelationWithIds = std::tuple<SpatialJoinType, ValueId, ValueId>;
+using GeoRelationWithIds =
+    std::tuple<SpatialJoinType, qlever::ValueId, qlever::ValueId>;
 
 // Struct for the output of `runParsingAndSweeper`
 struct SweeperTestResult {
@@ -152,15 +153,16 @@ struct ValIdTable {
 };
 
 // Retrieve the `ValueId` for a given `name` from a `GeomNameToValId`.
-inline ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
+inline qlever::ValueId getValId(const GeomNameToValId& nMap,
+                                std::string_view name) {
   auto valId = nMap.at(name);
-  EXPECT_EQ(valId.getDatatype(), Datatype::VocabIndex);
+  EXPECT_EQ(valId.getDatatype(), qlever::Datatype::VocabIndex);
   return valId;
 }
 
 // Helper to create a `ValIdTable` struct which maps `ValueId`s to names and
 // names to `ValueId`s for the geometries in `testGeometries`.
-inline ValIdTable resolveValIdTable(QueryExecutionContext* qec,
+inline ValIdTable resolveValIdTable(qlever::QueryExecutionContext* qec,
                                     size_t expectedSize,
                                     Loc loc = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(loc);
@@ -168,13 +170,13 @@ inline ValIdTable resolveValIdTable(QueryExecutionContext* qec,
   GeomNameToValId nMap;
 
   for (const auto& [name, wkt, isInGermany] : testGeometries) {
-    VocabIndex idx;
+    qlever::VocabIndex idx;
     if (!qec->getIndex().getVocab().getId(wkt, &idx)) {
       // This literal is not contained in the index of the current `qec`
       continue;
     }
 
-    auto vId = ValueId::makeFromVocabIndex(idx);
+    auto vId = qlever::ValueId::makeFromVocabIndex(idx);
     vMap[vId] = name;
     nMap[name] = vId;
   }
@@ -226,7 +228,7 @@ inline void runParsingAndSweeper(
     const LibSpatialJoinConfig& sjTask, SweeperTestResult& testResult,
     bool usePrefilter = true, bool checkPrefilterDeactivate = false,
     bool useRegularImplementation = false, Loc loc = AD_CURRENT_SOURCE_LOC()) {
-  using V = Variable;
+  using V = qlever::Variable;
   auto l = generateLocationTrace(loc);
 
   // Children of spatial join
@@ -238,11 +240,13 @@ inline void runParsingAndSweeper(
   V varRight{std::string{VAR_RIGHT}};
   SpatialJoinConfiguration config{sjTask, varLeft, varRight};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
-                                                 rightChild);
-  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
+                                                         rightChild);
+  std::shared_ptr<qlever::Operation> op =
+      spatialJoinOperation->getRootOperation();
+  qlever::SpatialJoin* spatialJoin =
+      static_cast<qlever::SpatialJoin*>(op.get());
 
   // Build `SpatialJoinAlgorithms` instance from spatial join operation
   auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
@@ -383,9 +387,10 @@ inline void checkSweeperTestResult(
 
   ad_utility::HashMap<GeoRelationWithIds, double> expectedResultsAndDist;
 
-  auto checkValId = [&](ValueId valId, Loc loc = AD_CURRENT_SOURCE_LOC()) {
+  auto checkValId = [&](qlever::ValueId valId,
+                        Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(loc);
-    ASSERT_EQ(valId.getDatatype(), Datatype::VocabIndex);
+    ASSERT_EQ(valId.getDatatype(), qlever::Datatype::VocabIndex);
     ASSERT_TRUE(vMap.contains(valId));
   };
 

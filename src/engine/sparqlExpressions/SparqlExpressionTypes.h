@@ -119,7 +119,7 @@ using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
 // Each type in this tuple also is a possible expression result type.
-using OtherTypes = std::tuple<ad_utility::SetOfIntervals, ::Variable>;
+using OtherTypes = std::tuple<ad_utility::SetOfIntervals, qlever::Variable>;
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;

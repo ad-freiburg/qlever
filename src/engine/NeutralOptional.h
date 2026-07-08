@@ -46,7 +46,4 @@ class NeutralOptional : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::NeutralOptional;
-
 #endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

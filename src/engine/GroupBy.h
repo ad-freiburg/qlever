@@ -66,7 +66,4 @@ class GroupBy : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::GroupBy;
-
 #endif  // QLEVER_SRC_ENGINE_GROUPBY_H

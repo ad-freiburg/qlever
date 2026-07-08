@@ -649,7 +649,4 @@ CPP_concept VectorOfAggregationData =
 }
 
 }  // namespace qlever
-
-using qlever::GroupByImpl;
-
 #endif  // QLEVER_SRC_ENGINE_GROUPBYIMPL_H

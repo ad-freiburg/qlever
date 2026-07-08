@@ -22,20 +22,21 @@ TEST(NowDatetimeExpression, nowExpressionEvaluate) {
   // definition a xsd:dateTime: "2011-01-10T14:45:13.815-05:00"^^xsd:dateTime
   auto resultAsVariant =
       NowDatetimeExpression{strDate}.evaluate(&evaluationContext);
-  ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant));
-  const auto& resultDate = std::get<Id>(resultAsVariant);
+  ASSERT_TRUE(std::holds_alternative<qlever::Id>(resultAsVariant));
+  const auto& resultDate = std::get<qlever::Id>(resultAsVariant);
 
   DateYearOrDuration dateNowTest =
       DateYearOrDuration(DateYearOrDuration::parseXsdDatetime(strDate));
 
-  ASSERT_EQ(resultDate.getDatatype(), Datatype::Date);
+  ASSERT_EQ(resultDate.getDatatype(), qlever::Datatype::Date);
   ASSERT_EQ(resultDate.getDate(), dateNowTest);
 
   evaluationContext._isPartOfGroupBy = true;
   auto resultAsVariant2 =
       NowDatetimeExpression{strDate}.evaluate(&evaluationContext);
-  ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant2));
-  DateYearOrDuration singleDateNow = std::get<Id>(resultAsVariant2).getDate();
+  ASSERT_TRUE(std::holds_alternative<qlever::Id>(resultAsVariant2));
+  DateYearOrDuration singleDateNow =
+      std::get<qlever::Id>(resultAsVariant2).getDate();
   ASSERT_EQ(singleDateNow, dateNowTest);
 }
 

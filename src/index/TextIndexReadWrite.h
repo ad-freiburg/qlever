@@ -17,13 +17,6 @@
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
 
-using qlever::ContextListMetaData;
-using qlever::Id;
-using qlever::Posting;
-using qlever::TextBlockMetaData;
-using qlever::TextRecordIndex;
-using qlever::WordIndex;
-
 namespace textIndexReadWrite::detail {
 
 // This function contains the actual frequency compressed list reading and does
@@ -133,8 +126,8 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
  *
  */
 IdTable readContextListHelper(
-    const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const ContextListMetaData& contextList, bool isWordCl,
+    const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
+    const qlever::ContextListMetaData& contextList, bool isWordCl,
     const ad_utility::File& textIndexFile,
     qlever::TextScoringMetric textScoringMetric);
 
@@ -162,9 +155,9 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
  *                      reference because it gets updated.
  *
  */
-ContextListMetaData writePostings(ad_utility::File& out,
-                                  const std::vector<Posting>& postings,
-                                  off_t& currentOffset, bool scoreIsInt);
+qlever::ContextListMetaData writePostings(
+    ad_utility::File& out, const std::vector<qlever::Posting>& postings,
+    off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>
 size_t writeCodebook(const std::vector<T>& codebook, ad_utility::File& file);
@@ -197,17 +190,18 @@ std::vector<T> readZstdComprList(size_t nofElements, off_t from,
 
 // Reads the given textblock and returns all words with their contextId, wordId
 // and score. Internally uses readContextListHelper.
-IdTable readWordCl(const TextBlockMetaData& tbmd,
-                   const ad_utility::AllocatorWithLimit<Id>& allocator,
+IdTable readWordCl(const qlever::TextBlockMetaData& tbmd,
+                   const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
                    const ad_utility::File& textIndexFile,
                    qlever::TextScoringMetric textScoringMetric);
 
 // Reads the given textblock and returns all entities with their contextId,
 // entityId and score. Internally uses readContextListHelper.
-IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
-                         const ad_utility::AllocatorWithLimit<Id>& allocator,
-                         const ad_utility::File& textIndexFile,
-                         qlever::TextScoringMetric textScoringMetric);
+IdTable readWordEntityCl(
+    const qlever::TextBlockMetaData& tbmd,
+    const ad_utility::AllocatorWithLimit<qlever::Id>& allocator,
+    const ad_utility::File& textIndexFile,
+    qlever::TextScoringMetric textScoringMetric);
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its
@@ -431,5 +425,4 @@ class GapEncode {
 template <typename View>
 GapEncode(View&& view)
     -> GapEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
-
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H

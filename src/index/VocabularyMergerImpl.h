@@ -150,13 +150,15 @@ CPP_template_def(typename C, typename L)(
       external = external || top.isExternal();
     }
     const auto& word = lastTripleComponent_.value();
-    Id targetId =
-        word.isBlankNode()
-            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
+    qlever::Id targetId = word.isBlankNode()
+                              ? qlever::Id::makeFromBlankNodeIndex(
+                                    qlever::BlankNodeIndex::make(word.index_))
+                              : qlever::Id::makeFromVocabIndex(
+                                    qlever::VocabIndex::make(word.index_));
     // Write pair of local and global ID to buffer.
     idMaps_[top.partialFileId_].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(top.id())), targetId});
+        {qlever::Id::makeFromVocabIndex(qlever::VocabIndex::make(top.id())),
+         targetId});
   }
 }
 
@@ -183,15 +185,15 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
 
 // ________________________________________________________________________________________________________
 inline void writeMappedIdsToExtVec(
-    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const std::vector<std::array<qlever::Id, NumColumnsIndexBuilding>>& input,
     const HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
-    std::array<Id, NumColumnsIndexBuilding> mappedTriple;
+    std::array<qlever::Id, NumColumnsIndexBuilding> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
     for (size_t k = 0; k < NumColumnsIndexBuilding; ++k) {
-      if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
+      if (curTriple[k].getDatatype() != qlever::Datatype::VocabIndex) {
         mappedTriple[k] = curTriple[k];
         continue;
       }
@@ -201,8 +203,8 @@ inline void writeMappedIdsToExtVec(
                      << curTriple[k] << std::endl;
         AD_FAIL();
       }
-      mappedTriple[k] =
-          Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
+      mappedTriple[k] = qlever::Id::makeFromVocabIndex(
+          qlever::VocabIndex::make(iterator->second));
     }
     vec.push(mappedTriple);
   }
@@ -293,10 +295,10 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }
 
 // _____________________________________________________________________
-inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+inline ad_utility::HashMap<qlever::Id, qlever::Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
   auto vec = getIdMapFromFile(filename);
-  return ad_utility::HashMap<Id, Id>{vec.begin(), vec.end()};
+  return ad_utility::HashMap<qlever::Id, qlever::Id>{vec.begin(), vec.end()};
 }
 }  // namespace ad_utility::vocabulary_merger
 

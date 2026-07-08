@@ -20,6 +20,8 @@
 #include "index/EncodedIriManager.h"
 #include "util/Exception.h"
 
+using namespace qlever;
+
 namespace ql::exportIds {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -184,9 +186,9 @@ std::optional<std::string> blankNodeIriToString(const Iri& iri) {
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
-    case Datatype::LocalVocabIndex:
+    case qlever::Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
-    case Datatype::VocabIndex: {
+    case qlever::Datatype::VocabIndex: {
       auto getEntity = [&index, id]() {
         return index.indexToString(id.getVocabIndex());
       };
@@ -199,7 +201,7 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                           std::string_view>);
       return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
-    case Datatype::EncodedVal:
+    case qlever::Datatype::EncodedVal:
       return encodedIdToLiteralOrIri(id, index);
     default:
       AD_FAIL();

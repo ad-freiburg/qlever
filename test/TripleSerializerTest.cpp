@@ -15,8 +15,8 @@ auto I = ad_utility::testing::IntId;
 auto V = ad_utility::testing::VocabId;
 TEST(TripleSerializer, simpleExample) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
-  std::vector<std::vector<Id>> ids;
+  qlever::LocalVocab localVocab;
+  std::vector<std::vector<qlever::Id>> ids;
 
   ids.emplace_back(std::vector{I(3), I(4), I(7)});
   ids.emplace_back(std::vector{I(1), V(2), V(3)});
@@ -32,13 +32,14 @@ TEST(TripleSerializer, simpleExample) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, localVocabIsRemapped) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  qlever::LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::literalWithoutQuotes(value,
-                                              qec->getLocalVocabContext())));
+    return qlever::Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(
+            qlever::LocalVocabEntry::literalWithoutQuotes(
+                value, qec->getLocalVocabContext())));
   };
-  std::vector<std::vector<Id>> ids;
+  std::vector<std::vector<qlever::Id>> ids;
 
   ids.emplace_back(std::vector{LV("Abc"), LV("def"), LV("ghi")});
   std::string filename = "tripleSerializerTestLocalVocabIsRemapped.dat";
@@ -51,7 +52,8 @@ TEST(TripleSerializer, localVocabIsRemapped) {
   EXPECT_THAT(localVocab.getAllWordsForTesting(),
               ::testing::UnorderedElementsAreArray(
                   localVocabOut.getAllWordsForTesting()));
-  for (const LocalVocabEntry& entry : localVocab.getAllWordsForTesting()) {
+  for (const qlever::LocalVocabEntry& entry :
+       localVocab.getAllWordsForTesting()) {
     EXPECT_NE(localVocab.getIndexOrNullopt(entry),
               localVocabOut.getIndexOrNullopt(entry));
   }
@@ -59,11 +61,11 @@ TEST(TripleSerializer, localVocabIsRemapped) {
 
 TEST(TripleSerializer, blankNodesRemapper) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
-  std::vector<std::vector<Id>> ids;
+  qlever::LocalVocab localVocab;
+  std::vector<std::vector<qlever::Id>> ids;
 
   auto bn = [&]() {
-    return Id::makeFromBlankNodeIndex(
+    return qlever::Id::makeFromBlankNodeIndex(
         localVocab.getBlankNodeIndex(qec->getIndex().getBlankNodeManager()));
   };
 
@@ -151,13 +153,14 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  qlever::LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::literalWithoutQuotes(value,
-                                              qec->getLocalVocabContext())));
+    return qlever::Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(
+            qlever::LocalVocabEntry::literalWithoutQuotes(
+                value, qec->getLocalVocabContext())));
   };
-  std::vector<std::vector<Id>> ids;
+  std::vector<std::vector<qlever::Id>> ids;
 
   ids.emplace_back(std::vector{LV("abc"), LV("def"), LV("ghi")});
   // Move entries to otherWordSet.
@@ -173,14 +176,15 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
       reader, qec->getLocalVocabContext());
   auto fromMapping = [&]() {
-    return ::ranges::to<std::vector>(
-        mapping | ql::views::values |
-        ql::views::transform([](Id id) { return *id.getLocalVocabIndex(); }));
+    return ::ranges::to<std::vector>(mapping | ql::views::values |
+                                     ql::views::transform([](qlever::Id id) {
+                                       return *id.getLocalVocabIndex();
+                                     }));
   };
   auto fromMappingOrigin = [&]() {
     return ::ranges::to<std::vector>(
-        mapping | ql::views::keys | ql::views::transform([](Id::T id) {
-          return *Id::fromBits(id).getLocalVocabIndex();
+        mapping | ql::views::keys | ql::views::transform([](qlever::Id::T id) {
+          return *qlever::Id::fromBits(id).getLocalVocabIndex();
         }));
   };
   EXPECT_EQ(localVocabOut.size(), localVocab.size());
@@ -193,7 +197,7 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   // Clear the original local vocab, then ensure that the target side of the
   // mapping is still valid, which means that it's being kept alive by the
   // new local vocab.
-  localVocab = LocalVocab{};
+  localVocab = qlever::LocalVocab{};
   EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(fromMapping()));
 }
 
@@ -214,7 +218,7 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
     GTEST_SKIP_("File permissions are not set to none");
   }
 
-  LocalVocab localVocab;
+  qlever::LocalVocab localVocab;
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ad_utility::deserializeIds(tmpFile, qec->getLocalVocabContext()),

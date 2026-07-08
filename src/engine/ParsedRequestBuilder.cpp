@@ -9,6 +9,8 @@
 #include "engine/HttpError.h"
 #include "util/Algorithm.h"
 
+using namespace qlever;
+
 using namespace ad_utility::url_parser::sparqlOperation;
 
 // ____________________________________________________________________________

@@ -14,7 +14,7 @@ namespace {
 
 using qlever::SparqlTriple;
 using qlever::SparqlTripleSimple;
-using V = Variable;
+using V = qlever::Variable;
 
 // _____________________________________________________________________________
 TEST(GraphPatternOperationTest, BasicPatternContainedVars) {

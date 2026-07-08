@@ -118,8 +118,8 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
 // _____________________________________________________________________________
 TEST(SpatialJoinParser, SpatialJoinTaskOperatorEq) {
   // Test equality operator of `SpatialJoinParseJob` helper struct
-  auto point = ValueId::makeFromGeoPoint({1, 1});
-  auto undef = ValueId::makeUndefined();
+  auto point = qlever::ValueId::makeFromGeoPoint({1, 1});
+  auto undef = qlever::ValueId::makeUndefined();
 
   SpatialJoinParseJob job1{point, 5, true, "", std::nullopt};
   SpatialJoinParseJob job1Copy = job1;

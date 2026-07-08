@@ -55,24 +55,24 @@
  */
 struct TextSearchConfig {
   std::optional<bool> isWordSearch_;
-  std::optional<Variable> textVar_;
+  std::optional<qlever::Variable> textVar_;
   std::optional<std::string> word_;
-  std::optional<Variable> matchVar_;
-  std::optional<Variable> scoreVar_;
-  std::optional<std::variant<Variable, std::string>> entity_;
+  std::optional<qlever::Variable> matchVar_;
+  std::optional<qlever::Variable> scoreVar_;
+  std::optional<std::variant<qlever::Variable, std::string>> entity_;
 };
 
-using FixedEntity = std::pair<std::string, VocabIndex>;
+using FixedEntity = std::pair<std::string, qlever::VocabIndex>;
 
 struct VarOrFixedEntity {
-  std::variant<Variable, FixedEntity> entity_;
+  std::variant<qlever::Variable, FixedEntity> entity_;
 
-  static std::variant<Variable, FixedEntity> makeEntityVariant(
-      const QueryExecutionContext* qec,
-      std::variant<Variable, std::string> entity);
+  static std::variant<qlever::Variable, FixedEntity> makeEntityVariant(
+      const qlever::QueryExecutionContext* qec,
+      std::variant<qlever::Variable, std::string> entity);
 
-  VarOrFixedEntity(const QueryExecutionContext* qec,
-                   std::variant<Variable, std::string> entity)
+  VarOrFixedEntity(const qlever::QueryExecutionContext* qec,
+                   std::variant<qlever::Variable, std::string> entity)
       : entity_(makeEntityVariant(qec, std::move(entity))) {}
 
   bool hasFixedEntity() const {
@@ -108,11 +108,11 @@ struct VarOrFixedEntity {
  *          of certain fields important to testing.
  */
 struct TextIndexScanForEntityConfiguration {
-  Variable varToBindText_;
-  std::variant<Variable, std::string> entity_;
+  qlever::Variable varToBindText_;
+  std::variant<qlever::Variable, std::string> entity_;
   std::string word_;
-  std::optional<Variable> scoreVar_ = std::nullopt;
-  std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
+  std::optional<qlever::Variable> scoreVar_ = std::nullopt;
+  std::optional<qlever::VariableToColumnMap> variableColumns_ = std::nullopt;
   std::optional<VarOrFixedEntity> varOrFixed_ = std::nullopt;
 
   bool operator==(const TextIndexScanForEntityConfiguration& other) const {
@@ -152,12 +152,12 @@ struct TextIndexScanForEntityConfiguration {
  *          of certain fields important to testing.
  */
 struct TextIndexScanForWordConfiguration {
-  Variable varToBindText_;
+  qlever::Variable varToBindText_;
   std::string word_;
-  std::optional<Variable> matchVar_ = std::nullopt;
-  std::optional<Variable> scoreVar_ = std::nullopt;
+  std::optional<qlever::Variable> matchVar_ = std::nullopt;
+  std::optional<qlever::Variable> scoreVar_ = std::nullopt;
   bool isPrefix_ = false;
-  std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
+  std::optional<qlever::VariableToColumnMap> variableColumns_ = std::nullopt;
 
   bool operator==(const TextIndexScanForWordConfiguration& other) const {
     return varToBindText_ == other.varToBindText_ && word_ == other.word_ &&

@@ -204,7 +204,4 @@ class JoinImpl : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::JoinImpl;
-
 #endif  // QLEVER_SRC_ENGINE_JOINIMPL_H

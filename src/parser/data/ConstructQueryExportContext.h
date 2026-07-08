@@ -16,18 +16,14 @@ class LocalVocab;
 }  // namespace qlever
 enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 
-using qlever::Index;
-using qlever::LocalVocab;
-
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {
   // idx of row of result table for WHERE-clause
   const size_t resultTableRowIndex_;
   IdTableView<0> idTable_;
-  const LocalVocab& localVocab_;
-  const VariableToColumnMap& _variableColumns;
-  const Index& _qecIndex;
+  const qlever::LocalVocab& localVocab_;
+  const qlever::VariableToColumnMap& _variableColumns;
+  const qlever::Index& _qecIndex;
   const size_t _rowOffset;
 };
-
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

@@ -90,7 +90,4 @@ class Filter : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Filter;
-
 #endif  // QLEVER_SRC_ENGINE_FILTER_H

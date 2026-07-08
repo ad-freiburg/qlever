@@ -19,14 +19,14 @@ TEST(RandomExpression, evaluate) {
   evaluationContext._endIndex = 1044;
   auto resultAsVariant = RandomExpression{}.evaluate(&evaluationContext);
 
-  using V = VectorWithMemoryLimit<Id>;
+  using V = VectorWithMemoryLimit<qlever::Id>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
   const auto& resultVector = std::get<V>(resultAsVariant);
   ASSERT_EQ(resultVector.size(), 1001);
 
   std::vector<int64_t> histogram(10);
   for (auto rand : resultVector) {
-    ASSERT_EQ(rand.getDatatype(), Datatype::Double);
+    ASSERT_EQ(rand.getDatatype(), qlever::Datatype::Double);
     ASSERT_GE(rand.getDouble(), 0.0);
     ASSERT_LT(rand.getDouble(), 1.0);
     histogram[std::abs(rand.getInt()) % 10]++;
@@ -50,7 +50,7 @@ TEST(RandomExpression, evaluate) {
   {
     evaluationContext._isPartOfGroupBy = true;
     auto resultAsVariant2 = RandomExpression{}.evaluate(&evaluationContext);
-    ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant2));
+    ASSERT_TRUE(std::holds_alternative<qlever::Id>(resultAsVariant2));
   }
 }
 
@@ -65,8 +65,9 @@ TEST(RandomExpression, insideAggregateReturnsVector) {
   const auto* random = aggregate->children()[0].get();
   ASSERT_TRUE(random->isInsideAggregate());
   auto result = random->evaluate(&evaluationContext);
-  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result));
-  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(result).size(),
+  ASSERT_TRUE(
+      std::holds_alternative<VectorWithMemoryLimit<qlever::Id>>(result));
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<qlever::Id>>(result).size(),
             evaluationContext.size());
 }
 

@@ -42,8 +42,8 @@ IdTableView<0> toView(const T& table) {
 // Merge the local vocab contained in `T` with the `targetVocab` and set the
 // passed pointer reference to that vocab.
 template <typename T>
-void mergeVocabInto(const T& table, const LocalVocab*& currentVocab,
-                    LocalVocab& targetVocab) {
+void mergeVocabInto(const T& table, const qlever::LocalVocab*& currentVocab,
+                    qlever::LocalVocab& targetVocab) {
   AD_CORRECTNESS_CHECK(currentVocab == nullptr);
   if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
     currentVocab = &table.getLocalVocab();

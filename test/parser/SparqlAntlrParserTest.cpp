@@ -817,7 +817,7 @@ TEST(SparqlParser, SelectClause) {
   auto expectSelectClause = ExpectCompleteParse<&Parser::selectClause>{};
   auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
 
-  using Alias = std::pair<string, ::Variable>;
+  using Alias = std::pair<string, qlever::Variable>;
   expectCompleteParse(parseSelectClause("SELECT *"),
                       m::AsteriskSelect(false, false));
   expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),

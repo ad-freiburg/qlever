@@ -9,6 +9,8 @@
 #include "index/ExportIds.h"
 #include "index/Index.h"
 
+using namespace qlever;
+
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________

@@ -24,7 +24,7 @@ class SpatialJoinCachedIndex {
  private:
   // The `geometryColumn_` indicates the variable name of the column from which
   // geometries are indexed.
-  Variable geometryColumn_;
+  qlever::Variable geometryColumn_;
 
   // This points to a class holding the actual index data structure along with
   // information necessary to use it. See more details in the `.cpp` file.
@@ -43,11 +43,13 @@ class SpatialJoinCachedIndex {
   // Constructor that builds an index from the geometries in the given column in
   // the `IdTable`. Currently only line strings are supported for the
   // experimental S2 point polyline algorithm.
-  SpatialJoinCachedIndex(Variable geometryColumn, ColumnIndex col,
-                         const IdTableView<0>& restable, const Index& index);
+  SpatialJoinCachedIndex(qlever::Variable geometryColumn,
+                         qlever::ColumnIndex col,
+                         const IdTableView<0>& restable,
+                         const qlever::Index& index);
 
   // Getters
-  const Variable& getGeometryColumn() const;
+  const qlever::Variable& getGeometryColumn() const;
   std::shared_ptr<const MutableS2ShapeIndex> getIndex() const;
 
   // From an `S2ShapeIndex` (returned by querying this index), obtain the

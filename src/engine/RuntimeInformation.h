@@ -163,8 +163,4 @@ struct RuntimeInformationWholeQuery {
 };
 
 }  // namespace qlever
-
-using qlever::RuntimeInformation;
-using qlever::RuntimeInformationWholeQuery;
-
 #endif  // QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H

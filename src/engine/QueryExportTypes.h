@@ -15,11 +15,11 @@
 // and `LocalVocab` associated with the `IdTable`.
 struct TableConstRefWithVocab {
   IdTableView<0> idTable_;
-  std::reference_wrapper<const LocalVocab> localVocab_;
+  std::reference_wrapper<const qlever::LocalVocab> localVocab_;
 
   const IdTableView<0>& idTable() const { return idTable_; }
 
-  const LocalVocab& localVocab() const { return localVocab_.get(); }
+  const qlever::LocalVocab& localVocab() const { return localVocab_.get(); }
 };
 
 // Helper type that contains an `IdTable` and a view with related indices to

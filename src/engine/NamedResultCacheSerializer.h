@@ -19,9 +19,8 @@
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+        Serializer>) void qlever::NamedResultCache::
+    writeToSerializer(Serializer& serializer) const {
   auto lock = cache_.wlock();
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
   for (const auto& key : lock->getAllNonpinnedKeys()) {
@@ -42,9 +41,9 @@ CPP_template_def(typename Serializer)(
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
+        Serializer>) void qlever::NamedResultCache::
     readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+                       const qlever::LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -75,7 +74,7 @@ namespace ad_utility::serialization {
 // This serializes the complete Value including the `LocalVocab` with proper ID
 // remapping.
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::SimilarTo<T, NamedResultCache::Value>)) {
+    (ad_utility::SimilarTo<T, qlever::NamedResultCache::Value>)) {
   if constexpr (WriteSerializer<S>) {
     // Serialize the LocalVocab first (required for ID remapping).
     ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
@@ -95,8 +94,8 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
       // allow local vocab entries here.
       AD_CORRECTNESS_CHECK(
-          ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
-              col.end(),
+          ql::ranges::find(col, qlever::Datatype::LocalVocabIndex,
+                           &qlever::Id::getDatatype) == col.end(),
           "Named result cache entries that contain local vocab entries "
           "currently cannot be serialized. Note that local vocab entries can "
           "also occur if SPARQL UPDATE operations have been performed on the "
@@ -150,17 +149,18 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     // Deserialize VariableToColumnMap manually.
     size_t mapSize;
     serializer >> mapSize;
-    VariableToColumnMap varToColMap;
+    qlever::VariableToColumnMap varToColMap;
     for (size_t i = 0; i < mapSize; ++i) {
-      Variable var{"?dummy"};  // Variable needs a non-empty name
+      qlever::Variable var{"?dummy"};  // Variable needs a non-empty name
       serializer >> var;
-      ColumnIndexAndTypeInfo colInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined};
+      qlever::ColumnIndexAndTypeInfo colInfo{
+          0, qlever::ColumnIndexAndTypeInfo::AlwaysDefined};
       serializer >> colInfo;
       varToColMap[std::move(var)] = colInfo;
     }
 
     // Deserialize `resultSortedOn`.
-    std::vector<ColumnIndex> resultSortedOn;
+    std::vector<qlever::ColumnIndex> resultSortedOn;
     serializer >> resultSortedOn;
 
     // Deserialize `cacheKey`.
@@ -177,7 +177,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     }
 
     // Construct the `Value`.
-    arg = NamedResultCache::Value{
+    arg = qlever::NamedResultCache::Value{
         std::make_shared<const IdTable>(std::move(idTable)),
         std::move(varToColMap),
         std::move(resultSortedOn),

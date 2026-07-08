@@ -10,11 +10,6 @@
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 
-using qlever::BlankNodeIndex;
-using qlever::ColumnIndex;
-using qlever::Id;
-using qlever::LocalVocab;
-using qlever::ValueId;
 namespace valueIdComparators = qlever::valueIdComparators;
 
 namespace qlever::sparqlExpression {
@@ -154,5 +149,4 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   }
 }
 }  // namespace ad_utility
-
 #endif  // QLEVER_TEST_SPARQLEXPRESSIONTESTHELPERS_H

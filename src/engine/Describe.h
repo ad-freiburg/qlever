@@ -83,7 +83,4 @@ class Describe : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Describe;
-
 #endif  // QLEVER_SRC_ENGINE_DESCRIBE_H

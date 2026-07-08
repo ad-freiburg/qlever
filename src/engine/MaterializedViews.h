@@ -33,16 +33,7 @@ class QueryExecutionTree;
 class IndexScan;
 }  // namespace qlever
 
-using qlever::DeltaTriples;
-using qlever::IndexMetaData;
-using qlever::ParsedQuery;
-using qlever::SparqlTriple;
-using qlever::SparqlTripleSimple;
 namespace parsedQuery = qlever::parsedQuery;
-using qlever::LocalVocabEntry;
-using qlever::LocatedTriplesSharedState;
-using qlever::LocatedTriplesState;
-using qlever::Permutation;
 
 namespace qlever {
 
@@ -352,9 +343,4 @@ class MaterializedViewsManager {
 };
 
 }  // namespace qlever
-
-using qlever::MaterializedView;
-using qlever::MaterializedViewsManager;
-using qlever::MaterializedViewWriter;
-
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_

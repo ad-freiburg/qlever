@@ -24,11 +24,6 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
-using qlever::IndexImpl;
-using qlever::LocalVocab;
-using qlever::LocalVocabContext;
-using qlever::LocalVocabEntry;
-
 namespace ad_utility {
 
 namespace detail {
@@ -82,14 +77,14 @@ CPP_template(typename Serializer)(
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void serializeLocalVocab(Serializer& serializer,
-                                              const LocalVocab& vocab) {
+                                              const qlever::LocalVocab& vocab) {
   serializer << vocab.getOwnedLocalBlankNodeBlocks();
   uint64_t numWords = vocab.size();
   serializer << numWords;
 
   auto writeWordSet = [&serializer](const auto& words) {
     ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
-      serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
+      serializer << qlever::Id::makeFromLocalVocabIndex(&localVocabEntry);
       serializer << localVocabEntry.toStringRepresentation();
     });
   };
@@ -100,10 +95,15 @@ CPP_template(typename Serializer)(
 
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) std::
-    tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer, const LocalVocabContext& context) {
-  LocalVocab vocab;
+    requires serialization::ReadSerializer<Serializer>)
+    std::tuple<
+        qlever::LocalVocab,
+        absl::flat_hash_map<
+            qlever::Id::T,
+            qlever::Id>> deserializeLocalVocab(Serializer& serializer,
+                                               const qlever::LocalVocabContext&
+                                                   context) {
+  qlever::LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
           BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
@@ -112,14 +112,15 @@ CPP_template(typename Serializer)(
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
-  absl::flat_hash_map<Id::T, Id> mapping{};
+  absl::flat_hash_map<qlever::Id::T, qlever::Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    auto id = readValue<Id::T>(serializer);
+    auto id = readValue<qlever::Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(s), context));
-    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
+        qlever::LocalVocabEntry::fromStringRepresentation(std::move(s),
+                                                          context));
+    mapping.emplace(id, qlever::Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
 }
@@ -132,9 +133,10 @@ CPP_template(typename Range, typename Serializer)(
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
   } else {
-    ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
+    ad_utility::serialization::VectorIncrementalSerializer<qlever::Id,
+                                                           Serializer>
         vectorSerializer{std::move(serializer)};
-    for (const Id& value : range) {
+    for (const qlever::Id& value : range) {
       vectorSerializer.push(value);
     }
     vectorSerializer.finish();
@@ -143,10 +145,11 @@ CPP_template(typename Range, typename Serializer)(
 }
 
 // TODO<joka921> Comments.
-inline void remapLocalVocab(ql::span<Id> ids,
-                            const absl::flat_hash_map<Id::T, Id>& mapping) {
-  for (Id& id : ids) {
-    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+inline void remapLocalVocab(
+    ql::span<qlever::Id> ids,
+    const absl::flat_hash_map<qlever::Id::T, qlever::Id>& mapping) {
+  for (qlever::Id& id : ids) {
+    if (id.getDatatype() == qlever::Datatype::LocalVocabIndex) {
       id = mapping.at(id.getBits());
     }
   }
@@ -155,18 +158,20 @@ inline void remapLocalVocab(ql::span<Id> ids,
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
 template <typename Serializer>
-void deserializeIds(Serializer& serializer,
-                    const absl::flat_hash_map<Id::T, Id>& mapping,
-                    ql::span<Id> ids) {
+void deserializeIds(
+    Serializer& serializer,
+    const absl::flat_hash_map<qlever::Id::T, qlever::Id>& mapping,
+    ql::span<qlever::Id> ids) {
   serializer >> ids;
   remapLocalVocab(ids, mapping);
 }
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
 template <typename Serializer>
-std::vector<Id> deserializeIds(Serializer& serializer,
-                               const absl::flat_hash_map<Id::T, Id>& mapping) {
-  std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
+std::vector<qlever::Id> deserializeIds(
+    Serializer& serializer,
+    const absl::flat_hash_map<qlever::Id::T, qlever::Id>& mapping) {
+  std::vector<qlever::Id> ids = readValue<std::vector<qlever::Id>>(serializer);
   remapLocalVocab(ids, mapping);
   return ids;
 }
@@ -176,7 +181,8 @@ std::vector<Id> deserializeIds(Serializer& serializer,
 CPP_template(typename Range)(
     requires ql::ranges::range<
         Range>) void serializeIds(const std::filesystem::path& path,
-                                  const LocalVocab& vocab, Range&& idRanges) {
+                                  const qlever::LocalVocab& vocab,
+                                  Range&& idRanges) {
   serialization::FileWriteSerializer serializer{path.c_str()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
@@ -186,8 +192,9 @@ CPP_template(typename Range)(
   }
 }
 
-inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const std::filesystem::path& path, const LocalVocabContext& context) {
+inline std::tuple<qlever::LocalVocab, std::vector<std::vector<qlever::Id>>>
+deserializeIds(const std::filesystem::path& path,
+               const qlever::LocalVocabContext& context) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
@@ -210,7 +217,7 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
               << " ..." << std::endl;
   detail::readHeader(serializer);
   auto [vocab, mapping] = detail::deserializeLocalVocab(serializer, context);
-  std::vector<std::vector<Id>> idVectors;
+  std::vector<std::vector<qlever::Id>> idVectors;
   auto numRanges = detail::readValue<uint64_t>(serializer);
   for ([[maybe_unused]] auto i : ad_utility::integerRange(numRanges)) {
     idVectors.push_back(detail::deserializeIds(serializer, mapping));

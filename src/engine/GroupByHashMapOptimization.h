@@ -12,7 +12,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
-using qlever::ValueId;
 namespace valueIdComparators = qlever::valueIdComparators;
 
 // _____________________________________________________________________________
@@ -47,9 +46,9 @@ struct AvgAggregationData {
   };
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocabContext& context,
-      [[maybe_unused]] const LocalVocab* localVocab) const;
+  [[nodiscard]] qlever::ValueId calculateResult(
+      [[maybe_unused]] const qlever::LocalVocabContext& context,
+      [[maybe_unused]] const qlever::LocalVocab* localVocab) const;
 
   void reset() { *this = AvgAggregationData{}; }
 };
@@ -66,9 +65,9 @@ struct CountAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocabContext& context,
-      [[maybe_unused]] const LocalVocab* localVocab) const;
+  [[nodiscard]] qlever::ValueId calculateResult(
+      [[maybe_unused]] const qlever::LocalVocabContext& context,
+      [[maybe_unused]] const qlever::LocalVocab* localVocab) const;
 
   void reset() { *this = CountAggregationData{}; }
 };
@@ -93,9 +92,9 @@ struct ExtremumAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocabContext& context,
-      LocalVocab* localVocab) const;
+  [[nodiscard]] qlever::ValueId calculateResult(
+      [[maybe_unused]] const qlever::LocalVocabContext& context,
+      qlever::LocalVocab* localVocab) const;
 
   void reset() { *this = ExtremumAggregationData{}; }
 };
@@ -136,9 +135,9 @@ struct SumAggregationData {
   };
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocabContext& context,
-      [[maybe_unused]] const LocalVocab* localVocab) const;
+  [[nodiscard]] qlever::ValueId calculateResult(
+      [[maybe_unused]] const qlever::LocalVocabContext& context,
+      [[maybe_unused]] const qlever::LocalVocab* localVocab) const;
 
   void reset() { *this = SumAggregationData{}; }
 };
@@ -167,8 +166,9 @@ struct GroupConcatAggregationData {
   void addValueImpl(
       const std::optional<ad_utility::triple_component::Literal>& value);
 
-  [[nodiscard]] ValueId calculateResult(const LocalVocabContext& context,
-                                        LocalVocab* localVocab) const;
+  [[nodiscard]] qlever::ValueId calculateResult(
+      const qlever::LocalVocabContext& context,
+      qlever::LocalVocab* localVocab) const;
 
   explicit GroupConcatAggregationData(std::string_view separator);
 
@@ -188,11 +188,10 @@ struct SampleAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocabContext& context,
-      LocalVocab* localVocab) const;
+  [[nodiscard]] qlever::ValueId calculateResult(
+      [[maybe_unused]] const qlever::LocalVocabContext& context,
+      qlever::LocalVocab* localVocab) const;
 
   void reset() { *this = SampleAggregationData{}; }
 };
-
 #endif  // QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H

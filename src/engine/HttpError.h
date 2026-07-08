@@ -35,7 +35,4 @@ class HttpError : public std::exception {
 };
 
 }  // namespace qlever
-
-using qlever::HttpError;
-
 #endif  // QLEVER_SRC_ENGINE_HTTPERROR_H

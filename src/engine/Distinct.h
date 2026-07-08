@@ -103,7 +103,4 @@ class Distinct : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Distinct;
-
 #endif  // QLEVER_SRC_ENGINE_DISTINCT_H

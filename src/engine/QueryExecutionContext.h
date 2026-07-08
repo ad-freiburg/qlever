@@ -273,12 +273,4 @@ class QueryExecutionContext
 };
 
 }  // namespace qlever
-
-using qlever::Index;
-using qlever::LocalVocabContext;
-using qlever::LocatedTriplesSharedState;
-using qlever::LocatedTriplesState;
-using qlever::QueryExecutionContext;
-using qlever::QueryResultCache;
-
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

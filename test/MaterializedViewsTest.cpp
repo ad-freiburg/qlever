@@ -53,7 +53,7 @@ namespace {
 
 using namespace materializedViewsTestHelpers;
 using namespace ad_utility::testing;
-using V = Variable;
+using V = qlever::Variable;
 
 }  // namespace
 
@@ -203,7 +203,7 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
 TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
   // Simple materialized view for testing the checks when querying.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("testView1", plan);
 
   // Helper that parses a query, but doesn't feed it to the `QueryPlanner` but
@@ -354,13 +354,13 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ColumnPermutation) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
 
   // Helper to get all column names from a view via its `VariableToColumnMap`.
-  auto columnNames = [](const MaterializedView& view) {
+  auto columnNames = [](const qlever::MaterializedView& view) {
     const auto& varToCol = view.variableToColumnMap();
     DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
-    std::vector<Variable> vars =
+    std::vector<qlever::Variable> vars =
         varToCol | ql::views::keys | ::ranges::to<std::vector>();
     GCC_REENABLE_WARNINGS
     ql::ranges::sort(
@@ -378,7 +378,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         "SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) }";
     manager.writeViewToDisk("testView3",
                             qlv().parseAndPlanQuery(reorderedQuery));
-    MaterializedView view{testIndexBase_, "testView3"};
+    qlever::MaterializedView view{testIndexBase_, "testView3"};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     const auto& map = view.variableToColumnMap();
     EXPECT_EQ(map.at(V{"?p"}).columnIndex_, 0);
@@ -399,7 +399,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr("Query result rows for materialized view "
                                      "\"testView4\" are already sorted"));
-    MaterializedView view{testIndexBase_, "testView4"};
+    qlever::MaterializedView view{testIndexBase_, "testView4"};
     EXPECT_EQ(columnNames(view).at(0), V{"?p"});
     auto res = qlv().query(
         "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>"
@@ -414,7 +414,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     clearLog();
     manager.writeViewToDisk("testView5",
                             qlv().parseAndPlanQuery("SELECT * { <s1> ?p ?o }"));
-    MaterializedView view{testIndexBase_, "testView5"};
+    qlever::MaterializedView view{testIndexBase_, "testView5"};
     EXPECT_THAT(columnNames(view),
                 ::testing::ElementsAreArray(std::vector<V>{V{"?p"}, V{"?o"}}));
     EXPECT_THAT(log_.str(), ::testing::HasSubstr("2 empty column(s)"));
@@ -443,19 +443,20 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
     // `UndefStatus` in `VariableToColumnMap`.
     auto map = view->variableToColumnMap();
-    VariableToColumnMap expected{{V{"?s"}, makeAlwaysDefinedColumn(0)},
-                                 {V{"?o"}, makeAlwaysDefinedColumn(1)},
-                                 {V{"?u"}, makePossiblyUndefinedColumn(2)}};
+    qlever::VariableToColumnMap expected{
+        {V{"?s"}, qlever::makeAlwaysDefinedColumn(0)},
+        {V{"?o"}, qlever::makeAlwaysDefinedColumn(1)},
+        {V{"?u"}, qlever::makePossiblyUndefinedColumn(2)}};
     EXPECT_THAT(map, ::testing::UnorderedElementsAreArray(expected));
 
     // `UndefStatus` is stored correctly in `Permutation`.
     auto permutation = view->permutation();
     EXPECT_EQ(permutation->getColumnUndefStatus(0),
-              ColumnIndexAndTypeInfo::AlwaysDefined);
+              qlever::ColumnIndexAndTypeInfo::AlwaysDefined);
     EXPECT_EQ(permutation->getColumnUndefStatus(1),
-              ColumnIndexAndTypeInfo::AlwaysDefined);
+              qlever::ColumnIndexAndTypeInfo::AlwaysDefined);
     EXPECT_EQ(permutation->getColumnUndefStatus(2),
-              ColumnIndexAndTypeInfo::PossiblyUndefined);
+              qlever::ColumnIndexAndTypeInfo::PossiblyUndefined);
 
     // `UndefStatus` in `IndexScan`.
     auto plannedQuery = qlv().parseAndPlanQuery(R"(
@@ -485,7 +486,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.writeViewToDisk("Something Out!of~the.ordinary",
@@ -941,21 +942,22 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
   auto writePlan = qlv().parseAndPlanQuery(
       "SELECT * { ?s ?p ?o ."
       " VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("testView1", writePlan);
   auto view = manager.getView("testView1");
   using ViewQuery = parsedQuery::MaterializedViewQuery;
 
   // Run a simple query and consume its result lazily.
   {
-    ViewQuery query{SparqlTriple{Variable{"?s"},
+    ViewQuery query{SparqlTriple{qlever::Variable{"?s"},
                                  ad_utility::triple_component::Iri::fromIriref(
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
-                                 Variable{"?o"}}};
+                                 qlever::Variable{"?o"}}};
     auto scan =
         manager.makeIndexScan(&writePlan.queryExecutionContext(), query);
-    auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+    auto res =
+        scan->getResult(true, qlever::ComputationMode::LAZY_IF_SUPPORTED);
     size_t numRows = 0;
     size_t numBlocks = 0;
 
@@ -985,9 +987,9 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto& qet = plannedQuery.queryExecutionTree();
     auto res = qet.getResult();
     ASSERT_TRUE(res->isFullyMaterialized());
-    auto col = qet.getVariableColumn(Variable{"?cnt"});
+    auto col = qet.getVariableColumn(qlever::Variable{"?cnt"});
     auto count = res->idTableView().at(0, col);
-    ASSERT_TRUE(count.getDatatype() == Datatype::Int);
+    ASSERT_TRUE(count.getDatatype() == qlever::Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
   }
 }
@@ -995,7 +997,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindToColumnMap) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1");
   EXPECT_TRUE(view->parsedQuery().has_value());
 
@@ -1003,7 +1005,7 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
   {
     auto expr = sparqlExpression::SparqlExpressionPimpl{
         std::make_shared<sparqlExpression::IdExpression>(
-            ValueId::makeFromInt(1)),
+            qlever::ValueId::makeFromInt(1)),
         "1"};
     auto cacheKey = expr.getCacheKey({});
     EXPECT_THAT(view->lookupBindTargetColumn(cacheKey),
@@ -1014,7 +1016,7 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
   {
     auto expr = sparqlExpression::SparqlExpressionPimpl{
         std::make_shared<sparqlExpression::IdExpression>(
-            ValueId::makeFromDouble(5.0)),
+            qlever::ValueId::makeFromDouble(5.0)),
         "5.0"};
     auto cacheKey = expr.getCacheKey({});
     EXPECT_FALSE(view->lookupBindTargetColumn(cacheKey).has_value());
@@ -1033,13 +1035,15 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
         std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
 
     // `BIND` is found using correct mapping despite different variable name.
-    VariableToColumnMap correctVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(2)}};
+    qlever::VariableToColumnMap correctVarToCol{
+        {V{"?x"}, qlever::makeAlwaysDefinedColumn(2)}};
     auto cacheKey1 = expr.getCacheKey(correctVarToCol);
     EXPECT_THAT(view2->lookupBindTargetColumn(cacheKey1),
                 ::testing::Optional(::testing::Eq(3)));
 
     // `BIND` is not found with different column index.
-    VariableToColumnMap wrongVarToCol{{V{"?x"}, makeAlwaysDefinedColumn(1)}};
+    qlever::VariableToColumnMap wrongVarToCol{
+        {V{"?x"}, qlever::makeAlwaysDefinedColumn(1)}};
     auto cacheKey2 = expr.getCacheKey(wrongVarToCol);
     EXPECT_FALSE(view2->lookupBindTargetColumn(cacheKey2).has_value());
   }
@@ -1150,7 +1154,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   auto viewScanNoBind =
       viewScan("bindView", "?s", "?o", "?_ql_materialized_view_o", 2);
 
-  using AC = std::vector<std::pair<ColumnIndex, Variable>>;
+  using AC = std::vector<std::pair<qlever::ColumnIndex, qlever::Variable>>;
 
   // Simple `BIND` rewrites.
   {
@@ -1221,10 +1225,10 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
           std::make_unique<sparqlExpression::IdExpression>(
-              ValueId::makeFromInt(2)),
+              qlever::ValueId::makeFromInt(2)),
           std::make_unique<sparqlExpression::VariableExpression>(V{"?o"})),
       std::make_unique<sparqlExpression::IdExpression>(
-          ValueId::makeFromInt(1)));
+          qlever::ValueId::makeFromInt(1)));
   const parsedQuery::Bind bind{sparqlExpression::SparqlExpressionPimpl{
                                    std::move(bindExpr), "2 * ?o + 1"},
                                V{"?bind"}};
@@ -1236,13 +1240,13 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, V{"?a"}, V{"?b"}};
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?o }");
     // `SpatialJoin` has no children.
-    SpatialJoin sj{&plan.queryExecutionContext(), config, std::nullopt,
-                   std::nullopt};
+    qlever::SpatialJoin sj{&plan.queryExecutionContext(), config, std::nullopt,
+                           std::nullopt};
     EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());
   }
 
   // A `BIND` is pushed down through a `StripColumns` operation.
-  const std::set<Variable> varsToKeep{V{"?o"}};
+  const std::set<qlever::Variable> varsToKeep{V{"?o"}};
   {
     auto plannedQuery = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -1251,22 +1255,24 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       }
     )");
     // `StripColumns` with a single column.
-    auto stripCols = ad_utility::makeExecutionTree<StripColumns>(
+    auto stripCols = ad_utility::makeExecutionTree<qlever::StripColumns>(
         &plannedQuery.queryExecutionContext(),
-        std::make_shared<QueryExecutionTree>(plannedQuery.queryExecutionTree()),
+        std::make_shared<qlever::QueryExecutionTree>(
+            plannedQuery.queryExecutionTree()),
         varsToKeep);
     EXPECT_EQ(stripCols->getResultWidth(), 1);
 
     auto stripWithBind =
         stripCols->getRootOperation()->makeTreeWithBindColumn(bind);
     ASSERT_TRUE(stripWithBind.has_value());
-    EXPECT_THAT(*stripWithBind.value(),
-                h::RootOperation<StripColumns>(::testing::AllOf(
-                    // The new `StripColumns` now includes the `BIND` column and
-                    // therefore has two columns, while the old `StripColumns`
-                    // only had one.
-                    AD_PROPERTY(StripColumns, getResultWidth, ::testing::Eq(2)),
-                    h::children(bindView(AC{{3, V{"?bind"}}})))));
+    EXPECT_THAT(
+        *stripWithBind.value(),
+        h::RootOperation<qlever::StripColumns>(::testing::AllOf(
+            // The new `StripColumns` now includes the `BIND` column and
+            // therefore has two columns, while the old `StripColumns`
+            // only had one.
+            AD_PROPERTY(qlever::StripColumns, getResultWidth, ::testing::Eq(2)),
+            h::children(bindView(AC{{3, V{"?bind"}}})))));
   }
 
   // A `BIND` cannot be pushed into a regular `IndexScan` (not a materialized
@@ -1277,9 +1283,10 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      .getRootOperation()
                      ->makeTreeWithBindColumn(bind)
                      .has_value());
-    auto stripCols = ad_utility::makeExecutionTree<StripColumns>(
+    auto stripCols = ad_utility::makeExecutionTree<qlever::StripColumns>(
         &plannedQuery.queryExecutionContext(),
-        std::make_shared<QueryExecutionTree>(plannedQuery.queryExecutionTree()),
+        std::make_shared<qlever::QueryExecutionTree>(
+            plannedQuery.queryExecutionTree()),
         varsToKeep);
     EXPECT_FALSE(stripCols->getRootOperation()
                      ->makeTreeWithBindColumn(bind)
@@ -1423,19 +1430,19 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         ?s view:bindView-b3 ?b3 .
       }
     )");
-    auto indexScan = dynamic_cast<IndexScan&>(
+    auto indexScan = dynamic_cast<qlever::IndexScan&>(
         *plannedQuery.queryExecutionTree().getRootOperation());
 
-    VariableToColumnMap expectedVarToColResult{
-        {V{"?s"}, makeAlwaysDefinedColumn(0)},
-        {V{"?b3"}, makePossiblyUndefinedColumn(1)},
+    qlever::VariableToColumnMap expectedVarToColResult{
+        {V{"?s"}, qlever::makeAlwaysDefinedColumn(0)},
+        {V{"?b3"}, qlever::makePossiblyUndefinedColumn(1)},
     };
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
-    VariableToColumnMap expectedVarToColPermutation{
-        {V{"?s"}, makeAlwaysDefinedColumn(0)},
-        {V{"?b3"}, makePossiblyUndefinedColumn(4)},
+    qlever::VariableToColumnMap expectedVarToColPermutation{
+        {V{"?s"}, qlever::makeAlwaysDefinedColumn(0)},
+        {V{"?b3"}, qlever::makePossiblyUndefinedColumn(4)},
     };
     EXPECT_THAT(
         indexScan.computePermutationColumnIndices(),
@@ -1452,19 +1459,19 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         BIND(math:cos(?x - 1) + 4 AS ?y)
       }
     )");
-    auto indexScan = dynamic_cast<IndexScan&>(
+    auto indexScan = dynamic_cast<qlever::IndexScan&>(
         *plannedQuery.queryExecutionTree().getRootOperation());
 
-    VariableToColumnMap expectedVarToColResult{
-        {V{"?x"}, makeAlwaysDefinedColumn(0)},
-        {V{"?y"}, makeAlwaysDefinedColumn(1)},
+    qlever::VariableToColumnMap expectedVarToColResult{
+        {V{"?x"}, qlever::makeAlwaysDefinedColumn(0)},
+        {V{"?y"}, qlever::makeAlwaysDefinedColumn(1)},
     };
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
-    VariableToColumnMap expectedVarToColPermutation{
-        {V{"?x"}, makeAlwaysDefinedColumn(1)},
-        {V{"?y"}, makeAlwaysDefinedColumn(4)},
+    qlever::VariableToColumnMap expectedVarToColPermutation{
+        {V{"?x"}, qlever::makeAlwaysDefinedColumn(1)},
+        {V{"?y"}, qlever::makeAlwaysDefinedColumn(4)},
     };
     EXPECT_THAT(
         indexScan.computePermutationColumnIndices(),
@@ -1532,13 +1539,13 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery =
         qlv.parseAndPlanQuery(std::string{geoBoundingBoxesViewQuery});
-    VariableToColumnMap expected{
-        {V{"?osm_id"}, makeAlwaysDefinedColumn(0)},
-        {V{"?intermediate"}, makeAlwaysDefinedColumn(1)},
-        {V{"?geometry"}, makeAlwaysDefinedColumn(2)},
-        {V{"?lower_left"}, makePossiblyUndefinedColumn(3)},
-        {V{"?upper_right"}, makePossiblyUndefinedColumn(4)},
-        {V{"?centroid"}, makePossiblyUndefinedColumn(5)}};
+    qlever::VariableToColumnMap expected{
+        {V{"?osm_id"}, qlever::makeAlwaysDefinedColumn(0)},
+        {V{"?intermediate"}, qlever::makeAlwaysDefinedColumn(1)},
+        {V{"?geometry"}, qlever::makeAlwaysDefinedColumn(2)},
+        {V{"?lower_left"}, qlever::makePossiblyUndefinedColumn(3)},
+        {V{"?upper_right"}, qlever::makePossiblyUndefinedColumn(4)},
+        {V{"?centroid"}, qlever::makePossiblyUndefinedColumn(5)}};
     EXPECT_THAT(plannedQuery.queryExecutionTree().getVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expected));
   }
@@ -1605,9 +1612,8 @@ constexpr std::string_view overlappingChains =
 // _____________________________________________________________________________
 TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
   RewriteTestParams p = GetParam();
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
-          p.queryPlanningBudget_);
+  auto cleanup = setRuntimeParameterForTest<
+      &qlever::RuntimeParameters::queryPlanningBudget_>(p.queryPlanningBudget_);
 
   // Test dataset and query.
   const std::string chainTtl =
@@ -1687,7 +1693,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   // Regression test for #2866.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("testView1", plan);
 
   // Test that the placeholder variable for the third column of both views,
@@ -1711,12 +1717,12 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
         }
       }
     )");
-    auto indexScanLeft = dynamic_cast<IndexScan&>(
+    auto indexScanLeft = dynamic_cast<qlever::IndexScan&>(
         *plannedQueryLeft.queryExecutionTree().getRootOperation());
-    auto indexScanRight = dynamic_cast<IndexScan&>(
+    auto indexScanRight = dynamic_cast<qlever::IndexScan&>(
         *plannedQueryRight.queryExecutionTree().getRootOperation());
-    EXPECT_NO_THROW(
-        IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight));
+    EXPECT_NO_THROW(qlever::IndexScan::lazyScanForJoinOfTwoScans(
+        indexScanLeft, indexScanRight));
   }
 
   // Test that an join column that is not in the first three columns is
@@ -1743,12 +1749,13 @@ TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
         }
       }
     )");
-    auto indexScanLeft = dynamic_cast<IndexScan&>(
+    auto indexScanLeft = dynamic_cast<qlever::IndexScan&>(
         *plannedQueryLeft.queryExecutionTree().getRootOperation());
-    auto indexScanRight = dynamic_cast<IndexScan&>(
+    auto indexScanRight = dynamic_cast<qlever::IndexScan&>(
         *plannedQueryRight.queryExecutionTree().getRootOperation());
     AD_EXPECT_THROW_WITH_MESSAGE(
-        IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft, indexScanRight),
+        qlever::IndexScan::lazyScanForJoinOfTwoScans(indexScanLeft,
+                                                     indexScanRight),
         ::testing::HasSubstr(
             "The two IndexScans for a lazy single-column join have "
             "more than one column in common."));
@@ -1768,12 +1775,12 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
       } INTERNAL SORT BY ?s ?p ?o LIMIT 1
     }
   )");
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("groupByTestView", plan);
 
   // Matcher for an `IdTable` containing a single integer.
   auto expectCount = [](size_t count) {
-    return matchesIdTableFromVector({{Id::makeFromInt(count)}});
+    return matchesIdTableFromVector({{qlever::Id::makeFromInt(count)}});
   };
 
   // Helpers to abbreviate redundant queries.
@@ -1811,14 +1818,14 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
   EXPECT_THAT(queryOnView("COUNT(DISTINCT ?o)"), expectCount(1));
 
   // Test the optimization of a join with an `IndexScan` on a materialized view.
-  EXPECT_THAT(
-      getQueryResultAsIdTable(R"(
+  EXPECT_THAT(getQueryResultAsIdTable(R"(
     SELECT (COUNT(?s) AS ?c) WHERE {
       ?s <p1> ?p1 .
       ?s ?p ?o
     } GROUP BY ?s
   )"),
-      matchesIdTableFromVector({{Id::makeFromInt(2)}, {Id::makeFromInt(2)}}));
+              matchesIdTableFromVector({{qlever::Id::makeFromInt(2)},
+                                        {qlever::Id::makeFromInt(2)}}));
   EXPECT_THAT(getQueryResultAsIdTable(
                   R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -1842,22 +1849,24 @@ TEST_F(MaterializedViewsTest,
        GetPermutationForThreeVariableTripleMaterializedView) {
   // Write and load a three-variable view.
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
-  MaterializedViewsManager manager{testIndexBase_};
+  qlever::MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("threeVarPermTestView", plan);
   manager.loadView("threeVarPermTestView");
 
   // Create a three-variable scan on the view binding all three columns.
   using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
   parsedQuery::MaterializedViewQuery viewQuery{
-      "threeVarPermTestView", RCols{{V{"?s"}, TripleComponent{V{"?s"}}},
-                                    {V{"?p"}, TripleComponent{V{"?p"}}},
-                                    {V{"?o"}, TripleComponent{V{"?o"}}}}};
+      "threeVarPermTestView",
+      RCols{{V{"?s"}, qlever::TripleComponent{V{"?s"}}},
+            {V{"?p"}, qlever::TripleComponent{V{"?p"}}},
+            {V{"?o"}, qlever::TripleComponent{V{"?o"}}}}};
   auto* qec = &plan.queryExecutionContext();
   auto indexScanPtr = manager.makeIndexScan(qec, viewQuery);
-  auto scanTree = std::make_shared<QueryExecutionTree>(qec, indexScanPtr);
+  auto scanTree =
+      std::make_shared<qlever::QueryExecutionTree>(qec, indexScanPtr);
 
   // Use a GroupByImpl as the holder for getPermutationForThreeVariableTriple.
-  GroupByImpl groupBy{qec, {V{"?s"}}, {}, scanTree};
+  qlever::GroupByImpl groupBy{qec, {V{"?s"}}, {}, scanTree};
 
   // Sort by subject: the materialized view case succeeds.
   EXPECT_TRUE(

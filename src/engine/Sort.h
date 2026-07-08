@@ -140,7 +140,4 @@ class Sort : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Sort;
-
 #endif  // QLEVER_SRC_ENGINE_SORT_H

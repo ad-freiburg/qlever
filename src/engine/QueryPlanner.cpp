@@ -402,7 +402,7 @@ std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
     const std::vector<SubtreePlan>& currentPlans) const {
   std::vector<SubtreePlan> result;
 
-  auto valuesPlan = makeSubtreePlan<::Values>(_qec, values._inlineValues);
+  auto valuesPlan = makeSubtreePlan<qlever::Values>(_qec, values._inlineValues);
   for (auto& plan : currentPlans) {
     ql::ranges::move(createJoinCandidatesAllowEmpty(
                          plan, valuesPlan, getJoinColumns(plan, valuesPlan)),

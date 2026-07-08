@@ -193,7 +193,4 @@ class ExportQueryExecutionTrees {
 };
 
 }  // namespace qlever
-
-using qlever::ExportQueryExecutionTrees;
-
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

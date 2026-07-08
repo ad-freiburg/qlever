@@ -782,7 +782,4 @@ class QueryPlanner {
 };
 
 }  // namespace qlever
-
-using qlever::QueryPlanner;
-
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

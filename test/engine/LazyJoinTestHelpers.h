@@ -21,10 +21,10 @@ namespace ad_utility::testing {
 // IndexScans. This is used by both IndexScanTest and OptionalJoinTest.
 class LazyJoinTestHelper {
  protected:
-  QueryExecutionContext* qec_ = nullptr;
+  qlever::QueryExecutionContext* qec_ = nullptr;
 
   // Convert a TripleComponent to a ValueId.
-  Id toValueId(const TripleComponent& tc) const {
+  qlever::Id toValueId(const TripleComponent& tc) const {
     return tc.toValueId(qec_->getIndex()).value();
   }
 

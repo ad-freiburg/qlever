@@ -40,13 +40,13 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   using namespace ::testing;
 
   // Setup VariableToColumnMap with different variable statuses
-  VariableToColumnMap varColMap;
-  Variable alwaysDefinedVar{"?alwaysDefined"};
-  Variable possiblyUndefVar{"?possiblyUndef"};
-  Variable unboundVar{"?unbound"};
+  qlever::VariableToColumnMap varColMap;
+  qlever::Variable alwaysDefinedVar{"?alwaysDefined"};
+  qlever::Variable possiblyUndefVar{"?possiblyUndef"};
+  qlever::Variable unboundVar{"?unbound"};
 
-  varColMap[alwaysDefinedVar] = makeAlwaysDefinedColumn(0);
-  varColMap[possiblyUndefVar] = makePossiblyUndefinedColumn(1);
+  varColMap[alwaysDefinedVar] = qlever::makeAlwaysDefinedColumn(0);
+  varColMap[possiblyUndefVar] = qlever::makePossiblyUndefinedColumn(1);
   // unboundVar is intentionally not in the map
 
   // Test LiteralExpression with variables
@@ -64,10 +64,12 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
 
   // Test LiteralExpression with ValueId
   {
-    auto definedIdExpr = std::make_unique<IdExpression>(Id::makeFromInt(42));
+    auto definedIdExpr =
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(42));
     EXPECT_TRUE(definedIdExpr->isResultAlwaysDefined(varColMap));
 
-    auto undefinedIdExpr = std::make_unique<IdExpression>(Id::makeUndefined());
+    auto undefinedIdExpr =
+        std::make_unique<IdExpression>(qlever::Id::makeUndefined());
     EXPECT_FALSE(undefinedIdExpr->isResultAlwaysDefined(varColMap));
   }
 
@@ -84,8 +86,8 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   // Test LiteralExpression with vector of IDs (currently always undefined
   // pessimistically).
   {
-    auto vecExpr =
-        std::make_unique<VectorIdExpression>(VectorWithMemoryLimit<ValueId>(
+    auto vecExpr = std::make_unique<VectorIdExpression>(
+        VectorWithMemoryLimit<qlever::ValueId>(
             0U, ad_utility::testing::makeAllocator()));
     EXPECT_FALSE(vecExpr->isResultAlwaysDefined(varColMap));
   }
@@ -96,20 +98,20 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
     auto coalesce1 = makeCoalesceExpressionVariadic(
         std::make_unique<VariableExpression>(possiblyUndefVar),
         std::make_unique<VariableExpression>(alwaysDefinedVar),
-        std::make_unique<IdExpression>(Id::makeUndefined()));
+        std::make_unique<IdExpression>(qlever::Id::makeUndefined()));
     EXPECT_TRUE(coalesce1->isResultAlwaysDefined(varColMap));
 
     // COALESCE with no always-defined children -> not always defined
     auto coalesce2 = makeCoalesceExpressionVariadic(
         std::make_unique<VariableExpression>(possiblyUndefVar),
         std::make_unique<VariableExpression>(unboundVar),
-        std::make_unique<IdExpression>(Id::makeUndefined()));
+        std::make_unique<IdExpression>(qlever::Id::makeUndefined()));
     EXPECT_FALSE(coalesce2->isResultAlwaysDefined(varColMap));
 
     // COALESCE with all always-defined children -> always defined
     auto coalesce3 = makeCoalesceExpressionVariadic(
-        std::make_unique<IdExpression>(Id::makeFromInt(1)),
-        std::make_unique<IdExpression>(Id::makeFromInt(2)),
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(1)),
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(2)),
         std::make_unique<VariableExpression>(alwaysDefinedVar));
     EXPECT_TRUE(coalesce3->isResultAlwaysDefined(varColMap));
   }
@@ -117,23 +119,23 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   // Test IfExpression - general case
   {
     // Both branches always defined -> always defined
-    auto ifExpr1 =
-        makeIfExpression(std::make_unique<IdExpression>(Id::makeFromBool(true)),
-                         std::make_unique<IdExpression>(Id::makeFromInt(1)),
-                         std::make_unique<IdExpression>(Id::makeFromInt(2)));
+    auto ifExpr1 = makeIfExpression(
+        std::make_unique<IdExpression>(qlever::Id::makeFromBool(true)),
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(1)),
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(2)));
     EXPECT_TRUE(ifExpr1->isResultAlwaysDefined(varColMap));
 
     // Then-branch possibly undefined -> not always defined
-    auto ifExpr2 =
-        makeIfExpression(std::make_unique<IdExpression>(Id::makeFromBool(true)),
-                         std::make_unique<VariableExpression>(possiblyUndefVar),
-                         std::make_unique<IdExpression>(Id::makeFromInt(2)));
+    auto ifExpr2 = makeIfExpression(
+        std::make_unique<IdExpression>(qlever::Id::makeFromBool(true)),
+        std::make_unique<VariableExpression>(possiblyUndefVar),
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(2)));
     EXPECT_FALSE(ifExpr2->isResultAlwaysDefined(varColMap));
 
     // Else-branch possibly undefined -> not always defined
     auto ifExpr3 = makeIfExpression(
-        std::make_unique<IdExpression>(Id::makeFromBool(true)),
-        std::make_unique<IdExpression>(Id::makeFromInt(1)),
+        std::make_unique<IdExpression>(qlever::Id::makeFromBool(true)),
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(1)),
         std::make_unique<VariableExpression>(possiblyUndefVar));
     EXPECT_FALSE(ifExpr3->isResultAlwaysDefined(varColMap));
   }
@@ -164,7 +166,7 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
         makeBoundExpression(
             std::make_unique<VariableExpression>(possiblyUndefVar)),
         std::make_unique<VariableExpression>(possiblyUndefVar),
-        std::make_unique<IdExpression>(Id::makeFromInt(42)));
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(42)));
     EXPECT_TRUE(ifExprSpecial3->isResultAlwaysDefined(varColMap));
 
     // Pattern doesn't match: IF(BOUND(?x), ?y, ?z) where ?x != ?y
@@ -174,7 +176,7 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
             std::make_unique<VariableExpression>(possiblyUndefVar)),
         std::make_unique<VariableExpression>(
             alwaysDefinedVar),  // Different variable!
-        std::make_unique<IdExpression>(Id::makeFromInt(42)));
+        std::make_unique<IdExpression>(qlever::Id::makeFromInt(42)));
     EXPECT_TRUE(ifExprNotSpecial->isResultAlwaysDefined(varColMap));
 
     // Pattern doesn't match, and one branch is not always defined
@@ -194,17 +196,17 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
   using namespace sparqlExpression::detail;
 
   auto makeVar = []() -> SparqlExpression::Ptr {
-    return std::make_unique<VariableExpression>(Variable{"?x"});
+    return std::make_unique<VariableExpression>(qlever::Variable{"?x"});
   };
   auto makeSharedVar = []() {
-    return std::make_shared<VariableExpression>(Variable{"?x"});
+    return std::make_shared<VariableExpression>(qlever::Variable{"?x"});
   };
   auto makeRand = []() -> SparqlExpression::Ptr {
     return std::make_unique<RandomExpression>();
   };
 
-  EXPECT_TRUE(VariableExpression{Variable{"?x"}}.isDeterministic());
-  EXPECT_TRUE(IdExpression{Id::makeFromInt(1)}.isDeterministic());
+  EXPECT_TRUE(VariableExpression{qlever::Variable{"?x"}}.isDeterministic());
+  EXPECT_TRUE(IdExpression{qlever::Id::makeFromInt(1)}.isDeterministic());
 
   EXPECT_TRUE(makeCountStarExpression(false)->isDeterministic());
 
@@ -263,8 +265,10 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
                                     "RAND()"};
   EXPECT_FALSE(nonDetPimpl.isDeterministic());
 
-  EXPECT_TRUE((PrefixRegexExpression{makeVar(), "prefix", Variable{"?x"}}
-                   .isDeterministic()));
+  EXPECT_TRUE(
+      (PrefixRegexExpression{makeVar(), "prefix", qlever::Variable{"?x"}}
+           .isDeterministic()));
 
-  EXPECT_TRUE((SingleUseExpression{Id::makeFromInt(1)}.isDeterministic()));
+  EXPECT_TRUE(
+      (SingleUseExpression{qlever::Id::makeFromInt(1)}.isDeterministic()));
 }

@@ -64,7 +64,4 @@ class NeutralElementOperation : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::NeutralElementOperation;
-
 #endif  // QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H

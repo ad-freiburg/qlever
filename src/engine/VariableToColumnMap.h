@@ -94,12 +94,4 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     size_t leftResultWidth, bool keepJoinColumns = true);
 
 }  // namespace qlever
-
-using qlever::ColumnIndex;
-using qlever::ColumnIndexAndTypeInfo;
-using qlever::makeAlwaysDefinedColumn;
-using qlever::makePossiblyUndefinedColumn;
-using qlever::Variable;
-using qlever::VariableToColumnMap;
-
 #endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

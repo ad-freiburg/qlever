@@ -28,13 +28,13 @@ using ad_utility::source_location;
 namespace {
 auto I = IntId;
 auto V = VocabId;
-auto U = Id::makeUndefined();
+auto U = qlever::Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
   return IdOrLiteralOrIri{
       ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s))};
 };
-static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
+static const qlever::Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace
 
 // Test that an expression of type `AggregateExpressionT` when run on the
@@ -67,7 +67,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
 // Same as `testAggregate` above, but the input is specified as a variable.
 template <typename AggregateExpressionT, typename T, typename U = T>
 auto testAggregateWithVariable =
-    [](Variable input, U expectedResult, bool distinct = false,
+    [](qlever::Variable input, U expectedResult, bool distinct = false,
        source_location l = AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(l);
       auto d = std::make_unique<VariableExpression>(std::move(input));
@@ -80,7 +80,7 @@ auto testAggregateWithVariable =
 
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
-  auto testCountId = testAggregate<CountExpression, Id>;
+  auto testCountId = testAggregate<CountExpression, qlever::Id>;
   // Test cases. Make sure that UNDEF and NaN values are ignored and that the
   // result for an empty input is 0. The last (Boolean) argument indicates
   // whether the count should be distinct.
@@ -90,22 +90,23 @@ TEST(AggregateExpression, count) {
   testCountId({I(3), NaN, NaN}, I(2), true);
   testCountId({}, I(0));
 
-  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
+  auto testCountString =
+      testAggregate<CountExpression, IdOrLiteralOrIri, qlever::Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }
 
 // Test the behavior of COUNT for variables.
 TEST(AggregateExpression, countForVariables) {
-  auto testCount = testAggregateWithVariable<CountExpression, Id>;
+  auto testCount = testAggregateWithVariable<CountExpression, qlever::Id>;
   // Unbound variables always have a count of 0.
-  testCount(Variable{"?thisVariableIsNotContained"}, I(0));
+  testCount(qlever::Variable{"?thisVariableIsNotContained"}, I(0));
   // The static test context has three rows.
-  testCount(Variable{"?ints"}, I(3));
+  testCount(qlever::Variable{"?ints"}, I(3));
 }
 
 // Test `SumExpression`.
 TEST(AggregateExpression, sum) {
-  auto testSumId = testAggregate<SumExpression, Id>;
+  auto testSumId = testAggregate<SumExpression, qlever::Id>;
   testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
   testSumId({D(2), D(2), I(2)}, D(4), true);
   testSumId({I(3), U}, U);
@@ -115,36 +116,39 @@ TEST(AggregateExpression, sum) {
   auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
   testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("unfug"));
-  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
+  auto testSumString =
+      testAggregate<SumExpression, IdOrLiteralOrIri, qlever::Id>;
   testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
 // Test `AvgExpression`.
 TEST(AggregateExpression, avg) {
-  auto testAvgId = testAggregate<AvgExpression, Id>;
+  auto testAvgId = testAggregate<AvgExpression, qlever::Id>;
   testAvgId({I(3), D(0), I(0), I(4), (I(-2))}, D(1));
   testAvgId({D(2), D(2), I(2)}, D(2), true);
   testAvgId({I(3), U}, U);
   testAvgId({I(3), NaN}, NaN);
   testAvgId({}, I(0));
 
-  auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
+  auto testAvgString =
+      testAggregate<AvgExpression, IdOrLiteralOrIri, qlever::Id>;
   testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
 // Test `StdevExpression`.
 TEST(StdevExpression, avg) {
-  auto testStdevId = testAggregate<StdevExpression, Id>;
+  auto testStdevId = testAggregate<StdevExpression, qlever::Id>;
 
   auto inputAsVector = std::vector{I(3), D(0), I(0), I(4), I(-2)};
-  VectorWithMemoryLimit<ValueId> input(inputAsVector.begin(),
-                                       inputAsVector.end(), makeAllocator());
+  VectorWithMemoryLimit<qlever::ValueId> input(
+      inputAsVector.begin(), inputAsVector.end(), makeAllocator());
   auto d = std::make_unique<SingleUseExpression>(input.clone());
   auto t = TestContext{};
   t.context._endIndex = 5;
   StdevExpression m{false, std::move(d)};
   auto resAsVariant = m.evaluate(&t.context);
-  ASSERT_NEAR(std::get<ValueId>(resAsVariant).getDouble(), 2.44949, 0.0001);
+  ASSERT_NEAR(std::get<qlever::ValueId>(resAsVariant).getDouble(), 2.44949,
+              0.0001);
 
   testStdevId({D(2), D(2), D(2), D(2)}, D(0), true);
 
@@ -155,24 +159,25 @@ TEST(StdevExpression, avg) {
   testStdevId({D(500)}, D(0));
   testStdevId({D(500), D(500), D(500)}, D(0));
 
-  auto testStdevString = testAggregate<StdevExpression, IdOrLiteralOrIri, Id>;
+  auto testStdevString =
+      testAggregate<StdevExpression, IdOrLiteralOrIri, qlever::Id>;
   testStdevString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
 // Test `MinExpression`.
 TEST(AggregateExpression, min) {
-  auto testMinId = testAggregate<MinExpression, Id>;
+  auto testMinId = testAggregate<MinExpression, qlever::Id>;
   TestContext t;
   // IDs of one word from the vocabulary ("alpha") and two words
   // from the local vocabulary ("alx" and "aalx").
-  Id alpha = t.alpha;
+  qlever::Id alpha = t.alpha;
   const auto& localVocabContext = t.qec->getLocalVocabContext();
   LocalVocabEntry l1 =
       LocalVocabEntry::literalWithoutQuotes("alx", localVocabContext);
-  Id alx = Id::makeFromLocalVocabIndex(&l1);
+  qlever::Id alx = qlever::Id::makeFromLocalVocabIndex(&l1);
   LocalVocabEntry l2 =
       LocalVocabEntry::literalWithoutQuotes("aalx", localVocabContext);
-  Id aalx = Id::makeFromLocalVocabIndex(&l2);
+  qlever::Id aalx = qlever::Id::makeFromLocalVocabIndex(&l2);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
   // compared correctly, that UNDEF is smaller than any other value, and that
@@ -191,15 +196,15 @@ TEST(AggregateExpression, min) {
 
 // Test `MaxExpression`.
 TEST(AggregateExpression, max) {
-  auto testMaxId = testAggregate<MaxExpression, Id>;
+  auto testMaxId = testAggregate<MaxExpression, qlever::Id>;
   auto t = TestContext{};
   // IDs of two words from the vocabulary ("alpha" and "Beta") and one word
   // from the local vocabulary ("alx").
-  Id alpha = t.alpha;
-  Id beta = t.Beta;
+  qlever::Id alpha = t.alpha;
+  qlever::Id beta = t.Beta;
   LocalVocabEntry l = LocalVocabEntry::literalWithoutQuotes(
       "alx", t.qec->getLocalVocabContext());
-  Id alx = Id::makeFromLocalVocabIndex(&l);
+  qlever::Id alx = qlever::Id::makeFromLocalVocabIndex(&l);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
   // compared correctly, that UNDEF is smaller than any other value, and that
@@ -227,7 +232,8 @@ TEST(AggregateExpression, CountStar) {
     };
     using namespace ::testing;
     t.qec->getQueryTreeCache().clearAll();
-    return ResultOf(evaluate, VariantWith<Id>(Eq(Id::makeFromInt(i))));
+    return ResultOf(evaluate,
+                    VariantWith<qlever::Id>(Eq(qlever::Id::makeFromInt(i))));
   };
 
   auto totalSize = t.table.size();
@@ -256,15 +262,15 @@ TEST(AggregateExpression, CountStar) {
   // ignored by COUNT DISTINCT *).
   t.varToColMap.clear();
 
-  t.varToColMap[Variable{"?x"}] = {
-      1, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
+  t.varToColMap[qlever::Variable{"?x"}] = {
+      1, qlever::ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
   EXPECT_THAT(m, matcher(totalSize));
 
   // This variable is internal, so it doesn't count towards the `COUNT(DISTINCT
   // *)` and doesn't change the result.
-  t.varToColMap[Variable{
+  t.varToColMap[qlever::Variable{
       absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, "someInternalVar")}] = {
-      0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
+      0, qlever::ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
   t.qec->getQueryTreeCache().clearAll();
   EXPECT_THAT(m, matcher(totalSize));
 
@@ -274,8 +280,8 @@ TEST(AggregateExpression, CountStar) {
   t.table.push_back(t.table[0]);
 
   auto setToUndef = [](IdTable::row_reference row) {
-    for (Id& id : row) {
-      id = Id::makeUndefined();
+    for (qlever::Id& id : row) {
+      id = qlever::Id::makeUndefined();
     }
   };
   setToUndef(t.table[t.table.numRows() - 1]);
@@ -334,7 +340,7 @@ TEST(AggregateExpression, SampleExpression) {
   };
 
   testSample(I(3), I(3));
-  auto v = VectorWithMemoryLimit<Id>(makeAllocator());
+  auto v = VectorWithMemoryLimit<qlever::Id>(makeAllocator());
   v.push_back(I(34));
   v.push_back(I(42));
   testSample(v.clone(), I(34));
@@ -343,13 +349,13 @@ TEST(AggregateExpression, SampleExpression) {
   v.clear();
   testSample(v.clone(), U);
   // The first value of the ?ints variable inside the `TestContext` is `1`.
-  testSample(Variable{"?ints"}, I(1));
+  testSample(qlever::Variable{"?ints"}, I(1));
 }
 
 // _____________________________________________________________________________
 TEST(AggregateExpression, SampleExpressionSimpleMembers) {
   using namespace sparqlExpression;
-  auto makeSample = [](Id result, bool distinct = false) {
+  auto makeSample = [](qlever::Id result, bool distinct = false) {
     return std::make_unique<SampleExpression>(
         distinct, std::make_unique<IdExpression>(std::move(result)));
   };

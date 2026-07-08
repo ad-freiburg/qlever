@@ -11,14 +11,14 @@
 TEST(HttpErrorTest, fields) {
   {
     // The reason is set automatically based on the status code.
-    HttpError err(boost::beast::http::status::not_found);
+    qlever::HttpError err(boost::beast::http::status::not_found);
     EXPECT_THAT(err.status(),
                 testing::Eq(boost::beast::http::status::not_found));
     EXPECT_THAT(err.what(), testing::StrEq("Not Found"));
   }
   {
     // With an explicitly set reason.
-    HttpError err(boost::beast::http::status::not_found, "Sorry");
+    qlever::HttpError err(boost::beast::http::status::not_found, "Sorry");
     EXPECT_THAT(err.status(),
                 testing::Eq(boost::beast::http::status::not_found));
     EXPECT_THAT(err.what(), testing::StrEq("Sorry"));

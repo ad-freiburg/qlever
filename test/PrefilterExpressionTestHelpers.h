@@ -154,7 +154,8 @@ namespace {
 using Literal = ad_utility::triple_component::Literal;
 using Iri = ad_utility::triple_component::Iri;
 using SparqlPtr = std::unique_ptr<SparqlExpression>;
-using VariantArgs = std::variant<Variable, ValueId, Iri, Literal, SparqlPtr>;
+using VariantArgs =
+    std::variant<qlever::Variable, qlever::ValueId, Iri, Literal, SparqlPtr>;
 
 //______________________________________________________________________________
 // If value `child` is not already a `SparqlExpression` pointer, try to create
@@ -163,9 +164,9 @@ using VariantArgs = std::variant<Variable, ValueId, Iri, Literal, SparqlPtr>;
 constexpr inline auto makeOptLiteralSparqlExpr =
     [](auto child) -> std::unique_ptr<SparqlExpression> {
   using T = std::decay_t<decltype(child)>;
-  if constexpr (std::is_same_v<T, ValueId>) {
+  if constexpr (std::is_same_v<T, qlever::ValueId>) {
     return std::make_unique<IdExpression>(child);
-  } else if constexpr (std::is_same_v<T, Variable>) {
+  } else if constexpr (std::is_same_v<T, qlever::Variable>) {
     return std::make_unique<VariableExpression>(child);
   } else if constexpr (std::is_same_v<T, Literal>) {
     return std::make_unique<StringLiteralExpression>(child);

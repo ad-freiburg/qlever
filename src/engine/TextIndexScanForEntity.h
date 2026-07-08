@@ -90,7 +90,4 @@ class TextIndexScanForEntity : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::TextIndexScanForEntity;
-
 #endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H

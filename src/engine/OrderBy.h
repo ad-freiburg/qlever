@@ -94,7 +94,4 @@ class OrderBy : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::OrderBy;
-
 #endif  // QLEVER_SRC_ENGINE_ORDERBY_H

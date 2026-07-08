@@ -132,7 +132,4 @@ class HasPredicateScan : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::HasPredicateScan;
-
 #endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

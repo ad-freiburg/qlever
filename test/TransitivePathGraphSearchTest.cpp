@@ -32,7 +32,7 @@ class GraphSearchTest : public Test {
  protected:
   using AdjacencyList = std::unordered_map<size_t, std::vector<size_t>>;
 
-  const ad_utility::AllocatorWithLimit<Id> allocator_ =
+  const ad_utility::AllocatorWithLimit<qlever::Id> allocator_ =
       ad_utility::testing::makeAllocator();
   GraphSearchExecutionParams ep_{
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator_};
@@ -40,8 +40,8 @@ class GraphSearchTest : public Test {
   std::vector<T> graphs_;
   // When testing using BinSearchMap, store the data for the startIds and
   // targetIds spans here.
-  std::vector<std::vector<Id>> binSearchMapStartIds_;
-  std::vector<std::vector<Id>> binSearchMapTargetIds_;
+  std::vector<std::vector<qlever::Id>> binSearchMapStartIds_;
+  std::vector<std::vector<qlever::Id>> binSearchMapTargetIds_;
 
   // Easy-to-read-and-change representation of the graphs that will be tested
   // on. Will be converted to template type T and stored in `graphs_` in the
@@ -92,7 +92,7 @@ class GraphSearchTest : public Test {
   Set initializeSet(const std::vector<size_t>& values) {
     Set returned{allocator_};
     for (size_t idx : values) {
-      returned.insert(Id::makeFromInt(idx));
+      returned.insert(qlever::Id::makeFromInt(idx));
     }
     return returned;
   }
@@ -105,17 +105,17 @@ class GraphSearchTest : public Test {
   void initializeGraphsWrappers() {
     // If a third wrapper (next to `HashMapWrapper` and `BinSearchMap`) is
     // introduced, specialized creation thereof will be necessary here.
-    if constexpr (std::is_same_v<T, HashMapWrapper>) {
+    if constexpr (std::is_same_v<T, qlever::HashMapWrapper>) {
       for (const AdjacencyList& adjList : graphsAdjListRepresentation_) {
-        HashMapWrapper::Map map(allocator_);
+        qlever::HashMapWrapper::Map map(allocator_);
         for (const auto& pair : adjList) {
-          map.insert_or_assign(Id::makeFromInt(pair.first),
+          map.insert_or_assign(qlever::Id::makeFromInt(pair.first),
                                this->initializeSet(pair.second));
         }
-        graphs_.push_back(HashMapWrapper(map, allocator_));
+        graphs_.push_back(qlever::HashMapWrapper(map, allocator_));
       }
     } else {
-      static_assert(std::is_same_v<T, BinSearchMap>);
+      static_assert(std::is_same_v<T, qlever::BinSearchMap>);
 
       binSearchMapStartIds_.reserve(graphsAdjListRepresentation_.size());
       binSearchMapTargetIds_.reserve(graphsAdjListRepresentation_.size());
@@ -123,8 +123,8 @@ class GraphSearchTest : public Test {
       for (const AdjacencyList& adjList : graphsAdjListRepresentation_) {
         // Create new storage on the heap for a new BinSearchMap's startId and
         // targetId spans.
-        binSearchMapStartIds_.push_back(std::vector<Id>());
-        binSearchMapTargetIds_.push_back(std::vector<Id>());
+        binSearchMapStartIds_.push_back(std::vector<qlever::Id>());
+        binSearchMapTargetIds_.push_back(std::vector<qlever::Id>());
         auto& startIds = binSearchMapStartIds_.back();
         auto& targetIds = binSearchMapTargetIds_.back();
 
@@ -134,12 +134,13 @@ class GraphSearchTest : public Test {
 
         for (const size_t startNode : keys) {
           for (const size_t targetNode : adjList.at(startNode)) {
-            startIds.emplace_back(Id::makeFromInt(startNode));
-            targetIds.emplace_back(Id::makeFromInt(targetNode));
+            startIds.emplace_back(qlever::Id::makeFromInt(startNode));
+            targetIds.emplace_back(qlever::Id::makeFromInt(targetNode));
           }
         }
-        graphs_.push_back(BinSearchMap(ql::span<const Id>(startIds),
-                                       ql::span<const Id>(targetIds)));
+        graphs_.push_back(
+            qlever::BinSearchMap(ql::span<const qlever::Id>(startIds),
+                                 ql::span<const qlever::Id>(targetIds)));
       }
     }
   }
@@ -147,7 +148,8 @@ class GraphSearchTest : public Test {
 
 // If another wrapper for graphs is to be introduced, add it here as well as
 // in `GraphSearchTest::initializeGraphsWrappers()`.
-using graphSearchTestTypes = Types<HashMapWrapper, BinSearchMap>;
+using graphSearchTestTypes =
+    Types<qlever::HashMapWrapper, qlever::BinSearchMap>;
 TYPED_TEST_SUITE(GraphSearchTest, graphSearchTestTypes);
 // _____________________________________________________________________________
 TYPED_TEST(GraphSearchTest, graphSearchWithoutTarget) {
@@ -158,9 +160,9 @@ TYPED_TEST(GraphSearchTest, graphSearchWithoutTarget) {
   // Iterate over all graphs and check if the graph search returns the right
   // values.
   for (size_t i = 0; i < expected.size(); i++) {
-    GraphSearchProblem<TypeParam> gsp(this->graphs_.at(i), Id::makeFromInt(0),
-                                      std::optional<Id>(), 0,
-                                      std::numeric_limits<size_t>::max());
+    GraphSearchProblem<TypeParam> gsp(
+        this->graphs_.at(i), qlever::Id::makeFromInt(0),
+        std::optional<qlever::Id>(), 0, std::numeric_limits<size_t>::max());
     EXPECT_THAT(runOptimalGraphSearch(gsp, this->ep_),
                 this->initializeSet(expected.at(i)));
   }
@@ -187,9 +189,9 @@ TYPED_TEST(GraphSearchTest, graphSearchWithoutTargetWithLimit) {
       TestVal(7, 1, std::numeric_limits<size_t>::max(), {1, 2, 3, 4})};
 
   for (const TestVal& test : tests) {
-    GraphSearchProblem<TypeParam> gsp(this->graphs_.at(test.graphNumber_),
-                                      Id::makeFromInt(0), std::optional<Id>(),
-                                      test.minDist_, test.maxDist_);
+    GraphSearchProblem<TypeParam> gsp(
+        this->graphs_.at(test.graphNumber_), qlever::Id::makeFromInt(0),
+        std::optional<qlever::Id>(), test.minDist_, test.maxDist_);
 
     EXPECT_THAT(runOptimalGraphSearch(gsp, this->ep_),
                 this->initializeSet(test.expected_));
@@ -209,9 +211,10 @@ TYPED_TEST(GraphSearchTest, graphSearchWithTarget) {
                                    TestVal(5, 7, {7}), TestVal(5, 8, {})};
 
   for (const TestVal& test : tests) {
-    GraphSearchProblem<TypeParam> gsp(
-        this->graphs_.at(test.graphNumber_), Id::makeFromInt(0),
-        Id::makeFromInt(test.target_), 0, std::numeric_limits<size_t>::max());
+    GraphSearchProblem<TypeParam> gsp(this->graphs_.at(test.graphNumber_),
+                                      qlever::Id::makeFromInt(0),
+                                      qlever::Id::makeFromInt(test.target_), 0,
+                                      std::numeric_limits<size_t>::max());
 
     EXPECT_THAT(runOptimalGraphSearch(gsp, this->ep_),
                 this->initializeSet(test.expected_))
@@ -246,8 +249,8 @@ TYPED_TEST(GraphSearchTest, graphSearchWithTargetWithLimit) {
 
   for (const TestVal& test : tests) {
     GraphSearchProblem<TypeParam> gsp(
-        this->graphs_.at(test.graphNumber_), Id::makeFromInt(0),
-        Id::makeFromInt(test.target_), test.minDist_, test.maxDist_);
+        this->graphs_.at(test.graphNumber_), qlever::Id::makeFromInt(0),
+        qlever::Id::makeFromInt(test.target_), test.minDist_, test.maxDist_);
 
     EXPECT_THAT(runOptimalGraphSearch(gsp, this->ep_),
                 this->initializeSet(test.expected_))
@@ -264,7 +267,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   // received will be logged.
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
 
-  const ad_utility::AllocatorWithLimit<Id> allocator =
+  const ad_utility::AllocatorWithLimit<qlever::Id> allocator =
       ad_utility::testing::makeAllocator();
   GraphSearchExecutionParams ep(
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator);

@@ -19,6 +19,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/ParsedUri.h"
 
+using namespace qlever;
+
 using namespace sparqlExpression::detail;
 
 // _____________________________________________________________________________

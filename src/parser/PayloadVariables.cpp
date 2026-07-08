@@ -8,6 +8,8 @@
 
 #include "util/Exception.h"
 
+using qlever::Variable;
+
 // ____________________________________________________________________________
 PayloadVariables::PayloadVariables(std::vector<Variable> variables)
     : variables_{std::move(variables)} {};

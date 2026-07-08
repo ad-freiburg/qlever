@@ -27,10 +27,11 @@ class ExpressionOrderKey {
 class VariableOrderKey {
  public:
   bool isDescending_;
-  Variable variable_;
+  qlever::Variable variable_;
 
   // ___________________________________________________________________________
-  explicit VariableOrderKey(Variable variable, bool isDescending = false)
+  explicit VariableOrderKey(qlever::Variable variable,
+                            bool isDescending = false)
       : isDescending_{isDescending}, variable_{std::move(variable)} {}
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(VariableOrderKey, isDescending_,

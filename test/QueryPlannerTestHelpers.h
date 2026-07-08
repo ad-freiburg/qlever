@@ -292,7 +292,7 @@ inline auto IndexScanFromStrings =
            std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (ql::starts_with(s, "?")) {
-      return ::Variable{std::string{s}};
+      return qlever::Variable{std::string{s}};
     } else if (ql::starts_with(s, '<')) {
       return TripleComponent::Iri::fromIriref(s);
     }

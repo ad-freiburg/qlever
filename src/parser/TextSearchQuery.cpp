@@ -10,6 +10,8 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
                          const TextIndexScanForEntityConfiguration& conf) {

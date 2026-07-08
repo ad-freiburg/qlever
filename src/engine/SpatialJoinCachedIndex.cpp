@@ -10,6 +10,8 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
+using namespace qlever;
+
 // An instance of this type erased class holds the actual data for each
 // `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
 // well as the storage of the geometries since the index works on pointers to

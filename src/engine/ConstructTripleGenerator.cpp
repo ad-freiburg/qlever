@@ -15,6 +15,8 @@
 #include "engine/ConstructTripleInstantiator.h"
 #include "util/Views.h"
 
+using namespace qlever;
+
 namespace qlever::constructExport {
 
 using ad_utility::InputRangeTypeErased;

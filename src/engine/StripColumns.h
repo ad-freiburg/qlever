@@ -69,7 +69,4 @@ class StripColumns : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::StripColumns;
-
 #endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H

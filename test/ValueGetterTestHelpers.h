@@ -23,9 +23,8 @@
 #include "util/GTestHelpers.h"
 #include "util/TypeTraits.h"
 
-using namespace qlever;
-
 namespace valueGetterTestHelpers {
+using namespace qlever;
 
 const std::string ttl = R"(
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -36,10 +35,10 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 struct TestContextWithGivenTTl {
   std::string turtleInput;
   std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt;
-  QueryExecutionContext* qec =
+  qlever::QueryExecutionContext* qec =
       ad_utility::testing::getQec(turtleInput, vocabularyType);
-  VariableToColumnMap varToColMap;
-  LocalVocab localVocab;
+  qlever::VariableToColumnMap varToColMap;
+  qlever::LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,
@@ -162,7 +161,8 @@ inline void checkUnitValueGetterFromId(
 // Helper to test UnitOfMeasurementValueGetter using ValueId input where the
 // ValueId represents an encoded value
 inline void checkUnitValueGetterFromIdEncodedValue(
-    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+    qlever::ValueId id,
+    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
   TestContextWithGivenTTl testContext{unitTtl};
   ASSERT_EQ(getter(id, &testContext.context), UnitOfMeasurement::UNKNOWN);
 }
@@ -235,9 +235,9 @@ class ValueGetterTester {
     ValueGetter getter;
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
-    LocalVocab localVocab;
+    qlever::LocalVocab localVocab;
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(
+        qlever::LocalVocabEntry::fromStringRepresentation(
             std::move(literal), testContext.qec->getLocalVocabContext()));
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
@@ -252,7 +252,7 @@ class ValueGetterTester {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
-    VocabIndex idx;
+    qlever::VocabIndex idx;
     ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(literal, &idx))
         << "Given test literal is not contained in test dataset";
     auto id = ValueId::makeFromVocabIndex(idx);
@@ -320,5 +320,4 @@ inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
 }
 
 }  // namespace geoInfoVGTestHelpers
-
 #endif  // QLEVER_TEST_VALUEGETTERTESTHELPERS_H

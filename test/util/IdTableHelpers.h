@@ -53,7 +53,7 @@ class CopyableIdTable : public TableImpl<N> {
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using IntOrId = std::variant<int64_t, Id>;
+using IntOrId = std::variant<int64_t, qlever::Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
 // Helper: construct a single-column VectorTable containing the exclusive
@@ -82,8 +82,8 @@ IdTable makeIdTableFromVector(const VectorTable& content,
     AD_CONTRACT_CHECK(row.size() == result.numColumns());
     result.emplace_back();
     for (size_t i = 0; i < result.numColumns(); ++i) {
-      if (std::holds_alternative<Id>(row.at(i))) {
-        result.back()[i] = std::get<Id>(row.at(i));
+      if (std::holds_alternative<qlever::Id>(row.at(i))) {
+        result.back()[i] = std::get<qlever::Id>(row.at(i));
       } else {
         result.back()[i] = transformation(std::get<int64_t>(row.at(i)));
       }
@@ -195,7 +195,7 @@ be thrown.
 */
 IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const std::function<std::vector<ValueId>()>& rowGenerator);
+    const std::function<std::vector<qlever::ValueId>()>& rowGenerator);
 
 /*
 @brief Create an `IdTable`, where the content of the join columns are given via
@@ -211,7 +211,7 @@ content for the non join column entries.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const std::vector<std::pair<size_t, std::function<ValueId()>>>&
+    const std::vector<std::pair<size_t, std::function<qlever::ValueId()>>>&
         joinColumnWithGenerator,
     const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
@@ -232,7 +232,7 @@ content for the non join column entries.
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<size_t>& joinColumns,
-    const std::function<ValueId()>& generator,
+    const std::function<qlever::ValueId()>& generator,
     const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
@@ -295,16 +295,16 @@ IdTable createRandomlyFilledIdTable(
 
 /// Turn a given `IdTable` into a `QueryExecutionTree` by cloning the table
 /// and filling it with dummy variables.
-std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
-    QueryExecutionContext*, const IdTable&);
+std::shared_ptr<qlever::QueryExecutionTree> idTableToExecutionTree(
+    qlever::QueryExecutionContext*, const IdTable&);
 
 // Fully consume a given generator and store it in an `IdTable` and store the
 // local vocabs in a vector.
-std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
-    Result::LazyResult generator, size_t numColumns);
+std::pair<IdTable, std::vector<qlever::LocalVocab>> aggregateTables(
+    qlever::Result::LazyResult generator, size_t numColumns);
 
 // Create an `IdTable` of the given size with width 1, filled with the given
 // value.
-IdTable createIdTableOfSizeWithValue(size_t size, Id value);
+IdTable createIdTableOfSizeWithValue(size_t size, qlever::Id value);
 
 #endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

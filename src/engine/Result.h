@@ -344,8 +344,4 @@ class Result {
 };
 
 }  // namespace qlever
-
-using qlever::LocalVocab;
-using qlever::Result;
-
 #endif  // QLEVER_SRC_ENGINE_RESULT_H

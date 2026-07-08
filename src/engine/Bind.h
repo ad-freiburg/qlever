@@ -64,6 +64,4 @@ class Bind : public Operation {
 
 }  // namespace qlever
 
-using qlever::Bind;
-
 #endif  // QLEVER_SRC_ENGINE_BIND_H

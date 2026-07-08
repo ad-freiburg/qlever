@@ -24,27 +24,22 @@ class MaterializedView;
 class IndexScan;
 }  // namespace qlever
 
-using qlever::ParsedQuery;
-using qlever::SparqlTriple;
-using qlever::TripleComponent;
-using qlever::Variable;
-
 // _____________________________________________________________________________
 namespace materializedViewsQueryAnalysis {
 
 using ViewPtr = std::shared_ptr<const qlever::MaterializedView>;
 using qlever::graphPatternAnalysis::BasicGraphPatternsInvariantTo;
 using VariableToTripleIndices =
-    ad_utility::HashMap<Variable, std::vector<size_t>>;
+    ad_utility::HashMap<qlever::Variable, std::vector<size_t>>;
 
 // Key and value types of the cache for simple chains, that is queries of the
 // form `?s <p1> ?m . ?m <p2> ?o`.
 using ChainedPredicates = ad_utility::detail::StringPair;
 using ChainedPredicatesForLookup = ad_utility::detail::StringViewPair;
 struct ChainInfo {
-  Variable subject_;
-  Variable chain_;
-  Variable object_;
+  qlever::Variable subject_;
+  qlever::Variable chain_;
+  qlever::Variable object_;
   ViewPtr view_;
 };
 using SimpleChainCache =
@@ -55,9 +50,9 @@ using SimpleChainCache =
 // The `StarInfo` holds the subject variable shared between all arms of the star
 // and the `StarArm` for each of them. The `StarArm` stores the predicate IRI
 // and object variable.
-using StarArm = std::pair<std::string, Variable>;
+using StarArm = std::pair<std::string, qlever::Variable>;
 struct StarInfo {
-  Variable subject_;
+  qlever::Variable subject_;
   std::vector<StarArm> arms_;
 };
 
@@ -102,21 +97,22 @@ class QueryPatternCache {
   // Given a set of triples, check if a subset of necessary join operations can
   // be replaced by scans on materialized views.
   std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
-      QueryExecutionContext* qec,
+      qlever::QueryExecutionContext* qec,
       const parsedQuery::BasicGraphPattern& triples) const;
 
   // Construct an `IndexScan` for a single chain join given the necessary
   // information from both the materialized view and the user's query.
   std::shared_ptr<qlever::IndexScan> makeScanForSingleChain(
-      QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
-      std::optional<Variable> chain, Variable object) const;
+      qlever::QueryExecutionContext* qec, ChainInfo cached,
+      qlever::TripleComponent subject, std::optional<qlever::Variable> chain,
+      qlever::Variable object) const;
 
   // Construct an `IndexScan` for a star join given the `RequestedColumns`
   // object that maps the columns of the materialized view to the subject and
   // object variable names from the user query. This assumes that the `starView`
   // represents the appropriate star join.
   std::shared_ptr<qlever::IndexScan> makeScanForStar(
-      QueryExecutionContext* qec, ViewPtr starView,
+      qlever::QueryExecutionContext* qec, ViewPtr starView,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
 
  private:
@@ -124,8 +120,8 @@ class QueryPatternCache {
   // iff a simple chain `a->b` is present.
   // NOTE: This function only checks one direction, so it should also be called
   // with `a` and `b` switched if it returns `false`.
-  bool analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
-                          const SparqlTriple& b);
+  bool analyzeSimpleChain(ViewPtr view, const qlever::SparqlTriple& a,
+                          const qlever::SparqlTriple& b);
 
   // Helper for `analyzeView`, that checks for a join star of arbitrary size.
   // A star requires all triples to share the same subject variable with
@@ -139,13 +135,15 @@ class QueryPatternCache {
   // Using `triples`, the function checks if the view represents a join star. If
   // yes, it adds the `view` to the cache for join stars. The function returns
   // `true` iff the view contains a star.
-  bool analyzeJoinStar(ViewPtr view, const std::vector<SparqlTriple>& triples);
+  bool analyzeJoinStar(ViewPtr view,
+                       const std::vector<qlever::SparqlTriple>& triples);
 
   // Given potential left and right sides of simple chains, check for available
   // replacement index scans, construct them and insert them into the `result`
   // vector.
   void makeScansFromChainCandidates(
-      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
+      qlever::QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
       const VariableToTripleIndices& chainLeft,
       const VariableToTripleIndices& chainRight) const;
@@ -153,7 +151,8 @@ class QueryPatternCache {
   // Given triples grouped by subject, check for available star join replacement
   // index scans, construct them and insert them into the `result` vector.
   void makeScansFromStarCandidates(
-      QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
+      qlever::QueryExecutionContext* qec,
+      const parsedQuery::BasicGraphPattern& triples,
       std::vector<MaterializedViewJoinReplacement>& result,
       const VariableToTripleIndices& starCandidates) const;
 };
@@ -162,7 +161,7 @@ class QueryPatternCache {
 // `BasicGraphPatternInvariantTo`. For details, see the documentation for this
 // helper.
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
-    const ParsedQuery& parsed);
+    const qlever::ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
@@ -170,8 +169,8 @@ using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
 // Extract all `BIND` statements from a `ParsedQuery` and create a hash map
 // mapping `BIND` expression cache keys to target variable column index.
 BindExpressionAndTargetCol extractBindExpressions(
-    const ParsedQuery& parsed, const VariableToColumnMap& varToColMap);
+    const qlever::ParsedQuery& parsed,
+    const qlever::VariableToColumnMap& varToColMap);
 
 }  // namespace materializedViewsQueryAnalysis
-
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_

@@ -117,7 +117,4 @@ class NamedResultCache {
 };
 
 }  // namespace qlever
-
-using qlever::NamedResultCache;
-
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

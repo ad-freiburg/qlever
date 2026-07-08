@@ -9,10 +9,6 @@
 #include "global/ValueId.h"
 #include "util/Random.h"
 
-using qlever::TextRecordIndex;
-using qlever::ValueId;
-using qlever::WordVocabIndex;
-
 // Enabling cheaper unit tests when building in Debug mode
 #ifdef QLEVER_RUN_EXPENSIVE_TESTS
 static constexpr size_t numElements = 10'000;
@@ -21,62 +17,70 @@ static constexpr size_t numElements = 10;
 #endif
 
 inline auto positiveRepresentableDoubleGenerator =
-    ad_utility::RandomDoubleGenerator(ValueId::minPositiveDouble,
+    ad_utility::RandomDoubleGenerator(qlever::ValueId::minPositiveDouble,
                                       std::numeric_limits<double>::max());
 inline auto negativeRepresentableDoubleGenerator =
     ad_utility::RandomDoubleGenerator(-std::numeric_limits<double>::max(),
-                                      -ValueId::minPositiveDouble);
+                                      -qlever::ValueId::minPositiveDouble);
 inline auto nonRepresentableDoubleGenerator = ad_utility::RandomDoubleGenerator(
-    -ValueId::minPositiveDouble, ValueId::minPositiveDouble);
+    -qlever::ValueId::minPositiveDouble, qlever::ValueId::minPositiveDouble);
 inline auto indexGenerator =
-    ad_utility::SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
+    ad_utility::SlowRandomIntGenerator<uint64_t>(0, qlever::ValueId::maxIndex);
 inline auto invalidIndexGenerator =
     ad_utility::SlowRandomIntGenerator<uint64_t>(
-        ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
+        qlever::ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
 
 inline auto nonOverflowingNBitGenerator =
-    ad_utility::SlowRandomIntGenerator<int64_t>(ValueId::IntegerType::min(),
-                                                ValueId::IntegerType::max());
+    ad_utility::SlowRandomIntGenerator<int64_t>(
+        qlever::ValueId::IntegerType::min(),
+        qlever::ValueId::IntegerType::max());
 inline auto overflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(
-        ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
+        qlever::ValueId::IntegerType::max() + 1,
+        std::numeric_limits<int64_t>::max());
 inline auto underflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(
-        std::numeric_limits<int64_t>::min(), ValueId::IntegerType::min() - 1);
+        std::numeric_limits<int64_t>::min(),
+        qlever::ValueId::IntegerType::min() - 1);
 
 // Some helper functions to convert uint64_t values directly to and from index
 // type `ValueId`s.
-inline ValueId makeVocabId(uint64_t value) {
-  return ValueId::makeFromVocabIndex(VocabIndex::make(value));
+inline qlever::ValueId makeVocabId(uint64_t value) {
+  return qlever::ValueId::makeFromVocabIndex(qlever::VocabIndex::make(value));
 }
-inline ValueId makeLocalVocabId(uint64_t value) {
+inline qlever::ValueId makeLocalVocabId(uint64_t value) {
   return ad_utility::testing::LocalVocabId(value);
 }
-inline ValueId makeTextRecordId(uint64_t value) {
-  return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
+inline qlever::ValueId makeTextRecordId(uint64_t value) {
+  return qlever::ValueId::makeFromTextRecordIndex(
+      qlever::TextRecordIndex::make(value));
 }
-inline ValueId makeWordVocabId(uint64_t value) {
-  return ValueId::makeFromWordVocabIndex(WordVocabIndex::make(value));
+inline qlever::ValueId makeWordVocabId(uint64_t value) {
+  return qlever::ValueId::makeFromWordVocabIndex(
+      qlever::WordVocabIndex::make(value));
 }
-inline ValueId makeBlankNodeId(uint64_t value) {
-  return ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(value));
+inline qlever::ValueId makeBlankNodeId(uint64_t value) {
+  return qlever::ValueId::makeFromBlankNodeIndex(
+      qlever::BlankNodeIndex::make(value));
 }
 
-inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
+inline uint64_t getVocabIndex(qlever::ValueId id) {
+  return id.getVocabIndex().get();
+}
 // TODO<joka921> Make the tests more precise for the localVocabIndices.
-inline std::string getLocalVocabIndex(ValueId id) {
-  AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::LocalVocabIndex);
+inline std::string getLocalVocabIndex(qlever::ValueId id) {
+  AD_CORRECTNESS_CHECK(id.getDatatype() == qlever::Datatype::LocalVocabIndex);
   return std::string{asStringViewUnsafe(id.getLocalVocabIndex()->getContent())};
 }
-inline uint64_t getTextRecordIndex(ValueId id) {
+inline uint64_t getTextRecordIndex(qlever::ValueId id) {
   return id.getTextRecordIndex().get();
 }
-inline uint64_t getWordVocabIndex(ValueId id) {
+inline uint64_t getWordVocabIndex(qlever::ValueId id) {
   return id.getWordVocabIndex().get();
 }
 
 inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
-                                     std::vector<ValueId>& ids) {
+                                     std::vector<qlever::ValueId>& ids) {
   ad_utility::SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
   for (size_t i = 0; i < numElements; ++i) {
     auto randomValue = generator();
@@ -87,48 +91,50 @@ inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
   }
 };
 inline auto makeRandomDoubleIds = []() {
-  std::vector<ValueId> ids;
+  std::vector<qlever::ValueId> ids;
   addIdsFromGenerator(positiveRepresentableDoubleGenerator,
-                      &ValueId::makeFromDouble, ids);
+                      &qlever::ValueId::makeFromDouble, ids);
   addIdsFromGenerator(negativeRepresentableDoubleGenerator,
-                      &ValueId::makeFromDouble, ids);
+                      &qlever::ValueId::makeFromDouble, ids);
 
   for (size_t i = 0; i < numElements; ++i) {
-    ids.push_back(ValueId::makeFromDouble(0.0));
-    ids.push_back(ValueId::makeFromDouble(-0.0));
+    ids.push_back(qlever::ValueId::makeFromDouble(0.0));
+    ids.push_back(qlever::ValueId::makeFromDouble(-0.0));
     auto inf = std::numeric_limits<double>::infinity();
-    ids.push_back(ValueId::makeFromDouble(inf));
-    ids.push_back(ValueId::makeFromDouble(-inf));
+    ids.push_back(qlever::ValueId::makeFromDouble(inf));
+    ids.push_back(qlever::ValueId::makeFromDouble(-inf));
     auto quietNan = std::numeric_limits<double>::quiet_NaN();
-    ids.push_back(ValueId::makeFromDouble(quietNan));
+    ids.push_back(qlever::ValueId::makeFromDouble(quietNan));
     auto signalingNan = std::numeric_limits<double>::signaling_NaN();
-    ids.push_back(ValueId::makeFromDouble(signalingNan));
+    ids.push_back(qlever::ValueId::makeFromDouble(signalingNan));
     auto max = std::numeric_limits<double>::max();
     auto min = std::numeric_limits<double>::min();
-    ids.push_back(ValueId::makeFromDouble(max));
-    ids.push_back(ValueId::makeFromDouble(min));
+    ids.push_back(qlever::ValueId::makeFromDouble(max));
+    ids.push_back(qlever::ValueId::makeFromDouble(min));
   }
   ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
 
 inline auto makeRandomIds = []() {
-  std::vector<ValueId> ids = makeRandomDoubleIds();
+  std::vector<qlever::ValueId> ids = makeRandomDoubleIds();
   addIdsFromGenerator(indexGenerator, &makeVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeLocalVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
   addIdsFromGenerator(indexGenerator, &makeWordVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeBlankNodeId, ids);
-  addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
+  addIdsFromGenerator(nonOverflowingNBitGenerator,
+                      &qlever::ValueId::makeFromInt, ids);
+  addIdsFromGenerator(overflowingNBitGenerator, &qlever::ValueId::makeFromInt,
+                      ids);
+  addIdsFromGenerator(underflowingNBitGenerator, &qlever::ValueId::makeFromInt,
+                      ids);
 
   for (size_t i = 0; i < numElements; ++i) {
-    ids.push_back(ValueId::makeUndefined());
+    ids.push_back(qlever::ValueId::makeUndefined());
   }
 
   ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
-
 #endif  // QLEVER_VALUEIDTESTHELPERS_H

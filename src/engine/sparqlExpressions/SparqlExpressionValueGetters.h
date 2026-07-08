@@ -28,8 +28,6 @@
 /// Several classes that can be used as the `ValueGetter` template
 /// argument in the SparqlExpression templates in `SparqlExpression.h`
 
-using qlever::GeoPoint;
-
 namespace qlever::sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -558,5 +556,4 @@ struct TypeErasedValueGetter {
 };
 
 }  // namespace qlever::sparqlExpression::detail
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONVALUEGETTERS_H

@@ -77,7 +77,4 @@ class TextLimit : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::TextLimit;
-
 #endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H

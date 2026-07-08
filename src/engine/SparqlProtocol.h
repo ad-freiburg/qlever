@@ -65,8 +65,5 @@ class SparqlProtocol {
 };
 
 }  // namespace qlever
-
-using qlever::SparqlProtocol;
-
 #endif
 #endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

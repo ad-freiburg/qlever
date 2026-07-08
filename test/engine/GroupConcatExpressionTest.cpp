@@ -16,18 +16,18 @@ namespace tc = ad_utility::triple_component;
 
 // _____________________________________________________________________________
 void expectIdsAreConcatenatedTo(
-    QueryExecutionContext* qec, bool distinct, const IdTable& idTable,
+    qlever::QueryExecutionContext* qec, bool distinct, const IdTable& idTable,
     const ExpressionResult& expected,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   AD_CONTRACT_CHECK(idTable.numColumns() == 1);
   auto g = generateLocationTrace(location);
 
-  Variable var{"?x"};
-  LocalVocab localVocab;
+  qlever::Variable var{"?x"};
+  qlever::LocalVocab localVocab;
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  VariableToColumnMap map{
-      {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  qlever::VariableToColumnMap map{
+      {var, {0, qlever::ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
   EvaluationContext context{
       *qec,
@@ -47,17 +47,17 @@ void expectIdsAreConcatenatedTo(
 
 // _____________________________________________________________________________
 void expectLiteralsAreConcatenatedTo(
-    QueryExecutionContext* qec, bool distinct,
+    qlever::QueryExecutionContext* qec, bool distinct,
     const std::vector<tc::Literal>& literals,
     const ad_utility::triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
-  LocalVocab localVocab;
-  IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  qlever::LocalVocab localVocab;
+  IdTable input{1, ad_utility::makeUnlimitedAllocator<qlever::Id>()};
 
   for (const auto& inputLiteral : literals) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry{inputLiteral, qec->getLocalVocabContext()});
-    input.push_back({Id::makeFromLocalVocabIndex(idx)});
+    input.push_back({qlever::Id::makeFromLocalVocabIndex(idx)});
   }
   expectIdsAreConcatenatedTo(qec, distinct, input,
                              IdOrLocalVocabEntry{LocalVocabEntry{
@@ -99,21 +99,21 @@ TEST(GroupConcatExpression, basicConcatenation) {
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
-  expectIdsAreConcatenatedTo(qec, false,
-                             makeIdTableFromVector({{Id::makeUndefined()}}),
-                             ExpressionResult{Id::makeUndefined()});
+  qlever::LocalVocab localVocab;
+  expectIdsAreConcatenatedTo(
+      qec, false, makeIdTableFromVector({{qlever::Id::makeUndefined()}}),
+      ExpressionResult{qlever::Id::makeUndefined()});
 
   auto idx = localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::fromStringRepresentation("\"a\"",
                                                 qec->getLocalVocabContext()));
-  auto a = Id::makeFromLocalVocabIndex(idx);
+  auto a = qlever::Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
-      qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),
-      ExpressionResult{Id::makeUndefined()});
+      qec, false, makeIdTableFromVector({{qlever::Id::makeUndefined()}, {a}}),
+      ExpressionResult{qlever::Id::makeUndefined()});
   expectIdsAreConcatenatedTo(
-      qec, false, makeIdTableFromVector({{a}, {Id::makeUndefined()}}),
-      ExpressionResult{Id::makeUndefined()});
+      qec, false, makeIdTableFromVector({{a}, {qlever::Id::makeUndefined()}}),
+      ExpressionResult{qlever::Id::makeUndefined()});
 }
 
 // _____________________________________________________________________________
@@ -139,9 +139,9 @@ TEST(GroupConcatExpression, concatenationWithLanguageTags) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, getCacheKey) {
-  Variable var{"?x"};
-  VariableToColumnMap map{
-      {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  qlever::Variable var{"?x"};
+  qlever::VariableToColumnMap map{
+      {var, {0, qlever::ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
   std::string sep = "👻";
 

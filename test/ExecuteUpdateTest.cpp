@@ -332,8 +332,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         {ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                            IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))})},
         {IsEmpty()});
-    auto allTriplesWith = [&Id,
-                           &IdTriple](std::optional<::Id> g = std::nullopt) {
+    auto allTriplesWith = [&Id, &IdTriple](std::optional<qlever::Id> g =
+                                               std::nullopt) {
       return std::vector{IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\""), g),
                          IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\""), g),
                          IdTriple(Id("<x>"), Id("<label>"), Id("\"A\""), g),
@@ -387,7 +387,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     config.indexType = qlever::Filetype::NQuad;
     qec = ad_utility::testing::getQec(std::move(config));
     auto Id = ad_utility::testing::makeGetId(qec->getIndex());
-    auto QuadFrom = [&IdTriple](const ::Id& id) {
+    auto QuadFrom = [&IdTriple](const qlever::Id& id) {
       return IdTriple(id, id, id, id);
     };
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
@@ -439,12 +439,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
   auto TripleComponentMatcher = [&index](
-                                    const ::LocalVocab& localVocab,
+                                    const qlever::LocalVocab& localVocab,
                                     TripleComponentT component) -> MatcherType {
     return std::visit(
         ad_utility::OverloadCallOperator{
-            [](const ::Id& id) -> MatcherType {
-              return VariantWith<::Id>(Eq(id));
+            [](const qlever::Id& id) -> MatcherType {
+              return VariantWith<qlever::Id>(Eq(id));
             },
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
@@ -460,7 +460,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                                  " not in local vocab"));
               }
               const auto id = Id::makeFromLocalVocabIndex(lviOpt.value());
-              return VariantWith<::Id>(
+              return VariantWith<qlever::Id>(
                   AD_PROPERTY(Id, getBits, Eq(id.getBits())));
             }},
         component);

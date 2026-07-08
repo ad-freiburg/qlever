@@ -130,7 +130,7 @@ template <bool removeQuotesAndAngleBrackets = false,
 std::optional<std::pair<std::string, const char*>> idToStringAndType(
     const Index& index, Id id, const LocalVocab& localVocab,
     EscapeFunction&& escapeFunction = EscapeFunction{}) {
-  using enum Datatype;
+  using enum qlever::Datatype;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
     if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
@@ -204,7 +204,7 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   // record where the `VocabIndex` block begins.
   size_t vocabBegin = ids.size();
   for (size_t i = 0; i < ids.size(); ++i) {
-    if (ids[i].getDatatype() != Datatype::VocabIndex) {
+    if (ids[i].getDatatype() != qlever::Datatype::VocabIndex) {
       results[i] =
           idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
               index, ids[i], localVocab, escapeFunction);
@@ -216,7 +216,8 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   // Resolve the contiguous `VocabIndex` block in sorted (vocabulary-position)
   // order, giving sequential I/O access to the on-disk vocabulary file.
   for (size_t i = vocabBegin;
-       i < ids.size() && ids[i].getDatatype() == Datatype::VocabIndex; ++i) {
+       i < ids.size() && ids[i].getDatatype() == qlever::Datatype::VocabIndex;
+       ++i) {
     results[i] =
         idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
             index, ids[i], localVocab, escapeFunction);

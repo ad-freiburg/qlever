@@ -87,7 +87,7 @@ SparqlExpression::getVariableForCount() const {
 }
 
 // _____________________________________________________________________________
-std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
+std::optional<qlever::Variable> SparqlExpression::getVariableOrNullopt() const {
   return std::nullopt;
 }
 

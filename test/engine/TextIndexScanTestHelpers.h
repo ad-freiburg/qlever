@@ -22,7 +22,7 @@ using qlever::TextRecordIndex;
 // The only problem is the increased size of the docsDB and the double saving
 // of the literals.
 inline std::string getTextRecordFromResultTable(
-    const QueryExecutionContext* qec, const Result& result,
+    const qlever::QueryExecutionContext* qec, const qlever::Result& result,
     const size_t& rowIndex) {
   size_t nofNonLiterals = qec->getIndex().getNofNonLiteralsInTextIndex();
   uint64_t textRecordIdFromTable =
@@ -33,7 +33,7 @@ inline std::string getTextRecordFromResultTable(
     // vocabulary is stored uncompressed in memory, hence the explicit cast to
     // `std::string`.
     return std::string{qec->getIndex().indexToString(
-        VocabIndex::make(textRecordIdFromTable - nofNonLiterals))};
+        qlever::VocabIndex::make(textRecordIdFromTable - nofNonLiterals))};
   } else {
     // Return when from DocsDB
     return std::string{qec->getIndex().getTextExcerpt(
@@ -42,15 +42,15 @@ inline std::string getTextRecordFromResultTable(
 }
 
 inline const TextRecordIndex getTextRecordIdFromResultTable(
-    [[maybe_unused]] const QueryExecutionContext* qec, const Result& result,
-    const size_t& rowIndex) {
+    [[maybe_unused]] const qlever::QueryExecutionContext* qec,
+    const qlever::Result& result, const size_t& rowIndex) {
   return result.idTableView().getColumn(0)[rowIndex].getTextRecordIndex();
 }
 
 // Only use on prefix search results
-inline std::string getEntityFromResultTable(const QueryExecutionContext* qec,
-                                            const Result& result,
-                                            const size_t& rowIndex) {
+inline std::string getEntityFromResultTable(
+    const qlever::QueryExecutionContext* qec, const qlever::Result& result,
+    const size_t& rowIndex) {
   // We need the explicit cast to `std::string` because the return type of
   // `indexToString` might be `string_view` if the vocabulary is stored
   // uncompressed in memory.
@@ -59,16 +59,17 @@ inline std::string getEntityFromResultTable(const QueryExecutionContext* qec,
 }
 
 // Only use on prefix search results
-inline std::string getWordFromResultTable(const QueryExecutionContext* qec,
-                                          const Result& result,
-                                          const size_t& rowIndex) {
+inline std::string getWordFromResultTable(
+    const qlever::QueryExecutionContext* qec, const qlever::Result& result,
+    const size_t& rowIndex) {
   return std::string{qec->getIndex().indexToString(
       result.idTableView().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
 
 inline Score getScoreFromResultTable(
-    [[maybe_unused]] const QueryExecutionContext* qec, const Result& result,
-    const size_t& rowIndex, bool wasPrefixSearch, bool scoreIsInt = true) {
+    [[maybe_unused]] const qlever::QueryExecutionContext* qec,
+    const qlever::Result& result, const size_t& rowIndex, bool wasPrefixSearch,
+    bool scoreIsInt = true) {
   size_t colToRetrieve = wasPrefixSearch ? 2 : 1;
   if (scoreIsInt) {
     return static_cast<Score>(

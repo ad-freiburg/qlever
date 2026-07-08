@@ -20,7 +20,7 @@ namespace textIndexReadWrite::detail {
 // _____________________________________________________________________________
 IdTable readContextListHelper(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const ContextListMetaData& contextList, bool isWordCl,
+    const qlever::ContextListMetaData& contextList, bool isWordCl,
     const ad_utility::File& textIndexFile,
     TextScoringMetric textScoringMetric) {
   IdTable idTable{3, allocator};
@@ -86,10 +86,11 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
 }
 
 // ____________________________________________________________________________
-ContextListMetaData writePostings(ad_utility::File& out,
-                                  const std::vector<Posting>& postings,
-                                  off_t& currentOffset, bool scoreIsInt) {
-  ContextListMetaData meta;
+qlever::ContextListMetaData writePostings(ad_utility::File& out,
+                                          const std::vector<Posting>& postings,
+                                          off_t& currentOffset,
+                                          bool scoreIsInt) {
+  qlever::ContextListMetaData meta;
   meta._nofElements = postings.size();
   if (meta._nofElements == 0) {
     meta._startContextlist = currentOffset;

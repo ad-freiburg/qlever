@@ -138,7 +138,4 @@ class OptionalJoin : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::OptionalJoin;
-
 #endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

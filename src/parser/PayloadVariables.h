@@ -9,12 +9,11 @@
 
 #include "rdfTypes/Variable.h"
 
-using qlever::Variable;
-
 namespace detail {
 // Represents the selection of all variables as payload
 struct PayloadAllVariables : std::monostate {
-  bool operator==([[maybe_unused]] const std::vector<Variable>& other) const {
+  bool operator==(
+      [[maybe_unused]] const std::vector<qlever::Variable>& other) const {
     return false;
   };
 };
@@ -28,14 +27,14 @@ class PayloadVariables {
   PayloadVariables() = default;
 
   // Construct a payload variables object from a vector of variables
-  PayloadVariables(std::vector<Variable> variables);
+  PayloadVariables(std::vector<qlever::Variable> variables);
 
   // Construct a payload variables object that is set to all
   static PayloadVariables all();
 
   // Add a variable to the payload variables or do nothing if all variables are
   // already selected
-  void addVariable(const Variable& variable);
+  void addVariable(const qlever::Variable& variable);
 
   // Select all variables.
   void setToAll();
@@ -47,7 +46,7 @@ class PayloadVariables {
   bool isAll() const;
 
   // Returns a vector of variables if all has not been set. Otherwise throws.
-  const std::vector<Variable>& getVariables() const;
+  const std::vector<qlever::Variable>& getVariables() const;
 
   // For testing: equality operator
   bool operator==(const PayloadVariables& other) const {
@@ -55,8 +54,7 @@ class PayloadVariables {
   };
 
  private:
-  std::variant<detail::PayloadAllVariables, std::vector<Variable>> variables_ =
-      std::vector<Variable>{};
+  std::variant<detail::PayloadAllVariables, std::vector<qlever::Variable>>
+      variables_ = std::vector<qlever::Variable>{};
 };
-
 #endif  // QLEVER_SRC_PARSER_PAYLOADVARIABLES_H

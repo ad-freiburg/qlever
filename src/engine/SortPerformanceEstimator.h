@@ -82,7 +82,4 @@ class SortPerformanceEstimator {
 };
 
 }  // namespace qlever
-
-using qlever::SortPerformanceEstimator;
-
 #endif  // QLEVER_SORTPERFORMANCEESTIMATOR_H

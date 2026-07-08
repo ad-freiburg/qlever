@@ -120,26 +120,26 @@ inline Index makeTestIndex(std::string turtle) {
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
-QueryExecutionContext* getQec(TestIndexConfig config);
+qlever::QueryExecutionContext* getQec(TestIndexConfig config);
 
 // Return a static `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above) at a basename derived from
 // `indexBasenamePrefix` by suffixing it with the test name and the context-map
 // size (see implementation). Use this overload if the test needs control over
 // the on-disk location (e.g. to verify behaviour on an absolute path).
-QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
-                              TestIndexConfig config);
+qlever::QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                                      TestIndexConfig config);
 
 // Overload of `getQec` for the simple case where we only care about the turtle
 // input. All other settings are left at their default values.
-QueryExecutionContext* getQec(
+qlever::QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     std::optional<VocabularyType> vocabularyType = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the
 // string cannot be found in the vocabulary.
-std::function<Id(const std::string&)> makeGetId(const Index& index);
+std::function<qlever::Id(const std::string&)> makeGetId(const Index& index);
 
 }  // namespace ad_utility::testing
 

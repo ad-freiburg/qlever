@@ -136,7 +136,4 @@ class Union : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Union;
-
 #endif  // QLEVER_SRC_ENGINE_UNION_H

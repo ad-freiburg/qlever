@@ -243,7 +243,7 @@ TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   size_t blockSize = 10;
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  size_t blockMemory = blockSize * NUM_COLS * sizeof(Id) * 2;
+  size_t blockMemory = blockSize * NUM_COLS * sizeof(qlever::Id) * 2;
   ad_utility::CompressedExternalIdTable<0> writer{
       filename, NUM_COLS, ad_utility::MemorySize::bytes(blockMemory),
       ad_utility::testing::makeAllocator()};

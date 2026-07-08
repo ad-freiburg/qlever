@@ -43,7 +43,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
   WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-            const Index& index);
+            const qlever::Index& index);
 
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
@@ -78,7 +78,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
 
   // A reference to QLever's index is needed to access precomputed geometry
   // bounding boxes and to resolve `ValueId`s into WKT literals.
-  const Index& _index;
+  const qlever::Index& _index;
 };
 
 }  // namespace ad_utility::detail::parallel_wkt_parser

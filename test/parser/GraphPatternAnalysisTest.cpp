@@ -58,16 +58,16 @@ TEST(BasicGraphPatternsInvariantToTest, Values) {
   parsedQuery::Values values;
   values._inlineValues._variables = {Variable{"?a"}, Variable{"?b"}};
   values._inlineValues._values = {
-      {TripleComponent::Iri::fromIriref("<value1>"),
-       TripleComponent::Iri::fromIriref("<value2>")}};
+      {qlever::TripleComponent::Iri::fromIriref("<value1>"),
+       qlever::TripleComponent::Iri::fromIriref("<value2>")}};
   EXPECT_TRUE(invariantTo(values));
 
   // Test VALUES with one row but with variable overlap.
   parsedQuery::Values values2;
   values2._inlineValues._variables = {Variable{"?x"}, Variable{"?b"}};
   values2._inlineValues._values = {
-      {TripleComponent::Iri::fromIriref("<value1>"),
-       TripleComponent::Iri::fromIriref("<value2>")}};
+      {qlever::TripleComponent::Iri::fromIriref("<value1>"),
+       qlever::TripleComponent::Iri::fromIriref("<value2>")}};
   EXPECT_FALSE(invariantTo(values2));
 
   // Test VALUES with multiple rows (not invariant even without variable
@@ -75,8 +75,8 @@ TEST(BasicGraphPatternsInvariantToTest, Values) {
   parsedQuery::Values values3;
   values3._inlineValues._variables = {Variable{"?a"}};
   values3._inlineValues._values = {
-      {TripleComponent::Iri::fromIriref("<value1>")},
-      {TripleComponent::Iri::fromIriref("<value2>")}};
+      {qlever::TripleComponent::Iri::fromIriref("<value1>")},
+      {qlever::TripleComponent::Iri::fromIriref("<value2>")}};
   EXPECT_FALSE(invariantTo(values3));
 
   // Test VALUES with zero rows (not invariant).

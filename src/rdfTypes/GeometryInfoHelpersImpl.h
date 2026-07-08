@@ -38,9 +38,6 @@
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
 // file should not be included in header files.
 
-using qlever::CoordinateOutOfRangeException;
-using qlever::GeoPoint;
-
 namespace ad_utility::detail {
 
 using namespace ::util::geo;
@@ -164,7 +161,7 @@ inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
   auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
   try {
     return Centroid{utilPointToGeoPoint(uPoint)};
-  } catch (const CoordinateOutOfRangeException& ex) {
+  } catch (const qlever::CoordinateOutOfRangeException& ex) {
     AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
                     "coordinates. Error: "
                  << ex.what() << std::endl;
@@ -181,7 +178,7 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
     auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
     auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
     return BoundingBox{lowerLeft, upperRight};
-  } catch (const CoordinateOutOfRangeException& ex) {
+  } catch (const qlever::CoordinateOutOfRangeException& ex) {
     AD_LOG_DEBUG << "Cannot compute bounding box due to "
                     "invalid coordinates. Error: "
                  << ex.what() << std::endl;
@@ -697,5 +694,4 @@ struct MetricDistanceVisitor {
 constexpr MetricDistanceVisitor computeMetricDistance;
 
 }  // namespace ad_utility::detail
-
 #endif  // QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H

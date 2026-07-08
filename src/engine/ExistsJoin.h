@@ -134,7 +134,4 @@ class ExistsJoin : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::ExistsJoin;
-
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

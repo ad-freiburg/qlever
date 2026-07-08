@@ -33,12 +33,13 @@ class NamedCachedResultTest : public ::testing::Test {
  protected:
   void SetUp() override {
     testIdentifier_ = "test_query_name";
-    testIdentifierAsIri_ = TripleComponent::Iri::fromIrirefWithoutBrackets(
-        absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, testIdentifier_));
+    testIdentifierAsIri_ =
+        qlever::TripleComponent::Iri::fromIrirefWithoutBrackets(
+            absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, testIdentifier_));
     query_ = std::make_unique<NamedCachedResult>(testIdentifierAsIri_);
   }
 
-  TripleComponent::Iri testIdentifierAsIri_;
+  qlever::TripleComponent::Iri testIdentifierAsIri_;
   std::string testIdentifier_;
   std::unique_ptr<NamedCachedResult> query_;
 };
@@ -46,12 +47,13 @@ class NamedCachedResultTest : public ::testing::Test {
 // Test constructor
 TEST_F(NamedCachedResultTest, Construction) {
   AD_EXPECT_THROW_WITH_MESSAGE(
-      NamedCachedResult(
-          TripleComponent::Iri::fromIriref("<someIRIThatIsNotACacheRequest>")),
+      NamedCachedResult(qlever::TripleComponent::Iri::fromIriref(
+          "<someIRIThatIsNotACacheRequest>")),
       ::testing::HasSubstr("must start with"));
   // Test construction with identifier
-  NamedCachedResult query(TripleComponent::Iri::fromIrirefWithoutBrackets(
-      absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, "my_query")));
+  NamedCachedResult query(
+      qlever::TripleComponent::Iri::fromIrirefWithoutBrackets(
+          absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, "my_query")));
   EXPECT_EQ(query.identifier(), "my_query");
 }
 

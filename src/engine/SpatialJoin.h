@@ -204,7 +204,4 @@ class SpatialJoin : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::SpatialJoin;
-
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

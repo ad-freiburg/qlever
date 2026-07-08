@@ -384,9 +384,5 @@ class TransitivePathBase : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::TransitivePathBase;
-
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
-
 #endif

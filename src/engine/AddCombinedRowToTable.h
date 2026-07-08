@@ -41,8 +41,8 @@ class AddCombinedRowToIdTable {
   bool keepJoinColumns_ = true;
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
-  LocalVocab mergedVocab_{};
-  std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
+  qlever::LocalVocab mergedVocab_{};
+  std::array<const qlever::LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
  public:
   // This struct stores the information, which row indices from the input are
@@ -80,7 +80,7 @@ class AddCombinedRowToIdTable {
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
   // complete operation has finished.
-  using BlockwiseCallback = std::function<void(IdTable&, LocalVocab&)>;
+  using BlockwiseCallback = std::function<void(IdTable&, qlever::LocalVocab&)>;
   [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -183,7 +183,7 @@ class AddCombinedRowToIdTable {
   // Merge the local vocab contained in `T` with the `mergedVocab_` and set the
   // passed pointer reference to that vocab.
   template <typename T>
-  void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
+  void mergeVocab(const T& table, const qlever::LocalVocab*& currentVocab) {
     detail::mergeVocabInto(table, currentVocab, mergedVocab_);
   }
 
@@ -201,7 +201,7 @@ class AddCombinedRowToIdTable {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = qlever::LocalVocab{};
     }
   }
 
@@ -235,7 +235,7 @@ class AddCombinedRowToIdTable {
             resultTable_.numColumns() +
                 (static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_) -
                 detail::toView(inputLeft).numColumns() + numJoinColumns_,
-            ad_utility::makeAllocatorWithLimit<Id>(0_B)}};
+            ad_utility::makeAllocatorWithLimit<qlever::Id>(0_B)}};
   }
 
   // The next free row in the output will be created from
@@ -258,14 +258,14 @@ class AddCombinedRowToIdTable {
     return std::move(resultTable_);
   }
 
-  LocalVocab& localVocab() { return mergedVocab_; }
+  qlever::LocalVocab& localVocab() { return mergedVocab_; }
 
   // Move both the result table and local vocab out as an IdTableVocabPair.
   // This is a convenience method for the common pattern of moving both out.
   auto toIdTableVocabPair() && {
     flush();
-    return Result::IdTableVocabPair{std::move(resultTable_),
-                                    std::move(mergedVocab_)};
+    return qlever::Result::IdTableVocabPair{std::move(resultTable_),
+                                            std::move(mergedVocab_)};
   }
 
   // Disable copying and moving, it is currently not needed and makes it harder
@@ -334,7 +334,7 @@ class AddCombinedRowToIdTable {
       // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        Id id = colLeft[sourceIndex];
+        qlever::Id id = colLeft[sourceIndex];
         resultCol[oldSize + targetIndex] = id;
         numUndef += static_cast<size_t>(id.isUndefined());
       }
@@ -359,14 +359,15 @@ class AddCombinedRowToIdTable {
           static constexpr size_t idx = isColFromLeft ? 0 : 1;
           for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
             auto resultId = col[sourceIndices[idx]];
-            numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
+            numUndef +=
+                static_cast<size_t>(resultId == qlever::Id::makeUndefined());
             resultCol[oldSize + targetIndex] = resultId;
           }
 
           // Write the optional rows. For the right input those are always
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
+            qlever::Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
               // Note: `if constexpr` doesn't work here for QCC 8.3 for some
               // reason which has yet to be analyzed.
               if QL_CONSTEXPR (isColFromLeft) {
@@ -374,7 +375,7 @@ class AddCombinedRowToIdTable {
               } else {
                 (void)col;
                 (void)sourceIndex;
-                return Id::makeUndefined();
+                return qlever::Id::makeUndefined();
               }
             }();
             resultCol[oldSize + targetIndex] = id;
@@ -411,7 +412,7 @@ class AddCombinedRowToIdTable {
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = qlever::LocalVocab{};
       // Only merge non-null vocabs.
       // Note: On QCC 8.3, the elegant lazy range pipeline gives us trouble, so
       // we use an `absl::InlinedVector<reference_wrapper>` instead, which can

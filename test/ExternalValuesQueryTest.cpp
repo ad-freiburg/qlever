@@ -21,7 +21,7 @@ using qlever::SparqlTriple;
 using qlever::parsedQuery::ExternalValuesException;
 using qlever::parsedQuery::ExternalValuesQuery;
 using namespace ::testing;
-using V = Variable;
+using V = qlever::Variable;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
@@ -29,20 +29,20 @@ using ::testing::HasSubstr;
 
 // Helper to create a triple with an IRI predicate.
 static SparqlTriple makeTriple(std::string_view predIri,
-                               TripleComponent object) {
-  TripleComponent subject = TripleComponent::UNDEF{};
+                               qlever::TripleComponent object) {
+  qlever::TripleComponent subject = qlever::TripleComponent::UNDEF{};
   auto predicate =
-      PropertyPath::fromIri(TripleComponent::Iri::fromIriref(predIri));
+      PropertyPath::fromIri(qlever::TripleComponent::Iri::fromIriref(predIri));
   return {subject, predicate, std::move(object)};
 }
 
 // Create a triple with the predicate `<name>`.
-static SparqlTriple idTriple(TripleComponent object) {
+static SparqlTriple idTriple(qlever::TripleComponent object) {
   return makeTriple("<name>", std::move(object));
 }
 
 // Create a triple with the predicate `<variable>`.
-static SparqlTriple varTriple(TripleComponent object) {
+static SparqlTriple varTriple(qlever::TripleComponent object) {
   return makeTriple("<variable>", std::move(object));
 }
 
@@ -105,7 +105,7 @@ TEST_F(ExternalValuesQueryTest, addParameterVariableNonVariable) {
 // Test addParameter with unknown predicate throws.
 TEST(ExternalValuesQuery, addParameterUnknownPredicate) {
   ExternalValuesQuery query;
-  auto triple = makeTriple("<unknown>", Variable{"?x"});
+  auto triple = makeTriple("<unknown>", qlever::Variable{"?x"});
   AD_EXPECT_THROW_WITH_MESSAGE(query.addParameter(triple),
                                HasSubstr("Unknown parameter"));
 }

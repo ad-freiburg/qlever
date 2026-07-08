@@ -192,7 +192,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
 
   {
     auto cleanUp = setRuntimeParameterForTest<
-        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
+        &qlever::RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
@@ -218,7 +218,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
 
   {
     auto cleanUp = setRuntimeParameterForTest<
-        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
+        &qlever::RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.

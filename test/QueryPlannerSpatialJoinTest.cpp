@@ -18,7 +18,7 @@
 
 namespace h = queryPlannerTestHelpers;
 namespace {
-using Var = Variable;
+using Var = qlever::Variable;
 constexpr auto iri = ad_utility::testing::iri;
 using queryPlannerTestHelpers::NamedTag;
 }  // namespace
@@ -27,7 +27,7 @@ using ::testing::HasSubstr;
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinService) {
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   auto Basel = SpatialJoinAlgorithm::BASELINE;
   auto BBox = SpatialJoinAlgorithm::BOUNDING_BOX;
@@ -292,7 +292,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
   // pattern inside the service.
 
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   using PV = PayloadVariables;
 
@@ -406,7 +406,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
 
   // If only maxDistance is used but not numNearestNeighbors, the right variable
@@ -494,7 +494,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   // Test two spatial join SERVICEs that share a common ?left variable
 
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   using PV = PayloadVariables;
 
@@ -989,7 +989,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
-  using V = Variable;
+  using V = qlever::Variable;
   using PV = PayloadVariables;
   auto scan = h::IndexScanFromStrings;
   using enum SpatialJoinAlgorithm;
@@ -1108,7 +1108,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   auto type = SpatialJoinType::WITHIN_DIST;
 
@@ -1253,7 +1253,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                           PayloadVariables::all(), algo, type,
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       scan("?m", "<p>", "?n")),
-                  "1", Variable{"?unrelated"}),
+                  "1", qlever::Variable{"?unrelated"}),
           h::spatialJoinFilterSubstitute(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
               algo, type,
@@ -1261,7 +1261,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                           500, -1, V{"?y"}, V{"?b"}, std::nullopt,
                           PayloadVariables::all(), algo, type,
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
-                      "1", Variable{"?unrelated"}),
+                      "1", qlever::Variable{"?unrelated"}),
               scan("?m", "<p>", "?n")),
           h::spatialJoinFilterSubstitute(
               500, -1, V{"?y"}, V{"?b"},
@@ -1270,7 +1270,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                           1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
                           PayloadVariables::all(), algo, type,
                           scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
-                      "1", Variable{"?unrelated"}),
+                      "1", qlever::Variable{"?unrelated"}),
               scan("?a", "<p>", "?b")),
           h::Bind(h::spatialJoinFilterSubstitute(
                       500, -1, V{"?y"}, V{"?b"},
@@ -1280,7 +1280,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                           PayloadVariables::all(), algo, type,
                           scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       scan("?a", "<p>", "?b")),
-                  "1", Variable{"?unrelated"})));
+                  "1", qlever::Variable{"?unrelated"})));
 }
 
 // _____________________________________________________________________________
@@ -1411,7 +1411,7 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
   using enum SpatialJoinType;
 
@@ -1534,7 +1534,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
-  using V = Variable;
+  using V = qlever::Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
 
   // For maxDistance the special predicate remains supported
@@ -1695,22 +1695,24 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   auto testMaxDistance = [](std::string distanceIRI, long long distance,
                             bool shouldThrow) {
     auto qec = ad_utility::testing::getQec();
-    TripleComponent subject{Variable{"?subject"}};
-    TripleComponent object{Variable{"?object"}};
+    qlever::TripleComponent subject{qlever::Variable{"?subject"}};
+    qlever::TripleComponent object{qlever::Variable{"?object"}};
     if (shouldThrow) {
-      ASSERT_ANY_THROW((parsedQuery::SpatialQuery{
-                            SparqlTriple{subject, iri(distanceIRI), object}})
+      ASSERT_ANY_THROW((parsedQuery::SpatialQuery{qlever::SparqlTriple{
+                            subject, iri(distanceIRI), object}})
                            .toSpatialJoinConfiguration());
     } else {
       auto config = parsedQuery::SpatialQuery{
-          SparqlTriple{
+          qlever::SparqlTriple{
               subject, iri(distanceIRI),
               object}}.toSpatialJoinConfiguration();
-      std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-          ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
-                                                     std::nullopt);
-      std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-      SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+      std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
+          ad_utility::makeExecutionTree<qlever::SpatialJoin>(
+              qec, config, std::nullopt, std::nullopt);
+      std::shared_ptr<qlever::Operation> op =
+          spatialJoinOperation->getRootOperation();
+      qlever::SpatialJoin* spatialJoin =
+          static_cast<qlever::SpatialJoin*>(op.get());
       ASSERT_TRUE(spatialJoin->getMaxDist().has_value());
       ASSERT_EQ(spatialJoin->getMaxDist(), distance);
       ASSERT_FALSE(spatialJoin->getMaxResults().has_value());

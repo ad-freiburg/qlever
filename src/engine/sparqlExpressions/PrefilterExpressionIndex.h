@@ -21,17 +21,6 @@
 #include "index/Vocabulary.h"
 #include "util/Iterators.h"
 
-using qlever::BlockMetadataRanges;
-using qlever::BlockMetadataSpan;
-using qlever::CompressedBlockMetadata;
-using qlever::Datatype;
-using qlever::Id;
-using qlever::LocalVocab;
-using qlever::LocalVocabContext;
-using qlever::LocalVocabEntry;
-using qlever::RdfsVocabulary;
-using qlever::TripleComponent;
-using qlever::ValueId;
 namespace valueIdComparators = qlever::valueIdComparators;
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
@@ -45,6 +34,17 @@ namespace valueIdComparators = qlever::valueIdComparators;
 // (unary), relational-ops and strstarts.
 
 namespace prefilterExpressions {
+using qlever::BlockMetadataRanges;
+using qlever::BlockMetadataSpan;
+using qlever::CompressedBlockMetadata;
+using qlever::Id;
+using qlever::LocalVocab;
+using qlever::LocalVocabContext;
+using qlever::LocalVocabEntry;
+using qlever::RdfsVocabulary;
+using qlever::TripleComponent;
+using qlever::ValueId;
+using qlever::Variable;
 
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 using Vocab = RdfsVocabulary;
@@ -468,5 +468,4 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 
 }  // namespace detail
 }  // namespace prefilterExpressions
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H

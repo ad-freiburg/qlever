@@ -130,7 +130,4 @@ class Minus : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Minus;
-
 #endif  // QLEVER_SRC_ENGINE_MINUS_H

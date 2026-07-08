@@ -82,7 +82,4 @@ class ExternalValues : private Values, virtual public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::ExternalValues;
-
 #endif  // QLEVER_SRC_ENGINE_EXTERNALVALUES_H

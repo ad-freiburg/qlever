@@ -15,8 +15,6 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
 
-using qlever::globalRuntimeParameters;
-
 namespace ad_utility {
 
 // Shared body for the boost::program_options `validate` overloads whose only
@@ -119,7 +117,7 @@ class ParameterToProgramOptionFactory {
     // Read the current value of the parameter; it will become the default
     // value of the command-line option. The read lock is bound to a named
     // local so it is held across both reads below.
-    auto lock = globalRuntimeParameters.rlock();
+    auto lock = qlever::globalRuntimeParameters.rlock();
     auto defaultValue = std::invoke(ParameterPtr, *lock).get();
     // This is needed for types that boost can't convert to string.
     auto defaultValueAsString = std::invoke(ParameterPtr, *lock).toString();
@@ -130,7 +128,8 @@ class ParameterToProgramOptionFactory {
     // The function that is called when the command-line option is called.
     // It sets the parameter to the parsed value.
     auto setParameterToValue{[](const Type& value) {
-      std::invoke(ParameterPtr, *globalRuntimeParameters.wlock()).set(value);
+      std::invoke(ParameterPtr, *qlever::globalRuntimeParameters.wlock())
+          .set(value);
     }};
 
     return boost::program_options::value<Type>()
@@ -169,5 +168,4 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   });
 }
 }  // namespace qlever
-
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H

@@ -17,38 +17,38 @@ namespace m = matchers;
 using namespace ad_utility::testing;
 using namespace ad_utility::url_parser::sparqlOperation;
 
-using Var = Variable;
+using Var = qlever::Variable;
 using TC = TripleComponent;
 
 namespace {
 // A matcher that matches a ParsedQuery that is an updated that deletes all
 // triples from the given `graph`.
 auto ClearGraph = [](ad_utility::triple_component::Iri graph)
-    -> testing::Matcher<const ParsedQuery&> {
+    -> testing::Matcher<const qlever::ParsedQuery&> {
   return m::UpdateClause(
       m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"),
-                       SparqlTripleSimpleWithGraph::Graph{graph}}},
+                       qlever::SparqlTripleSimpleWithGraph::Graph{graph}}},
                      {}),
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          graph, m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
-                                          TC(Var{"?o"}))}))));
+          graph, m::Triples({qlever::SparqlTriple(TC(Var{"?s"}), Var{"?p"},
+                                                  TC(Var{"?o"}))}))));
 };
 
-auto HasMiddleware =
-    AD_FIELD(ParsedQuery, responseMiddleware_, testing::Ne(std::nullopt));
+auto HasMiddleware = AD_FIELD(qlever::ParsedQuery, responseMiddleware_,
+                              testing::Ne(std::nullopt));
 
 auto GetGraph = [](ad_utility::triple_component::Iri graph) {
   return m::ConstructQuery(
       {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
       m::GraphPattern(m::GroupGraphPatternWithGraph(
-          std::move(graph), m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
-                                                     TC(Var{"?o"}))}))));
+          std::move(graph), m::Triples({qlever::SparqlTriple(
+                                TC(Var{"?s"}), Var{"?p"}, TC(Var{"?o"}))}))));
 };
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager encodedIriManager_;
+const qlever::EncodedIriManager* encodedIriManager() {
+  static qlever::EncodedIriManager encodedIriManager_;
   return &encodedIriManager_;
 }
 }  // namespace

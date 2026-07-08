@@ -12,18 +12,19 @@
 using namespace sparqlExpression;
 
 TEST(SparqlExpressionTypes, expressionResult) {
-  ExpressionResult a = Id::makeFromDouble(42.3);
-  ExpressionResult b = Id::makeFromDouble(1.0);
+  ExpressionResult a = qlever::Id::makeFromDouble(42.3);
+  ExpressionResult b = qlever::Id::makeFromDouble(1.0);
   ASSERT_NO_THROW(b = copyExpressionResult(a));
   ASSERT_EQ(a, b);
 
-  a = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
-  a.emplace<Id>(Id::makeFromDouble(42.0));
+  a = VectorWithMemoryLimit<qlever::Id>(ad_utility::testing::makeAllocator());
+  a.emplace<qlever::Id>(qlever::Id::makeFromDouble(42.0));
   ASSERT_NO_THROW(b = copyExpressionResult(a));
   ASSERT_EQ(a, b);
 
-  auto c = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
-  c.emplace_back(Id::makeFromDouble(42.0));
+  auto c =
+      VectorWithMemoryLimit<qlever::Id>(ad_utility::testing::makeAllocator());
+  c.emplace_back(qlever::Id::makeFromDouble(42.0));
   ASSERT_EQ(c.size(), 1);
   copyExpressionResult(static_cast<ExpressionResult>(std::move(c)));
   ASSERT_TRUE(c.empty());
@@ -33,7 +34,7 @@ TEST(SparqlExpressionTypes, printIdOrString) {
   using namespace ad_utility::triple_component;
   std::stringstream str;
 
-  IdOrLocalVocabEntry idOrString{Id::makeUndefined()};
+  IdOrLocalVocabEntry idOrString{qlever::Id::makeUndefined()};
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "U:0");
   auto* qec = ad_utility::testing::getQec();

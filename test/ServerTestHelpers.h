@@ -53,7 +53,7 @@ struct SimulateHttpRequest {
           qlever::EngineConfig config;
           config.persistUpdates_ = false;
           config.baseName_ = indexName;
-          Server server{4321, 1, "accessToken", config};
+          qlever::Server server{4321, 1, "accessToken", config};
 
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server.queryHub_ = queryHub;

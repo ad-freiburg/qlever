@@ -8,6 +8,8 @@
 #include "util/Algorithm.h"
 #include "util/OverloadCallOperator.h"
 
+using namespace qlever;
+
 using namespace qlever::parsedQuery;
 using qlever::Alias;
 

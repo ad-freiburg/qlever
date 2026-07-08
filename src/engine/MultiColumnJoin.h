@@ -84,7 +84,4 @@ class MultiColumnJoin : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::MultiColumnJoin;
-
 #endif  // QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H

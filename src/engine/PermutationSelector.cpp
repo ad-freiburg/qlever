@@ -6,6 +6,8 @@
 
 #include "index/IndexImpl.h"
 
+using namespace qlever;
+
 using qlever::SparqlTripleSimple;
 
 namespace {

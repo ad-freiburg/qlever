@@ -11,6 +11,8 @@
 #include "index/ExportIds.h"
 #include "util/Views.h"
 
+using namespace qlever;
+
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________

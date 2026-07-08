@@ -650,10 +650,5 @@ class Operation {
 
 }  // namespace qlever
 
-using qlever::ComputationMode;
-using qlever::LimitOffsetHandling;
-using qlever::Operation;
-using qlever::QueryExecutionTree;
 namespace parsedQuery = qlever::parsedQuery;
-
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

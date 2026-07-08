@@ -17,7 +17,7 @@ namespace {
 
 using namespace materializedViewsTestHelpers;
 using namespace ad_utility::testing;
-using V = Variable;
+using V = qlever::Variable;
 
 }  // namespace
 
@@ -39,9 +39,8 @@ constexpr std::string_view singleTripleFromStar = "SELECT * { ?s <p1> ?o1 }";
 // _____________________________________________________________________________
 TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
   RewriteTestParams p = GetParam();
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
-          p.queryPlanningBudget_);
+  auto cleanup = setRuntimeParameterForTest<
+      &qlever::RuntimeParameters::queryPlanningBudget_>(p.queryPlanningBudget_);
 
   // Test dataset: subjects with predicates p1, p2, p3.
   const std::string starTtl =
@@ -66,7 +65,7 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
                     h::IndexScanFromStrings("?s", "<p2>", "?o2")));
 
   // Write a star structure to the materialized view.
-  MaterializedViewsManager manager{onDiskBase};
+  qlever::MaterializedViewsManager manager{onDiskBase};
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(p.writeQuery_));
   qlv.loadMaterializedView(viewName);
   auto starView = std::bind_front(&viewScanSimple, viewName);

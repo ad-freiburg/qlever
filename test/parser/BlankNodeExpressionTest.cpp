@@ -17,9 +17,9 @@ using namespace ad_utility::triple_component;
 TEST(BlankNodeExpression, expectBlankNodeResultEquality) {
   TestContext context;
   auto expression0 = makeBlankNodeExpression(
-      std::make_unique<IdExpression>(Id::makeUndefined()));
+      std::make_unique<IdExpression>(qlever::Id::makeUndefined()));
   EXPECT_THAT(expression0->evaluate(&context.context),
-              ::testing::VariantWith<Id>(Id::makeUndefined()));
+              ::testing::VariantWith<qlever::Id>(qlever::Id::makeUndefined()));
   auto expression1 =
       makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
           Literal::literalWithoutQuotes("Test")));
@@ -136,21 +136,25 @@ TEST(BlankNodeExpression, uniqueValuesAcrossInstances) {
   auto expression1 = makeUniqueBlankNodeExpression();
   auto result0 = expression0->evaluate(&context.context);
   auto result1 = expression1->evaluate(&context.context);
-  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result0));
-  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result1));
+  ASSERT_TRUE(
+      std::holds_alternative<VectorWithMemoryLimit<qlever::Id>>(result0));
+  ASSERT_TRUE(
+      std::holds_alternative<VectorWithMemoryLimit<qlever::Id>>(result1));
   // Check that both results are distinct.
-  EXPECT_THAT(std::get<VectorWithMemoryLimit<Id>>(result0),
+  EXPECT_THAT(std::get<VectorWithMemoryLimit<qlever::Id>>(result0),
               ::testing::Each(::testing::ResultOf(
                   [&result1](const auto& elem) {
                     return ad_utility::contains(
-                        std::get<VectorWithMemoryLimit<Id>>(result1), elem);
+                        std::get<VectorWithMemoryLimit<qlever::Id>>(result1),
+                        elem);
                   },
                   ::testing::IsFalse())));
-  EXPECT_THAT(std::get<VectorWithMemoryLimit<Id>>(result1),
+  EXPECT_THAT(std::get<VectorWithMemoryLimit<qlever::Id>>(result1),
               ::testing::Each(::testing::ResultOf(
                   [&result0](const auto& elem) {
                     return ad_utility::contains(
-                        std::get<VectorWithMemoryLimit<Id>>(result0), elem);
+                        std::get<VectorWithMemoryLimit<qlever::Id>>(result0),
+                        elem);
                   },
                   ::testing::IsFalse())));
 }
@@ -162,7 +166,7 @@ TEST(BlankNodeExpression, consistentCounterWithUndefined) {
   const auto& localVocabContext = context.qec->getLocalVocabContext();
   vector.emplace_back(
       LocalVocabEntry::literalWithoutQuotes("T1", localVocabContext));
-  vector.emplace_back(Id::makeUndefined());
+  vector.emplace_back(qlever::Id::makeUndefined());
   vector.emplace_back(
       LocalVocabEntry::literalWithoutQuotes("T2", localVocabContext));
 
@@ -179,7 +183,7 @@ TEST(BlankNodeExpression, consistentCounterWithUndefined) {
               AD_PROPERTY(LiteralOrIri, toStringRepresentation,
                           StrEq("<http://qlever.cs.uni-freiburg.de/"
                                 "builtin-functions/blank-node/_:unT1_0>"))),
-          VariantWith<Id>(Eq(Id::makeUndefined())),
+          VariantWith<qlever::Id>(Eq(qlever::Id::makeUndefined())),
           VariantWith<LocalVocabEntry>(
               AD_PROPERTY(LiteralOrIri, toStringRepresentation,
                           StrEq("<http://qlever.cs.uni-freiburg.de/"
@@ -194,8 +198,9 @@ TEST(BlankNodeExpression, groupByReturnsSingleBlankNodePerGroup) {
   // `BNODE()` returns a single, constant blank node `Id`.
   {
     auto result = makeUniqueBlankNodeExpression()->evaluate(&context.context);
-    ASSERT_TRUE(std::holds_alternative<Id>(result));
-    EXPECT_EQ(std::get<Id>(result).getDatatype(), Datatype::BlankNodeIndex);
+    ASSERT_TRUE(std::holds_alternative<qlever::Id>(result));
+    EXPECT_EQ(std::get<qlever::Id>(result).getDatatype(),
+              qlever::Datatype::BlankNodeIndex);
   }
   // `BNODE(<constant>)` returns a single, constant blank node.
   {
@@ -220,8 +225,10 @@ TEST(BlankNodeExpression, insideAggregateReturnsOnePerRow) {
     const auto* blankNode = aggregate->children()[0].get();
     ASSERT_TRUE(blankNode->isInsideAggregate());
     auto result = blankNode->evaluate(&context.context);
-    ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result));
-    EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(result).size(), numRows);
+    ASSERT_TRUE(
+        std::holds_alternative<VectorWithMemoryLimit<qlever::Id>>(result));
+    EXPECT_EQ(std::get<VectorWithMemoryLimit<qlever::Id>>(result).size(),
+              numRows);
   }
   // `BNODE(<constant>)`, wrapped in an aggregate.
   {
@@ -244,7 +251,7 @@ TEST(BlankNodeExpression, insideAggregateReturnsOnePerRow) {
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, isResultAlwaysDefined) {
   EXPECT_FALSE(makeBlankNodeExpression(
-                   std::make_unique<IdExpression>(Id::makeFromInt(42)))
+                   std::make_unique<IdExpression>(qlever::Id::makeFromInt(42)))
                    ->isResultAlwaysDefined({}));
 
   EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined({}));

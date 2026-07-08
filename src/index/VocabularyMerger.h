@@ -29,7 +29,8 @@ class IdMapWriter {
  private:
   std::string filename_;
   using Serializer = ad_utility::serialization::VectorIncrementalSerializer<
-      std::pair<Id, Id>, ad_utility::serialization::FileWriteSerializer>;
+      std::pair<qlever::Id, qlever::Id>,
+      ad_utility::serialization::FileWriteSerializer>;
   std::unique_ptr<Serializer> serializer_;
 
  public:
@@ -37,12 +38,14 @@ class IdMapWriter {
     serializer_ = std::make_unique<Serializer>(filename);
   }
 
-  void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
+  void push_back(const std::pair<qlever::Id, qlever::Id>& pair) {
+    serializer_->push(pair);
+  }
 };
 
 // Get a vector of pairs of (partial ID, global ID) deserialized from a file
 // that has previously been written using the `IdMapWriter` class above.
-using IdMap = std::vector<std::pair<Id, Id>>;
+using IdMap = std::vector<std::pair<qlever::Id, qlever::Id>>;
 inline IdMap getIdMapFromFile(const std::string& filename) {
   IdMap idMap;
   ad_utility::serialization::FileReadSerializer serializer(filename);
@@ -87,22 +90,24 @@ struct VocabularyMetaData {
         return false;
       }
       if (!beginWasSeen_) {
-        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+        begin_ =
+            qlever::Id::makeFromVocabIndex(qlever::VocabIndex::make(wordIndex));
         beginWasSeen_ = true;
       }
-      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
+      end_ = qlever::Id::makeFromVocabIndex(
+          qlever::VocabIndex::make(wordIndex + 1));
       return true;
     }
 
-    Id begin() const { return begin_; }
-    Id end() const { return end_; }
+    qlever::Id begin() const { return begin_; }
+    qlever::Id end() const { return end_; }
 
     // Return true if the `id` belongs to this range.
-    bool contains(Id id) const { return begin_ <= id && id < end_; }
+    bool contains(qlever::Id id) const { return begin_ <= id && id < end_; }
 
    private:
-    Id begin_ = Id::makeUndefined();
-    Id end_ = Id::makeUndefined();
+    qlever::Id begin_ = qlever::Id::makeUndefined();
+    qlever::Id end_ = qlever::Id::makeUndefined();
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
@@ -120,7 +125,7 @@ struct VocabularyMetaData {
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
       if (globalSpecialIds_->contains(word)) {
         specialIdMapping_[std::string{word}] =
-            Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+            qlever::Id::makeFromVocabIndex(qlever::VocabIndex::make(wordIndex));
       }
     }
   }
@@ -148,7 +153,7 @@ struct VocabularyMetaData {
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the
   // input.
-  bool isQleverInternalId(Id id) const {
+  bool isQleverInternalId(qlever::Id id) const {
     return internalEntities_.contains(id) || langTaggedPredicates_.contains(id);
   }
 
@@ -163,8 +168,8 @@ struct VocabularyMetaData {
   IdRangeForPrefix internalEntities_{
       std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
 
-  ad_utility::HashMap<std::string, Id> specialIdMapping_;
-  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
+  ad_utility::HashMap<std::string, qlever::Id> specialIdMapping_;
+  const ad_utility::HashMap<std::string, qlever::Id>* globalSpecialIds_ =
       &qlever::specialIds();
 };
 // _______________________________________________________________
@@ -265,7 +270,7 @@ class VocabularyMerger {
 };
 
 // ____________________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+ad_utility::HashMap<qlever::Id, qlever::Id> IdMapFromPartialIdMapFile(
     const std::string& filename);
 
 /**
@@ -286,8 +291,9 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  * <map> and write the resulting Id triple to <*writePtr>
  */
 void writeMappedIdsToExtVec(
-    const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<Id, Id>& map, std::unique_ptr<TripleVec>* writePtr);
+    const std::vector<std::array<qlever::Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<qlever::Id, qlever::Id>& map,
+    std::unique_ptr<TripleVec>* writePtr);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file

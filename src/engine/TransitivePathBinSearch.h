@@ -105,10 +105,5 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
 };
 
 }  // namespace qlever
-
-using qlever::BinSearchMap;
-using qlever::TransitivePathBinSearch;
-
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
-
 #endif

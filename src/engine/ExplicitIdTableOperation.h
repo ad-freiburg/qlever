@@ -53,7 +53,4 @@ class ExplicitIdTableOperation : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::ExplicitIdTableOperation;
-
 #endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H

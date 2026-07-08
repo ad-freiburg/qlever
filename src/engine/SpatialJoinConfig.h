@@ -19,8 +19,6 @@
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
-using qlever::Variable;
-
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
 // class declaration of the spatial join operation.
@@ -84,12 +82,12 @@ struct SpatialJoinConfiguration {
   SpatialJoinTask task_;
 
   // The variables for the two tables to be joined
-  Variable left_;
-  Variable right_;
+  qlever::Variable left_;
+  qlever::Variable right_;
 
   // If given, the distance will be added to the result and be bound to this
   // variable.
-  std::optional<Variable> distanceVariable_ = std::nullopt;
+  std::optional<qlever::Variable> distanceVariable_ = std::nullopt;
 
   // If given a vector of variables, the selected variables will be part of the
   // result table - the join column will automatically be part of the result.
@@ -112,5 +110,4 @@ struct SpatialJoinConfiguration {
 // not the case. 1 divided by this constant is the damping factor for the
 // estimated number of results.
 static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
-
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H

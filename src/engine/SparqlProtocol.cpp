@@ -8,6 +8,8 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/HttpError.h"
 
+using namespace qlever;
+
 using namespace ad_utility::url_parser::sparqlOperation;
 namespace http = boost::beast::http;
 

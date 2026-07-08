@@ -197,11 +197,12 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
     if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> &&
                   isSimilar<FindSmallerUndefRangesRight, Noop>) {
       return true;
-    } else if constexpr (std::is_convertible_v<T, Id>) {
-      return row != Id::makeUndefined();
+    } else if constexpr (std::is_convertible_v<T, qlever::Id>) {
+      return row != qlever::Id::makeUndefined();
     } else {
-      return (ql::ranges::none_of(
-          row, [](Id id) { return id == Id::makeUndefined(); }));
+      return (ql::ranges::none_of(row, [](qlever::Id id) {
+        return id == qlever::Id::makeUndefined();
+      }));
     }
   };
 
@@ -620,7 +621,8 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
+    auto endOfUndef =
+        ql::ranges::find_if_not(leftSub, &qlever::Id::isUndefined);
 
     auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
@@ -1731,7 +1733,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Get allocator and number of columns from the first block.
     // TODO<joka921> pass in a proper allocator here.
-    auto allocator = makeUnlimitedAllocator<Id>();
+    auto allocator = makeUnlimitedAllocator<qlever::Id>();
     AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
 
     // TODO<joka921> This can be much more efficient, in particular it could use
@@ -1745,7 +1747,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
       size_t numCols =
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
       IdTable table(numCols, allocator);
-      LocalVocab vocab;
+      qlever::LocalVocab vocab;
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
         const auto& staticView = block.fullBlock().template asStaticView<0>();
@@ -1790,7 +1792,8 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Set up the generator for UNDEF values in the left last column.
     // TODO<joka921> Could optimize the case that there is no UNDEF at all.
-    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, &Id::isUndefined);
+    auto endOfUndef =
+        ql::ranges::find_if_not(lastColLeft, &qlever::Id::isUndefined);
     auto findSmallerUndefRangeLeft = [&lastColLeft, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
     };
@@ -1936,7 +1939,7 @@ void zipperJoinForBlocksWithPotentialUndef(
 
   detail::BlockZipperJoinImpl impl{
       leftSide, rightSide, lessThan, compatibleRowAction,
-      [](const Id& id) { return id.isUndefined(); }};
+      [](const qlever::Id& id) { return id.isUndefined(); }};
   impl.template runJoin<joinType>();
 }
 

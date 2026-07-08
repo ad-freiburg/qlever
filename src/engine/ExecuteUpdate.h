@@ -88,7 +88,4 @@ class ExecuteUpdate {
 };
 
 }  // namespace qlever
-
-using qlever::ExecuteUpdate;
-
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

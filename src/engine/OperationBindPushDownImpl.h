@@ -16,12 +16,12 @@
 // _____________________________________________________________________________
 CPP_template_def(typename MakeCloneWithNewChildren)(
     requires ad_utility::InvocableWithExactReturnType<
-        MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
-        std::vector<std::shared_ptr<QueryExecutionTree>>>)
-    std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
-        pushDownBindToAnyChild(
+        MakeCloneWithNewChildren, std::shared_ptr<qlever::QueryExecutionTree>,
+        std::vector<std::shared_ptr<qlever::QueryExecutionTree>>>)
+    std::optional<std::shared_ptr<qlever::QueryExecutionTree>> qlever::
+        Operation::pushDownBindToAnyChild(
             const parsedQuery::Bind& bind,
-            std::vector<std::shared_ptr<QueryExecutionTree>> children,
+            std::vector<std::shared_ptr<qlever::QueryExecutionTree>> children,
             MakeCloneWithNewChildren makeCloneWithNewChildren) const {
   if (children.empty()) {
     return std::nullopt;

@@ -66,7 +66,4 @@ class TextIndexScanForWord : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::TextIndexScanForWord;
-
 #endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORWORD_H

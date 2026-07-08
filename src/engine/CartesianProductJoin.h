@@ -149,7 +149,4 @@ class CartesianProductJoin : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::CartesianProductJoin;
-
 #endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H

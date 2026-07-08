@@ -10,8 +10,6 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
-using qlever::Id;
-using qlever::ValueId;
 namespace valueIdComparators = qlever::valueIdComparators;
 
 namespace qlever::sparqlExpression {
@@ -221,5 +219,4 @@ inline const auto compareIdsOrStrings =
 }  // namespace qlever::sparqlExpression
 
 namespace sparqlExpression = qlever::sparqlExpression;
-
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H

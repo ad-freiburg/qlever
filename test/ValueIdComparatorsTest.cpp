@@ -50,19 +50,20 @@ struct ValueIdComparators : public ::testing::Test {
 };
 
 TEST_F(ValueIdComparators, GetRangeForDatatype) {
-  std::vector<Datatype> datatypes{Datatype::Int,
-                                  Datatype::Double,
-                                  Datatype::VocabIndex,
-                                  Datatype::Undefined,
-                                  Datatype::LocalVocabIndex,
-                                  Datatype::TextRecordIndex,
-                                  Datatype::WordVocabIndex};
+  std::vector<qlever::Datatype> datatypes{qlever::Datatype::Int,
+                                          qlever::Datatype::Double,
+                                          qlever::Datatype::VocabIndex,
+                                          qlever::Datatype::Undefined,
+                                          qlever::Datatype::LocalVocabIndex,
+                                          qlever::Datatype::TextRecordIndex,
+                                          qlever::Datatype::WordVocabIndex};
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
     auto [begin, end] = getRangeForDatatype(ids.begin(), ids.end(), datatype);
-    auto hasMatchingDatatype = [&datatype](ValueId id) {
-      std::array vocabTypes{Datatype::VocabIndex, Datatype::LocalVocabIndex};
+    auto hasMatchingDatatype = [&datatype](qlever::ValueId id) {
+      std::array vocabTypes{qlever::Datatype::VocabIndex,
+                            qlever::Datatype::LocalVocabIndex};
       if (ad_utility::contains(vocabTypes, datatype)) {
         return ad_utility::contains(vocabTypes, id.getDatatype());
       } else {
@@ -105,7 +106,7 @@ auto getComparisonFunctor() {
 // (`isMatchingDatatype(a) and `isMatchingDatatype(b)` both are true when
 // `applyComparator` is called.
 template <typename It, typename IsMatchingDatatype, typename ApplyComparator>
-auto testGetRangesForId(It begin, It end, ValueId id,
+auto testGetRangesForId(It begin, It end, qlever::ValueId id,
                         IsMatchingDatatype isMatchingDatatype,
                         ApplyComparator applyComparator,
                         source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -116,7 +117,7 @@ auto testGetRangesForId(It begin, It end, ValueId id,
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
 
-    auto isMatching = [&](ValueId a, ValueId b) {
+    auto isMatching = [&](qlever::ValueId a, qlever::ValueId b) {
       bool m = isMatchingDatatype(a);
       if (!m) {
         return m;
@@ -162,7 +163,8 @@ auto testGetRangesForId(It begin, It end, ValueId id,
 // Test that `getRangesFromId` works correctly for `ValueId`s of the numeric
 // types (`Int` and `Double`)
 TEST_F(ValueIdComparators, NumericTypes) {
-  auto impl = [](Datatype datatype, auto isTypeMatching, auto applyComparator) {
+  auto impl = [](qlever::Datatype datatype, auto isTypeMatching,
+                 auto applyComparator) {
     auto ids = makeRandomIds();
     std::sort(ids.begin(), ids.end(), compareByBits);
     auto [beginOfDatatype, endOfDatatype] =
@@ -178,19 +180,20 @@ TEST_F(ValueIdComparators, NumericTypes) {
                          applyComparator);
     }
   };
-  auto isTypeMatching = [&](ValueId id) {
+  auto isTypeMatching = [&](qlever::ValueId id) {
     auto type = id.getDatatype();
-    return type == Datatype::Double || type == Datatype::Int;
+    return type == qlever::Datatype::Double || type == qlever::Datatype::Int;
   };
 
-  auto applyComparator = [&](auto comparator, ValueId aId, ValueId bId) {
+  auto applyComparator = [&](auto comparator, qlever::ValueId aId,
+                             qlever::ValueId bId) {
     std::variant<int64_t, double> aValue, bValue;
-    if (aId.getDatatype() == Datatype::Double) {
+    if (aId.getDatatype() == qlever::Datatype::Double) {
       aValue = aId.getDouble();
     } else {
       aValue = aId.getInt();
     }
-    if (bId.getDatatype() == Datatype::Double) {
+    if (bId.getDatatype() == qlever::Datatype::Double) {
       bValue = bId.getDouble();
     } else {
       bValue = bId.getInt();
@@ -200,15 +203,15 @@ TEST_F(ValueIdComparators, NumericTypes) {
                       bValue);
   };
 
-  impl(Datatype::Double, isTypeMatching, applyComparator);
-  impl(Datatype::Int, isTypeMatching, applyComparator);
+  impl(qlever::Datatype::Double, isTypeMatching, applyComparator);
+  impl(qlever::Datatype::Int, isTypeMatching, applyComparator);
 }
 
 // Test that `getRangesFromId` works correctly for the undefined ID.
 TEST_F(ValueIdComparators, Undefined) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
-  auto undefined = ValueId::makeUndefined();
+  auto undefined = qlever::ValueId::makeUndefined();
 
   for (auto comparison : {Comparison::EQ, Comparison::LE, Comparison::GE,
                           Comparison::GT, Comparison::LT, Comparison::NE}) {
@@ -221,12 +224,13 @@ TEST_F(ValueIdComparators, Undefined) {
 // Similar to `testGetRanges` (see above) but tests the comparison to a range of
 // `ValueId`s that are considered equal.
 template <typename It, typename IsMatchingDatatype>
-auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
+auto testGetRangesForEqualIds(It begin, It end, qlever::ValueId idBegin,
+                              qlever::ValueId idEnd,
                               IsMatchingDatatype isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
   auto testImpl = [&](auto comparison) {
     if (comparison == Comparison::NE &&
-        idBegin.getDatatype() == Datatype::VocabIndex) {
+        idBegin.getDatatype() == qlever::Datatype::VocabIndex) {
       EXPECT_TRUE(true);
     }
     using enum ComparisonResult;
@@ -282,18 +286,19 @@ TEST_F(ValueIdComparators, IndexTypes) {
     auto getRandomIndex =
         ad_utility::SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
-    auto isTypeMatching = [&](ValueId id) {
-      auto vocabTypes =
-          std::array{Datatype::LocalVocabIndex, Datatype::VocabIndex};
+    auto isTypeMatching = [&](qlever::ValueId id) {
+      auto vocabTypes = std::array{qlever::Datatype::LocalVocabIndex,
+                                   qlever::Datatype::VocabIndex};
       if (ad_utility::contains(vocabTypes, datatype)) {
         return ad_utility::contains(vocabTypes, id.getDatatype());
       }
       return id.getDatatype() == datatype;
     };
 
-    auto applyComparator = [&](auto comparator, ValueId a, ValueId b) {
-      if (a.getDatatype() == Datatype::LocalVocabIndex ||
-          a.getDatatype() == Datatype::VocabIndex) {
+    auto applyComparator = [&](auto comparator, qlever::ValueId a,
+                               qlever::ValueId b) {
+      if (a.getDatatype() == qlever::Datatype::LocalVocabIndex ||
+          a.getDatatype() == qlever::Datatype::VocabIndex) {
         return comparator(a, b);
       }
       return comparator(std::invoke(getFromId, a), std::invoke(getFromId, b));
@@ -318,15 +323,15 @@ TEST_F(ValueIdComparators, IndexTypes) {
   // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
   // complex....
   using ad_utility::use_value_identity::vi;
-  testImpl(vi<Datatype::VocabIndex>, &getVocabIndex);
-  testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex);
-  testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex);
-  testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex);
+  testImpl(vi<qlever::Datatype::VocabIndex>, &getVocabIndex);
+  testImpl(vi<qlever::Datatype::TextRecordIndex>, &getTextRecordIndex);
+  testImpl(vi<qlever::Datatype::LocalVocabIndex>, &getLocalVocabIndex);
+  testImpl(vi<qlever::Datatype::WordVocabIndex>, &getWordVocabIndex);
 }
 
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, undefinedWithItself) {
-  auto u = ValueId::makeUndefined();
+  auto u = qlever::ValueId::makeUndefined();
   using enum ComparisonResult;
   using enum ComparisonForIncompatibleTypes;
   ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
@@ -346,7 +351,7 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
 
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, contractViolations) {
-  auto u = ValueId::makeUndefined();
+  auto u = qlever::ValueId::makeUndefined();
   auto I = ad_utility::testing::IntId;
   // Invalid value for the `Comparison` enum.
   ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));

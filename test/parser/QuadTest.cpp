@@ -91,11 +91,11 @@ TEST(QuadTest, getOperations) {
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
     return {t, t, t};
   };
-  auto SparqlTriple = [](const TripleComponent& t) -> ::SparqlTriple {
+  auto SparqlTriple = [](const TripleComponent& t) -> qlever::SparqlTriple {
     return {t, t.getIri(), t};
   };
   auto GraphTriples =
-      [](const std::vector<::SparqlTriple>& triples,
+      [](const std::vector<qlever::SparqlTriple>& triples,
          const parsedQuery::GroupGraphPattern::GraphSpec& graph) {
         return matchers::GroupGraphPatternWithGraph(graph,
                                                     matchers::Triples(triples));

@@ -29,6 +29,8 @@ using qlever::Variable;
 #include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
 
+using namespace qlever;
+
 namespace materializedViewsQueryAnalysis {
 
 // _____________________________________________________________________________

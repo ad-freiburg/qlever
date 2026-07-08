@@ -8,6 +8,8 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
+using namespace qlever;
+
 namespace ad_utility::detail::parallel_wkt_parser {
 
 // _____________________________________________________________________________

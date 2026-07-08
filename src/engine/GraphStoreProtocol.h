@@ -296,9 +296,5 @@ class GraphStoreProtocol {
 };
 
 }  // namespace qlever
-
-using qlever::GraphStoreProtocol;
-
 #endif
-
 #endif  // QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H

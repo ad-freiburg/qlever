@@ -329,7 +329,4 @@ class IndexScan final : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::IndexScan;
-
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

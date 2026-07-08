@@ -91,7 +91,7 @@ class SparqlExpression {
   // Helper function for getVariableForCount() : If this
   // expression is a single variable, return the name of this variable.
   // Otherwise, return std::nullopt.
-  virtual std::optional<::Variable> getVariableOrNullopt() const;
+  virtual std::optional<qlever::Variable> getVariableOrNullopt() const;
 
   // Helper to identify if this is represents a `YEAR` expression.
   virtual bool isYearExpression() const;

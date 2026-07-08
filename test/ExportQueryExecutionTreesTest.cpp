@@ -52,12 +52,12 @@ std::string runQueryStreamableResult(
   qec->clearCacheUnpinnedOnly();
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{qec, cancellationHandle};
+  qlever::QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(query);
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
-  auto strGenerator = ExportQueryExecutionTrees::computeResult(
+  auto strGenerator = qlever::ExportQueryExecutionTrees::computeResult(
       pq, qet, mediaType, timer, std::move(cancellationHandle));
 
   std::string result;
@@ -81,13 +81,13 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   qec->clearCacheUnpinnedOnly();
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{qec, cancellationHandle};
+  qlever::QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(query);
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
-  for (auto c : ExportQueryExecutionTrees::computeResult(
+  for (auto c : qlever::ExportQueryExecutionTrees::computeResult(
            pq, qet, mediaType, timer, std::move(cancellationHandle))) {
     resStr += c;
   }
@@ -147,7 +147,7 @@ void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &qlever::RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -191,7 +191,7 @@ void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &qlever::RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -1464,17 +1464,17 @@ TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string result =
       runQueryStreamableResult(kg, query, ad_utility::MediaType::octetStream);
-  ASSERT_EQ(4 * sizeof(Id), result.size());
+  ASSERT_EQ(4 * sizeof(qlever::Id), result.size());
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto p = getId("<p>");
   auto o = getId("<o>");
 
-  Id id0, id1, id2, id3;
-  std::memcpy(&id0, result.data(), sizeof(Id));
-  std::memcpy(&id1, result.data() + sizeof(Id), sizeof(Id));
-  std::memcpy(&id2, result.data() + 2 * sizeof(Id), sizeof(Id));
-  std::memcpy(&id3, result.data() + 3 * sizeof(Id), sizeof(Id));
+  qlever::Id id0, id1, id2, id3;
+  std::memcpy(&id0, result.data(), sizeof(qlever::Id));
+  std::memcpy(&id1, result.data() + sizeof(qlever::Id), sizeof(qlever::Id));
+  std::memcpy(&id2, result.data() + 2 * sizeof(qlever::Id), sizeof(qlever::Id));
+  std::memcpy(&id3, result.data() + 3 * sizeof(qlever::Id), sizeof(qlever::Id));
 
   // The result is "p, 31" (first row) "o, 42" (second row)
   ASSERT_EQ(o, id0);
@@ -1521,12 +1521,12 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::idToStringAndType(qec->getIndex(), Id::max(),
-                                       LocalVocab{}),
+      ql::exportIds::idToStringAndType(qec->getIndex(), qlever::Id::max(),
+                                       qlever::LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::getLiteralOrIriFromVocabIndex(qec->getIndex(), Id::max(),
-                                                   LocalVocab{}),
+      ql::exportIds::getLiteralOrIriFromVocabIndex(
+          qec->getIndex(), qlever::Id::max(), qlever::LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ql::exportIds::idToStringAndTypeForEncodedValue(
@@ -1594,7 +1594,7 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
 
   auto* qec = ad_utility::testing::getQec(
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
-  QueryPlanner qp{qec, cancellationHandle};
+  qlever::QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(GetParam() == turtle
                            ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
                            : "SELECT * WHERE { ?x ?y ?z }");
@@ -1603,8 +1603,9 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   EXPECT_ANY_THROW(([&]() {
-    [[maybe_unused]] auto generator = ExportQueryExecutionTrees::computeResult(
-        pq, qet, GetParam(), timer, std::move(cancellationHandle));
+    [[maybe_unused]] auto generator =
+        qlever::ExportQueryExecutionTrees::computeResult(
+            pq, qet, GetParam(), timer, std::move(cancellationHandle));
   }()));
 }
 
@@ -1969,7 +1970,7 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{qec, cancellationHandle};
+  qlever::QueryPlanner qp{qec, cancellationHandle};
   auto qet = qp.createExecutionTree(parsedQuery);
 
   // Export as XML and verify encoded IRIs are properly converted back
@@ -1977,7 +1978,7 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   auto cancellationHandle2 =
       std::make_shared<ad_utility::CancellationHandle<>>();
   std::string result;
-  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
+  for (const auto& chunk : qlever::ExportQueryExecutionTrees::computeResult(
            parsedQuery, qet, ad_utility::MediaType::sparqlXml, timer,
            std::move(cancellationHandle2))) {
     result += chunk;
@@ -1995,7 +1996,7 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   auto cancellationHandle3 =
       std::make_shared<ad_utility::CancellationHandle<>>();
   std::string tsvResult;
-  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
+  for (const auto& chunk : qlever::ExportQueryExecutionTrees::computeResult(
            parsedQuery, qet, ad_utility::MediaType::tsv, tsvTimer,
            std::move(cancellationHandle3))) {
     tsvResult += chunk;
@@ -2016,7 +2017,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
   // Case 1: Runtime parameter enabled (default).
   {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+        &qlever::RuntimeParameters::sparqlResultsJsonWithTime_>(true);
     auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
     ASSERT_TRUE(result.contains("head"));
     ASSERT_TRUE(result.contains("results"));
@@ -2033,7 +2034,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
   // Case 2: Runtime parameter disabled.
   {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+        &qlever::RuntimeParameters::sparqlResultsJsonWithTime_>(false);
     auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
     ASSERT_TRUE(result.contains("head"));
     ASSERT_TRUE(result.contains("results"));

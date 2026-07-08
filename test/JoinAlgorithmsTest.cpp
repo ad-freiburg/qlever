@@ -287,10 +287,10 @@ namespace {
 // Replacement for `Id`, but with an additional tag to distinguish between ids
 // with the same value for testing.
 struct FakeId {
-  Id value_;
+  qlever::Id value_;
   std::string_view tag_;
 
-  operator Id() const { return value_; }
+  operator qlever::Id() const { return value_; }
   auto operator==(const FakeId& other) const {
     return value_.getBits() == other.value_.getBits() && tag_ == other.tag_;
   }
@@ -334,7 +334,7 @@ struct RowAdderWithUndef {
 
   void addOptionalRow(size_t leftIndex) {
     auto id = (*left_)[leftIndex];
-    output_.push_back({id, FakeId{Id::makeUndefined(), "OPTIONAL"}});
+    output_.push_back({id, FakeId{qlever::Id::makeUndefined(), "OPTIONAL"}});
   }
 
   void flush() const {
@@ -355,13 +355,16 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
   using namespace std::ranges;
   auto trace = generateLocationTrace(l);
   auto compare = [](FakeId l, FakeId r) {
-    return static_cast<Id>(l) < static_cast<Id>(r);
+    return static_cast<qlever::Id>(l) < static_cast<qlever::Id>(r);
   };
-  AD_CONTRACT_CHECK(is_sorted(a | views::join, {}, ad_utility::staticCast<Id>));
-  AD_CONTRACT_CHECK(is_sorted(b | views::join, {}, ad_utility::staticCast<Id>));
-  auto validationProjection = [](const std::array<FakeId, 2>& fakeIds) -> Id {
+  AD_CONTRACT_CHECK(
+      is_sorted(a | views::join, {}, ad_utility::staticCast<qlever::Id>));
+  AD_CONTRACT_CHECK(
+      is_sorted(b | views::join, {}, ad_utility::staticCast<qlever::Id>));
+  auto validationProjection =
+      [](const std::array<FakeId, 2>& fakeIds) -> qlever::Id {
     const auto& [x, y] = fakeIds;
-    return x == Id::makeUndefined() ? y : x;
+    return x == qlever::Id::makeUndefined() ? y : x;
   };
   {
     RowAdderWithUndef adder{};
@@ -388,12 +391,12 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
   }
 }
 using F = FakeId;
-auto I = Id::makeFromInt;
+auto I = qlever::Id::makeFromInt;
 }  // namespace
 
 // ________________________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnOneSide) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}},
                                      {{I(42), "a1"}, {I(42), "a2"}},
                                      {{I(42), "a3"}, {I(67), "a4"}},
@@ -428,7 +431,7 @@ TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnOneSide) {
 
 // ________________________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnBothSides) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}},
                                      {{I(42), "a1"}, {I(42), "a2"}},
                                      {{I(42), "a3"}, {I(67), "a4"}},
@@ -471,7 +474,7 @@ TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnBothSides) {
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}}};
   std::vector<std::vector<FakeId>> b{{{I(1), "b0"}, {I(2), "b1"}}};
 
@@ -485,7 +488,7 @@ TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksOneSideDoubleUndef) {
   // Regression test for https://github.com/ad-freiburg/qlever/issues/2606
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}, {U, "a1"}}};
   std::vector<std::vector<FakeId>> b{{{I(1), "b0"}, {I(2), "b1"}}};
 
@@ -500,7 +503,7 @@ TEST(JoinAlgorithms, JoinWithBlocksOneSideDoubleUndef) {
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}}};
   std::vector<std::vector<FakeId>> b{{{U, "b0"}, {I(2), "b1"}, {I(3), "b2"}}};
 
@@ -524,7 +527,7 @@ TEST(JoinAlgorithms, UndefinedJoinWorksWithoutUndefinedValues) {
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksMultipleGroupsAfterUndefined) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{
       {{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}, {I(3), "a3"}}};
   std::vector<std::vector<FakeId>> b{
@@ -542,7 +545,7 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleGroupsAfterUndefined) {
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, TrailingEmptyBlocksAreHandledWell) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{
       {{U, "a0"}}, {{I(1), "a1"}}, {{I(2), "a2"}}, {{I(3), "a3"}}};
   std::vector<std::vector<FakeId>> b{{{I(3), "b0"}}, {}, {}, {}, {}};
@@ -554,7 +557,7 @@ TEST(JoinAlgorithms, TrailingEmptyBlocksAreHandledWell) {
 
 // _____________________________________________________________________________
 TEST(JoinAlgorithms, EmptyBlocksInTheMiddleAreHandledWell) {
-  auto U = Id::makeUndefined();
+  auto U = qlever::Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{
       {{U, "a0"}}, {{I(1), "a1"}}, {{I(2), "a2"}}, {{I(3), "a3"}}};
   std::vector<std::vector<FakeId>> b{{{I(1), "b0"}}, {}, {{I(1), "b1"}}, {}, {},
@@ -572,14 +575,14 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   // This test is mostly for coverage purposes.
   RowAdderWithUndef adder{};
   std::vector<std::vector<FakeId>> dummyBlocks{};
-  auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
+  auto compare = [](auto l, auto r) { return static_cast<qlever::Id>(l) < r; };
   auto joinSide = ad_utility::detail::makeJoinSide(dummyBlocks, ql::identity{});
   ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
                                                adder};
   EXPECT_FALSE(impl.isUndefined_("Something"));
   EXPECT_FALSE(impl.isUndefined_(1));
   EXPECT_FALSE(impl.isUndefined_(I(1)));
-  EXPECT_FALSE(impl.isUndefined_(Id::makeUndefined()));
+  EXPECT_FALSE(impl.isUndefined_(qlever::Id::makeUndefined()));
 }
 
 // _____________________________________________________________________________
@@ -590,7 +593,7 @@ namespace {
 // Helper types for testing special optional join with Id values.
 using IdBlock = IdTable;
 using IdNestedBlock = std::vector<IdBlock>;
-using IdJoinResult = std::vector<std::array<Id, 4>>;
+using IdJoinResult = std::vector<std::array<qlever::Id, 4>>;
 
 auto makeVec = [](const auto&... tables) {
   std::vector<IdTable> result;
@@ -637,7 +640,8 @@ struct IdRowAdder {
     auto x1 = leftTable_(leftIndex, 0);
     auto x2 = leftTable_(leftIndex, 1);
     auto leftPayload = leftTable_(leftIndex, 2);
-    target_->emplace_back(std::array{x1, x2, leftPayload, Id::makeUndefined()});
+    target_->emplace_back(
+        std::array{x1, x2, leftPayload, qlever::Id::makeUndefined()});
   }
 
   template <typename R1, typename R2>
@@ -657,7 +661,7 @@ struct IdRowAdder {
 auto makeIdRowAdder(IdJoinResult& target) { return IdRowAdder{&target}; }
 
 // Helper function for creating undefined Ids.
-auto U2() { return Id::makeUndefined(); }
+auto U2() { return qlever::Id::makeUndefined(); }
 
 // Helper function to test the special optional join with blocks.
 void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
@@ -672,10 +676,10 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
   std::vector<TableWithJoinCols> wrappedA;
   std::vector<TableWithJoinCols> wrappedB;
   for (auto& table : a) {
-    wrappedA.emplace_back(std::move(table), LocalVocab{});
+    wrappedA.emplace_back(std::move(table), qlever::LocalVocab{});
   }
   for (auto& table : b) {
-    wrappedB.emplace_back(std::move(table), LocalVocab{});
+    wrappedB.emplace_back(std::move(table), qlever::LocalVocab{});
   }
 
   ad_utility::specialOptionalJoinForBlocks(
@@ -810,10 +814,10 @@ void testSpecialOptionalJoinWithSplits(
 TEST(JoinAlgorithms, SpecialOptionalJoinEmptyInputs) {
   testSpecialOptionalJoin({}, {}, {});
 
-  auto emptyTable = IdTable(3, makeUnlimitedAllocator<Id>());
+  auto emptyTable = IdTable(3, makeUnlimitedAllocator<qlever::Id>());
   auto nonEmpty = makeIdTableFromVector({{I(13), I(0), I(100)}});
   testSpecialOptionalJoin(makeVec(nonEmpty), makeVec(emptyTable),
-                          {{I(13), I(0), I(100), Id::makeUndefined()}});
+                          {{I(13), I(0), I(100), qlever::Id::makeUndefined()}});
 
   testSpecialOptionalJoin(makeVec(emptyTable), makeVec(nonEmpty), {});
 }
@@ -830,12 +834,13 @@ TEST(JoinAlgorithms, SpecialOptionalJoinSingleBlockWithSplits) {
                                {I(5), I(25), I(203)},
                                {I(19), I(26), I(204)},
                                {I(42), I(27), I(205)}});
-  IdJoinResult expectedResult{{I(1), I(11), I(101), Id::makeUndefined()},
-                              {I(4), I(12), I(102), I(201)},
-                              {I(4), I(12), I(102), I(202)},
-                              {I(4), I(12), I(103), I(201)},
-                              {I(4), I(12), I(103), I(202)},
-                              {I(42), I(14), I(104), Id::makeUndefined()}};
+  IdJoinResult expectedResult{
+      {I(1), I(11), I(101), qlever::Id::makeUndefined()},
+      {I(4), I(12), I(102), I(201)},
+      {I(4), I(12), I(102), I(202)},
+      {I(4), I(12), I(103), I(201)},
+      {I(4), I(12), I(103), I(202)},
+      {I(42), I(14), I(104), qlever::Id::makeUndefined()}};
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 

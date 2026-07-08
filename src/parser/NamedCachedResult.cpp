@@ -9,6 +9,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 
+using namespace qlever;
+
 namespace {
 // Helper function for the constructor that takes an IRI. check that the IRI has
 // the expected format and extract the query name.

@@ -26,10 +26,11 @@ TEST(SparqlParser, Update) {
   };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+    return qlever::TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
   auto Literal = [](std::string s) {
-    return TripleComponent::Literal::fromStringRepresentation(std::move(s));
+    return qlever::TripleComponent::Literal::fromStringRepresentation(
+        std::move(s));
   };
   auto noGraph = std::monostate{};
 
@@ -80,15 +81,15 @@ TEST(SparqlParser, Update) {
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), Iri("<foo>")}}, {}),
           m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})),
-          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
-                                   std::nullopt)));
+          m::datasetClausesMatcher(
+              m::Graphs{qlever::TripleComponent(Iri("<foo>"))}, std::nullopt)));
   expectUpdate(
       "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {}),
           m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})),
-          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
-                                   m::Graphs{})));
+          m::datasetClausesMatcher(
+              m::Graphs{qlever::TripleComponent(Iri("<foo>"))}, m::Graphs{})));
   expectUpdate("INSERT DATA { GRAPH <foo> { } }",
                m::UpdateClause(m::GraphUpdate({}, {}), m::GraphPattern()));
   expectUpdate("INSERT DATA { GRAPH <foo> { <a> <b> <c> } }",
@@ -104,16 +105,16 @@ TEST(SparqlParser, Update) {
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
           m::GraphPattern(m::Triples({{Iri("<d>"), iri("<e>"), Var{"?a"}}})),
-          m::datasetClausesMatcher(m::Graphs{},
-                                   m::Graphs{TripleComponent(Iri("<foo>"))})));
+          m::datasetClausesMatcher(
+              m::Graphs{}, m::Graphs{qlever::TripleComponent(Iri("<foo>"))})));
   expectUpdate(
       "WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), Iri("<foo>")}},
                          {}),
           m::GraphPattern(m::Triples({{Iri("<d>"), iri("<e>"), Var{"?a"}}})),
-          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
-                                   std::nullopt)));
+          m::datasetClausesMatcher(
+              m::Graphs{qlever::TripleComponent(Iri("<foo>"))}, std::nullopt)));
   const auto insertMatcher = m::UpdateClause(
       m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}),
       m::GraphPattern());
@@ -186,7 +187,7 @@ TEST(SparqlParser, Create) {
 TEST(SparqlParser, Add) {
   auto expectAdd = ExpectCompleteParse<&Parser::add>{defaultPrefixMap};
   auto expectAddFails = ExpectParseFails<&Parser::add>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
   auto addMatcher = ElementsAre(m::AddAll(Iri("<foo>"), Iri("<bar>")));
   expectAdd("ADD GRAPH <baz> to GRAPH <baz>", IsEmpty());
@@ -203,12 +204,12 @@ TEST(SparqlParser, Add) {
 TEST(SparqlParser, Clear) {
   auto expectClear = ExpectCompleteParse<&Parser::clear>{defaultPrefixMap};
   auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
   using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
-  expectClear("CLEAR ALL", m::Clear(Variable("?g"), GVB::ALL));
+  expectClear("CLEAR ALL", m::Clear(qlever::Variable("?g"), GVB::ALL));
   expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectClear("CLEAR NAMED", m::Clear(Variable("?g"), GVB::NAMED));
+  expectClear("CLEAR NAMED", m::Clear(qlever::Variable("?g"), GVB::NAMED));
   expectClear("CLEAR DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
@@ -218,12 +219,12 @@ TEST(SparqlParser, Drop) {
   // graph existence)
   auto expectDrop = ExpectCompleteParse<&Parser::drop>{defaultPrefixMap};
   auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
   using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
-  expectDrop("DROP ALL", m::Clear(Variable("?g"), GVB::ALL));
+  expectDrop("DROP ALL", m::Clear(qlever::Variable("?g"), GVB::ALL));
   expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
-  expectDrop("DROP NAMED", m::Clear(Variable("?g"), GVB::NAMED));
+  expectDrop("DROP NAMED", m::Clear(qlever::Variable("?g"), GVB::NAMED));
   expectDrop("DROP DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
@@ -231,7 +232,7 @@ TEST(SparqlParser, Drop) {
 TEST(SparqlParser, Move) {
   auto expectMove = ExpectCompleteParse<&Parser::move>{defaultPrefixMap};
   auto expectMoveFails = ExpectParseFails<&Parser::move>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
   // Moving a graph onto itself changes nothing
   expectMove("MOVE SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
@@ -246,7 +247,7 @@ TEST(SparqlParser, Move) {
 TEST(SparqlParser, Copy) {
   auto expectCopy = ExpectCompleteParse<&Parser::copy>{defaultPrefixMap};
   auto expectCopyFails = ExpectParseFails<&Parser::copy>{defaultPrefixMap};
-  auto Iri = TripleComponent::Iri::fromIriref;
+  auto Iri = qlever::TripleComponent::Iri::fromIriref;
 
   // Copying a graph onto itself changes nothing
   expectCopy("COPY SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
@@ -260,20 +261,20 @@ TEST(SparqlParser, Copy) {
 TEST(SparqlParser, Load) {
   auto expectLoad = ExpectCompleteParse<&Parser::load>{defaultPrefixMap};
   auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+    return qlever::TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
   auto noGraph = std::monostate{};
 
   expectLoad(
       "LOAD <https://example.com>",
       m::UpdateClause(
-          m::GraphUpdate({}, {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                          Var("?o"), noGraph}}),
+          m::GraphUpdate({}, {qlever::SparqlTripleSimpleWithGraph{
+                                 Var("?s"), Var("?p"), Var("?o"), noGraph}}),
           m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
   expectLoad("LOAD SILENT <http://example.com> into GRAPH <bar>",
              m::UpdateClause(
                  m::GraphUpdate(
-                     {}, {SparqlTripleSimpleWithGraph{
+                     {}, {qlever::SparqlTripleSimpleWithGraph{
                              Var("?s"), Var("?p"), Var("?o"), Iri("<bar>")}}),
                  m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
 }
@@ -293,25 +294,27 @@ MATCHER(SpNotEqual,
 }
 
 // Assert that a triple component stores an ID with datatype `BlankNodeIndex`.
-auto isBlank = []() -> testing::Matcher<const TripleComponent&> {
+auto isBlank = []() -> testing::Matcher<const qlever::TripleComponent&> {
   using namespace testing;
-  return AD_PROPERTY(TripleComponent, getVariant,
-                     VariantWith<Id>(AD_PROPERTY(
-                         Id, getDatatype, Eq(Datatype::BlankNodeIndex))));
+  return AD_PROPERTY(
+      qlever::TripleComponent, getVariant,
+      VariantWith<qlever::Id>(AD_PROPERTY(
+          qlever::Id, getDatatype, Eq(qlever::Datatype::BlankNodeIndex))));
 };
 
 // Assert that the subject and the object of a triple are blank nodes.
 // Note: The SPARQL grammar forbids predicates that are blank.
 auto bnodeTriple =
-    []() -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+    []() -> testing::Matcher<const qlever::SparqlTripleSimpleWithGraph&> {
   using namespace testing;
-  using Tr = SparqlTripleSimpleWithGraph;
+  using Tr = qlever::SparqlTripleSimpleWithGraph;
   return AllOf(AD_FIELD(Tr, s_, isBlank()), AD_FIELD(Tr, o_, isBlank()),
                Not(AD_FIELD(Tr, p_, isBlank())));
 };
 
-// Assert that for all triples in a `vector<SparqlTripleSimpleWithGraph>` the
-// subject is the same, and is an ID with datatype `BlankNodeIndex`.
+// Assert that for all triples in a
+// `vector<qlever::SparqlTripleSimpleWithGraph>` the subject is the same, and is
+// an ID with datatype `BlankNodeIndex`.
 MATCHER(allSubjectsTheSameAndBlank,
         "check that the subjects of the triples all are the same blank node") {
   for (const auto& triple : arg) {
@@ -319,22 +322,22 @@ MATCHER(allSubjectsTheSameAndBlank,
       return false;
     }
     if (!triple.s_.isId() ||
-        triple.s_.getId().getDatatype() != Datatype::BlankNodeIndex) {
+        triple.s_.getId().getDatatype() != qlever::Datatype::BlankNodeIndex) {
       return false;
     }
   }
   return true;
 }
 
-// Assert that for all triples in a `vector<SparqlTripleSimpleWithGraph>` the
-// subjects are pairwise disjoint but all are IDs with datatype
-// `BlankNodeIndex`.
+// Assert that for all triples in a
+// `vector<qlever::SparqlTripleSimpleWithGraph>` the subjects are pairwise
+// disjoint but all are IDs with datatype `BlankNodeIndex`.
 MATCHER(allSubjectsDifferentAndBlank,
         "check that the subjects of the triples all are different blank node") {
-  ad_utility::HashSet<Id> ids;
+  ad_utility::HashSet<qlever::Id> ids;
   for (const auto& triple : arg) {
     if (!triple.s_.isId() ||
-        triple.s_.getId().getDatatype() != Datatype::BlankNodeIndex) {
+        triple.s_.getId().getDatatype() != qlever::Datatype::BlankNodeIndex) {
       return false;
     }
     ids.insert(triple.s_.getId());

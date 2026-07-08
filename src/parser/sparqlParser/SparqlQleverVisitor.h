@@ -27,7 +27,6 @@
 namespace RdfEscaping = qlever::RdfEscaping;
 namespace parsedQuery = qlever::parsedQuery;
 namespace updateClause = qlever::updateClause;
-using qlever::Quads;
 
 namespace qlever {
 
@@ -740,5 +739,4 @@ class SparqlQleverVisitor {
 };
 
 }  // namespace qlever
-
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H

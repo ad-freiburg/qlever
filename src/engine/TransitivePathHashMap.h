@@ -85,10 +85,5 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
 };
 
 }  // namespace qlever
-
-using qlever::HashMapWrapper;
-using qlever::TransitivePathHashMap;
-
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
-
 #endif

@@ -79,7 +79,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -95,7 +95,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{Literal{"hello"}}});
 
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -114,7 +114,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
@@ -123,11 +123,12 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
 
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(3);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   // After preprocessing, columnIndex_ holds the original IdTable column (3).
@@ -143,11 +144,11 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
 TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
   // A triple with an unbound variable is dropped entirely.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?unbound"}},
+  triples.push_back({GraphTerm{qlever::Variable{"?unbound"}},
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;  // ?unbound is not in the map
+  qlever::VariableToColumnMap varMap;  // ?unbound is not in the map
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
@@ -160,7 +161,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -176,7 +177,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -188,7 +189,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
 
 TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
   Triples triples;
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
@@ -199,11 +200,12 @@ TEST(ConstructTemplatePreprocessorTest,
      sameVariableWithinSingleTripleDeduplicates) {
   // ?x appears in subject and object of the same triple: one unique column.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
-                     GraphTerm{Variable{"?x"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p>")},
+                     GraphTerm{qlever::Variable{"?x"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(5);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(5);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -217,14 +219,15 @@ TEST(ConstructTemplatePreprocessorTest,
      sameVariableAcrossMultipleTriplesDeduplicates) {
   // ?x appears in two different triples: still one unique column.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p1>")},
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p1>")},
                      GraphTerm{iriV("<http://o1>")}});
   triples.push_back({GraphTerm{iriV("<http://s2>")},
                      GraphTerm{iriV("<http://p2>")},
-                     GraphTerm{Variable{"?x"}}});
+                     GraphTerm{qlever::Variable{"?x"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(2);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(2);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -241,12 +244,13 @@ TEST(ConstructTemplatePreprocessorTest,
      differentVariablesCollectMultipleColumns) {
   // ?x and ?y are different variables with different columns.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
-                     GraphTerm{Variable{"?y"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p>")},
+                     GraphTerm{qlever::Variable{"?y"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(0);
+  varMap[qlever::Variable{"?y"}] = qlever::makeAlwaysDefinedColumn(1);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -260,17 +264,20 @@ TEST(ConstructTemplatePreprocessorTest,
   // Three triples with ?x, ?y, ?z. ?x appears in two triples.
   // Expected: 3 unique columns (for ?x, ?y, ?z).
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p1>")},
-                     GraphTerm{Variable{"?y"}}});
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p2>")},
-                     GraphTerm{Variable{"?z"}}});
-  triples.push_back({GraphTerm{Variable{"?y"}}, GraphTerm{iriV("<http://p3>")},
-                     GraphTerm{Variable{"?z"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p1>")},
+                     GraphTerm{qlever::Variable{"?y"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p2>")},
+                     GraphTerm{qlever::Variable{"?z"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?y"}},
+                     GraphTerm{iriV("<http://p3>")},
+                     GraphTerm{qlever::Variable{"?z"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
-  varMap[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(0);
+  varMap[qlever::Variable{"?y"}] = qlever::makeAlwaysDefinedColumn(1);
+  varMap[qlever::Variable{"?z"}] = qlever::makeAlwaysDefinedColumn(2);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -286,11 +293,12 @@ TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
   // ?x is bound (column 0), ?unbound is not in the map.
   // The entire triple is dropped because ?unbound is undefined.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
-                     GraphTerm{Variable{"?unbound"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p>")},
+                     GraphTerm{qlever::Variable{"?unbound"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(0);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_TRUE(result.preprocessedTriples_.empty());
@@ -303,13 +311,15 @@ TEST(ConstructTemplatePreprocessorTest,
   // Triple 2 has ?x (bound, column 0) -> kept.
   // ?x should still appear in uniqueVariableColumns_.
   Triples triples;
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
-                     GraphTerm{Variable{"?unbound"}}});
-  triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p>")},
+                     GraphTerm{qlever::Variable{"?unbound"}}});
+  triples.push_back({GraphTerm{qlever::Variable{"?x"}},
+                     GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(0);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -329,7 +339,7 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
                      GraphTerm{iriV("<http://p2>")},
                      GraphTerm{iriV("<http://o2>")}});
 
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -348,13 +358,13 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
   Triples triples;
   triples.push_back({GraphTerm{iriV("<http://s>")},
                      GraphTerm{iriV("<http://p>")},
-                     GraphTerm{Variable{"?val"}}});
+                     GraphTerm{qlever::Variable{"?val"}}});
   triples.push_back({GraphTerm{BlankNode{false, "b1"}},
                      GraphTerm{iriV("<http://q>")},
                      GraphTerm{Literal{"text"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?val"}] = makeAlwaysDefinedColumn(4);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?val"}] = qlever::makeAlwaysDefinedColumn(4);
   auto result = ConstructTemplatePreprocessor::preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -372,7 +382,7 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 // =============================================================================
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{iriV("<http://s>")}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
@@ -381,7 +391,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{Literal{"hello"}}, OBJECT, varMap);
   ASSERT_TRUE(result.has_value());
@@ -392,31 +402,31 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
   // Literals in subject position are invalid; evaluate returns empty string,
   // so preprocessTerm returns nullopt.
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{Literal{"invalid"}}, SUBJECT, varMap);
   EXPECT_EQ(result, std::nullopt);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableBound) {
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
+  qlever::VariableToColumnMap varMap;
+  varMap[qlever::Variable{"?x"}] = qlever::makeAlwaysDefinedColumn(3);
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
-      GraphTerm{Variable{"?x"}}, SUBJECT, varMap);
+      GraphTerm{qlever::Variable{"?x"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
 
   EXPECT_THAT(result.value(), Var(3));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
-      GraphTerm{Variable{"?unbound"}}, SUBJECT, varMap);
+      GraphTerm{qlever::Variable{"?unbound"}}, SUBJECT, varMap);
   EXPECT_EQ(result, std::nullopt);
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{BlankNode{false, "myNode"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());
@@ -425,7 +435,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
-  VariableToColumnMap varMap;
+  qlever::VariableToColumnMap varMap;
   auto result = ConstructTemplatePreprocessor::preprocessTerm(
       GraphTerm{BlankNode{true, "gen"}}, SUBJECT, varMap);
   ASSERT_TRUE(result.has_value());

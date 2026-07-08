@@ -32,10 +32,6 @@
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
-using qlever::TripleComponent;
-using qlever::TripleComponentComparator;
-using qlever::VocabIndex;
-
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
 //
@@ -62,11 +58,11 @@ struct TripleComponentWithIndex {
 // A `TripleComponent` together with the information, whether it should be part
 // of the external vocabulary.
 struct PossiblyExternalizedTripleComponent {
-  PossiblyExternalizedTripleComponent(TripleComponent tripleComponent,
+  PossiblyExternalizedTripleComponent(qlever::TripleComponent tripleComponent,
                                       bool isExternal = false)
       : tripleComponent_{std::move(tripleComponent)}, isExternal_{isExternal} {}
   PossiblyExternalizedTripleComponent() = default;
-  TripleComponent tripleComponent_;
+  qlever::TripleComponent tripleComponent_;
   bool isExternal_ = false;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedTripleComponent) {
@@ -93,7 +89,7 @@ class PartialVocabIndexWithExternalFlag {
     // This guard catches future regressions that funnel a tagged value or an
     // underflowed counter through here, which would otherwise silently
     // collide with the `isExternal` bit and corrupt the vocabulary mapping.
-    AD_EXPENSIVE_CHECK(id < (uint64_t{1} << ValueId::numDataBits));
+    AD_EXPENSIVE_CHECK(id < (uint64_t{1} << qlever::ValueId::numDataBits));
   }
 
   PartialVocabIndexWithExternalFlag() = default;
@@ -179,18 +175,19 @@ using ItemMapArray = std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>;
 struct alignas(256) ItemMapManager {
   // Member variables.
   ItemMapAndBuffer map_;
-  ad_utility::HashMap<Id, Id> specialIdMapping_;
+  ad_utility::HashMap<qlever::Id, qlever::Id> specialIdMapping_;
   uint64_t minId_;
-  const TripleComponentComparator* comparator_;
+  const qlever::TripleComponentComparator* comparator_;
 
   // Construct with given minimum ID.
-  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
+  explicit ItemMapManager(uint64_t minId,
+                          const qlever::TripleComponentComparator* cmp,
                           ItemAlloc alloc)
       : map_(alloc), minId_(minId), comparator_(cmp) {
     // Precompute the mapping from the `specialIds` to their normal IDs in the
     // vocabulary. This makes resolving such IRIs much cheaper.
     for (const auto& [specialIri, specialId] : qlever::specialIds()) {
-      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
+      auto iriref = qlever::TripleComponent::Iri::fromIriref(specialIri);
       auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
       specialIdMapping_[specialId] = getId(key);
     }
@@ -203,10 +200,10 @@ struct alignas(256) ItemMapManager {
   // For a given `PossiblyExternalizedTripleComponent`, if we have seen it
   // before, return its assigned ID. Else assign it the next free ID, store it,
   // and return it.
-  Id getId(const PossiblyExternalizedTripleComponent& key) {
+  qlever::Id getId(const PossiblyExternalizedTripleComponent& key) {
     if (key.tripleComponent_.isId()) {
       auto id = key.tripleComponent_.getId();
-      if (id.getDatatype() != Datatype::Undefined) {
+      if (id.getDatatype() != qlever::Datatype::Undefined) {
         return id;
       } else {
         // The only IDs with `Undefined` types ca be the `specialIds`.
@@ -224,14 +221,15 @@ struct alignas(256) ItemMapManager {
       auto keyView = buffer.addString(repr);
       map.try_emplace(keyView,
                       PartialVocabIndexWithExternalFlag{res, key.isExternal_});
-      return Id::makeFromVocabIndex(VocabIndex::make(res));
+      return qlever::Id::makeFromVocabIndex(qlever::VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(VocabIndex::make(it->second.id()));
+      return qlever::Id::makeFromVocabIndex(
+          qlever::VocabIndex::make(it->second.id()));
     }
   }
 
   // Like `getId` but for all components of a triple at once.
-  std::array<Id, NumColumnsIndexBuilding> getId(const Triple& t) {
+  std::array<qlever::Id, NumColumnsIndexBuilding> getId(const Triple& t) {
     return std::apply(
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
@@ -277,7 +275,7 @@ struct ProcessedTriple {
 template <typename IndexPtr>
 auto getIdMapLambdas(
     std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS>& itemMaps,
-    size_t maxNumberOfTriples, const TripleComponentComparator* comp,
+    size_t maxNumberOfTriples, const qlever::TripleComponentComparator* comp,
     IndexPtr* index, ItemAlloc alloc,
     std::atomic<size_t>* numHasWordTriples = nullptr) {
   // Create one `ItemMapManager` per thread, each with its own ID range.
@@ -293,7 +291,7 @@ auto getIdMapLambdas(
     itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples /
                                    NUM_PARALLEL_ITEM_MAPS);
   }
-  using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
+  using IdTriple = std::array<qlever::Id, NumColumnsIndexBuilding>;
   using IdTriples = absl::InlinedVector<IdTriple, 3>;
 
   // For a given `ItemMapManager` (specified via its index in `itemMaps`),
@@ -338,22 +336,22 @@ auto getIdMapLambdas(
       // eventually be refactored, so that this code duplication is avoided.
       if (!lt.langtag_.empty()) {
         // Get the `Id` for the language tag, e.g., `@en`.
-        auto langTagId = map.getId(TripleComponent{
+        auto langTagId = map.getId(qlever::TripleComponent{
             ad_utility::convertLangtagToEntityUri(lt.langtag_)});
         // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
         const auto& iri = lt.triple_[1].tripleComponent_.getIri();
-        auto langTaggedPredId = map.getId(TripleComponent{
+        auto langTaggedPredId = map.getId(qlever::TripleComponent{
             ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
         // Add the internal triple `<subject> @language@<predicate> <object>`.
         result.push_back(
             IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
         // Add the internal triple `<object> ql:langtag <@language>`.
-        result.push_back(IdTriple{
-            spoIds[2],
-            map.getId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    LANGUAGE_PREDICATE)}),
-            langTagId, tripleGraphId});
+        result.push_back(
+            IdTriple{spoIds[2],
+                     map.getId(qlever::TripleComponent{
+                         ad_utility::triple_component::Iri::fromIriref(
+                             LANGUAGE_PREDICATE)}),
+                     langTagId, tripleGraphId});
       }
 
       // Third, if applicable, add a `ql:has-word` triple for each distinct word
@@ -365,16 +363,16 @@ auto getIdMapLambdas(
       // this code, you probably also have to change that one. This should
       // eventually be refactored, so that this code duplication is avoided.
       if (!lt.wordFrequencies_.empty()) {
-        auto hasWordPredId = map.getId(TripleComponent{
+        auto hasWordPredId = map.getId(qlever::TripleComponent{
             ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
         for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
           // Add the internal triple `<literal> ql:has-word "word"`.
-          auto wordId = map.getId(TripleComponent{
+          auto wordId = map.getId(qlever::TripleComponent{
               ad_utility::triple_component::Literal::literalWithoutQuotes(
                   word)});
-          result.push_back(
-              IdTriple{spoIds[2], hasWordPredId, wordId,
-                       Id::makeFromInt(static_cast<int64_t>(termFrequency))});
+          result.push_back(IdTriple{
+              spoIds[2], hasWordPredId, wordId,
+              qlever::Id::makeFromInt(static_cast<int64_t>(termFrequency))});
         }
         // Update the counter for the number of `ql:has-word` triples. Relaxed
         // ordering is fine because this counter is only read after all threads
@@ -393,5 +391,4 @@ auto getIdMapLambdas(
   return ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
       itemMapLamdaCreator);
 }
-
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

@@ -130,14 +130,15 @@ TEST(VariableCounterTest, VariableCounts) {
   {
     VariableCounter count;
     count(parsedQuery::Load{
-        TripleComponent::Iri::fromIriref("<https://example.org>"), false});
+        qlever::TripleComponent::Iri::fromIriref("<https://example.org>"),
+        false});
     EXPECT_THAT(count, counts({}));
   }
 
   // `TripleComponent`.
   {
     VariableCounter count;
-    count(TripleComponent{V{"?x"}});
+    count(qlever::TripleComponent{V{"?x"}});
     EXPECT_THAT(count, counts({{V{"?x"}, 1}}));
   }
 

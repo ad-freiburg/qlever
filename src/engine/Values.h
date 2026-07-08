@@ -75,7 +75,4 @@ class Values : virtual public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Values;
-
 #endif  // QLEVER_SRC_ENGINE_VALUES_H

@@ -320,8 +320,6 @@ class QueryExecutionTree {
 
 }  // namespace qlever
 
-using qlever::QueryExecutionTree;
-
 namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
@@ -333,5 +331,4 @@ std::shared_ptr<qlever::QueryExecutionTree> makeExecutionTree(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
-
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H

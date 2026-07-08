@@ -15,10 +15,10 @@ using namespace ad_utility;
 using ad_utility::source_location;
 
 namespace {
-const Id U = Id::makeUndefined();
+const qlever::Id U = qlever::Id::makeUndefined();
 auto V = ad_utility::testing::VocabId;
 template <size_t I>
-using Arr = std::array<Id, I>;
+using Arr = std::array<qlever::Id, I>;
 }  // namespace
 
 // A small helper function used in the `testSmallerUndef...` functions below. It

@@ -40,6 +40,8 @@
 #include "util/GeoConverters.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace qlever;
+
 using namespace BoostGeometryNamespace;
 using namespace geometryConverters;
 using qlever::getRuntimeParameter;
@@ -57,13 +59,13 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-    const std::optional<util::geo::DBox>& prefilterLatLngBox,
+    const std::optional<::util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex,
     const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
   if (prefilterLatLngBox.has_value()) {
     auto hasNoIntersection =
         [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
-          return !util::geo::intersects(
+          return !::util::geo::intersects(
               prefilterLatLngBox.value(),
               ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
         };
@@ -93,12 +95,12 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
 SpatialJoinAlgorithms::LibSpatialJoinParseMetadata
 SpatialJoinAlgorithms::libspatialjoinParse(
     bool leftOrRightSide, LibSpatialJoinParseInput input, sj::Sweeper& sweeper,
-    size_t numThreads, std::optional<util::geo::I32Box> prefilterBox) const {
+    size_t numThreads, std::optional<::util::geo::I32Box> prefilterBox) const {
   const auto [idTable, column, boundingBoxes] = input;
 
   // Convert prefilter box to lat lng coordinates for comparing against geometry
   // info from vocabulary.
-  std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
+  std::optional<::util::geo::DBox> prefilterLatLngBox = std::nullopt;
   if (prefilterBox.has_value()) {
     prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
         prefilterBox.value());
@@ -111,7 +113,7 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   // retrieving bounding boxes from disk) is likely larger than its performance
   // gain. Therefore prefiltering is disabled in this case.
   if (usePrefiltering &&
-      util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox()) {
+      ::util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox()) {
     usePrefiltering = false;
     spatialJoin_.value()->runtimeInfo().addDetail(
         "prefilter-disabled-by-bounding-box-area", true);
@@ -194,7 +196,7 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     const IdTableView<0>& restable, size_t row, ColumnIndex col,
     const Index& index) {
-  using namespace util::geo;
+  using namespace ::util::geo;
   auto id = restable.at(row, col);
   auto str = ql::exportIds::idToStringAndType(index, id, {});
   if (!str.has_value()) {
@@ -663,7 +665,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   }
   if (maxDist.has_value()) {
     s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-        util::units::Meters(static_cast<float>(maxDist.value()))));
+        ::util::units::Meters(static_cast<float>(maxDist.value()))));
   }
 
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
@@ -711,7 +713,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   auto s2indexPtr = s2index.value().getIndex();
   auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
   s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-      util::units::Meters(static_cast<float>(maxDist.value()))));
+      ::util::units::Meters(static_cast<float>(maxDist.value()))));
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
   ad_utility::Timer timerS2{ad_utility::Timer::Stopped};

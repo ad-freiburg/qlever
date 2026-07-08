@@ -383,7 +383,4 @@ class Server {
 };
 
 }  // namespace qlever
-
-using qlever::Server;
-
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

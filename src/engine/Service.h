@@ -194,9 +194,5 @@ struct Service {
   static void precomputeSiblingResult(Ts&&...) {}
 };
 }  // namespace qlever
-
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-
-using qlever::Service;
-
 #endif  // QLEVER_SRC_ENGINE_SERVICE_H

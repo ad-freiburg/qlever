@@ -111,7 +111,4 @@ class CountAvailablePredicates : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::CountAvailablePredicates;
-
 #endif  // QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H

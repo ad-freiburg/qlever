@@ -70,7 +70,4 @@ class Join : public Operation {
 };
 
 }  // namespace qlever
-
-using qlever::Join;
-
 #endif  // QLEVER_SRC_ENGINE_JOIN_H

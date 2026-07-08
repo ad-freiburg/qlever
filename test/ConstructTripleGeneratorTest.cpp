@@ -44,7 +44,7 @@ static auto matchStringTriple(const std::string& s, const std::string& p,
                Field(&StringTriple::object_, o));
 }
 
-static constexpr auto U = Id::makeUndefined();
+static constexpr auto U = qlever::Id::makeUndefined();
 
 }  // namespace
 
