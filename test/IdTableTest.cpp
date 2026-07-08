@@ -1264,6 +1264,10 @@ TEST(IdTable, fromColumns) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(view(i, 0), col0[i]);
     EXPECT_EQ(view(i, 1), col1[i]);
+    // The view must not copy the data: its elements are the very same
+    // objects as those in `col0`/`col1`.
+    EXPECT_EQ(&view(i, 0), &col0[i]);
+    EXPECT_EQ(&view(i, 1), &col1[i]);
   }
 
   // The `columns` and the passed in `numColumns` must be consistent.
@@ -1289,6 +1293,8 @@ TEST(IdTable, fromColumns) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(staticView(i, 0), col0[i]);
     EXPECT_EQ(staticView(i, 1), col1[i]);
+    EXPECT_EQ(&staticView(i, 0), &col0[i]);
+    EXPECT_EQ(&staticView(i, 1), &col1[i]);
   }
 }
 
