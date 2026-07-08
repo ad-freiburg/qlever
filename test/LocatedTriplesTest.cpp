@@ -1037,7 +1037,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     {
       // Block has less than the threshold.
       auto cleanup = setRuntimeParameterForTest<
-          &RuntimeParameters::vacuumMinimumBlockSize_>(uint64_t{3});
+          &RuntimeParameters::vacuumMinimumBlockSize_>(size_t{3});
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
       EXPECT_THAT(result.insertionsToRemove_, testing::IsEmpty());
       EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
@@ -1048,7 +1048,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     {
       // Block has more than the threshold.
       auto cleanup = setRuntimeParameterForTest<
-          &RuntimeParameters::vacuumMinimumBlockSize_>(uint64_t{1});
+          &RuntimeParameters::vacuumMinimumBlockSize_>(size_t{1});
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
       EXPECT_THAT(result.insertionsToRemove_,
                   testing::UnorderedElementsAre(tInIdx1, tInIdx2));
@@ -1064,7 +1064,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     // Also has inserts and deletes past the last block with index triples.
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
-            uint64_t{2});
+            size_t{2});
     DeltaTriples dt(index);
     dt.insertTriples(handle, {tInIdx1, tNotIdx1, tNotIdx3, tNotIdx5});
     dt.deleteTriples(handle, {tNotIdx2, tInIdx2, tNotIdx4});

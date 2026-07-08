@@ -2073,7 +2073,7 @@ TEST_P(IndexScanWithLazyJoin,
         return std::move(block);
       });
   auto postCondition = [&numBlocksReadJoinSide,
-                        numBlocksExported = uint64_t{0}]() mutable {
+                        numBlocksExported = size_t{0}]() mutable {
     bool rightFirst = GetParam();
     if (rightFirst) {
       return;
