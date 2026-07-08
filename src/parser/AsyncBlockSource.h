@@ -13,7 +13,9 @@
 #include <absl/functional/any_invocable.h>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/strand.hpp>
 #include <exception>
 #include <functional>
@@ -35,16 +37,6 @@ namespace qlever::parser {
 using ByteBlock = ad_utility::UninitializedVector<char>;
 
 // Abstract base class for a source that produces `ByteBlock`s asynchronously.
-//
-// Deliberately free of coroutines/`net::awaitable`: only a handler-based
-// completion interface is used, so that this header -- and the block sources
-// shared with the RDF parser (`AsyncFileBlockSource`,
-// `AsyncStatementBoundaryBlockSource`) -- keep compiling in the
-// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` build, which lacks coroutine support.
-// Implementations that need genuine async I/O and have coroutines available
-// (e.g. `HttpBodyBlockSource` in `index/InputFileServer.cpp`) may still use
-// them internally; they just have to bridge to the handler-based
-// `asyncGetNextBlockImpl` contract below.
 class AsyncBlockSource {
  public:
   using Block = ByteBlock;
@@ -55,14 +47,18 @@ class AsyncBlockSource {
   using Handler = std::function<void(std::exception_ptr, std::optional<Block>)>;
 
  private:
+  boost::asio::any_io_executor executor_;
   ad_utility::MemorySize blocksize_;
 
  public:
-  // `blocksize` is the preferred size for the blocks to be received (a common
-  // implementation detail of all derived classes, hence lives in the base
-  // class).
-  explicit AsyncBlockSource(ad_utility::MemorySize blocksize)
-      : blocksize_{blocksize} {}
+  // `exec` is the default executor onto which completions are dispatched if
+  // the completion token passed to `asyncGetNextBlock` has no executor of its
+  // own associated with it. `blocksize` is the preferred size for the blocks
+  // to be received (a common implementation detail of all derived classes,
+  // hence lives in the base class).
+  AsyncBlockSource(const boost::asio::any_io_executor& exec,
+                   ad_utility::MemorySize blocksize)
+      : executor_{exec}, blocksize_{blocksize} {}
   virtual ~AsyncBlockSource() = default;
 
   // Asynchronously deliver the next block of bytes. Accepts any Asio
@@ -71,28 +67,27 @@ class AsyncBlockSource {
   // `exception_ptr` signals success, a non-null one signals an exception that
   // was thrown while retrieving the next block. A successful result with
   // `std::nullopt` means EOF (no more blocks available in this source).
-  // Note: the handler is invoked from whatever thread/executor
-  // `asyncGetNextBlockImpl` happens to complete on; it is not automatically
-  // redispatched onto the completion token's associated executor. Block
-  // sources are responsible for their own execution context (e.g. via a
-  // strand, see `SyncAsyncBlockSource`); no caller in this codebase currently
-  // relies on redispatching, and always doing so would risk an unwanted extra
-  // thread hop (e.g. onto Asio's default `system_executor`) for callers (like
-  // `boost::asio::use_future`) that don't care.
+  // The handler is dispatched onto the executor associated with `token`, or
+  // onto the executor passed to the constructor if `token` has none of its
+  // own.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, std::optional<Block>)>(
         [this](auto handler) mutable {
-          asyncGetNextBlockImpl(
-              [h = std::move(handler)](std::exception_ptr ep,
-                                       std::optional<Block> block) mutable {
-                // `std::move(h)` treats the handler as a one-shot, move-only
-                // callable, which is the required Asio convention for
-                // completion handlers.
-                std::move(h)(ep, std::move(block));
-              });
+          auto ex = net::get_associated_executor(handler, executor_);
+          asyncGetNextBlockImpl([h = std::move(handler), ex](
+                                    std::exception_ptr ep,
+                                    std::optional<Block> block) mutable {
+            net::dispatch(
+                ex, [h = std::move(h), ep, block = std::move(block)]() mutable {
+                  // `std::move(h)` treats the handler as a one-shot,
+                  // move-only callable, which is the required Asio
+                  // convention for completion handlers.
+                  std::move(h)(ep, std::move(block));
+                });
+          });
         },
         AD_FWD(token));
   }
@@ -131,15 +126,15 @@ class AsyncBlockSource {
 // that very same strand/executor. See `AsyncStatementBoundaryBlockSource`,
 // which derives from `AsyncBlockSource` directly and chains onto its inner
 // source via callbacks instead of blocking on it.
-class SyncAsyncBlockSource : public AsyncBlockSource {
+class BlockingAsyncBlockSource : public AsyncBlockSource {
  private:
   boost::asio::strand<boost::asio::any_io_executor> strand_;
 
  public:
   // Construct from an executor (on which a strand is created to serialize the
   // calls to `getNextBlockImpl`) and a blocksize.
-  SyncAsyncBlockSource(const boost::asio::any_io_executor& exec,
-                       ad_utility::MemorySize blocksize);
+  BlockingAsyncBlockSource(const boost::asio::any_io_executor& exec,
+                           ad_utility::MemorySize blocksize);
 
  protected:
   // Synchronously produce the next block of bytes. Called from within the
@@ -153,7 +148,7 @@ class SyncAsyncBlockSource : public AsyncBlockSource {
 
 // An `AsyncBlockSource` (see above) that reads blocks sequentially from a
 // given file.
-class AsyncFileBlockSource : public SyncAsyncBlockSource {
+class AsyncFileBlockSource : public BlockingAsyncBlockSource {
  private:
   ad_utility::File file_;
   bool eof_ = false;
@@ -176,16 +171,6 @@ class AsyncFileBlockSource : public SyncAsyncBlockSource {
 // with the tail carried over from the previous block prepended. If no statement
 // boundary can be found in a complete block, an exception is thrown with a
 // message that indicates possible mitigations for this error.
-//
-// This is a wrapper, not a leaf I/O source, and its inner source might be a
-// genuinely asynchronous one (e.g. an HTTP-body-backed source, which is
-// wrapped by this class just like a file-based source, to also cut it at
-// statement boundaries). It therefore derives from `AsyncBlockSource`
-// directly and chains onto the inner source's `asyncGetNextBlockImpl` purely
-// via callbacks, never blocking on it -- see the `SyncAsyncBlockSource` class
-// comment for why blocking here would be unsafe (it can deadlock if the inner
-// source's completion is scheduled on the same single-threaded executor that
-// would be blocking on it).
 class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
  public:
   // A function that, given a block, returns the number of bytes until the end
@@ -205,13 +190,34 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
  public:
   // Wrap `inner` and cut its blocks at the positions determined by
   // `findEndPosition`. `description` is used in error messages to describe what
-  // marks the end of a statement.
-  AsyncStatementBoundaryBlockSource(std::unique_ptr<AsyncBlockSource> inner,
+  // marks the end of a statement. `exec` is only used as the default executor
+  // for dispatching completions (see `AsyncBlockSource`'s constructor); this
+  // class never blocks on `inner`, so it does not need its own strand.
+  AsyncStatementBoundaryBlockSource(const boost::asio::any_io_executor& exec,
+                                    std::unique_ptr<AsyncBlockSource> inner,
                                     EndPositionFinder findEndPosition,
                                     std::string description);
 
  protected:
   void asyncGetNextBlockImpl(Handler handler) override;
+
+ private:
+  // Assemble the result block from `remainder_` and `rawInput[0,
+  // endPosition)`, update `remainder_` to `rawInput[endPosition, end)`, and
+  // pass the result to `handler`.
+  void assembleAndDeliver(const Handler& handler, Block& rawInput,
+                          size_t endPosition);
+
+  // Mark this source exhausted and pass whatever is left in `remainder_` to
+  // `handler` (`nullopt` if empty).
+  void deliverRemainder(const Handler& handler);
+
+  // Called when `findEndPosition_` found no boundary in `rawInput`. Peeks at
+  // the next block from `inner_` to decide whether `rawInput` is simply the
+  // last block (delivered as-is via `assembleAndDeliver`) or the search
+  // failed because the batch was too small (in which case `handler` receives
+  // a "statement too large" error).
+  void handleMissingBoundary(Handler handler, Block rawInput);
 };
 
 }  // namespace qlever::parser

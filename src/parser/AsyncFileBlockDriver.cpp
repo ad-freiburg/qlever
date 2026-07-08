@@ -22,6 +22,7 @@ AsyncFileBlockDriver::AsyncFileBlockDriver(
     AsyncStatementBoundaryBlockSource::EndPositionFinder findEndPosition,
     std::string description) {
   fileBuffer_ = std::make_unique<AsyncStatementBoundaryBlockSource>(
+      ioPool_.get_executor(),
       spec.makeAsyncBlockSource(ioPool_.get_executor(), blocksize),
       std::move(findEndPosition), std::move(description));
   pendingBlock_ = fileBuffer_->asyncGetNextBlock(boost::asio::use_future);

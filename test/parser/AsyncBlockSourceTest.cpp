@@ -96,6 +96,7 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // `AsyncStatementBoundaryBlockSource` cuts after the last digit that
     // precedes a letter, as determined by `findDigitFollowedByLetter`.
     qp::AsyncStatementBoundaryBlockSource buf(
+        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
@@ -108,6 +109,7 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // The following pattern is not found in the data, and the data is too
     // large for one block, so the parsing fails.
     qp::AsyncStatementBoundaryBlockSource buf(
+        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
         findXToZ, "a letter from x to z");
@@ -119,6 +121,7 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // fits into a single block. In this case it is no error that the pattern
     // can never be found.
     qp::AsyncStatementBoundaryBlockSource buf(
+        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(), 100_B,
                                                    filename),
         findXToZ, "a letter from x to z");
@@ -146,6 +149,7 @@ TEST(AsyncStatementBoundaryBlockSource, LongLookahead) {
     // The only position that ends a statement is far from the end of the block,
     // so the manual scan has to look back across many bytes.
     qp::AsyncStatementBoundaryBlockSource buf(
+        pool.get_executor(),
         std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
                                                    blocksize, filename),
         findDigitFollowedByLetter, "a digit followed by a letter");

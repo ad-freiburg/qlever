@@ -23,10 +23,10 @@ using namespace ad_utility::memory_literals;
 
 namespace {
 // Minimal concrete `AsyncBlockSource` for use in factory-based tests.
-struct DummyAsyncBlockSource : qlever::parser::SyncAsyncBlockSource {
+struct DummyAsyncBlockSource : qlever::parser::BlockingAsyncBlockSource {
   explicit DummyAsyncBlockSource(boost::asio::any_io_executor exec,
                                  ad_utility::MemorySize blocksize)
-      : SyncAsyncBlockSource{exec, blocksize} {}
+      : BlockingAsyncBlockSource{exec, blocksize} {}
 
  protected:
   std::optional<qlever::parser::ByteBlock> getNextBlockImpl() override {
