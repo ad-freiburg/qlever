@@ -451,15 +451,11 @@ void GroupByImpl::processGroup(
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
-    } else if constexpr (sparqlExpression::isVectorResult<T>) {
-      AD_CORRECTNESS_CHECK(singleResult.size() == 1,
-                           "An expression returned a vector expression result "
-                           "that contained an unexpected amount of entries.");
-      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          std::move(singleResult.at(0)), *localVocab);
     } else {
-      // This should never happen since aggregates always return constants or
-      // vectors.
+      // Inside a GROUP BY, every expression that operates on grouped variables
+      // and/or aggregates has to produce a constant result, because all such
+      // inputs are identical within a group. Every `SparqlExpression` is
+      // implemented so it returns a constant if all its inputs are constant.
       AD_THROW(absl::StrCat("An expression returned an invalid type ",
                             typeid(T).name(),
                             " as the result of an aggregation step."));
@@ -814,7 +810,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
           locatedTriplesState());
-  bool hasLocatedTriples = locTriples.numTriples() > 0;
+  bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
 

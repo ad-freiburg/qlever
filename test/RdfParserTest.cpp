@@ -1077,7 +1077,7 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
         ::testing::AllOf(
-            ::testing::HasSubstr("end of a statement was not found"),
+            ::testing::HasSubstr("No statement boundary"),
             ::testing::HasSubstr("use `--parser-buffer-size`"),
             ::testing::HasSubstr("use `--parallel-parsing false`")));
     ad_utility::deleteFile(filename);
@@ -1423,8 +1423,9 @@ TEST(RdfParserTest, specialPredicateA) {
 // _____________________________________________________________________________
 TEST(RdfParserTest, payloadSmallerThanInitialChunkSize) {
   // Regression test for small payloads with long prefixes, where the initial
-  // chunk size of `AsyncEndRegexBlockSource::findRegexNearEnd` of 1000 is
-  // greater than the total size of the payload.
+  // chunk size of 1000 of the former
+  // `AsyncStatementBoundaryBlockSource::findRegexNearEnd` function is greater
+  // than the total size of the payload.
   std::string filename{"payloadSmallerThanInitialChunkSize.dat"};
   auto testWithParser = [&](auto t, bool useBatchInterface,
                             std::string_view input) {
@@ -1697,12 +1698,8 @@ TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
   auto& limit = RDF_PARSER_MAX_TOTAL_BUFFER_SIZE();
   auto oldLimit = limit;
   limit = ad_utility::MemorySize::bytes(128);
-  absl::Cleanup cleanup{[&limit, oldLimit] {
-    limit = oldLimit;
-    ad_utility::setGlobalLoggingStream(&std::cout);
-  }};
-  std::stringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{[&limit, oldLimit] { limit = oldLimit; }};
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   // `@prefix` without a terminating dot raises a `ParseException` on every
   // attempt, so a pending exception is always present when the buffer limit
@@ -1740,12 +1737,8 @@ TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
   auto& limit = RDF_PARSER_MAX_TOTAL_BUFFER_SIZE();
   auto oldLimit = limit;
   limit = ad_utility::MemorySize::bytes(128);
-  absl::Cleanup cleanup{[&limit, oldLimit] {
-    limit = oldLimit;
-    ad_utility::setGlobalLoggingStream(&std::cout);
-  }};
-  std::stringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{[&limit, oldLimit] { limit = oldLimit; }};
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   // `<a> <b> <c>\n` parses successfully up to the (missing) dot, so
   // `statement()` returns false without raising. The parser is forced to
@@ -1790,12 +1783,8 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
     auto of = ad_utility::makeOfstream(filename);
     of << "<a> <b> <c> .\n" << trailingGarbage;
   }
-  std::stringstream logStream;
-  absl::Cleanup cleanup{[&] {
-    ad_utility::setGlobalLoggingStream(&std::cout);
-    ad_utility::deleteFile(filename);
-  }};
-  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{[&] { ad_utility::deleteFile(filename); }};
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   Parser parser{qlever::InputFileSpecification{
                     filename, qlever::Filetype::Turtle, std::nullopt},
@@ -1821,4 +1810,59 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
   EXPECT_THAT(log, ::testing::HasSubstr(trailingGarbage));
 }
 
+// _____________________________________________________________________________
+TEST(RdfParserTest, findEndOfLastNewline) {
+  using detail::findEndOfLastNewline;
+  using ::testing::Eq;
+  using ::testing::Optional;
+
+  // No newline at all.
+  EXPECT_EQ(findEndOfLastNewline(""), std::nullopt);
+  EXPECT_EQ(findEndOfLastNewline("abc"), std::nullopt);
+  EXPECT_EQ(findEndOfLastNewline("a.b"), std::nullopt);
+
+  // A single newline.
+  EXPECT_THAT(findEndOfLastNewline("\n"), Optional(Eq(1u)));
+  EXPECT_THAT(findEndOfLastNewline("abc\n"), Optional(Eq(4u)));
+  EXPECT_THAT(findEndOfLastNewline("a\nb"), Optional(Eq(2u)));
+
+  // A multiple newlines count as a single match that ends after the last one.
+  EXPECT_THAT(findEndOfLastNewline("a\n\n"), Optional(Eq(3u)));
+  EXPECT_THAT(findEndOfLastNewline("a\r\nb"), Optional(Eq(3u)));
+  EXPECT_THAT(findEndOfLastNewline("x\r\n\r\ny"), Optional(Eq(5u)));
+
+  // The last newline should be found.
+  EXPECT_THAT(findEndOfLastNewline("a\nb\nc"), Optional(Eq(4u)));
+  EXPECT_THAT(findEndOfLastNewline("a\n# comment\n"), Optional(Eq(12u)));
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, findEndOfLastStatement) {
+  using detail::findEndOfLastStatement;
+  using ::testing::Eq;
+  using ::testing::Optional;
+
+  // No statement end.
+  EXPECT_EQ(findEndOfLastStatement(""), std::nullopt);
+  EXPECT_EQ(findEndOfLastStatement("abc"), std::nullopt);
+  // A dot that is not followed by a newline.
+  EXPECT_EQ(findEndOfLastStatement("a. b"), std::nullopt);
+  EXPECT_EQ(findEndOfLastStatement("a.b\nc"), std::nullopt);
+  // A newline that is not preceded by a dot.
+  EXPECT_EQ(findEndOfLastStatement("abc\n"), std::nullopt);
+
+  // The result is the offset of the last newline.
+  EXPECT_THAT(findEndOfLastStatement(".\n"), Optional(Eq(2u)));
+  EXPECT_THAT(findEndOfLastStatement("a.\n\nb"), Optional(Eq(4u)));
+  EXPECT_THAT(findEndOfLastStatement("foo .\r\n"), Optional(Eq(7u)));
+
+  // Optional spaces and tabs are allowed between the dot and the newline.
+  EXPECT_THAT(findEndOfLastStatement("a . \nb"), Optional(Eq(5u)));
+  EXPECT_THAT(findEndOfLastStatement(".\t\n"), Optional(Eq(3u)));
+  EXPECT_THAT(findEndOfLastStatement(". \t \n"), Optional(Eq(5u)));
+
+  // The last statement end is found.
+  EXPECT_THAT(findEndOfLastStatement("a.\nbc.\ndef"), Optional(Eq(7u)));
+  EXPECT_THAT(findEndOfLastStatement("a.\n# comment\n"), Optional(Eq(3u)));
+}
 }  // namespace qlever

@@ -30,16 +30,19 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   // Update 3.1.3)
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
-    deltaTriples.deleteTriples(cancellationHandle,
-                               std::move(toDelete.idTriples_), tracer);
+    deltaTriples.deleteTriples<DeltaTriples::Consolidate::No>(
+        cancellationHandle, std::move(toDelete.idTriples_), tracer);
   }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
   if (!toInsert.idTriples_.empty()) {
-    deltaTriples.insertTriples(cancellationHandle,
-                               std::move(toInsert.idTriples_), tracer);
+    deltaTriples.insertTriples<DeltaTriples::Consolidate::No>(
+        cancellationHandle, std::move(toInsert.idTriples_), tracer);
   }
   tracer.endTrace("insertTriples");
+  tracer.beginTrace("consolidateSortedDeltaTriples");
+  deltaTriples.consolidateAll();
+  tracer.endTrace("consolidateSortedDeltaTriples");
   return metadata;
 }
 
