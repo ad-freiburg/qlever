@@ -179,15 +179,30 @@ TEST(ExportIds, ReplaceAnglesByQuotes) {
                ad_utility::Exception);
 }
 
+using IriTypes = ::testing::Types<ad_utility::triple_component::Iri,
+                                  ad_utility::triple_component::IriView>;
+
+template <typename IriType>
+class ExportIdsBlankNodeTest : public ::testing::Test {};
+
+TYPED_TEST_SUITE(ExportIdsBlankNodeTest, IriTypes);
+
 // _____________________________________________________________________________
-TEST(ExportIds, blankNodeIrisAreProperlyFormatted) {
-  using ad_utility::triple_component::Iri;
+TYPED_TEST(ExportIdsBlankNodeTest, blankNodeIrisAreProperlyFormatted) {
+  using IriType = TypeParam;
   std::string_view input = "_:test";
-  auto blankNodeIri = Iri::fromStringRepresentation(
-      absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"));
+
+  // Keep the string representations in named locals: `IriView` stores a view,
+  // so passing the `absl::StrCat` temporary directly would dangle.
+  std::string blankNodeRepresentation =
+      absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">");
+  auto blankNodeIri = IriType::fromStringRepresentation(blankNodeRepresentation));
   EXPECT_THAT(ql::exportIds::blankNodeIriToString(blankNodeIri),
               ::testing::Optional(::testing::Eq(input)));
-  auto nonBlankNodeIri = Iri::fromStringRepresentation("<some_iri>");
+
+  std::string nonBlankNodeRepresentation = "<some_iri>";
+  auto nonBlankNodeIri =
+      IriType::fromStringRepresentation(nonBlankNodeRepresentation);
   EXPECT_EQ(ql::exportIds::blankNodeIriToString(nonBlankNodeIri), std::nullopt);
 }
 

@@ -247,10 +247,6 @@ void resolveVocabIndexIds(
     return ids[i].getDatatype() == Datatype::VocabIndex;
   }));
 
-  auto vocabIds =
-      positions |
-      ql::views::transform([&ids](size_t i) -> const Id& { return ids[i]; });
-
   auto rawIndices = positions | ql::views::transform([&ids](size_t i) {
                       ids[i].getVocabIndex().get();
                     });
