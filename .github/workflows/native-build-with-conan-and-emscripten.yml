@@ -12,10 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Bump this to upgrade emsdk. The version must exist as a tag in the upstream
-  # https://github.com/emscripten-core/emsdk repository. We install emsdk
+  # Bump this to upgrade `emsdk`. The version must exist as a tag in the upstream
+  # https://github.com/emscripten-core/emsdk repository. We install `emsdk`
   # directly (rather than via the Conan recipe) because the Conan Center recipe
-  # lags behind upstream — at time of writing it tops out at 3.1.73.
+  # is outdated. Make sure to also change the version in
+  # `conanprofiles/emscripten.profile` when changing this!
   EMSDK_VERSION: "6.0.2"
 
 jobs:
@@ -33,8 +34,8 @@ jobs:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: emsdk-cache-${{ env.EMSDK_VERSION }}
 
-      # emsdk shells out to Node during compilation, so a working node has to
-      # be on PATH even though we never invoke it directly.
+      # `emsdk` shells out to `node` during compilation, so a working `node` has to
+      # be on `PATH` even though we never invoke it directly.
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -47,15 +48,13 @@ jobs:
         run: conan profile detect --force
 
       # `compiler.version` in a conan profile isn't a pointer to an installed
-      # binary — emcc is found via PATH (from setup-emsdk) and cross-compile
-      # rules come from Emscripten.cmake (wired in via the profile's
+      # binary, `emcc` is found via `PATH` (from setup-emsdk) and cross-compile
+      # rules come from `Emscripten.cmake` (wired in via the profile's
       # `tools.cmake.cmaketoolchain:user_toolchain`). The version string is a
       # label that goes into the package-ID hash so wasm-built dependencies
-      # tagged with one emsdk version are never silently reused with another.
-      # Conan validates that label against a closed list in its bundled
-      # settings.yml; that list lags upstream emsdk releases. settings_user.yml
-      # is conan's official extension hook for adding a version the bundled
-      # list doesn't know about yet.
+      # tagged with one `emsdk` version are never silently reused with another.
+      # `settings_user.yml` is conan's official extension hook for adding a
+      # version the bundled list doesn't know about yet.
       - name: Register emsdk version with conan settings
         run: |
           cat > ~/.conan2/settings_user.yml <<EOF
@@ -69,11 +68,11 @@ jobs:
         with:
           path: ~/.conan2/p
           key: ${{ runner.os }}-conan-emscripten-${{ env.EMSDK_VERSION }}-${{ hashFiles('conanfile.txt', 'conanprofiles/emscripten.profile') }}
-          # On an exact-key miss (e.g. small change to conanfile.txt or the
-          # profile), fall back to the most recent cache for this emsdk
+          # On an exact-key miss (e.g. small change to `conanfile.txt` or the
+          # profile), fall back to the most recent cache for this `emsdk`
           # version. Conan reuses unchanged binary packages and only rebuilds
           # what changed; without this, any change forces a full rebuild of
-          # boost/icu/openssl for wasm64.
+          # boost/icu/openssl for `wasm64`.
           restore-keys: |
             ${{ runner.os }}-conan-emscripten-${{ env.EMSDK_VERSION }}-
             ${{ runner.os }}-conan-emscripten-

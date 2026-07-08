@@ -31,7 +31,8 @@ namespace ad_utility {
 // `eq_int_type`) as well as the `..._type` aliases are inherited unchanged.
 template <typename CharType>
 struct GenericCharTraits : std::char_traits<char> {
-  static_assert(sizeof(CharType) == 1,
+  static_assert(sizeof(CharType) == sizeof(char) &&
+                    alignof(CharType) == alignof(char),
                 "GenericCharTraits only works for single-byte character types");
   static_assert(std::is_trivially_copyable_v<CharType>,
                 "GenericCharTraits requires a trivially copyable character "
@@ -58,12 +59,13 @@ struct GenericCharTraits : std::char_traits<char> {
     return reinterpret_cast<char*>(p);
   }
 
-  // ___________________________________________________________________________
+  // This is only used to cast back a `const char*` that was cast from `const
+  // char_type*`.
   static const char_type* asCharType(const char* p) noexcept {
     return reinterpret_cast<const char_type*>(p);
   }
 
-  // ___________________________________________________________________________
+  // This is only used to cast back a `char*` that was cast from `char_type*`.
   static char_type* asCharType(char* p) noexcept {
     return reinterpret_cast<char_type*>(p);
   }

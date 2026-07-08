@@ -480,10 +480,11 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # Apply FetchContent
 ################################
-# On Emscripten, gtest's pthread support causes various issues with threads and
-# gtest (hangs and crashes); disable it. Tests run single-threaded under node.
+# On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
+# but its headers "auto-detect" =0, an ODR mismatch, so we have to set this explicitly.
+# See https://github.com/google/googletest/issues/5015
 if (EMSCRIPTEN)
-    set(gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+    add_compile_definitions(GTEST_HAS_PTHREAD=1)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
