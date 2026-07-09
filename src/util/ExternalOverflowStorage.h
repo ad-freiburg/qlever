@@ -1,6 +1,11 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//  Copyright 2026 The QLever Authors, in particular:
+//
+//  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+//  UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_EXTERNALOVERFLOWSTORAGE_H
 #define QLEVER_SRC_UTIL_EXTERNALOVERFLOWSTORAGE_H
@@ -12,6 +17,7 @@
 #include "util/File.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
@@ -78,8 +84,8 @@ class ExternalOverflowStorage {
   }
 
   // Call `function` for each stored element, in insertion order.
-  template <typename F>
-  void forEach(F&& function) {
+  CPP_template(typename F)(requires ad_utility::InvocableWithExactReturnType<
+                           F, void, const T&>) void forEach(F function) {
     for (const T& element : buffer_) {
       std::invoke(function, element);
     }
