@@ -602,6 +602,10 @@ void cleanFilesWithPrefix(std::string_view prefix) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
   cleanFilesWithPrefix("my-name");
   cleanFilesWithPrefix("new_index");
   namespace net = boost::asio;
