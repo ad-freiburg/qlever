@@ -1499,7 +1499,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
 
   // Initialize engine on test index.
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, std::string{geoTtl});
-  auto cleanUp = absl::MakeCleanup(
+  auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;
@@ -1614,7 +1614,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
 
   // Initialized libqlever.
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
-  auto cleanUp = absl::MakeCleanup(
+  auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;
