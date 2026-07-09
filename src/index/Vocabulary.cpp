@@ -298,6 +298,26 @@ auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
   return vocabulary_[idx.get()];
 }
 
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
+    ql::span<const size_t> indices) const {
+  // Placeholder implementation of the batched vocabulary lookup.
+  using Data = VocabLookupDataCommonBase<std::vector<std::string>>;
+  auto data = std::make_shared<Data>();
+  auto& strings = data->buffer();
+  auto& views = data->views();
+  strings.reserve(indices.size());
+  for (size_t idx : indices) {
+    strings.emplace_back(vocabulary_[idx]);
+  }
+  views.reserve(strings.size());
+  for (const std::string& s : strings) {
+    views.emplace_back(s);
+  }
+  return Data::asResult(std::move(data));
+}
+
 // Explicit template instantiations
 template class Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
                           TripleComponentComparator, VocabIndex>;
