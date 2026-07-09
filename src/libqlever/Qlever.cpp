@@ -288,7 +288,7 @@ void Qlever::writeMaterializedView(
                         std::move(cancellationHandle), timeLimit, requestTimer);
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  materializedViewsManager()->writeViewToDisk(std::move(name), std::move(plan),
+  materializedViewsManager()->writeViewToDisk(std::move(name), plan,
                                               memoryLimit);
 }
 
