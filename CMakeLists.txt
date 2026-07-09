@@ -480,6 +480,12 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # Apply FetchContent
 ################################
+# On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
+# but its headers "auto-detect" =0, an ODR mismatch, so we have to set this explicitly.
+# See https://github.com/google/googletest/issues/5015
+if (EMSCRIPTEN)
+    add_compile_definitions(GTEST_HAS_PTHREAD=1)
+endif ()
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)

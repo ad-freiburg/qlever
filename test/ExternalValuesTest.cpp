@@ -58,6 +58,15 @@ TEST(ExternalValues, basicMethods) {
   EXPECT_EQ(externalValuesOp.getResultWidth(), 3u);
 }
 
+// _____________________________________________________________________________
+TEST(ExternalValues, isDeterministic) {
+  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  ValuesComponents values{{TC{1}}, {TC{2}}};
+  ExternalValues externalValuesOp(testQec, {{Variable{"?x"}}, values},
+                                  "det-id");
+  EXPECT_FALSE(externalValuesOp.isDeterministic());
+}
+
 // Check that `knownEmptyResult` returns `false` even with empty values.
 TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
   auto testQec = ad_utility::testing::getQec();

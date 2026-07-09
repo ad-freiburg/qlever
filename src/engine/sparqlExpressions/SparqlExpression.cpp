@@ -4,6 +4,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+#include "backports/algorithm.h"
 #include "backports/iterator.h"
 
 namespace sparqlExpression {
@@ -53,6 +54,12 @@ bool SparqlExpression::containsAggregate() const {
 
   return ql::ranges::any_of(
       children(), [](const Ptr& child) { return child->containsAggregate(); });
+}
+
+// _____________________________________________________________________________
+bool SparqlExpression::areChildrenDeterministic() const {
+  return ql::ranges::all_of(
+      children(), [](const Ptr& child) { return child->isDeterministic(); });
 }
 
 // _____________________________________________________________________________
@@ -178,6 +185,12 @@ bool SparqlExpression::isInsideAggregate() const {
         "constructor of an aggregate expression");
   }
   return isInsideAggregate_;
+}
+
+// _____________________________________________________________________________
+bool SparqlExpression::worksOnAggregatedData(
+    const EvaluationContext* context) const {
+  return context->_isPartOfGroupBy && !isInsideAggregate();
 }
 
 // ________________________________________________________________
