@@ -1533,7 +1533,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   }
   if (oldManager.hasLoadedViews()) {
     AD_LOG_WARN
-        << "Materialized views were loaded for the current index, but  they "
+        << "Materialized views were loaded for the current index, but they "
            "will no longer be available after the rebuild completes. You'll "
            "have to recompute them on the rebuilt index."
         << std::endl;
