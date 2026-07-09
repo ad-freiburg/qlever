@@ -624,7 +624,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
               name.value(), std::move(query.query_), query.datasetClauses_,
               std::move(cancellationHandle), timeLimit.value(), requestTimer);
         },
-        std::move(cancellationHandle));
+        cancellationHandle);
     co_await std::move(coroutine);
 
     // Construct simple response JSON.
