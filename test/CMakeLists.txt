@@ -352,7 +352,7 @@ addLinkAndDiscoverTest(LoadTest engine)
 # websocket coroutine code under both Wasm EH modes (legacy: wasm-opt rejects an
 # invalid `rethrow`; standard EH: the WebAssemblyLateEHPrepare backend pass segfaults).
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+    addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 endif ()
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
