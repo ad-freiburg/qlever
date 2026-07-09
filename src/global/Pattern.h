@@ -40,15 +40,11 @@ struct Pattern : std::vector<Id> {
   static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
 };
 
-}  // namespace qlever
-
 namespace detail {
 template <typename DataT>
 struct CompactStringVectorWriter;
 
-}
-
-namespace qlever {
+}  // namespace detail
 
 /**
  * @brief Stores a list of variable length data of a single type (e.g.
@@ -65,7 +61,7 @@ class CompactVectorOfStrings {
   using vector_type = std::conditional_t<std::is_same_v<data_type, char>,
                                          std::string, std::vector<data_type>>;
 
-  using Writer = ::detail::CompactStringVectorWriter<data_type>;
+  using Writer = detail::CompactStringVectorWriter<data_type>;
   CompactVectorOfStrings() = default;
 
   explicit CompactVectorOfStrings(
@@ -158,16 +154,13 @@ class CompactVectorOfStrings {
   std::vector<offset_type> offsets_;
 };
 
-}  // namespace qlever
-
 namespace detail {
 // Allows the incremental writing of a `CompactVectorOfStrings` directly to a
 // file.
 template <typename data_type>
 struct CompactStringVectorWriter {
  private:
-  using offset_type =
-      typename qlever::CompactVectorOfStrings<data_type>::offset_type;
+  using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
 
   // The data members are encapsulated in a separate struct to make the
   // definition of the move-assignment operator easier. NOTE: If you add
@@ -261,6 +254,8 @@ static_assert(
 static_assert(
     std::is_nothrow_move_constructible_v<CompactStringVectorWriter<char>>);
 }  // namespace detail
+
+}  // namespace qlever
 
 // Hashing support for the `Pattern` class.
 template <>

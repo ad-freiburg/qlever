@@ -9,21 +9,25 @@
 #include "engine/VariableToColumnMap.h"
 #include "rdfTypes/Variable.h"
 
-// Forward declarations to avoid cyclic dependencies
 namespace qlever {
+
+// Forward declarations to avoid cyclic dependencies
 class Index;
 class LocalVocab;
-}  // namespace qlever
+
 enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {
   // idx of row of result table for WHERE-clause
   const size_t resultTableRowIndex_;
-  qlever::IdTableView<0> idTable_;
-  const qlever::LocalVocab& localVocab_;
-  const qlever::VariableToColumnMap& _variableColumns;
-  const qlever::Index& _qecIndex;
+  IdTableView<0> idTable_;
+  const LocalVocab& localVocab_;
+  const VariableToColumnMap& _variableColumns;
+  const Index& _qecIndex;
   const size_t _rowOffset;
 };
+
+}  // namespace qlever
+
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

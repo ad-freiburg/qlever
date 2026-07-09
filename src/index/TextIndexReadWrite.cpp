@@ -6,7 +6,7 @@
 
 #include "index/TextScoringEnum.h"
 
-using namespace qlever;
+namespace qlever {
 
 namespace textIndexReadWrite::detail {
 
@@ -244,3 +244,5 @@ void GapEncode<T>::writeToFile(ad_utility::File& out, off_t& currentOffset) {
   textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<T>(encodedVector_, out,
                                                          currentOffset);
 }
+
+}  // namespace qlever

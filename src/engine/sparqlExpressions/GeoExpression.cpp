@@ -364,7 +364,7 @@ using Ptr = qlever::sparqlExpression::SparqlExpression::Ptr;
 #endif
 #define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                  \
   template Ptr qlever::sparqlExpression::makeGeoRelationExpression< \
-      SpatialJoinType::joinType>(Ptr, Ptr);
+      qlever::SpatialJoinType::joinType>(Ptr, Ptr);
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);

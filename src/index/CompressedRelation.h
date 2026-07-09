@@ -26,14 +26,10 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
+namespace qlever {
+
 // Forward declaration.
-namespace qlever {
 class IdTable;
-}
-
-using namespace std::string_view_literals;
-
-namespace qlever {
 
 class LocatedTriplesPerBlock;
 

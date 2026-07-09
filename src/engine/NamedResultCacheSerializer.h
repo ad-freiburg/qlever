@@ -71,18 +71,14 @@ CPP_template_def(typename Serializer)(
   }
 }
 
-}  // namespace qlever
-
-namespace ad_utility::serialization {
-
 // Serialization for `NamedResultCache::Value`
 // This serializes the complete Value including the `LocalVocab` with proper ID
 // remapping.
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::SimilarTo<T, qlever::NamedResultCache::Value>)) {
-  if constexpr (WriteSerializer<S>) {
+    (ad_utility::SimilarTo<T, NamedResultCache::Value>)) {
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     // Serialize the LocalVocab first (required for ID remapping).
-    qlever::detail::serializeLocalVocab(serializer, arg.localVocab_);
+    detail::serializeLocalVocab(serializer, arg.localVocab_);
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs).
@@ -99,13 +95,13 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
       // allow local vocab entries here.
       AD_CORRECTNESS_CHECK(
-          ql::ranges::find(col, qlever::Datatype::LocalVocabIndex,
-                           &qlever::Id::getDatatype) == col.end(),
+          ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+              col.end(),
           "Named result cache entries that contain local vocab entries "
           "currently cannot be serialized. Note that local vocab entries can "
           "also occur if SPARQL UPDATE operations have been performed on the "
           "index before creating the named cached result.");
-      qlever::detail::serializeIds(serializer, col);
+      detail::serializeIds(serializer, col);
     }
 
     // Serialize VariableToColumnMap manually (`Variable` is not
@@ -136,7 +132,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   } else {
     // Deserialize the LocalVocab and get the ID mapping.
     AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
-    auto [localVocab, mapping] = qlever::detail::deserializeLocalVocab(
+    auto [localVocab, mapping] = detail::deserializeLocalVocab(
         serializer, *arg.contextForSerialization_);
 
     // Deserialize the IdTable with ID mapping applied.
@@ -145,27 +141,26 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     serializer >> numColumns;
 
     AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
-    qlever::IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
+    IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
     for (auto&& col : idTable.getColumns()) {
-      qlever::detail::deserializeIds(serializer, mapping, col);
+      detail::deserializeIds(serializer, mapping, col);
     }
 
     // Deserialize VariableToColumnMap manually.
     size_t mapSize;
     serializer >> mapSize;
-    qlever::VariableToColumnMap varToColMap;
+    VariableToColumnMap varToColMap;
     for (size_t i = 0; i < mapSize; ++i) {
-      qlever::Variable var{"?dummy"};  // Variable needs a non-empty name
+      Variable var{"?dummy"};  // Variable needs a non-empty name
       serializer >> var;
-      qlever::ColumnIndexAndTypeInfo colInfo{
-          0, qlever::ColumnIndexAndTypeInfo::AlwaysDefined};
+      ColumnIndexAndTypeInfo colInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined};
       serializer >> colInfo;
       varToColMap[std::move(var)] = colInfo;
     }
 
     // Deserialize `resultSortedOn`.
-    std::vector<qlever::ColumnIndex> resultSortedOn;
+    std::vector<ColumnIndex> resultSortedOn;
     serializer >> resultSortedOn;
 
     // Deserialize `cacheKey`.
@@ -182,8 +177,8 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     }
 
     // Construct the `Value`.
-    arg = qlever::NamedResultCache::Value{
-        std::make_shared<const qlever::IdTable>(std::move(idTable)),
+    arg = NamedResultCache::Value{
+        std::make_shared<const IdTable>(std::move(idTable)),
         std::move(varToColMap),
         std::move(resultSortedOn),
         std::move(localVocab),
@@ -192,5 +187,5 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
 }
 
-}  // namespace ad_utility::serialization
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H

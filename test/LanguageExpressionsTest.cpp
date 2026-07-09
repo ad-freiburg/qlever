@@ -124,7 +124,7 @@ auto localVocabEntry =
     [](const std::string& literal,
        const LocalVocabContext& context) -> IdOrLocalVocabEntry {
   return LocalVocabEntry::fromStringRepresentation(
-      absl::StrCat("\""sv, literal, "\""sv), context);
+      absl::StrCat("\"", literal, "\""), context);
 };
 
 // ____________________________________________________________________________

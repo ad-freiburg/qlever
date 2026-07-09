@@ -407,7 +407,7 @@ void OptionalJoin::optionalJoin(
 
   auto lessThanBoth = ql::ranges::lexicographical_compare;
 
-  auto rowAdder = qlever::AddCombinedRowToIdTable(
+  auto rowAdder = AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
       cancellationHandle_, keepJoinColumns_);
   auto rowAdderOnIterators = [&]() {

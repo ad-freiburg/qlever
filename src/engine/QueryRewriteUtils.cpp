@@ -11,8 +11,8 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
 // _____________________________________________________________________________
-std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
-    const SparqlFilter& filter) {
+std::optional<qlever::SpatialJoinConfiguration>
+rewriteFilterToSpatialJoinConfig(const qlever::SparqlFilter& filter) {
   const auto& filterBody = *filter.expression_.getPimpl();
 
   // Currently, we can only optimize GeoSPARQL filters:
@@ -41,12 +41,13 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
         absl::StrCat("Unsupported GeoSPARQL filter: Variable ", left.name(),
                      " on both sides. Is this what you intended?"));
   }
-  return SpatialJoinConfiguration{LibSpatialJoinConfig{type, maxDist},
-                                  std::move(left),
-                                  std::move(right),
-                                  std::nullopt,
-                                  PayloadVariables::all(),
-                                  SpatialJoinAlgorithm::LIBSPATIALJOIN,
-                                  type,
-                                  std::nullopt};
+  return qlever::SpatialJoinConfiguration{
+      qlever::LibSpatialJoinConfig{type, maxDist},
+      std::move(left),
+      std::move(right),
+      std::nullopt,
+      qlever::PayloadVariables::all(),
+      qlever::SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      type,
+      std::nullopt};
 }

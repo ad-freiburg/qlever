@@ -23,14 +23,10 @@
 #include "util/CancellationHandle.h"
 #include "util/json.h"
 
-// Forward declaration.
-namespace qlever {
-class IdTable;
-}
-
 namespace qlever {
 
 // Forward declarations.
+class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
 struct LocatedTriplesState;

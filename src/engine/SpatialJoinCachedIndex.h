@@ -13,8 +13,12 @@
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/Serializer.h"
 
-// Forward declarations
+// Forward declaration of the third-party S2 class.
 class MutableS2ShapeIndex;
+
+namespace qlever {
+
+// Forward declaration.
 class SpatialJoinCachedIndexImpl;
 
 // This class holds a `MutableS2ShapeIndex` that is created once by the named
@@ -24,7 +28,7 @@ class SpatialJoinCachedIndex {
  private:
   // The `geometryColumn_` indicates the variable name of the column from which
   // geometries are indexed.
-  qlever::Variable geometryColumn_;
+  Variable geometryColumn_;
 
   // This points to a class holding the actual index data structure along with
   // information necessary to use it. See more details in the `.cpp` file.
@@ -43,13 +47,11 @@ class SpatialJoinCachedIndex {
   // Constructor that builds an index from the geometries in the given column in
   // the `IdTable`. Currently only line strings are supported for the
   // experimental S2 point polyline algorithm.
-  SpatialJoinCachedIndex(qlever::Variable geometryColumn,
-                         qlever::ColumnIndex col,
-                         const qlever::IdTableView<0>& restable,
-                         const qlever::Index& index);
+  SpatialJoinCachedIndex(Variable geometryColumn, ColumnIndex col,
+                         const IdTableView<0>& restable, const Index& index);
 
   // Getters
-  const qlever::Variable& getGeometryColumn() const;
+  const Variable& getGeometryColumn() const;
   std::shared_ptr<const MutableS2ShapeIndex> getIndex() const;
 
   // From an `S2ShapeIndex` (returned by querying this index), obtain the
@@ -91,5 +93,7 @@ class SpatialJoinCachedIndex {
   // the serialization function above.
   void populateFromSerialized(std::string_view serializedS2Index);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H

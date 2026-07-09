@@ -16,7 +16,7 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+using enum qlever::SpatialJoinType;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various carefully selected literals. It

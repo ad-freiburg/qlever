@@ -34,7 +34,7 @@ namespace {
 
 using namespace std::string_literals;
 using ::testing::Optional;
-using enum PositionInTriple;
+using enum qlever::PositionInTriple;
 using namespace qlever::constructExport;
 using qlever::GraphTerm;
 using Triples = qlever::sparql_types::Triples;

@@ -15,7 +15,6 @@
 #include "parser/data/GraphTerm.h"
 
 namespace qlever::sparql_types {
-using namespace qlever;
 // In the following, `Path` stands for `property path` (which can also be a
 // single predicate). More precisely, in a type that has `Path` in its name, all
 // the stored predicates can be property paths. This is in accordance with the

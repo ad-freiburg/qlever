@@ -26,6 +26,13 @@
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
+// Forward declaration of s2 classes
+class S2Polyline;
+class S2Point;
+class S2LatLng;
+
+namespace qlever {
+
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
@@ -70,8 +77,8 @@ struct ClosestPointVisitor : public boost::static_visitor<double> {
 #else
     Segment seg;
     bg::closest_points(geo1, geo2, seg);
-    qlever::GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
-    qlever::GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
+    GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
+    GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
     return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
 #endif
   }
@@ -80,18 +87,13 @@ struct ClosestPointVisitor : public boost::static_visitor<double> {
 struct RtreeEntry {
   size_t row_;
   std::optional<size_t> geometryIndex_;
-  std::optional<qlever::GeoPoint> geoPoint_;
+  std::optional<GeoPoint> geoPoint_;
   std::optional<Box> boundingBox_;
 };
 
 using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
-
-// Forward declaration of s2 classes
-class S2Polyline;
-class S2Point;
-class S2LatLng;
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
@@ -101,15 +103,15 @@ class SpatialJoinAlgorithms {
 
  public:
   // initialize the Algorithm with the needed parameters
-  SpatialJoinAlgorithms(
-      qlever::QueryExecutionContext* qec,
-      qlever::PreparedSpatialJoinParams params, SpatialJoinConfiguration config,
-      std::optional<qlever::SpatialJoin*> spatialJoin = std::nullopt);
-  qlever::Result BaselineAlgorithm();
-  qlever::Result S2geometryAlgorithm();
-  qlever::Result S2PointPolylineAlgorithm();
-  qlever::Result BoundingBoxAlgorithm();
-  qlever::Result LibspatialjoinAlgorithm();
+  SpatialJoinAlgorithms(QueryExecutionContext* qec,
+                        PreparedSpatialJoinParams params,
+                        SpatialJoinConfiguration config,
+                        std::optional<SpatialJoin*> spatialJoin = std::nullopt);
+  Result BaselineAlgorithm();
+  Result S2geometryAlgorithm();
+  Result S2PointPolylineAlgorithm();
+  Result BoundingBoxAlgorithm();
+  Result LibspatialjoinAlgorithm();
 
   // This function computes the bounding box(es) which represent all points,
   // which are in reach of the starting point with a distance of at most
@@ -143,7 +145,7 @@ class SpatialJoinAlgorithms {
 
   // Helper function, which computes the distance of two geometries, where each
   // geometry has already been parsed and is available as an RtreeEntry
-  qlever::Id computeDist(RtreeEntry& geo1, RtreeEntry& geo2);
+  Id computeDist(RtreeEntry& geo1, RtreeEntry& geo2);
 
   // this function calculates the maximum distance from the midpoint of the box
   // to any other point, which is contained in the box. If the midpoint has
@@ -154,13 +156,12 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  std::optional<size_t> getAnyGeometry(const qlever::IdTableView<0>* idtable,
+  std::optional<size_t> getAnyGeometry(const IdTableView<0>* idtable,
                                        size_t row, size_t col);
 
   // wrapper to access non const private function for testing
   std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(
-      const qlever::IdTableView<0>* idTable, const size_t row,
-      const qlever::ColumnIndex col) {
+      const IdTableView<0>* idTable, const size_t row, const ColumnIndex col) {
     return getRtreeEntry(idTable, row, col);
   }
 
@@ -182,9 +183,9 @@ class SpatialJoinAlgorithms {
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
   struct LibSpatialJoinParseInput {
-    const qlever::IdTableView<0>* idTable_;
-    qlever::ColumnIndex geomsCol_;
-    qlever::SpatialJoinBoundingBoxColumns boundingBoxCols_;
+    const IdTableView<0>* idTable_;
+    ColumnIndex geomsCol_;
+    SpatialJoinBoundingBoxColumns boundingBoxCols_;
   };
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
@@ -211,14 +212,14 @@ class SpatialJoinAlgorithms {
   // is known to be built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
       const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-      const qlever::Index& index, qlever::VocabIndex vocabIndex,
-      const std::optional<qlever::BoundingBox>& precomputedBoundingBox);
+      const Index& index, VocabIndex vocabIndex,
+      const std::optional<BoundingBox>& precomputedBoundingBox);
 
   // Helper for `libspatialjoinParse` to get the bounding box from an
   // `IdTable` if available.
-  static std::optional<qlever::BoundingBox> getBoundingBoxFromIdTable(
-      const qlever::IdTableView<0>* idTable,
-      const qlever::SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
+  static std::optional<BoundingBox> getBoundingBoxFromIdTable(
+      const IdTableView<0>* idTable,
+      const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 
   // Retrieve the number of threads to be used for `libspatialjoinParse` and
   // `LibspatialjoinAlgorithm`.
@@ -226,15 +227,14 @@ class SpatialJoinAlgorithms {
 
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
-  static std::optional<qlever::GeoPoint> getPoint(
-      const qlever::IdTableView<0>* restable, size_t row,
-      qlever::ColumnIndex col);
+  static std::optional<GeoPoint> getPoint(const IdTableView<0>* restable,
+                                          size_t row, ColumnIndex col);
 
   // Helper function to retrieve and parse a line string from the given cell of
   // an `IdTable` and convert it to an `S2Polyline`.
-  static std::optional<S2Polyline> getPolyline(
-      const qlever::IdTableView<0>& restable, size_t row,
-      qlever::ColumnIndex col, const qlever::Index& index);
+  static std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
+                                               size_t row, ColumnIndex col,
+                                               const Index& index);
 
  private:
   // returns everything between the first two quotes. If the string does not
@@ -244,11 +244,9 @@ class SpatialJoinAlgorithms {
   // Helper function, which adds a row, which belongs to the result to the
   // result table. As inputs it uses a row of the left and a row of the right
   // child result table.
-  void addResultTableEntry(qlever::IdTable* result,
-                           const qlever::IdTableView<0>* resultLeft,
-                           const qlever::IdTableView<0>* resultRight,
-                           size_t rowLeft, size_t rowRight,
-                           qlever::Id distance) const;
+  void addResultTableEntry(IdTable* result, const IdTableView<0>* resultLeft,
+                           const IdTableView<0>* resultRight, size_t rowLeft,
+                           size_t rowRight, Id distance) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -275,12 +273,12 @@ class SpatialJoinAlgorithms {
   // this helper function takes an idtable, a row and a column. It then tries
   // to parse a geometry or a geoPoint of that cell in the idtable. If it
   // succeeds, it returns an rtree entry of that geometry/geopoint
-  std::optional<RtreeEntry> getRtreeEntry(const qlever::IdTableView<0>* idTable,
+  std::optional<RtreeEntry> getRtreeEntry(const IdTableView<0>* idTable,
                                           const size_t row,
-                                          const qlever::ColumnIndex col);
+                                          const ColumnIndex col);
 
   // this helper function converts a GeoPoint into a boost geometry Point
-  size_t convertGeoPointToPoint(qlever::GeoPoint point);
+  size_t convertGeoPointToPoint(GeoPoint point);
 
   // This helper function calculates the query box. The query box is a box
   // that is guaranteed to contain all possible candidates of a `WITHIN_DIST`
@@ -293,10 +291,10 @@ class SpatialJoinAlgorithms {
   // cancelled.
   void throwIfCancelled() const;
 
-  qlever::QueryExecutionContext* qec_;
-  qlever::PreparedSpatialJoinParams params_;
+  QueryExecutionContext* qec_;
+  PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
-  std::optional<qlever::SpatialJoin*> spatialJoin_;
+  std::optional<SpatialJoin*> spatialJoin_;
 
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is
@@ -337,4 +335,7 @@ class SpatialJoinAlgorithms {
   // if the user has cancelled their query.
   static constexpr size_t wktParserChunkSizeForCancellationCheck = 10'000;
 };
+
+}  // namespace qlever
+
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H

@@ -632,7 +632,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
-    std::string_view v = siblingUsed ? "yes"sv : "no"sv;
+    std::string_view v = siblingUsed ? "yes" : "no";
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
     sibling->runtimeInfo().addDetail("used-to-optimize-service-sibling", v);
   };

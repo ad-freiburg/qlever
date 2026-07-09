@@ -149,9 +149,9 @@ class Service : public Operation {
 
   // Throws an error message, providing the first 100 bytes of the result as
   // context.
-  [[noreturn]] void throwErrorWithContext(
-      std::string_view msg, std::string_view first100,
-      std::string_view last100 = ""sv) const;
+  [[noreturn]] void throwErrorWithContext(std::string_view msg,
+                                          std::string_view first100,
+                                          std::string_view last100 = "") const;
 
   // Throws if the IRI is forbidden by the IRI prefix whitelist.
   void throwIfIriNotWhitelisted();

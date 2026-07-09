@@ -12,6 +12,7 @@
 
 namespace {
 
+using namespace qlever;
 using namespace queryRewriteUtilTestHelpers;
 
 // _____________________________________________________________________________

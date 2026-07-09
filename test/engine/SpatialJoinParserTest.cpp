@@ -23,6 +23,7 @@
 // _____________________________________________________________________________
 namespace {
 
+using namespace qlever;
 using namespace SpatialJoinPrefilterTestHelpers;
 using namespace qlever::detail::parallel_wkt_parser;
 

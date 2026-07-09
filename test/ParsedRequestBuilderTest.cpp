@@ -278,6 +278,12 @@ TEST(ParsedRequestBuilderTest, reportUnsupportedContentTypeIfGraphStore) {
       "application/sparql-query"));
 }
 
+// The following three tests access private members of `ParsedRequestBuilder`
+// via `FRIEND_TEST`. Since `ParsedRequestBuilder` lives in `namespace qlever`,
+// the `FRIEND_TEST`-generated fixture classes must live there too for the
+// (unqualified, self-declaring) `FRIEND_TEST` macro to grant them friendship.
+namespace qlever {
+
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce) {
   auto builder = ParsedRequestBuilder(
@@ -367,3 +373,5 @@ TEST(ParsedRequestBuilderTest, determineAccessToken) {
       testing::HasSubstr(
           "Authorization header doesn't start with \"Bearer \"."));
 }
+
+}  // namespace qlever

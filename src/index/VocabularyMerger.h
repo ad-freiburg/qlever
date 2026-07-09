@@ -24,13 +24,14 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // Writes pairs of (partial ID, global ID) incrementally to a file.
 class IdMapWriter {
  private:
   std::string filename_;
   using Serializer = ad_utility::serialization::VectorIncrementalSerializer<
-      std::pair<qlever::Id, qlever::Id>,
-      ad_utility::serialization::FileWriteSerializer>;
+      std::pair<Id, Id>, ad_utility::serialization::FileWriteSerializer>;
   std::unique_ptr<Serializer> serializer_;
 
  public:
@@ -38,14 +39,12 @@ class IdMapWriter {
     serializer_ = std::make_unique<Serializer>(filename);
   }
 
-  void push_back(const std::pair<qlever::Id, qlever::Id>& pair) {
-    serializer_->push(pair);
-  }
+  void push_back(const std::pair<Id, Id>& pair) { serializer_->push(pair); }
 };
 
 // Get a vector of pairs of (partial ID, global ID) deserialized from a file
 // that has previously been written using the `IdMapWriter` class above.
-using IdMap = std::vector<std::pair<qlever::Id, qlever::Id>>;
+using IdMap = std::vector<std::pair<Id, Id>>;
 inline IdMap getIdMapFromFile(const std::string& filename) {
   IdMap idMap;
   ad_utility::serialization::FileReadSerializer serializer(filename);
@@ -53,9 +52,9 @@ inline IdMap getIdMapFromFile(const std::string& filename) {
   return idMap;
 }
 
-using TripleVec = qlever::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+using TripleVec = CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
-namespace qlever::vocabulary_merger {
+namespace vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
@@ -322,7 +321,9 @@ ItemVec vocabMapsToVector(const ItemMapArray& map);
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
-}  // namespace qlever::vocabulary_merger
+}  // namespace vocabulary_merger
+
+}  // namespace qlever
 
 #include "index/VocabularyMergerImpl.h"
 

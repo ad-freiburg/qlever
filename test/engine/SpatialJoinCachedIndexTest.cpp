@@ -18,6 +18,7 @@
 
 namespace {
 
+using namespace qlever;
 using namespace SpatialJoinTestHelpers;
 
 void serializeAndDeserializeCache(qlever::NamedResultCache& cache,

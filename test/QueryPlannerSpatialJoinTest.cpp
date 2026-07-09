@@ -17,6 +17,7 @@
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
+using namespace qlever;
 namespace {
 using Var = qlever::Variable;
 constexpr auto iri = ad_utility::testing::iri;

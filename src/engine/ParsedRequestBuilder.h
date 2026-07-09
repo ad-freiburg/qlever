@@ -10,15 +10,6 @@
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
-// Forward declarations of the gtest-generated fixture classes so that the
-// `FRIEND_TEST` declarations below, which must be qualified with `::` because
-// `ParsedRequestBuilder` lives in `namespace qlever`, refer to these classes
-// instead of implicitly declaring (and granting friendship to) unrelated
-// classes of the same name nested inside `namespace qlever`.
-class ParsedRequestBuilderTest_extractTargetGraph_Test;
-class ParsedRequestBuilderTest_determineAccessToken_Test;
-class ParsedRequestBuilderTest_parameterIsContainedExactlyOnce_Test;
-
 namespace qlever {
 
 // Helper for parsing `HttpRequest` into `ParsedRequest`. The parsing has many
@@ -26,9 +17,9 @@ namespace qlever {
 // stores the partially parsed `ParsedRequest` and methods for common
 // operations used while parsing.
 struct ParsedRequestBuilder {
-  FRIEND_TEST(::ParsedRequestBuilderTest, extractTargetGraph);
-  FRIEND_TEST(::ParsedRequestBuilderTest, determineAccessToken);
-  FRIEND_TEST(::ParsedRequestBuilderTest, parameterIsContainedExactlyOnce);
+  FRIEND_TEST(ParsedRequestBuilderTest, extractTargetGraph);
+  FRIEND_TEST(ParsedRequestBuilderTest, determineAccessToken);
+  FRIEND_TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce);
 
   using RequestType =
       boost::beast::http::request<boost::beast::http::string_body>;

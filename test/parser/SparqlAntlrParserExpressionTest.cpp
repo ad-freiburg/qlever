@@ -437,31 +437,31 @@ TEST(SparqlParser, FunctionCall) {
   // Geometric relation functions
   expectFunctionCall(
       absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::INTERSECTS>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::INTERSECTS>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfContains>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CONTAINS>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::CONTAINS>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::CROSSES>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfTouches>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::TOUCHES>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfEquals>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::EQUALS>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::OVERLAPS>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfWithin>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
+      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::WITHIN>,
                 qlever::Variable{"?a"}, qlever::Variable{"?b"}));
 
   // Math functions

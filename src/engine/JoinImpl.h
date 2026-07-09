@@ -199,7 +199,7 @@ class JoinImpl : public Operation {
   ad_utility::JoinColumnMapping getJoinColumnMapping() const;
 
   // Helper function to create the commonly used instance of this class.
-  qlever::AddCombinedRowToIdTable makeRowAdder(
+  AddCombinedRowToIdTable makeRowAdder(
       std::function<void(IdTable&, LocalVocab&)> callback) const;
 };
 

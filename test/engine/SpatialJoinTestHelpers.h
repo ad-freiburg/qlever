@@ -509,18 +509,18 @@ inline std::shared_ptr<qlever::QueryExecutionTree> buildSmallChild(
 // defaulted as nullpointer or std::nullopt. The maxDist is necessary, because
 // one of the wrapper classes needs a proper maxDistance, otherwise the wrapper
 // can't be used to test the function
-inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
+inline qlever::SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
     size_t maxDist = 1000,
     std::optional<qlever::QueryExecutionContext*> qec = std::nullopt) {
   if (!qec) {
     qec = buildTestQEC();
   }
-  MaxDistanceConfig task{static_cast<double>(maxDist)};
+  qlever::MaxDistanceConfig task{static_cast<double>(maxDist)};
   std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
       qlever::makeExecutionTree<qlever::SpatialJoin>(
           qec.value(),
-          SpatialJoinConfiguration{task, qlever::Variable{"?point1"},
-                                   qlever::Variable{"?point2"}},
+          qlever::SpatialJoinConfiguration{task, qlever::Variable{"?point1"},
+                                           qlever::Variable{"?point2"}},
           std::nullopt, std::nullopt);
 
   std::shared_ptr<qlever::Operation> op =

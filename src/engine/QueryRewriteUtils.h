@@ -13,7 +13,7 @@
 
 // Generate a spatial join configuration for a given filter, if this filter is
 // suitable for such an optimization.
-std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
-    const SparqlFilter& filter);
+std::optional<qlever::SpatialJoinConfiguration>
+rewriteFilterToSpatialJoinConfig(const qlever::SparqlFilter& filter);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H

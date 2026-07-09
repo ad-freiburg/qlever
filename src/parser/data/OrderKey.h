@@ -11,14 +11,16 @@
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
+namespace qlever {
+
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {
  public:
   bool isDescending_;
-  qlever::sparqlExpression::SparqlExpressionPimpl expression_;
+  sparqlExpression::SparqlExpressionPimpl expression_;
   // ___________________________________________________________________________
   explicit ExpressionOrderKey(
-      qlever::sparqlExpression::SparqlExpressionPimpl expression,
+      sparqlExpression::SparqlExpressionPimpl expression,
       bool isDescending = false)
       : isDescending_{isDescending}, expression_{std::move(expression)} {}
 };
@@ -27,11 +29,10 @@ class ExpressionOrderKey {
 class VariableOrderKey {
  public:
   bool isDescending_;
-  qlever::Variable variable_;
+  Variable variable_;
 
   // ___________________________________________________________________________
-  explicit VariableOrderKey(qlever::Variable variable,
-                            bool isDescending = false)
+  explicit VariableOrderKey(Variable variable, bool isDescending = false)
       : isDescending_{isDescending}, variable_{std::move(variable)} {}
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(VariableOrderKey, isDescending_,
@@ -46,5 +47,7 @@ struct OrderClause {
   IsInternalSort isInternalSort = IsInternalSort::False;
   std::vector<OrderKey> orderKeys;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_ORDERKEY_H

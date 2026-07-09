@@ -37,6 +37,7 @@
 // _____________________________________________________________________________
 namespace SpatialJoinPrefilterTestHelpers {
 
+using namespace qlever;
 using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 

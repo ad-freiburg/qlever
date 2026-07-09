@@ -51,6 +51,11 @@ static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
 // of the single tables.
 class CompressedExternalIdTableWriter {
  private:
+  // Alias to avoid having to qualify `ad_utility::InputRangeTypeErased`
+  // throughout this class.
+  template <typename T>
+  using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+
   // Metadata for a compressed block of bytes. A block is a contiguous part of a
   // column of an `IdTable`.
   struct CompressedBlockMetadata {
@@ -161,10 +166,9 @@ class CompressedExternalIdTableWriter {
   // `i-th` IdTable that was stored. The IdTables are yielded in (smaller)
   // blocks which are `IdTables` themselves.
   template <size_t N = 0>
-  std::vector<ad_utility::InputRangeTypeErased<IdTableStatic<N>>>
-  getAllGenerators() {
+  std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
     file_.wlock()->flush();
-    std::vector<ad_utility::InputRangeTypeErased<IdTableStatic<N>>> result;
+    std::vector<InputRangeTypeErased<IdTableStatic<N>>> result;
     result.reserve(startOfSingleIdTables_.size());
     for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForIdTable<N>(i));
@@ -211,8 +215,8 @@ class CompressedExternalIdTableWriter {
 
   // Get the block generator for a single IdTable, specified by the `index`.
   template <size_t NumCols = 0>
-  ad_utility::InputRangeTypeErased<IdTableStatic<NumCols>>
-  makeGeneratorForIdTable(size_t index) {
+  InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
+      size_t index) {
     size_t firstBlock = startOfSingleIdTables_.at(index);
     size_t lastBlock{index + 1 < startOfSingleIdTables_.size()
                          ? startOfSingleIdTables_.at(index + 1)
@@ -224,7 +228,7 @@ class CompressedExternalIdTableWriter {
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
     using namespace ad_utility;
-    return ad_utility::InputRangeTypeErased{ad_utility::CallbackOnEndView(
+    return InputRangeTypeErased<IdTableStatic<NumCols>>{CallbackOnEndView(
         bufferedAsyncView(std::move(readBlocks), 1), callback)};
   }
 
@@ -297,21 +301,20 @@ class CompressedExternalIdTableWriter {
   // of stored blocks. Columns are decompressed sequentially within a block; the
   // single background thread already provides concurrency with the consumer.
   template <size_t N = 0>
-  ad_utility::InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
+  InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
     size_t totalBlocks =
         blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
-    ad_utility::CachingTransformInputRange readBlocks{
+    using namespace ad_utility;
+    CachingTransformInputRange readBlocks{
         ql::views::iota(size_t{0}, totalBlocks), [this](size_t blockIdx) {
           return this->template readBlockSequential<N>(blockIdx);
         }};
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
     // Queue size 2 keeps the producer one block ahead of the consumer.
-    return ad_utility::streams::runStreamAsync(
-        ad_utility::CallbackOnEndView{std::move(readBlocks),
-                                      std::move(callback)},
-        2);
+    return streams::runStreamAsync(
+        CallbackOnEndView{std::move(readBlocks), std::move(callback)}, 2);
   }
 };
 

@@ -10,7 +10,7 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
-using namespace qlever;
+namespace qlever {
 
 // An instance of this type erased class holds the actual data for each
 // `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
@@ -95,3 +95,5 @@ void SpatialJoinCachedIndex::populateFromSerialized(
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(TagForSerialization)
     : geometryColumn_("?dummyCol"),
       pimpl_(std::make_shared<SpatialJoinCachedIndexImpl>()) {}
+
+}  // namespace qlever

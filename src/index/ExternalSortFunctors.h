@@ -23,9 +23,11 @@
 #include "index/ConstantsIndexBuilding.h"
 #endif
 
+namespace qlever {
+
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
-  using T = std::array<qlever::Id, 3>;
+  using T = std::array<Id, 3>;
   // comparison function
   template <typename T1, typename T2>
   bool operator()(const T1& a, const T2& b) const {
@@ -35,7 +37,7 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    constexpr auto compare = &qlever::Id::compareWithoutLocalVocab;
+    constexpr auto compare = &Id::compareWithoutLocalVocab;
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.
@@ -72,7 +74,7 @@ struct SortText {
   // < comparator
   bool operator()(const auto& a, const auto& b) const {
     return ql::ranges::lexicographical_compare(
-        a, b, [](const qlever::Id& x, const qlever::Id& y) {
+        a, b, [](const Id& x, const Id& y) {
           return x.compareWithoutLocalVocab(y) < 0;
         });
   }
@@ -84,9 +86,9 @@ struct SortText {
 // TODO: This is not as efficient as it could be, because of the runtime state
 // (the vector of column indices); see `Sort::computeResultExternal`.
 struct SortByColumns {
-  std::vector<qlever::ColumnIndex> sortColumns_;
+  std::vector<ColumnIndex> sortColumns_;
 
-  explicit SortByColumns(std::vector<qlever::ColumnIndex> sortColumns)
+  explicit SortByColumns(std::vector<ColumnIndex> sortColumns)
       : sortColumns_{std::move(sortColumns)} {}
 
   // Default constructor for template requirements.
@@ -115,8 +117,6 @@ struct SortByColumns {
 // by index building, you must add a matching explicit instantiation in
 // `CompressedExternalIdTableSorterInstantiations.cpp`, otherwise the build will
 // fail at link time when `QLEVER_CHEAPER_COMPILATION` is set.
-namespace qlever {
-
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
                                                       3>;
 extern template class CompressedExternalIdTableSorter<
@@ -131,6 +131,8 @@ extern template class CompressedExternalIdTableSorter<
     SortByPSO, NumColumnsIndexBuilding + 2>;
 extern template class CompressedExternalIdTableSorter<SortText, 5>;
 
-}  // namespace qlever
 #endif  // QLEVER_CHEAPER_COMPILATION
+
+}  // namespace qlever
+
 #endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H

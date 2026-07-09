@@ -97,6 +97,8 @@ inline void PrintTo(const ParsedQuery& pq, std::ostream* os) {
 
 // _____________________________________________________________________________
 
+namespace qlever {
+
 inline std::ostream& operator<<(std::ostream& out,
                                 const VariableOrderKey& orderkey) {
   out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
@@ -110,6 +112,8 @@ inline std::ostream& operator<<(std::ostream& out,
       << " by " << expressionOrderKey.expression_.getDescriptor();
   return out;
 }
+
+}  // namespace qlever
 
 // _____________________________________________________________________________
 
@@ -173,6 +177,7 @@ void expectIncompleteParse(
 
 namespace matchers {
 
+using namespace qlever;
 using testing::Matcher;
 // short namespace alias
 // Recursively unwrap a std::variant object, or return a pointer
@@ -392,21 +397,22 @@ inline auto LimitOffset =
 
 inline auto VariableOrderKey =
     [](const qlever::Variable& variable,
-       bool desc) -> Matcher<const ::VariableOrderKey&> {
+       bool desc) -> Matcher<const qlever::VariableOrderKey&> {
   return testing::AllOf(
-      AD_FIELD(::VariableOrderKey, variable_, testing::Eq(variable)),
-      AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
+      AD_FIELD(qlever::VariableOrderKey, variable_, testing::Eq(variable)),
+      AD_FIELD(qlever::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
 inline auto VariableOrderKeyVariant =
     [](const qlever::Variable& key, bool desc) -> Matcher<const OrderKey&> {
-  return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
+  return testing::VariantWith<qlever::VariableOrderKey>(
+      VariableOrderKey(key, desc));
 };
 
 inline auto VariableOrderKeys =
     [](const std::vector<std::pair<qlever::Variable, bool>>& orderKeys)
-    -> Matcher<const std::vector<::VariableOrderKey>&> {
-  std::vector<Matcher<const ::VariableOrderKey&>> matchers;
+    -> Matcher<const std::vector<qlever::VariableOrderKey>&> {
+  std::vector<Matcher<const qlever::VariableOrderKey&>> matchers;
   for (auto [key, desc] : orderKeys) {
     matchers.push_back(VariableOrderKey(key, desc));
   }
@@ -415,20 +421,21 @@ inline auto VariableOrderKeys =
 
 inline auto ExpressionOrderKey = [](const std::string& expr,
                                     bool desc) -> Matcher<const OrderKey&> {
-  return testing::VariantWith<::ExpressionOrderKey>(testing::AllOf(
-      AD_FIELD(::ExpressionOrderKey, expression_, detail::Expression(expr)),
-      AD_FIELD(::ExpressionOrderKey, isDescending_, testing::Eq(desc))));
+  return testing::VariantWith<qlever::ExpressionOrderKey>(testing::AllOf(
+      AD_FIELD(qlever::ExpressionOrderKey, expression_,
+               detail::Expression(expr)),
+      AD_FIELD(qlever::ExpressionOrderKey, isDescending_, testing::Eq(desc))));
 };
 
 using ExpressionOrderKeyTest = std::pair<std::string, bool>;
 inline auto OrderKeys =
-    [](const std::vector<
-           std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys,
+    [](const std::vector<std::variant<qlever::VariableOrderKey,
+                                      ExpressionOrderKeyTest>>& orderKeys,
        IsInternalSort isInternalSort =
            IsInternalSort::False) -> Matcher<const OrderClause&> {
   std::vector<Matcher<const OrderKey&>> keyMatchers;
   auto variableOrderKey =
-      [](const ::VariableOrderKey& key) -> Matcher<const OrderKey&> {
+      [](const qlever::VariableOrderKey& key) -> Matcher<const OrderKey&> {
     return VariableOrderKeyVariant(key.variable_, key.isDescending_);
   };
   auto expressionOrderKey =
@@ -686,7 +693,7 @@ inline auto SolutionModifier =
            std::variant<std::string, std::pair<std::string, qlever::Variable>,
                         qlever::Variable>>& groupKeys = {},
        const std::vector<std::string>& havingClauses = {},
-       const std::vector<std::variant<::VariableOrderKey,
+       const std::vector<std::variant<qlever::VariableOrderKey,
                                       ExpressionOrderKeyTest>>& orderKeys = {},
        const LimitOffsetClause& limitOffset = {})
     -> Matcher<const qlever::SolutionModifiers&> {

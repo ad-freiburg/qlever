@@ -327,9 +327,9 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
   auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = qlever::AddCombinedRowToIdTable(
-      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_,
-      keepJoinColumn_);
+  auto rowAdder =
+      AddCombinedRowToIdTable(1, aPermuted, bPermuted, std::move(*result),
+                              cancellationHandle_, keepJoinColumn_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -734,14 +734,14 @@ ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
 }
 
 // _____________________________________________________________________________
-qlever::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
+AddCombinedRowToIdTable JoinImpl::makeRowAdder(
     std::function<void(IdTable&, LocalVocab&)> callback) const {
-  return qlever::AddCombinedRowToIdTable{1,
-                                         IdTable{getResultWidth(), allocator()},
-                                         cancellationHandle_,
-                                         keepJoinColumn_,
-                                         CHUNK_SIZE,
-                                         std::move(callback)};
+  return AddCombinedRowToIdTable{1,
+                                 IdTable{getResultWidth(), allocator()},
+                                 cancellationHandle_,
+                                 keepJoinColumn_,
+                                 CHUNK_SIZE,
+                                 std::move(callback)};
 }
 
 // _____________________________________________________________________________

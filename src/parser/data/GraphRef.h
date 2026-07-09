@@ -10,7 +10,9 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Iri.h"
 
-using GraphRef = qlever::triple_component::Iri;
+namespace qlever {
+
+using GraphRef = triple_component::Iri;
 // Denotes the target graph for an operation. Here the target is the default
 // graph.
 struct DEFAULT {
@@ -31,5 +33,7 @@ struct ALL {
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;
 using GraphOrDefault = std::variant<GraphRef, DEFAULT>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_GRAPHREF_H

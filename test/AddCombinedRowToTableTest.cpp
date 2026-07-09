@@ -24,7 +24,7 @@ class RowAdderTest : public ::testing::TestWithParam<std::tuple<size_t, bool>> {
 // `numJoinColumns` columns will be removed from `expectedResult` and
 // `expectedNumUndefined`respectively before comparing them to the actual
 // result.
-void testAdder(qlever::AddCombinedRowToIdTable& adder, IdTable& expectedResult,
+void testAdder(AddCombinedRowToIdTable& adder, IdTable& expectedResult,
                std::vector<size_t> expectedNumUndefined, size_t numJoinColumns,
                bool keepJoinColumns) {
   auto numUndefined = adder.numUndefinedPerColumn();
@@ -49,7 +49,7 @@ TEST_P(RowAdderTest, OneJoinColumn) {
   auto result = makeIdTableFromVector({});
   size_t numColsResult = keepJoinColumns ? 4 : 3;
   result.setNumColumns(numColsResult);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinColumns,
       bufferSize);
@@ -74,7 +74,7 @@ TEST_P(RowAdderTest, AddRows) {
   auto result = makeIdTableFromVector({});
   size_t numColsResult = keepJoinColumns ? 4 : 3;
   result.setNumColumns(numColsResult);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinColumns,
       bufferSize);
@@ -98,7 +98,7 @@ TEST_P(RowAdderTest, AddRowsZeroColumns) {
   auto result = makeIdTableFromVector({});
   size_t numColsResult = keepJoinColumns ? 1 : 0;
   result.setNumColumns(numColsResult);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinColumns,
       bufferSize);
@@ -120,7 +120,7 @@ TEST_P(RowAdderTest, TwoJoinColumns) {
   static constexpr size_t numJoinCols = 2;
   size_t numColsResult = keepJoinColumns ? 3 : 1;
   result.setNumColumns(numColsResult);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       numJoinCols, left.asStaticView<0>(), right.asStaticView<0>(),
       std::move(result), std::make_shared<ad_utility::CancellationHandle<>>(),
       keepJoinColumns, bufferSize);
@@ -140,7 +140,7 @@ TEST_P(RowAdderTest, UndefInInput) {
   auto right = makeIdTableFromVector({{1}, {3}, {4}, {U}});
   auto result = makeIdTableFromVector({});
   result.setNumColumns(keepJoinCol ? 2 : 1);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
       bufferSize);
@@ -163,7 +163,7 @@ TEST_P(RowAdderTest, setInput) {
   {
     auto result = makeIdTableFromVector({});
     result.setNumColumns(keepJoinCol ? 2 : 1);
-    auto adder = qlever::AddCombinedRowToIdTable(
+    auto adder = AddCombinedRowToIdTable(
         1, std::move(result),
         std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
         bufferSize);
@@ -181,7 +181,7 @@ TEST_P(RowAdderTest, setInput) {
 
   auto result = makeIdTableFromVector({});
   result.setNumColumns(keepJoinCol ? 3 : 2);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       1, std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
       bufferSize);
@@ -223,7 +223,7 @@ TEST_P(RowAdderTest, cornerCases) {
   auto [bufferSize, keepJoinCol] = GetParam();
   auto result = makeIdTableFromVector({});
   result.setNumColumns(keepJoinCol ? 3 : 1);
-  auto adder = qlever::AddCombinedRowToIdTable(
+  auto adder = AddCombinedRowToIdTable(
       2, std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), keepJoinCol,
       bufferSize);
@@ -247,10 +247,10 @@ TEST(AddCombinedRowToTable, BufferSizeZeroThrows) {
       makeIdTableFromVector({{7, 14, 0}, {9, 10, 1}, {14, 8, 2}, {33, 5, 3}});
   auto result = makeIdTableFromVector({});
   result.setNumColumns(4);
-  EXPECT_ANY_THROW(qlever::AddCombinedRowToIdTable(
+  EXPECT_ANY_THROW(AddCombinedRowToIdTable(
       1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), true, 0));
-  EXPECT_ANY_THROW(qlever::AddCombinedRowToIdTable(
+  EXPECT_ANY_THROW(AddCombinedRowToIdTable(
       1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
       std::make_shared<ad_utility::CancellationHandle<>>(), false, 0));
 };
@@ -260,8 +260,8 @@ TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
   auto result = makeIdTableFromVector({});
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  qlever::AddCombinedRowToIdTable adder{0, std::move(result),
-                                        cancellationHandle, true, 10};
+  AddCombinedRowToIdTable adder{0, std::move(result), cancellationHandle, true,
+                                10};
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   EXPECT_THROW(adder.flush(), ad_utility::CancellationException);
@@ -310,7 +310,7 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
   std::vector<LocalVocab> localVocabs;
-  qlever::AddCombinedRowToIdTable adder{
+  AddCombinedRowToIdTable adder{
       1,
       std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(),
@@ -381,7 +381,7 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
-  qlever::AddCombinedRowToIdTable adder{
+  AddCombinedRowToIdTable adder{
       1, std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(), 1};
 
@@ -408,7 +408,7 @@ TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
-  qlever::AddCombinedRowToIdTable adder{
+  AddCombinedRowToIdTable adder{
       1, std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(), 1};
 

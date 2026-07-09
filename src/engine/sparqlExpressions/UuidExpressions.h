@@ -23,15 +23,15 @@ inline constexpr auto fromLiteral = [](std::string_view str) {
 
 inline constexpr auto fromIri = [](std::string_view str) {
   return LiteralOrIri{triple_component::Iri::fromStringRepresentation(
-      absl::StrCat("<urn:uuid:"sv, str, ">"sv))};
+      absl::StrCat("<urn:uuid:", str, ">"))};
 };
 
 inline constexpr auto litUuidKey = [](int64_t randId) {
-  return absl::StrCat("STRUUID "sv, randId);
+  return absl::StrCat("STRUUID ", randId);
 };
 
 inline constexpr auto iriUuidKey = [](int64_t randId) {
-  return absl::StrCat("UUID "sv, randId);
+  return absl::StrCat("UUID ", randId);
 };
 
 // With UuidExpressionImpl<fromIri, iriUuidKey>, the UUIDs are returned as an
