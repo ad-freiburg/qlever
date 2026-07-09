@@ -308,6 +308,10 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
 }
 
 // ___________________________________________________________________________
+// The two functions below rely on `materializeToIndex` and
+// `DeltaTriples::addFromSnapshotDiff`, which are only available in the C++20
+// build, so they are not compiled in the reduced C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 Qlever::RebuildResult Qlever::rebuildIndexToDisk(
     Index& index, const std::string& indexBaseName,
     const ad_utility::SharedCancellationHandle& handle) const {
@@ -331,12 +335,8 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
 }
 
 // ___________________________________________________________________________
-// This function relies on `DeltaTriples::addFromSnapshotDiff`, which is only
-// available in the C++20 build, so it is not compiled in the reduced C++17
-// feature set.
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 void Qlever::swapInRebuiltIndex(
-    Index& index, RebuildResult rebuildResult,
+    const Index& index, RebuildResult rebuildResult,
     const ad_utility::SharedCancellationHandle& handle) {
   auto& [oldSnapshot, mapping, newIndexAndViews] = rebuildResult;
   auto newSnapshot =

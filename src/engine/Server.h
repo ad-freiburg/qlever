@@ -51,7 +51,7 @@ struct SimulateHttpRequest;
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
-  // Builds a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
+  // Build a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
   // capturing the request-specific settings (message sender, pinning). This
   // lets the caller bind the context to whichever snapshot is current when the
   // operation actually runs (see `processUpdate`).

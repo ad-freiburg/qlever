@@ -409,6 +409,12 @@ class Qlever {
       std::tuple<LocatedTriplesSharedState, indexRebuilder::IndexRebuildMapping,
                  std::shared_ptr<IndexAndViews>>;
 
+  // The two functions below implement an index rebuild. They are only available
+  // in the C++20 build. They rely on `materializeToIndex` and
+  // `DeltaTriples::addFromSnapshotDiff`, which are excluded from the reduced
+  // C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
   // Build a new index from the current state of `index`, write it to disk at
   // `indexBaseName`, and load it into a fresh `IndexAndViews`. This is the
   // expensive, read-only first phase of an index rebuild. It returns the data
@@ -420,7 +426,8 @@ class Qlever {
       Index& index, const std::string& indexBaseName,
       const ad_utility::SharedCancellationHandle& handle) const;
 
-  // Remap the delta triples that accumulated on the old `index` onto the
+  // Remap the delta triples that accumulated on the old `index` (which has to
+  // be the exact same index that was used to create `rebuildResult`) onto the
   // freshly built index (using the `rebuildResult` produced by
   // `rebuildIndexToDisk`) and atomically swap the new index in. Calling this
   // also persists the remapped delta triples to disk so that they are not lost
@@ -428,10 +435,8 @@ class Qlever {
   // `index` has to be passed in manually instead of using
   // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs. It is crucial
   // that this function is only called when you can guarantee no updates are
-  // added during the duration of this function call. Only available in the
-  // C++20 build (it relies on `DeltaTriples::addFromSnapshotDiff`).
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  void swapInRebuiltIndex(Index& index, RebuildResult rebuildResult,
+  // added during the duration of this function call.
+  void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
                           const ad_utility::SharedCancellationHandle& handle);
 #endif
 
