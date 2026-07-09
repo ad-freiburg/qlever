@@ -15,9 +15,11 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/IndexImpl.h"
+#include "index/IndexRebuilder.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/TimeTracer.h"
 #include "util/http/UrlParser.h"
 
 namespace qlever {
@@ -303,5 +305,55 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
       pinSubtrees, pinResult, disableCaching);
+}
+
+// ___________________________________________________________________________
+Qlever::RebuildResult Qlever::rebuildIndexToDisk(
+    Index& index, const std::string& indexBaseName,
+    const ad_utility::SharedCancellationHandle& handle) const {
+  auto logFileName = indexBaseName + ".rebuild-index-log.txt";
+  auto [currentSnapshot, localVocabCopy, ownedBlocks] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  auto mapping =
+      materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
+                         ownedBlocks, handle, logFileName);
+  auto indexAndViews = std::make_shared<IndexAndViews>(
+      Index{allocator()}, MaterializedViewsManager{});
+  auto& [newIndex, newManager] = *indexAndViews;
+  newIndex.usePatterns() = index.usePatterns();
+  newIndex.loadAllPermutations() = index.loadAllPermutations();
+  newIndex.createFromOnDiskIndex(indexBaseName,
+                                 index.deltaTriplesManager().persists());
+  newManager.setOnDiskBase(indexBaseName);
+  return {std::move(currentSnapshot), std::move(mapping),
+          std::move(indexAndViews)};
+}
+
+// ___________________________________________________________________________
+void Qlever::swapInRebuiltIndex(
+    Index& index, std::shared_ptr<IndexAndViews> newIndexAndViews,
+    LocatedTriplesSharedState oldSnapshot,
+    indexRebuilder::IndexRebuildMapping mapping,
+    const ad_utility::SharedCancellationHandle& handle) {
+  auto newSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+
+  // Calling this function also persists the remapped delta triples to
+  // disk so that they are not lost if the engine is later restarted on
+  // the rebuilt index. The triples that were persisted for the old index
+  // are not compatible with the freshly built index (their `Id`s refer to
+  // the old vocabulary), so they have to be regenerated.
+  newIndexAndViews->index_.deltaTriplesManager().modify<void>(
+      [&oldSnapshot, &newSnapshot, &mapping,
+       &handle](DeltaTriples& deltaTriples) {
+        ad_utility::timer::TimeTracer tracer{"swapIndex"};
+        deltaTriples.addFromSnapshotDiff(*oldSnapshot, *newSnapshot, mapping,
+                                         handle, tracer);
+      },
+      true);
+  // TODO<RobinTF> add this function
+  // oldIndex->removeOnDestruction();
+  swapIndexAndViews(std::move(newIndexAndViews));
 }
 }  // namespace qlever

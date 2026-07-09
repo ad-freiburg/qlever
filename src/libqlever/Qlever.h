@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -20,7 +21,9 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/IndexRebuilderTypes.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
@@ -396,6 +399,39 @@ class Qlever {
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
+
+  // The result of the first phase of an index rebuild (see
+  // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
+  // of the rebuild, the mapping from the old vocabulary `Id`s to the new ones,
+  // and the freshly built index (loaded from disk) paired with a fresh, empty
+  // `MaterializedViewsManager`.
+  using RebuildResult =
+      std::tuple<LocatedTriplesSharedState, indexRebuilder::IndexRebuildMapping,
+                 std::shared_ptr<IndexAndViews>>;
+
+  // Build a new index from the current state of `index`, write it to disk at
+  // `indexBaseName`, and load it into a fresh `IndexAndViews`. This is the
+  // expensive, read-only first phase of an index rebuild. It returns the data
+  // required by `swapInRebuiltIndex` to atomically switch over to the new
+  // index. `handle` can be used to cancel the rebuild. The reason why `index`
+  // has to be passed in manually instead of using `indexAndViewsSnapshot()` is
+  // to avoid a TOCTOU class of bugs.
+  [[nodiscard]] RebuildResult rebuildIndexToDisk(
+      Index& index, const std::string& indexBaseName,
+      const ad_utility::SharedCancellationHandle& handle) const;
+
+  // Remap the delta triples that accumulated on the old `index` onto the
+  // freshly built `newIndexAndViews` (using `oldSnapshot` and `mapping` as
+  // produced by `rebuildIndexToDisk`) and atomically swap the new index in.
+  // Calling this also persists the remapped delta triples to disk so that they
+  // are not lost if the engine is later restarted on the rebuilt index. The
+  // reason why `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
+  void swapInRebuiltIndex(Index& index,
+                          std::shared_ptr<IndexAndViews> newIndexAndViews,
+                          LocatedTriplesSharedState oldSnapshot,
+                          indexRebuilder::IndexRebuildMapping mapping,
+                          const ad_utility::SharedCancellationHandle& handle);
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }

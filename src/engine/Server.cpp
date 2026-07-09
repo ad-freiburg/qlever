@@ -29,7 +29,6 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
-#include "index/IndexRebuilder.h"
 #include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
@@ -1523,54 +1522,19 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // Conan setup.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &index, &handle, &indexBaseName]()
-          -> std::tuple<LocatedTriplesSharedState,
-                        qlever::indexRebuilder::IndexRebuildMapping,
-                        SharedIndexAndView> {
-        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
-        auto [currentSnapshot, localVocabCopy, ownedBlocks] =
-            index.deltaTriplesManager()
-                .getCurrentLocatedTriplesSharedStateWithVocab();
-        auto mapping = qlever::materializeToIndex(
-            index, indexBaseName, currentSnapshot, localVocabCopy, ownedBlocks,
-            handle, logFileName);
-        auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
-            Index{allocator()}, MaterializedViewsManager{});
-        auto& [newIndex, newManager] = *indexAndViews;
-        newIndex.usePatterns() = index.usePatterns();
-        newIndex.loadAllPermutations() = index.loadAllPermutations();
-        newIndex.createFromOnDiskIndex(indexBaseName,
-                                       index.deltaTriplesManager().persists());
-        newManager.setOnDiskBase(indexBaseName);
-        return {std::move(currentSnapshot), std::move(mapping),
-                std::move(indexAndViews)};
+      [this, &index, &handle, &indexBaseName] {
+        return qlever().rebuildIndexToDisk(index, indexBaseName, handle);
       },
       handle);
   auto [oldSnapshot, mapping, newIndexAndViews] = co_await std::move(coroutine);
   auto swapRoutine = computeInNewThread(
       updateThreadPool_,
-      [this, &oldIndex = index, newIndexAndViews = std::move(newIndexAndViews),
-       &handle, oldSnapshot = std::move(oldSnapshot),
+      [this, &index, newIndexAndViews = std::move(newIndexAndViews), &handle,
+       oldSnapshot = std::move(oldSnapshot),
        mapping = std::move(mapping)]() mutable {
-        auto newSnapshot = oldIndex.deltaTriplesManager()
-                               .getCurrentLocatedTriplesSharedState();
-
-        // Calling this function also persists the remapped delta triples to
-        // disk so that they are not lost if the engine is later restarted on
-        // the rebuilt index. The triples that were persisted for the old index
-        // are not compatible with the freshly built index (their `Id`s refer to
-        // the old vocabulary), so they have to be regenerated.
-        newIndexAndViews->index_.deltaTriplesManager().modify<void>(
-            [&oldSnapshot, &newSnapshot, &mapping,
-             &handle](DeltaTriples& deltaTriples) {
-              ad_utility::timer::TimeTracer tracer{"swapIndex"};
-              deltaTriples.addFromSnapshotDiff(*oldSnapshot, *newSnapshot,
-                                               mapping, handle, tracer);
-            },
-            true);
-        // TODO<RobinTF> add this function
-        // oldIndex->removeOnDestruction();
-        qlever().swapIndexAndViews(std::move(newIndexAndViews));
+        qlever().swapInRebuiltIndex(index, std::move(newIndexAndViews),
+                                    std::move(oldSnapshot), std::move(mapping),
+                                    handle);
       },
       handle);
   co_await std::move(swapRoutine);
