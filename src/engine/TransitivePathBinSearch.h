@@ -82,6 +82,8 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           const std::optional<Variable>& graphVariable);
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Create the `BinSearchMap` from the given `edges`, which is an `IdTable`
