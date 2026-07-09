@@ -44,7 +44,7 @@ CPP_concept QueryOrUpdate =
 
 // Forward declaration for testing.
 namespace serverTestHelpers {
-struct SimulateHttpRequest;
+class ServerForTesting;
 }
 
 //! The HTTP Server used.
@@ -65,7 +65,7 @@ class Server {
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
-  friend serverTestHelpers::SimulateHttpRequest;
+  friend serverTestHelpers::ServerForTesting;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
