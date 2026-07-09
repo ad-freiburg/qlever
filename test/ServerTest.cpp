@@ -454,13 +454,12 @@ TEST(ServerTest, gspHead) {
                       const std::optional<std::string>& accept,
                       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto serverForTesting =
-        makeServerForTesting(qec->getIndex().getOnDiskBase());
     auto head = makeRequest(http::verb::head, "/?default");
     if (accept.has_value()) {
       head.set(http::field::accept, accept.value());
     }
-    auto response = serverForTesting.process(head);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(head);
     EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
     EXPECT_THAT(responseBodyToString(std::move(response.body())),
                 testing::IsEmpty());
@@ -482,13 +481,12 @@ TEST(ServerTest, gspGet) {
                      const testing::Matcher<const std::string&>& bodyMatcher,
                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto serverForTesting =
-        makeServerForTesting(qec->getIndex().getOnDiskBase());
     auto get = makeGetRequest("/?default");
     if (accept.has_value()) {
       get.set(http::field::accept, accept.value());
     }
-    auto response = serverForTesting.process(get);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(get);
     EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
     EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };
@@ -509,14 +507,12 @@ TEST(ServerTest, gspPut) {
                      const std::string& graph, const auto& bodyMatcher,
                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto serverForTesting =
-        makeServerForTesting(qec->getIndex().getOnDiskBase());
-
     auto request =
         makeRequest(http::verb::put, "/?" + graph,
                     {{http::field::authorization, "Bearer accessToken"}}, body);
     request.set(http::field::content_type, contentType);
-    auto response = serverForTesting.process(request);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(request);
     EXPECT_THAT(response, bodyMatcher);
   };
   testPut("text/turtle", "<a> <b> <c> .", "default",
@@ -534,13 +530,11 @@ TEST(ServerTest, gspDelete) {
                            ad_utility::source_location l =
                                AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto serverForTesting =
-        makeServerForTesting(qec->getIndex().getOnDiskBase());
-
     auto request =
         makeRequest(http::verb::delete_, "/?" + graph,
                     {{http::field::authorization, "Bearer accessToken"}});
-    auto response = serverForTesting.process(request);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(request);
     EXPECT_THAT(response, bodyMatcher);
   };
   testDelete("default", StatusIs(http::status::ok));
