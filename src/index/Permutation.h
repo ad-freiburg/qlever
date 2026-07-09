@@ -63,7 +63,7 @@ class Permutation {
     }
   }
 
-  using MetaData = IndexMetaDataMmapView;
+  using MetaData = IndexMetaData;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
