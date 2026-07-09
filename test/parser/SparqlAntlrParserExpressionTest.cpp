@@ -425,6 +425,11 @@ TEST(SparqlParser, FunctionCall) {
       absl::StrCat(geof, "geometryN>(?a, ?b)"),
       matchNary(&makeGeometryNExpression, Variable{"?a"}, Variable{"?b"}));
 
+  // Simplify geometry (QLever-internal function)
+  expectFunctionCall(absl::StrCat(ql, "simplifyGeometry>(?a, ?b)"),
+                     matchNary(&makeSimplifyGeometryExpression, Variable{"?a"},
+                               Variable{"?b"}));
+
   // Geometric relation functions
   expectFunctionCall(
       absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
