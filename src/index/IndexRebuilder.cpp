@@ -134,7 +134,7 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 
 // _____________________________________________________________________________
 namespace {
-// Compute by what offset `value` needs to be increase to fit in the new index.
+// Compute by what offset `value` needs to be increased to fit in the new index.
 AD_ALWAYS_INLINE size_t computeIndexOffset(
     VocabIndex value, const InsertionPositions& insertionPositions) {
   return ql::ranges::distance(
@@ -142,8 +142,7 @@ AD_ALWAYS_INLINE size_t computeIndexOffset(
       ql::ranges::upper_bound(insertionPositions, value, std::less{}));
 }
 
-// Apply `offset` to `value` and return the new `VocabIndex` resulting from
-// this.
+// Apply `offset` to `value` and return the new `Id` resulting from this.
 AD_ALWAYS_INLINE Id applyOffset(VocabIndex value, size_t offset) {
   return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
 }

@@ -27,12 +27,12 @@ namespace indexRebuilder {
 // Map old vocab `Id`s to new vocab `Id`s according to the given
 // `insertionPositions`. This is the most performance critical code of the
 // rebuild.
-// If the extra `hint` argument is provided, first optimistically check `hint`
-// and `hint + 1` if they happen to be the right position before doing binary
-// search. This can significantly speed up remapping when there are long
-// sequences of ids that are mostly monotonically increasing. Once the call
-// returns, `hint` will be updated to the position of the remapped id, so that
-// the next call can use it as a hint.
+// If the extra `hint` argument is provided, first optimistically check whether
+// `hint` (confirmed against `hint - 1`) or `hint + 1` is already the right
+// position before doing binary search. This can significantly speed up
+// remapping when there are long sequences of ids that are mostly monotonically
+// increasing. Once the call returns, `hint` will be updated to the position of
+// the remapped id, so that the next call can use it as a hint.
 Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
 Id remapVocabId(Id original, const InsertionPositions& insertionPositions,
                 size_t& hint);
