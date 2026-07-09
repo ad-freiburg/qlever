@@ -7,8 +7,13 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
+#ifndef _QLEVER_NO_UNICODE
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
+#else
+#include <cctype>
+#include <iterator>
+#endif
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
@@ -80,6 +85,7 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
 // ___________________________________________________________________________
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
+#ifndef _QLEVER_NO_UNICODE
   const char* s = sv.data();
   int32_t length = sv.length();
   size_t numCodepoints = 0;
@@ -95,8 +101,14 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
     }
   }
   return {numCodepoints, sv.substr(0, i)};
+#else
+  // Without ICU we treat every byte as a single codepoint.
+  auto length = std::min(prefixLength, sv.size());
+  return {length, sv.substr(0, length)};
+#endif
 }
 
+#ifndef _QLEVER_NO_UNICODE
 namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
@@ -114,19 +126,36 @@ std::string utf8StringTransform(std::string_view s, F transformation) {
   return result;
 }
 }  // namespace detail
+#endif  // _QLEVER_NO_UNICODE
 
 // ____________________________________________________________________________
 std::string utf8ToLower(std::string_view s) {
+#ifndef _QLEVER_NO_UNICODE
   return detail::utf8StringTransform(s, [](auto&&... args) {
     return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
   });
+#else
+  std::string result;
+  result.reserve(s.size());
+  ql::ranges::transform(s, std::back_inserter(result),
+                        [](unsigned char c) { return std::tolower(c); });
+  return result;
+#endif
 }
 
 // ____________________________________________________________________________
 std::string utf8ToUpper(std::string_view s) {
+#ifndef _QLEVER_NO_UNICODE
   return detail::utf8StringTransform(s, [](auto&&... args) {
     return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
   });
+#else
+  std::string result;
+  result.reserve(s.size());
+  ql::ranges::transform(s, std::back_inserter(result),
+                        [](unsigned char c) { return std::toupper(c); });
+  return result;
+#endif
 }
 
 // ____________________________________________________________________________

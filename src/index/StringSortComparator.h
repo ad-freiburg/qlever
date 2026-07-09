@@ -7,6 +7,10 @@
 #ifndef QLEVER_STRINGSORTCOMPARATOR_H
 #define QLEVER_STRINGSORTCOMPARATOR_H
 
+#include "index/StringSortComparatorTypes.h"
+#include "index/StringSortComparatorsNoICU.h"
+
+#ifndef _QLEVER_NO_UNICODE
 #include <unicode/casemap.h>
 #include <unicode/coll.h>
 #include <unicode/locid.h>
@@ -14,6 +18,7 @@
 #include <unicode/unistr.h>
 #include <unicode/unorm2.h>
 #include <unicode/utypes.h>
+#endif  // _QLEVER_NO_UNICODE
 
 #include <cstring>
 #include <memory>
@@ -24,87 +29,31 @@
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
-#include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
+
+#ifndef _QLEVER_NO_UNICODE
 
 /**
  * @brief This class wraps all calls to the ICU library that are required by
  * QLever It internally handles all conversion to and from UTF-8 and from c++ to
  * c-strings where they are required by ICU
  */
-class LocaleManager {
+class LocaleManagerICU : public LocaleManagerBase {
  public:
-  /// The five collation levels supported by icu, forwarded in a typesafe manner
-  enum class Level : uint8_t {
-    PRIMARY = 0,
-    SECONDARY = 1,
-    TERTIARY = 2,
-    QUARTERNARY = 3,
-    IDENTICAL = 4,
-    TOTAL =
-        5  // if the identical level returns equal, we take the language  tag
-           // into account and then the result by strcmp. that way two strings
-           // that have a different byte representation never compare equal
-  };
-
-  /**
-   * A strong typedef for a string that contains unicode collation weights for
-   * another string. The actual storage can be a `std::string` or a
-   * `std::string_view`.
-   */
-  // TODO<GCC12> As soon as we have constexpr std::string, this class can
-  //  become constexpr.
-  // A `uint8_t` behaves like a `char`, so we use `GenericCharTraits` (see there
-  // for why we cannot rely on `std::char_traits` directly).
-  using U8CharTraits = ad_utility::GenericCharTraits<uint8_t>;
-  using U8String = std::basic_string<uint8_t, U8CharTraits>;
-  using U8StringView = std::basic_string_view<uint8_t, U8CharTraits>;
-
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, U8String, U8StringView>) class SortKeyImpl {
-   public:
-    SortKeyImpl() = default;
-    explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
-    [[nodiscard]] constexpr const T& get() const noexcept { return sortKey_; }
-    constexpr T& get() noexcept { return sortKey_; }
-
-    // Comparison of sort key is done lexicographically on the byte values
-    // of member `sortKey_`
-    template <typename U>
-    [[nodiscard]] int compare(const SortKeyImpl<U>& rhs) const noexcept {
-      return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
-    }
-
-    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKeyImpl, sortKey_)
-
-    /// Is this sort key a prefix of another sort key. Note: This does not imply
-    /// any guarantees on the relation of the underlying strings.
-    bool starts_with(const SortKeyImpl& rhs) const noexcept {
-      return ql::starts_with(get(), rhs.get());
-    }
-
-    /// Return the number of bytes in the `SortKey`
-    std::string::size_type size() const noexcept { return get().size(); }
-
-   private:
-    T sortKey_;
-  };
-  using SortKey = SortKeyImpl<U8String>;
-  using SortKeyView = SortKeyImpl<U8StringView>;
-
   /// Copy constructor
-  LocaleManager(const LocaleManager& rhs)
-      : _icuLocale(rhs._icuLocale),
+  LocaleManagerICU(const LocaleManagerICU& rhs)
+      : LocaleManagerBase(),
+        _icuLocale(rhs._icuLocale),
         _ignorePunctuationStatus(rhs._ignorePunctuationStatus) {
     setupCollators();
     setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
   }
 
   /// Default constructor. Use the settings from "../global/Constants.h"
-  LocaleManager()
-      : LocaleManager(std::string{LOCALE_DEFAULT_LANG},
-                      std::string{LOCALE_DEFAULT_COUNTRY},
-                      LOCALE_DEFAULT_IGNORE_PUNCTUATION) {}
+  LocaleManagerICU()
+      : LocaleManagerICU(std::string{LOCALE_DEFAULT_LANG},
+                         std::string{LOCALE_DEFAULT_COUNTRY},
+                         LOCALE_DEFAULT_IGNORE_PUNCTUATION) {}
 
   /**
    * @param lang The language of the locale, e.g. "en" or "de"
@@ -116,8 +65,8 @@ class LocaleManager {
    *
    * \todo(joka921): make the exact punctuation level configurable.
    */
-  LocaleManager(const std::string& lang, const std::string& country,
-                bool ignorePunctuationAtFirstLevel) {
+  LocaleManagerICU(const std::string& lang, const std::string& country,
+                   bool ignorePunctuationAtFirstLevel) {
     _icuLocale = icu::Locale(lang.c_str(), country.c_str());
     _ignorePunctuationStatus =
         ignorePunctuationAtFirstLevel ? UCOL_SHIFTED : UCOL_NON_IGNORABLE;
@@ -130,8 +79,8 @@ class LocaleManager {
     setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
   }
 
-  /// Assign from another LocaleManager
-  LocaleManager& operator=(const LocaleManager& other) {
+  /// Assign from another LocaleManagerICU
+  LocaleManagerICU& operator=(const LocaleManagerICU& other) {
     if (this == &other) return *this;
     _icuLocale = other._icuLocale;
     _ignorePunctuationStatus = other._ignorePunctuationStatus;
@@ -388,11 +337,11 @@ class LocaleManager {
 /**
  * @brief This class compares strings according to proper Unicode collation,
  * e.g. strings from the text index vocabulary. To compare components of
- * RDFS triples use the `TripleComponentComparator` defined below
+ * RDFS triples use the `TripleComponentComparatorICU` defined below
  */
-class SimpleStringComparator {
+class SimpleStringComparatorICU {
  public:
-  using Level = LocaleManager::Level;
+  using Level = LocaleManagerBase::Level;
   /**
    * @param lang The language of the locale, e.g. "en" or "de"
    * @param country The country of the locale, e.g. "US" or "CA"
@@ -403,13 +352,13 @@ class SimpleStringComparator {
    *
    * \todo(joka921): make the exact punctuation level configurable.
    */
-  SimpleStringComparator(const std::string& lang, const std::string& country,
-                         bool ignorePunctuationAtFirstLevel)
+  SimpleStringComparatorICU(const std::string& lang, const std::string& country,
+                            bool ignorePunctuationAtFirstLevel)
       : _locManager(lang, country, ignorePunctuationAtFirstLevel) {}
 
   /// Construct according to the default locale specified in
   /// ../global/Constants.h
-  SimpleStringComparator() = default;
+  SimpleStringComparatorICU() = default;
 
   /**
    * @brief Compare two UTF-8 encoded strings
@@ -449,22 +398,22 @@ class SimpleStringComparator {
    * @
    * @return true iff a comes before the string whose SortKey is b
    */
-  bool operator()(std::string_view a, const LocaleManager::SortKey& b,
+  bool operator()(std::string_view a, const LocaleManagerBase::SortKey& b,
                   [[maybe_unused]] const Level l) const {
     auto aTrans = _locManager.getSortKey(a, Level::PRIMARY);
-    auto cmp = LocaleManager::compare(aTrans, b, Level::PRIMARY);
+    auto cmp = LocaleManagerICU::compare(aTrans, b, Level::PRIMARY);
     return cmp < 0;
   }
 
   // This method is left undefined on purpose, as it is only used for
   // constraints checking in the <ranges> header for the UnicodeVocabulary
   // class.
-  bool operator()(const LocaleManager::SortKey& a, std::string_view s,
+  bool operator()(const LocaleManagerBase::SortKey& a, std::string_view s,
                   [[maybe_unused]] const Level l = Level::PRIMARY) const;
 
   // Same goes for this function (undefined on purpose).
-  bool operator()(const LocaleManager::SortKey& a,
-                  const LocaleManager::SortKey& b,
+  bool operator()(const LocaleManagerBase::SortKey& a,
+                  const LocaleManagerBase::SortKey& b,
                   [[maybe_unused]] Level level = Level::PRIMARY) const;
 
   /**
@@ -481,7 +430,7 @@ class SimpleStringComparator {
    * @return the PRIMARY level SortKey of the first possible string greater than
    * s
    */
-  [[nodiscard]] LocaleManager::SortKey transformToFirstPossibleBiggerValue(
+  [[nodiscard]] LocaleManagerBase::SortKey transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
     AD_CONTRACT_CHECK(level == Level::PRIMARY);
     auto transformed = _locManager.getSortKey(s, Level::PRIMARY);
@@ -494,13 +443,13 @@ class SimpleStringComparator {
     return transformed;
   }
 
-  /// Obtain access to the held LocaleManager
-  [[nodiscard]] const LocaleManager& getLocaleManager() const {
+  /// Obtain access to the held LocaleManagerICU
+  [[nodiscard]] const LocaleManagerICU& getLocaleManager() const {
     return _locManager;
   }
 
  private:
-  LocaleManager _locManager;
+  LocaleManagerICU _locManager;
 };
 /**
  * @brief Handles the comparisons between RDFS triple elements according to
@@ -509,9 +458,9 @@ class SimpleStringComparator {
  *  General Approach: First Sort by the datatype, then by the actual value
  * and then by the language tag.
  */
-class TripleComponentComparator {
+class TripleComponentComparatorICU {
  public:
-  using Level = LocaleManager::Level;
+  using Level = LocaleManagerBase::Level;
 
   /**
    * @param lang The language of the locale, e.g. "en" or "de"
@@ -523,18 +472,19 @@ class TripleComponentComparator {
    *
    * \todo(joka921): make the exact punctuation level configurable.
    */
-  TripleComponentComparator(const std::string& lang, const std::string& country,
-                            bool ignorePunctuationAtFirstLevel)
+  TripleComponentComparatorICU(const std::string& lang,
+                               const std::string& country,
+                               bool ignorePunctuationAtFirstLevel)
       : _locManager(lang, country, ignorePunctuationAtFirstLevel) {}
 
   /// Construct according to the default locale in "../global/Constants.h"
-  TripleComponentComparator() = default;
+  TripleComponentComparatorICU() = default;
 
   /**
    * @brief An entry of the Vocabulary, split up into its components and
    * possibly converted to a format that is easier to compare
    *
-   * @tparam InnerString either LocaleManager::SortKey or std::string_view.
+   * @tparam InnerString either LocaleManagerBase::SortKey or std::string_view.
    * Both variants differ greatly in their usage. Details can be found after the
    * class definition, together with the explicit aliases `SplitVal` and
    * `SplitValOwning` for the template instantiations that are actually used.
@@ -569,7 +519,7 @@ class TripleComponentComparator {
    * it around, e.g. when performing prefix comparisons in the vocabulary
    */
   using SplitVal =
-      SplitValBase<LocaleManager::SortKey, std::string, std::string>;
+      SplitValBase<LocaleManagerBase::SortKey, std::string, std::string>;
 
   /**
    * This only holds string_views to substrings of a string.
@@ -724,13 +674,13 @@ class TripleComponentComparator {
     return transformed;
   }
 
-  /// obtain const access to the held LocaleManager
-  [[nodiscard]] const LocaleManager& getLocaleManager() const {
+  /// obtain const access to the held LocaleManagerICU
+  [[nodiscard]] const LocaleManagerICU& getLocaleManager() const {
     return _locManager;
   }
 
   /**
-   * @brief trivialy wraps LocaleManager::normalizeUtf8, see there for
+   * @brief trivialy wraps LocaleManagerICU::normalizeUtf8, see there for
    * documentation
    */
   [[nodiscard]] std::string normalizeUtf8(std::string_view sv) const {
@@ -742,7 +692,7 @@ class TripleComponentComparator {
   [[nodiscard]] const Level& defaultLevel() const { return _defaultLevel; }
 
  private:
-  LocaleManager _locManager;
+  LocaleManagerICU _locManager;
   Level _defaultLevel = Level::IDENTICAL;
 
   /* Split a string into its components to prepare collation.
@@ -782,5 +732,20 @@ class TripleComponentComparator {
     }
   }
 };
+
+#endif  // _QLEVER_NO_UNICODE
+
+// Conditional aliases: select the ICU or the NoICU variants depending on the
+// build configuration (the `_QLEVER_NO_UNICODE` macro is defined via the
+// `NO_UNICODE` CMake option).
+#ifdef _QLEVER_NO_UNICODE
+using LocaleManager = LocaleManagerNoICU;
+using SimpleStringComparator = SimpleStringComparatorNoICU;
+using TripleComponentComparator = TripleComponentComparatorNoICU;
+#else
+using LocaleManager = LocaleManagerICU;
+using SimpleStringComparator = SimpleStringComparatorICU;
+using TripleComponentComparator = TripleComponentComparatorICU;
+#endif
 
 #endif  // QLEVER_STRINGSORTCOMPARATOR_H

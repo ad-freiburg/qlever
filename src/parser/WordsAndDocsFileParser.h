@@ -7,8 +7,13 @@
 #define QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
 
 #include <absl/strings/str_split.h>
+#ifndef _QLEVER_NO_UNICODE
 #include <unicode/locid.h>
 #include <unicode/uchar.h>
+#else
+#include <algorithm>
+#include <cctype>
+#endif
 
 #include <fstream>
 #include <string>
@@ -101,6 +106,16 @@ struct DocsFileLine {
 // This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
   absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
+#ifdef _QLEVER_NO_UNICODE
+    auto isAlNum = [](unsigned char c) { return std::isalnum(c); };
+    auto begOfSep =
+        std::find_if_not(text.begin() + unsignedPos, text.end(), isAlNum);
+    if (begOfSep == text.end()) {
+      return {text.end(), 0};
+    }
+    auto endOfSep = std::find_if(begOfSep, text.end(), isAlNum);
+    return {begOfSep, std::size_t(endOfSep - begOfSep)};
+#else
     auto pos = static_cast<int64_t>(unsignedPos);
     auto size = static_cast<int64_t>(text.size());
     // Note: If the Unicode handling ever becomes a bottleneck for ASCII only
@@ -118,6 +133,7 @@ struct LiteralsTokenizationDelimiter {
       }
     }
     return text.substr(text.size());
+#endif
   }
 };
 

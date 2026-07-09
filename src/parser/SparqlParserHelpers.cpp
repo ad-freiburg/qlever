@@ -4,7 +4,9 @@
 
 #include "parser/SparqlParserHelpers.h"
 
+#ifndef _QLEVER_NO_UNICODE
 #include <unicode/unistr.h>
+#endif
 
 #include <charconv>
 #include <ctre-unicode.hpp>
@@ -47,6 +49,9 @@ ParserAndVisitor::ParserAndVisitor(
 
 // _____________________________________________________________________________
 std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
+#ifdef _QLEVER_NO_UNICODE
+  return input;
+#else
   std::string_view view{input};
   std::string output;
   bool noEscapeSequenceFound = true;
@@ -125,5 +130,6 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
 
   output += view.substr(lastPos);
   return output;
+#endif
 }
 }  // namespace sparqlParserHelpers

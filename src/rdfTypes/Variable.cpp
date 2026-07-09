@@ -4,7 +4,9 @@
 
 #include "rdfTypes/Variable.h"
 
+#ifndef _QLEVER_NO_UNICODE
 #include <unicode/uchar.h>
+#endif
 
 #include "global/Constants.h"
 #include "parser/ParserAndVisitorBase.h"
@@ -62,6 +64,7 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
 }
 
 namespace {
+#ifndef _QLEVER_NO_UNICODE
 // Returns true for a subset of characters that are valid in variable names.
 // This roughly corresponds to `PN_CHARS_BASE` from the SPARQL 1.1 grammar with
 // the characters 0-9 also being allowed. Note that this deliberately does not
@@ -79,10 +82,16 @@ constexpr bool codePointSuitableForVariableName(UChar32 cp) {
     return cp >= arr[0] && cp <= arr[1];
   });
 }
+#endif
 }  // namespace
 
 // _____________________________________________________________________________
 void Variable::appendEscapedWord(std::string_view word, std::string& target) {
+#ifdef _QLEVER_NO_UNICODE
+  // This is a bit hacky as no escaping happens, but it is also never used in
+  // the unicode-free use cases anyway.
+  target.append(word);
+#else
   const char* ptr = word.data();
   const char* end = word.data() + word.size();
 
@@ -100,6 +109,7 @@ void Variable::appendEscapedWord(std::string_view word, std::string& target) {
     }
     ptr += i;
   }
+#endif
 }
 
 namespace {
