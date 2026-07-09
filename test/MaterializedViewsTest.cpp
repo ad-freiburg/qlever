@@ -777,7 +777,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   config.baseName_ = testIndexBase_;
 
   // Write a new materialized view using the `writeMaterializedView` method of
-  // the `Server` class.
+  // the `Qlever` class.
   {
     // Initialize but do not start a `Server` instance on our test index.
     Server server{4321, 1, "accessToken", config};
@@ -788,8 +788,9 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         std::make_shared<ad_utility::CancellationHandle<>>();
     static constexpr size_t dummyTimeLimit = 1000 * 60 * 60;  // 1 hour
     std::chrono::milliseconds timeLimit{dummyTimeLimit};
-    server.writeMaterializedView("testViewFromServer", query, requestTimer,
-                                 cancellationHandle, timeLimit);
+    server.qlever().writeMaterializedView(
+        "testViewFromServer", std::move(query.query_), requestTimer,
+        query.datasetClauses_, std::move(cancellationHandle), timeLimit);
   }
 
   // Test the preloading of materialized views on server start.

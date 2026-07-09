@@ -529,16 +529,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
 
-    // Call `Server::writeMaterializedView` with the extracted parameters. Note
-    // that storing the coroutine in a variable first and then awaiting it is
-    // required due to lifetime issues on certain compilers.
+    // Call `Qlever::writeMaterializedView` with the extracted parameters. This
+    // assumes that the access token has already been checked. Note that storing
+    // the coroutine in a variable first and then awaiting it is required due to
+    // lifetime issues on certain compilers.
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     auto coroutine = computeInNewThread(
         queryThreadPool_,
         [name, query, requestTimer, cancellationHandle, timeLimit, this] {
-          writeMaterializedView(name.value(), query, requestTimer,
-                                cancellationHandle, timeLimit.value());
+          qlever().writeMaterializedView(name.value(), std::move(query.query_),
+                                         requestTimer, query.datasetClauses_,
+                                         std::move(cancellationHandle),
+                                         timeLimit.value());
         },
         cancellationHandle);
     co_await std::move(coroutine);
@@ -1456,16 +1459,6 @@ Server::createMessageSender<http::request<http::string_body>>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
     const http::request<http::string_body>&, std::string_view,
     std::string_view);
-
-// _____________________________________________________________________________
-void Server::writeMaterializedView(const std::string& name, const Query& query,
-                                   const ad_utility::Timer& requestTimer,
-                                   SharedCancellationHandle cancellationHandle,
-                                   TimeLimit timeLimit) {
-  qlever().writeMaterializedView(name, query.query_, requestTimer,
-                                 query.datasetClauses_,
-                                 std::move(cancellationHandle), timeLimit);
-}
 
 // _____________________________________________________________________________
 Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {

@@ -332,14 +332,8 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  // Given a name and query, compute the query result and write a new
-  // materialized view of this result to disk. This assumes that the access
-  // token has already been checked.
-  void writeMaterializedView(
-      const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
-      const ad_utility::Timer& requestTimer,
-      SharedCancellationHandle cancellationHandle, TimeLimit timeLimit);
+  // Grants `serverIntegration` access to private members (in particular
+  // `qlever_`) for direct inspection in tests.
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
   // Trigger an index rebuild with `indexBaseName` as the base name for the new
