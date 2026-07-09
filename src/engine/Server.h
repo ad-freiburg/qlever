@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -49,6 +51,13 @@ struct SimulateHttpRequest;
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
+  // Builds a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
+  // capturing the request-specific settings (message sender, pinning). This
+  // lets the caller bind the context to whichever snapshot is current when the
+  // operation actually runs (see `processUpdate`).
+  using MakeQueryExecutionContext =
+      absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
+          SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
@@ -192,11 +201,11 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
+          MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
+          const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+          std::optional<PlannedQuery>& plannedUpdate);
 
   // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
@@ -213,8 +222,7 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Prepare the execution of an operation.
-  auto prepareOperation(SharedIndexAndView indexAndViews,
-                        std::string_view operationName,
+  auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,

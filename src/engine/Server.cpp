@@ -262,8 +262,7 @@ auto Server::setupCancellationHandle(
 
 // ____________________________________________________________________________
 auto Server::prepareOperation(
-    SharedIndexAndView indexAndViews, std::string_view operationName,
-    std::string_view operationSPARQL,
+    std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk, std::string_view clientIp) {
@@ -297,15 +296,25 @@ auto Server::prepareOperation(
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  auto qec = qlever().createQueryExecutionContext(
-      std::move(indexAndViews),
-      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
-        (*sharedMessageSender)(std::move(json));
-      },
-      pinSubtrees, pinResult);
-  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
-                                accessTokenOk, *qec);
-  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
+  // Return a factory rather than a ready-made context, so the caller can bind
+  // it to whichever snapshot is current when the operation runs (see
+  // `processUpdate`).
+  MakeQueryExecutionContext makeQec =
+      [this, sharedMessageSender = std::move(sharedMessageSender), pinSubtrees,
+       pinResult, pinResultWithName = std::move(pinResultWithName),
+       pinNamedGeoIndex = std::move(pinNamedGeoIndex),
+       accessTokenOk](SharedIndexAndView indexAndViews) {
+        auto qec = qlever().createQueryExecutionContext(
+            std::move(indexAndViews),
+            [sharedMessageSender](std::string json) {
+              (*sharedMessageSender)(std::move(json));
+            },
+            pinSubtrees, pinResult);
+        configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                      accessTokenOk, *qec);
+        return qec;
+      };
+  return std::make_tuple(std::move(makeQec), std::move(cancellationHandle),
                          std::move(cancelTimeoutOnDestruction));
 }
 
@@ -426,15 +435,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Conan setup.
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [&index] {
-          // Use `this` explicitly to silence false-positive errors on the
-          // captured `this` being unused.
-          auto counts = index.deltaTriplesManager().modify<DeltaTriplesCount>(
-              [](auto& deltaTriples) {
+        [this] {
+          // Snapshot here, on the (single-threaded) `updateThreadPool_`, so we
+          // modify the currently active index and not a stale one that a
+          // concurrent rebuild may have swapped out (whose changes would be
+          // lost).
+          auto snapshot = indexAndViewsSnapshot();
+          return snapshot->index_.deltaTriplesManager()
+              .modify<DeltaTriplesCount>([](auto& deltaTriples) {
                 deltaTriples.clear();
                 return deltaTriples.getCounts();
               });
-          return counts;
         },
         handle);
     auto countAfterClear = co_await std::move(coroutine);
@@ -458,10 +469,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [&index, handle] {
-          // Use `this` explicitly to silence false-positive errors on the
-          // captured `this` being unused.
-          return index.deltaTriplesManager().modify<nlohmann::json>(
+        [this, handle] {
+          // Snapshot on the update thread (see `clear-delta-triples` above).
+          auto snapshot = indexAndViewsSnapshot();
+          return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
               [handle](auto& deltaTriples) {
                 return deltaTriples.vacuum(handle);
               });
@@ -640,19 +651,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
+    auto [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
+        prepareOperation(operationName, operationString,
                          std::move(messageSender), parameters,
                          timeLimit.value(), accessTokenOk, clientIp);
-    auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
         throw std::runtime_error(absl::StrCat(
             msg, ad_utility::truncateOperationString(operationString)));
       }
       if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-        co_await processUpdate(indexAndViews, std::move(operations),
-                               requestTimer, tracer, cancellationHandle, qec,
+        co_await processUpdate(std::move(makeQec), std::move(operations),
+                               requestTimer, tracer, cancellationHandle,
                                std::move(request), send, timeLimit.value(),
                                plannedQuery);
       } else {
@@ -660,9 +670,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ParsedQuery query = std::move(operations[0]);
         AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                              query.hasConstructClause());
+        // Queries run against a consistent snapshot taken at the start of the
+        // request, so build the execution context from that snapshot here.
+        auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
-                              cancellationHandle, qec, std::move(request), send,
-                              timeLimit.value(), plannedQuery);
+                              cancellationHandle, *qecPtr, std::move(request),
+                              send, timeLimit.value(), plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -1176,12 +1189,11 @@ UpdateMetadata Server::processUpdateImpl(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
+        MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  auto& index = indexAndViews->index_;
+        const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+        std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
@@ -1201,9 +1213,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &index, &requestTimer, &cancellationHandle, &updates, &qec,
-       &timeLimit, &plannedUpdate, outerTracer, &metadatas]() {
+      [this, &makeQec, &requestTimer, &cancellationHandle, &updates, &timeLimit,
+       &plannedUpdate, outerTracer, &metadatas]() {
         outerTracer->endTrace("waitingForUpdateThread");
+        // Snapshot and build the context on the update thread (see
+        // `clear-delta-triples`), so the update sees and modifies the currently
+        // active index. The resulting `plannedUpdate` keeps the context alive
+        // past this lambda via `PlannedQuery`'s shared ownership.
+        auto indexAndViews = indexAndViewsSnapshot();
+        auto& index = indexAndViews->index_;
+        auto qecPtr = makeQec(indexAndViews);
+        auto& qec = *qecPtr;
         return index.deltaTriplesManager().modify<json>(
             [this, &index, &cancellationHandle, &plannedUpdate, &updates,
              &requestTimer, &timeLimit, &qec,
