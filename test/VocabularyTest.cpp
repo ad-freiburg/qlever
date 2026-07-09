@@ -200,6 +200,36 @@ TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
 }
 
 // _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
+  using ad_utility::VocabularyType;
+  using enum VocabularyType::Enum;
+
+  RdfsVocabulary vocabulary;
+  vocabulary.resetToType(VocabularyType{InMemoryCompressed});
+  ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocabulary.createFromSet(words, filename);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  vocabulary.writeAsZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  // The reader has to select the matching type before loading, exactly as with
+  // the regular `open` mechanism.
+  RdfsVocabulary readVocabulary;
+  readVocabulary.resetToType(VocabularyType{InMemoryCompressed});
+  readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
+
+  ASSERT_EQ(vocabulary.size(), readVocabulary.size());
+  for (size_t i = 0; i < vocabulary.size(); ++i) {
+    EXPECT_EQ(vocabulary[VocabIndex::make(i)],
+              readVocabulary[VocabIndex::make(i)]);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
   TextVocabulary vocabulary;
   ad_utility::HashSet<string> words{"wordA", "wordB", "wordC"};

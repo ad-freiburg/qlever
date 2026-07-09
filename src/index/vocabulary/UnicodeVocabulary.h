@@ -29,6 +29,24 @@ class UnicodeVocabulary {
       : _comparator{std::move(comparator)},
         _underlyingVocabulary{std::forward<Args>(args)...} {}
 
+  // Build a `UnicodeVocabulary` as a non-owning, zero-copy view directly into
+  // the buffer of `serializer` by delegating to the `UnderlyingVocabulary`
+  // (which therefore has to support zero-copy deserialization itself, see
+  // `SupportsZeroCopyDeserialization`). The `_comparator` is not stored in the
+  // serialized data (see the generic serialization function below); it is
+  // reconstructed as a default-constructed comparator, exactly as for the
+  // regular, non-zero-copy deserialization. The returned vocabulary is only
+  // valid as long as the memory backing `serializer`'s buffer is valid and
+  // unchanged.
+  CPP_template(typename S)(
+      requires ad_utility::serialization::SupportsZeroCopyDeserialization<
+          UnderlyingVocabulary, S>) static UnicodeVocabulary
+      fromZeroCopyDeserializer(S& serializer) {
+    return UnicodeVocabulary{
+        UnicodeComparator{},
+        UnderlyingVocabulary::fromZeroCopyDeserializer(serializer)};
+  }
+
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
