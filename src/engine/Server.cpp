@@ -537,13 +537,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         std::make_shared<ad_utility::CancellationHandle<>>();
     auto coroutine = computeInNewThread(
         queryThreadPool_,
-        [name, query, requestTimer, cancellationHandle, timeLimit, this] {
+        [name, query, requestTimer, cancellationHandle, timeLimit,
+         this]() mutable {
           qlever().writeMaterializedView(name.value(), std::move(query.query_),
                                          requestTimer, query.datasetClauses_,
                                          std::move(cancellationHandle),
                                          timeLimit.value());
         },
-        cancellationHandle);
+        std::move(cancellationHandle));
     co_await std::move(coroutine);
 
     // Construct simple response JSON.
