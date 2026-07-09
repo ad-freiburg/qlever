@@ -456,7 +456,7 @@ void OptionalJoin::optionalJoin(
             joinColumnsLeft, joinColumnsRight, lessThanBoth,
             rowAdderOnIterators, ad_utility::noop, ad_utility::noop,
             addOptionalRow, checkCancellationLambda);
-        AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
+        AD_CORRECTNESS_CHECK(shouldBeZero == size_t{0});
       }
       return size_t{0};
     } else {
