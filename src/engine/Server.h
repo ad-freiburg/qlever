@@ -64,6 +64,7 @@ class Server {
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
   friend serverTestHelpers::SimulateHttpRequest;
 
  public:

@@ -13,6 +13,7 @@
 #include <boost/asio/use_future.hpp>
 #include <filesystem>
 
+#include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
@@ -678,6 +679,61 @@ TEST(IndexRebuilder, serverIntegration) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       performRequest(request6).get(),
       ::testing::HasSubstr("not located in the same directory"));
+
+  threadPool.join();
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  cleanFilesWithPrefix("dropped-state");
+  namespace net = boost::asio;
+  net::thread_pool threadPool{1};
+
+  std::string indexName =
+      "IndexRebuilder_serverIntegrationDroppedStateWarnings";
+  ad_utility::testing::TestIndexConfig indexConfig{
+      "<a> <b> \"some literal text\" ."};
+  indexConfig.createTextIndex = true;
+  ad_utility::testing::makeTestIndex(indexName, std::move(indexConfig));
+
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  config.persistUpdates_ = false;
+
+  // Write a materialized view to disk so it can be preloaded below.
+  {
+    qlever::Qlever engine{config};
+    engine.writeMaterializedView("droppedView", "SELECT * { ?s ?p ?o }");
+  }
+
+  // Load both the text index and the materialized view, so the rebuild warns
+  // that they will be dropped.
+  config.loadTextIndex_ = true;
+  config.preloadMaterializedViews_ = {"droppedView"};
+  Server server{4321, 1, "accessToken", config};
+
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto request = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&index-name=dropped-state&access-token=accessToken");
+  using ResT = ad_utility::httpUtils::ResponseT;
+  auto response =
+      net::co_spawn(
+          threadPool,
+          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
+              request),
+          net::use_future)
+          .get();
+  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("text search will no longer work"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("Materialized views were loaded"));
 
   threadPool.join();
 }
