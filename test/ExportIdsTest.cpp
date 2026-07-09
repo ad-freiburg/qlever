@@ -316,6 +316,9 @@ template <bool RemoveQuotesAndAngleBrackets = false,
 void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
                                      ql::span<const size_t> positions,
                                      const EscapeFunction& escape) {
+  SCOPED_TRACE(absl::StrCat(
+      "removeQuotesAndAngleBrackets=", RemoveQuotesAndAngleBrackets,
+      " returnOnlyLiterals=", returnOnlyLiterals));
   std::vector<std::optional<std::pair<std::string, const char*>>> results(
       ids.size());
 
@@ -350,7 +353,6 @@ TEST(ExportIds, resolveVocabIndexIds) {
   const Index& index = qec->getIndex();
   LocalVocab localVocab{};
   auto getId = ad_utility::testing::makeGetId(index);
-  auto result = ql::exportIds::resolveVocabIndexIds();
 }
 
 // _____________________________________________________________________________
