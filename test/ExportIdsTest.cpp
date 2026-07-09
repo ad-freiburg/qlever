@@ -309,4 +309,42 @@ TEST(ExportIds, idsToStringAndTypeEmptyInput) {
   EXPECT_TRUE(result.empty());
 }
 
+template <bool RemoveQ, bool OnlyLit, typename Escape>
+void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
+                                     ql::span<const size_t> positions,
+                                     const Escape& escape) {
+  std::vector<std::optional<std::pair<std::string, const char*>>> results(
+      ids.size());
+  ql::exportIds::resolveVocabIndexIds<RemoveQ, OnlyLit>(index, ids, positions,
+                                                        results, escape);
+  std::set<size_t> resolved(positions.begin(), positions.end());
+  LocalVocab emptyLocalVocab{};
+  for (size_t i = 0; i < ids.size(); ++i) {
+    if (resolved.count(i) != 0) {
+      // The batched result must equal the non-batched per-ID path.
+      EXPECT_EQ(results[i], ql::exportIds::idToStringAndType<removeQ, OnlyLit>(
+                                index, ids[i], emptyLocalVocab, ecape))
+    } else {
+      EXPECT_EQ(results[i], std::nullopt);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExportIds, resolveVocabIndexIds) {
+  // Build a small index with IRIs and literals of various types.
+  std::string kg =
+      "<s> <p> <o> . "
+      "<s> <q> \"hello\" . "
+      "<s> <p> 42 . "
+      "<s> <p> 3.14 .";
+  auto qec = ad_utility::testing::getQec(kg);
+  const Index& index = qec->getIndex();
+  LocalVocab localVocab{};
+  auto getId = ad_utility::testing::makeGetId(index);
+  auto result = ql::exportIds::resolveVocabIndexIds<true, true>();
+}
+
+// _____________________________________________________________________________
+
 }  // namespace
