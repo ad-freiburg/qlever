@@ -1513,11 +1513,11 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
                 << std::endl;
   }
   if (oldManager.hasLoadedViews()) {
-    AD_LOG_WARN << "Materialized views were loaded for the current index, but "
-                   "they will no longer be available after the rebuild "
-                   "completes. Restart the server using the original index to "
-                   "reload them."
-                << std::endl;
+    AD_LOG_WARN
+        << "Materialized views were loaded for the current index, but  they "
+           "will no longer be available after the rebuild completes. You'll "
+           "have to recompute them on the rebuilt index."
+        << std::endl;
   }
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
