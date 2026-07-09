@@ -581,7 +581,7 @@ TEST(ServerTest, gspPost) {
           return server.deltaTriplesManager()
               .getCurrentLocatedTriplesSharedState()
               ->getLocatedTriplesForPermutation<false>(Permutation::PSO)
-              .numTriples();
+              .numTriplesForTesting();
         },
         matcher);
   };
