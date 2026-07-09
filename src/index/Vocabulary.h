@@ -247,10 +247,10 @@ class Vocabulary {
   // `VocabularyInMemory::fromZeroCopyDeserializer`). This switches the active
   // vocabulary implementation to `VocabularyInMemory`, regardless of what was
   // previously loaded. Only possible if `UnderlyingVocabulary` is
-  // `PolymorphicVocabulary` or `VocabularyInMemory` itself; throws (via a
-  // `static_assert`) for any other vocabulary implementation. The returned
-  // vocabulary is only valid as long as the memory backing `serializer`'s
-  // buffer is valid and unchanged.
+  // `PolymorphicVocabulary` or `VocabularyInMemory` itself; for any other
+  // vocabulary implementation, this fails to compile (via a `static_assert`).
+  // The returned vocabulary is only valid as long as the memory backing
+  // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::ZeroCopyReadSerializer<
           Serializer>) void loadFromZeroCopyDeserializer(Serializer&
