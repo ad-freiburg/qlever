@@ -5,6 +5,7 @@
 #include "engine/SpatialJoinCachedIndex.h"
 
 #include <s2/mutable_s2shape_index.h>
+#include <s2/s2error.h>
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
@@ -77,9 +78,10 @@ void SpatialJoinCachedIndex::populateFromSerialized(
     std::string_view serializedShapes) {
   AD_CORRECTNESS_CHECK(pimpl_ != nullptr);
   Decoder decoder(serializedShapes.data(), serializedShapes.size());
+  S2Error error;
   bool success = pimpl_->s2index_.Init(
-      &decoder, s2shapeutil::FullDecodeShapeFactory(&decoder));
-  AD_CORRECTNESS_CHECK(success,
+      &decoder, s2shapeutil::FullDecodeShapeFactory(&decoder, error));
+  AD_CORRECTNESS_CHECK(success && error.ok(),
                        "Initializing the S2 index from its serialized form "
                        "failed, probably the input data is corrupt");
   // We call `ForceBuild` when initializing the index, and the serialization
