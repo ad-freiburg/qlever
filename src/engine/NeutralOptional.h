@@ -20,6 +20,7 @@ class NeutralOptional : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
@@ -35,9 +36,8 @@ class NeutralOptional : public Operation {
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
+  LimitOffsetHandling handlesLimitOffset() const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;

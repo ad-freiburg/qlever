@@ -23,7 +23,7 @@ message(STATUS "PROJECT_VERSION is ${PROJECT_VERSION}")
 set(CONSTANTS "#include \"CompilationInfo.h\"
 namespace qlever::version {
 constexpr std::string_view GitHash = ${GIT_HASH};
-constexpr std::string_view GitShortHash = GitHash.substr(0, 6);
+constexpr std::string_view GitShortHash = GitHash.substr(0, 7);
 constexpr std::string_view DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
 constexpr std::string_view ProjectVersion = ${PROJECT_VERSION};
 

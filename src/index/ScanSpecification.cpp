@@ -12,8 +12,7 @@ namespace {
 // Helper function to turn a triple component into a `ValueId`.
 Id getNonOptionalId(TripleComponent tripleComponent, const IndexImpl& index,
                     LocalVocab& localVocab) {
-  return std::move(tripleComponent)
-      .toValueId(index.getVocab(), localVocab, index.encodedIriManager());
+  return std::move(tripleComponent).toValueId(index, localVocab);
 }
 
 }  // namespace

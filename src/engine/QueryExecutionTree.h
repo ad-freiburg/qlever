@@ -108,11 +108,11 @@ class QueryExecutionTree {
   }
 
   // The implementation of this method calls
-  // `Operation::setPrefilterGetUpdatedQueryExecutionTree()` for the root
-  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
-  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
+  // `Operation::getUpdatedQueryExecutionTreeWithPrefilterApplied()` for the
+  // root operation. Only `<PrefilterExpression, Variable>` pairs are passed,
+  // where the corresponding `Variable` is visible in the `VariableToColumnMap`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {
@@ -173,10 +173,14 @@ class QueryExecutionTree {
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
-  // sorted accordingly, it is simply returned.
+  // sorted accordingly, it is simply returned. If `explicitSort` is `true` and
+  // a `Sort` operation has to be created, that `Sort` will not propagate a
+  // `LIMIT`/`OFFSET` to its subtree. This is used for explicit `INTERNAL SORT
+  // BY` clauses, where the complete sorted result is requested and the
+  // limit-pushdown optimization is undesired.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns);
+      const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
@@ -209,7 +213,7 @@ class QueryExecutionTree {
   // `True`.
   static std::shared_ptr<QueryExecutionTree> makeTreeWithStrippedColumns(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::set<Variable>& variables,
+      const std::set<Variable>& variablesToKeep,
       HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
   // Return the column pairs where the two `QueryExecutionTree`s have the
@@ -240,21 +244,36 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const {
-    return getRootOperation()->supportsLimitOffset();
+  LimitOffsetHandling handlesLimitOffset() const {
+    return getRootOperation()->handlesLimitOffset();
   }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
     getRootOperation()->applyLimitOffset(limitOffsetClause);
-    // Setting the limit invalidates the `cacheKey` as well as the
-    // `sizeEstimate`.
+    updateCacheKeyAndSizeEstimate();
+  }
+
+ private:
+  // Directly set the `LIMIT`/`OFFSET` on the root operation without merging
+  // and without calling `onLimitOffsetChanged`. This is the only intended way
+  // to restore a previously set limit/offset that was removed by a
+  // cloning/rewriting operation (e.g. column stripping).
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->setLimitOffsetDirectlyWithoutTriggeringHooks(
+        limitOffsetClause);
+    updateCacheKeyAndSizeEstimate();
+  }
+
+  // After any change to the limit/offset of the root operation, the cached
+  // `cacheKey_` and `sizeEstimate_` must be refreshed.
+  void updateCacheKeyAndSizeEstimate() {
     cacheKey_ = getRootOperation()->getCacheKey();
     sizeEstimate_ = getRootOperation()->getSizeEstimate();
   }
 
- private:
   QueryExecutionContext* qec_;  // No ownership
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.

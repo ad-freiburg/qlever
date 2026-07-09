@@ -294,9 +294,19 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // QLever-internal functions.
   //
   // NOTE: Predicates like `ql:has-predicate` etc. are handled elsewhere.
+  static const UnaryFuncTable unaryInternalFuncs{
+      {"envelopeLowerLeft", &makeEnvelopeLowerLeftExpression},
+      {"envelopeUpperRight", &makeEnvelopeUpperRightExpression},
+      {"isGeoPoint", &makeIsGeoPointExpression},
+      {"toEpoch", &makeToEpochExpression},
+  };
   if (checkPrefix(QL_PREFIX)) {
-    if (functionName == "isGeoPoint") {
-      return createUnary(&makeIsGeoPointExpression);
+    if (ad_utility::contains(unaryInternalFuncs, functionName)) {
+      return createUnary(unaryInternalFuncs.at(functionName));
+    } else if (functionName == "prefix-match") {
+      return createBinary(&makePrefixMatchExpression);
+    } else if (functionName == "simplifyGeometry") {
+      return createBinary(&makeSimplifyGeometryExpression);
     }
   }
 
@@ -436,9 +446,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-      return PropertyPath::fromIri(
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              item.toSparql()));
+      return PropertyPath::fromIri(item);
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.
@@ -940,7 +948,6 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     }
   };
 
-  using Iri = TripleComponent::Iri;
   // The graph specified in the `WITH` clause or `std::monostate{}` if there was
   // no with clause.
   auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
@@ -1264,7 +1271,6 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
   VarOrIri varOrIri = visit(ctx->varOrIri());
-  using Iri = TripleComponent::Iri;
   auto serviceIri =
       std::visit(ad_utility::OverloadCallOperator{
                      [&ctx](const Variable&) -> Iri {
@@ -1280,6 +1286,11 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == EXTERNAL_VALUES_IRI ||
+             ql::starts_with(serviceIri.toStringRepresentation(),
+                             EXTERNAL_VALUES_IRI_PREFIX)) {
+    return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
+                                                                    serviceIri);
   } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
@@ -1438,14 +1449,11 @@ TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visit(Parser::IrirefContext* ctx) const {
-  if (baseIri_.empty()) {
+  if (!baseIri_.has_value()) {
     return ctx->getText();
   }
-  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
-  // Handle IRIs with base IRI.
   return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-             ctx->getText(), baseIri_.getBaseIri(false),
-             baseIri_.getBaseIri(true))
+             ctx->getText(), baseIri_.value())
       .toStringRepresentation();
 }
 
@@ -1527,7 +1535,9 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
         ctx,
         "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
   }
-  baseIri_ = TripleComponent::Iri::fromIriref(visit(ctx->iriref()));
+  auto iri =
+      TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
+  baseIri_ = qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
 }
 
 // ____________________________________________________________________________________
@@ -1855,17 +1865,12 @@ PredicateObjectPairsAndTriples Visitor::visit(
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    // This is an artefact of there being two distinct Iri types.
-    return std::visit(ad_utility::OverloadCallOperator{
-                          [](const Variable& v) -> GraphTerm { return v; },
-                          [](const TripleComponent::Iri& i) -> GraphTerm {
-                            return Iri(i.toStringRepresentation());
-                          }},
+    return std::visit(ad_utility::staticCast<GraphTerm>,
                       visit(ctx->varOrIri()));
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{a.toStringRepresentation()}};
+    return GraphTerm{a};
   }
 }
 
@@ -2051,9 +2056,7 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(
-          ad_utility::triple_component::Iri::fromStringRepresentation(
-              term.toSparql()));
+      return PropertyPath::fromIri(std::get<Iri>(term));
     }
   };
   for (auto& triple : objectList.second) {
@@ -2146,6 +2149,10 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 
 // ____________________________________________________________________________________
 std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
+  if (ctx->pathSyntaxExtension()) {
+    return visit(ctx->pathSyntaxExtension());
+  }
+
   std::string mod = ctx->getText();
   if (mod == "*") {
     return {0, std::numeric_limits<size_t>::max()};
@@ -2155,6 +2162,38 @@ std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
     AD_CORRECTNESS_CHECK(mod == "?");
     return {0, 1};
   }
+}
+
+// ____________________________________________________________________________
+std::pair<size_t, size_t> Visitor::visit(
+    Parser::PathSyntaxExtensionContext* ctx) {
+  // Syntax extension from
+  // https://www.w3.org/TR/sparql11-property-paths/#path-syntax:
+  //
+  //   path{n}    Exactly n repetitions of `path`.
+  //   path{n,m}  Between n and m repetitions of `path`.
+  //   path{n,}   At least n repetitions of `path`.
+  //   path{,n}   At most n repetitions of `path`.
+
+  if (ctx->minMax()) {
+    auto stepsMin = visit(ctx->minMax()->integer(0));
+    auto stepsMax = visit(ctx->minMax()->integer(1));
+    return {stepsMin, stepsMax};
+  }
+
+  if (ctx->exactLength()) {
+    auto stepsExact = visit(ctx->exactLength()->integer());
+    return {stepsExact, stepsExact};
+  }
+
+  if (ctx->onlyMin()) {
+    auto stepsMin = visit(ctx->onlyMin()->integer());
+    return {stepsMin, std::numeric_limits<size_t>::max()};
+  }
+
+  AD_CORRECTNESS_CHECK(ctx->onlyMax());
+  auto stepsMax = visit(ctx->onlyMax()->integer());
+  return {0, stepsMax};
 }
 
 // ____________________________________________________________________________________
@@ -2251,7 +2290,8 @@ template <typename TripleType, typename Func>
 TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
                                     Func iriStringToPredicate) {
   typename TripleType::second_type triples;
-  GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
+  GraphTerm nextTerm{Iri::fromIrirefValidated(
+      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")};
   for (auto& graphNode : ql::ranges::reverse_view(elements)) {
     GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
@@ -2272,9 +2312,10 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
 
 // _____________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
-    return GraphTerm{Iri{std::move(iri)}};
-  });
+  return toRdfCollection(visitVector(ctx->graphNode()),
+                         [](const std::string& iri) {
+                           return GraphTerm{Iri::fromIrirefValidated(iri)};
+                         });
 }
 
 // _____________________________________________________________________________
@@ -2323,10 +2364,10 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
   if (ctx->blankNode()) {
     return visit(ctx->blankNode());
   } else if (ctx->iri()) {
-    // TODO<joka921> Unify.
-    return Iri{std::string{visit(ctx->iri()).toStringRepresentation()}};
+    return visit(ctx->iri());
   } else if (ctx->NIL()) {
-    return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
+    return Iri::fromIrirefValidated(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
   } else {
     return visitAlternative<Literal>(ctx->numericLiteral(),
                                      ctx->booleanLiteral(), ctx->rdfLiteral());
@@ -2603,7 +2644,7 @@ ExpressionPtr Visitor::visit(Parser::BrackettedExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
+ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visit(ctx->aggregate());
   } else if (ctx->regexExpression()) {
@@ -2653,8 +2694,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
-    return makeIriOrUriExpression(std::move(argList[0]),
-                                  std::make_unique<IriExpression>(baseIri_));
+    return makeIriOrUriExpression(
+        std::move(argList[0]),
+        std::make_unique<IriExpression>(
+            baseIri_.has_value()
+                ? TripleComponent::Iri::fromUri(baseIri_.value())
+                : TripleComponent::Iri{}));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {

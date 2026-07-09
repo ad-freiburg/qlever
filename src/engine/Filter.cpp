@@ -53,9 +53,10 @@ std::string Filter::getDescriptor() const {
 //______________________________________________________________________________
 void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
-      _expression.getPrefilterExpressionForMetadata();
-  auto optNewSubTree = _subtree->setPrefilterGetUpdatedQueryExecutionTree(
-      std::move(prefilterPairs));
+      _expression.getPrefilterExpressionForMetadata(getLocalVocabContext());
+  auto optNewSubTree =
+      _subtree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          std::move(prefilterPairs));
   if (optNewSubTree.has_value()) {
     _subtree = std::move(optNewSubTree.value());
   }
@@ -69,7 +70,7 @@ Result Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTableView());
     AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
@@ -113,7 +114,7 @@ Result Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+CPP_template_def(typename Table)(requires IdTableLike<Table>)
     IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
                                   Table&& idTable) const {
   size_t width = idTable.numColumns();
@@ -128,8 +129,8 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int WIDTH, typename Table)(
-    requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
+CPP_template_def(int WIDTH,
+                 typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                       std::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
@@ -137,7 +138,8 @@ CPP_template_def(int WIDTH, typename Table)(
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
       cancellationHandle_, deadline_);
 
@@ -243,6 +245,11 @@ size_t Filter::getCostEstimate() {
                  _subtree->getSizeEstimate(),
                  _subtree->getRootOperation()->getPrimarySortKeyVariable())
              .costEstimate;
+}
+
+// _____________________________________________________________________________
+bool Filter::isDeterministicImpl() const {
+  return _expression.isDeterministic();
 }
 
 // _____________________________________________________________________________

@@ -13,12 +13,15 @@
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
 #include "backports/three_way_comparison.h"
-#include "engine/LocalVocab.h"
+#include "engine/UpdateMetadata.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
+#include "index/IndexRebuilderTypes.h"
+#include "index/LocalVocab.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "util/LruCache.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 
@@ -68,22 +71,6 @@ struct LocatedTriplesState {
 // `LocatedTriplesState` can change in some cases.
 using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 
-// A class for keeping track of the number of triples of the `DeltaTriples`.
-struct DeltaTriplesCount {
-  int64_t triplesInserted_;
-  int64_t triplesDeleted_;
-
-  /// Output as json. The signature of this function is mandated by the json
-  /// library to allow for implicit conversion.
-  friend void to_json(nlohmann::json& j, const DeltaTriplesCount& count);
-
-  friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
-                                     const DeltaTriplesCount& rhs);
-
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DeltaTriplesCount,
-                                              triplesInserted_, triplesDeleted_)
-};
-
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
 //
@@ -109,6 +96,13 @@ class DeltaTriples {
   using Triples = std::vector<IdTriple<0>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
+  // Whether `insertTriples`/`deleteTriples` consolidate the located triples
+  // immediately. Consolidation is required before any read access, but it is
+  // expensive, so batch callers that issue several insert/delete calls in a row
+  // should pass `Consolidate::No` and call `consolidateAll()` exactly once at
+  // the end.
+  enum class Consolidate { Yes, No };
+
  private:
   // The index to which these triples are added.
   const IndexImpl& index_;
@@ -117,9 +111,9 @@ class DeltaTriples {
   // `shared_ptr` so that we can easily convert them to a
   // `LocatedTriplesSnapshot`.
   std::shared_ptr<LocatedTriplesState> locatedTriples_ =
-      std::make_shared<LocatedTriplesState>(
+      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
           LocatedTriplesPerBlockAllPermutations<false>{},
-          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0);
+          LocatedTriplesPerBlockAllPermutations<true>{}, std::nullopt, 0});
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -127,6 +121,23 @@ class DeltaTriples {
 
   // See the documentation of `setPersist()` below.
   std::optional<std::string> filenameForPersisting_;
+
+  // Store the id of the `ql:langtag` predicate to avoid repeated disk lookups.
+  // This is initialized on first use.
+  Id languagePredicate_ = Id::makeUndefined();
+
+  // Store commonly used language tags of the form `<@lang>` to avoid repeated
+  // disk lookups.
+  static constexpr size_t languageTagCacheSize_ = 1000;
+  ad_utility::util::LRUCache<std::string, Id> languageTagCache_{
+      languageTagCacheSize_};
+
+  // Cache commonly used predicates and their IRI representation between calls
+  // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
+  // are frequently used, so we try to avoid an expensive lookup from disk.
+  static constexpr size_t predicateCacheSize_ = 1000;
+  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
+      predicateCache_{predicateCacheSize_};
 
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
@@ -142,32 +153,25 @@ class DeltaTriples {
   // Generic state wrapper to avoid code duplication for internal and regular
   // triples.
   template <bool isInternal>
-  struct TriplesToHandles {
-    // Each delta triple needs to know where it is stored in each of the six
-    // `LocatedTriplesPerBlock` above.
-    struct LocatedTripleHandles {
-      using It = LocatedTriples::iterator;
-      std::array<It, Permutation::all<isInternal>().size()> handles_;
-
-      LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
-    };
-    using TriplesToHandlesMap =
-        ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>;
+  struct TriplesSets {
+    using TriplesSet = ad_utility::HashSet<IdTriple<0>>;
     // The sets of triples added to and subtracted from the original index. Any
     // triple can be at most in one of the sets. The information whether a
     // triple is in the index is missing. This means that a triple that is in
     // the index may still be in the inserted set and vice versa.
-    TriplesToHandlesMap triplesInserted_;
-    TriplesToHandlesMap triplesDeleted_;
+    TriplesSet triplesInserted_;
+    TriplesSet triplesDeleted_;
   };
 
-  TriplesToHandles<false> triplesToHandlesNormal_;
-  TriplesToHandles<true> triplesToHandlesInternal_;
+  // TODO<qup42>: investigate whether we still need the state at all and whether
+  // it can be replaced by a `HashMap<Triple, insertedOrDeleted>`.
+  TriplesSets<false> triplesSetsNormal_;
+  TriplesSets<true> triplesSetsInternal_;
 
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
+  explicit DeltaTriples(const IndexImpl& index);
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
@@ -189,46 +193,58 @@ class DeltaTriples {
   // structures.
   void clear();
 
+  // Remove redundant insertions (triples already in the index) and redundant
+  // deletions (triples not in the index). The triples to be removed are taken
+  // from the blocks in PSO that have at least `vacuum-minimum-block-size`
+  // triples. Returns aggregated statistics.
+  nlohmann::json vacuum(
+      ad_utility::SharedCancellationHandle cancellationHandle);
+
   // The number of delta triples added and subtracted.
   int64_t numInserted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesNormal_.triplesInserted_.size());
+    return static_cast<int64_t>(triplesSetsNormal_.triplesInserted_.size());
   }
   int64_t numDeleted() const {
-    return static_cast<int64_t>(triplesToHandlesNormal_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesSetsNormal_.triplesDeleted_.size());
   }
   DeltaTriplesCount getCounts() const;
 
   // The number of internal delta triples added and subtracted.
   int64_t numInternalInserted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesInternal_.triplesInserted_.size());
+    return static_cast<int64_t>(triplesSetsInternal_.triplesInserted_.size());
   }
   int64_t numInternalDeleted() const {
-    return static_cast<int64_t>(
-        triplesToHandlesInternal_.triplesDeleted_.size());
+    return static_cast<int64_t>(triplesSetsInternal_.triplesDeleted_.size());
   }
 
   // From the triples that are explicitly being added to the index, compute a
   // bunch of triples to be inserted into the internal permutation to make
   // things like efficient language filters work. This currently performs a
   // lookup from disk to check the language tag, but in the future this may be
-  // implemented more efficiently.
-  Triples makeInternalTriples(const Triples& triples);
+  // implemented more efficiently. If `insertion` is false, this indicates that
+  // the triples are meant for deletion. In that case no triples are returned
+  // that may be unsafe to delete. In particular this refers to triples of the
+  // form `<object> ql:langtag <@language>`.
+  Triples makeInternalTriples(const Triples& triples, bool insertion);
 
-  // Insert triples.
+  // Insert triples. By default the located triples are consolidated
+  // immediately; pass `Consolidate::No` when batching several inserts/deletes
+  // and calling `consolidateAll()` once at the end.
+  template <Consolidate consolidate = Consolidate::Yes>
   void insertTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  // Delete triples.
+  // Delete triples. See `insertTriples` for the meaning of `consolidate`.
+  template <Consolidate consolidate = Consolidate::Yes>
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
                      ad_utility::timer::TimeTracer& tracer =
                          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Insert internal delta triples for test code. In practice these are inferred
   // from regular triples, so `insertTriples` and `deleteTriples` will insert
-  // them on their own.
+  // them on their own. See `insertTriples` for the meaning of `consolidate`.
+  template <Consolidate consolidate = Consolidate::Yes>
   void insertInternalTriplesForTesting(
       CancellationHandle cancellationHandle, Triples triples,
       ad_utility::timer::TimeTracer& tracer =
@@ -236,7 +252,8 @@ class DeltaTriples {
 
   // Delete internal delta triples for test code. In practice these are inferred
   // from regular triples, so `insertTriples` and `deleteTriples` will insert
-  // them on their own.
+  // them on their own. See `insertTriples` for the meaning of `consolidate`.
+  template <Consolidate consolidate = Consolidate::Yes>
   void deleteInternalTriplesForTesting(
       CancellationHandle cancellationHandle, Triples triples,
       ad_utility::timer::TimeTracer& tracer =
@@ -272,27 +289,64 @@ class DeltaTriples {
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
       bool setInternalMetadata);
 
+  // Consolidate the located triples in all permutations. Must be called after a
+  // batch of insertTriples/deleteTriples, before any query access or metadata
+  // update.
+  // Note: This function allows doing updates more efficiently, but it is
+  // expensive and should only be called once at the end.
+  void consolidateAll();
+
   // Update the block metadata.
   void updateAugmentedMetadata();
 
+  // Create a shallow copy of the local vocab such that it can be processed
+  // without holding the lock. You have to make sure separately that the
+  // pointers that the returned `LocalVocabIndex`es represent are still valid.
+  std::pair<std::vector<LocalVocabIndex>,
+            std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                            OwnedBlocksEntry>>
+  copyLocalVocab() const;
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Compute the diff between `oldState` (the snapshot used to start the index
+  // rebuild) and `newState` (the current snapshot), remap the IDs using
+  // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
+  void addFromSnapshotDiff(
+      const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
+      CancellationHandle cancellationHandle,
+      ad_utility::timer::TimeTracer& tracer);
+
  private:
+  // Remap the `Id` from the old index to the new index using the given
+  // `idMapping`. If the `Id` can't be remapped, this means that it was added
+  // after the mapping was created and will be left unchanged.
+  static void remapId(
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
+#endif
+
+  // Call `consolidateAll()` iff `consolidate` is `Consolidate::Yes`. Used by
+  // the insert/delete functions to implement their `consolidate` template
+  // parameter.
+  template <Consolidate consolidate>
+  void consolidateIfRequested(ad_utility::timer::TimeTracer& tracer);
+
   // The proper state according to the template parameter. This will either
-  // return a reference to `triplesToHandlesInternal_` or
-  // `triplesToHandlesNormal_`.
+  // return a reference to `triplesSetsInternal_` or
+  // `triplesSetsNormal_`.
   template <bool isInternal>
-  TriplesToHandles<isInternal>& getState();
+  TriplesSets<isInternal>& getState();
 
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
   // When `insertOrDelete` is `true`, the triples are inserted, otherwise
-  // deleted. Return the iterators of where it was added (so that we can easily
-  // delete it again from these maps later).
+  // deleted.
   template <bool isInternal>
-  std::vector<typename TriplesToHandles<isInternal>::LocatedTripleHandles>
-  locateAndAddTriples(CancellationHandle cancellationHandle,
-                      ql::span<const IdTriple<0>> triples, bool insertOrDelete,
-                      ad_utility::timer::TimeTracer& tracer =
-                          ad_utility::timer::DEFAULT_TIME_TRACER);
+  void locateAndAddTriples(CancellationHandle cancellationHandle,
+                           ql::span<const IdTriple<0>> triples,
+                           bool insertOrDelete,
+                           ad_utility::timer::TimeTracer& tracer =
+                               ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Common implementation for `insertTriples` and `deleteTriples`. When
   // `insertOrDelete` is `true`, the triples are inserted, `targetMap` contains
@@ -315,18 +369,37 @@ class DeltaTriples {
   void rewriteLocalVocabEntriesAndBlankNodes(Triples& triples);
   FRIEND_TEST(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes);
 
-  // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
-  // argument are iterators for each list, as returned by the method
-  // `locateTripleInAllPermutations` above.
-  //
-  // NOTE: The iterators are invalid afterward. That is OK, as long as we also
-  // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
-  // which stores these iterators.
-  template <bool isInternal>
-  void eraseTripleInAllPermutations(
-      typename TriplesToHandles<isInternal>::LocatedTripleHandles& handles);
+  // The difference between two `LocatedTriplesState` snapshots, split into
+  // inserted/deleted and internal/external triples.
+  class LocatedTriplesDiff {
+    std::array<Triples, 4> data_;
+
+   public:
+    LocatedTriplesDiff(Triples inserted, Triples deleted,
+                       Triples internalInserted, Triples internalDeleted);
+
+    // Run `func` on all `Id` references contained in `data_`.
+    template <typename Func>
+    void remapIds(Func func);
+
+    // Provides access to the corresponding entry in `data_`.
+    template <bool isInternal, bool insertOrDelete>
+    Triples& triples();
+  };
+
+  // Compute which located triples are present in `newState` but not in
+  // `oldState`.
+  static LocatedTriplesDiff computeLocatedTriplesDiff(
+      const LocatedTriplesState& oldState, const LocatedTriplesState& newState);
+
+  // Drop multiple update triples in a permutation.
+  // Note: This is currently used for `vacuum`.
+  void eraseTriplesInPermutation(
+      Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
+      auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle);
 
   friend class DeltaTriplesManager;
+  FRIEND_TEST(DeltaTriplesTest, remapId);
 };
 
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding
@@ -365,6 +438,17 @@ class DeltaTriplesManager {
   // This can be safely used to execute a query without interfering with future
   // updates.
   LocatedTriplesSharedState getCurrentLocatedTriplesSharedState() const;
+
+  // In addition to the located triples shared state, also acquire a copy of the
+  // local vocab indices and the local blank node blocks owned by the local
+  // vocab. As long as the returned `LocatedTriplesSharedState` is alive, the
+  // local vocab entries and blank nodes will remain valid. So the return value
+  // basically acts as a complete shallow copy of the current state of the
+  // `DeltaTriples`.
+  std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
+                             OwnedBlocksEntry>>
+  getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

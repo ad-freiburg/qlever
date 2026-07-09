@@ -9,7 +9,8 @@ add_library(parser
         RdfParser.cpp
         Tokenizer.cpp
         WordsAndDocsFileParser.cpp
-        ParallelBuffer.cpp
+        AsyncBlockSource.cpp
+        AsyncFileBlockDriver.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
         GraphPatternOperation.cpp
@@ -30,5 +31,8 @@ add_library(parser
         Quads.cpp
         UpdateTriples.cpp
         MaterializedViewQuery.cpp
+        GraphPatternAnalysis.cpp
+        ExternalValuesQuery.cpp
+        VariableCounter.cpp
 )
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping global re2::re2 util engine index rdfTypes)

@@ -8,7 +8,7 @@
 /// Helper macros that allow suppressing specific warnings in certain compiler
 /// versions that turn out to be false positives.
 
-#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 13)
+#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 15)
 
 // Disable the `maybe-uninitialized` warning, which has many false positives.
 #define DISABLE_UNINITIALIZED_WARNINGS \
@@ -37,6 +37,31 @@
   _Pragma("GCC diagnostic push")             \
       _Pragma("GCC diagnostic ignored \"-Wnon-template-friend\"")
 
+// Disable the `aggressive-loop-optimizations` warning, which produces false
+// positives on GCC 13 when `std::advance` is inlined into
+// `std::vector::assign` through a `ranges::elements_view` over a hash map.
+#define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS \
+  _Pragma("GCC diagnostic push")             \
+      _Pragma("GCC diagnostic ignored \"-Waggressive-loop-optimizations\"")
+
+// Disable the `dangling-reference` warning, which produces false positives
+// when `std::visit` returns a reference or when a reference is bound to the
+// result of an immediately-invoked lambda that returns a reference to a static
+// local. The warning was introduced in GCC 13; the pragma is a no-op on
+// earlier versions that don't know the flag.
+#define DISABLE_DANGLING_REFERENCE_WARNINGS \
+  _Pragma("GCC diagnostic push")            \
+      _Pragma("GCC diagnostic ignored \"-Wdangling-reference\"")
+
+// Disable the `array-bounds` warning, which produces false positives on GCC 13
+// when the comparators in `ExternalSortFunctors.h` are inlined into
+// `std::__insertion_sort`. GCC then conflates the `Row<ValueId, 5>` and
+// `Row<ValueId, 4>` instantiations and wrongly believes an out-of-bounds access
+// happens.
+#define DISABLE_ARRAY_BOUNDS_WARNINGS \
+  _Pragma("GCC diagnostic push")      \
+      _Pragma("GCC diagnostic ignored \"-Warray-bounds\"")
+
 // Re-enable the warnings disabled by the last `DISABLE_...` call.
 #define GCC_REENABLE_WARNINGS _Pragma("GCC diagnostic pop")
 
@@ -46,6 +71,9 @@
 #define DISABLE_STRINGOP_OVERFLOW_WARNINGS
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define DISABLE_FREE_NONHEAP_WARNINGS
+#define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
+#define DISABLE_DANGLING_REFERENCE_WARNINGS
+#define DISABLE_ARRAY_BOUNDS_WARNINGS
 #define GCC_REENABLE_WARNINGS
 #endif
 

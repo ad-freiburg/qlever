@@ -36,8 +36,6 @@ class ServiceTest : public ::testing::Test {
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
-  ad_utility::AllocatorWithLimit<Id> testAllocator =
-      ad_utility::testing::makeAllocator();
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
   // is used by default by a `Service` operation (see the constructor in
@@ -196,8 +194,8 @@ TEST_F(ServiceTest, computeResult) {
     // Compute the Result lazily for the given Service and check that the
     // resulting IdTable equals the expected IdTable-vector.
     auto checkLazyResult =
-        [](Service& service,
-           const std::vector<std::vector<std::string>>& expIdTableVector) {
+        [this](Service& service,
+               const std::vector<std::vector<std::string>>& expIdTableVector) {
           auto result = service.computeResultOnlyForTesting(true);
 
           // compute resulting idTable
@@ -209,12 +207,12 @@ TEST_F(ServiceTest, computeResult) {
           }
 
           // create expected idTable
-          auto get =
-              [&localVocabs](
-                  const std::string& s) -> std::optional<LocalVocabIndex> {
+          auto get = [this, &localVocabs](
+                         std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index = localVocab.getIndexOrNullopt(
-                  ad_utility::triple_component::LiteralOrIri::iriref(s));
+              auto index =
+                  localVocab.getIndexOrNullopt(LocalVocabEntry::fromIriref(
+                      s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
               }
@@ -267,7 +265,7 @@ TEST_F(ServiceTest, computeResult) {
     // status-code isn't ok
     expectThrowOrSilence(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
-        "SERVICE responded with HTTP status code: 400, Bad Request.",
+        "SERVICE responded with HTTP status code: 400, Bad Request",
         boost::beast::http::status::bad_request,
         "application/sparql-results+json");
     // contentType doesn't match
@@ -275,7 +273,7 @@ TEST_F(ServiceTest, computeResult) {
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
         "QLever requires the endpoint of a SERVICE to send "
         "the result as 'application/sparql-results+json' but "
-        "the endpoint sent 'wrong/type'.",
+        "the endpoint sent 'wrong/type'",
         boost::beast::http::status::ok, "wrong/type");
 
     // or Result has invalid structure
@@ -302,12 +300,12 @@ TEST_F(ServiceTest, computeResult) {
     expectThrowOrSilence(
         "{\"head\": {},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
     // wrong variables type (array of strings expected)
     expectThrowOrSilence(
         "{\"head\": {\"vars\": [\"x\", \"y\", 3]},"
         "\"results\": {\"bindings\": []}}",
-        "\"head\" section is not according to the SPARQL standard.");
+        "\"head\" section is not according to the SPARQL standard");
 
     // Internal parser errors.
     expectThrowOrSilence(
@@ -321,8 +319,8 @@ TEST_F(ServiceTest, computeResult) {
         getResultFunctionFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
-            std::make_exception_ptr(
-                ad_utility::CancellationException("Mock Cancellation")))};
+            std::make_exception_ptr(ad_utility::CancellationException(
+                ad_utility::CancellationState::MANUAL, "Mock Cancellation")))};
 
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         serviceSilent.computeResultOnlyForTesting(),
@@ -362,7 +360,7 @@ TEST_F(ServiceTest, computeResult) {
     // value -> undefined value
     auto result3 = runComputeResult(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
-    EXPECT_TRUE(result3.idTable().at(1, 1).isUndefined());
+    EXPECT_TRUE(result3.idTableView()(1, 1).isUndefined());
 
     testQec->clearCacheUnpinnedOnly();
 
@@ -382,9 +380,10 @@ TEST_F(ServiceTest, computeResult) {
     Id idY = getId("<y>");
     const auto& localVocab = result.localVocab();
     EXPECT_EQ(localVocab.size(), 3);
-    auto get = [&localVocab](const std::string& s) {
+    const auto& localVocabContext = testQec->getLocalVocabContext();
+    auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          ad_utility::triple_component::LiteralOrIri::iriref(s));
+          LocalVocabEntry::fromIriref(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -399,7 +398,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check that the result table corresponds to the contents of the JSON.
     IdTable expectedIdTable = makeIdTableFromVector(
         {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-    EXPECT_EQ(result.idTable(), expectedIdTable);
+    EXPECT_EQ(result.idTableView(), expectedIdTable);
 
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
@@ -426,9 +425,8 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
-        ". ?y "
-        "<is-a> ?z2 . }";
+        "{ ?x <ble> ?y . ?y <is-a> ?z2 . VALUES (?x ?y) { (<x> <y>) "
+        "(<blu> <bla>) } }";
 
     Service serviceOperation5{
         testQec, parsedServiceClause5,
@@ -499,8 +497,7 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
       false};
 
   std::string_view expectedSparqlQuery =
-      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
-      "?c } } }";
+      " SELECT ?a { { SELECT ?obj WHERE { ?a ?b ?c } } VALUES (?a) { (<a>) } }";
 
   Service serviceOperation{
       testQec, parsedServiceClause,
@@ -509,6 +506,27 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
+  // Normal body: VALUES clause appears after the body content.
+  EXPECT_EQ(
+      Service::pushDownValues("{ ?x <ble> ?y . }", "VALUES (?x) { (<a>) } "),
+      "{\n ?x <ble> ?y . \nVALUES (?x) { (<a>) } \n}");
+
+  // Subquery body: subquery is wrapped in braces and VALUES appears after.
+  EXPECT_EQ(Service::pushDownValues("{ SELECT ?a WHERE { ?a ?b ?c } }",
+                                    "VALUES (?a) { (<a>) } "),
+            "{\n{ SELECT ?a WHERE { ?a ?b ?c } }\nVALUES (?a) { (<a>) } \n}");
+
+  // BIND body: VALUES is placed AFTER the BIND so the remote endpoint does not
+  // see the variable as already bound when it evaluates the BIND expression.
+  // Reproducer: SELECT * WHERE { VALUES ?x { 1 }
+  //             SERVICE <...> { BIND (1 AS ?x) } }
+  EXPECT_EQ(
+      Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
+      "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
 // _____________________________________________________________________________
@@ -722,9 +740,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry(
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "a\"b\"c"));
+  auto str = LocalVocabEntry::literalWithoutQuotes("a\"b\"c", index);
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 
@@ -817,13 +833,13 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
    public:
     MockValues(QueryExecutionContext* qec,
                parsedQuery::SparqlValues parsedValues)
-        : Values(qec, parsedValues) {}
+        : Operation{qec}, Values(qec, parsedValues) {}
 
     Result computeResult([[maybe_unused]] bool requestLaziness) override {
       Result res = Values::computeResult(false);
 
       if (!requestLaziness) {
-        return Result(Result::IdTableVocabPair(res.idTable().clone(),
+        return Result(Result::IdTableVocabPair(res.cloneIdTable(),
                                                res.localVocab().clone()),
                       res.sortedBy());
       }
@@ -838,7 +854,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   co_yield pair;
                   idt.clear();
                 }
-              }(res.idTable().clone()),
+              }(res.cloneIdTable()),
               res.sortedBy()};
     }
   };
@@ -962,8 +978,129 @@ TEST_F(ServiceTest, clone) {
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json")};
 
+  // SERVICE performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(service.isDeterministic());
   auto clone = service.clone();
   ASSERT_TRUE(clone);
   EXPECT_THAT(service, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, serviceAllowedIriPrefixes) {
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  parsedQuery::Service parsedServiceClauseSilent{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      true};
+
+  std::string_view expectedUrl = "http://localhost:80/api";
+  std::string_view expectedSparqlQuery =
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y { }";
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  auto makeService = [&](const parsedQuery::Service& clause) {
+    return Service{
+        testQec, clause,
+        getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result)};
+  };
+
+  // With an empty whitelist (default), all URLs should be allowed.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With a matching prefix, the IRI should be allowed.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://localhost/"});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With a non-matching prefix, the IRI should be rejected.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/"});
+    auto s = makeService(parsedServiceClause);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
+                                 ::testing::HasSubstr("not allowed"));
+  }
+
+  // With SILENT keyword, the rejected URL should be silenced.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/"});
+    auto s = makeService(parsedServiceClauseSilent);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With multiple prefixes, matching any should allow.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/", "http://localhost/"});
+    auto s = makeService(parsedServiceClause);
+    EXPECT_NO_THROW(s.computeResultOnlyForTesting());
+  }
+
+  // With multiple prefixes, none matching should reject.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::serviceAllowedIriPrefixes_>(
+        std::vector<std::string>{"http://example.org/", "http://other.org/"});
+    auto s = makeService(parsedServiceClause);
+    AD_EXPECT_THROW_WITH_MESSAGE(s.computeResultOnlyForTesting(),
+                                 ::testing::HasSubstr("not allowed"));
+  }
+}
+
+// Test that a `Service` operation correctly passes the `maxRedirects` parameter
+// to the HTTP client. The actual redirect handling is tested in `HttpTest.cpp`.
+TEST_F(ServiceTest, redirectsIntegration) {
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://example.com/api>"),
+      "",
+      "{ }",
+      false};
+  auto result = genJsonResult({"x", "y"}, {{"a", "b"}});
+
+  // Test with default setting for `maxRedirects`, which is 1.
+  {
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(1)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
+
+  // Test with custom setting for `maxRedirects`.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
+    httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
+                                                        testing::Eq(5)};
+    Service service{testQec, parsedServiceClause,
+                    httpClientTestHelpers::getResultFunctionFactory(
+                        result, "application/sparql-results+json",
+                        boost::beast::http::status::ok, matchers)};
+    EXPECT_NO_THROW(service.computeResultOnlyForTesting());
+  }
 }

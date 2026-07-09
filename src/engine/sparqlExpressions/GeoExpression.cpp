@@ -53,6 +53,14 @@ NARY_EXPRESSION(MetricAreaExpression, 1,
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(
+    EnvelopeLowerLeftExpression, 1,
+    FV<ad_utility::WktEnvelopeCorner<ad_utility::BoundingBoxCorner::LOWER_LEFT>,
+       GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
+                FV<ad_utility::WktEnvelopeCorner<
+                       ad_utility::BoundingBoxCorner::UPPER_RIGHT>,
+                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
 NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
@@ -69,6 +77,10 @@ NARY_EXPRESSION(MetricLengthExpression, 1,
 NARY_EXPRESSION(
     GeometryNExpression, 2,
     FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
+
+NARY_EXPRESSION(
+    SimplifyGeometryExpression, 2,
+    FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
@@ -171,6 +183,13 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeSimplifyGeometryExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2) {
+  return std::make_unique<SimplifyGeometryExpression>(std::move(child1),
+                                                      std::move(child2));
+}
+
+// _____________________________________________________________________________
 template <SpatialJoinType Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
@@ -189,6 +208,18 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
   return std::make_unique<NumGeometriesExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeLowerLeftExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
 }
 
 namespace {

@@ -91,7 +91,7 @@ TEST_F(LoadTest, computeResult) {
       auto tr = generateLocationTrace(loc);
       Load load{testQec, pq, sendFunc};
       auto res = load.computeResultOnlyForTesting();
-      EXPECT_THAT(res.idTable(), testing::IsEmpty());
+      EXPECT_THAT(res.idTableView(), testing::IsEmpty());
       EXPECT_THAT(res.localVocab(), testing::IsEmpty());
     };
 
@@ -146,23 +146,22 @@ TEST_F(LoadTest, computeResult) {
                 responseBody, boost::beast::http::status::ok, contentType)};
         auto res = load.computeResultOnlyForTesting();
 
-        auto& idTable = res.idTable();
+        const auto& idTable = res.idTableView();
         auto& lv = res.localVocab();
 
         std::vector<std::vector<IntOrId>> idVector;
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            const auto& idx = testQec->getIndex();
-            auto idOpt =
-                field.toValueId(idx.getVocab(), idx.encodedIriManager());
+            auto idOpt = field.toValueId(testQec->getIndex());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
               using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-              auto lveOpt = lv.getIndexOrNullopt(
+              auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
                   field.isLiteral() ? LiteralOrIri{field.getLiteral()}
-                                    : LiteralOrIri{field.getIri()});
+                                    : LiteralOrIri{field.getIri()},
+                  testQec->getLocalVocabContext()});
               ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }
@@ -277,6 +276,8 @@ TEST_F(LoadTest, getCacheKey) {
 
 TEST_F(LoadTest, clone) {
   Load load{testQec, pqLoad("https://mundhahs.dev")};
+  // LOAD performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(load.isDeterministic());
   // When the results are not cached, cloning should create a decoupled object.
   // The cache breaker will be different.
   {

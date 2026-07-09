@@ -84,6 +84,12 @@ class DateYearOrDuration {
   // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const { return bits_ >> numPayloadDateBits == datetime; }
 
+  // True iff a large year is stored.
+  bool isLongYear() const {
+    return (bits_ >> numPayloadDateBits == negativeYear) ||
+           (bits_ >> numPayloadDateBits == positiveYear);
+  }
+
   // True iff constructed with `DayTimeDuration`.
   bool isDayTimeDuration() const {
     return bits_ >> numPayloadDurationBits == daytimeDuration;
@@ -205,9 +211,36 @@ class DateYearOrDuration {
   // std::nullopt.
   static std::optional<DateYearOrDuration> convertToXsdDate(
       const DateYearOrDuration& dateValue);
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Subtraction and Addition of two `DateYearOrDuration` objects.
+  // For undefined operations `std::nullopt` is returned.
+  [[nodiscard]] std::optional<DateYearOrDuration> operator-(
+      const DateYearOrDuration& rhs) const;
+  [[nodiscard]] std::optional<DateYearOrDuration> operator+(
+      const DateYearOrDuration& rhs) const;
+
+  // From a Unix Epoch timestamp, construct the corresponding `Date` or
+  // `LargeYear`.
+  static DateYearOrDuration makeFromEpoch(Date::Milliseconds timestamp,
+                                          Date::TimeZone tz);
+#endif
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<DateYearOrDuration>);
+#endif
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Calculates `Date` that is time of the `DayTimeDuration` earlier. If the
+// resulting dates year is not in [-9999,9999] this will return a `LargeYear`.
+// Therefore the return type is `DateYearOrDuration`.
+std::optional<DateYearOrDuration> operator-(const Date lhs,
+                                            const DayTimeDuration& rhs);
+
+// Calculates `Date` that is time of the `DayTimeDuration` later. As seen
+// above this can result in a `LargeYear`.
+std::optional<DateYearOrDuration> operator+(const Date lhs,
+                                            const DayTimeDuration& rhs);
 #endif
 
 #endif  //  QLEVER_DATES_AND_DURATION_H

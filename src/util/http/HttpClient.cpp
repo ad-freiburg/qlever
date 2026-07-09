@@ -9,7 +9,7 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <sstream>
+#include <boost/url/url.hpp>
 #include <string>
 
 #include "global/Constants.h"
@@ -120,8 +120,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
             client->ioContext_);
       };
 
-  // Send the request, receive the response (unlimited body size), and return
-  // the body as a `std::istringstream`.
+  // Send the request, receive the response (unlimited body size).
   wait(http::async_write(*(client->stream_), request, net::use_awaitable));
   beast::flat_buffer buffer;
   auto responseParser =
@@ -132,7 +131,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 
   const auto status = responseParser->get().result();
   const std::string contentType =
-      responseParser->get()[boost::beast::http::field::content_type];
+      responseParser->get()[http::field::content_type];
+  const std::string location = responseParser->get()[http::field::location];
 
   auto getBody = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
                     std::unique_ptr<http::response_parser<http::buffer_body>>
@@ -158,6 +158,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 
   return {.status_ = status,
           .contentType_ = contentType,
+          .location_ = location,
           .body_ = getBody(std::move(client), std::move(responseParser),
                            std::move(buffer), std::move(handle))};
 }
@@ -165,9 +166,9 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 // ____________________________________________________________________________
 template <typename StreamType>
 http::response<http::string_body>
-HttpClientImpl<StreamType>::sendWebSocketHandshake(
-    const boost::beast::http::verb& method, std::string_view host,
-    std::string_view target) {
+HttpClientImpl<StreamType>::sendWebSocketHandshake(const http::verb& method,
+                                                   std::string_view host,
+                                                   std::string_view target) {
   // Check that we have a stream (created in the constructor).
   AD_CORRECTNESS_CHECK(stream_);
 
@@ -202,22 +203,74 @@ template class HttpClientImpl<ssl::stream<tcp::socket>>;
 // ____________________________________________________________________________
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
-    ad_utility::SharedCancellationHandle handle,
-    const boost::beast::http::verb& method, std::string_view requestData,
-    std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  auto sendRequest = [&](auto ti) -> HttpOrHttpsResponse {
+    ad_utility::SharedCancellationHandle handle, const http::verb& method,
+    std::string_view requestData, std::string_view contentTypeHeader,
+    std::string_view acceptHeader, size_t maxRedirects) {
+  auto sendRequest = [&](const Url& currentUrl,
+                         auto ti) -> HttpOrHttpsResponse {
     using Client = typename decltype(ti)::type;
-    auto client = std::make_unique<Client>(url.host(), url.port());
-    return Client::sendRequest(std::move(client), method, url.host(),
-                               url.target(), std::move(handle), requestData,
+    auto client =
+        std::make_unique<Client>(currentUrl.host(), currentUrl.port());
+    return Client::sendRequest(std::move(client), method, currentUrl.host(),
+                               currentUrl.target(), handle, requestData,
                                contentTypeHeader, acceptHeader);
   };
+
   using namespace ad_utility::use_type_identity;
-  if (url.protocol() == Url::Protocol::HTTP) {
-    return sendRequest(ti<HttpClient>);
-  } else {
-    AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
-    return sendRequest(ti<HttpsClient>);
+
+  // Follow redirects up to the limit specified by maxRedirects.
+  boost::url currentUrl = boost::url{url.asString()};
+  size_t redirectCount = 0;
+  while (redirectCount <= maxRedirects) {
+    HttpOrHttpsResponse response;
+    if (currentUrl.scheme() == "http") {
+      response = sendRequest(Url{currentUrl.c_str()}, ti<HttpClient>);
+    } else {
+      AD_CORRECTNESS_CHECK(currentUrl.scheme() == "https");
+      response = sendRequest(Url{currentUrl.c_str()}, ti<HttpsClient>);
+    }
+
+    // Check if the response is a redirect (301, 302, 307, 308), we don't modify
+    // the request type to GET for status codes 301 and 302, which would be the
+    // behavior of browsers.
+    using enum http::status;
+    bool isRedirect =
+        ad_utility::contains(std::array{moved_permanently, found,
+                                        temporary_redirect, permanent_redirect},
+                             response.status_);
+    if (!isRedirect) {
+      return response;
+    }
+
+    // If it is a redirect, but there is no `Location` header, we cannot
+    // proceed and throw an error.
+    if (response.location_.empty()) {
+      throw std::runtime_error(absl::StrCat(
+          "HTTP request to <", currentUrl.c_str(),
+          "> responded with redirect status code: ", response.status_,
+          " but no Location header was provided"));
+    }
+
+    // Follow the redirect and properly resolve relative URLs.
+    boost::system::result<boost::url_view> relativeUrl =
+        boost::urls::parse_uri_reference(response.location_);
+    if (relativeUrl.has_error()) {
+      throw std::runtime_error(absl::StrCat(
+          "The HTTP request to '", currentUrl.c_str(),
+          "' responded with redirect status code: ", response.status_,
+          " but the Location header value '", response.location_,
+          "' could not be parsed: ", relativeUrl.error().message()));
+    }
+    auto result = currentUrl.resolve(relativeUrl.value());
+    AD_CORRECTNESS_CHECK(!result.has_error(), "Error while resolving URL:",
+                         result.error().message());
+    redirectCount++;
   }
+
+  // If the loop exited because we exceeded the maximum number of redirects,
+  // throw a corresponding error.
+  throw std::runtime_error(absl::StrCat("HTTP request to <", url.asString(),
+                                        "> exceeded maximum redirect limit of ",
+                                        maxRedirects));
 }
 #endif

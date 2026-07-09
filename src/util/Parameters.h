@@ -7,9 +7,14 @@
 #ifndef QLEVER_SRC_UTIL_PARAMETERS_H
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
+#include <absl/strings/str_join.h>
+#include <absl/strings/str_split.h>
+
 #include <optional>
+#include <vector>
 
 #include "backports/concepts.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
@@ -199,6 +204,18 @@ struct MemorySizeFromString {
   }
 };
 
+// Space-separated string to/from `std::vector<std::string>`.
+struct VectorToSpaceSeparatedStrings {
+  std::string operator()(const std::vector<std::string>& v) const {
+    return absl::StrJoin(v, " ");
+  }
+};
+struct SpaceSeparatedStringsToVector {
+  std::vector<std::string> operator()(const std::string& s) const {
+    return absl::StrSplit(s, " ", absl::SkipWhitespace());
+  }
+};
+
 }  // namespace detail::parameterSerializers
 
 namespace detail::parameterShortNames {
@@ -221,6 +238,17 @@ template <typename DurationType>
 using DurationParameter = Parameter<ParseableDuration<DurationType>,
                                     n::durationFromString<DurationType>,
                                     n::durationToString<DurationType>>;
+
+// Simple type for space-separated strings, used for IRIs which do not contain
+// spaces.
+using SpaceSeparatedStrings =
+    Parameter<std::vector<std::string>, n::SpaceSeparatedStringsToVector,
+              n::VectorToSpaceSeparatedStrings>;
+
+using DeduplicationModeParameter =
+    Parameter<DeduplicationMode, DeduplicationModeFromString,
+              DeduplicationModeToString>;
+
 }  // namespace detail::parameterShortNames
 }  // namespace ad_utility
 

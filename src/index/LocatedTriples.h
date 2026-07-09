@@ -11,13 +11,18 @@
 #ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 #define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 
+#include <boost/optional.hpp>
+
 #include "backports/three_way_comparison.h"
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
+#include "util/SortedSequence.h"
 #include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
+#include "util/TypeTraits.h"
 
 class Permutation;
 
@@ -33,6 +38,39 @@ struct NumAddedAndDeleted {
     str << "added " << n.numAdded_ << ", deleted " << n.numDeleted_;
     return str;
   }
+};
+
+// Statistics collected during a vacuum operation on a block.
+struct VacuumStatistics {
+  // Only updates that have an effect are kept. Inserts that already exist
+  // and deletes that don't exist are removed.
+  size_t numDeletionsRemoved_;
+  size_t numInsertionsRemoved_;
+  size_t numDeletionsKept_;
+  size_t numInsertionsKept_;
+
+  size_t totalRemoved() const {
+    return numDeletionsRemoved_ + numInsertionsRemoved_;
+  }
+
+  size_t totalKept() const { return numDeletionsKept_ + numInsertionsKept_; }
+
+  VacuumStatistics& operator+=(const VacuumStatistics& other) {
+    numDeletionsRemoved_ += other.numDeletionsRemoved_;
+    numInsertionsRemoved_ += other.numInsertionsRemoved_;
+    numDeletionsKept_ += other.numDeletionsKept_;
+    numInsertionsKept_ += other.numInsertionsKept_;
+    return *this;
+  }
+
+  friend void to_json(nlohmann::json& j, const VacuumStatistics& stats);
+};
+
+// Triples identified for removal during a vacuum operation.
+struct TriplesToVacuum {
+  std::vector<IdTriple<0>> deletionsToRemove_;
+  std::vector<IdTriple<0>> insertionsToRemove_;
+  VacuumStatistics stats_;
 };
 
 // A triple and its block in a particular permutation. For a detailed definition
@@ -56,7 +94,7 @@ struct LocatedTriple {
       const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
                                               triple_, insertOrDelete_)
 
   // This operator is only for debugging and testing. It returns a
@@ -68,29 +106,16 @@ struct LocatedTriple {
   }
 };
 
-// A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
-// this to store all located triples with the same `blockIndex_`.
-//
-// NOTE: We could also overload `std::less` here, but the explicit specification
-// of the order makes it clearer.
-struct LocatedTripleCompare {
-  bool operator()(const LocatedTriple& x, const LocatedTriple& y) const {
-    return x.triple_ < y.triple_;
-  }
-};
-using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;
+using SortedLocatedTriplesVector = ad_utility::SortedSequence<
+    LocatedTriple, std::less<>,
+    ad_utility::MemberProjection<&LocatedTriple::triple_>>;
 
-// This operator is only for debugging and testing. It returns a
-// human-readable representation.
-std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
+using LocatedTriples = SortedLocatedTriplesVector;
 
 // Sorted sets of located triples, grouped by block. We use this to store all
 // located triples for a permutation.
 class LocatedTriplesPerBlock {
  private:
-  // The total number of `LocatedTriple` objects stored (for all blocks).
-  size_t numTriples_ = 0;
-
   // For each block with a non-empty set of located triples, the located triples
   // in that block.
   ad_utility::HashMap<size_t, LocatedTriples> map_;
@@ -115,24 +140,24 @@ class LocatedTriplesPerBlock {
   // Get upper limits for the number of inserted and deleted located triples
   // for the given block.
   //
-  // NOTE: This currently returns the total number of triples in the block
-  // twice, in order to avoid counting the triples with `insertOrDelete_ ==
-  // true` and `insertOrDelete_ == false` separately, which turned out to
-  // be very expensive for a `std::set`, which is the underlying data
-  // structure.
+  // NOTE: This currently returns an upper bound for the total number of triples
+  // in the block twice, in order to avoid counting the triples with
+  // `insertOrDelete_ == true` and `insertOrDelete_ == false` separately, which
+  // is expensive.
   //
   // TODO: Since the average number of located triples per block is usually
   // small, this estimate is usually fine. We could get better estimates in
   // constant time by maintaining a counter for each of these two numbers in
-  // `LocatedTriplesPerBlock` and update these counters for each update
-  // operatoin. However, note that that would still be an estimate because at
-  // this point we do not know whether an insertion or deletion is actually
-  // effective.
+  // `SortedSequence` and update these counters for each consolidation.
+  // However, note that that would still be an estimate because 1. the triple
+  // might be counted twice between the parts and 2. at this point we do not
+  // know whether an insertion or deletion is actually effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
-  // Returns whether there are updates triples for the block with the index
-  // `blockIndex`.
-  bool hasUpdates(size_t blockIndex) const;
+  // Returns an optional reference to update triples for the block with the
+  // index `blockIndex`. If no such block exists, return `std::nullopt`.
+  boost::optional<const LocatedTriples&> getUpdatesIfPresent(
+      size_t blockIndex) const;
 
   // Merge located triples for `blockIndex_` (there must be at least one,
   // otherwise this function must not be called) with the given input `block`.
@@ -162,29 +187,37 @@ class LocatedTriplesPerBlock {
     return map_.contains(blockIndex);
   }
 
-  // Add `locatedTriples` to the `LocatedTriplesPerBlock` and return handles to
-  // where they were added (`LocatedTriples` is a sorted set, see above). Using
-  // these handles, we can easily remove the `locatedTriples` from the set again
-  // when we need to.
-  //
-  // PRECONDITION: The `locatedTriples` must not already exist in
-  // `LocatedTriplesPerBlock`.
-  std::vector<LocatedTriples::iterator> add(
-      ql::span<const LocatedTriple> locatedTriples,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
+  // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
+  void add(ql::span<const LocatedTriple> locatedTriples,
+           ad_utility::timer::TimeTracer& tracer =
+               ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Removes the given `LocatedTriple` from the `LocatedTriplesPerBlock`.
   //
   // NOTE: `updateAugmentedMetadata()` must be called to update the block
   // metadata.
-  void erase(size_t blockIndex, LocatedTriples::iterator iter);
+  void erase(size_t blockIndex, const LocatedTriple& lt);
+
+  // Overload of erase above that removes multiple triples at once.
+  // PRECONDITION: `sortedTriples` must be sorted.
+  // NOTE: `updateAugmentedMetadata()` must be called to update the block
+  // metadata.
+  void erase(ql::span<LocatedTriple> sortedTriples);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
-  size_t numTriples() const { return numTriples_; }
+  size_t numTriplesForTesting() const;
 
   // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
+
+  // Return whether there are any updates at all.
+  bool isEmpty() const { return map_.empty(); }
+
+  // Consolidate the located triples in all blocks. Forwards to
+  // `SortedSequence`. Must be called before any sorted access
+  // (begin/end/size/mergeTriples/updateAugmentedMetadata) if the
+  // `LocatedTriples` were modified since the last call to this function.
+  void consolidateAllBlocks();
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated
@@ -211,9 +244,17 @@ class LocatedTriplesPerBlock {
   // Remove all located triples.
   void clear() {
     map_.clear();
-    numTriples_ = 0;
     augmentedMetadata_.reset();
   }
+
+  // Identify, for all blocks in `perm` whose number of located triples is at
+  // least `vacuum-minimum-block-size`, the redundant insertions (triple already
+  // in index) and invalid deletions (triple not in index). The redundant
+  // triples are then returned as `SPO`. Depending on the updates different
+  // permutations may be more or less effective.
+  TriplesToVacuum identifyTriplesToVacuum(
+      const Permutation& perm,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Return `true` iff one of the blocks contains `triple` with the given
   // `insertOrDelete` status (`true` for inserted, `false` for deleted).
@@ -221,6 +262,12 @@ class LocatedTriplesPerBlock {
   // NOTE: This is expensive because it iterates over all blocks and checks
   // containment in each. It is only used in our tests, for convenience.
   bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
+
+  // Compute the located triples that are present in this
+  // `LocatedTriplesPerBlock` instance but not in `oldBlocks`. The result is a
+  // pair of vectors (insertions, deletions), each sorted in SPO order.
+  std::array<std::vector<IdTriple<0>>, 2> computeDiff(
+      const LocatedTriplesPerBlock& oldBlocks) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

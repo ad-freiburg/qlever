@@ -6,12 +6,18 @@
 #ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
+#include <memory>
 #include <optional>
+#include <sstream>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -76,8 +82,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
 
-// `EXPECT` that the `argument` is equal to `std::nullopt`.
-#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
+// `EXPECT` that the `argument`'s `has_value` method returns `false`. Checking
+// equality to `std::nullopt` does not work with `boost::optional`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_FALSE(argument.has_value())
 
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
@@ -88,6 +95,69 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
     ad_utility::source_location l,
     std::string_view errorMessage = "Actual location of the test failure") {
   return {l.file_name(), static_cast<int>(l.line()), errorMessage};
+}
+
+// _____________________________________________________________________________
+// Some tests require a certain log level, e.g. but not only because they
+// capture log output and make assertions about it. This macro can be used to
+// skip such tests if the runtime log level is too low.
+#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                                       \
+  if (::ad_utility::detail::runtimeLogLevel.load(std::memory_order_relaxed) <  \
+      (level)) {                                                               \
+    GTEST_SKIP() << "This test requires a runtime log level of at least "      \
+                 << ad_utility::LogLevel{level}.toString()                     \
+                 << ", but the current runtime log level is "                  \
+                 << ad_utility::LogLevel{::ad_utility::detail::runtimeLogLevel \
+                                             .load(std::memory_order_relaxed)} \
+                        .toString();                                           \
+  }
+
+// _____________________________________________________________________________
+// Set the runtime log level to `level` and return an `absl::Cleanup` that
+// restores the previous level when it goes out of scope. Use this in tests
+// that temporarily need a specific log level to avoid leaving the global
+// atomic modified after the test finishes.
+inline auto setLoglevelForTesting(LogLevel level) {
+  auto previous = ::ad_utility::detail::runtimeLogLevel.exchange(
+      level.value(), std::memory_order_relaxed);
+  return absl::Cleanup([previous] {
+    ::ad_utility::detail::runtimeLogLevel.store(previous,
+                                                std::memory_order_relaxed);
+  });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to `stream` and return an `absl::Cleanup`
+// that restores the *previously active* stream when it goes out of scope. Use
+// this in tests that temporarily capture or suppress log output, so the global
+// stream is never left dangling or reset to the wrong value.
+inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream);
+  return absl::Cleanup(
+      [previous] { ad_utility::setGlobalLoggingStream(previous); });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to a fresh `std::ostringstream` and return
+// a pair of an `absl::Cleanup` (which restores the previously active stream
+// when it goes out of scope) and a reference to that stream. Typical usage is
+// `auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();`.
+// NOTE: The returned reference is only valid as long as the `cleanup` is alive,
+// as the underlying stream is owned by the `cleanup`.
+inline auto setGlobalLoggingStreamToStringStream() {
+  auto stream = std::make_shared<std::ostringstream>();
+  auto& streamRef = *stream;
+  // `setGlobalLoggingStreamForTesting` cannot be used here because we have to
+  // move the shared pointer to the string stream into the cleanup to keep it
+  // alive.
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream.get());
+  auto cleanup = absl::Cleanup([previous, stream = std::move(stream)] {
+    ad_utility::setGlobalLoggingStream(previous);
+  });
+  return std::pair<decltype(cleanup), std::ostringstream&>{std::move(cleanup),
+                                                           streamRef};
 }
 
 // _____________________________________________________________________________
@@ -199,9 +269,11 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
 // returns a function `ArrayType -> Matcher<ArrayType>` that applies
 // `MakeMatcher` to each of the expected values in the argument of `ArrayType`
 // and returns an `ElementsAreArray` matcher of these submatchers.
-template <typename T, typename ArrayType, typename MakeMatcher>
-requires std::is_convertible_v<ArrayType, std::vector<T>>
-auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
+CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
+    requires std::is_convertible_v<
+        ArrayType,
+        std::vector<T>>) auto liftMatcherToElementsAreArray(MakeMatcher
+                                                                makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
         std::vector<::testing::Matcher<T>> childMatchers;
@@ -209,6 +281,45 @@ auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
                               makeMatcher);
         return ::testing::ElementsAreArray(childMatchers);
       };
+}
+
+// Matcher that takes a range of arguments, applies the `func` to them, and
+// asserts, that the results are all unique. Is currently implemented using a
+// linear find, s.t. we don't require hashing support for the projection result,
+// but therefore has a quadratic runtime.
+MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
+  std::vector<decltype(func(*arg.begin()))> seen;
+  for (const auto& item : arg) {
+    auto val = func(item);
+    if (std::find(seen.begin(), seen.end(), val) != seen.end()) {
+      *result_listener << "duplicate value found: "
+                       << ::testing::PrintToString(val);
+      return false;
+    }
+    seen.push_back(std::move(val));
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+// Returns "<TestSuiteName>_<TestName>" for the currently running gtest, with
+// any '/' replaced by '_' (parameterized tests embed '/' in their names).
+// If `assertInGtestEnvironment` is true (the default), crashes if called
+// outside a running gtest (i.e. when `current_test_info()` returns nullptr).
+// Pass false when the caller is also used by non-test code (e.g. benchmarks),
+// in which case an empty string is returned instead.
+inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  if (assertInGtestEnvironment) {
+    AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  }
+  if (testInfo == nullptr) {
+    return "";
+  }
+  return absl::StrReplaceAll(
+      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
+      {{"/", "_"}});
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

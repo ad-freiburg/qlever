@@ -4,6 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -12,11 +13,15 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "CompilationInfo.h"
 #include "index/Index.h"
+#include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/vocabulary/VocabularyType.h"
+#include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -93,6 +98,31 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
+
+// Create a temporary directory inside the Google Test temporary directory
+// with the given `name`. The directory and all its contents are deleted when
+// the returned `absl::Cleanup` is destroyed.
+auto makeTemporaryDirectory(std::string_view name) {
+  std::string directory = ::testing::TempDir();
+  if (!ql::ends_with(directory, "/")) {
+    directory.push_back('/');
+  }
+  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
+  directory += name;
+  // Create directory.
+  std::filesystem::create_directory(directory);
+
+  // Remove all files in directory when done.
+  absl::Cleanup cleanup{[directory]() {
+    std::error_code ec;
+    std::filesystem::remove_all(directory, ec);
+    if (ec) {
+      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
+                    << ": " << ec.message();
+    }
+  }};
+  return std::make_pair(std::move(directory), std::move(cleanup));
+}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -120,7 +150,7 @@ TEST(IndexTest, createFromTurtleTest) {
       const auto& [index, qec] = getIndex();
       const auto& locatedTriplesSnapshot = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -211,7 +241,7 @@ TEST(IndexTest, createFromTurtleTest) {
       const IndexImpl& index = qec.getIndex().getImpl();
       const auto& deltaTriples = qec.locatedTriplesState();
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id zero = getId("<0>");
       Id one = getId("<1>");
       Id two = getId("<2>");
@@ -268,7 +298,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   const IndexImpl& index = qec.getIndex().getImpl();
   const auto& deltaTriples = qec.locatedTriplesState();
 
-  auto getId = makeGetId(getQec(kb)->getIndex());
+  auto getId = makeGetId(qec.getIndex());
   Id b = getId("<b>");
   Id b2 = getId("<b2>");
   Id a = getId("<a>");
@@ -308,19 +338,18 @@ TEST(IndexTest, indexIdAndGitHash) {
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
     using enum Permutation::Enum;
-    std::string kb =
-        "<a>  <b>  <c>  . \n"
-        "<a>  <b>  <c2> . \n"
-        "<a>  <b2> <c>  . \n"
-        "<a2> <b2> <c2> .   ";
-    auto& index = makeQecWithOrWithoutCompression(kb, useCompression)
-                      ->getIndex()
-                      .getImpl();
     {
+      std::string kb =
+          "<a>  <b>  <c>  . \n"
+          "<a>  <b>  <c2> . \n"
+          "<a>  <b2> <c>  . \n"
+          "<a2> <b2> <c2> .   ";
+      auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
+      auto& index = qec.getIndex().getImpl();
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
 
-      const auto& qec = *getQec(kb);
       auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id c = getId("<c>");
@@ -342,21 +371,21 @@ TEST(IndexTest, scanTest) {
       testOne(iri("<b2>"), iri("<c2>"), POS, {{a2}});
       testOne(iri("<notExisting>"), iri("<a>"), PSO, {});
     }
-    kb = "<a> <is-a> <1> . \n"
-         "<a> <is-a> <2> . \n"
-         "<a> <is-a> <0> . \n"
-         "<b> <is-a> <3> . \n"
-         "<b> <is-a> <0> . \n"
-         "<c> <is-a> <1> . \n"
-         "<c> <is-a> <2> . \n";
 
     {
-      TestIndexConfig config{kb};
-      config.usePrefixCompression = useCompression;
-      const auto& qec = *getQec(std::move(config));
+      std::string kb =
+          "<a> <is-a> <1> . \n"
+          "<a> <is-a> <2> . \n"
+          "<a> <is-a> <0> . \n"
+          "<b> <is-a> <3> . \n"
+          "<b> <is-a> <0> . \n"
+          "<c> <is-a> <1> . \n"
+          "<c> <is-a> <2> . \n";
+      const auto& qec =
+          *makeQecWithOrWithoutCompression(std::move(kb), useCompression);
       const IndexImpl& index = qec.getIndex().getImpl();
 
-      auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id b = getId("<b>");
       Id c = getId("<c>");
@@ -414,31 +443,48 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
-// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
-// `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
-// bool `isExternal`.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+TEST(IndexTest, emptyTextIndex) {
+  std::array<std::string, 2> inputs = {
+      "<a:> <a:> <a:> .",
+      "<a:> <a:> \"\" .",
+  };
+  for (auto input : inputs) {
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = std::move(input);
+    config.createTextIndex = true;
+    auto* qec = ad_utility::testing::getQec(std::move(config));
+    // Building an empty text index must succeed, and scanning it for any word
+    // must yield no postings.
+    IdTable result =
+        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    EXPECT_EQ(result.size(), 0);
+  }
+}
 
-auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
-  return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
-      ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
-                                ::testing::Eq(content)),
-                       AD_FIELD(PossiblyExternalizedIriOrLiteral, isExternal_,
-                                ::testing::Eq(isExternal))));
+// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
+// `PossiblyExternalizedTripleComponent` that matches `content` and the bool
+// `isExternal`.
+auto IsPossiblyExternalString = [](const TripleComponent& content,
+                                   bool isExternal) {
+  return ::testing::AllOf(AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   tripleComponent_, ::testing::Eq(content)),
+                          AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   isExternal_, ::testing::Eq(isExternal)));
 };
 
-TEST(IndexTest, TripleToInternalRepresentation) {
+TEST(IndexTest, processTriple) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_TRUE(result.langtag_.empty());
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), true));
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\""), true));
   }
   {
@@ -447,23 +493,48 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"", "@fr")};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0],
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(result.langtag_, "fr");
+    EXPECT_THAT(result.triple_[0],
                 IsPossiblyExternalString(iri("<subject>"), true));
-    EXPECT_THAT(res.triple_[1],
+    EXPECT_THAT(result.triple_[1],
                 IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res.triple_[2],
+    EXPECT_THAT(result.triple_[2],
                 IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
-    LangtagAndTriple res =
-        index.tripleToInternalRepresentation(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    ProcessedTriple result = index.processTriple(std::move(turtleTriple));
+    EXPECT_EQ(Id::makeFromDouble(42.0),
+              result.triple_[2].tripleComponent_.getId());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, ZeroCopyVocabularyBlob) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto& vocab = index.getNonConstVocabForTesting();
+  vocab.resetToType(ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::InMemoryUncompressed});
+  ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocab.createFromSet(words, filename);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  index.writeVocabularyToZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  IndexImpl otherIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  otherIndex.loadVocabularyFromZeroCopyBlob(readSerializer);
+
+  const auto& readVocab = otherIndex.getVocab();
+  ASSERT_EQ(vocab.size(), readVocab.size());
+  for (size_t i = 0; i < vocab.size(); ++i) {
+    EXPECT_EQ(vocab[VocabIndex::make(i)], readVocab[VocabIndex::make(i)]);
   }
 }
 
@@ -473,7 +544,9 @@ TEST(IndexTest, NumDistinctEntities) {
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
-  const auto& qec = *getQec(turtleInput);
+  TestIndexConfig config{turtleInput};
+  config.addHasWordTriples = true;
+  const auto& qec = *getQec(config);
   const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
@@ -487,10 +560,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numPredicates = index.numDistinctPredicates();
   EXPECT_EQ(numPredicates.normal, 2);
-  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
-  // predicate for each combination of predicate+language that is actually used
-  // (e.g. `@en@label`).
-  EXPECT_EQ(numPredicates.internal, 3);
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, `ql:has-word`,
+  // and one added predicate for each combination of predicate+language that is
+  // actually used (e.g. `@en@label`).
+  EXPECT_EQ(numPredicates.internal, 4);
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
@@ -501,9 +574,10 @@ TEST(IndexTest, NumDistinctEntities) {
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal, 7);
-  // Two added triples for each triple that has an object with a language tag
-  // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal, 5);
+  // Two added triples for each triple that has an object with a language tag,
+  // one triple per subject for the pattern, and one ql:has-word triple per
+  // word in the literals (5 literals with 1 word each = 5 word triples).
+  EXPECT_EQ(numTriples.internal, 10);
 
   auto multiplicities =
       index.getMultiplicities(index.getPermutation(Permutation::SPO));
@@ -562,6 +636,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -570,6 +645,18 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
 
+  // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
+  // that the assertion is only active when `LOGLEVEL >= INFO`. At
+  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
+  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
+  // `testing::_` (match anything) in that case.
+  auto onlyAtInfoOrAbove = [](auto matcher) {
+    if constexpr (LOGLEVEL < INFO) {
+      return testing::_;
+    } else {
+      return matcher;
+    }
+  };
   // Parallel parsing not specified anywhere. For a single input stream, we then
   // default to `true` for reasons of backwards compatibility, but this is
   // deprecated. For multiple input streams, we default to `false` and this is
@@ -580,7 +667,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -588,9 +676,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -603,9 +691,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
@@ -615,9 +703,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -630,7 +718,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -680,12 +769,12 @@ TEST(IndexImpl, recomputeStatistics) {
 
   // Now, modify the index by adding triples.
   Id blankNodeId = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
-  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId](
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
+                                            &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz{ad_utility::triple_component::Iri::fromIriref("<zzz>")};
-    LocalVocabEntry literal{
-        ad_utility::triple_component::Literal::fromStringRepresentation(
-            "\"test\"@en")};
+    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
+    LocalVocabEntry literal =
+        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.
@@ -713,7 +802,7 @@ TEST(IndexImpl, recomputeStatistics) {
     auto newStats = indexImpl.recomputeStatistics(
         index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
-    EXPECT_EQ(newStats["num-triples"], NNAI(5, 6));
+    EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
     if (loadAllPermutations) {
       EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
@@ -722,8 +811,6 @@ TEST(IndexImpl, recomputeStatistics) {
       EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
       EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
     }
-    // Blank node ids are remapped, so we cannot predict the exact number.
-    EXPECT_NE(newStats["num-blank-nodes-total"], 0);
   }
 }
 
@@ -739,4 +826,164 @@ TEST(IndexImpl, countDistinct) {
     IndexImpl::countDistinct(lastId, counter, table);
   }
   EXPECT_EQ(counter, 2);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, createPermutation) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [directory, cleanup] = makeTemporaryDirectory("createPermutation");
+  auto onDiskBase = directory + "/index";
+  index.setOnDiskBase(onDiskBase);
+  std::vector<IdTableStatic<0>> tables;
+  tables.push_back(
+      makeIdTableFromVector({{1, 1, 1, 0}, {1, 2, 1, 0}, {2, 3, 1, 0}}));
+  tables.push_back(
+      makeIdTableFromVector({{2, 4, 1, 0}, {2, 5, 1, 0}, {3, 6, 1, 0}}));
+
+  Permutation permutation{Permutation::PSO,
+                          ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [uniquePredicates, meta] = index.createPermutationWithoutMetadata(
+      4,
+      ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+          tables.at(0).clone(), tables.at(1).clone()}},
+      permutation, false);
+  index.finalizePermutation(meta, permutation, false);
+
+  EXPECT_EQ(uniquePredicates, 3);
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
+
+  auto [uniqueInternalPredicates, internalMeta] =
+      index.createPermutationWithoutMetadata(
+          4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
+          true);
+  index.finalizePermutation(internalMeta, permutation, true);
+
+  EXPECT_EQ(uniqueInternalPredicates, 3);
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
+
+  permutation.loadFromDisk(onDiskBase, true);
+  index.deltaTriplesManager().modify<void>(
+      [&permutation](DeltaTriples& deltaTriples) {
+        permutation.setOriginalMetadataForDeltaTriples(deltaTriples);
+      });
+
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  for (bool internal : {false, true}) {
+    const auto& actualPermutation =
+        internal ? permutation.internalPermutation() : permutation;
+    auto scan = actualPermutation.lazyScan(
+        actualPermutation.getScanSpecAndBlocks(scanSpec, *state), std::nullopt,
+        std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
+        *state);
+    auto begin = scan.begin();
+    ASSERT_NE(begin, scan.end());
+    EXPECT_EQ(*begin, makeIdTableFromVector({{1, 1, 1, 0},
+                                             {1, 2, 1, 0},
+                                             {2, 3, 1, 0},
+                                             {2, 4, 1, 0},
+                                             {2, 5, 1, 0},
+                                             {3, 6, 1, 0}}));
+    ++begin;
+    EXPECT_EQ(begin, scan.end());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, writePatternsToFile) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [directory, cleanup] = makeTemporaryDirectory("writePatternsToFile");
+  auto onDiskBase = directory + "/index";
+  index.setOnDiskBase(onDiskBase);
+  index.avgNumDistinctSubjectsPerPredicate_ = 1337.5;
+  index.avgNumDistinctPredicatesPerSubject_ = 3.14;
+  index.numDistinctSubjectPredicatePairs_ = 42;
+
+  std::vector<std::vector<Id>> data;
+  data.push_back({Id::makeFromInt(1), Id::makeFromInt(2)});
+  data.push_back({Id::makeFromInt(3), Id::makeFromInt(4)});
+
+  index.getPatterns() = CompactVectorOfStrings{data};
+  index.writePatternsToFile();
+
+  ASSERT_TRUE(std::filesystem::exists(onDiskBase + ".index.patterns"));
+
+  double avgNumDistinctSubjectsPerPredicate;
+  double avgNumDistinctPredicatesPerSubject;
+  uint64_t numDistinctSubjectPredicatePairs;
+  CompactVectorOfStrings<Id> result;
+
+  PatternCreator::readPatternsFromFile(
+      onDiskBase + ".index.patterns", avgNumDistinctSubjectsPerPredicate,
+      avgNumDistinctPredicatesPerSubject, numDistinctSubjectPredicatePairs,
+      result);
+
+  EXPECT_EQ(index.avgNumDistinctSubjectsPerPredicate_,
+            avgNumDistinctSubjectsPerPredicate);
+  EXPECT_EQ(index.avgNumDistinctPredicatesPerSubject_,
+            avgNumDistinctPredicatesPerSubject);
+  EXPECT_EQ(index.numDistinctSubjectPredicatePairs_,
+            numDistinctSubjectPredicatePairs);
+  EXPECT_TRUE(ql::ranges::equal(CompactVectorOfStrings{data}, result,
+                                ql::ranges::equal));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, loadConfigFromOldIndex) {
+  auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
+  auto onDiskBase = directory + "/index";
+  IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
+  other.blocksizePermutationPerColumn() = 1337_B;
+  nlohmann::json stats;
+
+  Index::NumNormalAndInternal numTriples{42, 1337};
+  Index::NumNormalAndInternal numPredicates{9999, 1010};
+  Index::NumNormalAndInternal numSubjects{8888, 2020};
+  Index::NumNormalAndInternal numObjects{7777, 3030};
+
+  stats["num-triples"] = numTriples;
+  stats["num-predicates"] = numPredicates;
+  stats["num-subjects"] = numSubjects;
+  stats["num-objects"] = numObjects;
+  stats["i-just-invented-this"] = "🤠";
+
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.loadConfigFromOldIndex(onDiskBase, other, stats);
+  EXPECT_EQ(index.getOnDiskBase(), onDiskBase);
+  EXPECT_EQ(index.getKbName(), other.getKbName());
+  EXPECT_EQ(index.numTriples(), numTriples);
+  EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
+  EXPECT_EQ(index.numSubjects_, numSubjects);
+  EXPECT_EQ(index.numObjects_, numObjects);
+  EXPECT_EQ(index.blocksizePermutationPerColumn(),
+            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.configurationJson_, stats);
+
+  // The version written to disk will also have these fields.
+  stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
+  stats["index-format-version"] = qlever::indexFormatVersion;
+
+  std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
+  std::ifstream in{jsonFile};
+  nlohmann::json jsonFromFile;
+  in >> jsonFromFile;
+  EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, graphNameManagerIntegration) {
+  TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
+                                 "2> . <a> <b> <c> <http://example.org/1> .")};
+  c.indexType = qlever::Filetype::NQuad;
+  c.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto qec = getQec(c);
+  const auto graphManager = qec->getIndex().graphNameManager();
+  EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
+  EXPECT_THAT(graphManager.prefixWithoutBraces_,
+              testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }

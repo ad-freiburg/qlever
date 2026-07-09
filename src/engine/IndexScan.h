@@ -64,7 +64,9 @@ class IndexScan final : public Operation {
             Graphs graphsToFilter = Graphs::All(),
             std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
 
-  // Constructor to simplify copy creation of an `IndexScan`.
+  // Constructor that takes all members explicitly. In particular, the last two
+  // arguments avoid that we have to recompute the size estimate (which can be
+  // expensive for many blocks) when we already know it.
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
             LocatedTriplesSharedState locatedTriplesSharedState,
             const TripleComponent& s, const TripleComponent& p,
@@ -72,7 +74,8 @@ class IndexScan final : public Operation {
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
-            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep);
+            bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
+            bool sizeEstimateIsExact, size_t sizeEstimate);
 
   ~IndexScan() override = default;
 
@@ -94,10 +97,11 @@ class IndexScan final : public Operation {
 
   std::vector<ColumnIndex> resultSortedOn() const override;
 
-  // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
-  // if necessary.
+  // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
+  // none of the prefilters in `prefilterVariablePairs` applies, return
+  // `std::nullopt`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  getUpdatedQueryExecutionTreeWithPrefilterApplied(
       const std::vector<PrefilterVariablePair>& prefilterVariablePairs)
       const override;
 
@@ -128,7 +132,8 @@ class IndexScan final : public Operation {
   // there are undef values, the second generator represents the full index
   // scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
-      Result::LazyResult input, ColumnIndex joinColumn);
+      Result::LazyResult input, ColumnIndex joinColumn,
+      bool filterJoinSide = true);
 
  private:
   // Implementation detail that allows to consume a lazy range from two other
@@ -164,6 +169,9 @@ class IndexScan final : public Operation {
     return multiplicity_[col];
   }
 
+  // Return the internal flag for testing purposes.
+  bool sizeEstimateIsExactForTesting() const { return sizeEstimateIsExact_; }
+
   bool knownEmptyResult() override {
     return sizeEstimateIsExact_ && sizeEstimate_ == 0;
   }
@@ -180,8 +188,10 @@ class IndexScan final : public Operation {
                                          sizeof(Id)) > maxCacheableSize;
   }
 
-  // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
+  // An index scan applies LIMIT and OFFSET directly while scanning.
+  [[nodiscard]] LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
+  }
 
   // Instead of using the `LocatedTriplesSnapshot` of the `Operation` base
   // class, which accesses the one stored in the `QueryExecutionContext`, use
@@ -209,6 +219,8 @@ class IndexScan final : public Operation {
   const Permutation& permutation() const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;
@@ -219,21 +231,28 @@ class IndexScan final : public Operation {
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
   // estimate is exact. If not, the estimate is the mean of the lower and upper
   // bound.
+  //
+  // NOTE: For full index scans (think `?s ?p ?o`), we simply take the total
+  // number of triples from the permutation's metadata as an estimate,
+  // because summing up all the block sizes and numbers of located triples per
+  // block is expensive for large datasets (with millions of blocks). The
+  // estimate is an approximation, but a reasonably good one when the number of
+  // delta triples is small compared to the total number of triples and there
+  // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
-  // result of this `IndexScan` shouldn't be cached. Thus, this method returns
-  // `false` if prefilterd `BlockMetadataRanges` are contained.
-  bool canResultBeCachedImpl() const override;
+  // result of this `IndexScan` is only a subset of the result associated with
+  // its cache key (which is that of the unfiltered scan). Thus, this method
+  // returns `false` if prefiltered `BlockMetadataRanges` are contained.
+  bool resultDoesMatchCacheKey() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Return an updated QueryExecutionTree containing the new IndexScan which is
-  // a copy of this (`IndexScan`), but with added corresponding
-  // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
-  // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
+  // Return a new `QueryExecutionTree` with prefiltered `scanSpecAndBlocks`. If
+  // no prefiltering is applied, return `std::nullopt`.
   std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredScanSpecAndBlocks(
       ScanSpecAndBlocks scanSpecAndBlocks) const;
 
@@ -243,9 +262,9 @@ class IndexScan final : public Operation {
   IdTable materializedIndexScan() const;
 
   // Returns the first sorted 'Variable' with corresponding `ColumnIndex`. If
-  // `numVariables_` is 0, `std::nullopt` is returned.
-  // The returned `ColumnIndex` corresponds to the `CompressedBlockMetadata`
-  // blocks, NOT to a column of the resulting `IdTable`.
+  // `numVariables_` is 0, `std::nullopt` is returned. The returned
+  // `ColumnIndex` corresponds to the `CompressedBlockMetadata` blocks, NOT to a
+  // column of the resulting `IdTable`.
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
@@ -291,6 +310,20 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+
+  // Returns a `VariableToColumnMap` that maps all visible variables of this
+  // `IndexScan` not to result column indices but to column indices in the
+  // underlying `Permutation`. This differs from the regular
+  // `VariableToColumnMap` if some columns are not read.  Used for
+  // `makeTreeWithBindColumn`.
+  //
+  // Example: We select the first three columns and an additional column at
+  // index 5. Then the regular column index for the additional column is 3 but
+  // the permutation column index is 5.
+  VariableToColumnMap computePermutationColumnIndices() const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

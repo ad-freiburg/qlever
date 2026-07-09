@@ -13,7 +13,7 @@ namespace ad_utility::detail::parallel_wkt_parser {
 // _____________________________________________________________________________
 WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
                      bool usePrefiltering,
-                     const std::optional<util::geo::DBox>& prefilterLatLngBox,
+                     const std::optional<::util::geo::DBox>& prefilterLatLngBox,
                      const Index& index)
     : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
       _numSkipped(numThreads),
@@ -53,7 +53,8 @@ void WKTParser::processQueue(size_t t) {
         // bounding box for the geometry this `VocabIndex` is referring to.
         if (_usePrefiltering &&
             SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-                _prefilterLatLngBox, _index, job.valueId.getVocabIndex())) {
+                _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
+                job.boundingBox)) {
           prefilterCounter++;
           continue;
         }
@@ -66,22 +67,22 @@ void WKTParser::processQueue(size_t t) {
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
-        const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
+        const ::util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
 
         // If point is not contained in the prefilter box, we can skip it
         // immediately instead of feeding it to the parser.
         if (_prefilterLatLngBox.has_value() &&
-            !util::geo::intersects(_prefilterLatLngBox.value(), utilPoint)) {
+            !::util::geo::intersects(_prefilterLatLngBox.value(), utilPoint)) {
           prefilterCounter++;
           continue;
         }
         // parse point directly
         auto mercPoint = latLngToWebMerc(utilPoint);
 
-        util::geo::I32Point addPoint{
+        ::util::geo::I32Point addPoint{
             static_cast<int32_t>(mercPoint.getX() * PREC),
             static_cast<int32_t>(mercPoint.getY() * PREC)};
-        _bboxes[t] = util::geo::extendBox(
+        _bboxes[t] = ::util::geo::extendBox(
             _sweeper->add(addPoint, std::to_string(job.line), job.side, w),
             _bboxes[t]);
         parseCounter++;
@@ -106,8 +107,9 @@ void WKTParser::processQueue(size_t t) {
 }
 
 // _____________________________________________________________________________
-void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side) {
-  _curBatch.push_back({valueId, rowIndex, side, ""});
+void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+                                  std::optional<BoundingBox> boundingBox) {
+  _curBatch.push_back({valueId, rowIndex, side, "", std::move(boundingBox)});
 
   if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));

@@ -29,12 +29,15 @@ template <typename Func>
 requires(TestableCoroutine<Func> || TestableFunction<Func>)
 void runAsyncTest(Func innerRun, size_t numThreads) {
   auto ioContext = std::make_shared<net::io_context>();
+
   auto future = [&]() {
     if constexpr (TestableCoroutine<Func>) {
       return net::co_spawn(*ioContext, innerRun(*ioContext), net::use_future);
     } else {
-      return net::post(*ioContext, std::packaged_task<void()>{
-                                       [&] { innerRun(*ioContext); }});
+      // Use a named variable to work around AppleClang compiler crash when
+      // passing a temporary `packaged_task` directly to `net::post`.
+      std::packaged_task<void()> task{[&] { innerRun(*ioContext); }};
+      return net::post(*ioContext, std::move(task));
     }
   }();
 

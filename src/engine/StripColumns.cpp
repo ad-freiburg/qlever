@@ -11,6 +11,7 @@
 #include "engine/StripColumns.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "parser/GraphPatternOperation.h"
 
 // _____________________________________________________________________________
 StripColumns::StripColumns(QueryExecutionContext* ctx,
@@ -85,6 +86,25 @@ std::unique_ptr<Operation> StripColumns::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // Push `bind` down to the child. If successful, create a new `StripColumns`
+  // that also keeps the bound target variable.
+  auto newChild = child_->getRootOperation()->makeTreeWithBindColumn(bind);
+  if (!newChild) {
+    return std::nullopt;
+  }
+
+  // Add the bind target to the variables to keep.
+  auto view = varToCol_ | ql::ranges::views::keys;
+  std::set<Variable> keepVars{view.begin(), view.end()};
+  keepVars.insert(bind._target);
+
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(*newChild), keepVars);
+}
+
+// _____________________________________________________________________________
 std::vector<ColumnIndex> StripColumns::resultSortedOn() const {
   std::vector<ColumnIndex> sortedOn;
   const auto& fromChild = child_->resultSortedOn();
@@ -112,7 +132,7 @@ Result StripColumns::computeResult(bool requestLaziness) {
     // implement moving the tables from materialized results that are too big
     // for the cache or having a `shared_ptr<IdTable+SubsetView>` type in the
     // result.
-    auto table = res->idTable().asColumnSubsetView(subset_).clone();
+    auto table = res->idTableView().asColumnSubsetView(subset_).clone();
     return {std::move(table), resultSortedOn(), res->getSharedLocalVocab()};
   } else {
     return {Result::LazyResult{ad_utility::CachingTransformInputRange(

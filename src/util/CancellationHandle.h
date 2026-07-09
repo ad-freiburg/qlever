@@ -92,18 +92,26 @@ constexpr auto printNothing = []() constexpr { return ""; };
 /// An exception signalling an cancellation
 class CancellationException : public std::exception {
   std::string message_;
+  // Always `TIMEOUT` or `MANUAL`.
+  CancellationState state_;
 
  public:
-  explicit CancellationException(std::string message)
-      : message_{std::move(message)} {}
-  explicit CancellationException(CancellationState reason)
-      : message_{reason == CancellationState::TIMEOUT
-                     ? "Operation timed out."
-                     : "Operation was manually cancelled."} {
+  // Custom message paired with a known reason.
+  CancellationException(CancellationState reason, std::string message)
+      : message_{std::move(message)}, state_{reason} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
+  // Known reason with the default message text for that reason.
+  explicit CancellationException(CancellationState reason)
+      : CancellationException(reason,
+                              reason == CancellationState::TIMEOUT
+                                  ? "Operation timed out."
+                                  : "Operation was manually cancelled.") {}
 
   const char* what() const noexcept override { return message_.c_str(); }
+
+  // Cancellation reason, always `TIMEOUT` or `MANUAL`.
+  CancellationState state() const noexcept { return state_; }
 
   /// Set optional operation information, if not already set.
   void setOperation(std::string_view operation) {
@@ -178,7 +186,7 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          AD_LOG_WARN
+          AD_LOG_DEBUG
               << "No timeout check has been performed for at least "
               << ParseableDuration{std::chrono::duration_cast<DurationType>(
                                        steady_clock::now() -

@@ -31,6 +31,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "index/ExportIds.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
@@ -381,28 +382,28 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
         ValueId tableEntry = r->at(0, ind);
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+          std::string value =
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+          std::string value =
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), tableEntry, {})
-                                   .value();
+          auto [value, type] =
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
@@ -453,7 +454,7 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
 
@@ -461,9 +462,9 @@ class SpatialJoinVarColParamTest
         std::vector<std::string> columnEntries;
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), valueId, {})
-                                   .value();
+          auto [value, type] =
+              ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+                  .value();
           if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
           }
@@ -652,7 +653,7 @@ TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
   auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto resultTable = spatialJoin->computeResult(false);
-  ASSERT_EQ(resultTable.idTable().numRows(), 1);
+  ASSERT_EQ(resultTable.idTableView().numRows(), 1);
 }
 
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {

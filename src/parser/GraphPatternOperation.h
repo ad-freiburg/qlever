@@ -15,6 +15,7 @@
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
+#include "parser/ExternalValuesQuery.h"
 #include "parser/GraphPattern.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
@@ -80,6 +81,10 @@ struct BasicGraphPattern {
   std::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
+
+  // Collect all the `Variable`s present in this `BasicGraphPattern` and add
+  // them to a `HashSet`.
+  void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
 
 /// A `Values` clause
@@ -101,8 +106,9 @@ struct GroupGraphPattern {
   enum class GraphVariableBehaviour { ALL, NAMED };
   // If not `monostate`, then this group is a `GRAPH` clause, either with a
   // fixed graph IRI, or with a variable.
-  using GraphSpec = std::variant<std::monostate, TripleComponent::Iri,
-                                 std::pair<Variable, GraphVariableBehaviour>>;
+  using GraphVar = std::pair<Variable, GraphVariableBehaviour>;
+  using GraphSpec =
+      std::variant<std::monostate, TripleComponent::Iri, GraphVar>;
   GraphSpec graphSpec_ = std::monostate{};
 
   // Constructors for all legal constellations.
@@ -213,7 +219,7 @@ using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
                  Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
-                 MaterializedViewQuery>;
+                 MaterializedViewQuery, ExternalValuesQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

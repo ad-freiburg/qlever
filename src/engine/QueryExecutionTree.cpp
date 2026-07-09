@@ -112,7 +112,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 //_____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
+QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
@@ -127,7 +127,7 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
   if (prefilterPairs.empty()) {
     return std::nullopt;
   } else {
-    return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
+    return rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
         prefilterPairs);
   }
 }
@@ -136,7 +136,7 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {
     AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());
-    return cachedResult_->idTable().size() == 0;
+    return cachedResult_->idTableView().size() == 0;
   }
   return rootOperation_->knownEmptyResult();
 }
@@ -149,7 +149,8 @@ bool QueryExecutionTree::isVariableCovered(Variable variable) const {
 
 // _______________________________________________________________________
 void QueryExecutionTree::readFromCache() {
-  if (!qec_) {
+  AD_CORRECTNESS_CHECK(qec_ != nullptr);
+  if (qec_->disableCaching()) {
     return;
   }
   auto& cache = qec_->getQueryTreeCache();
@@ -178,7 +179,7 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns) {
+    const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
   const auto& rootOperation = qet->getRootOperation();
   if (rootOperation->isSortedBy(sortColumns)) {
     return qet;
@@ -187,24 +188,38 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
+                         sortedQet.value()->getVariableColumns());
+    AD_CORRECTNESS_CHECK(
+        sortedQet.value()->getRootOperation()->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 
   return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns);
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
+      explicitSort);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::makeTreeWithStrippedColumns(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::set<Variable>& variables,
+    const std::set<Variable>& variablesToKeep,
     HideStrippedColumns hideStrippedColumns) {
+  // If all variables of this tree are part of `variablesToKeep`, we can simply
+  // return the original tree, without stripping any columns.
+  if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
+                         [&variablesToKeep](const Variable& variable) {
+                           return ad_utility::contains(variablesToKeep,
+                                                       variable);
+                         })) {
+    return qet;
+  }
   const auto& rootOperation = qet->getRootOperation();
-  auto optTree = rootOperation->makeTreeWithStrippedColumns(variables);
+  auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {
     return ad_utility::makeExecutionTree<StripColumns>(
-        rootOperation->getExecutionContext(), std::move(qet), variables);
+        rootOperation->getExecutionContext(), std::move(qet), variablesToKeep);
   }
 
   auto& resultTree = optTree.value();
@@ -214,7 +229,12 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
       "`LIMIT` and `OFFSET` are applied by "
       "`QueryExecutionTree::makeTreeWithStrippedColumns` not by the individual "
       "implementations.");
-  resultTree->applyLimit(rootOperation->getLimitOffset());
+  // We cannot use `applyLimitOffset` here, because this might get propagated to
+  // children of this operation, where the limit/offset has already been set
+  // correctly. We just reapply a previously set limit which was removed by the
+  // column stripping.
+  resultTree->setLimitOffsetDirectlyWithoutTriggeringHooks(
+      rootOperation->getLimitOffset());
   // Only store stripped variables if `hideStrippedColumns` is `False`
   if (hideStrippedColumns == HideStrippedColumns::False) {
     // Calculate the variables that will be stripped (present in the input, but
@@ -222,7 +242,7 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     ad_utility::HashSet<Variable> strippedVariables;
     const auto& originalVariableColumns = qet->getVariableColumns();
     for (const auto& [var, colInfo] : originalVariableColumns) {
-      if (!ad_utility::contains(variables, var)) {
+      if (!ad_utility::contains(variablesToKeep, var)) {
         strippedVariables.insert(var);
       }
     }

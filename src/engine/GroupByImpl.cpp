@@ -25,10 +25,13 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
 #include "parser/Alias.h"
+#include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
@@ -51,7 +54,11 @@ class LazyGroupByRange
   bool singleIdTable_{false};
   // runtime state
   size_t inWidth_;
-  IdTable resultTable_;
+  // Keep the lazy result blocks as `IdTableStatic` (that is, with fixed width),
+  // to avoid a conversion for every block (this used to be a performance bug).
+  // The paths that need a (dynamic) `IdTable` are not performance-criticial
+  // and convert using `toDynamic()` explicitly.
+  IdTableStatic<OUT_WIDTH> resultTable_;
   std::unique_ptr<LazyGroupBy> lazyGroupBy_;
   LocalVocab currentLocalVocab_;
   std::vector<LocalVocab> storedLocalVocabs_;
@@ -119,17 +126,16 @@ class LazyGroupByRange
                      sparqlExpression::EvaluationContext& evaluationContext) {
     if (groupSplitAcrossTables_) {
       lazyGroupBy_->processBlock(evaluationContext, blockStart, blockEnd);
-      lazyGroupBy_->commitRow(resultTable_, evaluationContext,
+      IdTable resultTable = std::move(resultTable_).toDynamic();
+      lazyGroupBy_->commitRow(resultTable, evaluationContext,
                               currentGroupBlock_);
+      resultTable_ = std::move(resultTable).template toStatic<OUT_WIDTH>();
       groupSplitAcrossTables_ = false;
     } else {
-      // This processes the whole block in batches if possible
-      IdTableStatic<OUT_WIDTH> table =
-          std::move(resultTable_).toStatic<OUT_WIDTH>();
-      parent_->processBlock<OUT_WIDTH>(table, aggregates_, evaluationContext,
-                                       blockStart, blockEnd,
-                                       &currentLocalVocab_, groupByCols_);
-      resultTable_ = std::move(table).toDynamic();
+      // This processes the whole block in batches if possible.
+      parent_->template processBlock<OUT_WIDTH>(
+          resultTable_, aggregates_, evaluationContext, blockStart, blockEnd,
+          &currentLocalVocab_, groupByCols_);
     }
   }
 
@@ -153,8 +159,11 @@ class LazyGroupByRange
       }
     }
 
+    // `process()` is called once per lazy block, so `createEvaluationContext`
+    // (and thus `asStaticView<0>()`) runs once per block, not once per group.
     sparqlExpression::EvaluationContext evaluationContext =
-        parent_->createEvaluationContext(currentLocalVocab_, idTable);
+        parent_->createEvaluationContext(currentLocalVocab_,
+                                         idTable.asStaticView<0>());
 
     size_t lastBlockStart = parent_->searchBlockBoundaries(
         [this, &evaluationContext](size_t a, size_t b) {
@@ -188,9 +197,10 @@ class LazyGroupByRange
       if (groupByCols_.empty()) {
         // If we have an implicit GROUP BY, where the entire input is a
         // single group, we need to produce one result row.
-        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable_, aggregates_,
+        IdTable resultTable = std::move(resultTable_).toDynamic();
+        parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates_,
                                                       &currentLocalVocab_);
-        return IdTableVocabPair{std::move(resultTable_),
+        return IdTableVocabPair{std::move(resultTable),
                                 std::move(currentLocalVocab_)};
       }
       if (singleIdTable_) {
@@ -214,12 +224,13 @@ class LazyGroupByRange
     }
 
     sparqlExpression::EvaluationContext evaluationContext =
-        parent_->createEvaluationContext(currentLocalVocab_, idTable);
+        parent_->createEvaluationContext(currentLocalVocab_,
+                                         idTable.asStaticView<0>());
 
-    lazyGroupBy_->commitRow(resultTable_, evaluationContext,
-                            currentGroupBlock_);
+    IdTable resultTable = std::move(resultTable_).toDynamic();
+    lazyGroupBy_->commitRow(resultTable, evaluationContext, currentGroupBlock_);
     currentLocalVocab_.mergeWith(storedLocalVocabs_);
-    return IdTableVocabPair{std::move(resultTable_),
+    return IdTableVocabPair{std::move(resultTable),
                             std::move(currentLocalVocab_)};
   }
 };
@@ -438,15 +449,11 @@ void GroupByImpl::processGroup(
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
-    } else if constexpr (sparqlExpression::isVectorResult<T>) {
-      AD_CORRECTNESS_CHECK(singleResult.size() == 1,
-                           "An expression returned a vector expression result "
-                           "that contained an unexpected amount of entries.");
-      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          std::move(singleResult.at(0)), *localVocab);
     } else {
-      // This should never happen since aggregates always return constants or
-      // vectors.
+      // Inside a GROUP BY, every expression that operates on grouped variables
+      // and/or aggregates has to produce a constant result, because all such
+      // inputs are identical within a group. Every `SparqlExpression` is
+      // implemented so it returns a constant if all its inputs are constant.
       AD_THROW(absl::StrCat("An expression returned an invalid type ",
                             typeid(T).name(),
                             " as the result of an aggregation step."));
@@ -458,7 +465,7 @@ void GroupByImpl::processGroup(
 
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
+IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
                                const vector<size_t>& groupByCols,
                                const vector<Aggregate>& aggregates,
                                LocalVocab* outLocalVocab) const {
@@ -505,7 +512,7 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
 
 // _____________________________________________________________________________
 sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
-    LocalVocab& localVocab, const IdTable& idTable) const {
+    LocalVocab& localVocab, const IdTableView<0>& idTable) const {
   sparqlExpression::EvaluationContext evaluationContext{
       *getExecutionContext(),
       _subtree->getVariableColumns(),
@@ -612,9 +619,9 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // of results, so if the result is fully materialized, we create an array
     // with a single element.
     if (subresult->isFullyMaterialized()) {
-      return computeWithHashMap(
-          std::array{std::pair{std::cref(subresult->idTable()),
-                               std::cref(subresult->localVocab())}});
+      const auto idTableView = subresult->idTableView();
+      return computeWithHashMap(std::array{
+          std::pair{idTableView, std::cref(subresult->localVocab())}});
     } else {
       return computeWithHashMap(subresult->idTables());
     }
@@ -641,7 +648,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
                         resultSortedOn()};
   }
 
-  AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
+  AD_CORRECTNESS_CHECK(subresult->idTableView().numColumns() == inWidth);
 
   // Make a copy of the local vocab. Note: the LocalVocab has reference
   // semantics via `shared_ptr`, so no actual strings are copied here.
@@ -652,7 +659,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
       (std::array{inWidth, outWidth}),
       [&, self = this](auto inWidth, auto outWidth) {
         return self->doGroupBy<inWidth, outWidth>(
-            subresult->idTable(), groupByCols, aggregates, &localVocab);
+            subresult->idTableView(), groupByCols, aggregates, &localVocab);
       });
 
   AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
@@ -717,7 +724,7 @@ void GroupByImpl::processEmptyImplicitGroup(
   IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
 
   sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContext(*localVocab, idTable);
+      createEvaluationContext(*localVocab, idTable.asStaticView<0>());
   resultTable.emplace_back();
 
   IdTableStatic<OUT_WIDTH> table = std::move(resultTable).toStatic<OUT_WIDTH>();
@@ -772,35 +779,74 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  IdTable table{1, getExecutionContext()->getAllocator()};
-  table.emplace_back();
   const auto& var = varAndDistinctness.value().variable_;
+
+  // Helpers for exporting the result as an `IdTable`.
+  auto idTableFromInt = [this](size_t count) {
+    IdTable table{1, getExecutionContext()->getAllocator()};
+    table.push_back({Id::makeFromInt(count)});
+    return table;
+  };
+  auto countFromExactSize = [&indexScan, &idTableFromInt] {
+    return idTableFromInt(
+        indexScan->getLimitOffset().actualSize(indexScan->getExactSize()));
+  };
+
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
-    table(0, 0) = Id::makeFromInt(0);
-  } else if (indexScan->numVariables() == 3) {
-    // TODO<RobinTF> This currently doesn't work correctly with UPDATE. It
-    // queries the statistics which are never updated. Consider calling
-    // `IndexImpl::recomputeStatistics` and storing the result somewhere in this
-    // case. It also doesn't return the correct result for internal
-    // permutations.
-    if (countIsDistinct) {
-      auto permutation =
-          getPermutationForThreeVariableTriple(*_subtree, var, var);
-      AD_CONTRACT_CHECK(permutation.has_value());
-      table(0, 0) = Id::makeFromInt(
-          getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
-    } else {
-      const auto& limitOffset = indexScan->getLimitOffset();
-      table(0, 0) = Id::makeFromInt(
-          limitOffset.actualSize(getIndex().numTriples().normal));
-    }
-  } else {
-    const auto& limitOffset = indexScan->getLimitOffset();
-    table(0, 0) =
-        Id::makeFromInt(limitOffset.actualSize(indexScan->getExactSize()));
+    return idTableFromInt(0);
   }
-  return table;
+
+  if (indexScan->numVariables() != 3) {
+    return countFromExactSize();
+  }
+
+  // The statistics used below are precomputed at index build time and do not
+  // reflect delta triples from SPARQL updates. Fall back to the general
+  // computation when there are any delta triples.
+
+  const auto& locTriples =
+      indexScan->permutation().getLocatedTriplesForPermutation(
+          locatedTriplesState());
+  bool hasLocatedTriples = !locTriples.isEmpty();
+  bool isMaterializedView = indexScan->permutation().permutationType() ==
+                            Permutation::Type::MATERIALIZED_VIEW;
+
+  // For `COUNT(DISTINCT)` on a normal permutation without updates, we use
+  // `numDistinctCol0`. Otherwise we need to compute the result regularly.
+  if (countIsDistinct) {
+    if (hasLocatedTriples || isMaterializedView) {
+      return std::nullopt;
+    }
+    auto permutation =
+        getPermutationForThreeVariableTriple(*_subtree, var, var);
+    AD_CONTRACT_CHECK(permutation.has_value());
+    return idTableFromInt(
+        getIndex()
+            .getImpl()
+            .numDistinctCol0(permutation.value().permutation())
+            .normal);
+  }
+
+  // For a regular, non-distinct `COUNT` we can use the number of triples in the
+  // permutation if there are no updates or duplicates from different graphs.
+  bool hasGraphVariable =
+      !isMaterializedView &&
+      ql::ranges::any_of(indexScan->additionalColumns(), [](ColumnIndex col) {
+        return col == ADDITIONAL_COLUMN_GRAPH_ID;
+      });
+  bool hasCrossGraphDuplicates =
+      !isMaterializedView && !hasGraphVariable &&
+      ql::ranges::any_of(locTriples.getAugmentedMetadata(),
+                         [](const CompressedBlockMetadata& block) {
+                           return block.containsDuplicatesWithDifferentGraphs_;
+                         });
+
+  if (hasLocatedTriples || hasCrossGraphDuplicates) {
+    return countFromExactSize();
+  }
+  return idTableFromInt(indexScan->getLimitOffset().actualSize(
+      indexScan->permutation().numTriples()));
 }
 
 // ____________________________________________________________________________
@@ -813,9 +859,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  const auto& vocabulary = getIndex().getVocab();
-  std::optional<Id> col0Id =
-      permutedTriple[0]->toValueId(vocabulary, getIndex().encodedIriManager());
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }
@@ -863,10 +907,10 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
 
   // The child must be an `IndexScan` with three variables that contains
   // the grouped variable.
-  auto permutationEnum = getPermutationForThreeVariableTriple(
+  auto permutation = getPermutationForThreeVariableTriple(
       *_subtree, groupByVariable, groupByVariable);
 
-  if (!permutationEnum.has_value()) {
+  if (!permutation.has_value()) {
     return std::nullopt;
   }
 
@@ -898,14 +942,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  const auto& indexScan = _subtree->getRootOperation();
-  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  const auto& operation = _subtree->getRootOperation();
+  operation->updateRuntimeInformationWhenOptimizedOut();
 
-  const auto& permutation =
-      getExecutionContext()->getIndex().getPimpl().getPermutation(
-          permutationEnum.value());
-  auto table = permutation.getDistinctCol0IdsAndCounts(
-      cancellationHandle_, locatedTriplesState(), indexScan->getLimitOffset());
+  auto table = permutation.value().getDistinctCol0IdsAndCounts(
+      cancellationHandle_, locatedTriplesState(), operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -921,34 +962,43 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
 }
 
 // ____________________________________________________________________________
-std::optional<Permutation::Enum>
+boost::optional<const Permutation&>
 GroupByImpl::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
-    const Variable& variableThatMustBeContained) {
+    const Variable& variableThatMustBeContained) const {
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
       indexScan->numVariables() != 3) {
-    return std::nullopt;
+    return {};
   }
   {
     auto v = variableThatMustBeContained;
     if (v != indexScan->subject() && v != indexScan->predicate() &&
         v != indexScan->object()) {
-      return std::nullopt;
+      return {};
     }
   }
 
-  if (variableByWhichToSort == indexScan->subject()) {
-    return Permutation::SPO;
-  } else if (variableByWhichToSort == indexScan->predicate()) {
-    return Permutation::POS;
-  } else if (variableByWhichToSort == indexScan->object()) {
-    return Permutation::OSP;
-  } else {
-    return std::nullopt;
+  // For normal permutations we can just select a differently sorted one, but
+  // for materialized views this is not possible. The view is either sorted
+  // correctly or we can't use it.
+
+  if (indexScan->permutation().permutationType() == Permutation::Type::NORMAL) {
+    if (variableByWhichToSort == indexScan->subject()) {
+      return getIndex().getImpl().getPermutation(Permutation::SPO);
+    } else if (variableByWhichToSort == indexScan->predicate()) {
+      return getIndex().getImpl().getPermutation(Permutation::POS);
+    } else if (variableByWhichToSort == indexScan->object()) {
+      return getIndex().getImpl().getPermutation(Permutation::OSP);
+    }
+  } else if (indexScan->permutation().permutationType() ==
+                 Permutation::Type::MATERIALIZED_VIEW &&
+             variableByWhichToSort == indexScan->subject()) {
+    return indexScan->permutation();
   }
+  return {};
 };
 
 // ____________________________________________________________________________
@@ -1017,22 +1067,31 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       {subtree.getRootOperation()->getRuntimeInfoPointer(),
        threeVarSubtree.getRootOperation()->getRuntimeInfoPointer()});
   IdTable result{2, getExecutionContext()->getAllocator()};
-  if (subresult->idTable().size() == 0) {
+  if (subresult->idTableView().size() == 0) {
     return result;
   }
 
   auto idTable = std::move(result).toStatic<2>();
-  const auto& index = getExecutionContext()->getIndex();
+  auto indexScan = std::dynamic_pointer_cast<const IndexScan>(
+      threeVarSubtree.getRootOperation());
+  AD_CORRECTNESS_CHECK(indexScan != nullptr);
+
+  auto getExactCardinality = [&indexScan, &permutation](Id id) {
+    return permutation.getResultSizeOfScan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecification{id, std::nullopt, std::nullopt},
+            indexScan->locatedTriplesState()),
+        indexScan->locatedTriplesState());
+  };
 
   // TODO<joka921, C++23> Simplify the following pattern by using
   // `ql::views::chunk_by` and implement a lazy version of this view for
   // input iterators.
 
   // Take care of duplicate values in the input.
-  Id currentId = subresult->idTable()(0, columnIndex);
+  Id currentId = subresult->idTableView()(0, columnIndex);
   size_t currentCount = 0;
-  size_t currentCardinality =
-      index.getCardinality(currentId, permutation, locatedTriplesState());
+  size_t currentCardinality = getExactCardinality(currentId);
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -1045,17 +1104,13 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
-  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
-    auto id = subresult->idTable()(i, columnIndex);
+  for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
+    auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
       pushRow();
       currentId = id;
       currentCount = 0;
-      // TODO<joka921> This is also not quite correct, we want the cardinality
-      // without the internally added triples, but that is not easy to
-      // retrieve right now.
-      currentCardinality =
-          index.getCardinality(id, permutation, locatedTriplesState());
+      currentCardinality = getExactCardinality(id);
     }
     currentCount += currentCardinality;
   }
@@ -1274,7 +1329,7 @@ void GroupByImpl::extractValues(
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
-    for (sparqlExpression::IdOrLiteralOrIri val : generator) {
+    for (sparqlExpression::IdOrLocalVocabEntry val : generator) {
       *targetIterator = sparqlExpression::detail::constantExpressionResultToId(
           std::move(val), *localVocab);
       ++targetIterator;
@@ -1298,7 +1353,8 @@ GroupByImpl::getHashMapAggregationResults(
     IdTable* resultTable,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     size_t dataIndex, size_t beginIndex, size_t endIndex,
-    LocalVocab* localVocab, const Allocator& allocator) {
+    const LocalVocabContext& context, LocalVocab* localVocab,
+    const Allocator& allocator) {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(allocator);
   aggregateResults.resize(endIndex - beginIndex);
 
@@ -1322,10 +1378,11 @@ GroupByImpl::getHashMapAggregationResults(
       vectorIdx = aggregationData.getIndex(mapKey);
     }
 
-    auto visitor = [&aggregateResults, vectorIdx, rowIdx, beginIndex,
+    auto visitor = [&context, &aggregateResults, vectorIdx, rowIdx, beginIndex,
                     localVocab](auto& aggregateDataVariant) {
       aggregateResults[rowIdx - beginIndex] =
-          aggregateDataVariant.at(vectorIdx).calculateResult(localVocab);
+          aggregateDataVariant.at(vectorIdx).calculateResult(context,
+                                                             localVocab);
     };
 
     std::visit(visitor, aggregateDataVariant);
@@ -1367,7 +1424,8 @@ GroupByImpl::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    IdTable* resultTable, LocalVocab* localVocab, const Allocator& allocator) {
+    IdTable* resultTable, const LocalVocabContext& context,
+    LocalVocab* localVocab, const Allocator& allocator) {
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
       originalChildren;
   originalChildren.reserve(info.size());
@@ -1375,7 +1433,7 @@ GroupByImpl::substituteAllAggregates(
   for (auto& aggregate : info) {
     auto aggregateResults = getHashMapAggregationResults(
         resultTable, aggregationData, aggregate.aggregateDataIndex_, beginIndex,
-        endIndex, localVocab, allocator);
+        endIndex, context, localVocab, allocator);
 
     // Substitute the resulting vector as a literal
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
@@ -1482,8 +1540,8 @@ void GroupByImpl::substituteAndEvaluate(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab, const Allocator& allocator,
-    std::vector<HashMapAggregateInformation>& info,
+    const LocalVocabContext& context, LocalVocab* localVocab,
+    const Allocator& allocator, std::vector<HashMapAggregateInformation>& info,
     const std::vector<HashMapGroupedVariableInformation>& substitutions) {
   // Store which SPARQL expressions of grouped variables have been substituted.
   std::vector<std::pair<
@@ -1509,7 +1567,7 @@ void GroupByImpl::substituteAndEvaluate(
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
       originalChildren = substituteAllAggregates(
           info, evaluationContext._beginIndex, evaluationContext._endIndex,
-          aggregationData, result, localVocab, allocator);
+          aggregationData, result, context, localVocab, allocator);
 
   // Evaluate top-level alias expression.
   sparqlExpression::ExpressionResult expressionResult =
@@ -1552,7 +1610,8 @@ void GroupByImpl::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab, const Allocator& allocator) {
+    const LocalVocabContext& context, LocalVocab* localVocab,
+    const Allocator& allocator) {
   auto& info = alias.aggregateInfo_;
 
   // Either:
@@ -1596,8 +1655,8 @@ void GroupByImpl::evaluateAlias(
     // Get aggregate results
     auto aggregateResults = getHashMapAggregationResults(
         result, aggregationData, aggregate.aggregateDataIndex_,
-        evaluationContext._beginIndex, evaluationContext._endIndex, localVocab,
-        allocator);
+        evaluationContext._beginIndex, evaluationContext._endIndex, context,
+        localVocab, allocator);
 
     // Copy to result table
     decltype(auto) outValues = result->getColumn(alias.outCol_);
@@ -1609,9 +1668,9 @@ void GroupByImpl::evaluateAlias(
         sparqlExpression::copyExpressionResult(
             sparqlExpression::ExpressionResult{std::move(aggregateResults)});
   } else {
-    substituteAndEvaluate<NUM_GROUP_COLUMNS>(alias, result, evaluationContext,
-                                             aggregationData, localVocab,
-                                             allocator, info, substitutions);
+    substituteAndEvaluate<NUM_GROUP_COLUMNS>(
+        alias, result, evaluationContext, aggregationData, context, localVocab,
+        allocator, info, substitutions);
   }
 }
 
@@ -1661,7 +1720,7 @@ IdTable GroupByImpl::createResultFromHashMap(
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContext(*localVocab, result);
+      createEvaluationContext(*localVocab, result.asStaticView<0>());
 
   ad_utility::Timer evaluationAndResultsTimer{ad_utility::Timer::Started};
   for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
@@ -1673,7 +1732,7 @@ IdTable GroupByImpl::createResultFromHashMap(
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, &result, evaluationContext, aggregationData,
-                    localVocab, allocator());
+                    getLocalVocabContext(), localVocab, allocator());
     }
   }
   runtimeInfo().addDetail("timeEvaluationAndResults",
@@ -1728,7 +1787,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
   for (const auto& [inputTableRef, inputLocalVocabRef] : subresults) {
-    const IdTable& inputTable = inputTableRef;
+    const auto inputTable = inputTableRef.template asStaticView<0>();
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
     // Merge the local vocab of each input block.
@@ -1853,7 +1912,7 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   // Compute the result as a single `size_t`.
   auto res = [&input = *childRes]() -> size_t {
     if (input.isFullyMaterialized()) {
-      return input.idTable().size();
+      return input.idTableView().size();
     } else {
       auto gen = input.idTables();
       auto sz = gen | ql::views::transform([](const auto& pair) {

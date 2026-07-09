@@ -73,13 +73,13 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  CPP_auto_member constexpr auto CPP_fun(begin)()(
+  CPP_auto_member constexpr auto CPP_fun(begin) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(end)()(
+  CPP_auto_member constexpr auto CPP_fun(end) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
@@ -95,17 +95,18 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const
+      -> CPP_ret(size_t)(
+          requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  CPP_auto_member constexpr auto
+      CPP_fun(data) ()(requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
+  CPP_auto_member constexpr auto CPP_fun(data) ()(
       const  //
       requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
@@ -213,9 +214,19 @@ CPP_template(typename V, typename F)(
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
-  F callback_;
+  ::ranges::semiregular_box_t<F> callback_;
   // Don't invoke the callback if the view was moved from.
   ad_utility::ResetWhenMoved<bool, true> called_ = false;
+
+  // The `callback_` might be called from the destructor, so we have to make
+  // sure the exceptions from the callback don't terminate the program. We use
+  // the `ThrowInDestructorIfSafe` mechanism, which ignores exceptions that
+  // would terminate the program because other exceptions are in flight during
+  // stack unwinding.
+  static constexpr bool isNoexcept = std::is_nothrow_invocable_v<F>;
+  using ThrowIfSafe =
+      std::conditional_t<isNoexcept, std::monostate, ThrowInDestructorIfSafe>;
+  [[no_unique_address]] ThrowIfSafe throwIfSafe_;
 
   // Invoke the `callback` iff it hasn't been invoked yet.
   void maybeInvoke() {
@@ -269,7 +280,13 @@ CPP_template(typename V, typename F)(
   CallbackOnEndView(CallbackOnEndView&&) = default;
   CallbackOnEndView& operator=(CallbackOnEndView&&) = default;
 
-  ~CallbackOnEndView() { maybeInvoke(); }
+  ~CallbackOnEndView() noexcept(isNoexcept) {
+    if constexpr (isNoexcept) {
+      maybeInvoke();
+    } else {
+      throwIfSafe_([this]() { maybeInvoke(); });
+    }
+  }
 
   auto begin() { return Iterator{ql::ranges::begin(base_), this}; }
 
@@ -341,8 +358,9 @@ CPP_template(typename UnderlyingRange)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const
+      -> CPP_ret(size_t)(
+          requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 };

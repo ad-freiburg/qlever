@@ -25,8 +25,9 @@ class RandomExpression : public SparqlExpression {
     result.reserve(numElements);
     ad_utility::RandomDoubleGenerator randDouble(0.0, 1.0);
 
-    // As part of a GROUP BY we only return one value per group.
-    if (context->_isPartOfGroupBy) {
+    // As part of a GROUP BY (and outside of an aggregate) we only return one
+    // value per group.
+    if (worksOnAggregatedData(context)) {
       return Id::makeFromDouble(randDouble());
     }
 
@@ -45,6 +46,14 @@ class RandomExpression : public SparqlExpression {
   std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return "RAND " + std::to_string(randId);
+  }
+
+  // RAND() produces a fresh random value on every invocation.
+  bool isDeterministic() const override { return false; }
+
+  // `RAND()` is always defined.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
   }
 
  private:
