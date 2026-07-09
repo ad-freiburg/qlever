@@ -332,8 +332,6 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  // Grants `serverIntegration` access to private members (in particular
-  // `qlever_`) for direct inspection in tests.
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
   // Trigger an index rebuild with `indexBaseName` as the base name for the new
