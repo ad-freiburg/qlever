@@ -1694,12 +1694,8 @@ TEST(RdfParserTest, getLineRethrowsOnTooLargeBufferWithPendingException) {
   auto& limit = RDF_PARSER_MAX_TOTAL_BUFFER_SIZE();
   auto oldLimit = limit;
   limit = ad_utility::MemorySize::bytes(128);
-  absl::Cleanup cleanup{[&limit, oldLimit] {
-    limit = oldLimit;
-    ad_utility::setGlobalLoggingStream(&std::cout);
-  }};
-  std::stringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{[&limit, oldLimit] { limit = oldLimit; }};
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   // `@prefix` without a terminating dot raises a `ParseException` on every
   // attempt, so a pending exception is always present when the buffer limit
@@ -1737,12 +1733,8 @@ TEST(RdfParserTest, getLineRaisesOnTooLargeBufferWithoutPendingException) {
   auto& limit = RDF_PARSER_MAX_TOTAL_BUFFER_SIZE();
   auto oldLimit = limit;
   limit = ad_utility::MemorySize::bytes(128);
-  absl::Cleanup cleanup{[&limit, oldLimit] {
-    limit = oldLimit;
-    ad_utility::setGlobalLoggingStream(&std::cout);
-  }};
-  std::stringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{[&limit, oldLimit] { limit = oldLimit; }};
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   // `<a> <b> <c>\n` parses successfully up to the (missing) dot, so
   // `statement()` returns false without raising. The parser is forced to
@@ -1787,12 +1779,8 @@ TEST(RdfParserTest, getLineLogsRemainingUnparsedBytesWhenInputExhausted) {
     auto of = ad_utility::makeOfstream(filename);
     of << "<a> <b> <c> .\n" << trailingGarbage;
   }
-  std::stringstream logStream;
-  absl::Cleanup cleanup{[&] {
-    ad_utility::setGlobalLoggingStream(&std::cout);
-    ad_utility::deleteFile(filename);
-  }};
-  ad_utility::setGlobalLoggingStream(&logStream);
+  absl::Cleanup cleanup{[&] { ad_utility::deleteFile(filename); }};
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   Parser parser{qlever::InputFileSpecification{
                     filename, qlever::Filetype::Turtle, std::nullopt},
