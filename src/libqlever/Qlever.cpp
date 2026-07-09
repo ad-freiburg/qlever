@@ -331,11 +331,14 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
 }
 
 // ___________________________________________________________________________
+// This function relies on `DeltaTriples::addFromSnapshotDiff`, which is only
+// available in the C++20 build, so it is not compiled in the reduced C++17
+// feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 void Qlever::swapInRebuiltIndex(
-    Index& index, std::shared_ptr<IndexAndViews> newIndexAndViews,
-    LocatedTriplesSharedState oldSnapshot,
-    indexRebuilder::IndexRebuildMapping mapping,
+    Index& index, RebuildResult rebuildResult,
     const ad_utility::SharedCancellationHandle& handle) {
+  auto& [oldSnapshot, mapping, newIndexAndViews] = rebuildResult;
   auto newSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
 
@@ -356,4 +359,5 @@ void Qlever::swapInRebuiltIndex(
   // oldIndex->removeOnDestruction();
   swapIndexAndViews(std::move(newIndexAndViews));
 }
+#endif
 }  // namespace qlever

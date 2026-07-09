@@ -421,17 +421,19 @@ class Qlever {
       const ad_utility::SharedCancellationHandle& handle) const;
 
   // Remap the delta triples that accumulated on the old `index` onto the
-  // freshly built `newIndexAndViews` (using `oldSnapshot` and `mapping` as
-  // produced by `rebuildIndexToDisk`) and atomically swap the new index in.
-  // Calling this also persists the remapped delta triples to disk so that they
-  // are not lost if the engine is later restarted on the rebuilt index. The
-  // reason why `index` has to be passed in manually instead of using
-  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
-  void swapInRebuiltIndex(Index& index,
-                          std::shared_ptr<IndexAndViews> newIndexAndViews,
-                          LocatedTriplesSharedState oldSnapshot,
-                          indexRebuilder::IndexRebuildMapping mapping,
+  // freshly built index (using the `rebuildResult` produced by
+  // `rebuildIndexToDisk`) and atomically swap the new index in. Calling this
+  // also persists the remapped delta triples to disk so that they are not lost
+  // if the engine is later restarted on the rebuilt index. The reason why
+  // `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs. It is crucial
+  // that this function is only called when you can guarantee no updates are
+  // added during the duration of this function call. Only available in the
+  // C++20 build (it relies on `DeltaTriples::addFromSnapshotDiff`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  void swapInRebuiltIndex(Index& index, RebuildResult rebuildResult,
                           const ad_utility::SharedCancellationHandle& handle);
+#endif
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }

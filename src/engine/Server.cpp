@@ -1526,15 +1526,16 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
         return qlever().rebuildIndexToDisk(index, indexBaseName, handle);
       },
       handle);
-  auto [oldSnapshot, mapping, newIndexAndViews] = co_await std::move(coroutine);
+  auto rebuildResult = co_await std::move(coroutine);
+  // It is important that the swap is done in the update thread pool, because it
+  // prevents other updates from being applied while the diff is computed for
+  // the new index. Otherwise, the new index would be out of sync with the
+  // current index.
   auto swapRoutine = computeInNewThread(
       updateThreadPool_,
-      [this, &index, newIndexAndViews = std::move(newIndexAndViews), &handle,
-       oldSnapshot = std::move(oldSnapshot),
-       mapping = std::move(mapping)]() mutable {
-        qlever().swapInRebuiltIndex(index, std::move(newIndexAndViews),
-                                    std::move(oldSnapshot), std::move(mapping),
-                                    handle);
+      [this, &index, rebuildResult = std::move(rebuildResult),
+       &handle]() mutable {
+        qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle);
       },
       handle);
   co_await std::move(swapRoutine);
