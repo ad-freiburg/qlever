@@ -10,31 +10,42 @@
 #ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 #define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 
+#include <boost/asio/any_io_executor.hpp>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 
-#include "parser/ParallelBuffer.h"
+#include "parser/AsyncBlockSource.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/http/MediaTypes.h"
 
 namespace qlever {
 
 // An enum to distinguish between `Turtle` and `NQuad` files.
 enum class Filetype { Turtle, NQuad };
 
+// Convert a `MediaType` (typically parsed from an HTTP `Content-Type` header)
+// to a `Filetype` (typically used for selecting an RDF parser). Return
+// `nullopt` for any `MediaType` that isn't a supported RDF input format (e.g.
+// `json`, or `csv`).
+std::optional<Filetype> filetypeFromMediaType(ad_utility::MediaType mediaType);
+
 // Specify a single input file or stream for the index builder. The source of
-// bytes is either a filename or a factory that produces a `ParallelBuffer`.
+// bytes is either a filename or a factory that produces an `AsyncBlockSource`.
 struct InputFileSpecification {
-  // A factory that, when called, creates a ready-to-use `ParallelBuffer`.
-  // The `size_t` is the preferred blocksize for the `ParallelBuffer`, and the
-  // `string_view` is a descriptor of the resource, which can be used for
-  // logging and debugging.
-  using ParallelBufferFactory =
-      std::function<std::unique_ptr<ParallelBuffer>(size_t, std::string_view)>;
+  // A factory that, when called, creates a ready-to-use `AsyncBlockSource`.
+  // The `any_io_executor` is the executor on which I/O will be dispatched, the
+  // `MemorySize` is the preferred blocksize, and the `string_view` is a
+  // descriptor of the resource used for logging and debugging.
+  using AsyncBlockSourceFactory =
+      std::function<std::unique_ptr<qlever::parser::AsyncBlockSource>(
+          const boost::asio::any_io_executor&, ad_utility::MemorySize,
+          std::string_view)>;
 
   struct BufferFactoryAndDescription {
-    ParallelBufferFactory bufferFactory_;
+    AsyncBlockSourceFactory bufferFactory_;
     std::string description_;
   };
   // The byte source: either a filename or a factory.
@@ -70,17 +81,19 @@ struct InputFileSpecification {
         source_);
   }
 
-  // Create and return a `ParallelBuffer` for this spec. For filename-based
-  // specs, a `ParallelFileBuffer` with the given `blocksize` is returned. For
-  // factory-based specs, the factory is called.
-  std::unique_ptr<ParallelBuffer> getParallelBuffer(size_t blocksize) const {
+  // Create and return an `AsyncBlockSource` for this spec. For filename-based
+  // specs, an `AsyncFileBlockSource` with the given `exec` and `blocksize` is
+  // returned. For factory-based specs, the factory is called.
+  std::unique_ptr<qlever::parser::AsyncBlockSource> makeAsyncBlockSource(
+      const boost::asio::any_io_executor& exec,
+      ad_utility::MemorySize blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
-      return std::make_unique<ParallelFileBuffer>(
-          blocksize, std::get<std::string>(source_));
+      return std::make_unique<qlever::parser::AsyncFileBlockSource>(
+          exec, blocksize, std::get<std::string>(source_));
     }
     auto& [factory, description] =
         std::get<BufferFactoryAndDescription>(source_);
-    return factory(blocksize, description);
+    return factory(exec, blocksize, description);
   }
 };
 }  // namespace qlever

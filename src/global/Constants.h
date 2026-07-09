@@ -224,7 +224,7 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
-constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
+constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
 
 constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
