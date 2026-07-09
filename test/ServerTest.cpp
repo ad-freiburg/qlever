@@ -448,12 +448,14 @@ using namespace serverTestHelpers;
 // _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  auto serverForTesting = makeServerForTesting(qec->getIndex().getOnDiskBase());
-
-  auto testHead = [&serverForTesting](
+  // Each request runs on a fresh server, so that the sub-tests are
+  // independent of each other.
+  auto testHead = [&qec](
                       const std::optional<std::string>& accept,
                       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
+    auto serverForTesting =
+        makeServerForTesting(qec->getIndex().getOnDiskBase());
     auto head = makeRequest(http::verb::head, "/?default");
     if (accept.has_value()) {
       head.set(http::field::accept, accept.value());
@@ -473,13 +475,15 @@ TEST(ServerTest, gspHead) {
 // _____________________________________________________________________________
 TEST(ServerTest, gspGet) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  auto serverForTesting = makeServerForTesting(qec->getIndex().getOnDiskBase());
-
-  auto testGet = [&serverForTesting](
+  // Each request runs on a fresh server, so that the sub-tests are
+  // independent of each other.
+  auto testGet = [&qec](
                      const std::optional<std::string>& accept,
                      const testing::Matcher<const std::string&>& bodyMatcher,
                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
+    auto serverForTesting =
+        makeServerForTesting(qec->getIndex().getOnDiskBase());
     auto get = makeGetRequest("/?default");
     if (accept.has_value()) {
       get.set(http::field::accept, accept.value());

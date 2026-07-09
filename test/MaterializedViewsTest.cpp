@@ -772,9 +772,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
-  auto serverForTesting = makeServerForTesting(testIndexBase_);
-  // Config for the plain `Server` instances constructed below (not to be
-  // confused with the config of `serverForTesting` above).
+  // Config for the plain `Server` instances constructed below.
   qlever::EngineConfig config;
   config.baseName_ = testIndexBase_;
 
@@ -824,7 +822,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP&access-token="
         "accessToken",
         "application/sparql-query", simpleWriteQuery_);
-    auto response = responseBodyAsJson(serverForTesting.process(request));
+    auto response = responseBodyAsJson(
+        makeServerForTesting(testIndexBase_).process(request));
 
     // Check HTTP response.
     ASSERT_TRUE(response.has_value());
@@ -846,7 +845,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "&access-token=accessToken"
         "&query=SELECT%20*%20%7B%20%3Fs%20%3Fp%20%3Fo%20.%20BIND(1%"
         "20AS%20%3Fg)%20%7D");
-    auto response = responseBodyAsJson(serverForTesting.process(request));
+    auto response = responseBodyAsJson(
+        makeServerForTesting(testIndexBase_).process(request));
 
     // Check HTTP response.
     ASSERT_TRUE(response.has_value());
@@ -866,7 +866,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto request = makeGetRequest(
         "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
         "&access-token=accessToken");
-    auto response = responseBodyAsJson(serverForTesting.process(request));
+    auto response = responseBodyAsJson(
+        makeServerForTesting(testIndexBase_).process(request));
 
     // Check HTTP response.
     ASSERT_TRUE(response.has_value());
@@ -888,7 +889,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "access-token=accessToken",
         "application/sparql-update", "INSERT DATA { <a> <b> <c> }");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(serverForTesting.process(request)),
+        responseBodyAsJson(
+            makeServerForTesting(testIndexBase_).process(request)),
         ::testing::HasSubstr(
             "Action 'write-materialized-view' requires a 'SELECT' query"));
   }
@@ -899,7 +901,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "/?cmd=write-materialized-view&view-name=testViewFromHTTP3",
         "application/sparql-query", simpleWriteQuery_);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(serverForTesting.process(request)),
+        responseBodyAsJson(
+            makeServerForTesting(testIndexBase_).process(request)),
         ::testing::HasSubstr("write-materialized-view requires a valid access "
                              "token but no access token was provided"));
   }
@@ -910,7 +913,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "/?cmd=write-materialized-view&access-token=accessToken",
         "application/sparql-query", simpleWriteQuery_);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(serverForTesting.process(request)),
+        responseBodyAsJson(
+            makeServerForTesting(testIndexBase_).process(request)),
         ::testing::HasSubstr(
             "Writing a materialized view requires a name to be set "
             "via the 'view-name' parameter"));
@@ -922,7 +926,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         "/?cmd=write-materialized-view&view-name=&access-token=accessToken",
         "application/sparql-query", simpleWriteQuery_);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        responseBodyAsJson(serverForTesting.process(request)),
+        responseBodyAsJson(
+            makeServerForTesting(testIndexBase_).process(request)),
         ::testing::HasSubstr("The name for the view may not be empty"));
   }
 }
