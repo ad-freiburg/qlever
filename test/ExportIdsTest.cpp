@@ -196,7 +196,8 @@ TYPED_TEST(ExportIdsBlankNodeTest, blankNodeIrisAreProperlyFormatted) {
   // so passing the `absl::StrCat` temporary directly would dangle.
   std::string blankNodeRepresentation =
       absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">");
-  auto blankNodeIri = IriType::fromStringRepresentation(blankNodeRepresentation));
+  auto blankNodeIri =
+      IriType::fromStringRepresentation(blankNodeRepresentation);
   EXPECT_THAT(ql::exportIds::blankNodeIriToString(blankNodeIri),
               ::testing::Optional(::testing::Eq(input)));
 
