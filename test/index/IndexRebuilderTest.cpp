@@ -220,6 +220,69 @@ TEST(IndexRebuilder, remapVocabId) {
 }
 
 // _____________________________________________________________________________
+// Same expected values as `remapVocabId`, but exercising the hinted overload.
+// The hint is intentionally reused across all calls (the same way the
+// production call site does it) and across non-monotone inputs to verify that
+// it self-corrects.
+TEST(IndexRebuilder, remapVocabIdHinted) {
+  std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
+                                  VocabIndex::make(7)};
+
+  size_t hint = 0;
+  // Monotone forward sweep.
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsA, hint), V(0));
+  EXPECT_EQ(0, hint);
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsA, hint), V(1));
+  EXPECT_EQ(0, hint);
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsA, hint), V(2));
+  EXPECT_EQ(0, hint);
+  EXPECT_EQ(remapVocabId(V(3), insertionPositionsA, hint), V(4));
+  EXPECT_EQ(1, hint);
+  EXPECT_EQ(remapVocabId(V(4), insertionPositionsA, hint), V(5));
+  EXPECT_EQ(1, hint);
+  EXPECT_EQ(remapVocabId(V(5), insertionPositionsA, hint), V(7));
+  EXPECT_EQ(2, hint);
+  EXPECT_EQ(remapVocabId(V(6), insertionPositionsA, hint), V(8));
+  EXPECT_EQ(2, hint);
+  EXPECT_EQ(remapVocabId(V(7), insertionPositionsA, hint), V(10));
+  EXPECT_EQ(3, hint);
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+
+  // Backward jump (hint is now too high) - must self-correct.
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsA, hint), V(2));
+  EXPECT_EQ(0, hint);
+  // Forward jump that lands several insertions later.
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+  // Repeated value (hint already correct).
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+
+  // Independent insertion-position vector with a fresh hint.
+  std::vector insertionPositionsB{VocabIndex::make(0), VocabIndex::make(1)};
+  size_t hintB = 0;
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsB, hintB), V(1));
+  EXPECT_EQ(1, hintB);
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsB, hintB), V(3));
+  EXPECT_EQ(2, hintB);
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsB, hintB), V(4));
+  EXPECT_EQ(2, hintB);
+
+  // Empty insertion positions: every id is unchanged regardless of pattern.
+  std::vector<VocabIndex> insertionPositionsEmpty;
+  size_t hintE = 0;
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsEmpty, hintE), V(0));
+  EXPECT_EQ(0, hintE);
+  EXPECT_EQ(remapVocabId(V(42), insertionPositionsEmpty, hintE), V(42));
+  EXPECT_EQ(0, hintE);
+  EXPECT_EQ(remapVocabId(V(7), insertionPositionsEmpty, hintE), V(7));
+  EXPECT_EQ(0, hintE);
+}
+
+// _____________________________________________________________________________
 TEST(IndexRebuilder, remapBlankNodeId) {
   std::vector<uint64_t> blankNodeBlocks{4, 42, 77};
   auto s = ad_utility::BlankNodeManager::blockSize_;
@@ -575,18 +638,37 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 namespace {
 // Get rid of previous files with the specified prefix.
 void cleanFilesWithPrefix(std::string_view prefix) {
+  AD_CONTRACT_CHECK(!prefix.empty(),
+                    "This function is not meant to delete all files in the "
+                    "current directory. Please specify a prefix.");
   namespace fs = std::filesystem;
-  for (const auto& entry : fs::directory_iterator(".")) {
-    std::string name = entry.path().filename().string();
-    if (ql::starts_with(name, prefix)) {
-      ad_utility::deleteFile(name);
-    }
+  // Collect the matching entries first and delete them only afterwards.
+  // Deleting entries while iterating the directory is unspecified behavior and
+  // can cause entries to be skipped on some platforms (observed on macOS),
+  // leaving leftover files behind.
+  std::vector<fs::directory_entry> toDelete;
+  ql::ranges::copy_if(fs::directory_iterator("."), std::back_inserter(toDelete),
+                      [prefix](const auto& e) {
+                        return ql::starts_with(e.path().filename().string(),
+                                               prefix);
+                      });
+  AD_CONTRACT_CHECK(
+      ql::ranges::all_of(
+          toDelete, [](const auto& entry) { return entry.is_regular_file(); }),
+      "All entries matching the prefix must be regular files, this function "
+      "does not delete directories.");
+  for (const auto& entry : toDelete) {
+    ad_utility::deleteFile(entry.path());
   }
 }
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
   cleanFilesWithPrefix("my-name");
   cleanFilesWithPrefix("new_index");
   namespace net = boost::asio;

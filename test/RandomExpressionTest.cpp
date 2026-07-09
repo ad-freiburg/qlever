@@ -6,6 +6,7 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -51,6 +52,22 @@ TEST(RandomExpression, evaluate) {
     auto resultAsVariant2 = RandomExpression{}.evaluate(&evaluationContext);
     ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant2));
   }
+}
+
+// _____________________________________________________________________________
+TEST(RandomExpression, insideAggregateReturnsVector) {
+  TestContext testContext{};
+  auto& evaluationContext = testContext.context;
+  evaluationContext._isPartOfGroupBy = true;
+  // Wrap expression in an aggregate.
+  auto aggregate = std::make_unique<SampleExpression>(
+      false, std::make_unique<RandomExpression>());
+  const auto* random = aggregate->children()[0].get();
+  ASSERT_TRUE(random->isInsideAggregate());
+  auto result = random->evaluate(&evaluationContext);
+  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result));
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(result).size(),
+            evaluationContext.size());
 }
 
 TEST(RandomExpression, simpleMemberFunctions) {
@@ -156,6 +173,35 @@ TEST(UuidExpression, evaluateUuidExpression) {
       std::get<IdOrLocalVocabEntry>(resultAsVariant2);
   ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(litOrIriUuid));
   ASSERT_TRUE(std::get<LocalVocabEntry>(litOrIriUuid).isIri());
+}
+
+// _____________________________________________________________________________
+template <typename Expression>
+void testInsideAggregateReturnsVector() {
+  TestContext testContext{};
+  auto& evaluationContext = testContext.context;
+  evaluationContext._isPartOfGroupBy = true;
+  // Wrap expression in an aggregate.
+  auto aggregate =
+      std::make_unique<SampleExpression>(false, std::make_unique<Expression>());
+  const auto* uuid = aggregate->children()[0].get();
+  ASSERT_TRUE(uuid->isInsideAggregate());
+  auto result = uuid->evaluate(&evaluationContext);
+  ASSERT_TRUE(
+      std::holds_alternative<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(
+          result));
+  EXPECT_EQ(std::get<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(result).size(),
+            evaluationContext.size());
+}
+
+// _____________________________________________________________________________
+TEST(UuidExpression, insideAggregateReturnsVector) {
+  testInsideAggregateReturnsVector<UuidExpression>();
+}
+
+// _____________________________________________________________________________
+TEST(UuidExpression, insideAggregateReturnsVectorStrUuid) {
+  testInsideAggregateReturnsVector<StrUuidExpression>();
 }
 
 // _____________________________________________________________________________

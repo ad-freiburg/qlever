@@ -72,7 +72,7 @@ Server::Server(
             ->index_.deltaTriplesManager()
             .getCurrentLocatedTriplesSharedState()
             ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
-            .numTriples();
+            .numTriplesForTesting();
       },
       [this]() -> int64_t { return allocator().amountMemoryLeft().getBytes(); },
       [this]() -> int64_t {
@@ -254,15 +254,20 @@ auto Server::cancelAfterDeadline(
     TimeLimit timeLimit)
     -> QL_CONCEPT_OR_NOTHING(
         ad_utility::InvocableWithExactReturnType<void>) auto {
-  net::steady_timer timer{timerExecutor_, timeLimit};
+  // The timer must not be moved once `async_wait` has registered a
+  // `wait_op` against its implementation: the queued op references the
+  // original impl by address, and moving the timer leaves the op
+  // dangling in the scheduler's queue. Wrap in `shared_ptr` so the
+  // timer object stays put.
+  auto timer = std::make_shared<net::steady_timer>(timerExecutor_, timeLimit);
 
-  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
-                       const boost::system::error_code&) {
+  timer->async_wait([cancellationHandle = std::move(cancellationHandle)](
+                        const boost::system::error_code&) {
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
   });
-  return [timer = std::move(timer)]() mutable { timer.cancel(); };
+  return [timer = std::move(timer)]() { timer->cancel(); };
 }
 
 // _____________________________________________________________________________
@@ -806,24 +811,13 @@ Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
     TimeLimit timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) const {
-  QueryPlanner qp(&qec, handle);
-  auto executionTree = qp.createExecutionTree(operation);
-  PlannedQuery plannedQuery{std::move(operation), std::move(executionTree),
-                            qec};
-  handle->throwIfCancelled();
-  // Set some additional attributes on the `PlannedQuery`.
-  plannedQuery.queryExecutionTree()
-      .getRootOperation()
-      ->recursivelySetCancellationHandle(std::move(handle));
-  plannedQuery.queryExecutionTree()
-      .getRootOperation()
-      ->recursivelySetTimeConstraint(timeLimit);
-  auto& qet = plannedQuery.queryExecutionTree();
-  qet.isRoot() = true;  // allow pinning of the final result
-  auto timeForQueryPlanning = requestTimer.msecs();
-  auto& runtimeInfoWholeQuery =
+  PlannedQuery plannedQuery = qlever().planQuery(
+      std::move(operation), timeLimit, qec, std::move(handle), requestTimer);
+
+  const auto& qet = plannedQuery.queryExecutionTree();
+  const auto& runtimeInfoWholeQuery =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+  auto timeForQueryPlanning = runtimeInfoWholeQuery.timeQueryPlanning;
   AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
   AD_LOG_TRACE << qet.getCacheKey() << std::endl;

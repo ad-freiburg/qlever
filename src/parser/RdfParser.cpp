@@ -14,6 +14,7 @@
 #include <absl/strings/charconv.h>
 
 #include <cstring>
+#include <ctre-unicode.hpp>
 #include <exception>
 #include <optional>
 
@@ -31,6 +32,37 @@
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
+
+namespace {
+// CTRE regex patterns, defined as variables for C++17 compatibility. They are
+// written reversed because they are matched against the reversed input.
+constexpr ctll::fixed_string newlineRegex = R"([\r\n]+)";
+constexpr ctll::fixed_string statementEndRegex = R"([\r\n]+[\t ]*\.)";
+
+// Run `search` against the reversed `sv`, and return the number of bytes up to
+// and including the rightmost match, or `std::nullopt` if there is no match.
+template <typename Search>
+std::optional<size_t> findEndOfLastMatch(const Search& search,
+                                         std::string_view sv) {
+  auto match = search(sv.rbegin(), sv.rend());
+  if (!match) {
+    return std::nullopt;
+  }
+  return match.begin().base() - sv.begin();
+}
+}  // namespace
+
+namespace detail {
+// _____________________________________________________________________________
+std::optional<size_t> findEndOfLastNewline(std::string_view input) {
+  return findEndOfLastMatch(ctre::search<newlineRegex>, input);
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> findEndOfLastStatement(std::string_view input) {
+  return findEndOfLastMatch(ctre::search<statementEndRegex>, input);
+}
+}  // namespace detail
 
 // _____________________________________________________________________________
 template <class Tokenizer_T>
@@ -340,9 +372,10 @@ void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
   if (ql::starts_with(input, '+')) {
     input.remove_prefix(1);
   }
+  const char* end = input.data() + input.size();
   auto [firstNonMatching, errorCode] =
-      absl::from_chars(input.data(), input.data() + input.size(), result);
-  if (firstNonMatching != input.end() || errorCode != std::errc{}) {
+      absl::from_chars(input.data(), end, result);
+  if (firstNonMatching != end || errorCode != std::errc{}) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as a floating point value");
     raiseOrIgnoreTriple(errorMessage);
@@ -378,7 +411,7 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
           "\"parser-integer-overflow-behavior\"");
       raiseOrIgnoreTriple(errorMessage);
     }
-  } else if (firstNonMatching != input.end()) {
+  } else if (firstNonMatching != input.data() + input.size()) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
@@ -944,7 +977,7 @@ RdfStreamParser<T>::backupState() const {
   TurtleParserBackupState b;
   b.numBlankNodes_ = this->numBlankNodes_;
   b.numTriples_ = this->triples_.size();
-  b.tokenizerPosition_ = this->tok_.data().begin();
+  b.tokenizerPosition_ = this->tok_.data().data();
   b.tokenizerSize_ = this->tok_.data().size();
   return b;
 }
@@ -975,7 +1008,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
   // function "raise").
   numBytesBeforeCurrentBatch_ += byteVec_.size() - tok_.data().size();
   buf.resize(tok_.data().size() + nextBytes.size());
-  memcpy(buf.data(), tok_.data().begin(), tok_.data().size());
+  memcpy(buf.data(), tok_.data().data(), tok_.data().size());
   memcpy(buf.data() + tok_.data().size(), nextBytes.data(), nextBytes.size());
   byteVec_ = std::move(buf);
   tok_.reset(byteVec_.data(), byteVec_.size());
@@ -1004,7 +1037,7 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
   // The reason is that with a `.` at the end, we cannot decide whether we are
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
-  driver_.emplace(spec, blocksize, "([\\r\\n]+)");
+  driver_.emplace(spec, blocksize, detail::findEndOfLastNewline, "a newline");
   // Read the first block and initialize the tokenizer.
   if (auto res = driver_.value().getNextBlock(); res.has_value()) {
     byteVec_ = std::move(res.value());
@@ -1201,7 +1234,8 @@ template <typename T>
 void RdfParallelParser<T>::initialize(
     const qlever::InputFileSpecification& spec,
     ad_utility::MemorySize blocksize) {
-  driver_.emplace(spec, blocksize, "\\.[\\t ]*([\\r\\n]+)");
+  driver_.emplace(spec, blocksize, detail::findEndOfLastStatement,
+                  "a dot followed by a newline");
   qlever::parser::ByteBlock remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;

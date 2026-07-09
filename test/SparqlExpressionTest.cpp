@@ -21,6 +21,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -1845,6 +1846,13 @@ TEST(SparqlExpression, ifAndCoalesce) {
       std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
                  IdOrLocalVocabEntry{lit("eins")}, Ids{U, U, U, U, U, D(5.0)}});
 
+  // If all children are constant, the result of COALESCE is also constant.
+  checkCoalesce(IdOrLocalVocabEntry{lit("eins")},
+                std::tuple{U, IdOrLocalVocabEntry{lit("eins")}, I(3)});
+  checkCoalesce(IdOrLocalVocabEntry{I(3)}, std::tuple{I(3), U});
+  // If all children are unbound constants, the result is a single UNDEF.
+  checkCoalesce(U, std::tuple{U, U});
+
   // Check COALESCE with no arguments or empty arguments.
   checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
   checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});
@@ -2109,6 +2117,41 @@ TEST(SparqlExpression, unboundVariableExpression) {
   EXPECT_THAT(var.getCacheKey({}), ::testing::HasSubstr("Unbound Variable"));
   EXPECT_THAT(var.evaluate(&ctx.context),
               ::testing::VariantWith<Id>(Id::makeUndefined()));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, groupedVariableIsConstantOutsideOfAggregate) {
+  Variable vocab{"?vocab"};
+  // Evaluate on a single-row "group" in which `?vocab` is constant.
+  auto setUpGroupedContext = [&vocab](TestContext& ctx) {
+    ctx.context._groupedVariables = {vocab};
+    ctx.context._isPartOfGroupBy = true;
+    ctx.context._beginIndex = 0;
+    ctx.context._endIndex = 1;
+  };
+
+  // Outside an aggregate the grouped variable is treated as a constant.
+  {
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    VariableExpression var{vocab};
+    EXPECT_THAT(var.evaluate(&ctx.context),
+                ::testing::VariantWith<Id>(ctx.Beta));
+  }
+
+  // Inside an aggregate the variable is not folded; the `VariableExpression`
+  // still evaluates to the `Variable` itself (which is expanded to the whole
+  // column by the surrounding aggregate).
+  {
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    auto aggregate = std::make_unique<SampleExpression>(
+        false, std::make_unique<VariableExpression>(vocab));
+    const auto* inner = aggregate->children()[0].get();
+    ASSERT_TRUE(inner->isInsideAggregate());
+    EXPECT_THAT(inner->evaluate(&ctx.context),
+                ::testing::VariantWith<::Variable>(vocab));
+  }
 }
 
 // ______________________________________________________________________________
@@ -2421,6 +2464,17 @@ TEST(NaryExpressionTypeErased, basicTests) {
   // change the cache key.
   exprs.push_back(makeTypeErasedOrAlwaysTrue(c2(), c1()));
   EXPECT_THAT(exprs, AllUniqueBy(getKey));
+}
+
+// _____________________________________________________________________________
+TEST(NaryExpressionTypeErased, isDeterministic) {
+  auto var = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
+  auto rand = []() { return std::make_unique<RandomExpression>(); };
+
+  EXPECT_TRUE(makeTypeErasedOrExpression(var(), var())->isDeterministic());
+  EXPECT_FALSE(makeTypeErasedOrExpression(var(), rand())->isDeterministic());
 }
 
 }  // anonymous namespace
