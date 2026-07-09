@@ -304,7 +304,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
 
   // TODO<C++23> `ql::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
+  ql::ranges::copy(ql::views::iota(ColumnIndex{3}, getNumColumns(inputs) + 1),
                    std::back_inserter(additionalColumns));
   // Get a pair<optional<RelationMetadata>, bool>` for the given `col0`, where
   // the `bool` is true if the `col0` is a "large" relation, meaning that the

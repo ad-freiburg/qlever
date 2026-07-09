@@ -54,7 +54,7 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
 constexpr std::pair<Id, Id> getBoundsForSpecialIds() {
   constexpr auto upperBound = Id::makeFromBool(false);
   static_assert(static_cast<int>(Datatype::Undefined) == 0);
-  static_assert(upperBound.getBits() == 1UL << Id::numDataBits);
+  static_assert(upperBound.getBits() == uint64_t{1} << Id::numDataBits);
   return {Id::fromBits(1), upperBound};
 }
 }  // namespace qlever

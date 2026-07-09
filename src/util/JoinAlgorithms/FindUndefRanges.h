@@ -55,7 +55,7 @@ CPP_template(typename R,
   const size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
   // Row rowLower = row;
-  const size_t upperBound = 1UL << row.size();
+  const size_t upperBound = size_t{1} << row.size();
 
   auto getIthMask = [row = Row{row}, numJoinColumns](size_t i) {
     auto rowLower = row;
