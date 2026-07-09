@@ -16,6 +16,7 @@
 #include "engine/IndexScan.h"
 #include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
+#include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 

@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -9,6 +10,8 @@
 
 #include "index/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/GTestHelpers.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/json.h"
 
 using json = nlohmann::json;
@@ -156,4 +159,65 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
 
   TextVocabulary v4;
   ASSERT_FALSE(v4.isGeoInfoAvailable());
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
+  using ad_utility::VocabularyType;
+  using enum VocabularyType::Enum;
+
+  RdfsVocabulary vocabulary;
+  vocabulary.resetToType(VocabularyType{InMemoryUncompressed});
+  ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocabulary.createFromSet(words, filename);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  vocabulary.writeAsZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  RdfsVocabulary readVocabulary;
+  readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
+
+  ASSERT_EQ(vocabulary.size(), readVocabulary.size());
+  for (size_t i = 0; i < vocabulary.size(); ++i) {
+    EXPECT_EQ(vocabulary[VocabIndex::make(i)],
+              readVocabulary[VocabIndex::make(i)]);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
+  using ad_utility::VocabularyType;
+  using enum VocabularyType::Enum;
+
+  RdfsVocabulary vocabulary;
+  vocabulary.resetToType(VocabularyType{OnDiskCompressed});
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  EXPECT_ANY_THROW(vocabulary.writeAsZeroCopyBlob(writeSerializer));
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
+  TextVocabulary vocabulary;
+  ad_utility::HashSet<string> words{"wordA", "wordB", "wordC"};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocabulary.createFromSet(words, filename);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  vocabulary.writeAsZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  TextVocabulary readVocabulary;
+  readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
+
+  ASSERT_EQ(vocabulary.size(), readVocabulary.size());
+  for (size_t i = 0; i < vocabulary.size(); ++i) {
+    EXPECT_EQ(vocabulary[WordVocabIndex::make(i)],
+              readVocabulary[WordVocabIndex::make(i)]);
+  }
 }

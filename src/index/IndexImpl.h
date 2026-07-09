@@ -17,7 +17,6 @@
 #include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "global/Pattern.h"
 #include "global/SpecialIds.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -38,6 +37,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
+#include "util/CompactStringVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -248,6 +248,29 @@ class IndexImpl {
 
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
+
+  // Replace the currently loaded vocabulary with a zero-copy view directly
+  // into `serializer`'s buffer. See `Vocabulary::loadFromZeroCopyDeserializer`
+  // for details and restrictions.
+  // PRECONDITION: Must only be called while no other thread can concurrently
+  // access this `IndexImpl`, e.g. right after construction and before the
+  // first query is answered.
+  CPP_template(typename Serializer)(
+      requires ad_utility::serialization::ZeroCopyReadSerializer<
+          Serializer>) void loadVocabularyFromZeroCopyBlob(Serializer&
+                                                               serializer) {
+    vocab_.loadFromZeroCopyDeserializer(serializer);
+  }
+
+  // Serialize the currently loaded vocabulary to `serializer`. See
+  // `Vocabulary::writeAsZeroCopyBlob` for details and restrictions.
+  CPP_template(typename Serializer)(
+      requires ad_utility::serialization::WriteSerializer<
+          Serializer>) void writeVocabularyToZeroCopyBlob(Serializer&
+                                                              serializer)
+      const {
+    vocab_.writeAsZeroCopyBlob(serializer);
+  }
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
