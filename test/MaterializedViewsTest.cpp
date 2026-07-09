@@ -770,6 +770,10 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   SimulateHttpRequest simulateHttpRequest{testIndexBase_};
@@ -1499,7 +1503,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
 
   // Initialize engine on test index.
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, std::string{geoTtl});
-  auto cleanUp = absl::MakeCleanup(
+  auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;
@@ -1614,7 +1618,7 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
 
   // Initialized libqlever.
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
-  auto cleanUp = absl::MakeCleanup(
+  auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;
