@@ -320,7 +320,7 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
     return;
   }
   checkCancellation();
-  ad_utility::JoinColumnMapping joinColumnData = getJoinColumnMapping();
+  JoinColumnMapping joinColumnData = getJoinColumnMapping();
   auto joinColumnL = a.getColumn(leftJoinCol_);
   auto joinColumnR = b.getColumn(rightJoinCol_);
 
@@ -356,12 +356,12 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
     auto inverseAddRow = [&addRow](const auto& rowA, const auto& rowB) {
       addRow(rowB, rowA);
     };
-    ad_utility::gallopingJoin(joinColumnR, joinColumnL, ql::ranges::less{},
-                              inverseAddRow, {}, cancellationCallback);
+    gallopingJoin(joinColumnR, joinColumnL, ql::ranges::less{}, inverseAddRow,
+                  {}, cancellationCallback);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
-    ad_utility::gallopingJoin(joinColumnL, joinColumnR, ql::ranges::less{},
-                              addRow, {}, cancellationCallback);
+    gallopingJoin(joinColumnL, joinColumnR, ql::ranges::less{}, addRow, {},
+                  cancellationCallback);
   } else {
     auto findSmallerUndefRangeLeft = [undefRangeA](auto&&...) {
       return ad_utility::IteratorRange{undefRangeA.first, undefRangeA.second};
@@ -372,15 +372,15 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
 
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
-        return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
-            ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
+        return zipperJoinWithUndef(joinColumnL, joinColumnR, ql::ranges::less{},
+                                   addRow, ad_utility::noop, ad_utility::noop,
+                                   {}, cancellationCallback);
 
       } else {
-        return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
-            findSmallerUndefRangeLeft, findSmallerUndefRangeRight, {},
-            cancellationCallback);
+        return zipperJoinWithUndef(joinColumnL, joinColumnR, ql::ranges::less{},
+                                   addRow, findSmallerUndefRangeLeft,
+                                   findSmallerUndefRangeRight, {},
+                                   cancellationCallback);
       }
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
@@ -405,7 +405,7 @@ Result JoinImpl::lazyJoin(std::shared_ptr<const Result> a,
   // If both inputs are fully materialized, we can join them more
   // efficiently.
   AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
-  ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
+  JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
   return createResultFromAction(
       requestLaziness,
@@ -417,8 +417,8 @@ Result JoinImpl::lazyJoin(std::shared_ptr<const Result> a,
         auto rightRange = resultToView(*b, joinColMap.permutationRight());
         std::visit(
             [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
-              ad_utility::zipperJoinForBlocksWithPotentialUndef(
-                  leftBlocks, rightBlocks, std::less{}, rowAdder);
+              zipperJoinForBlocksWithPotentialUndef(leftBlocks, rightBlocks,
+                                                    std::less{}, rowAdder);
             },
             leftRange, rightRange);
         auto localVocab = std::move(rowAdder.localVocab());
@@ -590,8 +590,8 @@ Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
         auto rightBlocks = convertGeneratorFromScan(
             std::move(rightBlocksInternal), *rightScan);
 
-        ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
-                                                    std::less{}, rowAdder);
+        zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, std::less{},
+                                        rowAdder);
         setScanStatusToLazilyCompleted(*leftScan, *rightScan);
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
@@ -607,7 +607,7 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
     std::shared_ptr<IndexScan> scan) const {
   AD_CORRECTNESS_CHECK((idTableIsRightInput ? leftJoinCol_ : rightJoinCol_) ==
                        0);
-  ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
+  JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
   return createResultFromAction(
       requestLaziness,
@@ -618,12 +618,11 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
         const IdTableView<0>& idTable = resultWithIdTable->idTableView();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto permutationIdTable =
-            ad_utility::IdTableAndFirstCols<1, IdTableView<0>>{
-                idTable.asColumnSubsetView(idTableIsRightInput
-                                               ? joinColMap.permutationRight()
-                                               : joinColMap.permutationLeft()),
-                resultWithIdTable->getCopyOfLocalVocab()};
+        auto permutationIdTable = IdTableAndFirstCols<1, IdTableView<0>>{
+            idTable.asColumnSubsetView(idTableIsRightInput
+                                           ? joinColMap.permutationRight()
+                                           : joinColMap.permutationLeft()),
+            resultWithIdTable->getCopyOfLocalVocab()};
 
         ad_utility::Timer timer{
             ad_utility::timer::Timer::InitialStatus::Started};
@@ -654,8 +653,8 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
           // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
           // switches to a more efficient implementation if there are no UNDEF
           // values in any of the inputs.
-          ad_utility::zipperJoinForBlocksWithPotentialUndef(
-              left, right, std::less{}, rowAdder);
+          zipperJoinForBlocksWithPotentialUndef(left, right, std::less{},
+                                                rowAdder);
         };
         auto blockForIdTable = std::array{std::move(permutationIdTable)};
         if constexpr (idTableIsRightInput) {
@@ -678,7 +677,7 @@ Result JoinImpl::computeResultForIndexScanAndLazyOperation(
     std::shared_ptr<IndexScan> scan) const {
   AD_CORRECTNESS_CHECK(rightJoinCol_ == 0);
 
-  ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
+  JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
   return createResultFromAction(
       requestLaziness,
@@ -726,11 +725,11 @@ Result JoinImpl::createEmptyResult() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
-  return ad_utility::JoinColumnMapping{{{leftJoinCol_, rightJoinCol_}},
-                                       left_->getResultWidth(),
-                                       right_->getResultWidth(),
-                                       keepJoinColumn_};
+JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
+  return JoinColumnMapping{{{leftJoinCol_, rightJoinCol_}},
+                           left_->getResultWidth(),
+                           right_->getResultWidth(),
+                           keepJoinColumn_};
 }
 
 // _____________________________________________________________________________

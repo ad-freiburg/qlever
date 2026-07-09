@@ -134,9 +134,8 @@ auto Minus::makeUndefRangesChecker(bool left,
                                    &Id::isUndefined);
       });
   // Use expensive operation if one of the columns might contain undef.
-  using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;
-  return alwaysDefined ? RT{ad_utility::Noop{}}
-                       : RT{ad_utility::FindSmallerUndefRanges{}};
+  using RT = std::variant<ad_utility::Noop, FindSmallerUndefRanges>;
+  return alwaysDefined ? RT{ad_utility::Noop{}} : RT{FindSmallerUndefRanges{}};
 }
 
 // _____________________________________________________________________________
@@ -181,8 +180,8 @@ IdTable Minus::computeMinus(
     return IdTable{left.clone()};
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                   right.numColumns()};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -220,7 +219,7 @@ IdTable Minus::computeMinus(
       [this, &joinColumnsLeft, &joinColumnsRight,
        handleCompatibleRow = std::move(handleCompatibleRow)](
           auto findUndefLeft, auto findUndefRight) {
-        [[maybe_unused]] auto outOfOrder = ad_utility::zipperJoinWithUndef(
+        [[maybe_unused]] auto outOfOrder = zipperJoinWithUndef(
             joinColumnsLeft, joinColumnsRight,
             ql::ranges::lexicographical_compare, handleCompatibleRow,
             std::move(findUndefLeft), std::move(findUndefRight), {},
@@ -346,9 +345,9 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
             joinHelpers::resultToView(*right, {_matchedColumns.at(0).at(1)});
         std::visit(
             [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
-              ad_utility::zipperJoinForBlocksWithPotentialUndef(
-                  leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-                  ad_utility::MinusJoinTag{});
+              zipperJoinForBlocksWithPotentialUndef(leftBlocks, rightBlocks,
+                                                    std::less{}, rowAdder, {},
+                                                    {}, MinusJoinTag{});
             },
             leftRange, rightRange);
         auto localVocab = std::move(rowAdder.localVocab());

@@ -41,7 +41,7 @@ using namespace qlever;
 namespace {  // anonymous namespace to avoid linker problems
 
 using namespace ad_utility::testing;
-using namespace SpatialJoinTestHelpers;
+using namespace spatial_join_test_helpers;
 
 namespace childrenTesting {
 

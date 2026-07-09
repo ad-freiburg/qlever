@@ -20,77 +20,64 @@
 namespace qlever::sparqlExpression {
 namespace detail {
 
-NARY_EXPRESSION(
-    LongitudeExpression, 1,
-    FV<NumericIdWrapper<ad_utility::WktLongitude, true>, GeoPointValueGetter>);
-NARY_EXPRESSION(
-    LatitudeExpression, 1,
-    FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
+NARY_EXPRESSION(LongitudeExpression, 1,
+                FV<NumericIdWrapper<WktLongitude, true>, GeoPointValueGetter>);
+NARY_EXPRESSION(LatitudeExpression, 1,
+                FV<NumericIdWrapper<WktLatitude, true>, GeoPointValueGetter>);
 
 NARY_EXPRESSION(CentroidExpression, 1,
-                FV<ad_utility::WktCentroid, GeometryInfoValueGetter<Centroid>>);
+                FV<WktCentroid, GeometryInfoValueGetter<Centroid>>);
 
+NARY_EXPRESSION(DistExpression, 2,
+                FV<NumericIdWrapper<WktDist, true>, GeoPointOrWktValueGetter>);
 NARY_EXPRESSION(
-    DistExpression, 2,
-    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter>);
-NARY_EXPRESSION(MetricDistExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktMetricDist, true>,
-                   GeoPointOrWktValueGetter>);
-NARY_EXPRESSION(
-    DistWithUnitExpression, 3,
-    FV<NumericIdWrapper<ad_utility::WktDist, true>, GeoPointOrWktValueGetter,
-       GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
+    MetricDistExpression, 2,
+    FV<NumericIdWrapper<WktMetricDist, true>, GeoPointOrWktValueGetter>);
+NARY_EXPRESSION(DistWithUnitExpression, 3,
+                FV<NumericIdWrapper<WktDist, true>, GeoPointOrWktValueGetter,
+                   GeoPointOrWktValueGetter, UnitOfMeasurementValueGetter>);
 
 NARY_EXPRESSION(AreaExpression, 2,
-                FV<ad_utility::WktArea, GeometryInfoValueGetter<MetricArea>,
+                FV<WktArea, GeometryInfoValueGetter<MetricArea>,
                    UnitOfMeasurementValueGetter>);
-NARY_EXPRESSION(
-    MetricAreaExpression, 1,
-    FV<ad_utility::WktMetricArea, GeometryInfoValueGetter<MetricArea>>);
+NARY_EXPRESSION(MetricAreaExpression, 1,
+                FV<WktMetricArea, GeometryInfoValueGetter<MetricArea>>);
 
-NARY_EXPRESSION(
-    EnvelopeExpression, 1,
-    FV<ad_utility::WktEnvelope, GeometryInfoValueGetter<BoundingBox>>);
+NARY_EXPRESSION(EnvelopeExpression, 1,
+                FV<WktEnvelope, GeometryInfoValueGetter<BoundingBox>>);
 NARY_EXPRESSION(EnvelopeLowerLeftExpression, 1,
-                FV<ad_utility::WktEnvelopeCorner<BoundingBoxCorner::LOWER_LEFT>,
+                FV<WktEnvelopeCorner<BoundingBoxCorner::LOWER_LEFT>,
                    GeometryInfoValueGetter<BoundingBox>>);
-NARY_EXPRESSION(
-    EnvelopeUpperRightExpression, 1,
-    FV<ad_utility::WktEnvelopeCorner<BoundingBoxCorner::UPPER_RIGHT>,
-       GeometryInfoValueGetter<BoundingBox>>);
+NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
+                FV<WktEnvelopeCorner<BoundingBoxCorner::UPPER_RIGHT>,
+                   GeometryInfoValueGetter<BoundingBox>>);
 
-NARY_EXPRESSION(
-    GeometryTypeExpression, 1,
-    FV<ad_utility::WktGeometryType, GeometryInfoValueGetter<GeometryType>>);
+NARY_EXPRESSION(GeometryTypeExpression, 1,
+                FV<WktGeometryType, GeometryInfoValueGetter<GeometryType>>);
 
 NARY_EXPRESSION(LengthExpression, 2,
-                FV<ad_utility::WktLength, GeometryInfoValueGetter<MetricLength>,
+                FV<WktLength, GeometryInfoValueGetter<MetricLength>,
                    UnitOfMeasurementValueGetter>);
-NARY_EXPRESSION(
-    MetricLengthExpression, 1,
-    FV<ad_utility::WktMetricLength, GeometryInfoValueGetter<MetricLength>>);
+NARY_EXPRESSION(MetricLengthExpression, 1,
+                FV<WktMetricLength, GeometryInfoValueGetter<MetricLength>>);
 
-NARY_EXPRESSION(
-    GeometryNExpression, 2,
-    FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
+NARY_EXPRESSION(GeometryNExpression, 2,
+                FV<WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
 
-NARY_EXPRESSION(
-    SimplifyGeometryExpression, 2,
-    FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
+NARY_EXPRESSION(SimplifyGeometryExpression, 2,
+                FV<WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
 
 template <SpatialJoinType Relation>
-NARY_EXPRESSION(
-    GeoRelationExpression, 2,
-    FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
+NARY_EXPRESSION(GeoRelationExpression, 2,
+                FV<WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
 template <BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
-                FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
+                FV<WktBoundingCoordinate<RequestedCoordinate>,
                    GeometryInfoValueGetter<BoundingBox>>);
 
-NARY_EXPRESSION(
-    NumGeometriesExpression, 1,
-    FV<ad_utility::WktNumGeometries, GeometryInfoValueGetter<NumGeometries>>);
+NARY_EXPRESSION(NumGeometriesExpression, 1,
+                FV<WktNumGeometries, GeometryInfoValueGetter<NumGeometries>>);
 
 }  // namespace detail
 

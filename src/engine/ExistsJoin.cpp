@@ -159,8 +159,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
 
   // Extract the join columns from both inputs to make the following code
   // easier.
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
-                                               right.numColumns()};
+  JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
+                                   right.numColumns()};
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
   IdTableView<0> joinColumnsRight =
@@ -209,7 +209,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // in the join columns.
     auto checkCancellationLambda = [this] { checkCancellation(); };
     auto runZipperJoin = [&](auto findUndef) {
-      [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+      [[maybe_unused]] auto numOutOfOrder = zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight,
           ql::ranges::lexicographical_compare, noopRowAdder, findUndef,
           findUndef, actionForNotExisting, checkCancellationLambda);
@@ -217,7 +217,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     if (isCheap) {
       runZipperJoin(ad_utility::noop);
     } else {
-      runZipperJoin(ad_utility::findSmallerUndefRanges);
+      runZipperJoin(findSmallerUndefRanges);
     }
   };
   ad_utility::callFixedSizeVi(numJoinColumns, runForNumJoinCols);

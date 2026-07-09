@@ -24,7 +24,10 @@ using qlever::EncodedIriManager;
 using qlever::PathSearchAlgorithm;
 using qlever::PathSearchConfiguration;
 using qlever::SparqlParser;
+using qlever::TextIndexScanForEntityConfiguration;
+using qlever::TextIndexScanForWordConfiguration;
 using qlever::TransitivePathSide;
+using qlever::VarOrFixedEntity;
 
 namespace h = queryPlannerTestHelpers;
 namespace {

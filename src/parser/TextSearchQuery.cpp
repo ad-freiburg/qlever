@@ -10,7 +10,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
-using namespace qlever;
+namespace qlever {
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
@@ -72,6 +72,8 @@ std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
   }
   return std::get<Variable>(entity);
 };
+
+}  // namespace qlever
 
 namespace qlever::parsedQuery {
 

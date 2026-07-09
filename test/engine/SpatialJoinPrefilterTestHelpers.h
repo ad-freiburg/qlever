@@ -39,7 +39,7 @@ namespace SpatialJoinPrefilterTestHelpers {
 
 using namespace qlever;
 using namespace ad_utility::testing;
-using namespace SpatialJoinTestHelpers;
+using namespace spatial_join_test_helpers;
 
 struct SweeperSingleResult {
   SpatialJoinType sjType_;
@@ -49,22 +49,21 @@ struct SweeperSingleResult {
 using SweeperResult = std::vector<std::vector<SweeperSingleResult>>;
 using SweeperDistResult = std::vector<std::vector<double>>;
 
-using QET = std::shared_ptr<qlever::QueryExecutionTree>;
-using QEC = qlever::QueryExecutionContext*;
+using QET = std::shared_ptr<QueryExecutionTree>;
+using QEC = QueryExecutionContext*;
 using Loc = ad_utility::source_location;
 
-using ValIdToGeomName = ad_utility::HashMap<qlever::ValueId, std::string>;
-using GeomNameToValId = ad_utility::HashMap<std::string, qlever::ValueId>;
+using ValIdToGeomName = ad_utility::HashMap<ValueId, std::string>;
+using GeomNameToValId = ad_utility::HashMap<std::string, ValueId>;
 
 struct SweeperSingleResultWithIds {
   SpatialJoinType sjType_;
-  qlever::ValueId left_;
-  qlever::ValueId right_;
+  ValueId left_;
+  ValueId right_;
   double meterDistance_;
 };
 using SweeperResultWithIds = std::vector<SweeperSingleResultWithIds>;
-using GeoRelationWithIds =
-    std::tuple<SpatialJoinType, qlever::ValueId, qlever::ValueId>;
+using GeoRelationWithIds = std::tuple<SpatialJoinType, ValueId, ValueId>;
 
 // Struct for the output of `runParsingAndSweeper`
 struct SweeperTestResult {
@@ -154,16 +153,15 @@ struct ValIdTable {
 };
 
 // Retrieve the `ValueId` for a given `name` from a `GeomNameToValId`.
-inline qlever::ValueId getValId(const GeomNameToValId& nMap,
-                                std::string_view name) {
+inline ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
   auto valId = nMap.at(name);
-  EXPECT_EQ(valId.getDatatype(), qlever::Datatype::VocabIndex);
+  EXPECT_EQ(valId.getDatatype(), Datatype::VocabIndex);
   return valId;
 }
 
 // Helper to create a `ValIdTable` struct which maps `ValueId`s to names and
 // names to `ValueId`s for the geometries in `testGeometries`.
-inline ValIdTable resolveValIdTable(qlever::QueryExecutionContext* qec,
+inline ValIdTable resolveValIdTable(QueryExecutionContext* qec,
                                     size_t expectedSize,
                                     Loc loc = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(loc);
@@ -171,13 +169,13 @@ inline ValIdTable resolveValIdTable(qlever::QueryExecutionContext* qec,
   GeomNameToValId nMap;
 
   for (const auto& [name, wkt, isInGermany] : testGeometries) {
-    qlever::VocabIndex idx;
+    VocabIndex idx;
     if (!qec->getIndex().getVocab().getId(wkt, &idx)) {
       // This literal is not contained in the index of the current `qec`
       continue;
     }
 
-    auto vId = qlever::ValueId::makeFromVocabIndex(idx);
+    auto vId = ValueId::makeFromVocabIndex(idx);
     vMap[vId] = name;
     nMap[name] = vId;
   }
@@ -229,7 +227,7 @@ inline void runParsingAndSweeper(
     const LibSpatialJoinConfig& sjTask, SweeperTestResult& testResult,
     bool usePrefilter = true, bool checkPrefilterDeactivate = false,
     bool useRegularImplementation = false, Loc loc = AD_CURRENT_SOURCE_LOC()) {
-  using V = qlever::Variable;
+  using V = Variable;
   auto l = generateLocationTrace(loc);
 
   // Children of spatial join
@@ -241,13 +239,10 @@ inline void runParsingAndSweeper(
   V varRight{std::string{VAR_RIGHT}};
   SpatialJoinConfiguration config{sjTask, varLeft, varRight};
   config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
-                                                     rightChild);
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(qec, config, leftChild, rightChild);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   // Build `SpatialJoinAlgorithms` instance from spatial join operation
   auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
@@ -349,10 +344,11 @@ inline void runParsingAndSweeper(
   }
 
   // Convert aggregated bounding boxes from web mercator int32 to lat/lng double
-  auto boxLeftLatLng =
-      ad_utility::detail::projectInt32WebMercToDoubleLatLng(aggBoundingBoxLeft);
-  auto boxRightLatLng = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
-      aggBoundingBoxRight);
+  auto boxLeftLatLng = geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
+      aggBoundingBoxLeft);
+  auto boxRightLatLng =
+      geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
+          aggBoundingBoxRight);
 
   // Write struct with all results of the test run
   testResult = {resultMatched, boxLeftLatLng,    boxRightLatLng,   numEl,
@@ -388,10 +384,9 @@ inline void checkSweeperTestResult(
 
   ad_utility::HashMap<GeoRelationWithIds, double> expectedResultsAndDist;
 
-  auto checkValId = [&](qlever::ValueId valId,
-                        Loc loc = AD_CURRENT_SOURCE_LOC()) {
+  auto checkValId = [&](ValueId valId, Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(loc);
-    ASSERT_EQ(valId.getDatatype(), qlever::Datatype::VocabIndex);
+    ASSERT_EQ(valId.getDatatype(), Datatype::VocabIndex);
     ASSERT_TRUE(vMap.contains(valId));
   };
 
@@ -454,16 +449,16 @@ inline ::util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
   std::vector<std::string> wktWithoutDatatype;
   for (const auto& geom : wktGeometries) {
-    wktWithoutDatatype.push_back(ad_utility::detail::removeDatatype(geom));
+    wktWithoutDatatype.push_back(geometry_info_helpers::removeDatatype(geom));
   }
   auto aggregatedWkt = absl::StrCat("\"GEOMETRYCOLLECTION(",
                                     absl::StrJoin(wktWithoutDatatype, ", "),
                                     ")\"^^<", GEO_WKT_LITERAL, ">");
-  auto boundingBox = qlever::GeometryInfo::getBoundingBox(aggregatedWkt);
+  auto boundingBox = GeometryInfo::getBoundingBox(aggregatedWkt);
   if (!boundingBox.has_value()) {
     throw std::runtime_error("Could not compute expected bounding box.");
   }
-  return ad_utility::detail::boundingBoxToUtilBox(boundingBox.value());
+  return geometry_info_helpers::boundingBoxToUtilBox(boundingBox.value());
 }
 
 const auto boundingBoxGermanPlaces = makeAggregatedBoundingBox(

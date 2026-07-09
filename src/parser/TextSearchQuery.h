@@ -12,6 +12,8 @@
 #include "parser/MagicServiceQuery.h"
 #include "util/HashMap.h"
 
+namespace qlever {
+
 /**
  * @brief This struct holds all information given by a single configuration in
  *        the magic service query for text search. It holds information for both
@@ -55,24 +57,24 @@
  */
 struct TextSearchConfig {
   std::optional<bool> isWordSearch_;
-  std::optional<qlever::Variable> textVar_;
+  std::optional<Variable> textVar_;
   std::optional<std::string> word_;
-  std::optional<qlever::Variable> matchVar_;
-  std::optional<qlever::Variable> scoreVar_;
-  std::optional<std::variant<qlever::Variable, std::string>> entity_;
+  std::optional<Variable> matchVar_;
+  std::optional<Variable> scoreVar_;
+  std::optional<std::variant<Variable, std::string>> entity_;
 };
 
-using FixedEntity = std::pair<std::string, qlever::VocabIndex>;
+using FixedEntity = std::pair<std::string, VocabIndex>;
 
 struct VarOrFixedEntity {
-  std::variant<qlever::Variable, FixedEntity> entity_;
+  std::variant<Variable, FixedEntity> entity_;
 
-  static std::variant<qlever::Variable, FixedEntity> makeEntityVariant(
-      const qlever::QueryExecutionContext* qec,
-      std::variant<qlever::Variable, std::string> entity);
+  static std::variant<Variable, FixedEntity> makeEntityVariant(
+      const QueryExecutionContext* qec,
+      std::variant<Variable, std::string> entity);
 
-  VarOrFixedEntity(const qlever::QueryExecutionContext* qec,
-                   std::variant<qlever::Variable, std::string> entity)
+  VarOrFixedEntity(const QueryExecutionContext* qec,
+                   std::variant<Variable, std::string> entity)
       : entity_(makeEntityVariant(qec, std::move(entity))) {}
 
   bool hasFixedEntity() const {
@@ -108,11 +110,11 @@ struct VarOrFixedEntity {
  *          of certain fields important to testing.
  */
 struct TextIndexScanForEntityConfiguration {
-  qlever::Variable varToBindText_;
-  std::variant<qlever::Variable, std::string> entity_;
+  Variable varToBindText_;
+  std::variant<Variable, std::string> entity_;
   std::string word_;
-  std::optional<qlever::Variable> scoreVar_ = std::nullopt;
-  std::optional<qlever::VariableToColumnMap> variableColumns_ = std::nullopt;
+  std::optional<Variable> scoreVar_ = std::nullopt;
+  std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
   std::optional<VarOrFixedEntity> varOrFixed_ = std::nullopt;
 
   bool operator==(const TextIndexScanForEntityConfiguration& other) const {
@@ -152,12 +154,12 @@ struct TextIndexScanForEntityConfiguration {
  *          of certain fields important to testing.
  */
 struct TextIndexScanForWordConfiguration {
-  qlever::Variable varToBindText_;
+  Variable varToBindText_;
   std::string word_;
-  std::optional<qlever::Variable> matchVar_ = std::nullopt;
-  std::optional<qlever::Variable> scoreVar_ = std::nullopt;
+  std::optional<Variable> matchVar_ = std::nullopt;
+  std::optional<Variable> scoreVar_ = std::nullopt;
   bool isPrefix_ = false;
-  std::optional<qlever::VariableToColumnMap> variableColumns_ = std::nullopt;
+  std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
 
   bool operator==(const TextIndexScanForWordConfiguration& other) const {
     return varToBindText_ == other.varToBindText_ && word_ == other.word_ &&
@@ -169,7 +171,7 @@ struct TextIndexScanForWordConfiguration {
       std::ostream& os, const TextIndexScanForWordConfiguration& conf);
 };
 
-namespace qlever::parsedQuery {
+namespace parsedQuery {
 
 class TextSearchException : public std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -246,6 +248,8 @@ struct TextSearchQuery : MagicServiceQuery {
   };
 };
 
-}  // namespace qlever::parsedQuery
+}  // namespace parsedQuery
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TEXTSEARCHQUERY_H

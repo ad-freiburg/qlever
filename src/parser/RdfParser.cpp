@@ -31,8 +31,6 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
-using qlever::CoordinateOutOfRangeException;
-
 using namespace std::chrono_literals;
 
 namespace qlever {

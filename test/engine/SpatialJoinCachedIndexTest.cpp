@@ -19,17 +19,16 @@
 namespace {
 
 using namespace qlever;
-using namespace SpatialJoinTestHelpers;
+using namespace spatial_join_test_helpers;
 
-void serializeAndDeserializeCache(qlever::NamedResultCache& cache,
-                                  qlever::QueryExecutionContext* qec) {
+void serializeAndDeserializeCache(NamedResultCache& cache,
+                                  QueryExecutionContext* qec) {
   using namespace ad_utility::serialization;
   ByteBufferWriteSerializer writer;
   cache.writeToSerializer(writer);
   cache.clear();
   ByteBufferReadSerializer reader{std::move(writer).data()};
-  cache.readFromSerializer(reader,
-                           ad_utility::makeUnlimitedAllocator<qlever::Id>(),
+  cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
                            qec->getLocalVocabContext());
 }
 
@@ -56,7 +55,7 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   // Build a `QueryExecutionContext` and pin the query result of `?s <p> ?o`
   // together with an s2 index on `?o`.
   auto qec = ad_utility::testing::getQec(kb);
-  qec->pinResultWithName() = {"dummy", qlever::Variable{"?o"}};
+  qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
 
@@ -127,7 +126,7 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   // First, pin the linestrings as a named s2 index
   const std::string pinQuery = "SELECT * { ?s2 <asWKT> ?geo2 }";
   auto qec = ad_utility::testing::getQec(kb);
-  qec->pinResultWithName() = {"dummy", qlever::Variable{"?geo2"}};
+  qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   const auto pinResultCacheKey = plan.getCacheKey();
   [[maybe_unused]] auto pinResult = plan.getResult();
@@ -147,17 +146,16 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   // dataset and use the `QueryExecutionContext` which holds the cached index.
   auto leftChild =
       buildIndexScan(qec, {"?s1", std::string{"<asWKT2>"}, "?geo1"});
-  SpatialJoinConfiguration config{maxDistance, qlever::Variable{"?geo1"},
-                                  qlever::Variable{"?geo2"}};
+  SpatialJoinConfiguration config{maxDistance, Variable{"?geo1"},
+                                  Variable{"?geo2"}};
   config.algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
   config.rightCacheName_ = "dummy";
 
   // The spatial join gets an index scan returning points as the left child and
   // no right child (it will construct a `ExplicitResult` itself).
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(qec, config, leftChild,
-                                                     std::nullopt);
-  auto spatialJoin = std::dynamic_pointer_cast<qlever::SpatialJoin>(
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(qec, config, leftChild, std::nullopt);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   const auto res = spatialJoin->computeResult(false);
 
@@ -168,11 +166,11 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   std::vector<std::string> resultIris;
 
   const auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
-                                 .at(qlever::Variable{"?s2"})
+                                 .at(Variable{"?s2"})
                                  .columnIndex_;
   for (size_t i = 0; i < res.idTableView().numRows(); i++) {
     auto valueId = res.idTableView()(i, subjectColIdx);
-    ASSERT_EQ(valueId.getDatatype(), qlever::Datatype::VocabIndex);
+    ASSERT_EQ(valueId.getDatatype(), Datatype::VocabIndex);
     auto entry = qec->getIndex().getVocab()[valueId.getVocabIndex()];
     resultIris.push_back(entry);
   }

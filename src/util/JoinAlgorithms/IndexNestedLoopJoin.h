@@ -18,7 +18,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
-namespace joinAlgorithms::indexNestedLoop {
+namespace qlever::joinAlgorithms::indexNestedLoop {
 
 namespace detail {
 // Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
@@ -85,14 +85,14 @@ struct Adder {
 
   // Turn collected indices in `matchingPairs_` and write them into an actual
   // result table and clear `matchingPairs_` afterwards.
-  void materializeTables(qlever::IdTable& result, qlever::IdTableView<0> left,
-                         qlever::IdTableView<0> right) {
+  void materializeTables(IdTable& result, IdTableView<0> left,
+                         IdTableView<0> right) {
     size_t originalSize = result.size();
     result.resize(originalSize + matchingPairs_.size());
     auto numColsInResult = left.numColumns() + right.numColumns() -
                            (1 + (!keepJoinColumns_)) * numJoinColumns_;
     AD_CORRECTNESS_CHECK(result.numColumns() == numColsInResult);
-    qlever::ColumnIndex resultColIdx = 0;
+    ColumnIndex resultColIdx = 0;
     auto numColsToDrop =
         static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
     for (auto source : ad_utility::OwningView{left.getColumns()} |
@@ -122,13 +122,12 @@ struct Adder {
 
   // Scan `missingIndices_` for indices that haven't found a match so far and
   // fill them with undef on the right side.
-  void materializeMissing(qlever::IdTable& result,
-                          qlever::IdTableView<0> left) {
+  void materializeMissing(IdTable& result, IdTableView<0> left) {
     size_t counter =
         ::ranges::accumulate(missingIndices_, static_cast<size_t>(0));
     size_t originalSize = result.size();
     result.resize(originalSize + counter);
-    qlever::ColumnIndex resultColIdx = 0;
+    ColumnIndex resultColIdx = 0;
     auto numColsToDrop =
         static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
     for (auto source : ad_utility::OwningView{left.getColumns()} |
@@ -148,7 +147,7 @@ struct Adder {
                         ql::views::drop(resultColIdx)) {
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
-          qlever::Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,
+          Id::makeUndefined(), joinHelpers::CHUNK_SIZE,
           [this]() { cancellationHandle_->throwIfCancelled(); });
     }
   }
@@ -158,27 +157,26 @@ struct Adder {
 // algorithm to it. This does not preserve sort order.
 template <typename ComputeMatches>
 class OptionalJoinRange
-    : public ad_utility::InputRangeFromGet<qlever::Result::IdTableVocabPair> {
+    : public ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
   // Kept for correct lifetime.
-  std::shared_ptr<const qlever::Result> leftResult_;
-  std::shared_ptr<const qlever::Result> rightResult_;
-  const qlever::LocalVocab& leftVocab_;
-  const qlever::IdTableView<0>& leftTable_;
-  qlever::Result::LazyResult rightTables_;
+  std::shared_ptr<const Result> leftResult_;
+  std::shared_ptr<const Result> rightResult_;
+  const LocalVocab& leftVocab_;
+  const IdTableView<0>& leftTable_;
+  Result::LazyResult rightTables_;
   Adder matchTracker_;
   size_t resultWidth_;
-  ad_utility::JoinColumnMapping joinColumnData_;
+  JoinColumnMapping joinColumnData_;
   ComputeMatches computeMatches_;
   bool lastProcessed_ = false;
 
  public:
-  OptionalJoinRange(std::shared_ptr<const qlever::Result> leftResult,
-                    std::shared_ptr<const qlever::Result> rightResult,
-                    const qlever::LocalVocab& leftVocab,
-                    const qlever::IdTableView<0>& leftTable,
-                    qlever::Result::LazyResult rightTables, Adder matchTracker,
-                    size_t resultWidth,
-                    ad_utility::JoinColumnMapping joinColumnData,
+  OptionalJoinRange(std::shared_ptr<const Result> leftResult,
+                    std::shared_ptr<const Result> rightResult,
+                    const LocalVocab& leftVocab,
+                    const IdTableView<0>& leftTable,
+                    Result::LazyResult rightTables, Adder matchTracker,
+                    size_t resultWidth, JoinColumnMapping joinColumnData,
                     ComputeMatches computeMatches)
       : leftResult_{std::move(leftResult)},
         rightResult_{std::move(rightResult)},
@@ -190,7 +188,7 @@ class OptionalJoinRange
         joinColumnData_{std::move(joinColumnData)},
         computeMatches_{std::move(computeMatches)} {}
 
-  std::optional<qlever::Result::IdTableVocabPair> get() override {
+  std::optional<Result::IdTableVocabPair> get() override {
     if (lastProcessed_) {
       return std::nullopt;
     }
@@ -198,18 +196,18 @@ class OptionalJoinRange
     if (next.has_value()) {
       auto& [idTable, localVocab] = next.value();
       computeMatches_(matchTracker_, idTable);
-      qlever::IdTable resultTable{resultWidth_, leftTable_.getAllocator()};
+      IdTable resultTable{resultWidth_, leftTable_.getAllocator()};
       matchTracker_.materializeTables(
           resultTable,
           leftTable_.asColumnSubsetView(joinColumnData_.permutationLeft()),
           idTable.asColumnSubsetView(joinColumnData_.permutationRight()));
       resultTable.setColumnSubset(joinColumnData_.permutationResult());
       localVocab.mergeWith(leftVocab_);
-      return qlever::Result::IdTableVocabPair{std::move(resultTable),
-                                              std::move(localVocab)};
+      return Result::IdTableVocabPair{std::move(resultTable),
+                                      std::move(localVocab)};
     }
     lastProcessed_ = true;
-    qlever::IdTable resultTable{resultWidth_, leftTable_.getAllocator()};
+    IdTable resultTable{resultWidth_, leftTable_.getAllocator()};
     matchTracker_.materializeMissing(
         resultTable,
         leftTable_.asColumnSubsetView(joinColumnData_.permutationLeft()));
@@ -217,17 +215,15 @@ class OptionalJoinRange
       return std::nullopt;
     }
     resultTable.setColumnSubset(joinColumnData_.permutationResult());
-    return qlever::Result::IdTableVocabPair{std::move(resultTable),
-                                            leftVocab_.clone()};
+    return Result::IdTableVocabPair{std::move(resultTable), leftVocab_.clone()};
   }
 };
 
 // Helper function for common pattern.
 template <size_t JOIN_COLUMNS, typename IdTableT>
-qlever::IdTableView<JOIN_COLUMNS> toStaticView(
-    const IdTableT& idTable,
-    const std::vector<qlever::ColumnIndex>& joinColumns) {
-  static_assert(qlever::IdTableLike<IdTableT>);
+IdTableView<JOIN_COLUMNS> toStaticView(
+    const IdTableT& idTable, const std::vector<ColumnIndex>& joinColumns) {
+  static_assert(IdTableLike<IdTableT>);
   return idTable.asColumnSubsetView(joinColumns)
       .template asStaticView<JOIN_COLUMNS>();
 }
@@ -241,15 +237,14 @@ qlever::IdTableView<JOIN_COLUMNS> toStaticView(
 // unsupported. `matchLeft` can be used with different types to accommodate
 // different types of joins.
 class IndexNestedLoopJoin {
-  std::vector<std::array<qlever::ColumnIndex, 2>> joinColumns_;
-  std::shared_ptr<const qlever::Result> leftResult_;
-  std::shared_ptr<const qlever::Result> rightResult_;
+  std::vector<std::array<ColumnIndex, 2>> joinColumns_;
+  std::shared_ptr<const Result> leftResult_;
+  std::shared_ptr<const Result> rightResult_;
 
  public:
-  IndexNestedLoopJoin(
-      std::vector<std::array<qlever::ColumnIndex, 2>> joinColumns,
-      std::shared_ptr<const qlever::Result> leftResult,
-      std::shared_ptr<const qlever::Result> rightResult)
+  IndexNestedLoopJoin(std::vector<std::array<ColumnIndex, 2>> joinColumns,
+                      std::shared_ptr<const Result> leftResult,
+                      std::shared_ptr<const Result> rightResult)
       : joinColumns_{std::move(joinColumns)},
         leftResult_{std::move(leftResult)},
         rightResult_{std::move(rightResult)} {}
@@ -259,9 +254,8 @@ class IndexNestedLoopJoin {
   // writes for the matching row indices on the left the value `true` into
   // `matchTracker`.
   template <typename T, int JOIN_COLUMNS>
-  static void matchLeft(T& matchTracker,
-                        qlever::IdTableView<JOIN_COLUMNS> leftTable,
-                        qlever::IdTableView<JOIN_COLUMNS> rightTable) {
+  static void matchLeft(T& matchTracker, IdTableView<JOIN_COLUMNS> leftTable,
+                        IdTableView<JOIN_COLUMNS> rightTable) {
     auto leftColumns = leftTable.getColumns();
     size_t rightIndex = 0;
     for (const auto& rightRow : rightTable) {
@@ -289,9 +283,9 @@ class IndexNestedLoopJoin {
  public:
   // Function for MINUS and EXISTS operations when the right side is fully
   // materialized.
-  qlever::Result::LazyResult computeRightExistance(auto transformationFunc) {
-    std::vector<qlever::ColumnIndex> leftColumns;
-    std::vector<qlever::ColumnIndex> rightColumns;
+  Result::LazyResult computeRightExistance(auto transformationFunc) {
+    std::vector<ColumnIndex> leftColumns;
+    std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {
       leftColumns.push_back(leftCol);
       rightColumns.push_back(rightCol);
@@ -306,9 +300,9 @@ class IndexNestedLoopJoin {
           auto matchHelper =
               [rightTable = std::move(rightTable), leftColumns, JOIN_COLUMNS,
                transformationFunc = std::move(transformationFunc),
-               rightResult = rightResult_](auto&& idTable,
-                                           qlever::LocalVocab localVocab)
-              -> qlever::Result::IdTableVocabPair {
+               rightResult = rightResult_](
+                  auto&& idTable,
+                  LocalVocab localVocab) -> Result::IdTableVocabPair {
             detail::RightFiller matchTracker{
                 idTable.size(), idTable.getAllocator().template as<bool>()};
             matchLeft(matchTracker, rightTable,
@@ -317,17 +311,16 @@ class IndexNestedLoopJoin {
                                       matchTracker.matchTracker_);
           };
           if (leftResult_->isFullyMaterialized()) {
-            return qlever::Result::LazyResult{
+            return Result::LazyResult{
                 std::array{matchHelper(leftResult_->idTableView(),
                                        leftResult_->getCopyOfLocalVocab())}};
           }
-          return qlever::Result::LazyResult{
-              ad_utility::CachingTransformInputRange{
-                  leftResult_->idTables(),
-                  [matchHelper = std::move(matchHelper)](auto& pair) {
-                    return matchHelper(std::move(pair.idTable_),
-                                       std::move(pair.localVocab_));
-                  }}};
+          return Result::LazyResult{ad_utility::CachingTransformInputRange{
+              leftResult_->idTables(),
+              [matchHelper = std::move(matchHelper)](auto& pair) {
+                return matchHelper(std::move(pair.idTable_),
+                                   std::move(pair.localVocab_));
+              }}};
         });
   }
 
@@ -339,8 +332,8 @@ class IndexNestedLoopJoin {
     detail::Filler matchTracker{
         leftResult_->idTableView().size(),
         leftResult_->idTableView().getAllocator().as<char>()};
-    std::vector<qlever::ColumnIndex> leftColumns;
-    std::vector<qlever::ColumnIndex> rightColumns;
+    std::vector<ColumnIndex> leftColumns;
+    std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {
       leftColumns.push_back(leftCol);
       rightColumns.push_back(rightCol);
@@ -372,7 +365,7 @@ class IndexNestedLoopJoin {
 
  public:
   // Main function for OPTIONAL operation.
-  qlever::Result::LazyResult computeOptionalJoin(
+  Result::LazyResult computeOptionalJoin(
       bool yieldOnce, size_t resultWidth,
       ad_utility::SharedCancellationHandle cancellationHandle,
       size_t numColsRight, bool keepJoinColumns) && {
@@ -384,13 +377,13 @@ class IndexNestedLoopJoin {
     return ad_utility::callFixedSizeVi(
         static_cast<int>(joinColumns_.size()),
         [this, &matchTracker, yieldOnce, resultWidth, numColsRight,
-         keepJoinColumns](auto JOIN_COLUMNS_PAR) -> qlever::Result::LazyResult {
+         keepJoinColumns](auto JOIN_COLUMNS_PAR) -> Result::LazyResult {
           static constexpr auto JOIN_COLUMNS =
               static_cast<size_t>(JOIN_COLUMNS_PAR);
-          const qlever::IdTableView<0>& leftTable = leftResult_->idTableView();
+          const IdTableView<0>& leftTable = leftResult_->idTableView();
           size_t numColsLeft = leftTable.numColumns();
-          ad_utility::JoinColumnMapping joinColumnData{
-              joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
+          JoinColumnMapping joinColumnData{joinColumns_, numColsLeft,
+                                           numColsRight, keepJoinColumns};
           auto leftTableView = detail::toStaticView<JOIN_COLUMNS>(
               leftTable, joinColumnData.jcsLeft());
           auto matchHelper =
@@ -400,8 +393,8 @@ class IndexNestedLoopJoin {
                     matchTracker, leftTableView,
                     detail::toStaticView<JOIN_COLUMNS>(idTable, rightColumns));
               };
-          qlever::IdTable resultTable{resultWidth, leftTable.getAllocator()};
-          qlever::LocalVocab mergedVocab = leftResult_->getCopyOfLocalVocab();
+          IdTable resultTable{resultWidth, leftTable.getAllocator()};
+          LocalVocab mergedVocab = leftResult_->getCopyOfLocalVocab();
           if (rightResult_->isFullyMaterialized()) {
             matchHelper(rightResult_->idTableView());
             matchTracker.materializeTables(
@@ -428,28 +421,27 @@ class IndexNestedLoopJoin {
                 resultTable,
                 leftTable.asColumnSubsetView(joinColumnData.permutationLeft()));
           } else {
-            const qlever::LocalVocab& leftVocab = leftResult_->localVocab();
+            const LocalVocab& leftVocab = leftResult_->localVocab();
             auto rightTables = rightResult_->idTables();
             auto rightColumns = joinColumnData.jcsRight();
-            return qlever::Result::LazyResult{detail::OptionalJoinRange{
+            return Result::LazyResult{detail::OptionalJoinRange{
                 std::move(leftResult_), std::move(rightResult_), leftVocab,
                 leftTable, std::move(rightTables), std::move(matchTracker),
                 resultWidth, std::move(joinColumnData),
                 [leftTableView = std::move(leftTableView),
                  rightColumns = std::move(rightColumns)](
-                    detail::Adder& adder, const qlever::IdTable& rightTable) {
+                    detail::Adder& adder, const IdTable& rightTable) {
                   matchLeft(adder, leftTableView,
                             detail::toStaticView<JOIN_COLUMNS>(rightTable,
                                                                rightColumns));
                 }}};
           }
           resultTable.setColumnSubset(joinColumnData.permutationResult());
-          return qlever::Result::LazyResult{
-              std::array{qlever::Result::IdTableVocabPair{
-                  std::move(resultTable), std::move(mergedVocab)}}};
+          return Result::LazyResult{std::array{Result::IdTableVocabPair{
+              std::move(resultTable), std::move(mergedVocab)}}};
         });
   }
 };
-}  // namespace joinAlgorithms::indexNestedLoop
+}  // namespace qlever::joinAlgorithms::indexNestedLoop
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_INDEXNESTEDLOOPJOIN_H

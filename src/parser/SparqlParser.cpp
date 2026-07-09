@@ -8,9 +8,9 @@
 
 using AntlrParser = SparqlAutomaticParser;
 
-using BnodeMgr = qlever::BlankNodeManager*;
-
 namespace qlever {
+
+using BnodeMgr = BlankNodeManager*;
 
 namespace {
 // _____________________________________________________________________________

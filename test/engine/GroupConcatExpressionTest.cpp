@@ -10,24 +10,25 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
-namespace {
 using namespace qlever;
+
+namespace {
 using namespace sparqlExpression;
 
 // _____________________________________________________________________________
 void expectIdsAreConcatenatedTo(
-    qlever::QueryExecutionContext* qec, bool distinct, const IdTable& idTable,
+    QueryExecutionContext* qec, bool distinct, const IdTable& idTable,
     const ExpressionResult& expected,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   AD_CONTRACT_CHECK(idTable.numColumns() == 1);
   auto g = generateLocationTrace(location);
 
-  qlever::Variable var{"?x"};
-  qlever::LocalVocab localVocab;
+  Variable var{"?x"};
+  LocalVocab localVocab;
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  qlever::VariableToColumnMap map{
-      {var, {0, qlever::ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  VariableToColumnMap map{
+      {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
   EvaluationContext context{
       *qec,
@@ -47,17 +48,17 @@ void expectIdsAreConcatenatedTo(
 
 // _____________________________________________________________________________
 void expectLiteralsAreConcatenatedTo(
-    qlever::QueryExecutionContext* qec, bool distinct,
-    const std::vector<qlever::triple_component::Literal>& literals,
-    const qlever::triple_component::Literal& literal,
+    QueryExecutionContext* qec, bool distinct,
+    const std::vector<triple_component::Literal>& literals,
+    const triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
-  qlever::LocalVocab localVocab;
-  IdTable input{1, ad_utility::makeUnlimitedAllocator<qlever::Id>()};
+  LocalVocab localVocab;
+  IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
 
   for (const auto& inputLiteral : literals) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry{inputLiteral, qec->getLocalVocabContext()});
-    input.push_back({qlever::Id::makeFromLocalVocabIndex(idx)});
+    input.push_back({Id::makeFromLocalVocabIndex(idx)});
   }
   expectIdsAreConcatenatedTo(qec, distinct, input,
                              IdOrLocalVocabEntry{LocalVocabEntry{
@@ -66,8 +67,7 @@ void expectLiteralsAreConcatenatedTo(
 }
 
 auto lit = [](std::string s) {
-  return qlever::triple_component::Literal::fromStringRepresentation(
-      std::move(s));
+  return triple_component::Literal::fromStringRepresentation(std::move(s));
 };
 }  // namespace
 
@@ -100,21 +100,21 @@ TEST(GroupConcatExpression, basicConcatenation) {
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
   auto* qec = ad_utility::testing::getQec();
-  qlever::LocalVocab localVocab;
-  expectIdsAreConcatenatedTo(
-      qec, false, makeIdTableFromVector({{qlever::Id::makeUndefined()}}),
-      ExpressionResult{qlever::Id::makeUndefined()});
+  LocalVocab localVocab;
+  expectIdsAreConcatenatedTo(qec, false,
+                             makeIdTableFromVector({{Id::makeUndefined()}}),
+                             ExpressionResult{Id::makeUndefined()});
 
   auto idx = localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::fromStringRepresentation("\"a\"",
                                                 qec->getLocalVocabContext()));
-  auto a = qlever::Id::makeFromLocalVocabIndex(idx);
+  auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
-      qec, false, makeIdTableFromVector({{qlever::Id::makeUndefined()}, {a}}),
-      ExpressionResult{qlever::Id::makeUndefined()});
+      qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),
+      ExpressionResult{Id::makeUndefined()});
   expectIdsAreConcatenatedTo(
-      qec, false, makeIdTableFromVector({{a}, {qlever::Id::makeUndefined()}}),
-      ExpressionResult{qlever::Id::makeUndefined()});
+      qec, false, makeIdTableFromVector({{a}, {Id::makeUndefined()}}),
+      ExpressionResult{Id::makeUndefined()});
 }
 
 // _____________________________________________________________________________
@@ -140,9 +140,9 @@ TEST(GroupConcatExpression, concatenationWithLanguageTags) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, getCacheKey) {
-  qlever::Variable var{"?x"};
-  qlever::VariableToColumnMap map{
-      {var, {0, qlever::ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  Variable var{"?x"};
+  VariableToColumnMap map{
+      {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
   std::string sep = "👻";
 

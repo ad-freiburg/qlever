@@ -6,7 +6,7 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
-using qlever::VocabularyType;
+using namespace qlever;
 
 namespace {
 
@@ -16,15 +16,14 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
 
-  auto writerPtr =
-      qlever::PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
+  auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
   auto& writer = *writerPtr;
   writer("alpha", false);
   writer("beta", true);
   writer("gamma", false);
   writer.finish();
 
-  qlever::PolymorphicVocabulary vocab;
+  PolymorphicVocabulary vocab;
   vocab.open(filename, type);
   EXPECT_EQ(vocab.size(), 3);
 
@@ -62,7 +61,7 @@ TEST(PolymorphicVocabulary, basicTests) {
 
 // Test a corner case in a `switch` statement.
 TEST(PolymorphicVocabulary, invalidVocabularyType) {
-  qlever::PolymorphicVocabulary vocab;
+  PolymorphicVocabulary vocab;
   auto invalidType = VocabularyType{static_cast<VocabularyType::Enum>(23401)};
   EXPECT_ANY_THROW(vocab.resetToType(invalidType));
 }

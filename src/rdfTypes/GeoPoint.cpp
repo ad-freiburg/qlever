@@ -66,8 +66,8 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
   if (!checkDatatype ||
       (value.hasDatatype() &&
        value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {
-    auto [lng, lat] = ad_utility::detail::parseWktPoint(
-        asStringViewUnsafe(value.getContent()));
+    auto [lng, lat] =
+        detail::parseWktPoint(asStringViewUnsafe(value.getContent()));
     if (!std::isnan(lng) && !std::isnan(lat)) {
       return GeoPoint{lat, lng};
     }

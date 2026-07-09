@@ -378,7 +378,7 @@ constexpr std::string_view example = "Example";
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryInfoHelpers) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   Point<double> p{50, 60};
   auto g = utilPointToGeoPoint(p);
   EXPECT_NEAR(g.getLng(), p.getX(), 0.0001);
@@ -439,7 +439,7 @@ TEST(GeometryInfoTest, MetricLength) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   using Poly = Polygon<CoordType>;
 
   testMetricArea<Poly>(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
@@ -450,7 +450,7 @@ TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   using MultiP = MultiPolygon<CoordType>;
 
   testMetricArea<MultiP>(litRealWorldMultiPolygonFullyContained,
@@ -472,7 +472,7 @@ TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   using Coll = Collection<CoordType>;
 
   // Join two polygons and a line (no area) to a geometry collection literal
@@ -552,7 +552,7 @@ TEST(GeometryInfoTest, WebMercProjection) {
   ::util::geo::DBox b1{{1, 2}, {3, 4}};
   auto b1WebMerc = boxToWebMerc(b1);
   auto result1 =
-      ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
+      geometry_info_helpers::projectInt32WebMercToDoubleLatLng(b1WebMerc);
   checkUtilBoundingBox(result1, b1);
 }
 
@@ -593,7 +593,7 @@ TEST(GeometryInfoTest, AnyGeometryMember) {
 TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
   // This test builds a big geometry collection containing one geometry of every
   // supported geometry type and feeds it to `computeMetricLength`.
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   double expected = 0.0;
   DCollection collection;
@@ -634,7 +634,7 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   auto fromSV = [](std::string_view lit) {
     return GeoPointOrWkt{std::string{lit}};
   };
@@ -661,7 +661,7 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   auto literals = getAllTestLiterals();
   auto geometries = getAllExpectedParseResults();
@@ -690,7 +690,7 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryN) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   using s = std::string;
   std::vector<ExpectedGeometryN> expected{
@@ -746,7 +746,7 @@ struct TwiceProjection {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ProjectionVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
               parseResultNear(ParseResult{NONE, std::nullopt}));
@@ -772,7 +772,7 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, MetricDistanceVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   // Distance between points (Freiburg Central Railway Station and Freiburg
   // Cathedral).
   EXPECT_THAT(computeMetricDistance(

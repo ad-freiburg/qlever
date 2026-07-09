@@ -20,6 +20,7 @@
 
 using qlever::ColumnIndex;
 using qlever::IdTable;
+using qlever::ValuesForTesting;
 
 /*
  * @brief Join two IdTables using the given join function and return

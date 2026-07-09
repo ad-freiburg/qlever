@@ -65,7 +65,7 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
         [&prefilterLatLngBox](const BoundingBox& geomBoundingBox) {
           return !::util::geo::intersects(
               prefilterLatLngBox.value(),
-              ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
+              geometry_info_helpers::boundingBoxToUtilBox(geomBoundingBox));
         };
 
     // Use the `precomputedBoundingBox` for filtering if available.
@@ -100,8 +100,9 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   // info from vocabulary.
   std::optional<::util::geo::DBox> prefilterLatLngBox = std::nullopt;
   if (prefilterBox.has_value()) {
-    prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
-        prefilterBox.value());
+    prefilterLatLngBox =
+        geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
+            prefilterBox.value());
   }
   bool usePrefiltering = prefilterLatLngBox.has_value() &&
                          (boundingBoxes.has_value() ||
@@ -300,8 +301,8 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
   // use the already parsed geometries to calculate the distance
   if (useMidpointForAreas_ ||
       (geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value())) {
-    return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
-        convertPoint(geo1), convertPoint(geo2)));
+    return Id::makeFromDouble(
+        detail::wktDistImpl(convertPoint(geo1), convertPoint(geo2)));
   } else {
     // at least one area
     return Id::makeFromDouble(computeDist(getIndex(geo1), getIndex(geo2)));

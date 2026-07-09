@@ -29,12 +29,12 @@ TEST(GeoPoint, GeoPoint) {
   ASSERT_THROW(GeoPoint(0, 185.0), CoordinateOutOfRangeException);
   ASSERT_THROW(GeoPoint(90.1, 180.0), CoordinateOutOfRangeException);
   ASSERT_THROW(GeoPoint(90.1, 180.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate, 20.0),
+  ASSERT_THROW(GeoPoint(qlever::detail::invalidCoordinate, 20.0),
                CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(20.0, ad_utility::detail::invalidCoordinate),
+  ASSERT_THROW(GeoPoint(20.0, qlever::detail::invalidCoordinate),
                CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate,
-                        ad_utility::detail::invalidCoordinate),
+  ASSERT_THROW(GeoPoint(qlever::detail::invalidCoordinate,
+                        qlever::detail::invalidCoordinate),
                CoordinateOutOfRangeException);
   AD_EXPECT_THROW_WITH_MESSAGE(GeoPoint(100, 200),
                                ::testing::ContainsRegex("out of range"));

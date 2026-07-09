@@ -217,8 +217,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
     return;
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                   right.numColumns()};
 
   IdTableView<0> leftJoinColumns =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -254,17 +254,15 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {
-      return ad_utility::zipperJoinWithUndef(
-          leftJoinColumns, rightJoinColumns,
-          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
-          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
+      return zipperJoinWithUndef(leftJoinColumns, rightJoinColumns,
+                                 ql::ranges::lexicographical_compare, addRow,
+                                 ad_utility::noop, ad_utility::noop,
+                                 ad_utility::noop, checkCancellationLambda);
     } else {
-      return ad_utility::zipperJoinWithUndef(
-          leftJoinColumns, rightJoinColumns,
-          ql::ranges::lexicographical_compare, addRow,
-          ad_utility::findSmallerUndefRanges,
-          ad_utility::findSmallerUndefRanges, ad_utility::noop,
-          checkCancellationLambda);
+      return zipperJoinWithUndef(leftJoinColumns, rightJoinColumns,
+                                 ql::ranges::lexicographical_compare, addRow,
+                                 findSmallerUndefRanges, findSmallerUndefRanges,
+                                 ad_utility::noop, checkCancellationLambda);
     }
   }();
   *result = std::move(rowAdder).resultTable();

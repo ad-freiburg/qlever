@@ -23,7 +23,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // Some helper concepts.
 
@@ -75,7 +75,7 @@ CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
  * and MINUS and to allow for optimizations when some of the columns don't
  * contain UNDEF values.
  * @param left The left input to the join algorithm. Typically a range of rows
- * of IDs (e.g.`qlever::IdTable` or `IdTableView`).
+ * of IDs (e.g.`IdTable` or `IdTableView`).
  * @param right The right input to the join algorithm.
  * @param lessThan This function is called with one element from `left` and
  * `right` each and must return `true` if the first argument comes before the
@@ -96,8 +96,9 @@ CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
  * but reversed: gets an element from `left` and returns the compatible but
  * smaller elements from `right`.
  * @param elFromFirstNotFoundAction This function is called for each iterator in
- * `left` for which no corresponding match in `right` was found. This is `noop`
- * for "normal` joins, but can be set to implement `OPTIONAL` or `MINUS`.
+ * `left` for which no corresponding match in `right` was found. This is
+ * `ad_utility::noop` for "normal` joins, but can be set to implement `OPTIONAL`
+ * or `MINUS`.
  * @param checkCancellation Is called many times during processing to allow
  * cancelling this join operation at arbitrary times. It is supposed to throw
  * a proper exception. Typically implementations will just
@@ -117,8 +118,8 @@ CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
 CPP_template(typename Range1, typename Range2, typename LessThan,
              typename CompatibleRowAction, typename FindSmallerUndefRangesLeft,
              typename FindSmallerUndefRangesRight,
-             typename ElFromFirstNotFoundAction = decltype(noop),
-             typename CheckCancellation = decltype(noop),
+             typename ElFromFirstNotFoundAction = decltype(ad_utility::noop),
+             typename CheckCancellation = decltype(ad_utility::noop),
              typename CoverUndefRanges = std::true_type)(
     requires ql::ranges::random_access_range<Range1> CPP_and
         ql::ranges::random_access_range<Range2>)
@@ -132,7 +133,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
-      !ad_utility::isSimilar<ElFromFirstNotFoundAction, decltype(noop)>;
+      !ad_utility::isSimilar<ElFromFirstNotFoundAction,
+                             decltype(ad_utility::noop)>;
 
   // Iterators for both ranges that will be used to advance during the zipper
   // algorithm.
@@ -173,7 +175,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   auto mergeWithUndefLeft = [&](auto itFromRight, auto leftBegin,
                                 auto leftEnd) {
     checkCancellation();
-    if constexpr (!isSimilar<FindSmallerUndefRangesLeft, Noop>) {
+    if constexpr (!ad_utility::isSimilar<FindSmallerUndefRangesLeft,
+                                         ad_utility::Noop>) {
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesLeft` generator.
       const auto& row = *itFromRight;
@@ -194,15 +197,16 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   // the following `mergeWithUndefRight` function.
   auto containsNoUndefined = [](const auto& row) {
     using T = std::decay_t<decltype(row)>;
-    if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> &&
-                  isSimilar<FindSmallerUndefRangesRight, Noop>) {
+    if constexpr (ad_utility::isSimilar<FindSmallerUndefRangesLeft,
+                                        ad_utility::Noop> &&
+                  ad_utility::isSimilar<FindSmallerUndefRangesRight,
+                                        ad_utility::Noop>) {
       return true;
-    } else if constexpr (std::is_convertible_v<T, qlever::Id>) {
-      return row != qlever::Id::makeUndefined();
+    } else if constexpr (std::is_convertible_v<T, Id>) {
+      return row != Id::makeUndefined();
     } else {
-      return (ql::ranges::none_of(row, [](qlever::Id id) {
-        return id == qlever::Id::makeUndefined();
-      }));
+      return (ql::ranges::none_of(
+          row, [](Id id) { return id == Id::makeUndefined(); }));
     }
   };
 
@@ -218,7 +222,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   auto mergeWithUndefRight = [&](auto itFromLeft, auto beginRight,
                                  auto endRight, bool hasNoMatch) {
     checkCancellation();
-    if constexpr (!isSimilar<FindSmallerUndefRangesRight, Noop>) {
+    if constexpr (!ad_utility::isSimilar<FindSmallerUndefRangesRight,
+                                         ad_utility::Noop>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesRight` generator.
@@ -374,8 +379,9 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
  * CancellationHandle::throwIfCancelled().
  */
 CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
-             typename Action, typename ElementFromSmallerNotFoundAction = Noop,
-             typename CheckCancellation = Noop)(
+             typename Action,
+             typename ElementFromSmallerNotFoundAction = ad_utility::Noop,
+             typename CheckCancellation = ad_utility::Noop)(
     requires ql::ranges::random_access_range<RangeSmaller> CPP_and
         ql::ranges::random_access_range<
             RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
@@ -426,7 +432,7 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
     // Linear search in the smaller input.
     while (lessThan(*itSmall, elLarge)) {
       if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
-                                           Noop>) {
+                                           ad_utility::Noop>) {
         elementFromSmallerNotFoundAction(itSmall);
       }
       ++itSmall;
@@ -464,7 +470,7 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
     itLarge = endSameLarge;
   }
   if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
-                                       Noop>) {
+                                       ad_utility::Noop>) {
     while (itSmall != endSmall) {
       elementFromSmallerNotFoundAction(itSmall);
       ++itSmall;
@@ -555,7 +561,7 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
   // TODO<joka921> This is a little inefficient, should be a getColumn on a
   // column based interface, but that requires refactoring of all the
   // types passed in here (in particular, we are using
-  // `ql::ranges::subrange<qlever::IdTable>` etc.
+  // `ql::ranges::subrange<IdTable>` etc.
   auto getLastJoinColum = [numJoinCols](const auto& row) {
     AD_EXPENSIVE_CHECK(numJoinCols > 0 && numJoinCols <= row.size());
     return row[numJoinCols - 1];
@@ -621,8 +627,7 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef =
-        ql::ranges::find_if_not(leftSub, &qlever::Id::isUndefined);
+    auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
 
     auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
@@ -641,9 +646,9 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     };
 
     // Perform the join on the last column.
-    size_t numOutOfOrder = ad_utility::zipperJoinWithUndef(
+    size_t numOutOfOrder = zipperJoinWithUndef(
         leftSub, rightSub, std::less<>{}, compAction, findSmallerUndefRangeLeft,
-        noop, notFoundAction, checkCancellation);
+        ad_utility::noop, notFoundAction, checkCancellation);
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
     it1 = endSame1;
     it2 = endSame2;
@@ -663,7 +668,7 @@ using Range = std::pair<size_t, size_t>;
 // contiguous subrange of the range. Note that this approach is more robust
 // than storing iterators or subranges directly instead of indices, because many
 // containers have their iterators invalidated when they are being moved (e.g.
-// `std::string` or `qlever::IdTable`).
+// `std::string` or `IdTable`).
 template <typename Block>
 class BlockAndSubrange {
  private:
@@ -892,7 +897,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
              typename LessThan, typename CompatibleRowAction,
              typename IsUndef = AlwaysFalse)(
     requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
+        ad_utility::InvocableWithExactReturnType<
             IsUndef, bool,
             typename LeftSide::ProjectedEl>) struct BlockZipperJoinImplCRTP {
   // The left and right inputs of the join
@@ -922,8 +927,10 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 #if defined(Side) || defined(Blocks)
 #error Side or Blocks are already defined
 #endif
-#define Side QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
-#define Blocks QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
+#define Side \
+  QL_CONCEPT_OR_NOTHING(ad_utility::SameAsAny<LeftSide, RightSide>) auto
+#define Blocks \
+  QL_CONCEPT_OR_NOTHING(ad_utility::SameAsAny<LeftBlocks, RightBlocks>) auto
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -1234,7 +1241,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
       // use the simpler code path (with std::true_type for coverage).
       if (!hasUndef(leftSide_) && !hasUndef(rightSide_)) {
         // No UNDEFs found at runtime, use the simpler code path.
-        doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+        doJoin(ad_utility::noop, ad_utility::noop, addNotFoundRowIndex,
+               ad_utility::noop, std::true_type{});
       } else {
         // We pass `std::false_type`, to disable coverage checks for the
         // undefined values that are stored in `side.undefBlocks_`, which we
@@ -1243,10 +1251,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
         doJoin(
             findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
             findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
-            addNotFoundRowIndex, noop, std::false_type{});
+            addNotFoundRowIndex, ad_utility::noop, std::false_type{});
       }
     } else {
-      doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+      doJoin(ad_utility::noop, ad_utility::noop, addNotFoundRowIndex,
+             ad_utility::noop, std::true_type{});
     }
     compatibleRowAction_.flush();
 
@@ -1584,7 +1593,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 CPP_template(typename LeftSide, typename RightSide, typename LessThan,
              typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
     requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
+        ad_utility::InvocableWithExactReturnType<
             IsUndef, bool,
             typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl
     : BlockZipperJoinImplCRTP<BlockZipperJoinImpl<LeftSide, RightSide, LessThan,
@@ -1713,7 +1722,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
   // column, it suffices to perform a single column join on the last column.
   // Note: We currently copy all the contents of `blocksLeft` and `blocksRight`,
   // because the interfaces we are using currently requires the interface of a
-  // single qlever::IdTable-like thing.
+  // single IdTable-like thing.
   // TODO<joka921> mitigate this requirement, or at least assess how expensive
   // it is.
   template <bool reversed>
@@ -1733,12 +1742,12 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Get allocator and number of columns from the first block.
     // TODO<joka921> pass in a proper allocator here.
-    auto allocator = makeUnlimitedAllocator<qlever::Id>();
+    auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
     AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
 
     // TODO<joka921> This can be much more efficient, in particular it could use
     // zero copying.
-    // Concatenate all rows from blocksLeft into a single qlever::IdTable.
+    // Concatenate all rows from blocksLeft into a single IdTable.
 
     auto materializeBlocksAsTable = [&allocator](const auto& blocks) {
       // Note: It is crucial that we go through the `asStaticView` interface of
@@ -1746,8 +1755,8 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
       // columns, not only the join columns, because the resultAdder needs them.
       size_t numCols =
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
-      qlever::IdTable table(numCols, allocator);
-      qlever::LocalVocab vocab;
+      IdTable table(numCols, allocator);
+      LocalVocab vocab;
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
         const auto& staticView = block.fullBlock().template asStaticView<0>();
@@ -1757,7 +1766,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
         vocab.mergeWith(block.fullBlock().getLocalVocab());
       }
       // Note: We use `IdTableAndFirstCols` here because it allows us to combine
-      // an `qlever::IdTable`  with a `LocalVocab` in a way that the
+      // an `IdTable`  with a `LocalVocab` in a way that the
       // `AddCombinedRowAdder` understands. The `1` template argument is
       // actually a dummy, as we will never access the data via the
       // `getFirstCols` interface.
@@ -1792,8 +1801,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Set up the generator for UNDEF values in the left last column.
     // TODO<joka921> Could optimize the case that there is no UNDEF at all.
-    auto endOfUndef =
-        ql::ranges::find_if_not(lastColLeft, &qlever::Id::isUndefined);
+    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, &Id::isUndefined);
     auto findSmallerUndefRangeLeft = [&lastColLeft, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
     };
@@ -1804,9 +1812,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
     };
 
     // Perform the join on the last column only.
-    [[maybe_unused]] auto res = zipperJoinWithUndef(
-        lastColLeft, lastColRight, std::less<>{}, compAction,
-        findSmallerUndefRangeLeft, noop, notFoundAction, noop);
+    [[maybe_unused]] auto res =
+        zipperJoinWithUndef(lastColLeft, lastColRight, std::less<>{},
+                            compAction, findSmallerUndefRangeLeft,
+                            ad_utility::noop, notFoundAction, ad_utility::noop);
     AD_EXPENSIVE_CHECK(res == 0);
 
     this->compatibleRowAction_.flush();
@@ -1887,8 +1896,8 @@ void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
  * `O(size of result)`. The result is only correct if none of the inputs
  * contains UNDEF values.
  * @param leftBlocks The left input range to the join algorithm. We use this for
- * blocks of rows of IDs (e.g.`std::vector<qlever::IdTable>` or
- * `ad_utility::generator<qlever::IdTable>`). Each block will be moved from.
+ * blocks of rows of IDs (e.g.`std::vector<IdTable>` or
+ * `ad_utility::generator<IdTable>`). Each block will be moved from.
  * @param rightBlocks The right input range to the join algorithm. Each block
  * will be moved from.
  * @param lessThan This function is called with one element from one of the
@@ -1939,10 +1948,10 @@ void zipperJoinForBlocksWithPotentialUndef(
 
   detail::BlockZipperJoinImpl impl{
       leftSide, rightSide, lessThan, compatibleRowAction,
-      [](const qlever::Id& id) { return id.isUndefined(); }};
+      [](const Id& id) { return id.isUndefined(); }};
   impl.template runJoin<joinType>();
 }
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_JOINALGORITHMS_H

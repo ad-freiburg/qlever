@@ -13,7 +13,7 @@
 #include "util/Generator.h"
 #include "util/Views.h"
 
-namespace ad_utility {
+namespace qlever {
 // The following functions `findSmallerUndefRanges...` have the following in
 // common: For a single `row` of IDs find all the iterators in the sorted range
 // `[begin, end)` that are lexicographically smaller than `row`, are compatible
@@ -49,8 +49,8 @@ CPP_template(typename R,
   assert(row.size() == (*begin).size());
   assert(
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
-  assert((ql::ranges::all_of(
-      row, [](qlever::Id id) { return id != qlever::Id::makeUndefined(); })));
+  assert((ql::ranges::all_of(row,
+                             [](Id id) { return id != Id::makeUndefined(); })));
 
   const size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
@@ -62,7 +62,7 @@ CPP_template(typename R,
     for (size_t j = 0; j < numJoinColumns; ++j) {
       rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
                         ? row[j]
-                        : qlever::ValueId::makeUndefined();
+                        : ValueId::makeUndefined();
     }
     return rowLower;
   };
@@ -97,10 +97,10 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
   const size_t numDefinedColumns = numJoinColumns - numLastUndefined;
   for (size_t i = 0; i < numDefinedColumns; ++i) {
-    assert(row[i] != qlever::Id::makeUndefined());
+    assert(row[i] != Id::makeUndefined());
   }
   for (size_t i = numDefinedColumns; i < numJoinColumns; ++i) {
-    assert(row[i] == qlever::Id::makeUndefined());
+    assert(row[i] == Id::makeUndefined());
   }
 
   // If every entry in the row is UNDEF, then it is the smallest possible
@@ -111,7 +111,7 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
       rowLower[colIdx] =
           (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
               ? row[colIdx]
-              : qlever::ValueId::makeUndefined();
+              : ValueId::makeUndefined();
     }
     return rowLower;
   };
@@ -127,7 +127,7 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
            auto begOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
            row[numDefinedColumns - 1] =
-               qlever::Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
+               Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
            auto endOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
            resultMightBeUnsorted = true;
@@ -154,10 +154,10 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
   auto isCompatible = [numJoinColumns, &row](const auto& otherIt) {
     const auto& otherRow = *otherIt;
     for (size_t k = 0u; k < numJoinColumns; ++k) {
-      qlever::Id a = row[k];
-      qlever::Id b = otherRow[k];
-      bool aUndef = a == qlever::Id::makeUndefined();
-      bool bUndef = b == qlever::Id::makeUndefined();
+      Id a = row[k];
+      Id b = otherRow[k];
+      bool aUndef = a == Id::makeUndefined();
+      bool bUndef = b == Id::makeUndefined();
       bool eq = a == b;
       auto match = aUndef || bUndef || eq;
       if (!match) {
@@ -194,14 +194,14 @@ struct FindSmallerUndefRanges {
     auto it = ql::ranges::rbegin(row);
     auto rend = ql::ranges::rend(row);
     for (; it < rend; ++it) {
-      if (*it != qlever::Id::makeUndefined()) {
+      if (*it != Id::makeUndefined()) {
         break;
       }
       ++numLastUndefined;
     }
 
     for (; it < rend; ++it) {
-      if (*it == qlever::Id::makeUndefined()) {
+      if (*it == Id::makeUndefined()) {
         return ad_utility::InputRangeTypeErased{findSmallerUndefRangesArbitrary(
             row, begin, end, resultMightBeUnsorted)};
       }
@@ -218,6 +218,6 @@ struct FindSmallerUndefRanges {
   }
 };
 constexpr FindSmallerUndefRanges findSmallerUndefRanges;
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H

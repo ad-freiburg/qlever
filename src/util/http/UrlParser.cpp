@@ -6,11 +6,11 @@
 
 #include "util/http/UrlParser.h"
 
-using namespace qlever::url_parser;
+namespace qlever::url_parser {
 
 // _____________________________________________________________________________
-std::optional<std::string> qlever::url_parser::getParameterCheckAtMostOnce(
-    const ParamValueMap& map, std::string_view key) {
+std::optional<std::string> getParameterCheckAtMostOnce(const ParamValueMap& map,
+                                                       std::string_view key) {
   if (!map.contains(key)) {
     return std::nullopt;
   }
@@ -24,9 +24,9 @@ std::optional<std::string> qlever::url_parser::getParameterCheckAtMostOnce(
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> qlever::url_parser::checkParameter(
-    const ParamValueMap& parameters, std::string_view key,
-    std::optional<std::string> value) {
+std::optional<std::string> checkParameter(const ParamValueMap& parameters,
+                                          std::string_view key,
+                                          std::optional<std::string> value) {
   const auto param = getParameterCheckAtMostOnce(parameters, key);
   if (!param.has_value()) {
     return std::nullopt;
@@ -44,7 +44,7 @@ std::optional<std::string> qlever::url_parser::checkParameter(
 }
 
 // _____________________________________________________________________________
-ParsedUrl qlever::url_parser::parseRequestTarget(std::string_view target) {
+ParsedUrl parseRequestTarget(std::string_view target) {
   auto urlResult = boost::urls::parse_origin_form(target);
   if (urlResult.has_error()) {
     throw std::runtime_error(
@@ -56,7 +56,7 @@ ParsedUrl qlever::url_parser::parseRequestTarget(std::string_view target) {
 }
 
 // _____________________________________________________________________________
-ParamValueMap qlever::url_parser::paramsToMap(boost::urls::params_view params) {
+ParamValueMap paramsToMap(boost::urls::params_view params) {
   ParamValueMap result;
   for (const auto& [key, value, _] : params) {
     result[key].push_back(value);
@@ -65,15 +65,17 @@ ParamValueMap qlever::url_parser::paramsToMap(boost::urls::params_view params) {
 }
 
 // _____________________________________________________________________________
-std::vector<qlever::DatasetClause> qlever::url_parser::parseDatasetClausesFrom(
-    const ParamValueMap& params, const std::string& key, bool isNamed) {
-  std::vector<qlever::DatasetClause> datasetClauses;
+std::vector<DatasetClause> parseDatasetClausesFrom(const ParamValueMap& params,
+                                                   const std::string& key,
+                                                   bool isNamed) {
+  std::vector<DatasetClause> datasetClauses;
   if (params.contains(key)) {
     for (const auto& uri : params.at(key)) {
       datasetClauses.emplace_back(
-          qlever::triple_component::Iri::fromIrirefWithoutBrackets(uri),
-          isNamed);
+          triple_component::Iri::fromIrirefWithoutBrackets(uri), isNamed);
     }
   }
   return datasetClauses;
 }
+
+}  // namespace qlever::url_parser

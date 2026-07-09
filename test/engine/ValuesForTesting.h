@@ -12,18 +12,15 @@
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
-using qlever::ColumnIndex;
-using qlever::Id;
-using qlever::IdTable;
-using qlever::LocalVocab;
+namespace qlever {
 
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another
 // operation.
-class ValuesForTesting : public qlever::Operation {
+class ValuesForTesting : public Operation {
  private:
-  std::vector<qlever::Result::IdTableVocabPair> tables_;
-  std::vector<std::optional<qlever::Variable>> variables_;
+  std::vector<Result::IdTableVocabPair> tables_;
+  std::vector<std::optional<Variable>> variables_;
   bool handlesLimit_;
   // Those can be manually overwritten for testing using the respective getters.
   size_t sizeEstimate_;
@@ -33,26 +30,23 @@ class ValuesForTesting : public qlever::Operation {
 
  public:
   auto tables() {
-    return tables_ |
-           ql::views::transform(&qlever::Result::IdTableVocabPair::idTable_);
+    return tables_ | ql::views::transform(&Result::IdTableVocabPair::idTable_);
   }
   auto tables() const {
-    return tables_ |
-           ql::views::transform(&qlever::Result::IdTableVocabPair::idTable_);
+    return tables_ | ql::views::transform(&Result::IdTableVocabPair::idTable_);
   }
 
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  explicit ValuesForTesting(
-      qlever::QueryExecutionContext* ctx, IdTable table,
-      std::vector<std::optional<qlever::Variable>> variables,
-      bool handlesLimit = false,
-      std::vector<qlever::ColumnIndex> sortedColumns = {},
-      qlever::LocalVocab localVocab = qlever::LocalVocab{},
-      std::optional<float> multiplicity = std::nullopt,
-      bool forceFullyMaterialized = false)
-      : qlever::Operation{ctx},
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            std::vector<std::optional<Variable>> variables,
+                            bool handlesLimit = false,
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{},
+                            std::optional<float> multiplicity = std::nullopt,
+                            bool forceFullyMaterialized = false)
+      : Operation{ctx},
         tables_{},
         variables_{std::move(variables)},
         handlesLimit_{handlesLimit},
@@ -65,21 +59,19 @@ class ValuesForTesting : public qlever::Operation {
     tables_.emplace_back(std::move(table), std::move(localVocab));
   }
 
-  static std::vector<qlever::Result::IdTableVocabPair> liftToPairs(
-      std::vector<IdTable> tables, qlever::LocalVocab voc) {
-    return ::ranges::to_vector(tables |
-                               ql::views::transform([&voc](auto& table) {
-                                 return qlever::Result::IdTableVocabPair{
-                                     std::move(table), voc.clone()};
-                               }));
+  static std::vector<Result::IdTableVocabPair> liftToPairs(
+      std::vector<IdTable> tables, LocalVocab voc) {
+    return ::ranges::to_vector(
+        tables | ql::views::transform([&voc](auto& table) {
+          return Result::IdTableVocabPair{std::move(table), voc.clone()};
+        }));
   }
-  explicit ValuesForTesting(
-      qlever::QueryExecutionContext* ctx,
-      std::vector<qlever::Result::IdTableVocabPair> tables,
-      std::vector<std::optional<qlever::Variable>> variables,
-      bool unlikelyToFitInCache = false,
-      std::vector<qlever::ColumnIndex> sortedColumns = {})
-      : qlever::Operation{ctx},
+  explicit ValuesForTesting(QueryExecutionContext* ctx,
+                            std::vector<Result::IdTableVocabPair> tables,
+                            std::vector<std::optional<Variable>> variables,
+                            bool unlikelyToFitInCache = false,
+                            std::vector<ColumnIndex> sortedColumns = {})
+      : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
         handlesLimit_{false},
@@ -100,12 +92,12 @@ class ValuesForTesting : public qlever::Operation {
     costEstimate_ = totalRows;
   }
 
-  explicit ValuesForTesting(
-      qlever::QueryExecutionContext* ctx, std::vector<IdTable> tables,
-      std::vector<std::optional<qlever::Variable>> variables,
-      bool unlikelyToFitInCache = false,
-      std::vector<qlever::ColumnIndex> sortedColumns = {},
-      qlever::LocalVocab localVocab = qlever::LocalVocab{})
+  explicit ValuesForTesting(QueryExecutionContext* ctx,
+                            std::vector<IdTable> tables,
+                            std::vector<std::optional<Variable>> variables,
+                            bool unlikelyToFitInCache = false,
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{})
       : ValuesForTesting{ctx,
                          liftToPairs(std::move(tables), std::move(localVocab)),
                          std::move(variables), unlikelyToFitInCache,
@@ -118,19 +110,18 @@ class ValuesForTesting : public qlever::Operation {
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  qlever::Result computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     if (requestLaziness && !forceFullyMaterialized_) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!handlesLimit_);
       auto lazyRange =
           tables_ | ql::views::transform([](const auto& tableAndVocab) {
-            return qlever::Result::IdTableVocabPair{
-                tableAndVocab.idTable_.clone(),
-                tableAndVocab.localVocab_.clone()};
+            return Result::IdTableVocabPair{tableAndVocab.idTable_.clone(),
+                                            tableAndVocab.localVocab_.clone()};
           });
-      return {qlever::Result::LazyResult{lazyRange}, resultSortedOn()};
+      return {Result::LazyResult{lazyRange}, resultSortedOn()};
     }
-    qlever::LocalVocab aggregateLocalVocab;
+    LocalVocab aggregateLocalVocab;
     IdTable table{tables()[0].numColumns(), tables()[0].getAllocator()};
     for (const auto& [idTable, localVocab] : tables_) {
       table.insertAtEnd(idTable);
@@ -155,9 +146,9 @@ class ValuesForTesting : public qlever::Operation {
     cacheSizeStorage_ = cacheSizeStorage;
   }
 
-  qlever::LimitOffsetHandling handlesLimitOffset() const override {
-    return handlesLimit_ ? qlever::LimitOffsetHandling::FULL
-                         : qlever::LimitOffsetHandling::NONE;
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return handlesLimit_ ? LimitOffsetHandling::FULL
+                         : LimitOffsetHandling::NONE;
   }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
@@ -176,7 +167,7 @@ class ValuesForTesting : public qlever::Operation {
     } else {
       for (const IdTable& idTable : tables()) {
         for (size_t i = 0; i < idTable.numColumns(); ++i) {
-          for (qlever::Id entry : idTable.getColumn(i)) {
+          for (Id entry : idTable.getColumn(i)) {
             str << entry << ' ';
           }
         }
@@ -197,7 +188,7 @@ class ValuesForTesting : public qlever::Operation {
     return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
-  std::vector<qlever::ColumnIndex> resultSortedOn() const override {
+  std::vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
 
@@ -215,7 +206,7 @@ class ValuesForTesting : public qlever::Operation {
     return static_cast<float>(col + 1) * 42.0f;
   }
 
-  std::vector<qlever::QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   bool knownEmptyResult() override {
     return ql::ranges::all_of(
@@ -223,20 +214,19 @@ class ValuesForTesting : public qlever::Operation {
   }
 
  private:
-  qlever::VariableToColumnMap computeVariableToColumnMap() const override {
-    qlever::VariableToColumnMap m;
-    for (auto i = qlever::ColumnIndex{0}; i < variables_.size(); ++i) {
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    VariableToColumnMap m;
+    for (auto i = ColumnIndex{0}; i < variables_.size(); ++i) {
       if (!variables_.at(i).has_value()) {
         continue;
       }
       bool containsUndef =
           ql::ranges::any_of(tables(), [&i](const IdTable& table) {
-            return ql::ranges::any_of(table.getColumn(i), [](qlever::Id id) {
-              return id.isUndefined();
-            });
+            return ql::ranges::any_of(table.getColumn(i),
+                                      [](Id id) { return id.isUndefined(); });
           });
-      using enum qlever::ColumnIndexAndTypeInfo::UndefStatus;
-      m[variables_.at(i).value()] = qlever::ColumnIndexAndTypeInfo{
+      using enum ColumnIndexAndTypeInfo::UndefStatus;
+      m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
           i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
@@ -244,7 +234,7 @@ class ValuesForTesting : public qlever::Operation {
 
   // _____________________________________________________________________________
   ValuesForTesting(const ValuesForTesting& other)
-      : qlever::Operation{other._executionContext},
+      : Operation{other._executionContext},
         variables_{other.variables_},
         handlesLimit_{other.handlesLimit_},
         sizeEstimate_{other.sizeEstimate_},
@@ -266,7 +256,7 @@ class ValuesForTesting : public qlever::Operation {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
-  std::vector<qlever::ColumnIndex> resultSortedColumns_;
+  std::vector<ColumnIndex> resultSortedColumns_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
 };
@@ -280,5 +270,7 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   bool knownEmptyResult() override { return false; }
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H

@@ -34,7 +34,7 @@ using namespace qlever;
 namespace {  // anonymous namespace to avoid linker problems
 
 using namespace ad_utility::testing;
-using namespace SpatialJoinTestHelpers;
+using namespace spatial_join_test_helpers;
 
 // Shortcut for SpatialJoin task parameters
 using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
@@ -377,19 +377,19 @@ class SpatialJoinParamTest
       getUseAreasOrPoints() ? "<geometryArea5>" : "<geometry5>";
 
   std::string wktString1 = getUseAreasOrPoints()
-                               ? SpatialJoinTestHelpers::areaUniFreiburg
+                               ? spatial_join_test_helpers::areaUniFreiburg
                                : "POINT(7.835050 48.012670)";
   std::string wktString2 = getUseAreasOrPoints()
-                               ? SpatialJoinTestHelpers::areaMuenster
+                               ? spatial_join_test_helpers::areaMuenster
                                : "POINT(7.852980 47.995570)";
   std::string wktString3 = getUseAreasOrPoints()
-                               ? SpatialJoinTestHelpers::areaLondonEye
+                               ? spatial_join_test_helpers::areaLondonEye
                                : "POINT(-0.119570 51.503330)";
   std::string wktString4 = getUseAreasOrPoints()
-                               ? SpatialJoinTestHelpers::areaStatueOfLiberty
+                               ? spatial_join_test_helpers::areaStatueOfLiberty
                                : "POINT(-74.044540 40.689250)";
   std::string wktString5 = getUseAreasOrPoints()
-                               ? SpatialJoinTestHelpers::areaEiffelTower
+                               ? spatial_join_test_helpers::areaEiffelTower
                                : "POINT(2.294510 48.858250)";
 
   Rows unordered_rows{{name1, node1, geometry1, wktString1},
@@ -1081,7 +1081,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
     if (!within) {
       GeoPoint geo1{point1.get<1>(), point1.get<0>()};
       GeoPoint geo2{startPoint.get<1>(), startPoint.get<0>()};
-      double dist = ad_utility::detail::wktDistImpl(geo1, geo2) * 1000;
+      double dist = qlever::detail::wktDistImpl(geo1, geo2) * 1000;
       ASSERT_GT(static_cast<long long>(dist), maxDistInMeters);
     }
   };

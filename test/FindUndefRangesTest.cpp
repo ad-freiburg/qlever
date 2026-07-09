@@ -12,13 +12,14 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace ad_utility;
+using namespace qlever;
 using ad_utility::source_location;
 
 namespace {
-const qlever::Id U = qlever::Id::makeUndefined();
+const Id U = Id::makeUndefined();
 auto V = ad_utility::testing::VocabId;
 template <size_t I>
-using Arr = std::array<qlever::Id, I>;
+using Arr = std::array<Id, I>;
 }  // namespace
 
 // A small helper function used in the `testSmallerUndef...` functions below. It

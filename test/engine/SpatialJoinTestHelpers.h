@@ -16,7 +16,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
-namespace SpatialJoinTestHelpers {
+namespace qlever::spatial_join_test_helpers {
 
 constexpr inline auto makePointLiteral = [](std::string_view c1,
                                             std::string_view c2) {
@@ -291,13 +291,13 @@ const std::string approximatedAreaGermany = makeAreaLiteral(
     "7.20369317867016 53.62121249029073");
 
 // helper function to create a vector of strings from a result table
-inline std::vector<std::string> printTable(
-    const qlever::QueryExecutionContext* qec, const qlever::Result* table) {
+inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
+                                           const Result* table) {
   std::vector<std::string> output;
   for (size_t i = 0; i < table->idTableView().numRows(); i++) {
     std::string line = "";
     for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
-      auto test = qlever::exportIds::idToStringAndType(
+      auto test = exportIds::idToStringAndType(
           qec->getIndex(), table->idTableView().at(i, k), {});
       line += test.value().first;
       line += " ";
@@ -313,7 +313,7 @@ inline std::vector<std::string> printTable(
 // each column of the result, each column consist of a vector, where each entry
 // is a row of this column))
 inline std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
-    qlever::VariableToColumnMap varColMaps,
+    VariableToColumnMap varColMaps,
     std::vector<std::vector<std::string>> columns,
     std::vector<std::string> columnNames) {
   std::vector<std::vector<std::string>> result;
@@ -421,10 +421,10 @@ inline std::string createTrueDistanceDataset() {
 // literals. `vocabType` can be set
 inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
   ad_utility::testing::TestIndexConfig config{turtleKg};
-  std::optional<qlever::VocabularyType> vocabType = std::nullopt;
+  std::optional<VocabularyType> vocabType = std::nullopt;
   if (useGeoVocab) {
-    using enum qlever::VocabularyType::Enum;
-    vocabType = qlever::VocabularyType{OnDiskCompressedGeoSplit};
+    using enum VocabularyType::Enum;
+    vocabType = VocabularyType{OnDiskCompressedGeoSplit};
   }
   config.vocabularyType = vocabType;
   config.blocksizePermutations = 16_MB;
@@ -432,12 +432,12 @@ inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
   return ad_utility::testing::getQec(std::move(config));
 }
 
-inline qlever::QueryExecutionContext* buildTestQEC(bool useAreas = false,
-                                                   bool useGeoVocab = false) {
+inline QueryExecutionContext* buildTestQEC(bool useAreas = false,
+                                           bool useGeoVocab = false) {
   return buildQec(createSmallDataset(useAreas), useGeoVocab);
 }
 
-inline qlever::QueryExecutionContext* buildMixedAreaPointQEC(
+inline QueryExecutionContext* buildMixedAreaPointQEC(
     bool useTrueDistanceDataset = false, bool useGeoVocab = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
@@ -447,7 +447,7 @@ inline qlever::QueryExecutionContext* buildMixedAreaPointQEC(
 // Create `QueryExecutionContext` with a dataset that contains an additional
 // area without `<name>` predicate (so that our `libspatialjoin` test has two
 // sides of different size), as well as an object with an invalid geometry.
-inline qlever::QueryExecutionContext* buildNonSelfJoinDataset(
+inline QueryExecutionContext* buildNonSelfJoinDataset(
     bool useGeoVocab = false) {
   std::string kg = createTrueDistanceDataset();
   kg += absl::StrCat(
@@ -458,35 +458,32 @@ inline qlever::QueryExecutionContext* buildNonSelfJoinDataset(
   return buildQec(kg, useGeoVocab);
 }
 
-inline std::shared_ptr<qlever::QueryExecutionTree> buildIndexScan(
-    qlever::QueryExecutionContext* qec, std::array<std::string, 3> triple) {
-  qlever::TripleComponent subject{qlever::Variable{triple.at(0)}};
-  qlever::TripleComponent object{qlever::Variable{triple.at(2)}};
-  return qlever::makeExecutionTree<qlever::IndexScan>(
-      qec, qlever::Permutation::Enum::PSO,
-      qlever::SparqlTripleSimple{
-          subject, qlever::TripleComponent::Iri::fromIriref(triple.at(1)),
-          object});
+inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
+    QueryExecutionContext* qec, std::array<std::string, 3> triple) {
+  TripleComponent subject{Variable{triple.at(0)}};
+  TripleComponent object{Variable{triple.at(2)}};
+  return makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{
+          subject, TripleComponent::Iri::fromIriref(triple.at(1)), object});
 }
 
-inline std::shared_ptr<qlever::QueryExecutionTree> buildJoin(
-    qlever::QueryExecutionContext* qec,
-    std::shared_ptr<qlever::QueryExecutionTree> tree1,
-    std::shared_ptr<qlever::QueryExecutionTree> tree2,
-    qlever::Variable joinVariable) {
+inline std::shared_ptr<QueryExecutionTree> buildJoin(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> tree1,
+    std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
   auto varCol1 = tree1->getVariableColumns();
   auto varCol2 = tree2->getVariableColumns();
   size_t col1 = varCol1[joinVariable].columnIndex_;
   size_t col2 = varCol2[joinVariable].columnIndex_;
-  return qlever::makeExecutionTree<qlever::Join>(qec, tree1, tree2, col1, col2);
+  return makeExecutionTree<Join>(qec, tree1, tree2, col1, col2);
 }
 
-inline std::shared_ptr<qlever::QueryExecutionTree> buildMediumChild(
-    qlever::QueryExecutionContext* qec, std::array<std::string, 3> triple1,
+inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
+    QueryExecutionContext* qec, std::array<std::string, 3> triple1,
     std::array<std::string, 3> triple2, std::array<std::string, 3> triple3,
     std::string joinVariable1_, std::string joinVariable2_) {
-  qlever::Variable joinVariable1{joinVariable1_};
-  qlever::Variable joinVariable2{joinVariable2_};
+  Variable joinVariable1{joinVariable1_};
+  Variable joinVariable2{joinVariable2_};
   auto scan1 = buildIndexScan(qec, triple1);
   auto scan2 = buildIndexScan(qec, triple2);
   auto scan3 = buildIndexScan(qec, triple3);
@@ -494,10 +491,10 @@ inline std::shared_ptr<qlever::QueryExecutionTree> buildMediumChild(
   return buildJoin(qec, join, scan3, joinVariable2);
 }
 
-inline std::shared_ptr<qlever::QueryExecutionTree> buildSmallChild(
-    qlever::QueryExecutionContext* qec, std::array<std::string, 3> triple1,
+inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
+    QueryExecutionContext* qec, std::array<std::string, 3> triple1,
     std::array<std::string, 3> triple2, std::string joinVariable_) {
-  qlever::Variable joinVariable{joinVariable_};
+  Variable joinVariable{joinVariable_};
   auto scan1 = buildIndexScan(qec, triple1);
   auto scan2 = buildIndexScan(qec, triple2);
   return buildJoin(qec, scan1, scan2, joinVariable);
@@ -509,42 +506,40 @@ inline std::shared_ptr<qlever::QueryExecutionTree> buildSmallChild(
 // defaulted as nullpointer or std::nullopt. The maxDist is necessary, because
 // one of the wrapper classes needs a proper maxDistance, otherwise the wrapper
 // can't be used to test the function
-inline qlever::SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
+inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
     size_t maxDist = 1000,
-    std::optional<qlever::QueryExecutionContext*> qec = std::nullopt) {
+    std::optional<QueryExecutionContext*> qec = std::nullopt) {
   if (!qec) {
     qec = buildTestQEC();
   }
-  qlever::MaxDistanceConfig task{static_cast<double>(maxDist)};
-  std::shared_ptr<qlever::QueryExecutionTree> spatialJoinOperation =
-      qlever::makeExecutionTree<qlever::SpatialJoin>(
+  MaxDistanceConfig task{static_cast<double>(maxDist)};
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      makeExecutionTree<SpatialJoin>(
           qec.value(),
-          qlever::SpatialJoinConfiguration{task, qlever::Variable{"?point1"},
-                                           qlever::Variable{"?point2"}},
+          SpatialJoinConfiguration{task, Variable{"?point1"},
+                                   Variable{"?point2"}},
           std::nullopt, std::nullopt);
 
-  std::shared_ptr<qlever::Operation> op =
-      spatialJoinOperation->getRootOperation();
-  qlever::SpatialJoin* spatialJoin =
-      static_cast<qlever::SpatialJoin*>(op.get());
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  qlever::PreparedSpatialJoinParams params{nullptr,
-                                           nullptr,
-                                           nullptr,
-                                           nullptr,
-                                           0,
-                                           0,
-                                           std::vector<qlever::ColumnIndex>{},
-                                           1,
-                                           spatialJoin->getMaxDist(),
-                                           std::nullopt,
-                                           std::nullopt,
-                                           std::nullopt,
-                                           std::nullopt,
-                                           std::nullopt};
+  PreparedSpatialJoinParams params{nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   0,
+                                   0,
+                                   std::vector<ColumnIndex>{},
+                                   1,
+                                   spatialJoin->getMaxDist(),
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt,
+                                   std::nullopt};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }
 
-}  // namespace SpatialJoinTestHelpers
+}  // namespace qlever::spatial_join_test_helpers
 #endif  // QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H

@@ -196,7 +196,7 @@ class JoinImpl : public Operation {
   // joining. This is required because the join algorithms expect the join
   // columns to be the first columns of the input tables and the result to be in
   // the order of the input tables.
-  ad_utility::JoinColumnMapping getJoinColumnMapping() const;
+  JoinColumnMapping getJoinColumnMapping() const;
 
   // Helper function to create the commonly used instance of this class.
   AddCombinedRowToIdTable makeRowAdder(

@@ -391,8 +391,8 @@ void OptionalJoin::optionalJoin(
         computeImplementationFromIdTables(left, right, joinColumns);
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{
-      joinColumns, left.numColumns(), right.numColumns(), keepJoinColumns_};
+  JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                   right.numColumns(), keepJoinColumns_};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -427,8 +427,7 @@ void OptionalJoin::optionalJoin(
       rowAdder.addRows(getRng(itLeft, endLeft, beginLeft),
                        getRng(itRight, endRight, beginRight));
     };
-    return ad_utility::detail::RowIndexAdder{std::move(addRow),
-                                             std::move(addRows)};
+    return detail::RowIndexAdder{std::move(addRow), std::move(addRows)};
   }();
 
   auto addOptionalRow = [&rowAdder,
@@ -438,23 +437,23 @@ void OptionalJoin::optionalJoin(
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end,
                               bool& outOfOrder) {
-    return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
+    return findSmallerUndefRanges(row, begin, end, outOfOrder);
   };
 
   const size_t numOutOfOrder = [&]() {
     auto checkCancellationLambda = [this] { checkCancellation(); };
     if (implementation == Implementation::OnlyUndefInLastJoinColumnOfLeft) {
-      ad_utility::specialOptionalJoin(joinColumns.size(), joinColumnsLeft,
-                                      joinColumnsRight, rowAdderOnIterators,
-                                      addOptionalRow, checkCancellationLambda);
+      specialOptionalJoin(joinColumns.size(), joinColumnsLeft, joinColumnsRight,
+                          rowAdderOnIterators, addOptionalRow,
+                          checkCancellationLambda);
       return 0UL;
     } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
-        ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
-                                  lessThanBoth, rowAdderOnIterators,
-                                  addOptionalRow, checkCancellationLambda);
+        gallopingJoin(joinColumnsLeft, joinColumnsRight, lessThanBoth,
+                      rowAdderOnIterators, addOptionalRow,
+                      checkCancellationLambda);
       } else {
-        auto shouldBeZero = ad_utility::zipperJoinWithUndef(
+        auto shouldBeZero = zipperJoinWithUndef(
             joinColumnsLeft, joinColumnsRight, lessThanBoth,
             rowAdderOnIterators, ad_utility::noop, ad_utility::noop,
             addOptionalRow, checkCancellationLambda);
@@ -462,10 +461,10 @@ void OptionalJoin::optionalJoin(
       }
       return 0UL;
     } else {
-      return ad_utility::zipperJoinWithUndef(
-          joinColumnsLeft, joinColumnsRight, lessThanBoth, rowAdderOnIterators,
-          findUndefDispatch, findUndefDispatch, addOptionalRow,
-          checkCancellationLambda);
+      return zipperJoinWithUndef(joinColumnsLeft, joinColumnsRight,
+                                 lessThanBoth, rowAdderOnIterators,
+                                 findUndefDispatch, findUndefDispatch,
+                                 addOptionalRow, checkCancellationLambda);
     }
   }();
   // The column order in the result is now
@@ -503,9 +502,8 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
                     !right->isFullyMaterialized());
   // Currently only supports a single join column.
   AD_CORRECTNESS_CHECK(_joinColumns.size() == 1);
-  ad_utility::JoinColumnMapping joinColMap{
-      _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
-      keepJoinColumns_};
+  JoinColumnMapping joinColMap{_joinColumns, _left->getResultWidth(),
+                               _right->getResultWidth(), keepJoinColumns_};
 
   auto resultPermutation = joinColMap.permutationResult();
 
@@ -518,9 +516,9 @@ Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
     auto rightRange = resultToView(*right, joinColMap.permutationRight());
     std::visit(
         [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
-          ad_utility::zipperJoinForBlocksWithPotentialUndef(
-              leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-              ad_utility::OptionalJoinTag{});
+          zipperJoinForBlocksWithPotentialUndef(leftBlocks, rightBlocks,
+                                                std::less{}, rowAdder, {}, {},
+                                                OptionalJoinTag{});
         },
         leftRange, rightRange);
     auto localVocab = std::move(rowAdder.localVocab());
@@ -538,9 +536,8 @@ Result OptionalJoin::optionalJoinWithIndexScan(
   AD_CORRECTNESS_CHECK(_joinColumns.size() == 1 ||
                        implementation_ ==
                            Implementation::OnlyUndefInLastJoinColumnOfLeft);
-  ad_utility::JoinColumnMapping joinColMap{
-      _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
-      keepJoinColumns_};
+  JoinColumnMapping joinColMap{_joinColumns, _left->getResultWidth(),
+                               _right->getResultWidth(), keepJoinColumns_};
 
   auto resultPermutation = joinColMap.permutationResult();
 
@@ -560,7 +557,7 @@ Result OptionalJoin::optionalJoinWithIndexScan(
           auto rightRange = convertGeneratorFromScan<numJoinCols>(
               std::move(rightBlocksInternal), *rightScan);
           auto permutationIdTable =
-              ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
+              IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
                   left->idTableView().asColumnSubsetView(
                       joinColMap.permutationLeft()),
                   left->getCopyOfLocalVocab()};
@@ -589,7 +586,7 @@ Result OptionalJoin::optionalJoinWithIndexScan(
             getLeftAndRightRange.template operator()<1>();
         zipperJoinForBlocksWithPotentialUndef(
             std::move(leftRange), std::move(rightRange), std::less{}, rowAdder,
-            {}, {}, ad_utility::OptionalJoinTag{});
+            {}, {}, OptionalJoinTag{});
       } else {
         AD_CORRECTNESS_CHECK(implementation_ ==
                              Implementation::OnlyUndefInLastJoinColumnOfLeft);
@@ -644,7 +641,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto rightRes = computeResultSkipChild(_right->getRootOperation(), true);
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
-  ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _joinColumns, std::move(leftRes), std::move(rightRes)};
 
   // This algorithm doesn't produce sorted output

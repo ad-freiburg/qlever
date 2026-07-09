@@ -22,11 +22,11 @@ using namespace qlever;
 using namespace ::testing;
 using Loc = source_location;
 
-using ad_utility::detail::AnyGeometryMember;
-using ad_utility::detail::DAnyGeometry;
-using ad_utility::detail::ParsedWkt;
-using ad_utility::detail::ParseResult;
-using ad_utility::detail::visitAnyGeometry;
+using geometry_info_helpers::AnyGeometryMember;
+using geometry_info_helpers::DAnyGeometry;
+using geometry_info_helpers::ParsedWkt;
+using geometry_info_helpers::ParseResult;
+using geometry_info_helpers::visitAnyGeometry;
 
 // Helpers that check (approx.) equality of two GeometryInfo objects or for
 // instances of the associated helper classes.
@@ -220,7 +220,7 @@ inline void checkAnyGeometryMemberEnum(
 template <typename T>
 inline T getGeometryOfTypeOrThrow(
     const std::string_view wkt, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   auto l = generateLocationTrace(sourceLocation);
   auto parseRes = parseWkt(wkt);
   if (!parseRes.second.has_value()) {
@@ -243,7 +243,7 @@ template <typename T>
 inline void testMetricArea(const std::string_view wkt, double expectedArea,
                            size_t expectedNumPolygons = 0,
                            Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   auto l = generateLocationTrace(sourceLocation);
   const auto parsed = getGeometryOfTypeOrThrow<T>(wkt);
 
