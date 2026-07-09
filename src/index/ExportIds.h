@@ -247,9 +247,10 @@ void resolveVocabIndexIds(
     return ids[i].getDatatype() == Datatype::VocabIndex;
   }));
 
-  auto rawIndices = positions | ql::views::transform([&ids](size_t i) {
-                      ids[i].getVocabIndex().get();
-                    });
+  auto rawIndices =
+      ::ranges::to_vector(positions | ql::views::transform([&ids](size_t i) {
+                            return ids[i].getVocabIndex().get();
+                          }));
   auto vocabStrings = index.getImpl().getVocab().lookupBatch(rawIndices);
 
   // `vocabStrings` is in the same order as `positions`, so zip scatters each
