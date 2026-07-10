@@ -534,12 +534,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      {{Id("\"foo\""), Id("<bar>"), 0UL, defaultGraphId}});
+      {{Id("\"foo\""), Id("<bar>"), uint64_t{0}, defaultGraphId}});
   expectTransformTriplesTemplate(
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
-      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}});
+      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), uint64_t{0}}});
   expectTransformTriplesTemplate(
       {},
       {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
@@ -559,9 +559,9 @@ TEST(ExecuteUpdate, resolveVariable) {
   auto resolveVariable = std::bind_front(&ExecuteUpdate::resolveVariable,
                                          idTable.asStaticView<0>());
   EXPECT_THAT(resolveVariable(0, V(10)), Eq(V(10)));
-  EXPECT_THAT(resolveVariable(0, 1UL), Eq(V(1)));
-  EXPECT_THAT(resolveVariable(1, 1UL), Eq(V(4)));
-  EXPECT_THAT(resolveVariable(2, 1UL), Eq(std::nullopt));
+  EXPECT_THAT(resolveVariable(0, uint64_t{1}), Eq(V(1)));
+  EXPECT_THAT(resolveVariable(1, uint64_t{1}), Eq(V(4)));
+  EXPECT_THAT(resolveVariable(2, uint64_t{1}), Eq(std::nullopt));
   EXPECT_THAT(resolveVariable(2, Id::makeUndefined()), Eq(std::nullopt));
 }
 
@@ -591,12 +591,13 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
                      ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
   // The variables in templates are resolved to the value of the variable in the
   // specified row of the result.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 0,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}}}));
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 1,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 1,
                      ElementsAreArray({IdTriple{{V(3), V(1), V(4), V(3)}}}));
   // Quads with undefined IDs cannot be stored and are not returned.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 2, IsEmpty());
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 2,
+                     IsEmpty());
   expectComputeQuads({{V(0), V(1), Id::makeUndefined(), V(3)}}, idTable, 0,
                      IsEmpty());
   // Some extra cases to cover all branches.
@@ -607,8 +608,9 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
   expectComputeQuads({{V(0), V(1), V(2), Id::makeUndefined()}}, idTable, 0,
                      IsEmpty());
   // All the templates are evaluated for the specified row of the result.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}, {V(0), 1UL, 2UL, V(3)}}, idTable,
-                     0,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)},
+                      {V(0), uint64_t{1}, uint64_t{2}, V(3)}},
+                     idTable, 0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}},
                                        IdTriple{{V(0), V(1), V(2), V(3)}}}));
 }
