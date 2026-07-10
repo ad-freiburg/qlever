@@ -943,7 +943,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto request = makeGetRequest(
         "/?cmd=delete-materialized-view&view-name=testViewFromHTTP2"
         "&access-token=accessToken");
-    auto response = simulateHttpRequest(request);
+    auto response = responseBodyAsJson(
+        makeServerForTesting(testIndexBase_).process(request));
 
     // Check HTTP response.
     ASSERT_TRUE(response.has_value());
@@ -964,7 +965,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     auto request = makeGetRequest(
         "/?cmd=delete-materialized-view&view-name=testViewFromHTTP");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        simulateHttpRequest(request),
+        responseBodyAsJson(
+            makeServerForTesting(testIndexBase_).process(request)),
         ::testing::HasSubstr("delete-materialized-view requires a valid access "
                              "token but no access token was provided"));
   }
