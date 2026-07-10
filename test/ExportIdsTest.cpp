@@ -25,6 +25,7 @@
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using ::testing::ElementsAre;
+using ::testing::ElementsAreArray;
 using ::testing::EndsWith;
 using ::testing::Eq;
 using ::testing::HasSubstr;
@@ -343,18 +344,170 @@ void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
 
 // _____________________________________________________________________________
 TEST(ExportIds, resolveVocabIndexIds) {
-  // Build a small index with IRIs and literals of various types.
-  std::string kg =
-      "<s> <p> <o> . "
-      "<s> <q> \"hello\" . "
-      "<s> <p> 42 . "
-      "<s> <p> 3.14 .";
-  auto qec = ad_utility::testing::getQec(kg);
-  const Index& index = qec->getIndex();
-  LocalVocab localVocab{};
-  auto getId = ad_utility::testing::makeGetId(index);
+  // TODO
 }
 
 // _____________________________________________________________________________
+// An escape function that visibly transforms its input. Using `ql::identity`
+// here would make "the escape function was applied" indistinguishable from
+// "the escape function was silently dropped".
+const auto escapeWithMarker = [](std::string s) {
+  return absl::StrCat("X:", s);
+};
+
+// The expected result of `literalOrIriToStringAndType` for one input, for each
+// of the four combinations of the two template flags. `std::nullopt` means
+// that the function is expected to return `std::nullopt`.
+struct ExpectedForFlags {
+  std::optional<std::string> plain_;
+  std::optional<std::string> removeQuotesAndAngleBrackets_;
+  std::optional<std::string> returnOnlyLiterals_;
+  std::optional<std::string> both_;
+};
+
+// _____________________________________________________________________________
+template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
+          typename LiteralOrIriType>
+void expectLiteralOrIriToStringAndType(
+    const LiteralOrIriType& word, const std::optional<std::string>& expected) {
+  SCOPED_TRACE(absl::StrCat(
+      "removeQuotesAndAngleBrackets=", removeQuotesAndAngleBrackets,
+      " returnOnlyLiterals=", returnOnlyLiterals));
+  auto result =
+      ql::exportIds::literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                                 returnOnlyLiterals>(
+          word, escapeWithMarker);
+  if (!expected.has_value()) {
+    EXPECT_EQ(result, std::nullopt);
+    return;
+  }
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->first, expected.value());
+  // This function never reports an XSD datatype; that is the job of
+  // `idToStringAndTypeForEncodedValue`.
+  EXPECT_EQ(result->second, nullptr);
+}
+
+using LiteralOrIriTypes =
+    ::testing::Types<ad_utility::triple_component::LiteralOrIri,
+                     ad_utility::triple_component::LiteralOrIriView>;
+
+template <typename LiteralOrIriType>
+class ExportIdsLiteralOrIriToStringAndTypeTest : public ::testing::Test {
+ protected:
+  // Run `literalOrIriToStringAndType` on the `LiteralOrIri[View]` parsed from
+  // `stringRepresentation` for all four flag combinations.
+  static void checkAllFlagCombinations(std::string_view stringRepresentation,
+                                       const ExpectedForFlags& expected) {
+    SCOPED_TRACE(stringRepresentation);
+    // Keep the string representation in a named local: `LiteralOrIriView`
+    // stores views, so a temporary would dangle.
+    std::string owned{stringRepresentation};
+    auto word = LiteralOrIriType::fromStringRepresentation(owned);
+    expectLiteralOrIriToStringAndType<false, false>(word, expected.plain_);
+    expectLiteralOrIriToStringAndType<true, false>(
+        word, expected.removeQuotesAndAngleBrackets_);
+    expectLiteralOrIriToStringAndType<false, true>(
+        word, expected.returnOnlyLiterals_);
+    expectLiteralOrIriToStringAndType<true, true>(word, expected.both_);
+  }
+};
+
+TYPED_TEST_SUITE(ExportIdsLiteralOrIriToStringAndTypeTest, LiteralOrIriTypes);
+
+// _____________________________________________________________________________
+TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, literals) {
+  // A plain literal is returned as-is; `removeQuotesAndAngleBrackets` strips
+  // the quotes. `returnOnlyLiterals` never rejects a literal.
+  TestFixture::checkAllFlagCombinations(
+      "\"hello\"", {.plain_ = "X:\"hello\"",
+                    .removeQuotesAndAngleBrackets_ = "X:hello",
+                    .returnOnlyLiterals_ = "X:\"hello\"",
+                    .both_ = "X:hello"});
+
+  // With a datatype, the plain path keeps the `^^<...>` suffix, while
+  // `removeQuotesAndAngleBrackets` reduces the literal to its content.
+  std::string_view withDatatype =
+      "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>";
+  TestFixture::checkAllFlagCombinations(
+      withDatatype, {.plain_ = absl::StrCat("X:", withDatatype),
+                     .removeQuotesAndAngleBrackets_ = "X:42",
+                     .returnOnlyLiterals_ = absl::StrCat("X:", withDatatype),
+                     .both_ = "X:42"});
+
+  // Same for a language tag.
+  TestFixture::checkAllFlagCombinations(
+      "\"hallo\"@de", {.plain_ = "X:\"hallo\"@de",
+                       .removeQuotesAndAngleBrackets_ = "X:hallo",
+                       .returnOnlyLiterals_ = "X:\"hallo\"@de",
+                       .both_ = "X:hallo"});
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, iris) {
+  // `returnOnlyLiterals` rejects IRIs. Otherwise the angle brackets are kept
+  // unless `removeQuotesAndAngleBrackets` is set.
+  TestFixture::checkAllFlagCombinations(
+      "<http://example.org/x>",
+      {.plain_ = "X:<http://example.org/x>",
+       .removeQuotesAndAngleBrackets_ = "X:http://example.org/x",
+       .returnOnlyLiterals_ = std::nullopt,
+       .both_ = std::nullopt});
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, blankNodeIris) {
+  std::string blankNode =
+      absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:b0", ">");
+
+  // A blank node is an IRI internally, so `returnOnlyLiterals` rejects it
+  // before the blank-node check is ever reached. Otherwise it is returned as
+  // its `_:` representation, independent of `removeQuotesAndAngleBrackets`
+  // and, notably, *without* the escape function being applied.
+  TestFixture::checkAllFlagCombinations(
+      blankNode, {.plain_ = "_:b0",
+                  .removeQuotesAndAngleBrackets_ = "_:b0",
+                  .returnOnlyLiterals_ = std::nullopt,
+                  .both_ = std::nullopt});
+}
+
+// _____________________________________________________________________________
+TEST(ExportIds, partitionIdPositions) {
+  using namespace ad_utility::testing;
+
+  auto expectPartition =
+      [](const std::vector<Id>& ids,
+         const std::vector<size_t>& expectedVocabIndices,
+         const std::vector<size_t>& expectedNonVocabIndices) {
+        auto positions = ql::exportIds::partitionIdPositions(ids);
+        EXPECT_THAT(positions.vocabIndexIndices_,
+                    ElementsAreArray(expectedVocabIndices));
+        EXPECT_THAT(positions.nonVocabIndexIndices_,
+                    ElementsAreArray(expectedNonVocabIndices));
+      };
+
+  // Empty input yields two empty partitions.
+  expectPartition({}, {}, {});
+
+  // All `VocabIndex`, respectively no `VocabIndex` at all.
+  expectPartition({VocabId(0), VocabId(5)}, {0, 1}, {});
+  expectPartition({IntId(1), UndefId(), BlankNodeId(3)}, {}, {0, 1, 2});
+
+  // The interesting case: `LocalVocabIndex` and encoded values interspersed
+  // between the `VocabIndex` IDs, so the partition cannot be a range split.
+  expectPartition({VocabId(0), LocalVocabId(1), VocabId(2), IntId(7),
+                   VocabId(3), DoubleId(1.5)},
+                  {0, 2, 4}, {1, 3, 5});
+
+  // Both partitions are stable, i.e. the positions are ascending even when the
+  // underlying vocabulary indices are not. `resolveVocabIndexIds` relies on
+  // this to scatter the batched lookup results back to the right slots.
+  expectPartition({VocabId(9), IntId(0), VocabId(1)}, {0, 2}, {1});
+}
+
+// _____________________________________________________________________________
+TEST(ExportIds, resolveNonVocabIndexIds) {
+  // TODO
+}
 
 }  // namespace
