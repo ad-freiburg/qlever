@@ -36,131 +36,226 @@
 
 namespace columnBasedIdTable {
 
-// A contiguous range `[begin_, end_)` of positions of a column that all have
-// the same datatype.
-struct DatatypeRun {
-  Datatype type_;
-  size_t begin_;
-  size_t end_;
-};
-
-// Compute the runs of equal datatypes of the `column`. For columns that are
-// sorted in the datatype-major ID order this yields at most one run per
-// datatype. This is a single cheap pass over the datatype bytes.
-inline std::vector<DatatypeRun> computeDatatypeRuns(ConstIdColumnSpan column) {
-  std::vector<DatatypeRun> runs;
-  auto types = column.datatypeSpan();
-  size_t i = 0;
-  while (i < types.size()) {
-    uint8_t type = types[i];
-    // Find the end of the run. `memchr`-style scanning would also be
-    // possible, but this loop is already memory-bound and vectorizes well.
-    size_t end = i + 1;
-    while (end < types.size() && types[end] == type) {
-      ++end;
-    }
-    runs.push_back({static_cast<Datatype>(type), i, end});
-    i = end;
-  }
-  return runs;
-}
-
-// Return true iff any of the `runs` has the `LocalVocabIndex` datatype.
-inline bool anyRunIsLocalVocab(const std::vector<DatatypeRun>& runs) {
-  return std::any_of(runs.begin(), runs.end(), [](const DatatypeRun& run) {
-    return run.type_ == Datatype::LocalVocabIndex;
-  });
-}
-
 // Try to perform a merge/zipper join of two sorted columns without UNDEF
-// values. On success, call `addRow(leftIndex, rightIndex)` for each matching
-// pair of positions (in the same order as the generic zipper join) and
-// return `true`. Return `false` without calling `addRow` if any of the
-// columns contains IDs of type `LocalVocabIndex` (see above); the caller
-// then has to use the generic join.
+// values. Call `addRow(leftIndex, rightIndex)` for single matching pairs and
+// `addRows(leftBegin, leftEnd, rightBegin, rightEnd)` for the Cartesian
+// product of groups of equal elements, in the same order as the generic
+// zipper join. `notFoundAction(leftIndex)` is called for all elements of the
+// left column without a matching element in the right column (pass
+// `ad_utility::noop` unless this is an OPTIONAL join or a MINUS).
 //
-// The join first merges the datatype runs of the two columns (runs of
-// datatypes that only appear on one side are skipped in O(1)) and then joins
-// the runs of equal datatypes on the plain payload words.
-CPP_template(typename AddRow, typename CancelCallback)(
+// The algorithm compares the datatype bytes and payload words of the split
+// column storage directly and thus avoids materializing `Id`s in the hot
+// loop. IDs of type `LocalVocabIndex` (which do not compare bitwise, but by
+// their position in the vocabulary) are handled gracefully: the columns are
+// processed in maximal chunks that contain no `LocalVocabIndex` IDs (these
+// chunks are joined by the fast bitwise loop), and only the elements at and
+// around the `LocalVocabIndex` positions are compared with the semantic `Id`
+// comparison.
+CPP_template(typename AddRow, typename AddRows, typename NotFoundAction,
+             typename CancelCallback)(
     requires ql::concepts::invocable<AddRow, size_t, size_t> CPP_and
-        ql::concepts::invocable<
-            CancelCallback>) bool tryZipperJoinOnDatatypeRuns(ConstIdColumnSpan
+        ql::concepts::invocable<AddRows, size_t, size_t, size_t, size_t>
+            CPP_and ql::concepts::invocable<NotFoundAction, size_t>
+                CPP_and ql::concepts::invocable<
+                    CancelCallback>) void zipperJoinIdColumns(ConstIdColumnSpan
                                                                   left,
                                                               ConstIdColumnSpan
                                                                   right,
                                                               AddRow addRow,
+                                                              AddRows addRows,
+                                                              NotFoundAction
+                                                                  notFoundAction,
                                                               CancelCallback
                                                                   cancelCallback) {
-  auto runsLeft = computeDatatypeRuns(left);
-  auto runsRight = computeDatatypeRuns(right);
-  if (anyRunIsLocalVocab(runsLeft) || anyRunIsLocalVocab(runsRight)) {
-    return false;
-  }
+  constexpr uint8_t localVocabType =
+      static_cast<uint8_t>(Datatype::LocalVocabIndex);
+  const auto typesLeft = left.datatypeSpan();
+  const auto typesRight = right.datatypeSpan();
+  const auto payloadsLeft = left.payloadSpan();
+  const auto payloadsRight = right.payloadSpan();
+  const size_t numLeft = left.size();
+  const size_t numRight = right.size();
 
-  auto payloadsLeft = left.payloadSpan();
-  auto payloadsRight = right.payloadSpan();
+  auto makeId = [](uint8_t type, uint64_t payload) {
+    return Id::fromBits({type, payload});
+  };
 
-  // Join two runs of the same datatype on the plain payloads. This is a
-  // classic merge join on `uint64_t` values, including the cross product for
-  // duplicate values.
-  size_t stepsUntilCancelCheck = 0;
-  auto joinRuns = [&](const DatatypeRun& runLeft, const DatatypeRun& runRight) {
-    size_t l = runLeft.begin_;
-    size_t r = runRight.begin_;
-    while (l < runLeft.end_ && r < runRight.end_) {
-      if (++stepsUntilCancelCheck >= (1ull << 20)) {
-        stepsUntilCancelCheck = 0;
-        cancelCallback();
+  // Return the position of the next ID of type `LocalVocabIndex` at or after
+  // the position `from` (or the size of the column if there is none).
+  auto nextLocalVocab = [](ql::span<const uint8_t> types, size_t from) {
+    const void* pointer =
+        std::memchr(types.data() + from, localVocabType, types.size() - from);
+    return pointer == nullptr
+               ? types.size()
+               : static_cast<size_t>(static_cast<const uint8_t*>(pointer) -
+                                     types.data());
+  };
+
+  // Return the end of the group of elements that compare equal to the
+  // element at position `group`. The group is first extended bitwise; if the
+  // group then borders an ID of type `LocalVocabIndex` (or starts with one),
+  // it is extended further using the semantic `Id` comparison (groups of
+  // equivalent elements can contain interleaved `LocalVocabIndex` and
+  // `VocabIndex`/`EncodedVal` IDs with different bit representations).
+  auto groupEnd = [&makeId](ql::span<const uint8_t> types,
+                            ql::span<const uint64_t> payloads, size_t numRows,
+                            size_t group) {
+    size_t end = group + 1;
+    while (end < numRows && types[end] == types[group] &&
+           payloads[end] == payloads[group]) {
+      ++end;
+    }
+    if (end < numRows &&
+        (types[end] == localVocabType || types[group] == localVocabType)) {
+      Id representative = makeId(types[group], payloads[group]);
+      while (end < numRows &&
+             representative == makeId(types[end], payloads[end])) {
+        ++end;
       }
-      uint64_t valueLeft = payloadsLeft[l];
-      uint64_t valueRight = payloadsRight[r];
-      if (valueLeft < valueRight) {
+    }
+    return end;
+  };
+
+  size_t l = 0;
+  size_t r = 0;
+  // Cached positions of the next `LocalVocabIndex` IDs. They are recomputed
+  // lazily, s.t. the total cost of all the `memchr` calls stays linear.
+  size_t nextLocalVocabLeft = nextLocalVocab(typesLeft, 0);
+  size_t nextLocalVocabRight = nextLocalVocab(typesRight, 0);
+  size_t stepsUntilCancelCheck = 0;
+
+  // Return the end of the run of equal datatype bytes that starts at `begin`
+  // (bounded by `end`).
+  auto typeRunEnd = [](ql::span<const uint8_t> types, size_t begin,
+                       size_t end) {
+    uint8_t type = types[begin];
+    size_t position = begin + 1;
+    while (position < end && types[position] == type) {
+      ++position;
+    }
+    return position;
+  };
+
+  while (l < numLeft && r < numRight) {
+    if (nextLocalVocabLeft < l) {
+      nextLocalVocabLeft = nextLocalVocab(typesLeft, l);
+    }
+    if (nextLocalVocabRight < r) {
+      nextLocalVocabRight = nextLocalVocab(typesRight, r);
+    }
+
+    // Phase 1: Bitwise merging of the chunks before the next
+    // `LocalVocabIndex` IDs. The chunks are further subdivided into runs of
+    // equal datatypes: runs of a datatype that only appears on one side are
+    // skipped wholesale, and runs of equal datatypes are joined with a
+    // payload-only merge loop (a single 64-bit comparison per step, exactly
+    // as fast as with packed 64-bit IDs).
+    bool groupTouchesChunkEnd = false;
+    while (l < nextLocalVocabLeft && r < nextLocalVocabRight &&
+           !groupTouchesChunkEnd) {
+      uint8_t typeLeft = typesLeft[l];
+      uint8_t typeRight = typesRight[r];
+      if (typeLeft != typeRight) {
+        // The datatype-major ID order guarantees that the smaller type run
+        // has no matches on the other side, so it can be skipped completely.
+        if (typeLeft < typeRight) {
+          size_t runEnd = typeRunEnd(typesLeft, l, nextLocalVocabLeft);
+          for (; l < runEnd; ++l) {
+            notFoundAction(l);
+          }
+        } else {
+          r = typeRunEnd(typesRight, r, nextLocalVocabRight);
+        }
+        continue;
+      }
+      // Both current elements have the same datatype: merge the two type
+      // runs on the payloads only.
+      const size_t runEndLeft = typeRunEnd(typesLeft, l, nextLocalVocabLeft);
+      const size_t runEndRight = typeRunEnd(typesRight, r, nextLocalVocabRight);
+      while (l < runEndLeft && r < runEndRight) {
+        if (++stepsUntilCancelCheck >= (1ull << 20)) {
+          stepsUntilCancelCheck = 0;
+          cancelCallback();
+        }
+        uint64_t payloadLeft = payloadsLeft[l];
+        uint64_t payloadRight = payloadsRight[r];
+        if (payloadLeft < payloadRight) {
+          notFoundAction(l);
+          ++l;
+        } else if (payloadRight < payloadLeft) {
+          ++r;
+        } else {
+          // Find the ranges of equal payloads on both sides. Note: The
+          // scans stop at the run ends, which is correct because the
+          // elements there differ in their datatype byte.
+          size_t endLeft = l + 1;
+          while (endLeft < runEndLeft && payloadsLeft[endLeft] == payloadLeft) {
+            ++endLeft;
+          }
+          size_t endRight = r + 1;
+          while (endRight < runEndRight &&
+                 payloadsRight[endRight] == payloadRight) {
+            ++endRight;
+          }
+          // If a group extends up to a following `LocalVocabIndex` ID, the
+          // group might semantically continue there, so it must be handled
+          // by the semantic phase below.
+          if ((endLeft == nextLocalVocabLeft && endLeft < numLeft) ||
+              (endRight == nextLocalVocabRight && endRight < numRight)) {
+            groupTouchesChunkEnd = true;
+            break;
+          }
+          if (endLeft == l + 1 && endRight == r + 1) {
+            addRow(l, r);
+          } else {
+            addRows(l, endLeft, r, endRight);
+          }
+          l = endLeft;
+          r = endRight;
+        }
+      }
+    }
+    if (l >= numLeft || r >= numRight) {
+      break;
+    }
+
+    // Phase 2: Semantic merging. Compare the current elements as `Id`s
+    // (this correctly handles IDs of type `LocalVocabIndex`) and process
+    // single elements or whole groups of equivalent elements. Keep going as
+    // long as one of the current elements is of type `LocalVocabIndex`
+    // (this processes contiguous regions of `LocalVocabIndex` IDs in one
+    // tight loop).
+    do {
+      cancelCallback();
+      Id idLeft = makeId(typesLeft[l], payloadsLeft[l]);
+      Id idRight = makeId(typesRight[r], payloadsRight[r]);
+      auto comparison = idLeft.compareThreeWay(idRight);
+      if (comparison < 0) {
+        notFoundAction(l);
         ++l;
-      } else if (valueRight < valueLeft) {
+      } else if (comparison > 0) {
         ++r;
       } else {
-        // Find the ranges of equal values on both sides and add their cross
-        // product.
-        size_t endLeft = l + 1;
-        while (endLeft < runLeft.end_ && payloadsLeft[endLeft] == valueLeft) {
-          ++endLeft;
-        }
-        size_t endRight = r + 1;
-        while (endRight < runRight.end_ &&
-               payloadsRight[endRight] == valueLeft) {
-          ++endRight;
-        }
-        for (size_t i = l; i < endLeft; ++i) {
-          for (size_t j = r; j < endRight; ++j) {
-            addRow(i, j);
-          }
+        size_t endLeft = groupEnd(typesLeft, payloadsLeft, numLeft, l);
+        size_t endRight = groupEnd(typesRight, payloadsRight, numRight, r);
+        if (endLeft == l + 1 && endRight == r + 1) {
+          addRow(l, r);
+        } else {
+          addRows(l, endLeft, r, endRight);
         }
         l = endLeft;
         r = endRight;
       }
-    }
-  };
-
-  // Merge the datatype runs. Note: The datatype-major ID order guarantees
-  // that the runs of a sorted column are sorted by their datatype.
-  size_t indexLeft = 0;
-  size_t indexRight = 0;
-  while (indexLeft < runsLeft.size() && indexRight < runsRight.size()) {
-    cancelCallback();
-    const auto& runLeft = runsLeft[indexLeft];
-    const auto& runRight = runsRight[indexRight];
-    if (runLeft.type_ < runRight.type_) {
-      ++indexLeft;
-    } else if (runRight.type_ < runLeft.type_) {
-      ++indexRight;
-    } else {
-      joinRuns(runLeft, runRight);
-      ++indexLeft;
-      ++indexRight;
-    }
+    } while (
+        l < numLeft && r < numRight &&
+        (typesLeft[l] == localVocabType || typesRight[r] == localVocabType));
   }
-  return true;
+  // Report the unmatched trailing elements of the left column (relevant for
+  // OPTIONAL joins and MINUS).
+  for (; l < numLeft; ++l) {
+    notFoundAction(l);
+  }
 }
 
 // Try to sort the `table` by the single column with index `keyColumn`. On

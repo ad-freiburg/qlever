@@ -29,6 +29,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <iostream>
 #include <random>
 #include <string>
@@ -65,6 +66,10 @@ struct Options {
   size_t groupSize_ = 10;
   size_t reps_ = 5;
   uint64_t seed_ = 42;
+  // Number of rows per block for the `join-blocks` kernel.
+  size_t blockSize_ = 100'000;
+  // Per-mille of `LocalVocabIndex` IDs in the key column.
+  size_t localVocabPerMille_ = 0;
 };
 
 // _____________________________________________________________________________
@@ -92,6 +97,10 @@ Options parseOptions(int argc, char** argv) {
       opts.reps_ = value;
     } else if (flag == "--seed") {
       opts.seed_ = value;
+    } else if (flag == "--blocksize") {
+      opts.blockSize_ = value;
+    } else if (flag == "--lvpermille") {
+      opts.localVocabPerMille_ = value;
     } else {
       std::cerr << "Unknown flag " << flag << '\n';
       std::exit(1);
@@ -123,6 +132,29 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           ad_utility::MemorySize::gigabytes(20))};
   return alloc;
+}
+
+// A pool that owns `LocalVocabEntry`s for the benchmark (the entries must
+// outlive all tables that contain IDs pointing to them).
+struct LocalVocabPool {
+  std::deque<LocalVocabEntry> entries_;
+  ad_utility::HashMap<uint64_t, const LocalVocabEntry*> byKey_;
+
+  Id getId(uint64_t key, const LocalVocabContext& context) {
+    auto it = byKey_.find(key);
+    if (it == byKey_.end()) {
+      std::string word = absl::StrFormat("\"lv%012d\"", key);
+      entries_.push_back(
+          LocalVocabEntry::fromStringRepresentation(std::move(word), context));
+      it = byKey_.emplace(key, &entries_.back()).first;
+    }
+    return Id::makeFromLocalVocabIndex(it->second);
+  }
+};
+
+LocalVocabPool& localVocabPool() {
+  static LocalVocabPool pool;
+  return pool;
 }
 
 // Generate a table with `numRows` rows and `1 + numPayloadCols` columns.
@@ -159,12 +191,34 @@ IdTable makeTable(const Options& opts, bool sorted, uint64_t seedOffset) {
     });
   }
 
+  // Materialize the key ids (a fraction of them may be `LocalVocabIndex`
+  // IDs). In the latter case the ids are sorted semantically afterwards.
+  std::vector<Id> keyIds;
+  keyIds.reserve(opts.numRows_);
+  if (opts.localVocabPerMille_ > 0) {
+    const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+    for (const auto& [type, key] : keys) {
+      if (key % 1000 < opts.localVocabPerMille_) {
+        keyIds.push_back(localVocabPool().getId(key, context));
+      } else {
+        keyIds.push_back(makeIdOfType(type, key));
+      }
+    }
+    if (sorted) {
+      std::sort(keyIds.begin(), keyIds.end());
+    }
+  } else {
+    for (const auto& [type, key] : keys) {
+      keyIds.push_back(makeIdOfType(type, key));
+    }
+  }
+
   IdTable table{1 + opts.numPayloadCols_, allocator()};
   table.resize(opts.numRows_);
   {
     decltype(auto) keyCol = table.getColumn(0);
     for (size_t i = 0; i < opts.numRows_; ++i) {
-      keyCol[i] = makeIdOfType(keys[i].first, keys[i].second);
+      keyCol[i] = keyIds[i];
     }
   }
   for (size_t c = 1; c <= opts.numPayloadCols_; ++c) {
@@ -249,6 +303,42 @@ void benchJoin(const Options& opts) {
 }
 
 // _____________________________________________________________________________
+// Kernel 1b: The same merge join, but through the blockwise (lazy) zipper
+// join that is used for joins of prefiltered index scans
+// (`zipperJoinForBlocksWithoutUndef`).
+void benchJoinBlocks(const Options& opts) {
+  IdTable left = makeTable(opts, true, 0);
+  IdTable right = makeTable(opts, true, 1);
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Split a table into blocks of `opts.blockSize_` rows.
+  auto toBlocks = [&](const IdTable& table) {
+    std::vector<ad_utility::IdTableAndFirstCols<1, IdTable>> blocks;
+    for (size_t begin = 0; begin < table.numRows(); begin += opts.blockSize_) {
+      size_t size = std::min(opts.blockSize_, table.numRows() - begin);
+      IdTable block{table.numColumns(), allocator()};
+      block.insertAtEnd(table, begin, begin + size);
+      blocks.push_back(ad_utility::makeIdTableAndFirstCols<1>(std::move(block),
+                                                              LocalVocab{}));
+    }
+    return blocks;
+  };
+  // Note: The blocks have to be recreated for every repetition, because
+  // the blockwise join consumes them.
+  auto setup = [&]() { return std::pair{toBlocks(left), toBlocks(right)}; };
+  auto kernel = [&](auto blocks) {
+    IdTable result{left.numColumns() + right.numColumns() - 1, allocator()};
+    auto rowAdder =
+        ad_utility::AddCombinedRowToIdTable(1, std::move(result), handle);
+    ad_utility::zipperJoinForBlocksWithoutUndef(blocks.first, blocks.second,
+                                                std::less{}, rowAdder);
+    auto resultTable = std::move(rowAdder).resultTable();
+    return checksum(resultTable);
+  };
+  runAndReport("join-blocks", opts.reps_, setup, kernel);
+}
+
+// _____________________________________________________________________________
 // Kernel 2: Sort a fully materialized `IdTable` by a single column. This is
 // the exact code path of `Sort::computeResultInMemory`.
 void benchSort(const Options& opts) {
@@ -307,6 +397,8 @@ int main(int argc, char** argv) {
             << " reps=" << opts.reps_ << std::endl;
   if (opts.kernel_ == "join") {
     benchJoin(opts);
+  } else if (opts.kernel_ == "join-blocks") {
+    benchJoinBlocks(opts);
   } else if (opts.kernel_ == "sort") {
     benchSort(opts);
   } else if (opts.kernel_ == "groupby") {

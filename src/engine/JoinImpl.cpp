@@ -371,22 +371,22 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
 
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
-        // Fast path: If neither join column contains `LocalVocabIndex` IDs
-        // (which don't compare bitwise), the join can be performed on the
-        // datatype runs and the plain payload words of the split column
-        // storage, which is much faster than comparing materialized IDs.
-        if (columnBasedIdTable::tryZipperJoinOnDatatypeRuns(
-                joinColumnL, joinColumnR,
-                [&rowAdder](size_t leftIndex, size_t rightIndex) {
-                  rowAdder.addRow(leftIndex, rightIndex);
-                },
-                cancellationCallback)) {
-          return size_t{0};
-        }
-        return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
-            ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
-
+        // Fast path: perform the join on the datatype bytes and plain
+        // payload words of the split column storage, which is much faster
+        // than comparing materialized IDs (`LocalVocabIndex` IDs are handled
+        // gracefully inside).
+        columnBasedIdTable::zipperJoinIdColumns(
+            joinColumnL, joinColumnR,
+            [&rowAdder](size_t leftIndex, size_t rightIndex) {
+              rowAdder.addRow(leftIndex, rightIndex);
+            },
+            [&rowAdder](size_t beginLeft, size_t endLeft, size_t beginRight,
+                        size_t endRight) {
+              rowAdder.addRows(ql::views::iota(beginLeft, endLeft),
+                               ql::views::iota(beginRight, endRight));
+            },
+            ad_utility::noop, cancellationCallback);
+        return size_t{0};
       } else {
         return ad_utility::zipperJoinWithUndef(
             joinColumnL, joinColumnR, ql::ranges::less{}, addRow,

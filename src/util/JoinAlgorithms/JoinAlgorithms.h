@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
+#include "engine/idTable/IdColumnAlgorithms.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/InputRangeUtils.h"
@@ -1649,10 +1650,56 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
       ElFromFirstNotFoundAction elFromFirstNotFoundAction,
       CheckCancellation checkCancellation, CoverUndefRanges coverUndefRanges) {
-    [[maybe_unused]] auto res = zipperJoinWithUndef(
-        subrangeLeft, subrangeRight, this->lessThan_, rowIndexAdder,
-        findSmallerUndefRangesLeft, findSmallerUndefRangesRight,
-        elFromFirstNotFoundAction, checkCancellation, coverUndefRanges);
+    // Fast path: If the join is on single split `Id` columns (i.e. the
+    // iterators are `IdColumnIterator`s), the comparison is the default
+    // `Id` order, and there is no UNDEF machinery (which is also the case
+    // at runtime for the "potentially UNDEF" variant if no UNDEF values
+    // were found), then perform the join directly on the datatype bytes and
+    // payload words of the split column storage. This is used by all joins
+    // of prefiltered index scans (lazy and materialized).
+    using LeftIterator = ql::ranges::iterator_t<const SubrangeLeft>;
+    using RightIterator = ql::ranges::iterator_t<const SubrangeRight>;
+    namespace cbit = columnBasedIdTable;
+    constexpr bool areIdColumns =
+        SimilarToAny<LeftIterator,
+                     cbit::IdColumnIterator<ad_utility::IsConst::False>,
+                     cbit::IdColumnIterator<ad_utility::IsConst::True>> &&
+        SimilarToAny<RightIterator,
+                     cbit::IdColumnIterator<ad_utility::IsConst::False>,
+                     cbit::IdColumnIterator<ad_utility::IsConst::True>>;
+    constexpr bool isDefaultLess =
+        SimilarToAny<LessThan, std::less<>, std::less<Id>, ql::ranges::less>;
+    constexpr bool hasNoUndefMachinery =
+        isSimilar<FindSmallerUndefRangesLeft, decltype(ad_utility::noop)> &&
+        isSimilar<FindSmallerUndefRangesRight, decltype(ad_utility::noop)> &&
+        isSimilar<CoverUndefRanges, std::true_type>;
+    if constexpr (areIdColumns && isDefaultLess && hasNoUndefMachinery) {
+      auto beginLeft = subrangeLeft.begin();
+      auto beginRight = subrangeRight.begin();
+      cbit::ConstIdColumnSpan left{beginLeft.payloadPtr(),
+                                   beginLeft.datatypePtr(),
+                                   static_cast<size_t>(subrangeLeft.size())};
+      cbit::ConstIdColumnSpan right{beginRight.payloadPtr(),
+                                    beginRight.datatypePtr(),
+                                    static_cast<size_t>(subrangeRight.size())};
+      cbit::zipperJoinIdColumns(
+          left, right,
+          [&](size_t l, size_t r) {
+            rowIndexAdder(beginLeft + l, beginRight + r);
+          },
+          [&](size_t beginL, size_t endL, size_t beginR, size_t endR) {
+            rowIndexAdder.addRows(beginLeft + beginL, beginLeft + endL,
+                                  beginRight + beginR, beginRight + endR);
+          },
+          [&](size_t l) { elFromFirstNotFoundAction(beginLeft + l); },
+          checkCancellation);
+      return;
+    } else {
+      [[maybe_unused]] auto res = zipperJoinWithUndef(
+          subrangeLeft, subrangeRight, this->lessThan_, rowIndexAdder,
+          findSmallerUndefRangesLeft, findSmallerUndefRangesRight,
+          elFromFirstNotFoundAction, checkCancellation, coverUndefRanges);
+    }
   }
 };
 
