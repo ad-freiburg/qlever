@@ -635,10 +635,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
+    // NOTE: This is deliberately NOT a structured binding: with GCC 15, the
+    // compiler-generated object behind a structured binding in this coroutine
+    // is never destroyed, which leaks the `QueryExecutionContext` (and with it
+    // the `OwningQueryId`, whose destructor writes the `end` event to the
+    // query event log) on every request.
+    auto preparedOperation = prepareOperation(
+        indexAndViews, operationName, operationString, std::move(messageSender),
+        parameters, timeLimit.value(), accessTokenOk, clientIp);
+    auto& qecPtr = std::get<0>(preparedOperation);
+    auto& cancellationHandle = std::get<1>(preparedOperation);
+    [[maybe_unused]] auto& cancelTimeoutOnDestruction =
+        std::get<2>(preparedOperation);
     auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {

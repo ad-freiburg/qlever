@@ -377,11 +377,15 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           permutation, isInternal);
     };
   };
-  auto [resultA, resultB] =
-      co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
-                asCoroutine(makeTaskForPermutation(permutationB)));
-  auto& [_, metaA] = resultA;
-  auto& [__, metaB] = resultB;
+  // NOTE: `results` is deliberately a named tuple, not a structured binding.
+  // See `Server::process`: with GCC 15 the hidden object behind a structured
+  // binding in a coroutine is never destroyed, which would leak the
+  // permutation results. The `auto&` bindings below are references (no such
+  // hidden object) and are fine.
+  auto results = co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
+                           asCoroutine(makeTaskForPermutation(permutationB)));
+  auto& [_, metaA] = std::get<0>(results);
+  auto& [__, metaB] = std::get<1>(results);
   metaA.exchangeMultiplicities(metaB);
 
   auto makeFinalizerTasks = [&newIndex, isInternal](
