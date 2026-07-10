@@ -413,6 +413,10 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   bool anyChildCoversVars = false;
   for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
     if (!subtree->getRootOperation()->coversVariables(bindExpressionVars)) {
+      // This child cannot produce the `BIND`'s column, so it is left
+      // unchanged; `UNION` already fills in `UNDEF` for columns that are not
+      // produced by all children.
+      results[i] = subtree;
       continue;
     }
     anyChildCoversVars = true;
@@ -427,9 +431,10 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   }
 
   // All relevant children have the `BIND` target column added. Make a new
-  // `UNION` object with the new children.
+  // `UNION` object with the new children, preserving the sort order.
   return ad_utility::makeExecutionTree<Union>(
-      getExecutionContext(), std::move(results[0]), std::move(results[1]));
+      getExecutionContext(), std::move(results[0]), std::move(results[1]),
+      targetOrder_);
 }
 
 // _____________________________________________________________________________

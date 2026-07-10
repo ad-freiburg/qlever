@@ -192,7 +192,7 @@ IdTable Bind::computeExpressionBind(
   idTable.addEmptyColumn();
   auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  auto visitor = CPP_template_lambda_mut (&)(typename T)(T && singleResult)(
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;

@@ -698,7 +698,8 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   auto newLeft = _left->getRootOperation()->makeTreeWithBindColumn(bind);
   if (newLeft.has_value()) {
     return ad_utility::makeExecutionTree<OptionalJoin>(
-        getExecutionContext(), std::move(newLeft.value()), _right);
+        getExecutionContext(), std::move(newLeft.value()), _right,
+        keepJoinColumns_);
   }
 
   // If the right (optional) child covers the `BIND`s variables, but the left
@@ -714,7 +715,8 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     auto newRight = _right->getRootOperation()->makeTreeWithBindColumn(bind);
     if (newRight.has_value()) {
       return ad_utility::makeExecutionTree<OptionalJoin>(
-          getExecutionContext(), _left, std::move(newRight.value()));
+          getExecutionContext(), _left, std::move(newRight.value()),
+          keepJoinColumns_);
     }
   }
 
