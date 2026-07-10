@@ -75,7 +75,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
-    ASSERT_EQ(result.idTable(), expectedResult);
+    ASSERT_EQ(result.idTableView(), expectedResult);
   }
 }
 
@@ -132,7 +132,7 @@ void testLazyOptionalJoin(
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 }  // namespace
@@ -372,8 +372,8 @@ TEST(OptionalJoin, gallopingJoin) {
     for (int64_t i = 0; i < 300; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
-    auto numElementsInLarger = static_cast<int64_t>(
-        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    auto numElementsInLarger =
+        std::max<int64_t>(10000, a.numRows() * GALLOP_THRESHOLD + 1);
     for (int64_t i = 400; i < numElementsInLarger; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
@@ -394,8 +394,8 @@ TEST(OptionalJoin, gallopingJoin) {
     for (int64_t i = 0; i < 300; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
-    auto numElementsInLarger = static_cast<int64_t>(
-        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    auto numElementsInLarger =
+        std::max<int64_t>(10000, a.numRows() * GALLOP_THRESHOLD + 1);
     for (int64_t i = 400; i < numElementsInLarger; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
@@ -458,7 +458,7 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
     auto result = optionalJoin.computeResultOnlyForTesting(false);
     ASSERT_TRUE(result.isFullyMaterialized());
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA, entryB));
 
@@ -930,7 +930,7 @@ class OptionalJoinWithIndexScan
       }
       return lazyResult;
     } else {
-      return result.idTable().clone();
+      return result.cloneIdTable();
     }
   }
   // Helper to verify that lazy and materialized results match.

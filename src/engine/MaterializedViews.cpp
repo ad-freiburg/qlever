@@ -28,6 +28,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
@@ -40,21 +41,18 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan, MaterializedViewId viewId,
+    const qlever::PlannedQuery& plannedQuery, MaterializedViewId viewId,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
       viewId_{viewId},
+      qet_{plannedQuery.sharedQueryExecutionTree()},
+      qec_{plannedQuery.sharedQueryExecutionContext()},
+      parsedQuery_{plannedQuery.parsedQuery()},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
-  auto [qet, qec, parsedQuery] = queryPlan;
-  AD_CORRECTNESS_CHECK(qet != nullptr);
-  AD_CORRECTNESS_CHECK(qec != nullptr);
-  qet_ = qet;
-  qec_ = qec;
-  parsedQuery_ = std::move(parsedQuery);
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -134,7 +132,7 @@ MaterializedViewId MaterializedViewsManager::smallestFreeViewId(
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
   MaterializedView::throwIfInvalidName(name);
@@ -154,7 +152,7 @@ void MaterializedViewsManager::writeViewToDisk(
   }
 
   MaterializedViewWriter writer{
-      onDiskBase_, std::move(name),        queryPlan,
+      onDiskBase_, std::move(name),        plannedQuery,
       viewId,      std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
@@ -337,7 +335,7 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 }
 
 // _____________________________________________________________________________
-IndexMetaDataMmap MaterializedViewWriter::writePermutation(
+IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
@@ -345,8 +343,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
-  IndexMetaDataMmap spoMetaData;
-  spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
+  IndexMetaData spoMetaData;
   auto spoCallback =
       [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {
         for (const auto& m : md) {
@@ -366,7 +363,8 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
   spoMetaData.setName(getFilenameBase());
   {
     ad_utility::File spoFile(spoFilename, "r+");
-    spoMetaData.appendToFile(&spoFile);
+    ad_utility::File spoMetaFile(spoFilename + META_FILE_SUFFIX, "w");
+    spoMetaData.appendToFile(spoFile, spoMetaFile);
   }
 
   return spoMetaData;
