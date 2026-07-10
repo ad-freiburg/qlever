@@ -172,6 +172,7 @@ class LiteralExpression : public SparqlExpression {
   // might be called recursively.
   ExpressionResult evaluateIfVariable(EvaluationContext* context,
                                       const Variable& variable) const {
+    std::cerr << "DEBUG: evaluateIfVariable reached for variable\n";
     // If this is a variable that is not visible in the input but was bound by a
     // previous alias in the same SELECT clause, then read the constant value of
     // the variable from the data structures dedicated to this case.
