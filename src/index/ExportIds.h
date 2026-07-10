@@ -126,7 +126,11 @@ template <bool removeQuotesAndAngleBrackets = false,
 std::optional<std::pair<std::string, const char*>> idToStringAndType(
     const Index& index, Id id, const LocalVocab& localVocab,
     EscapeFunction&& escapeFunction = EscapeFunction{}) {
-  using enum Datatype;
+  constexpr auto WordVocabIndex = Datatype::WordVocabIndex,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 EncodedVal = Datatype::EncodedVal,
+                 TextRecordIndex = Datatype::TextRecordIndex;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
     if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {

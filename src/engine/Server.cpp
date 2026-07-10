@@ -251,8 +251,9 @@ auto Server::setupCancellationHandle(
   cancellationHandle->startWatchDog();
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(cancellationHandle, timeLimit)};
-  return CancellationHandleAndTimeoutTimerCancel{
-      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
+  return CancellationHandleAndTimeoutTimerCancel<
+      decltype(cancelCancellationHandle)>{std::move(cancellationHandle),
+                                          std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
@@ -631,7 +632,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     ad_utility::websocket::MessageSender messageSender =
         createMessageSender(queryHub_, request, operationString, clientIp);
     // Grab the shared handle before `messageSender` is moved below.
-    using enum ad_utility::websocket::QueryStatus;
+    constexpr auto OK = ad_utility::websocket::QueryStatus::OK,
+                   CANCELLED = ad_utility::websocket::QueryStatus::CANCELLED,
+                   TIMEOUT = ad_utility::websocket::QueryStatus::TIMEOUT;
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.

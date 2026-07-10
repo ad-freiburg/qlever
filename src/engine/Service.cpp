@@ -551,7 +551,9 @@ void Service::throwErrorWithContext(std::string_view msg,
 // ____________________________________________________________________________
 std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 BlankNodeIndex = Datatype::BlankNodeIndex;
   const auto& optionalStringAndXsdType =
       ql::exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {

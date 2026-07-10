@@ -277,7 +277,6 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
                                             const LocalVocabContext& context) {
-  using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
     return idExpr->value();
   } else if (const auto* literalExpr =
@@ -296,7 +295,6 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
 // `std::nullopt`.
 inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
     const SparqlExpression* child) {
-  using enum Datatype;
   if (const auto* literalExpr =
           dynamic_cast<const StringLiteralExpression*>(child)) {
     return literalExpr->value();

@@ -29,7 +29,13 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
 
 // _____________________________________________________________________________
 Id StringMapping::remapId(Id id) {
-  using enum Datatype;
+  constexpr auto VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex,
+                 WordVocabIndex = Datatype::WordVocabIndex,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal,
+                 MaxValue = Datatype::MaxValue;
   // The datatypes that can be passed to a string mapping are exactly the
   // datatypes that semantically point to strings (so literals/IRIs that can't
   // be directly encoded into the ID). All other IDs have to be serialized by

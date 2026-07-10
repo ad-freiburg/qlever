@@ -265,7 +265,9 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       return;
     }
     lastId = id;
-    using enum Datatype;
+    constexpr auto VocabIndex = Datatype::VocabIndex,
+                   LocalVocabIndex = Datatype::LocalVocabIndex,
+                   BlankNodeIndex = Datatype::BlankNodeIndex;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
       id = remapVocabId(id, insertionPositions, vocabHint);
@@ -467,7 +469,9 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     }));
   }
 
-  using enum Permutation::Enum;
+  constexpr auto PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 SPO = Permutation::Enum::SPO, SOP = Permutation::Enum::SOP,
+                 OPS = Permutation::Enum::OPS, OSP = Permutation::Enum::OSP;
 
   // List of permutation pairs, with the information whether the attached
   // internal permutation should be used.

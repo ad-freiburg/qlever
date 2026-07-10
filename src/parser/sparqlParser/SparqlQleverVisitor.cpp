@@ -219,7 +219,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
-  using enum ad_utility::BoundingCoordinate;
+  constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X,
+                 MIN_Y = ad_utility::BoundingCoordinate::MIN_Y,
+                 MAX_X = ad_utility::BoundingCoordinate::MAX_X,
+                 MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
@@ -234,7 +237,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
   };
-  using enum SpatialJoinType;
+  constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS,
+                 CONTAINS = SpatialJoinType::CONTAINS,
+                 COVERS = SpatialJoinType::COVERS,
+                 CROSSES = SpatialJoinType::CROSSES,
+                 TOUCHES = SpatialJoinType::TOUCHES,
+                 EQUALS = SpatialJoinType::EQUALS,
+                 OVERLAPS = SpatialJoinType::OVERLAPS,
+                 WITHIN = SpatialJoinType::WITHIN;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       {"length", &makeLengthExpression},

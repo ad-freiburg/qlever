@@ -16,7 +16,13 @@ using std::string;
 namespace ad_utility {
 
 namespace detail {
-using enum MediaType;
+constexpr auto binaryQleverExport = MediaType::binaryQleverExport,
+               csv = MediaType::csv, ntriples = MediaType::ntriples,
+               nquads = MediaType::nquads, octetStream = MediaType::octetStream,
+               qleverJson = MediaType::qleverJson,
+               sparqlJson = MediaType::sparqlJson,
+               sparqlXml = MediaType::sparqlXml, tsv = MediaType::tsv,
+               turtle = MediaType::turtle;
 // The first media type in this list is the default, if no other type is
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
@@ -35,7 +41,15 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
           type, MediaTypeImpl(type, std::move(typeString),
                               std::move(subtypeString), std::move(v))));
     };
-    using enum MediaType;
+    constexpr auto binaryQleverExport = MediaType::binaryQleverExport,
+                   csv = MediaType::csv, json = MediaType::json,
+                   ntriples = MediaType::ntriples, nquads = MediaType::nquads,
+                   octetStream = MediaType::octetStream,
+                   qleverJson = MediaType::qleverJson,
+                   sparqlJson = MediaType::sparqlJson,
+                   sparqlXml = MediaType::sparqlXml,
+                   textPlain = MediaType::textPlain, tsv = MediaType::tsv,
+                   turtle = MediaType::turtle;
     add(textPlain, "text", "plain", {".txt"});
     add(json, "application", "json", {".json"});
     add(tsv, "text", "tab-separated-values", {".tsv"});

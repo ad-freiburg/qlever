@@ -64,7 +64,10 @@ class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
 // Global type alias and using-enum so that `LogLevel::FATAL` etc. and the
 // compile-time `LOGLEVEL` macro keep working outside `namespace ad_utility`.
 using LogLevel = ad_utility::LogLevel;
-using enum LogLevel::Enum;
+constexpr auto DEBUG = LogLevel::Enum::DEBUG, ERROR = LogLevel::Enum::ERROR,
+               FATAL = LogLevel::Enum::FATAL, INFO = LogLevel::Enum::INFO,
+               TIMING = LogLevel::Enum::TIMING, TRACE = LogLevel::Enum::TRACE,
+               WARN = LogLevel::Enum::WARN;
 
 // Both the compile-time level (LOGLEVEL) and the runtime level must pass for a
 // message to be logged. The LogLock temporary is held for the entire <<

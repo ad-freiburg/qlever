@@ -19,6 +19,6 @@ std::optional<std::string_view> detail::matchDigitsPrefix(
   if (!match) {
     return std::nullopt;
   }
-  constexpr ctll::fixed_string digitsCaptureGroup = "digits";
+  static constexpr ctll::fixed_string digitsCaptureGroup = "digits";
   return match.template get<digitsCaptureGroup>().to_view();
 }

@@ -77,7 +77,8 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
 // _____________________________________________________________________________
 auto EffectiveBooleanValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const -> Result {
-  using enum Result;
+  constexpr auto False = Result::False, True = Result::True,
+                 Undef = Result::Undef;
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
@@ -323,7 +324,15 @@ IntDoubleStr ToNumericValueGetter::operator()(
 // _____________________________________________________________________________
 OptIri DatatypeValueGetter::operator()(ValueId id,
                                        const EvaluationContext* context) const {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint,
+                 WordVocabIndex = Datatype::WordVocabIndex,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal;
   auto datatype = id.getDatatype();
   std::optional<std::string> entity;
   switch (datatype) {
@@ -426,7 +435,15 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
 //______________________________________________________________________________
 std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint,
+                 WordVocabIndex = Datatype::WordVocabIndex,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal;
   switch (id.getDatatype()) {
     case GeoPoint:
       return id.getGeoPoint();
@@ -467,7 +484,15 @@ CPP_template(typename T, typename ValueGetter)(
              concepts::same_as<std::optional<std::string>, T>)) T
     getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
              ValueGetter& valueGetter) {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint,
+                 WordVocabIndex = Datatype::WordVocabIndex,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
     case EncodedVal:
@@ -503,7 +528,15 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint,
+                 WordVocabIndex = Datatype::WordVocabIndex,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal;
   switch (id.getDatatype()) {
     case Bool:
     case Int:
@@ -578,7 +611,15 @@ CPP_template_out_def(typename RequestedInfo)(
     std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
         RequestedInfo)>::operator()(ValueId id,
                                     const EvaluationContext * context) const {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint,
+                 WordVocabIndex = Datatype::WordVocabIndex,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal;
   switch (id.getDatatype()) {
     case EncodedVal:
     case LocalVocabIndex:

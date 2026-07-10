@@ -41,7 +41,7 @@ enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
 /// Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
-  using enum CancellationMode;
+  constexpr auto ENABLED = CancellationMode::ENABLED;
 #ifndef QUERY_CANCELLATION_MODE
   return ENABLED;
 #else
@@ -54,7 +54,11 @@ constexpr CancellationMode CANCELLATION_MODE = []() {
 /// efficiency.
 AD_ALWAYS_INLINE constexpr bool isCancelled(
     CancellationState cancellationState) {
-  using enum CancellationState;
+  constexpr auto NOT_CANCELLED = CancellationState::NOT_CANCELLED,
+                 WAITING_FOR_CHECK = CancellationState::WAITING_FOR_CHECK,
+                 CHECK_WINDOW_MISSED = CancellationState::CHECK_WINDOW_MISSED,
+                 MANUAL = CancellationState::MANUAL,
+                 TIMEOUT = CancellationState::TIMEOUT;
   static_assert(NOT_CANCELLED <= CHECK_WINDOW_MISSED);
   static_assert(WAITING_FOR_CHECK <= CHECK_WINDOW_MISSED);
   static_assert(MANUAL > CHECK_WINDOW_MISSED);

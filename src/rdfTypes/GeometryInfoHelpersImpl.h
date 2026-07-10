@@ -84,7 +84,9 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
-  using enum WKTType;
+  using WKTType::NONE, WKTType::POINT, WKTType::LINESTRING, WKTType::POLYGON,
+      WKTType::MULTIPOINT, WKTType::MULTILINESTRING, WKTType::MULTIPOLYGON,
+      WKTType::COLLECTION;
   try {
     switch (type) {
       case POINT:
@@ -290,7 +292,13 @@ CPP_template(typename Visitor, typename T)(
     requires SimilarTo<
         T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
                                                        T&& geom) {
-  using enum AnyGeometryMember;
+  constexpr auto POINT = AnyGeometryMember::POINT,
+                 LINE = AnyGeometryMember::LINE,
+                 POLYGON = AnyGeometryMember::POLYGON,
+                 MULTILINE = AnyGeometryMember::MULTILINE,
+                 MULTIPOLYGON = AnyGeometryMember::MULTIPOLYGON,
+                 COLLECTION = AnyGeometryMember::COLLECTION,
+                 MULTIPOINT = AnyGeometryMember::MULTIPOINT;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
   // identifiers for the geometry types with this enum is tested in

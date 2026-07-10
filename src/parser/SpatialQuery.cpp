@@ -294,7 +294,11 @@ namespace detail {
 // _____________________________________________________________________________
 SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
     std::string_view identifier) {
-  using enum SpatialJoinAlgorithm;
+  constexpr auto BASELINE = SpatialJoinAlgorithm::BASELINE,
+                 S2_GEOMETRY = SpatialJoinAlgorithm::S2_GEOMETRY,
+                 BOUNDING_BOX = SpatialJoinAlgorithm::BOUNDING_BOX,
+                 LIBSPATIALJOIN = SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                 S2_POINT_POLYLINE = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
   static const ad_utility::HashMap<std::string, SpatialJoinAlgorithm>
       nameToAlgorithmMap{
           {"baseline", BASELINE},

@@ -298,7 +298,11 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
-  using enum SpatialJoinAlgorithm;
+  constexpr auto BASELINE = SpatialJoinAlgorithm::BASELINE,
+                 S2_GEOMETRY = SpatialJoinAlgorithm::S2_GEOMETRY,
+                 BOUNDING_BOX = SpatialJoinAlgorithm::BOUNDING_BOX,
+                 LIBSPATIALJOIN = SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                 S2_POINT_POLYLINE = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
   if (!childLeft_ || !childRight_) {
     return 1;  // dummy return, as the class does not have its children yet
   }

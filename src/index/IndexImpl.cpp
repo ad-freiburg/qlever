@@ -1672,7 +1672,9 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 
 // ____________________________________________________________________________
 IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
-  using enum Permutation::Enum;
+  constexpr auto PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 SPO = Permutation::Enum::SPO, SOP = Permutation::Enum::SOP,
+                 OSP = Permutation::Enum::OSP, OPS = Permutation::Enum::OPS;
   switch (p) {
     case PSO:
       return pso_;

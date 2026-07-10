@@ -1249,7 +1249,13 @@ GroupByImpl::findAggregates(sparqlExpression::SparqlExpression* expr) {
 // _____________________________________________________________________________
 std::optional<GroupByImpl::HashMapAggregateTypeWithData>
 GroupByImpl::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  using enum HashMapAggregateType;
+  constexpr auto AVG = HashMapAggregateType::AVG,
+                 COUNT = HashMapAggregateType::COUNT,
+                 MIN = HashMapAggregateType::MIN,
+                 MAX = HashMapAggregateType::MAX,
+                 SUM = HashMapAggregateType::SUM,
+                 GROUP_CONCAT = HashMapAggregateType::GROUP_CONCAT,
+                 SAMPLE = HashMapAggregateType::SAMPLE;
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate

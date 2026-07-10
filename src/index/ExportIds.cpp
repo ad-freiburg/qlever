@@ -77,7 +77,11 @@ std::optional<Literal> handleIriOrLiteral(
 std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
                                    const LocalVocab& localVocab,
                                    bool onlyReturnLiteralsWithXsdString) {
-  using enum Datatype;
+  constexpr auto WordVocabIndex = Datatype::WordVocabIndex,
+                 EncodedVal = Datatype::EncodedVal,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 TextRecordIndex = Datatype::TextRecordIndex;
   auto datatype = id.getDatatype();
 
   switch (datatype) {
@@ -148,7 +152,11 @@ std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
 std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
                                              const LocalVocab& localVocab,
                                              bool skipEncodedValues) {
-  using enum Datatype;
+  constexpr auto WordVocabIndex = Datatype::WordVocabIndex,
+                 VocabIndex = Datatype::VocabIndex,
+                 LocalVocabIndex = Datatype::LocalVocabIndex,
+                 EncodedVal = Datatype::EncodedVal,
+                 TextRecordIndex = Datatype::TextRecordIndex;
   switch (id.getDatatype()) {
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
@@ -209,7 +217,11 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
 // _____________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
 idToStringAndTypeForEncodedValue(Id id) {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Double = Datatype::Double,
+                 Bool = Datatype::Bool, Int = Datatype::Int,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint,
+                 BlankNodeIndex = Datatype::BlankNodeIndex,
+                 EncodedVal = Datatype::EncodedVal;
   switch (id.getDatatype()) {
     case Undefined:
       return std::nullopt;

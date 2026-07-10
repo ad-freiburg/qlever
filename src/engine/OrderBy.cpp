@@ -134,7 +134,7 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
 OrderBy::SortedVariables OrderBy::getSortedVariables() const {
   SortedVariables result;
   for (const auto& [colIdx, isDescending] : sortIndices_) {
-    using enum AscOrDesc;
+    constexpr auto Asc = AscOrDesc::Asc, Desc = AscOrDesc::Desc;
     result.emplace_back(subtree_->getVariableAndInfoByColumnIndex(colIdx).first,
                         isDescending ? Desc : Asc);
   }

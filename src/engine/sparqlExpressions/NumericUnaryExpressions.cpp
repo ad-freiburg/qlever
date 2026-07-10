@@ -13,7 +13,8 @@ namespace detail {
 // Unary negation.
 struct UnaryNegate {
   Id operator()(TernaryBool a) const {
-    using enum TernaryBool;
+    constexpr auto True = TernaryBool::True, False = TernaryBool::False,
+                   Undef = TernaryBool::Undef;
     switch (a) {
       case True:
         return Id::makeFromBool(false);

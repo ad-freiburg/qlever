@@ -49,7 +49,9 @@ auto toMs(std::chrono::microseconds us) {
 void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
-  using enum nlohmann::json::value_t;
+  constexpr auto number_float = nlohmann::json::value_t::number_float,
+                 number_unsigned = nlohmann::json::value_t::number_unsigned,
+                 number_integer = nlohmann::json::value_t::number_integer;
   // We want to print doubles and ints as their native type so they get
   // thousands separators. For everything else we let nlohmann::json handle it.
   if (value.type() == number_float) {
