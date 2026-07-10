@@ -80,12 +80,15 @@ Server::Server(
       },
       config.memoryLimit_.value_or(ad_utility::MemorySize::max()));
   metrics_->registerCallbacks();
-  // Re-register the cache-size action to also record the metric going forward.
-  // This triggers immediately, recording the current cache limit as the initial
-  // value.
+  // The update actions overwrite each other, so the action from previously
+  // registered actions (here in `Qlever`) also have to be run.
+  // TODO<qup42>: either support multiple callbacks or move responsibility for
+  // recording this metric.
   globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) {
+        // Run code of the overwritten action.
         cache().setMaxSize(newValue);
+        // New metric collection code.
         metrics_->memoryCacheLimit_->Record(newValue.getBytes());
       });
 
