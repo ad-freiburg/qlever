@@ -499,7 +499,8 @@ void TextIndexBuilder::calculateBlockBoundaries() {
 // _____________________________________________________________________________
 void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   AD_LOG_INFO << "Building DocsDB...\n";
-  std::ifstream docsFile = ad_utility::makeIfstream(docsFileName);
+  // If the file doesn't exist, `std::getline` does nothing.
+  std::ifstream docsFile{docsFileName};
   std::ofstream ofs = ad_utility::makeOfstream(onDiskBase_ + ".text.docsDB");
   // To avoid excessive use of RAM, we stream the offsets into a temporary file
   // and append them to the end of the docsDB file once all text records have

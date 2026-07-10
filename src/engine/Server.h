@@ -24,8 +24,8 @@
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
 #include "libqlever/Qlever.h"
+#include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -42,7 +42,7 @@ CPP_concept QueryOrUpdate =
 
 // Forward declaration for testing.
 namespace serverTestHelpers {
-struct SimulateHttpRequest;
+class ServerForTesting;
 }
 
 //! The HTTP Server used.
@@ -55,7 +55,7 @@ class Server {
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
-  friend serverTestHelpers::SimulateHttpRequest;
+  friend serverTestHelpers::ServerForTesting;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -75,40 +75,6 @@ class Server {
   // Get server statistics.
   static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
-
-  // Helper struct bundling a parsed query with a query execution tree.
-  // As the `QueryExecutionTree` stores a raw pointer to the
-  // `QueryExecutionContext`, We additionally store the context as a
-  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
-  // server code.
-  struct PlannedQuery {
-   private:
-    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
-    // is destroyed after it. The `QueryExecutionTree` holds operations with
-    // raw `_executionContext` pointers to the QEC, and their lazy result
-    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
-    // last `shared_ptr` and is destroyed first, the QEC is freed while the
-    // operations still reference it.
-    std::shared_ptr<const QueryExecutionContext> qec_;
-    ParsedQuery parsedQuery_;
-    QueryExecutionTree queryExecutionTree_;
-
-   public:
-    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
-                 const QueryExecutionContext& qec)
-        : qec_{qec.shared_from_this()},
-          parsedQuery_{std::move(pq)},
-          queryExecutionTree_{std::move(qet)} {
-      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
-    }
-
-    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
-    ParsedQuery& parsedQuery() { return parsedQuery_; }
-    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
-    const QueryExecutionTree& queryExecutionTree() const {
-      return queryExecutionTree_;
-    }
-  };
 
  private:
   qlever::Qlever qlever_;
@@ -142,6 +108,7 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
+  using PlannedQuery = qlever::PlannedQuery;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<

@@ -29,6 +29,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
@@ -41,21 +42,18 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan, MaterializedViewId viewId,
+    const qlever::PlannedQuery& plannedQuery, MaterializedViewId viewId,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
       viewId_{viewId},
+      qet_{plannedQuery.sharedQueryExecutionTree()},
+      qec_{plannedQuery.sharedQueryExecutionContext()},
+      parsedQuery_{plannedQuery.parsedQuery()},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
-  auto [qet, qec, parsedQuery] = queryPlan;
-  AD_CORRECTNESS_CHECK(qet != nullptr);
-  AD_CORRECTNESS_CHECK(qec != nullptr);
-  qet_ = qet;
-  qec_ = qec;
-  parsedQuery_ = std::move(parsedQuery);
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -135,7 +133,7 @@ MaterializedViewId MaterializedViewsManager::smallestFreeViewId(
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
   MaterializedView::throwIfInvalidName(name);
@@ -155,7 +153,7 @@ void MaterializedViewsManager::writeViewToDisk(
   }
 
   MaterializedViewWriter writer{
-      onDiskBase_, std::move(name),        queryPlan,
+      onDiskBase_, std::move(name),        plannedQuery,
       viewId,      std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
@@ -338,7 +336,7 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 }
 
 // _____________________________________________________________________________
-IndexMetaDataMmap MaterializedViewWriter::writePermutation(
+IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
@@ -346,8 +344,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
-  IndexMetaDataMmap spoMetaData;
-  spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
+  IndexMetaData spoMetaData;
   auto spoCallback =
       [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {
         for (const auto& m : md) {
@@ -367,7 +364,8 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
   spoMetaData.setName(getFilenameBase());
   {
     ad_utility::File spoFile(spoFilename, "r+");
-    spoMetaData.appendToFile(&spoFile);
+    ad_utility::File spoMetaFile(spoFilename + META_FILE_SUFFIX, "w");
+    spoMetaData.appendToFile(spoFile, spoMetaFile);
   }
 
   return spoMetaData;
@@ -543,21 +541,29 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name) const {
-  auto lock = loadedViews_.wlock();
-  if (lock->views_.contains(name)) {
-    return;
+std::shared_ptr<MaterializedView>
+MaterializedViewsManager::loadViewIntoLockedState(const std::string& name,
+                                                  LoadedViews& state) const {
+  if (auto it = state.views_.find(name); it != state.views_.end()) {
+    return it->second;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
   view->connectPermutationBackReference();
-  lock->views_.insert({name, view});
+  state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting
   // all views. Therefore query analysis is performed when loading views.
-  if (lock->queryPatternCache_.analyzeView(view)) {
+  if (state.queryPatternCache_.analyzeView(view)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
+  return view;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::loadView(const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  loadViewIntoLockedState(name, *lock);
 }
 
 // _____________________________________________________________________________
@@ -574,8 +580,8 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
-  loadView(name);
-  return loadedViews_.rlock()->views_.at(name);
+  auto lock = loadedViews_.wlock();
+  return loadViewIntoLockedState(name, *lock);
 }
 
 // _____________________________________________________________________________
@@ -752,23 +758,30 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
         absl::StrCat("The materialized view '", name, "' does not exist."));
   }
 
-  // Unload the view if it is currently loaded so that it no longer holds open
-  // file handles or its permutation's memory mapping.
-  unloadViewIfLoaded(name);
+  // Hold the lock for the whole unload-and-delete sequence below, so that a
+  // concurrent `loadView`/`getView` call for the same view can not reload it
+  // in between.
+  auto lock = loadedViews_.wlock();
+  if (auto it = lock->views_.find(name); it != lock->views_.end()) {
+    lock->queryPatternCache_.removeView(it->second);
+    lock->views_.erase(it);
+  }
 
   // Remove the view from the central views list, freeing its ID for reuse.
   {
-    std::lock_guard lock{*viewsListMutex_};
+    std::lock_guard viewsListLock{*viewsListMutex_};
     auto views = readViewsList();
     views.erase(name);
     writeViewsList(views);
   }
 
-  // Delete all files belonging to the view from disk. The `.spo-sorter.dat`
+  // Delete all files belonging to the view from disk. Deleting `.viewinfo.json`
+  // first ensures that if this operation is interrupted, the view will already
+  // be reported as deleted by the existence check above. The `.spo-sorter.dat`
   // file is a temporary file that should normally not exist anymore, but we
   // remove it defensively in case a previous write was interrupted.
   for (const auto* suffix :
-       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+       {".viewinfo.json", ".index.spo", ".index.spo.meta"}) {
     std::error_code ec;
     std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
     if (ec) {

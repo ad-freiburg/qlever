@@ -22,7 +22,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
   sparqlExpression::EvaluationContext context_{
       *qec_,
       varToColMap_,
-      table_,
+      table_.asStaticView<0>(),
       qec_->getAllocator(),
       localVocab_,
       std::make_shared<ad_utility::CancellationHandle<>>(),

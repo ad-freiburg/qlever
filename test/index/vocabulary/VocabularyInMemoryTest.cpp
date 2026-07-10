@@ -81,6 +81,22 @@ TEST(VocabularyInMemory, EmptyVocabulary) {
 }
 
 // _____________________________________________________________________________
+TEST(VocabularyInMemory, ZeroCopyDeserialization) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+  const auto vocab = createVocabulary(words);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << vocab;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = Vocab::fromZeroCopyDeserializer(readSerializer);
+
+  assertThatRangesAreEqual(vocab, view);
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
   const std::string filename = "VocabInMemoryWordWriterDestructorBehavior.tmp";
   Vocab v;
