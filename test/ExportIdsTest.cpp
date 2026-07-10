@@ -366,6 +366,9 @@ struct ExpectedForFlags {
 };
 
 // _____________________________________________________________________________
+// Run `literalOrIriToStringAndType` on `word` with the given flags and the
+// `escapeWithMarker` escape function, and check that the result is `expected`
+// (where `std::nullopt` means that the function must return `std::nullopt`).
 template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
           typename LiteralOrIriType>
 void expectLiteralOrIriToStringAndType(
@@ -445,7 +448,7 @@ TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, literals) {
 
 // _____________________________________________________________________________
 TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, iris) {
-  // `returnOnlyLiterals` rejects IRIs. Otherwise the angle brackets are kept
+  // `returnOnlyLiterals` rejects IRIs. Otherwise, the angle brackets are kept
   // unless `removeQuotesAndAngleBrackets` is set.
   TestFixture::checkAllFlagCombinations(
       "<http://example.org/x>",
@@ -461,7 +464,7 @@ TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, blankNodeIris) {
       absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:b0", ">");
 
   // A blank node is an IRI internally, so `returnOnlyLiterals` rejects it
-  // before the blank-node check is ever reached. Otherwise it is returned as
+  // before the blank-node check is ever reached. Otherwise, it is returned as
   // its `_:` representation, independent of `removeQuotesAndAngleBrackets`
   // and, notably, *without* the escape function being applied.
   TestFixture::checkAllFlagCombinations(
