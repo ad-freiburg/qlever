@@ -25,6 +25,7 @@
 #include "engine/JoinHelpers.h"
 #include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
+#include "engine/idTable/IdColumnAlgorithms.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
@@ -370,6 +371,18 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
 
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
+        // Fast path: If neither join column contains `LocalVocabIndex` IDs
+        // (which don't compare bitwise), the join can be performed on the
+        // datatype runs and the plain payload words of the split column
+        // storage, which is much faster than comparing materialized IDs.
+        if (columnBasedIdTable::tryZipperJoinOnDatatypeRuns(
+                joinColumnL, joinColumnR,
+                [&rowAdder](size_t leftIndex, size_t rightIndex) {
+                  rowAdder.addRow(leftIndex, rightIndex);
+                },
+                cancellationCallback)) {
+          return size_t{0};
+        }
         return ad_utility::zipperJoinWithUndef(
             joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
             ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
