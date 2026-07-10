@@ -90,6 +90,9 @@ class CartesianProductJoin : public Operation {
     return LimitOffsetHandling::FULL;
   }
 
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;
+
  protected:
   // Don't promise any sorting of the result.
   // TODO<joka921> Depending on the implementation we could propagate sorted

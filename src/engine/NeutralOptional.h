@@ -38,6 +38,8 @@ class NeutralOptional : public Operation {
   bool knownEmptyResult() override;
   LimitOffsetHandling handlesLimitOffset() const override;
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;

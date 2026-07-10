@@ -1415,6 +1415,241 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      "2 * ?s", V{"?x1"}));
   }
 
+  // `BIND` push down through the remaining operations that support it:
+  // `ExistsJoin`, `Minus`, `MultiColumnJoin`, `OptionalJoin`, `Union`,
+  // `NeutralOptional`, `Bind`, `CartesianProductJoin`, and `Filter`. Each tree
+  // is built manually (instead of going through the query planner) so that the
+  // test is independent of query planning heuristics.
+  {
+    namespace tc = ad_utility::triple_component;
+
+    // A view scan on `bindView` exposing `?s ?o` (no `BIND` pushed down yet),
+    // together with a plain (non-view) scan of `otherTriple`. Depending on
+    // which variables `otherTriple` shares with the view, the resulting pair
+    // of trees can be used to force a `MultiColumnJoin` (shares `?s` and
+    // `?o`), test that a scan not covering `?o` never accepts the push down
+    // (shares only `?s`), or force a `CartesianProductJoin` (shares nothing).
+    auto makeViewAndOtherTree = [this](SparqlTripleSimple otherTriple) {
+      auto plannedQuery = qlv().parseAndPlanQuery(R"(
+        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+        SELECT * {
+          ?s view:bindView-o ?o .
+        }
+      )");
+      auto* qec = &plannedQuery.queryExecutionContext();
+      auto viewTree = std::make_shared<QueryExecutionTree>(
+          plannedQuery.queryExecutionTree());
+      auto otherTree = ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::PSO, std::move(otherTriple));
+      return std::tuple{std::move(plannedQuery), std::move(viewTree),
+                        std::move(otherTree)};
+    };
+    auto sharesOnlyS =
+        SparqlTripleSimple{V{"?s"}, tc::Iri::fromIriref("<p1>"), V{"?x"}};
+    auto sharesSAndO =
+        SparqlTripleSimple{V{"?s"}, tc::Iri::fromIriref("<p3>"), V{"?o"}};
+    auto sharesNothing =
+        SparqlTripleSimple{V{"?y"}, tc::Iri::fromIriref("<p1>"), V{"?z"}};
+
+    // `makeTreeWithBindColumn` is a private override in each operation (it is
+    // only meant to be called polymorphically via `Operation`), so it is
+    // called via `getRootOperation()`, just like the query planner does.
+    auto pushBind = [&bind](const std::shared_ptr<QueryExecutionTree>& tree) {
+      return tree->getRootOperation()->makeTreeWithBindColumn(bind);
+    };
+
+    // `ExistsJoin`: the `BIND` can only be pushed into the left child.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      auto existsLeft = ad_utility::makeExecutionTree<ExistsJoin>(
+          &pq.queryExecutionContext(), viewTree, otherTree, V{"?exists"});
+      auto pushed = pushBind(existsLeft);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(*pushed.value(),
+                  h::ExistsJoin(bindView(AC{{3, V{"?bind"}}}),
+                                h::IndexScanFromStrings("?s", "<p1>", "?x")));
+
+      auto [pq2, viewTree2, otherTree2] = makeViewAndOtherTree(sharesOnlyS);
+      // Pushing into the right child instead is not supported.
+      auto existsRight = ad_utility::makeExecutionTree<ExistsJoin>(
+          &pq2.queryExecutionContext(), otherTree2, viewTree2, V{"?exists"});
+      EXPECT_FALSE(pushBind(existsRight).has_value());
+    }
+
+    // `Minus`: the `BIND` can only be pushed into the left child.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      auto minusLeft = ad_utility::makeExecutionTree<Minus>(
+          &pq.queryExecutionContext(), viewTree, otherTree);
+      auto pushed = pushBind(minusLeft);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(*pushed.value(),
+                  h::Minus(bindView(AC{{3, V{"?bind"}}}),
+                           h::IndexScanFromStrings("?s", "<p1>", "?x")));
+
+      auto [pq2, viewTree2, otherTree2] = makeViewAndOtherTree(sharesOnlyS);
+      // Pushing into the right child instead is not supported.
+      auto minusRight = ad_utility::makeExecutionTree<Minus>(
+          &pq2.queryExecutionContext(), otherTree2, viewTree2);
+      EXPECT_FALSE(pushBind(minusRight).has_value());
+    }
+
+    // `MultiColumnJoin`: succeeds because at least one applicable child (the
+    // view scan) accepts the push down.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesSAndO);
+      auto mcj = ad_utility::makeExecutionTree<MultiColumnJoin>(
+          &pq.queryExecutionContext(), viewTree, otherTree);
+      auto pushed = pushBind(mcj);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(
+          *pushed.value(),
+          h::MultiColumnJoin(bindView(AC{{3, V{"?bind"}}}),
+                             h::IndexScanFromStrings("?s", "<p3>", "?o")));
+    }
+
+    // `OptionalJoin`.
+    {
+      // The left (non-optional) child covers the `BIND`'s variables, so the
+      // push down happens there.
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      auto leftCovers = ad_utility::makeExecutionTree<OptionalJoin>(
+          &pq.queryExecutionContext(), viewTree, otherTree);
+      auto pushedLeft = pushBind(leftCovers);
+      ASSERT_TRUE(pushedLeft.has_value());
+      EXPECT_THAT(*pushedLeft.value(),
+                  h::OptionalJoin(bindView(AC{{3, V{"?bind"}}}),
+                                  h::IndexScanFromStrings("?s", "<p1>", "?x")));
+
+      // The left child is unrelated to the `BIND` (does not cover `?o`), but
+      // the right (optional) child does, so the push down happens there.
+      auto [pq2, viewTree2, otherTree2] = makeViewAndOtherTree(sharesOnlyS);
+      auto rightCovers = ad_utility::makeExecutionTree<OptionalJoin>(
+          &pq2.queryExecutionContext(), otherTree2, viewTree2);
+      auto pushedRight = pushBind(rightCovers);
+      ASSERT_TRUE(pushedRight.has_value());
+      EXPECT_THAT(*pushedRight.value(),
+                  h::OptionalJoin(h::IndexScanFromStrings("?s", "<p1>", "?x"),
+                                  bindView(AC{{3, V{"?bind"}}})));
+
+      // Neither child covers `?o`: the push down fails.
+      auto [pq3, viewTree3, otherTree3] = makeViewAndOtherTree(sharesOnlyS);
+      auto [pq4, viewTree4, otherTree4] = makeViewAndOtherTree(sharesOnlyS);
+      auto neitherCovers = ad_utility::makeExecutionTree<OptionalJoin>(
+          &pq3.queryExecutionContext(), otherTree3, otherTree4);
+      EXPECT_FALSE(pushBind(neitherCovers).has_value());
+
+      // Regression test: `keepJoinColumns_ == false` (as used when the join
+      // column `?s` was already stripped, e.g. from a subquery's `SELECT`
+      // clause) must be preserved across the push down. Otherwise `?s` would
+      // be silently re-exposed in the pushed-down tree's result.
+      auto [pq5, viewTree5, otherTree5] = makeViewAndOtherTree(sharesOnlyS);
+      auto dropJoinColumn = ad_utility::makeExecutionTree<OptionalJoin>(
+          &pq5.queryExecutionContext(), viewTree5, otherTree5,
+          /*keepJoinColumns=*/false);
+      ASSERT_FALSE(
+          dropJoinColumn->getVariableColumns().contains(Variable{"?s"}));
+      auto pushedDropJoinColumn = pushBind(dropJoinColumn);
+      ASSERT_TRUE(pushedDropJoinColumn.has_value());
+      EXPECT_FALSE(pushedDropJoinColumn.value()->getVariableColumns().contains(
+          Variable{"?s"}));
+    }
+
+    // `Union`: the `BIND` must be pushed into all children that cover its
+    // variables.
+    {
+      // Both children cover `?o`: both get the `BIND` pushed down.
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      auto viewTreeClone =
+          std::make_shared<QueryExecutionTree>(pq.queryExecutionTree());
+      auto bothCover = ad_utility::makeExecutionTree<Union>(
+          &pq.queryExecutionContext(), viewTree, viewTreeClone);
+      auto pushedBoth = pushBind(bothCover);
+      ASSERT_TRUE(pushedBoth.has_value());
+      EXPECT_THAT(*pushedBoth.value(), h::Union(bindView(AC{{3, V{"?bind"}}}),
+                                                bindView(AC{{3, V{"?bind"}}})));
+
+      // Only one child covers `?o`: the `BIND` is pushed there, the other
+      // child is left unchanged (its column will be `UNDEF` for `?bind`).
+      auto [pq2, viewTree2, otherTree2] = makeViewAndOtherTree(sharesOnlyS);
+      auto oneCovers = ad_utility::makeExecutionTree<Union>(
+          &pq2.queryExecutionContext(), viewTree2, otherTree2);
+      auto pushedOne = pushBind(oneCovers);
+      ASSERT_TRUE(pushedOne.has_value());
+      EXPECT_THAT(*pushedOne.value(),
+                  h::Union(bindView(AC{{3, V{"?bind"}}}),
+                           h::IndexScanFromStrings("?s", "<p1>", "?x")));
+
+      // One child covers `?o` but rejects the push down (a plain, non-view
+      // scan): the whole `UNION` rewrite fails, even though the other child
+      // would accept it.
+      auto [pq3, viewTree3, otherTree3] = makeViewAndOtherTree(sharesSAndO);
+      auto oneRejects = ad_utility::makeExecutionTree<Union>(
+          &pq3.queryExecutionContext(), otherTree3, viewTree3);
+      EXPECT_FALSE(pushBind(oneRejects).has_value());
+    }
+
+    // `NeutralOptional`: succeeds because its only child accepts the push
+    // down.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      auto no = ad_utility::makeExecutionTree<NeutralOptional>(
+          &pq.queryExecutionContext(), viewTree);
+      auto pushed = pushBind(no);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(*pushed.value(),
+                  h::NeutralOptional(bindView(AC{{3, V{"?bind"}}})));
+    }
+
+    // `Bind`: succeeds because its only child accepts the push down.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      parsedQuery::Bind innerBind{
+          sparqlExpression::SparqlExpressionPimpl{
+              std::make_shared<sparqlExpression::IdExpression>(
+                  ValueId::makeFromInt(1)),
+              "1"},
+          V{"?other"}};
+      auto bindOp = ad_utility::makeExecutionTree<::Bind>(
+          &pq.queryExecutionContext(), viewTree, innerBind);
+      auto pushed = pushBind(bindOp);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(*pushed.value(),
+                  h::Bind(bindView(AC{{3, V{"?bind"}}}), "1", V{"?other"}));
+    }
+
+    // `CartesianProductJoin`: succeeds because at least one applicable child
+    // (the view scan) accepts the push down.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesNothing);
+      auto cpj = ad_utility::makeExecutionTree<CartesianProductJoin>(
+          &pq.queryExecutionContext(),
+          std::vector<std::shared_ptr<QueryExecutionTree>>{viewTree,
+                                                           otherTree});
+      auto pushed = pushBind(cpj);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(
+          *pushed.value(),
+          h::CartesianProductJoin(bindView(AC{{3, V{"?bind"}}}),
+                                  h::IndexScanFromStrings("?y", "<p1>", "?z")));
+    }
+
+    // `Filter`: succeeds because its only child accepts the push down.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      sparqlExpression::SparqlExpressionPimpl filterExpr{
+          std::make_shared<sparqlExpression::IdExpression>(
+              Id::makeFromBool(true)),
+          "true"};
+      auto filterOp = ad_utility::makeExecutionTree<Filter>(
+          &pq.queryExecutionContext(), viewTree, filterExpr);
+      auto pushed = pushBind(filterOp);
+      ASSERT_TRUE(pushed.has_value());
+      EXPECT_THAT(*pushed.value(),
+                  h::Filter("true", bindView(AC{{3, V{"?bind"}}})));
+    }
+  }
+
   // Test the variable to permutation column index map.
   {
     // The column `?b3` is the fifth column in the permutation, but the second
