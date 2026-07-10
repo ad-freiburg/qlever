@@ -760,6 +760,13 @@ void DeltaTriples::addFromSnapshotDiff(
   addTriples(vi<true>, vi<true>);
   addTriples(vi<true>, vi<false>);
   tracer.endTrace("insertDiffedTriples");
+  // The four calls above bypass `insertTriples`/`deleteTriples` and thus do
+  // not consolidate. Consolidation is required before any read access, in
+  // particular before the `updateAugmentedMetadata` that follows in
+  // `DeltaTriplesManager::modify`.
+  tracer.beginTrace("consolidate");
+  consolidateAll();
+  tracer.endTrace("consolidate");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
 }
