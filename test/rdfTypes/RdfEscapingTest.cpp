@@ -16,12 +16,24 @@ TEST(RdfEscapingTest, escapeForCsv) {
   ASSERT_EQ(escapeForCsv("\""), "\"\"\"\"");
   ASSERT_EQ(escapeForCsv("a\"b"), "\"a\"\"b\"");
   ASSERT_EQ(escapeForCsv("a\"\"c"), "\"a\"\"\"\"c\"");
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/3055:
+  // literals with any of the three common line-ending conventions (`\n`
+  // only, `\r` only, or `\r\n`) must be wrapped in quotes, even if no other
+  // special character is present.
+  ASSERT_EQ(escapeForCsv("a\nb"), "\"a\nb\"");
+  ASSERT_EQ(escapeForCsv("a\rb"), "\"a\rb\"");
+  ASSERT_EQ(escapeForCsv("a\r\nb"), "\"a\r\nb\"");
 }
 
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, escapeForTsv) {
   ASSERT_EQ(escapeForTsv("abc"), "abc");
   ASSERT_EQ(escapeForTsv("a\nb\tc"), "a\\nb c");
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/3055:
+  // a lone `\r` (the old Mac line ending) must be escaped just like `\n`,
+  // otherwise the raw control character ends up unescaped in the TSV output.
+  ASSERT_EQ(escapeForTsv("a\rb"), "a\\rb");
+  ASSERT_EQ(escapeForTsv("a\r\nb"), "a\\r\\nb");
 }
 
 // ___________________________________________________________________________

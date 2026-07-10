@@ -129,7 +129,10 @@ std::string escapeForCsv(std::string input);
 
 /**
  * Escape a string to be compatible with the IANA-TSV specification by
- * replacing tabs with spaces and newlines with '\n'.
+ * replacing tabs with spaces, newlines ('\n') with '\\n', and carriage
+ * returns ('\r') with '\\r'. This makes sure that none of the various
+ * line-ending conventions ('\n', '\r', or '\r\n') can break the row structure
+ * of the resulting TSV.
  *
  * See https://www.iana.org/assignments/media-types/text/tab-separated-values
  * for more information.

@@ -14,6 +14,7 @@
 #include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Literal.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -1065,7 +1066,7 @@ TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
       "?o\n"
       "<iriescaped\x01o\x02"
       "e\x03i\x04o\x05u\x06"
-      "e\ag\bc u\\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\n",
+      "e\ag\bc u\\ne\ve\fa\\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\n",
       // CSV
       "o\n"
       "\"iriescaped\x01o\x02"
@@ -2035,4 +2036,38 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
     ASSERT_TRUE(result["head"].contains("vars"));
     ASSERT_FALSE(result.contains("meta"));
   }
+}
+
+// _____________________________________________________________________________
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3055:
+// literals that contain raw line-ending characters (`\n`, `\r`, or `\r\n`)
+// must be escaped such that the row structure of the CSV/TSV export is
+// preserved.
+TEST(ExportQueryExecutionTrees, NewlinesInLiteralsAreEscapedForCsvAndTsv) {
+  using enum ad_utility::MediaType;
+  std::string kg =
+      "<s> <p1> \"windows\\r\\nlineending\" ."
+      "<s> <p2> \"unixlineending\\n\" ."
+      "<s> <p3> \"oldmac\\rlineending\" .";
+
+  // CSV already wraps the field in quotes (and doubles any inner quotes)
+  // whenever it contains `\r`, `\n`, `\"` or `,`, so the row structure is
+  // preserved even though the raw line-ending characters remain in the
+  // field. This is valid according to RFC4180.
+  EXPECT_EQ(runQueryStreamableResult(kg, "SELECT ?o WHERE {?s <p1> ?o}", csv),
+            "o\n\"windows\r\nlineending\"\n");
+  EXPECT_EQ(runQueryStreamableResult(kg, "SELECT ?o WHERE {?s <p2> ?o}", csv),
+            "o\n\"unixlineending\n\"\n");
+  EXPECT_EQ(runQueryStreamableResult(kg, "SELECT ?o WHERE {?s <p3> ?o}", csv),
+            "o\n\"oldmac\rlineending\"\n");
+
+  // TSV has no quoting mechanism, so `\n` and `\r` must both be replaced by
+  // their two-character escape sequences (`\n` -> `\n`, `\r` -> `\r`,
+  // literally spelled out) to keep each result row on a single line.
+  EXPECT_EQ(runQueryStreamableResult(kg, "SELECT ?o WHERE {?s <p1> ?o}", tsv),
+            "?o\n\"windows\\r\\nlineending\"\n");
+  EXPECT_EQ(runQueryStreamableResult(kg, "SELECT ?o WHERE {?s <p2> ?o}", tsv),
+            "?o\n\"unixlineending\\n\"\n");
+  EXPECT_EQ(runQueryStreamableResult(kg, "SELECT ?o WHERE {?s <p3> ?o}", tsv),
+            "?o\n\"oldmac\\rlineending\"\n");
 }
