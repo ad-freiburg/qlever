@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_H
 
 #include <cassert>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
