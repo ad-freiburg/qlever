@@ -57,11 +57,10 @@ Id StringMapping::remapId(Id id) {
   static_assert(checkDatatypes());
   size_t distinctIndex =
       stringMapping_.try_emplace(id, stringMapping_.size()).first->second;
-  // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
-  // are all zero and then performs a right shift. We have to shift the
-  // `dinstinctIndex` left by the same amount to counter this effect.
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
-      distinctIndex << Id::numDatatypeBits));
+  // `Id::makeFromLocalVocabIndex` stores the pointer verbatim, so we can
+  // directly use the `distinctIndex` as a fake pointer.
+  return Id::makeFromLocalVocabIndex(
+      reinterpret_cast<::LocalVocabIndex>(distinctIndex));
 }
 
 }  // namespace qlever::binary_export

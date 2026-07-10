@@ -16,29 +16,22 @@ static constexpr size_t numElements = 10'000;
 static constexpr size_t numElements = 10;
 #endif
 
+// Note: Since the payload of a `ValueId` is a full 64-bit word, all doubles,
+// all values of `int64_t`, and all indices of `uint64_t` are exactly
+// representable.
 inline auto positiveRepresentableDoubleGenerator =
-    ad_utility::RandomDoubleGenerator(ValueId::minPositiveDouble,
+    ad_utility::RandomDoubleGenerator(std::numeric_limits<double>::denorm_min(),
                                       std::numeric_limits<double>::max());
 inline auto negativeRepresentableDoubleGenerator =
-    ad_utility::RandomDoubleGenerator(-std::numeric_limits<double>::max(),
-                                      -ValueId::minPositiveDouble);
-inline auto nonRepresentableDoubleGenerator = ad_utility::RandomDoubleGenerator(
-    -ValueId::minPositiveDouble, ValueId::minPositiveDouble);
+    ad_utility::RandomDoubleGenerator(
+        -std::numeric_limits<double>::max(),
+        -std::numeric_limits<double>::denorm_min());
 inline auto indexGenerator =
     ad_utility::SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
-inline auto invalidIndexGenerator =
-    ad_utility::SlowRandomIntGenerator<uint64_t>(
-        ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
 
 inline auto nonOverflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(ValueId::IntegerType::min(),
                                                 ValueId::IntegerType::max());
-inline auto overflowingNBitGenerator =
-    ad_utility::SlowRandomIntGenerator<int64_t>(
-        ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
-inline auto underflowingNBitGenerator =
-    ad_utility::SlowRandomIntGenerator<int64_t>(
-        std::numeric_limits<int64_t>::min(), ValueId::IntegerType::min() - 1);
 
 // Some helper functions to convert uint64_t values directly to and from index
 // type `ValueId`s.
@@ -116,8 +109,6 @@ inline auto makeRandomIds = []() {
   addIdsFromGenerator(indexGenerator, &makeWordVocabId, ids);
   addIdsFromGenerator(indexGenerator, &makeBlankNodeId, ids);
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
 
   for (size_t i = 0; i < numElements; ++i) {
     ids.push_back(ValueId::makeUndefined());

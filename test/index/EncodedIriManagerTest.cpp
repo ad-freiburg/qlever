@@ -49,7 +49,7 @@ TEST(EncodedIriManger, EncodingAndDecoding) {
     EXPECT_EQ(encodedIriManager.toString(id.value()), wdq)
         << std::hex << id.value().getBits();
     stringsAndEncodings.push_back(
-        std::pair{std::move(wdq), id.value().getBits()});
+        std::pair{std::move(wdq), id.value().getEncodedVal()});
   }
 
   // Test the sorting;

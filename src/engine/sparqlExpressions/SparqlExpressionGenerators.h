@@ -30,7 +30,7 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline ql::span<const ValueId> getIdsFromVariable(
+inline columnBasedIdTable::ConstIdColumnSpan getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
@@ -41,17 +41,16 @@ inline ql::span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  ql::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  auto completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
-  return {completeColumn.begin() + beginIndex,
-          completeColumn.begin() + endIndex};
+  return completeColumn.subspan(beginIndex, endIndex - beginIndex);
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline ql::span<const ValueId> getIdsFromVariable(
+inline columnBasedIdTable::ConstIdColumnSpan getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
@@ -93,8 +92,27 @@ CPP_template(typename T, typename Transformation = ql::identity)(
         T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
                                      Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  return ad_utility::allView(AD_FWD(vector)) |
-         ql::views::transform(std::move(transformation));
+  using Reference = ql::ranges::range_reference_t<std::remove_reference_t<T>>;
+  if constexpr (ad_utility::SimilarToAny<std::decay_t<Reference>,
+                                         columnBasedIdTable::IdRef,
+                                         columnBasedIdTable::ConstIdRef>) {
+    // The elements of a split column of `Id`s are proxy references (`IdRef`,
+    // see `IdColumn.h`). They are materialized to `ValueId`s here, s.t. all
+    // downstream code (in particular the `ValueGetter`s) continues to work
+    // on plain `ValueId`s.
+    // IMPORTANT: The lambda deliberately returns by value (plain `auto`, not
+    // `decltype(auto)`): the `transformation` (e.g. `ql::identity`) may
+    // return a reference into the materialized temporary, which would
+    // otherwise dangle.
+    return ad_utility::allView(AD_FWD(vector)) |
+           ql::views::transform(
+               [transformation = std::move(transformation)](auto&& element) {
+                 return transformation(static_cast<ValueId>(AD_FWD(element)));
+               });
+  } else {
+    return ad_utility::allView(AD_FWD(vector)) |
+           ql::views::transform(std::move(transformation));
+  }
 }
 
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17

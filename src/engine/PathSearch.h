@@ -258,14 +258,15 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  std::pair<std::vector<Id>, std::vector<Id>> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
   pathSearch::PathsLimited findPaths(
-      const Id& source, const std::unordered_set<uint64_t>& targets,
+      const Id& source,
+      const std::unordered_set<Id::BitRepresentation>& targets,
       const pathSearch::BinSearchWrapper& binSearch,
       std::optional<uint64_t> numPathsPerTarget) const;
 

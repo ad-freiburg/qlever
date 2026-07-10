@@ -113,14 +113,14 @@ struct SetOfIdTableColumnElements {
   However, accessing a hash map entry based on index position takes linear time,
   instead of constant.
   */
-  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  std::vector<ValueId> uniqueElements_{};
   ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
 
   /*
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const ql::span<const ValueId>& idTableColumnRef) {
+      columnBasedIdTable::ConstIdColumnSpan idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -194,13 +194,12 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
 
   // Create the overlap.
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](auto& id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](auto&& id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -333,7 +332,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Overwrite the designated values in the smaller table.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
+      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto&& id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;

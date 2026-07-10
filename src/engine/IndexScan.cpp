@@ -549,7 +549,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange
 IndexScan::lazyScanForJoinOfColumnWithScan(
-    ql::span<const Id> joinColumn) const {
+    columnBasedIdTable::ConstIdColumnSpan joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
 

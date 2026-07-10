@@ -52,11 +52,16 @@ static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
 class CompressedExternalIdTableWriter {
  private:
   // Metadata for a compressed block of bytes. A block is a contiguous part of a
-  // column of an `IdTable`.
+  // column of an `IdTable`. The compressed payload words and the compressed
+  // datatype bytes of the block are stored adjacently (first the payloads,
+  // then the datatypes).
   struct CompressedBlockMetadata {
     // The sizes are in Bytes.
     size_t compressedSize_;
-    size_t uncompressedSize_;
+    // The compressed size of only the payload part.
+    size_t compressedSizePayloads_;
+    // The number of rows (`Id`s) stored in this block.
+    size_t numRows_;
     size_t offsetInFile_;
   };
 
@@ -122,7 +127,9 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    // Note: The block size is interpreted in terms of the 8-byte payload
+    // words of the IDs (the datatype bytes are a small constant overhead).
+    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(uint64_t);
     AD_CONTRACT_CHECK(blockSize > 0);
     startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
     // The columns are compressed and stored in parallel.
@@ -131,26 +138,35 @@ class CompressedExternalIdTableWriter {
     // parallelism.
     std::vector<std::future<void>> compressColumFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumFutures.push_back(
-          std::async(std::launch::async, [this, i, blockSize, &table]() {
-            auto& blockMetadata = blocksPerColumn_.at(i);
-            decltype(auto) column = table.getColumn(i);
-            // TODO<C++23> Use `ql::views::chunkd`
-            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-              size_t upper = std::min<size_t>(lower + blockSize, column.size());
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  column.data() + lower, thisBlockSizeUncompressed);
-              size_t offset = 0;
-              file_.withWriteLock(
-                  [&offset, &compressed](ad_utility::File& file) {
-                    offset = file.tell();
-                    file.write(compressed.data(), compressed.size());
-                  });
-              blockMetadata.push_back(
-                  {compressed.size(), thisBlockSizeUncompressed, offset});
-            }
-          }));
+      compressColumFutures.push_back(std::async(std::launch::async, [this, i,
+                                                                     blockSize,
+                                                                     &table]() {
+        auto& blockMetadata = blocksPerColumn_.at(i);
+        decltype(auto) column = table.getColumn(i);
+        // TODO<C++23> Use `ql::views::chunkd`
+        for (size_t lower = 0; lower < column.size(); lower += blockSize) {
+          size_t upper = std::min<size_t>(lower + blockSize, column.size());
+          auto numRows = upper - lower;
+          // Compress the payload words and the datatype bytes of this
+          // part of the column separately and store them adjacently.
+          auto payloads = column.payloadSpan().subspan(lower, numRows);
+          auto datatypes = column.datatypeSpan().subspan(lower, numRows);
+          auto compressedPayloads = ZstdWrapper::compress(
+              payloads.data(), payloads.size() * sizeof(payloads[0]));
+          auto compressedDatatypes = ZstdWrapper::compress(
+              datatypes.data(), datatypes.size() * sizeof(datatypes[0]));
+          size_t offset = 0;
+          file_.withWriteLock([&offset, &compressedPayloads,
+                               &compressedDatatypes](ad_utility::File& file) {
+            offset = file.tell();
+            file.write(compressedPayloads.data(), compressedPayloads.size());
+            file.write(compressedDatatypes.data(), compressedDatatypes.size());
+          });
+          blockMetadata.push_back(
+              {compressedPayloads.size() + compressedDatatypes.size(),
+               compressedPayloads.size(), numRows, offset});
+        }
+      }));
     }
     for (auto& fut : compressColumFutures) {
       fut.get();
@@ -242,19 +258,26 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    auto numBytesDecompressed =
-        ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
-                                        col.data(), metaData.uncompressedSize_);
-    AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
+    // The compressed payload words and the compressed datatype bytes are
+    // stored adjacently; decompress them separately into the split storage
+    // of the column.
+    auto sizePayloads = metaData.compressedSizePayloads_;
+    auto numRows = metaData.numRows_;
+    auto numPayloadBytes = ZstdWrapper::decompressToBuffer(
+        compressed.data(), sizePayloads, col.payloadData(),
+        numRows * sizeof(uint64_t));
+    AD_CORRECTNESS_CHECK(numPayloadBytes == numRows * sizeof(uint64_t));
+    auto numDatatypeBytes = ZstdWrapper::decompressToBuffer(
+        compressed.data() + sizePayloads, compressed.size() - sizePayloads,
+        col.datatypeData(), numRows * sizeof(uint8_t));
+    AD_CORRECTNESS_CHECK(numDatatypeBytes == numRows * sizeof(uint8_t));
   }
 
   // Allocate and size an IdTableStatic for the block at `blockIdx`.
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> makeBlock(size_t blockIdx) {
     IdTableStatic<NumCols> block{numColumns(), allocator_};
-    size_t blockSize =
-        blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
-    block.resize(blockSize);
+    block.resize(blocksPerColumn_.at(0).at(blockIdx).numRows_);
     return block;
   }
 
@@ -344,7 +367,7 @@ CPP_class_template(size_t NumStaticCols,
   // The division by two is there because we store two blocks at the same time:
   // One that is currently being sorted and written to disk in the background,
   // and one that is used to collect rows in the calls to `push`.
-  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(Id) * 2)};
+  size_t blocksize_{memory_.getBytes() / (numColumns_ * sizeof(uint64_t) * 2)};
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
@@ -916,7 +939,7 @@ class CompressedExternalIdTableSorter
                    maxOutputBlocksize_);
 
       size_t blockSizeForOutput =
-          blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns);
+          blockSizeOutputMemory.getBytes() / (sizeof(uint64_t) * numColumns);
       // If blocks are smaller than this, the performance will probably be poor
       // because of the coroutine and vector resetting overhead.
       if (blockSizeForOutput <= 10'000) {

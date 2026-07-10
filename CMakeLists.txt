@@ -305,6 +305,12 @@ function(qlever_target_link_libraries target)
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
             ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
 
+    # The 16-byte `std::atomic`s (e.g. for the cached vocabulary position in
+    # `LocalVocabEntry`) require `libatomic` on Linux with GCC and Clang.
+    if (UNIX AND NOT APPLE)
+        target_link_libraries(${target} atomic)
+    endif ()
+
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
         target_link_libraries(${target} memorySize)

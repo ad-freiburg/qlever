@@ -184,10 +184,14 @@ class GeometryInfo {
   // attributes
   //   int64_t parsedGeometryOffset_ = -1;
 
+  // The `geometryTypeAndCentroid_` member stores the WKT geometry type in
+  // the (upper) bits that are not used by the encoding of the centroid
+  // `GeoPoint` (which only uses `GeoPoint::numDataBits` many bits).
+  static constexpr uint64_t numGeometryTypeBits = 64 - GeoPoint::numDataBits;
   static constexpr uint64_t bitMaskGeometryType =
-      bitMaskForHigherBits(ValueId::numDatatypeBits);
+      bitMaskForHigherBits(numGeometryTypeBits);
   static constexpr uint64_t bitMaskCentroid =
-      bitMaskForLowerBits(ValueId::numDataBits);
+      bitMaskForLowerBits(GeoPoint::numDataBits);
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,

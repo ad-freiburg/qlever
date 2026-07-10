@@ -35,7 +35,9 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    constexpr auto compare = &Id::compareWithoutLocalVocab;
+    constexpr auto compare = [](const Id& x, const Id& y) {
+      return x.compareWithoutLocalVocab(y);
+    };
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.

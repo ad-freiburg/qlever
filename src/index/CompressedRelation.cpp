@@ -80,7 +80,7 @@ CompressedBlockMetadataNoBlockIndex::OffsetAndCompressedSize
 CompressedBlockMetadataNoBlockIndex::getOffsetAndCompressedSizeForColumn(
     ColumnIndex columnIndex) const {
   if (!offsetsAndCompressedSize_.has_value()) {
-    return {0, 0};
+    return {0, 0, 0};
   }
   return offsetsAndCompressedSize_.value().at(columnIndex);
 }
@@ -616,7 +616,7 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getBlocksForJoin(
-    ql::span<const Id> joinColumn,
+    columnBasedIdTable::ConstIdColumnSpan joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
     -> GetBlocksForJoinResult {
   if (joinColumn.empty() || metadataAndBlocks.getBlockMetadataView().empty()) {
@@ -1143,8 +1143,10 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const auto& offset =
         blockMetaData.getOffsetAndCompressedSizeForColumn(columnIndices[i]);
     auto& currentCol = compressedBuffer[i];
-    currentCol.resize(offset.compressedSize_);
-    file_.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
+    currentCol.data_.resize(offset.compressedSize_);
+    currentCol.compressedSizePayloads_ = offset.compressedSizePayloads_;
+    file_.read(currentCol.data_.data(), offset.compressedSize_,
+               offset.offsetInFile_);
   }
   return compressedBuffer;
 }
@@ -1155,8 +1157,8 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
   DecompressedBlock decompressedBlock{compressedBlock.size(), allocator_};
   decompressedBlock.resize(numRowsToRead);
   for (size_t i = 0; i < compressedBlock.size(); ++i) {
-    auto col = decompressedBlock.getColumn(i);
-    decompressColumn(compressedBlock[i], numRowsToRead, col.data());
+    decompressColumn(compressedBlock[i], numRowsToRead,
+                     decompressedBlock.getColumn(i));
   }
   return decompressedBlock;
 }
@@ -1190,15 +1192,23 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 }
 
 // ____________________________________________________________________________
-template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
-    const std::vector<char>& compressedBlock, size_t numRowsToRead,
-    Iterator iterator) {
-  auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-      compressedBlock.data(), compressedBlock.size(), iterator,
-      numRowsToRead * sizeof(*iterator));
-  static_assert(sizeof(Id) == sizeof(*iterator));
-  AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
+    const CompressedColumn& compressedColumn, size_t numRowsToRead,
+    columnBasedIdTable::MutableIdColumnSpan column) {
+  // The compressed payload words and the compressed datatype bytes are
+  // stored adjacently and are decompressed separately into the split storage
+  // of the `column`.
+  const auto& data = compressedColumn.data_;
+  auto sizePayloads = compressedColumn.compressedSizePayloads_;
+  AD_CORRECTNESS_CHECK(sizePayloads <= data.size());
+  auto numPayloadBytes = ZstdWrapper::decompressToBuffer(
+      data.data(), sizePayloads, column.payloadData(),
+      numRowsToRead * sizeof(uint64_t));
+  AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(uint64_t) == numPayloadBytes);
+  auto numDatatypeBytes = ZstdWrapper::decompressToBuffer(
+      data.data() + sizePayloads, data.size() - sizePayloads,
+      column.datatypeData(), numRowsToRead * sizeof(uint8_t));
+  AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(uint8_t) == numDatatypeBytes);
 }
 
 // ____________________________________________________________________________
@@ -1218,14 +1228,23 @@ CompressedRelationReader::readAndDecompressBlock(
 
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
-CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
-  auto compressedSize = compressedBlock.size();
+CompressedRelationWriter::compressAndWriteColumn(
+    columnBasedIdTable::ConstIdColumnSpan column) {
+  // Compress the payload words and the datatype bytes separately and store
+  // them adjacently.
+  auto payloads = column.payloadSpan();
+  auto datatypes = column.datatypeSpan();
+  std::vector<char> compressedPayloads = ZstdWrapper::compress(
+      (void*)(payloads.data()), payloads.size() * sizeof(payloads[0]));
+  std::vector<char> compressedDatatypes = ZstdWrapper::compress(
+      (void*)(datatypes.data()), datatypes.size() * sizeof(datatypes[0]));
+  auto compressedSizePayloads = compressedPayloads.size();
+  auto compressedSize = compressedSizePayloads + compressedDatatypes.size();
   auto file = outfile_.wlock();
   auto offsetInFile = file->tell();
-  file->write(compressedBlock.data(), compressedBlock.size());
-  return {offsetInFile, compressedSize};
+  file->write(compressedPayloads.data(), compressedPayloads.size());
+  file->write(compressedDatatypes.data(), compressedDatatypes.size());
+  return {offsetInFile, compressedSize, compressedSizePayloads};
 }
 
 // _____________________________________________________________________________

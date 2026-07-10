@@ -32,8 +32,10 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
     // sort is far from being a performance bottleneck.
     auto compare = [](const auto& a, const auto& b) {
-      return std::tie(a[0], a[1], a[2], a[3]) <
-             std::tie(b[0], b[1], b[2], b[3]);
+      auto key = [](const auto& row) {
+        return std::tuple<Id, Id, Id, Id>{row[0], row[1], row[2], row[3]};
+      };
+      return key(a) < key(b);
     };
     ql::ranges::sort(blockOfSmallRelations, compare);
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());

@@ -434,7 +434,7 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  auto resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
@@ -1451,7 +1451,7 @@ GroupByImpl::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
+    const ArrayOrVector<columnBasedIdTable::ConstIdColumnSpan>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1817,8 +1817,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       auto currentBlockSize = evaluationContext.size();
 
       // Perform HashMap lookup once for all groups in current block
-      using U = typename HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+      using U = typename HashMapAggregationData<NUM_GROUP_COLUMNS>::
+          template ArrayOrVector<columnBasedIdTable::ConstIdColumnSpan>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

@@ -38,7 +38,8 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
     if (auto opt =
             context_->encodedIriManager().encode(toStringRepresentation());
         opt.has_value()) {
-      return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
+      return std::pair{opt.value(),
+                       Id::fromBits(opt.value().getBits().incremented())};
     }
     auto [l, u] = vocab.getPositionOfWord(toStringRepresentation());
     AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);

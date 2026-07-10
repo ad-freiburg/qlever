@@ -1161,19 +1161,26 @@ TEST(IdTable, shrinkToFit) {
   auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB);
   IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
   using namespace ad_utility::memory_literals;
+  // The number of bytes that one entry of an `IdTable` occupies: 8 bytes of
+  // payload and 1 byte for the datatype (stored in separate columns).
+  constexpr auto bytesPerEntry =
+      ad_utility::MemorySize::bytes(sizeof(uint64_t) + sizeof(uint8_t));
   ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 1_kB);
   table.reserve(20);
   ASSERT_TRUE(table.empty());
-  // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
+  // 20 rows * 2 columns entries were allocated.
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(),
+            1_kB - 20 * 2 * bytesPerEntry);
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(),
+            1_kB - 20 * 2 * bytesPerEntry);
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
-  // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 968_B);
+  // Now only 2 rows * 2 columns entries are allocated.
+  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(),
+            1_kB - 2 * 2 * bytesPerEntry);
 }
 
 TEST(IdTable, staticAsserts) {
@@ -1241,13 +1248,13 @@ TEST(IdTable, moveOrCloneOnView) {
   // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
   IdTable cloned = view.moveOrClone();
   EXPECT_EQ(cloned, table);
-  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+  EXPECT_NE(cloned(0, 0).payloadPtr(), table(0, 0).payloadPtr());
 
   // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
   // views cannot transfer ownership.
   IdTable cloned2 = std::move(view).moveOrClone();
   EXPECT_EQ(cloned2, table);
-  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+  EXPECT_NE(cloned2(0, 0).payloadPtr(), table(0, 0).payloadPtr());
 }
 
 // ____________________________________________________________________________
@@ -1293,8 +1300,8 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     EXPECT_EQ(sliceView(1, 0), V(20));
 
     // `subView` is non-owning: data pointers point into the original table.
-    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
-    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    EXPECT_EQ(sliceView(0, 0).payloadPtr(), table(1, 0).payloadPtr());
+    EXPECT_EQ(sliceView(1, 0).payloadPtr(), table(2, 0).payloadPtr());
 
     // Out-of-range access must trigger a contract check.
     EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.

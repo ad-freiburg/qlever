@@ -87,8 +87,10 @@ namespace {
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
-auto tieHelper(Row& row, Tp<size_t, I...>) {
-  return std::tie(row[I]...);
+auto tieHelper(Row&& row, Tp<size_t, I...>) {
+  // Note: The entries of an `IdTable` row are proxy references, so we
+  // materialize them into a tuple of `Id`s (`std::tie` does not work here).
+  return std::tuple{Id{row[I]}...};
 };
 }  // namespace
 
@@ -99,7 +101,7 @@ auto tieHelper(Row& row, Tp<size_t, I...>) {
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
-                                      3)) auto tieIdTableRow(T& row) {
+                                      3)) auto tieIdTableRow(T&& row) {
   return tieHelper(
       row, std::make_index_sequence<numIndexColumns +
                                     static_cast<size_t>(includeGraphColumn)>{});
@@ -271,14 +273,10 @@ VacuumStatistics processBlockForVacuum(
     }(std::make_index_sequence<4>{})};
   };
 
-  auto ltProj = [](const LocatedTriple& lt)
-      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+  auto ltProj = [](const LocatedTriple& lt) {
     return tieLocatedTripleValue<3, true>(lt);
   };
-  auto rowProj = [](const auto& row)
-      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
-    return tieIdTableRow<3, true>(row);
-  };
+  auto rowProj = [](const auto& row) { return tieIdTableRow<3, true>(row); };
 
   auto rowsAsTuple = idTable | ql::views::transform(rowProj);
   auto filteredTriples = [&](bool isInsertion) {

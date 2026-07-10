@@ -248,8 +248,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         !optionalLiteralOrIri.value().hasLanguageTag()) {
       continue;
     }
-    const auto& predicate =
-        predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
+    const auto& predicate = predicateCache_.getOrCompute(
+        ids.at(1).getBits(), [this](Id::BitRepresentation bits) {
           auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());

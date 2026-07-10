@@ -152,7 +152,7 @@ void testLazyScanForJoinWithColumn(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
-  std::vector<Id> column;
+  columnBasedIdTable::IdColumnVector<> column;
   for (const auto& entry : columnEntries) {
     column.push_back(entry.toValueId(qec->getIndex()).value());
   }
@@ -170,7 +170,7 @@ void testLazyScanWithColumnThrows(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
-  std::vector<Id> column;
+  columnBasedIdTable::IdColumnVector<> column;
   for (const auto& entry : columnEntries) {
     column.push_back(entry.toValueId(qec->getIndex()).value());
   }

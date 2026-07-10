@@ -243,8 +243,11 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // for a later PR.
   bool isCheap = ql::ranges::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
-    return (ql::ranges::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
-           (ql::ranges::any_of(left.getColumn(leftCol), &Id::isUndefined));
+    return (ql::ranges::any_of(
+               right.getColumn(rightCol),
+               [](const Id& id) { return id.isUndefined(); })) ||
+           (ql::ranges::any_of(left.getColumn(leftCol),
+                               [](const Id& id) { return id.isUndefined(); }));
   });
 
   auto checkCancellationLambda = [this] { checkCancellation(); };

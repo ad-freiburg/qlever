@@ -179,7 +179,8 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   };
   auto fromMappingOrigin = [&]() {
     return ::ranges::to<std::vector>(
-        mapping | ql::views::keys | ql::views::transform([](Id::T id) {
+        mapping | ql::views::keys |
+        ql::views::transform([](Id::BitRepresentation id) {
           return *Id::fromBits(id).getLocalVocabIndex();
         }));
   };

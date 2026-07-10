@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/span.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
@@ -28,6 +29,32 @@
 #include "util/Views.h"
 
 namespace columnBasedIdTable {
+
+// Traits that describe how the entries of a single column of an `IdTable`
+// are accessed, depending on the underlying storage type of the column.
+// The general case covers storages with contiguous elements of type `T`
+// (e.g. `std::vector<T>`), where a reference to an entry is a plain `T&` and
+// a whole column can be viewed as a `ql::span`.
+template <typename ColumnStorage, typename T>
+struct ColumnStorageTraits {
+  using reference = T&;
+  using const_reference = const T&;
+  using View = ql::span<T>;
+  using ConstView = ql::span<const T>;
+};
+
+// The specialization for the storage-efficient split columns of `Id`s (see
+// `IdColumn.h`): references are the `IdRef` proxy types and the views are
+// the `IdColumnSpan` types.
+template <typename PayloadStorage, typename TypeStorage>
+struct ColumnStorageTraits<IdColumnVectorImpl<PayloadStorage, TypeStorage>,
+                           Id> {
+  using reference = IdRef;
+  using const_reference = ConstIdRef;
+  using View = MutableIdColumnSpan;
+  using ConstView = ConstIdColumnSpan;
+};
+
 // The `IdTable` class is QLever's central data structure. It is used to store
 // all intermediate and final query results in the ID space.
 //
@@ -126,7 +153,15 @@ class IdTable {
   static constexpr size_t numInlinedColumns = 10;
   using Storage = detail::VectorWithElementwiseMove<
       ColumnStorage, absl::InlinedVector<ColumnStorage, numInlinedColumns>>;
-  using ViewSpans = absl::InlinedVector<ql::span<const T>, numInlinedColumns>;
+  // The types for the access to single entries and whole columns, which
+  // depend on the underlying column storage (see `ColumnStorageTraits`
+  // above).
+  using Traits = ColumnStorageTraits<ColumnStorage, T>;
+  using single_value_reference = typename Traits::reference;
+  using const_single_value_reference = typename Traits::const_reference;
+  using column_view = typename Traits::View;
+  using const_column_view = typename Traits::ConstView;
+  using ViewSpans = absl::InlinedVector<const_column_view, numInlinedColumns>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
@@ -335,10 +370,13 @@ class IdTable {
   // Note: Since this class has a column-based layout, the usage of the
   // column-based interface (`getColumn` and `getColumns`) should be preferred
   // for performance reason whenever possible.
+  // Note: For the storage-efficient split `Id` columns, the returned
+  // "reference" is a proxy object of type `IdRef`/`ConstIdRef` (see
+  // `IdColumn.h`).
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
-  CPP_template(typename = void)(requires(!isView)) T& operator()(
-      size_t row, size_t column) {
+  CPP_template(typename = void)(requires(!isView)) single_value_reference
+  operator()(size_t row, size_t column) {
     AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
       return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
                           numColumns(), ", ", numStaticColumns);
@@ -346,25 +384,25 @@ class IdTable {
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
-  const T& operator()(size_t row, size_t column) const {
+  const_single_value_reference operator()(size_t row, size_t column) const {
     return data()[column][row];
   }
 
   // Get safe access to a single element specified by the row and the column.
   // Throw if the row or the column is out of bounds. See the note for
   // `operator()` above.
-  CPP_template(typename = void)(requires(!isView)) T& at(size_t row,
-                                                         size_t column) {
+  CPP_template(typename = void)(requires(!isView)) single_value_reference
+      at(size_t row, size_t column) {
     return data().at(column).at(row);
   }
   // TODO<C++26> Remove overload for `isView` and drop requires clause.
-  CPP_template(typename = void)(requires(!isView)) const T& at(
-      size_t row, size_t column) const {
+  CPP_template(typename = void)(requires(!isView)) const_single_value_reference
+      at(size_t row, size_t column) const {
     return data().at(column).at(row);
   }
   // `std::span::at` is a C++26 feature, so we have to implement it ourselves.
-  CPP_template(typename = void)(requires(isView)) const T& at(
-      size_t row, size_t column) const {
+  CPP_template(typename = void)(requires(isView)) const_single_value_reference
+      at(size_t row, size_t column) const {
     const auto& col = data().at(column);
     AD_CONTRACT_CHECK(row < col.size());
     return col[row];
@@ -612,7 +650,7 @@ class IdTable {
     auto viewSpans = ::ranges::to<ViewSpans>(
         ad_utility::allView(getColumns()) |
         ql::views::transform(
-            [offset, size](const auto& col) -> ql::span<const T> {
+            [offset, size](const auto& col) -> const_column_view {
               return col.subspan(offset, size);
             }));
     return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
@@ -850,12 +888,16 @@ class IdTable {
     return true;
   }
 
-  // Get the `i`-th column. It is stored contiguously in memory.
-  CPP_template(typename = void)(requires(!isView)) ql::span<T> getColumn(
-      size_t i) {
-    return {data().at(i)};
+  // Get the `i`-th column. Note: For the storage-efficient split `Id`
+  // columns the return type is not a `ql::span`, but an `IdColumnSpan` (see
+  // `IdColumn.h`), which provides a very similar interface.
+  CPP_template(typename = void)(requires(!isView)) column_view
+      getColumn(size_t i) {
+    return column_view{data().at(i)};
   }
-  ql::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
+  const_column_view getColumn(size_t i) const {
+    return const_column_view{data().at(i)};
+  }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
   // `std::array` (else). The elements of the vector/array are `ql::span<T>`
@@ -897,7 +939,9 @@ class IdTable {
 namespace detail {
 using DefaultAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
-using IdVector = std::vector<Id, DefaultAllocator>;
+// The default column storage for `Id`s: the storage-efficient split column
+// (payloads and datatype bytes in separate arrays, see `IdColumn.h`).
+using IdVector = columnBasedIdTable::IdColumnVector<DefaultAllocator>;
 }  // namespace detail
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,

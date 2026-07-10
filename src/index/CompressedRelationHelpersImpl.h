@@ -20,8 +20,11 @@ static constexpr size_t c2Idx = 2;
 // ignores the first column as well as any payload columns).
 struct ComparatorForConstCol0 {
   bool operator()(const auto& a, const auto& b) const {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    auto key = [](const auto& row) {
+      return std::tuple<Id, Id, Id>{row[c1Idx], row[c2Idx],
+                                    row[ADDITIONAL_COLUMN_GRAPH_ID]};
+    };
+    return key(a) < key(b);
   }
 };
 

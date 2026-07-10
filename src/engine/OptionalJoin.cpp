@@ -334,7 +334,8 @@ auto OptionalJoin::computeImplementationFromIdTables(
     -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
-    return ql::ranges::any_of(column, &Id::isUndefined);
+    return ql::ranges::any_of(column,
+                              [](const Id& id) { return id.isUndefined(); });
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);

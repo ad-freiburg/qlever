@@ -123,7 +123,8 @@ class IndexScan final : public Operation {
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   CompressedRelationReader::IdTableGeneratorInputRange
-  lazyScanForJoinOfColumnWithScan(ql::span<const Id> joinColumn) const;
+  lazyScanForJoinOfColumnWithScan(
+      columnBasedIdTable::ConstIdColumnSpan joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the

@@ -324,7 +324,9 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
         false};
   };
 
-  AD_EXPECT_NULLOPT(getMetadataFromId(V(Id::maxIndex - 1)).first);
+  AD_EXPECT_NULLOPT(getMetadataFromId(Id::makeFromVocabIndex(
+                                          VocabIndex::make(Id::maxIndex - 1)))
+                        .first);
 
   // return a `pair<RelationMetadata, bool>` (see above), but for the `i`-th
   // relation specified by the `inputs`.
@@ -718,8 +720,10 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                   size_t numHandledBlocksExpected,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
+    columnBasedIdTable::IdColumnVector<> joinColumnSplit{
+        joinColumn.begin(), joinColumn.end(), std::allocator<Id>{}};
     auto [result, numHandledBlocks] =
-        CompressedRelationReader::getBlocksForJoin(joinColumn,
+        CompressedRelationReader::getBlocksForJoin(joinColumnSplit,
                                                    *metadataAndBlocks);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
     EXPECT_EQ(numHandledBlocks, numHandledBlocksExpected);

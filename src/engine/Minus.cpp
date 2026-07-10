@@ -128,8 +128,9 @@ auto Minus::makeUndefRangesChecker(bool left,
             info.mightContainUndef_ ==
             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
         return colAlwaysDefined ||
-               ql::ranges::none_of(idTable.getColumn(tableColumn),
-                                   &Id::isUndefined);
+               ql::ranges::none_of(
+                   idTable.getColumn(tableColumn),
+                   [](const Id& id) { return id.isUndefined(); });
       });
   // Use expensive operation if one of the columns might contain undef.
   using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;

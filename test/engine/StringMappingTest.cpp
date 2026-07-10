@@ -20,7 +20,7 @@ TEST(StringMapping, remapId) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> .");
   auto toMappedId = [](size_t count) {
     return Id::makeFromLocalVocabIndex(
-        reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
+        reinterpret_cast<LocalVocabIndex>(count));
   };
 
   auto binaryEq = [](Id a, Id b,

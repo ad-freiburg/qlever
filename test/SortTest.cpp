@@ -281,9 +281,11 @@ TEST(Sort, externalSortLazyInput) {
   const auto& table = result->idTableView();
   EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
-    bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+    auto rowTuple = [&table](size_t row) {
+      return std::tuple<Id, Id, Id>{table(row, 0), table(row, 1),
+                                    table(row, 2)};
+    };
+    bool isLessOrEqual = rowTuple(i - 1) <= rowTuple(i);
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -326,9 +328,11 @@ TEST(Sort, externalSortMaterializedInput) {
   const auto& table = result->idTableView();
   EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
-    bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+    auto rowTuple = [&table](size_t row) {
+      return std::tuple<Id, Id, Id>{table(row, 0), table(row, 1),
+                                    table(row, 2)};
+    };
+    bool isLessOrEqual = rowTuple(i - 1) <= rowTuple(i);
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -419,9 +423,11 @@ TEST(Sort, inMemorySortMaterializedInput) {
   const auto& table = result->idTableView();
   EXPECT_EQ(100u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
-    bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+    auto rowTuple = [&table](size_t row) {
+      return std::tuple<Id, Id, Id>{table(row, 0), table(row, 1),
+                                    table(row, 2)};
+    };
+    bool isLessOrEqual = rowTuple(i - 1) <= rowTuple(i);
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }

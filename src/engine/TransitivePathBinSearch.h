@@ -30,9 +30,9 @@ class BinSearchMap {
   // source node. The first two ranges have the same size. The third one either
   // has the same size (for a transitive path operation inside a GRAPH clause)
   // or otherwise is empty.
-  ql::span<const Id> startIds_;
-  ql::span<const Id> targetIds_;
-  ql::span<const Id> graphIds_;
+  columnBasedIdTable::ConstIdColumnSpan startIds_;
+  columnBasedIdTable::ConstIdColumnSpan targetIds_;
+  columnBasedIdTable::ConstIdColumnSpan graphIds_;
 
   // The index of the first edge of the currently active graph and the number
   // of edges in that graph.
@@ -43,13 +43,14 @@ class BinSearchMap {
   // Construct with the given edges. The `sizeOfActiveGraph_` is set to the
   // total number of edges if no graphs are given, or to zero otherwise. In the
   // latter case, the correct size has to be set via `setGraphId`.
-  BinSearchMap(
-      ql::span<const Id> startIds, ql::span<const Id> targetIds,
-      const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
+  BinSearchMap(columnBasedIdTable::ConstIdColumnSpan startIds,
+               columnBasedIdTable::ConstIdColumnSpan targetIds,
+               const std::optional<columnBasedIdTable::ConstIdColumnSpan>&
+                   graphIds = std::nullopt);
 
   // Return all target nodes for the given source node in the currently
   // active graph.
-  ql::span<const Id> successors(Id node) const;
+  columnBasedIdTable::ConstIdColumnSpan successors(Id node) const;
 
   // Find all `Id`s in `startIds_` that are equal to `id` together with the
   // corresponding graph `Id`s, with the following special cases:

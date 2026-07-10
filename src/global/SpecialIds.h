@@ -25,10 +25,10 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
   static const auto ids = []() {
     using S = std::string;
     ad_utility::HashMap<std::string, Id> result{
-        {S{HAS_PREDICATE_PREDICATE}, Id::fromBits(1)},
-        {S{HAS_PATTERN_PREDICATE}, Id::fromBits(2)},
-        {S{DEFAULT_GRAPH_IRI}, Id::fromBits(3)},
-        {S{QLEVER_INTERNAL_GRAPH_IRI}, Id::fromBits(4)}};
+        {S{HAS_PREDICATE_PREDICATE}, Id::fromBits({0, 1})},
+        {S{HAS_PATTERN_PREDICATE}, Id::fromBits({0, 2})},
+        {S{DEFAULT_GRAPH_IRI}, Id::fromBits({0, 3})},
+        {S{QLEVER_INTERNAL_GRAPH_IRI}, Id::fromBits({0, 4})}};
 
     // Perform the following checks: All the special IDs are unique, all of them
     // have the `Undefined` datatype, but none of them is equal to the "actual"
@@ -54,8 +54,10 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
 constexpr std::pair<Id, Id> getBoundsForSpecialIds() {
   constexpr auto upperBound = Id::makeFromBool(false);
   static_assert(static_cast<int>(Datatype::Undefined) == 0);
-  static_assert(upperBound.getBits() == uint64_t{1} << Id::numDataBits);
-  return {Id::fromBits(1), upperBound};
+  // The `upperBound` is the smallest ID that does not have the `Undefined`
+  // datatype.
+  static_assert(upperBound.getBits() == ValueId::BitRepresentation{1, 0});
+  return {Id::fromBits({0, 1}), upperBound};
 }
 }  // namespace qlever
 
