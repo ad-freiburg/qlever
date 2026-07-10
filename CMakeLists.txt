@@ -149,7 +149,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        GIT_TAG 973323ed64a05b128418e7eab67016db5ba049df # main branch on 2026/06/30
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -251,6 +251,7 @@ endif ()
 ### io_uring (optional, for asynchronous batch vocabulary I/O)
 option(USE_IO_URING "Enable io_uring support for batch vocabulary I/O (requires liburing)" ON)
 if (USE_IO_URING)
+    find_package(PkgConfig)
     pkg_check_modules(URING QUIET liburing)
     if (URING_FOUND)
         MESSAGE(STATUS "Found liburing, enabling io_uring support")
@@ -377,7 +378,7 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        GIT_TAG 255c84dadd029fd8ad25c5efb5933e47beaa00c7  # tag 20260107.1 (LTS 2026-01-07)
         EXCLUDE_FROM_ALL
 )
 
@@ -388,7 +389,7 @@ set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
-        GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        GIT_TAG a37aba69f14af676e9605cd9515c8aca6cef8342  # tag v0.13.1
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -451,7 +452,7 @@ set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 FetchContent_Declare(
         re2
         GIT_REPOSITORY https://github.com/google/re2.git
-        GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
+        GIT_TAG 972a15cedd008d846f1a39b2e88ce48d7f166cbd  # main branch from January 23 2026
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
         SYSTEM
@@ -479,10 +480,16 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # Apply FetchContent
 ################################
+# On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
+# but its headers "auto-detect" =0, an ODR mismatch, so we have to set this explicitly.
+# See https://github.com/google/googletest/issues/5015
+if (EMSCRIPTEN)
+    add_compile_definitions(GTEST_HAS_PTHREAD=1)
+endif ()
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
-target_compile_options(re2 PRIVATE -Wno-unused-parameter)
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
+target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()

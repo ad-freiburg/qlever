@@ -46,8 +46,8 @@ class MaterializedViewWriter {
   std::string name_;
 
   // Query plan to retrieve the view's rows.
-  std::shared_ptr<QueryExecutionTree> qet_;
-  std::shared_ptr<QueryExecutionContext> qec_;
+  std::shared_ptr<const QueryExecutionTree> qet_;
+  std::shared_ptr<const QueryExecutionContext> qec_;
   ParsedQuery parsedQuery_;
 
   // Memory limit and allocator for `CompressedExternalIdTableSorter`, which is
@@ -74,13 +74,13 @@ class MaterializedViewWriter {
   // argument `NumStaticCols == 0`)
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
-  using QueryPlan = qlever::QueryPlan;
+  using PlannedQuery = qlever::PlannedQuery;
 
-  // Initialize a writer given the base filename of the view and a query plan.
-  // The view will be written to files prefixed with the index basename followed
-  // by the view name.
+  // Initialize a writer given the base filename of the view and a planned
+  // query. The view will be written to files prefixed with the index basename
+  // followed by the view name.
   MaterializedViewWriter(std::string onDiskBase, std::string name,
-                         const QueryPlan& queryPlan,
+                         const PlannedQuery& plannedQuery,
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -129,7 +129,7 @@ class MaterializedViewWriter {
   // Helper for `computeResultAndWritePermutation`: given sorted and permuted
   // blocks from `getSortedBlocks`, write the `Permutation` to disk using
   // `CompressedRelationWriter`. Returns the permutation metadata.
-  IndexMetaDataMmap writePermutation(RangeOfIdTables sortedBlocksSPO) const;
+  IndexMetaData writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
   // files with column names and ordering to disk.
@@ -324,7 +324,7 @@ class MaterializedViewsManager {
       const parsedQuery::BasicGraphPattern& triples) const;
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
-  // alphanumerics and hyphens) and a `queryPlan` to be executed. The query's
+  // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
   // result is written to the view.
   //
   // If a view with the same name is already loaded, it is unloaded before
@@ -332,9 +332,9 @@ class MaterializedViewsManager {
   //
   // The `memoryLimit` and `allocator` are used only for sorting the
   // permutation if the query result is not correctly sorted already. The
-  // `queryPlan` is executed with the normal query memory limit.
+  // `plannedQuery` is executed with the normal query memory limit.
   void writeViewToDisk(
-      std::string name, const qlever::QueryPlan& queryPlan,
+      std::string name, const qlever::PlannedQuery& plannedQuery,
       ad_utility::MemorySize memoryLimit = ad_utility::MemorySize::gigabytes(4),
       ad_utility::AllocatorWithLimit<Id> allocator =
           ad_utility::makeUnlimitedAllocator<Id>()) const;

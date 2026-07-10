@@ -1776,7 +1776,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   auto res = spatialJoin->computeResult(false);
 
   // Each area only intersects itself, so the result has two rows.
-  EXPECT_EQ(res.idTable().numRows(), 2);
+  EXPECT_EQ(res.idTableView().numRows(), 2);
 }
 
 // _____________________________________________________________________________
@@ -1810,7 +1810,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   auto res = spatialJoin->computeResult(false);
 
   // Each area only intersects itself, so the result has two rows.
-  EXPECT_EQ(res.idTable().numRows(), 2);
+  EXPECT_EQ(res.idTableView().numRows(), 2);
 }
 
 }  // namespace runtimeParameters
