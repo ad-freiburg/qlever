@@ -667,3 +667,26 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
       vocab.reserveBlankNodeBlocksFromExplicitIndices(indices, &bnm),
       ::testing::HasSubstr("Assertion"));
 }
+
+// _____________________________________________________________________________
+// Regression test: comparing two `LocalVocabEntry`s must also work after the
+// index they were created with has been destroyed. This happens e.g. for
+// entries that are part of a cached query result, or for entries that are
+// carried over when a rebuilt index is swapped in at runtime. It used to be a
+// use-after-free of the ICU collator of the destroyed index's vocabulary.
+TEST(LocalVocabEntry, comparisonWorksAfterIndexIsDestroyed) {
+  std::optional<LocalVocabEntry> a;
+  std::optional<LocalVocabEntry> b;
+  {
+    Index index = ad_utility::testing::makeTestIndex(
+        "LocalVocabEntryComparisonAfterIndexDestroyed", "<x> <y> <z>.");
+    a = LocalVocabEntry::fromIriref("<http://example.org/a>", index.getImpl());
+    b = LocalVocabEntry::fromIriref("<http://example.org/b>", index.getImpl());
+  }
+  // The index is gone; the comparison must still work because each entry
+  // shares ownership of the comparator.
+  EXPECT_EQ(a->compareThreeWay(*b), ql::strong_ordering::less);
+  EXPECT_EQ(b->compareThreeWay(*a), ql::strong_ordering::greater);
+  EXPECT_EQ(a->compareThreeWay(*a), ql::strong_ordering::equal);
+  EXPECT_TRUE(*a < *b);
+}

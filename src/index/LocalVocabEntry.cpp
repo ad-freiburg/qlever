@@ -8,11 +8,21 @@
 #include "index/IndexImpl.h"
 
 // ___________________________________________________________________________
+std::shared_ptr<const TripleComponentComparator>
+localVocabEntryDetail::comparatorFromContext(
+    const LocalVocabContext& context) noexcept {
+  return context.getVocab().getCaseComparatorPtr();
+}
+
+// ___________________________________________________________________________
 ql::strong_ordering LocalVocabEntry::compareThreeWay(
     const LocalVocabEntry& rhs) const {
-  int i = context_->getVocab().getCaseComparator().compare(
-      toStringRepresentation(), rhs.toStringRepresentation(),
-      LocaleManager::Level::TOTAL);
+  // NOTE: Deliberately use the shared `comparator_` and not the `context_`:
+  // this way the comparison also works for entries that outlive the index
+  // they were created with (e.g. entries in a cached query result).
+  int i = comparator_->compare(toStringRepresentation(),
+                               rhs.toStringRepresentation(),
+                               LocaleManager::Level::TOTAL);
   if (i < 0) {
     return ql::strong_ordering::less;
   } else if (i > 0) {

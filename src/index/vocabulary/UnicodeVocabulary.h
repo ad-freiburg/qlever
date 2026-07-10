@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 
+#include <memory>
+
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
@@ -18,7 +20,10 @@ class UnicodeVocabulary {
   using SortLevel = typename UnicodeComparator::Level;
 
  private:
-  UnicodeComparator _comparator;
+  // The comparator is stored via a `shared_ptr` so that it can be safely
+  // shared with objects that may outlive this vocabulary (in particular
+  // `LocalVocabEntry`, see `getComparatorPtr` below).
+  std::shared_ptr<UnicodeComparator> _comparator;
   UnderlyingVocabulary _underlyingVocabulary;
 
  public:
@@ -26,7 +31,7 @@ class UnicodeVocabulary {
   template <typename... Args>
   explicit UnicodeVocabulary(UnicodeComparator comparator = UnicodeComparator{},
                              Args&&... args)
-      : _comparator{std::move(comparator)},
+      : _comparator{std::make_shared<UnicodeComparator>(std::move(comparator))},
         _underlyingVocabulary{std::forward<Args>(args)...} {}
 
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
@@ -42,7 +47,7 @@ class UnicodeVocabulary {
   template <typename T>
   WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
-      return _comparator(a, b, level);
+      return (*_comparator)(a, b, level);
     };
     return _underlyingVocabulary.lower_bound(word, actualComparator);
   }
@@ -56,7 +61,7 @@ class UnicodeVocabulary {
   template <typename T>
   WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
-      return _comparator(a, b, level);
+      return (*_comparator)(a, b, level);
     };
     return _underlyingVocabulary.upper_bound(word, actualComparator);
   }
@@ -67,7 +72,7 @@ class UnicodeVocabulary {
   template <typename T>
   std::pair<uint64_t, uint64_t> getPositionOfWord(const T& word) const {
     auto actualComparator = [this](const auto& a, const auto& b) {
-      return _comparator(a, b, SortLevel::TOTAL);
+      return (*_comparator)(a, b, SortLevel::TOTAL);
     };
     if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
       return _underlyingVocabulary.getPositionOfWord(word, actualComparator);
@@ -94,7 +99,7 @@ class UnicodeVocabulary {
     }
 
     auto lb = lower_bound(prefix, SortLevel::PRIMARY);
-    auto transformed = _comparator.transformToFirstPossibleBiggerValue(
+    auto transformed = _comparator->transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
     auto ub = lower_bound(transformed, SortLevel::PRIMARY);
@@ -119,8 +124,15 @@ class UnicodeVocabulary {
     return _underlyingVocabulary;
   }
 
-  UnicodeComparator& getComparator() { return _comparator; }
-  const UnicodeComparator& getComparator() const { return _comparator; }
+  UnicodeComparator& getComparator() { return *_comparator; }
+  const UnicodeComparator& getComparator() const { return *_comparator; }
+
+  // Shared ownership of the comparator, for objects that must be able to
+  // compare words even after this vocabulary (or the index that contains it)
+  // has been destroyed, e.g. `LocalVocabEntry`.
+  std::shared_ptr<const UnicodeComparator> getComparatorPtr() const {
+    return _comparator;
+  }
 
   void close() { _underlyingVocabulary.close(); }
 

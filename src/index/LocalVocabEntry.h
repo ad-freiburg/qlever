@@ -8,6 +8,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
+#include <memory>
 
 #include "backports/algorithm.h"
 #include "backports/keywords.h"
@@ -20,6 +21,15 @@
 
 class IndexImpl;
 using LocalVocabContext = IndexImpl;
+class TripleComponentComparator;
+
+namespace localVocabEntryDetail {
+// Return shared ownership of the case comparator of the vocabulary of the
+// given context (implemented in the `.cpp` file because it needs the full
+// definition of `IndexImpl`).
+std::shared_ptr<const TripleComponentComparator> comparatorFromContext(
+    const LocalVocabContext& context) noexcept;
+}  // namespace localVocabEntryDetail
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -41,7 +51,16 @@ class alignas(16) LocalVocabEntry
 
  private:
   // Pointer to keep this object assignable.
+  // NOTE: The `context_` is only used to (lazily) compute the position in the
+  // vocabulary (see below), so it must stay valid until the position has been
+  // cached. Comparisons between entries (`compareThreeWay`) deliberately do
+  // NOT use the `context_`, but the shared `comparator_` below, so that they
+  // also work for entries that outlive the index they were created with (e.g.
+  // entries that are part of a cached query result).
   const LocalVocabContext* context_;
+  // Shared ownership of the case comparator of the vocabulary, see the NOTE
+  // above.
+  std::shared_ptr<const TripleComponentComparator> comparator_;
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -55,21 +74,30 @@ class alignas(16) LocalVocabEntry
 
  public:
   LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
-      : Base{std::move(literal)}, context_{&context} {}
+      : Base{std::move(literal)},
+        context_{&context},
+        comparator_{localVocabEntryDetail::comparatorFromContext(context)} {}
   LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
-      : Base{std::move(iri)}, context_{&context} {}
+      : Base{std::move(iri)},
+        context_{&context},
+        comparator_{localVocabEntryDetail::comparatorFromContext(context)} {}
 
   // Deliberately allow implicit conversion from `LiteralOrIri`.
   LocalVocabEntry(const Base& base, const LocalVocabContext& context)
-      : Base{base}, context_{&context} {}
+      : Base{base},
+        context_{&context},
+        comparator_{localVocabEntryDetail::comparatorFromContext(context)} {}
   LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
-      : Base{std::move(base)}, context_{&context} {}
+      : Base{std::move(base)},
+        context_{&context},
+        comparator_{localVocabEntryDetail::comparatorFromContext(context)} {}
 
   // Constructor for when the position in the vocab is already known.
   LocalVocabEntry(Base&& base, auto lower, auto upper,
                   const LocalVocabContext& context)
       : Base{std::move(base)},
         context_{&context},
+        comparator_{localVocabEntryDetail::comparatorFromContext(context)},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
         upperBoundInVocab_(IdProxy::make(upper.getBits())),
         positionInVocabKnown_(true) {

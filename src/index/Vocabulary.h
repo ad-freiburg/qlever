@@ -204,6 +204,12 @@ class Vocabulary {
     return vocabulary_.getComparator();
   }
 
+  // Shared ownership of the comparator, for objects that may outlive this
+  // vocabulary (e.g. `LocalVocabEntry`, see there for details).
+  std::shared_ptr<const ComparatorType> getCaseComparatorPtr() const {
+    return vocabulary_.getComparatorPtr();
+  }
+
   // Get prefix ranges for the given prefix.
   PrefixRanges prefixRanges(std::string_view prefix) const;
 
