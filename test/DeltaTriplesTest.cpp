@@ -1228,4 +1228,86 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
                                          ::testing::Eq(Datatype::VocabIndex)),
                              newGraph));
 }
+
+// _____________________________________________________________________________
+// Regression test: local vocab entries that are carried over from the old to
+// the new index by `addFromSnapshotDiff` must be re-anchored to the new index.
+// A plain copy would keep the raw pointer to the old index (use-after-free
+// once the old index is destroyed after the swap) and the cached position in
+// the OLD vocabulary (silently wrong comparison results in the new index).
+TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
+  using ad_utility::testing::makeTestIndex;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ad_utility::timer::TimeTracer tracer{"testReanchor"};
+
+  // NOTE: The literals in the new index are essential for this test: they
+  // sort before the carried word "zzz-reanchor", so its position in the NEW
+  // vocabulary differs numerically from its position in the OLD vocabulary
+  // (which contains no literals). Otherwise, the position assertion below
+  // would hold by coincidence even for a plain (not re-anchored) copy.
+  Index newIndex = makeTestIndex(
+      "reanchorNewIndex", "<a> <b> \"aaa\" . <a> <b> \"mmm\" . <a> <b> <c> .");
+  DeltaTriples newDeltaTriples(newIndex);
+
+  {
+    Index oldIndex = makeTestIndex("reanchorOldIndex", "<x> <y> <z> .");
+    DeltaTriples oldDeltaTriples(oldIndex);
+    LocalVocab localVocab;
+
+    // The snapshot is taken BEFORE the update, so the rebuild mapping is
+    // empty and the word below is carried over as a local vocab entry.
+    auto originalSnapshot = oldDeltaTriples.getLocatedTriplesSharedStateCopy();
+    oldDeltaTriples.insertTriples(cancellationHandle,
+                                  makeIdTriples(oldIndex.getImpl(), localVocab,
+                                                {"<x> <y> \"zzz-reanchor\""}));
+    auto newSnapshot = oldDeltaTriples.getLocatedTriplesSharedStateCopy();
+
+    // Force the entries to compute and cache their position in the OLD
+    // vocabulary (this happens whenever they are used in comparisons before
+    // the swap).
+    auto [entries, blocks] = oldDeltaTriples.copyLocalVocab();
+    for (const auto& entry : entries) {
+      entry->positionInVocab();
+    }
+
+    qlever::indexRebuilder::IndexRebuildMapping emptyMapping{};
+    newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
+                                        emptyMapping, cancellationHandle,
+                                        tracer);
+  }  // The old index is destroyed here, just like after a real index swap.
+
+  // Find the carried local vocab entry among the located triples.
+  const LocalVocabEntry* carried = nullptr;
+  auto locatedTriples =
+      newDeltaTriples.getLocatedTriplesForPermutation(Permutation::SPO);
+  for (size_t block = 0; block < 1000; ++block) {
+    auto updates = locatedTriples.getUpdatesIfPresent(block);
+    if (!updates.has_value()) {
+      continue;
+    }
+    for (const auto& locatedTriple : updates.value().getSortedView()) {
+      for (const Id& id : locatedTriple.triple_.ids()) {
+        if (id.getDatatype() == Datatype::LocalVocabIndex) {
+          carried = id.getLocalVocabIndex();
+        }
+      }
+    }
+    if (carried != nullptr) {
+      break;
+    }
+  }
+  ASSERT_NE(carried, nullptr);
+  EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(),
+            "\"zzz-reanchor\"");
+
+  // The carried entry must behave exactly like a fresh entry that was created
+  // with the new index: same position in the NEW vocabulary (a plain copy
+  // would have kept the stale position cached against the old vocabulary),
+  // and comparing must not access the old index (checked by the ASAN build,
+  // since the old index no longer exists at this point).
+  LocalVocabEntry fresh{carried->asLiteralOrIri(), newIndex.getImpl()};
+  EXPECT_EQ(carried->positionInVocab(), fresh.positionInVocab());
+  EXPECT_EQ(*carried, fresh);
+}
 #endif

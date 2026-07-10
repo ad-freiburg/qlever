@@ -745,7 +745,20 @@ void DeltaTriples::addFromSnapshotDiff(
     ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("computeLocatedTriplesDiff");
   auto difference = computeLocatedTriplesDiff(oldState, newState);
-  difference.remapIds([&idMapping](Id& id) { remapId(idMapping, id); });
+  difference.remapIds([this, &idMapping](Id& id) {
+    remapId(idMapping, id);
+    // Ids that remain of type `LocalVocabIndex` (words first seen by updates
+    // after the rebuild snapshot was taken) still point to entries that are
+    // anchored to the OLD index; in particular, their lazily cached position
+    // refers to the old vocabulary. Insert a *re-anchored* copy (anchored to
+    // the new index, with an empty position cache) into our local vocab and
+    // rewrite the id, so that no entry of the new index references the old
+    // index, which is destroyed after the swap.
+    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      id = Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
+          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index_}));
+    }
+  });
   tracer.endTrace("computeLocatedTriplesDiff");
   tracer.beginTrace("insertDiffedTriples");
   auto addTriples = [this, &cancellationHandle, &difference, &tracer](
@@ -783,8 +796,8 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
     auto it = localVocabMapping.find(id.getBits());
     // If we have a mapping, this means that the new index used this to make a
     // vocab index out of it and we have to do the same. If we don't have a
-    // mapping it will remain a local vocab index that is then copied into the
-    // delta triples vocabulary and remapped then.
+    // mapping it remains a local vocab index; a re-anchored copy of its entry
+    // is then added to the delta triples vocabulary in `addFromSnapshotDiff`.
     if (it != localVocabMapping.end()) {
       id = it->second;
     }
