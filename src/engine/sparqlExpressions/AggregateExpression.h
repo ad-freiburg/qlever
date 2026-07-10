@@ -92,6 +92,10 @@ class AggregateExpression : public SparqlExpression {
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
   getVariableForCount() const override;
 
+  [[nodiscard]] bool isDeterministic() const override {
+    return _child->isDeterministic();
+  }
+
  private:
   // _________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override;

@@ -2471,6 +2471,13 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
       return;
     }
 
+    // Don't distribute over a UNION if the other operand is non-deterministic
+    // (e.g. contains BIND(BNODE(...))). Cloning a non-deterministic tree would
+    // produce a copy with the same cache key but potentially different results.
+    if (!other._qet->getRootOperation()->isDeterministic()) {
+      return;
+    }
+
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
