@@ -24,6 +24,7 @@
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
+#include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "util/BlankNodeManager.h"
 #include "util/FilesystemHelpers.h"
@@ -140,6 +141,59 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   ec.loadTextIndex_ = true;
   Qlever engine{ec};
 #endif
+}
+
+namespace {
+// A minimal parser that yields a fixed set of programmatically created
+// triples, for testing the parser-injecting `buildIndex` overload.
+class VectorTripleParser : public RdfParserBase {
+  std::optional<std::vector<TurtleTriple>> triples_;
+
+ public:
+  VectorTripleParser(std::vector<TurtleTriple> triples,
+                     const EncodedIriManager* encodedIriManager)
+      : RdfParserBase{encodedIriManager}, triples_{std::move(triples)} {}
+
+  // Yield all the triples as a single batch.
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      std::vector<TurtleTriple>) override {
+    return std::exchange(triples_, std::nullopt);
+  }
+  size_t getParsePosition() const override { return 0; }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(LibQlever, buildIndexFromInjectedParser) {
+  IndexBuilderConfig c;
+  c.baseName_ = "LibQlever.buildIndexFromInjectedParser";
+
+  auto iri = [](std::string_view s) {
+    return TripleComponent{TripleComponent::Iri::fromIriref(s)};
+  };
+  std::vector<TurtleTriple> triples{
+      {iri("<s>"), iri("<p>"), iri("<o>")},
+      {iri("<s2>"), iri("<p>"),
+       TripleComponent{TripleComponent::Literal::literalWithoutQuotes(
+           "kartoffel und salat")}}};
+
+  // Build the index from the injected parser (no input files involved) and
+  // check that the triples are queryable.
+  Qlever::buildIndex(c, [&triples](const EncodedIriManager* encodedIriManager) {
+    return std::make_unique<VectorTripleParser>(triples, encodedIriManager);
+  });
+
+  EngineConfig ec{c};
+  Qlever engine{ec};
+  auto res = engine.query("SELECT ?s WHERE { ?s <p> <o> }",
+                          ad_utility::MediaType::tsv);
+  EXPECT_EQ(res, "?s\n<s>\n");
+  res = engine.query("SELECT * WHERE { <s2> <p> ?o }",
+                     ad_utility::MediaType::csv);
+  EXPECT_EQ(res, "o\nkartoffel und salat\n");
+
+  // An empty factory falls back to `config.inputFiles_`, which are empty here.
+  EXPECT_ANY_THROW(Qlever::buildIndex(c, ParserFactory{}));
 }
 
 // _____________________________________________________________________________

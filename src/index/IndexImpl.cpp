@@ -81,10 +81,9 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t numThreads) {
-  auto indexBuilderData =
-      passFileForVocabulary(std::move(files), numTriplesPerBatch_, numThreads);
+    AsyncParserMaker makeParser, size_t numThreads) {
+  auto indexBuilderData = passFileForVocabulary(
+      std::move(makeParser), numTriplesPerBatch_, numThreads);
 
   auto isQleverInternalTriple = [&indexBuilderData](const auto& triple) {
     auto internal = [&indexBuilderData](Id id) {
@@ -442,6 +441,22 @@ void IndexImpl::createFromFiles(
 }
 
 // _____________________________________________________________________________
+void IndexImpl::createFromParser(ParserFactory parserFactory,
+                                 size_t numThreads) {
+  prepareIndexBuild();
+  createFromParserAfterPreparation(
+      [this, parserFactory = std::move(parserFactory)](
+          const ql::any_io_executor& executor) mutable {
+        return std::make_unique<AsyncSerialParserAdapter>(
+            executor, [parserFactory = std::move(parserFactory),
+                       encodedIriManager = &encodedIriManager()]() mutable {
+              return std::move(parserFactory)(encodedIriManager);
+            });
+      },
+      numThreads);
+}
+
+// _____________________________________________________________________________
 void IndexImpl::prepareIndexBuild() {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
@@ -490,8 +505,19 @@ void IndexImpl::prepareIndexBuild() {
 void IndexImpl::createFromFilesAfterPreparation(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
+  createFromParserAfterPreparation(
+      [this,
+       files = std::move(files)](const ql::any_io_executor& executor) mutable {
+        return makeRdfParser(executor, std::move(files));
+      },
+      numThreads);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromParserAfterPreparation(AsyncParserMaker makeParser,
+                                                 size_t numThreads) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(std::move(files), numThreads);
+      createIdTriplesAndVocab(std::move(makeParser), numThreads);
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -580,8 +606,7 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t linesPerPartial, size_t numThreads) {
+    AsyncParserMaker makeParser, size_t linesPerPartial, size_t numThreads) {
   AD_CONTRACT_CHECK(numThreads > 0,
                     "The number of threads for the index build must be at "
                     "least 1");
@@ -595,10 +620,7 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
                                          linesPerPartial};
   // The thread pool and the parser are owned by `runTaskChains`, which only
   // returns once no asynchronous operation is left.
-  runTaskChains(shared, numThreads,
-                [this, &files](const ql::any_io_executor& executor) {
-                  return makeRdfParser(executor, std::move(files));
-                });
+  runTaskChains(shared, numThreads, std::move(makeParser));
 
   // If the input didn't contain a single triple, we still have to write one
   // partial vocabulary, because the vocabulary has to contain the special IDs
@@ -629,10 +651,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
 
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-    size_t linesPerPartial, size_t numThreads) {
-  auto parsedTriples =
-      buildPartialVocabularies(std::move(files), linesPerPartial, numThreads);
+    AsyncParserMaker makeParser, size_t linesPerPartial, size_t numThreads) {
+  auto parsedTriples = buildPartialVocabularies(std::move(makeParser),
+                                                linesPerPartial, numThreads);
   size_t numPartialVocabularies = parsedTriples.numPartialVocabularies_;
 
   size_t sizeInternalVocabulary = 0;

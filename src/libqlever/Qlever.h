@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <absl/functional/any_invocable.h>
 #include <gtest/gtest_prod.h>
 
 #include <algorithm>
@@ -38,6 +39,7 @@
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
 #include "index/InputFileSpecification.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
@@ -52,7 +54,15 @@
 #include "util/json.h"
 #include "util/memorySize/MemorySize.h"
 
+class RdfParserBase;
+
 namespace qlever {
+
+// Type-erased parser factory for programmatic index building (triples
+// supplied by the embedding application instead of input files). See
+// `IndexImpl::ParserFactory` for why this is a factory and not a parser.
+using ParserFactory = absl::AnyInvocable<std::unique_ptr<RdfParserBase>(
+                                             const EncodedIriManager*) &&>;
 
 // The common configuration shared by the index building and query execution.
 struct CommonConfig {
@@ -400,6 +410,14 @@ class Qlever : public ad_utility::NoCopyNoMove {
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
+
+  // Build an index from triples supplied programmatically by the parser
+  // produced by `parserFactory` (`config.inputFiles_` is then ignored; an
+  // empty factory means "build from `config.inputFiles_`" as above). This
+  // allows embedding applications to feed triples from their own data
+  // structures without serializing them to an RDF text format first.
+  static void buildIndex(IndexBuilderConfig config,
+                         ParserFactory parserFactory);
 
   // Create a QLever instance for querying using an `EngineConfig` as
   // explained above. The memory limit from `config` is enforced and cache
