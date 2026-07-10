@@ -278,6 +278,13 @@ class MaterializedViewsManager {
 
   mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
 
+  // Load the given view into `state` if it isn't loaded yet and return it.
+  // Requires `state` to be the locked contents of `loadedViews_` (this is a
+  // helper for `loadView` and `getView`, so that the latter can look up the
+  // view atomically with loading it, without releasing the lock in between).
+  std::shared_ptr<MaterializedView> loadViewIntoLockedState(
+      const std::string& name, LoadedViews& state) const;
+
  public:
   MaterializedViewsManager() = default;
   explicit MaterializedViewsManager(std::string onDiskBase)

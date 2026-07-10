@@ -440,21 +440,29 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name) const {
-  auto lock = loadedViews_.wlock();
-  if (lock->views_.contains(name)) {
-    return;
+std::shared_ptr<MaterializedView>
+MaterializedViewsManager::loadViewIntoLockedState(const std::string& name,
+                                                  LoadedViews& state) const {
+  if (auto it = state.views_.find(name); it != state.views_.end()) {
+    return it->second;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
   view->connectPermutationBackReference();
-  lock->views_.insert({name, view});
+  state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting
   // all views. Therefore query analysis is performed when loading views.
-  if (lock->queryPatternCache_.analyzeView(view)) {
+  if (state.queryPatternCache_.analyzeView(view)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
+  return view;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::loadView(const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  loadViewIntoLockedState(name, *lock);
 }
 
 // _____________________________________________________________________________
@@ -477,15 +485,18 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
         absl::StrCat("The materialized view '", name, "' does not exist."));
   }
 
-  // Unload the view if it is currently loaded so that it no longer holds open
-  // file handles or its permutation's memory mapping.
-  unloadViewIfLoaded(name);
+  // Hold the lock for the whole unload-and-delete sequence below, so that a
+  // concurrent `loadView`/`getView` call for the same view can not reload it
+  // in between.
+  auto lock = loadedViews_.wlock();
+  if (auto it = lock->views_.find(name); it != lock->views_.end()) {
+    lock->queryPatternCache_.removeView(it->second);
+    lock->views_.erase(it);
+  }
 
-  // Delete all files belonging to the view from disk. The `.spo-sorter.dat`
-  // file is a temporary file that should normally not exist anymore, but we
-  // remove it defensively in case a previous write was interrupted.
+  // Delete all files belonging to the view from disk.
   for (const auto* suffix :
-       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+       {".viewinfo.json", ".index.spo", ".index.spo.meta"}) {
     std::error_code ec;
     std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
     if (ec) {
@@ -494,10 +505,6 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
           "' while deleting materialized view '", name, "': ", ec.message()));
     }
   }
-  // Best-effort removal of the sorter temp file; it normally doesn't exist.
-  std::error_code ignoredError;
-  std::filesystem::remove(absl::StrCat(filenameBase, ".spo-sorter.dat"),
-                          ignoredError);
 
   AD_LOG_INFO << "Materialized view \"" << name << "\" deleted" << std::endl;
 }
@@ -505,8 +512,8 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
-  loadView(name);
-  return loadedViews_.rlock()->views_.at(name);
+  auto lock = loadedViews_.wlock();
+  return loadViewIntoLockedState(name, *lock);
 }
 
 // _____________________________________________________________________________
