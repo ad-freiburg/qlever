@@ -13,7 +13,7 @@
 #include <array>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/thread_pool.hpp>
@@ -34,6 +34,7 @@
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -133,22 +134,78 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
+namespace {
+// Compute by what offset `value` needs to be increased to fit in the new index.
+AD_ALWAYS_INLINE size_t computeIndexOffset(
+    VocabIndex value, const InsertionPositions& insertionPositions) {
+  return ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, value, std::less{}));
+}
+
+// Apply `offset` to `value` and return the new `Id` resulting from this.
+AD_ALWAYS_INLINE Id applyOffset(VocabIndex value, size_t offset) {
+  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
+}
+}  // namespace
+
+// _____________________________________________________________________________
 AD_ALWAYS_INLINE Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
-  return Id::makeFromVocabIndex(
-      VocabIndex::make(original.getVocabIndex().get() + offset));
+  auto value = original.getVocabIndex();
+  return applyOffset(value, computeIndexOffset(value, insertionPositions));
 }
 
 // _____________________________________________________________________________
-Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
-                    uint64_t minBlankNodeIndex) {
+AD_ALWAYS_INLINE Id remapVocabId(Id original,
+                                 const InsertionPositions& insertionPositions,
+                                 size_t& hint) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  AD_EXPENSIVE_CHECK(hint <= insertionPositions.size(),
+                     "Hint must be a valid index into the insertion positions "
+                     "or equal to its size.");
+  auto value = original.getVocabIndex();
+  auto isUpperBound = [value, &insertionPositions](size_t candidate) {
+    return candidate == insertionPositions.size() ||
+           insertionPositions[candidate] > value;
+  };
+
+  // Update `hint` to the correct upper bound for `value`. Avoid writing `hint`
+  // in cases where that's not necessary.
+  [&hint, &isUpperBound, &value, &insertionPositions]() {
+    // Check if the cached hint is still the upper bound for `value`.
+    if (isUpperBound(hint)) [[likely]] {
+      // `hint` is an upper bound, so check if `hint - 1` is not an upper bound.
+      if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
+        // `hint` still is the correct upper bound, so there is nothing to do.
+        return;
+      }
+    } else {
+      // Check if `hint + 1` is an upper bound. This is the case when we just
+      // move the hint forward by one position.
+      size_t next = hint + 1;
+      if (isUpperBound(next)) [[likely]] {
+        hint = next;
+        return;
+      }
+    }
+
+    // Fallback and write the hint for the next iteration.
+    hint = computeIndexOffset(value, insertionPositions);
+  }();
+
+  return applyOffset(value, hint);
+}
+
+// _____________________________________________________________________________
+std::optional<Id> tryRemapBlankNodeId(Id original,
+                                      const BlankNodeBlocks& blankNodeBlocks,
+                                      uint64_t minBlankNodeIndex) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::BlankNodeIndex,
       "Only ids resembling a blank node index can be remapped with this "
@@ -160,13 +217,24 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
   auto normalizedId = rawId - minBlankNodeIndex;
   auto blockIndex = normalizedId / ad_utility::BlankNodeManager::blockSize_;
   auto it = ql::ranges::lower_bound(blankNodeBlocks, blockIndex);
-  AD_EXPENSIVE_CHECK(it != blankNodeBlocks.end() && *it == blockIndex,
-                     "Could not find block index of blank node.");
+  if (it == blankNodeBlocks.end() || *it != blockIndex) {
+    return std::nullopt;
+  }
   auto relativeId = normalizedId % ad_utility::BlankNodeManager::blockSize_;
   auto blockOffset = ql::ranges::distance(blankNodeBlocks.begin(), it) *
                      ad_utility::BlankNodeManager::blockSize_;
   return Id::makeFromBlankNodeIndex(
       BlankNodeIndex::make(relativeId + blockOffset + minBlankNodeIndex));
+}
+
+// _____________________________________________________________________________
+Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
+                    uint64_t minBlankNodeIndex) {
+  auto value =
+      tryRemapBlankNodeId(original, blankNodeBlocks, minBlankNodeIndex);
+  AD_CORRECTNESS_CHECK(value.has_value(),
+                       "Could not find block index of blank node.");
+  return value.value();
 }
 
 // _____________________________________________________________________________
@@ -184,31 +252,35 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  auto fullScan = permutation.lazyScan(
-      scanSpecAndBlocks, std::nullopt, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState, LimitOffsetClause{});
+  auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
+      scanSpecAndBlocks, additionalColumns, cancellationHandle,
+      *locatedTriplesSharedState);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
-                  minBlankNodeIndex](Id& id) {
-    // TODO<RobinTF> Experiment with caching the last remapped id
-    // and reusing it if the same id appears again. See if that
-    // improves performance or if it makes it worse.
+                  minBlankNodeIndex, lastId = Id::makeUndefined(),
+                  mappedId = Id::makeUndefined(),
+                  vocabHint = size_t{0}](Id& id) mutable {
+    if (lastId.getBits() == id.getBits()) {
+      id = mappedId;
+      return;
+    }
+    lastId = id;
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
-      id = remapVocabId(id, insertionPositions);
+      id = remapVocabId(id, insertionPositions, vocabHint);
     } else if (datatype == LocalVocabIndex) {
       id = localVocabMapping.at(id.getBits());
     } else if (datatype == BlankNodeIndex) {
       id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
     }
+    mappedId = id;
   };
 
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
-          std::move(fullScan),
-          [remapId = std::move(remapId)](IdTable& idTable) {
-            // TODO<RobinTF> process columns in parallel.
+          std::move(fullScan), [remapId = std::move(remapId),
+                                reader = std::move(reader)](IdTable& idTable) {
             auto allCols = idTable.getColumns();
             // Extra columns beyond the graph column only contain integers (or
             // undefined for triples added via UPDATE) and thus don't need to be
@@ -217,7 +289,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
             for (auto col : allCols | ::ranges::views::take(REGULAR_COLUMNS)) {
               ql::ranges::for_each(col, remapId);
             }
-            AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+            AD_EXPENSIVE_CHECK(ql::ranges::all_of(
                 allCols | ::ranges::views::drop(REGULAR_COLUMNS), [](auto col) {
                   return ql::ranges::all_of(col, [](Id id) {
                     return id.getDatatype() == Datatype::Int ||
@@ -261,8 +333,18 @@ getNumberOfColumnsAndAdditionalColumns(
 }
 
 namespace {
+// Run the synchronous `func` as a distinct task on the current executor. The
+// initial `post` is essential and easy to overlook: `co_spawn` (used by the
+// `&&` operator below) starts a child coroutine *inline* via `dispatch()` on
+// the spawning thread. Because `func` is fully synchronous and never suspends,
+// without this reschedule the first sibling task would run to completion before
+// the second is even started, serializing work that is meant to run in
+// parallel. Posting first yields the thread immediately, so the siblings are
+// queued onto the pool and actually spread across its threads.
 template <typename Func>
 boost::asio::awaitable<std::invoke_result_t<Func>> asCoroutine(Func func) {
+  namespace net = boost::asio;
+  co_await net::post(co_await net::this_coro::executor, net::use_awaitable);
   co_return std::invoke(func);
 }
 }  // namespace
@@ -277,7 +359,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
   namespace net = boost::asio;
-  auto ex = co_await net::this_coro::executor;
+  using namespace net::experimental::awaitable_operators;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
     return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
             &localVocabMapping, &insertionPositions, &blankNodeBlocks,
@@ -295,40 +377,28 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           permutation, isInternal);
     };
   };
-  auto taskA =
-      net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationA)),
-                    net::use_awaitable);
-  auto taskB =
-      net::co_spawn(ex, asCoroutine(makeTaskForPermutation(permutationB)),
-                    net::use_awaitable);
-
-  auto [_, metaA] = co_await std::move(taskA);
-  auto [__, metaB] = co_await std::move(taskB);
+  auto [resultA, resultB] =
+      co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
+                asCoroutine(makeTaskForPermutation(permutationB)));
+  auto& [_, metaA] = resultA;
+  auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);
 
-  auto makeFinalizerTasks =
-      [&newIndex, isInternal](
-          IndexImpl::IndexMetaDataMmapDispatcher::WriteType& meta,
-          const Permutation& permutation) {
-        return [&newIndex, &meta, &permutation, isInternal]() {
-          return newIndex.finalizePermutation(meta, permutation, isInternal);
-        };
-      };
-  auto taskC =
-      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaA, permutationA)),
-                    net::use_awaitable);
-  auto taskD =
-      net::co_spawn(ex, asCoroutine(makeFinalizerTasks(metaB, permutationB)),
-                    net::use_awaitable);
-
-  co_await std::move(taskC);
-  co_await std::move(taskD);
+  auto makeFinalizerTasks = [&newIndex, isInternal](
+                                IndexMetaData& meta,
+                                const Permutation& permutation) {
+    return [&newIndex, &meta, &permutation, isInternal]() {
+      return newIndex.finalizePermutation(meta, permutation, isInternal);
+    };
+  };
+  co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
+            asCoroutine(makeFinalizerTasks(metaB, permutationB)));
 }
 }  // namespace qlever::indexRebuilder
 
 // _____________________________________________________________________________
 namespace qlever {
-void materializeToIndex(
+indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
     const std::vector<LocalVocabIndex>& entries,
@@ -350,7 +420,7 @@ void materializeToIndex(
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  const auto& [insertionPositions, localVocabMapping] =
+  auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName);
 
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
@@ -364,7 +434,11 @@ void materializeToIndex(
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
 
-  IndexImpl newIndex{index.allocator(), false};
+  // Pass a 0-byte allocator as a sanity check: nothing below allocates
+  // through `newIndex`'s allocator, and if a future change ever does, this
+  // will throw immediately rather than silently using whatever allocator
+  // the source index happens to have.
+  IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
@@ -374,14 +448,23 @@ void materializeToIndex(
   namespace net = boost::asio;
   net::thread_pool threadPool{patternThreads + numberOfPermutations};
 
+  // Collect the first exception thrown by any worker so it can be rethrown to
+  // the caller after `threadPool.join()`. Without this, exceptions escaping a
+  // `net::post` handler call `std::terminate` and exceptions from a detached
+  // `co_spawn` are silently swallowed. NOTE: `exceptionCollector` must outlive
+  // `threadPool`, since the worker callables capture a pointer to it via
+  // `wrap()` / `std::ref`; the declaration order here guarantees that.
+  ad_utility::ExceptionCollector exceptionCollector;
+
   if (index.usePatterns()) {
-    net::post(threadPool, [&newIndex, &index, &insertionPositions]() {
+    net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,
+                                                   &insertionPositions]() {
       newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
           [&insertionPositions](const Id& oldId) {
             return remapVocabId(oldId, insertionPositions);
           });
       newIndex.writePatternsToFile();
-    });
+    }));
   }
 
   using enum Permutation::Enum;
@@ -410,14 +493,17 @@ void materializeToIndex(
             newIndex, getPermutation(a), getPermutation(b), isInternal,
             locatedTriplesSharedState, localVocabMapping, insertionPositions,
             blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
-        net::detached);
+        std::ref(exceptionCollector));
   }
 
   threadPool.join();
+  exceptionCollector.rethrowIfException();
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
 #undef REBUILD_LOG_INFO
+  return {std::move(insertionPositions), std::move(localVocabMapping),
+          std::move(blankNodeBlocks), minBlankNodeIndex};
 }
 
 }  // namespace qlever

@@ -58,7 +58,9 @@ class ExplicitIdTableOperationTest : public ::testing::Test {
     qec_ = getTestQec();
     testTable_ = createTestIdTable(3, 2);
     testVariables_ = createTestVariableMap(2);
-    testSortedColumns_ = {ColumnIndex{0}};
+    // Avoid initializer_list assignment to sidestep a GCC 12 false positive
+    // (-Werror=array-bounds).
+    testSortedColumns_ = std::vector<ColumnIndex>(1, ColumnIndex{0});
     testCacheKey_ = "[dummy cache key]";
   }
 
@@ -111,6 +113,14 @@ TEST_F(ExplicitIdTableOperationTest, TrivialGetters) {
   EXPECT_TRUE(varMap.contains(Variable("?var1")));
 }
 
+// _____________________________________________________________________________
+TEST_F(ExplicitIdTableOperationTest, isDeterministic) {
+  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+                              testSortedColumns_, testLocalVocab_.clone(),
+                              testCacheKey_);
+  EXPECT_TRUE(op.isDeterministic());
+}
+
 TEST_F(ExplicitIdTableOperationTest, KnownEmptyResult) {
   {
     auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
@@ -135,7 +145,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
 
   // Check that we get back the same table
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
 
   EXPECT_THAT(resultTable, matchesIdTable(*testTable_));
   // Check sorted columns are preserved
@@ -151,7 +161,7 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
   auto result = op.computeResult(true);
 
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
 
   EXPECT_EQ(resultTable.numRows(), 3u);
   EXPECT_EQ(resultTable.numColumns(), 2u);
@@ -160,9 +170,8 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
 // _____________________________________________________________________________
 TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
   LocalVocab localVocab;
-  LocalVocabEntry testEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"test_word\"")};
+  LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
+      "\"test_word\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
   ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
@@ -180,9 +189,8 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 // Test cloneImpl functionality
 TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   LocalVocab localVocab;
-  LocalVocabEntry testEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"clone_test\"")};
+  LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
+      "\"clone_test\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
   ExplicitIdTableOperation original(qec_, testTable_, testVariables_,
@@ -205,7 +213,8 @@ TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   auto originalResult = original.computeResult(false);
   auto clonedResult = clonedOp->computeResult(false);
 
-  EXPECT_THAT(clonedResult.idTable(), matchesIdTable(originalResult.idTable()));
+  EXPECT_THAT(clonedResult.idTableView(),
+              matchesIdTable(originalResult.idTableView()));
 
   // Test that local vocab is cloned properly
   const auto& originalLocalVocab = originalResult.localVocab();

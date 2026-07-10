@@ -4,7 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "util/File.h"
+#include "util/GTestHelpers.h"
 
 namespace ad_utility {
 TEST(File, move) {
@@ -12,6 +15,7 @@ TEST(File, move) {
   File file1(filename, "w");
   ASSERT_TRUE(file1.isOpen());
   file1.write("aaa", 3);
+  EXPECT_EQ(file1.name(), "testFileMove.tmp");
 
   File file2;
   ASSERT_TRUE(file1.isOpen());
@@ -53,6 +57,33 @@ TEST(File, move) {
 }
 }  // namespace ad_utility
 
+// _____________________________________________________________________________
+TEST(File, getLastOffset) {
+  ad_utility::File closedFile;
+  ASSERT_FALSE(closedFile.isOpen());
+  ASSERT_THROW(closedFile.getLastOffset(), ad_utility::Exception);
+
+  // Write a few `off_t` values to a file and check that `getLastOffset`
+  // returns the offset of the last value as well as the value itself.
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  std::array<off_t, 3> offsets{42, 1337, 123456789};
+  {
+    ad_utility::File writer{filename, "w"};
+    ASSERT_TRUE(writer.isOpen());
+    writer.write(offsets.data(), offsets.size() * sizeof(off_t));
+  }
+
+  ad_utility::File reader{filename, "r"};
+  ASSERT_TRUE(reader.isOpen());
+  auto [lastOffsetOffset, lastOffset] = reader.getLastOffset();
+  // The last `off_t` starts after the first two `off_t`s.
+  ASSERT_EQ(lastOffsetOffset, 2 * sizeof(off_t));
+  ASSERT_EQ(lastOffset, offsets.back());
+  reader.close();
+}
+
+// _____________________________________________________________________________
 TEST(File, makeFilestream) {
   std::string filename = "makeFilstreamTest.dat";
   ad_utility::makeOfstream(filename) << "helloAgain\n";

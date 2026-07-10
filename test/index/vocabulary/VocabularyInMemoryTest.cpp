@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
@@ -15,7 +16,7 @@ namespace {
 using namespace vocabulary_test;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  auto filename = "vocabInMemoryCreation.tmp";
+  auto filename = gtestCurrentTestName();
   {
     Vocab v;
     auto writerPtr = v.makeDiskWriterPtr(filename);
@@ -77,6 +78,22 @@ TEST(VocabularyInMemory, WriteAndReadWithSerializer) {
 
 TEST(VocabularyInMemory, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemory, ZeroCopyDeserialization) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+  const auto vocab = createVocabulary(words);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << vocab;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = Vocab::fromZeroCopyDeserializer(readSerializer);
+
+  assertThatRangesAreEqual(vocab, view);
 }
 
 // _____________________________________________________________________________

@@ -16,6 +16,7 @@
 
 #include "CompilationInfo.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -117,7 +118,7 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   auto check = absl::bind_front(checkNumParameterValues, inputFile.size());
   check(filetype, "--file-format, -F");
   check(defaultGraphs, "--default-graph, -g");
-  check(parseParallel, "--parse-parallel, p");
+  check(parseParallel, "--parallel-parsing, p");
 
   std::vector<qlever::InputFileSpecification> fileSpecs;
   for (size_t i = 0; i < inputFile.size(); ++i) {
@@ -213,7 +214,7 @@ int main(int argc, char** argv) {
       "The graph IRI without angle brackets. Write `-` for the default graph. "
       "Can be omitted (then all files use the default graph), specified once "
       "(then all files use that graph), or once per file.");
-  add("parse-parallel,p", po::value(&parseParallel),
+  add("parallel-parsing,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "
       "using the N-Triples or N-Quads format, as well as for well-behaved "
@@ -260,6 +261,9 @@ int main(int argc, char** argv) {
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
+  add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
+      "Add `ql:has-word` triples for each word in each literal. This enables "
+      "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfSupportedValues());
@@ -320,6 +324,10 @@ int main(int argc, char** argv) {
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
+    // For index building, use more threads for writing permutations than the
+    // default (which is optimized for `rebuild-index`, where six permutations
+    // are written simultaneously).
+    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

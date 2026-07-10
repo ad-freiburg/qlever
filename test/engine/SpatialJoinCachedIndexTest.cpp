@@ -14,6 +14,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
@@ -27,7 +28,7 @@ void serializeAndDeserializeCache(NamedResultCache& cache,
   cache.clear();
   ByteBufferReadSerializer reader{std::move(writer).data()};
   cache.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                           *qec->getIndex().getBlankNodeManager());
+                           qec->getLocalVocabContext());
 }
 
 // _____________________________________________________________________________
@@ -159,16 +160,16 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   const auto res = spatialJoin->computeResult(false);
 
   EXPECT_TRUE(res.isFullyMaterialized());
-  EXPECT_EQ(res.idTable().numRows(), expectedResultIris.size());
-  EXPECT_EQ(res.idTable().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
+  EXPECT_EQ(res.idTableView().numRows(), expectedResultIris.size());
+  EXPECT_EQ(res.idTableView().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
 
   std::vector<std::string> resultIris;
 
   const auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
                                  .at(Variable{"?s2"})
                                  .columnIndex_;
-  for (size_t i = 0; i < res.idTable().numRows(); i++) {
-    auto valueId = res.idTable().at(i, subjectColIdx);
+  for (size_t i = 0; i < res.idTableView().numRows(); i++) {
+    auto valueId = res.idTableView()(i, subjectColIdx);
     ASSERT_EQ(valueId.getDatatype(), Datatype::VocabIndex);
     auto entry = qec->getIndex().getVocab()[valueId.getVocabIndex()];
     resultIris.push_back(entry);

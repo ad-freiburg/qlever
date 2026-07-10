@@ -17,7 +17,6 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/JoinHelpers.h"
@@ -26,6 +25,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -259,12 +259,12 @@ void testJoinOperation(
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
   EXPECT_EQ(varToCols.size(), expected.size());
   if (expectLazinessParityWhenNonEmpty &&
-      (!res->isFullyMaterialized() || !res->idTable().empty())) {
+      (!res->isFullyMaterialized() || !res->idTableView().empty())) {
     EXPECT_EQ(res->isFullyMaterialized(), !requestLaziness);
   }
   IdTable table =
       res->isFullyMaterialized()
-          ? res->idTable().clone()
+          ? res->cloneIdTable()
           : aggregateTables(res->idTables(), join.getResultWidth()).first;
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
@@ -1052,7 +1052,7 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
 
   // Check that the join result has 10 rows as expected.
   ASSERT_TRUE(result->isFullyMaterialized());
-  EXPECT_EQ(result->idTable().size(), 10);
+  EXPECT_EQ(result->idTableView().size(), 10);
 
   // Get the detalis of the runtime info of both index scans.
   const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();

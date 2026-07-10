@@ -25,6 +25,7 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+class ExternalValues;
 namespace parsedQuery {
 struct Bind;
 }
@@ -33,6 +34,21 @@ enum class ComputationMode {
   FULLY_MATERIALIZED,
   ONLY_IF_CACHED,
   LAZY_IF_SUPPORTED
+};
+
+enum class LimitOffsetHandling {
+  // The operation does not handle `LIMIT`/`OFFSET` itself; it must be applied
+  // externally on the result.
+  NONE,
+  // The operation propagates `LIMIT`/`OFFSET` to its children to reduce their
+  // work, but does not enforce it on its own output — an external apply is
+  // still required.
+  PARTIAL,
+  // The operation handles `LIMIT`/`OFFSET` end-to-end so that no external
+  // apply is needed. This can mean applying it during its own processing
+  // (e.g. `IndexScan` stops scanning after N rows), forwarding it to a child
+  // that handles it (e.g. `Bind`, `Sort`), or both.
+  FULL
 };
 
 class Operation {
@@ -64,7 +80,7 @@ class Operation {
   // Note: This limit will only be set in the following cases:
   // 1. This operation is the last operation of a subquery
   // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimitOffset()`
+  //    efficient calculation of the limit (see also the `handlesLimitOffset()`
   //    function).
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
@@ -92,8 +108,8 @@ class Operation {
   mutable std::optional<std::vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
 
-  // True if this operation does not support limits/offsets natively and a
-  // limit/offset is applied post computation.
+  // True if this operation does not handle limits/offsets itself and the
+  // limit/offset is therefore applied post computation.
   bool externalLimitApplied_ = false;
 
   // See the documentation of the getter function below.
@@ -103,10 +119,7 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
-  // Default Constructor.
-  Operation() : _executionContext(nullptr) {}
-
-  // Typical Constructor.
+  // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}
 
@@ -169,14 +182,31 @@ class Operation {
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
   virtual std::string getCacheKey() const final;
 
+  // Return true iff this operation and all of its children are guaranteed to
+  // produce the same result on every invocation, OR are explicitly configured
+  // to be treated as reproducible (e.g. SERVICE/LOAD with result caching
+  // enabled, where the user guarantees that the remote endpoint returns a
+  // stable result). A tree containing BNODE(), RAND(), UUID(), STRUUID(), or a
+  // non-cached SERVICE/LOAD is not deterministic. Operations for which this
+  // returns false must not be cloned (or only cloned if you can prove only one
+  // of the clones will ever be used in the same query tree), as the clone would
+  // share the same cache key but might compute a different result.
+  [[nodiscard]] bool isDeterministic() const;
+
   // If this function returns `false`, then the result of this `Operation` will
-  // never be stored in the cache. It might however be read from the cache.
-  // This can be used, if the operation actually only returns a subset of the
-  // actual result because it has been constrained by a parent operation (e.g.
-  // an IndexScan that has been prefiltered by another operation which it is
-  // joined with).
+  // never be stored in the cache. It might however be read from the cache. A
+  // result is not stored if any of the following holds:
+  //   - the operation is not deterministic (see `isDeterministic()`), because
+  //     such a result could never be retrieved anyway: its cache key is either
+  //     unique per instantiation, or the operation is not meant to be reused;
+  //   - `disableStoringInCache()` was called on this operation;
+  //   - `resultDoesMatchCacheKey()` returns `false`, i.e. the operation only
+  //     returns a subset of the actual result associated with its cache key
+  //     because it has been constrained by a parent operation (e.g. an
+  //     `IndexScan` that has been prefiltered by another operation which it is
+  //     joined with).
   virtual bool canResultBeCached() const final {
-    return canResultBeCachedImpl() && canResultBeCached_;
+    return resultDoesMatchCacheKey() && canResultBeCached_ && isDeterministic();
   }
 
   // After calling this function, `canResultBeCached()` will return `false` (see
@@ -184,10 +214,25 @@ class Operation {
   virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
-  // Return if the result of this `Operation` can be cached at all. Caching can
-  // still be disabled for other reason external to this operation with
-  // `disableStoringInCache()`.
-  virtual bool canResultBeCachedImpl() const { return true; }
+  // Return whether the result produced by this `Operation` actually matches the
+  // result associated with its cache key. This is `true` for almost all
+  // operations, but `false` e.g. for an `IndexScan` that has been prefiltered
+  // by a parent operation: such a scan shares the cache key of the unfiltered
+  // scan but only produces a subset of its result, so storing it would poison
+  // the cache entry for the full scan. This is independent of
+  // `disableStoringInCache()` and of `isDeterministic()`; see
+  // `canResultBeCached()` for how the three are combined.
+  virtual bool resultDoesMatchCacheKey() const { return true; }
+
+  // Per-class component of `isDeterministic()`. Return true iff this specific
+  // operation (ignoring children) is deterministic. Override and return false
+  // for operations that evaluate non-deterministic expressions (BIND/FILTER
+  // with BNODE, RAND, UUID, or STRUUID). Operations that perform network
+  // requests (SERVICE, LOAD) are non-deterministic by default, but report
+  // `true` when their result caching is explicitly enabled, in which case the
+  // user guarantees that the remote endpoint returns a stable result (and the
+  // cache key becomes reproducible accordingly).
+  [[nodiscard]] virtual bool isDeterministicImpl() const = 0;
 
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
@@ -296,17 +341,21 @@ class Operation {
     return false;
   }
 
-  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
-  // its result.
-  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
+  // Return how this operation handles `LIMIT` and `OFFSET`. See the docs of
+  // `LimitOffsetHandling` for the meaning of `NONE` / `PARTIAL` / `FULL`.
+  [[nodiscard]] virtual LimitOffsetHandling handlesLimitOffset() const {
+    return LimitOffsetHandling::NONE;
+  }
 
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
-    // If `supportsLimitOffset()` returns `false`, this function has to be
-    // no-op.
+  // way.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
+    // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
+    // after the computation of the result. Make sure to also override
+    // `handlesLimitOffset()` if this function is overridden, otherwise the
+    // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
   // This function is called when the operation's result is requested to be
@@ -350,6 +399,16 @@ class Operation {
 
   const auto& getLimitOffset() const { return limitOffset_; }
 
+  // Directly set the `limitOffset_` without merging and without calling
+  // `onLimitOffsetChanged`. The only intended use case is to restore a
+  // previously set limit/offset that was removed by a cloning/rewriting
+  // operation (e.g. column stripping). In almost all other cases, use
+  // `applyLimitOffset` instead.
+  void setLimitOffsetDirectlyWithoutTriggeringHooks(
+      const LimitOffsetClause& limitOffsetClause) {
+    limitOffset_ = limitOffsetClause;
+  }
+
  private:
   // Actual implementation of `clone()` without extra checks.
   virtual std::unique_ptr<Operation> cloneImpl() const = 0;
@@ -357,6 +416,19 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Recursively collect all `ExternalValues` operations in this
+  // operation tree. This allows the following pattern:
+  // 1. Parse and plan a query that contains an `ExternalValues`
+  //    clause.
+  // 2. Modify the contents of the `ExternalValues` after obtaining
+  //    them from the planned `QueryExecutionTree` via this function.
+  // 3. Execute the query.
+  // 4. Repeat steps 2 and 3 with different values. This does not require
+  //    running the parser and query planner again (which is the point of the
+  //    whole `ExternalValues` feature). For a complete E2E example,
+  //    see QleverTest.cpp.
+  virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
 
   // Helper function to check hif the result of this operation is
   // already sorted accordigngly.
@@ -457,10 +529,10 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimitOffset() == true`, then the operation does
-  // already track the limit stats correctly and there's no need to keep track
-  // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
-  // be handled.
+  // operation. If `handlesLimitOffset() == LimitOffsetHandling::FULL`, then
+  // the operation already tracks the limit stats correctly and there's no
+  // need to keep track of both. Otherwise `externalLimitApplied_` decides how
+  // stat tracking should be handled.
   void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
                           std::chrono::microseconds duration) const;
 
@@ -536,6 +608,10 @@ class Operation {
   // the variables on the right hand side of a MINUS operation never become part
   // of the result).
   virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
+
+  // Helper function to abstract away the fact that `LocalVocabContext` is
+  // currently just an alias for `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
 
  private:
   // Create the runtime information in case the evaluation of this operation has

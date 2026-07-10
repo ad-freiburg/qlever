@@ -1,14 +1,14 @@
 # See .pre-commit-config.yaml for usage instructions.
 repos:
-    # Uses the local clang-format
+  # Uses the local clang-format
   - repo: local
     hooks:
       # Inspired by https://github.com/doublify/pre-commit-clang-format and
       # https://github.com/pre-commit/mirrors-clang-format
-      - id: clang-format-16
+      - id: clang-format-18
         name: clang-format
-        description: Format files with ClangFormat16.
-        entry: clang-format-16 -i
+        description: Format files with ClangFormat18.
+        entry: clang-format-18 -i
         language: system
         'types_or': [ c++, c ]
         args: [ "-style=file" ]
@@ -19,4 +19,4 @@ repos:
     # Configuration for codespell is in .codespellrc
     rev: v2.2.6
     hooks:
-    - id: codespell
+      - id: codespell

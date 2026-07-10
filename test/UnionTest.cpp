@@ -36,7 +36,7 @@ TEST(Union, computeUnion) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   auto U = Id::makeUndefined();
   auto expected = makeIdTableFromVector(
@@ -71,7 +71,7 @@ TEST(Union, computeUnionLarge) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   ASSERT_EQ(result, makeIdTableFromVector(expected));
 }
@@ -181,7 +181,7 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     auto U = Id::makeUndefined();
     auto expected =
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -218,7 +218,7 @@ TEST(Union, inputWithZeroColumns) {
     ASSERT_TRUE(resultTable.isFullyMaterialized());
 
     auto expected = makeIdTableFromVector({{}, {}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -293,7 +293,7 @@ TEST(Union, sortedMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 4}, {1, 2, 4}, {2, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -327,7 +327,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     qec->getQueryTreeCache().clearAll();
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -352,16 +352,16 @@ TEST(Union, sortedMergeWithLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
 
   LocalVocab vocab1;
-  vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test1\""));
+  vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test1\"", qec->getLocalVocabContext()));
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
   LocalVocab vocab2;
-  vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Test2\""));
+  vocab2.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
+      "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{0}}));
   tables.push_back(makeIdTableFromVector({{3}}));
@@ -376,7 +376,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}, {5}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
                 ::testing::IsSupersetOf(vocab1.getAllWordsForTesting()));
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
@@ -434,13 +434,13 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
     auto result =
         unionOperation1.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 8}, {1, 4, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     auto result =
         unionOperation2.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, 4, U}, {1, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -540,7 +540,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{U, 2}, {1, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -554,7 +554,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U}, {U, 2}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -589,7 +589,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, U, U, 4}, {1, 2, 4, U}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -607,7 +607,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -689,7 +689,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union2{qec, values, index};
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -697,7 +697,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union3{qec, index, values};
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
   EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
@@ -705,7 +705,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   Union union4{qec, index, index};
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
   EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
   EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);

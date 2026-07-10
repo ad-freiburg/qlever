@@ -50,6 +50,9 @@ class StringExpressionImplImpl : public SparqlExpression {
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return impl_->getCacheKey(varColMap);
   }
+  [[nodiscard]] bool isDeterministic() const override {
+    return impl_->isDeterministic();
+  }
 
  private:
   ql::span<Ptr> childrenImpl() override { return impl_->children(); }

@@ -7,9 +7,9 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
 #include "engine/OperationBindPushDownImpl.h"
+#include "index/IdTableUtils.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -76,10 +76,10 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_LOG_DEBUG << "MultiColumnJoin subresult computation done." << std::endl;
 
   AD_LOG_DEBUG << "Computing a multi column join between results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
-  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+  computeMultiColumnJoin(leftResult->idTableView(), rightResult->idTableView(),
                          _joinColumns, &idTable);
 
   checkCancellation();
@@ -207,7 +207,7 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
     IdTable* result) {
   // check for trivial cases
@@ -277,7 +277,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    Engine::sort(*result, cols);
+    IdTableUtils::sort(*result, cols);
   }
 
   // The result that `zipperJoinWithUndef` produces has a different order of

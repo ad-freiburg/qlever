@@ -12,6 +12,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
@@ -118,16 +119,13 @@ class Index {
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
 
+  // Get a reference to the GraphNameManager of this Index.
+  GraphNameManager& graphNameManager();
+  const GraphNameManager& graphNameManager() const;
+
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-  [[nodiscard]] size_t getCardinality(
-      Id id, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -184,6 +182,8 @@ class Index {
   bool& usePatterns();
 
   bool& loadAllPermutations();
+
+  bool& addHasWordTriples();
 
   bool& doNotLoadPermutations();
 

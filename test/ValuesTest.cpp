@@ -72,11 +72,12 @@ TEST(Values, computeResult) {
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
   auto result = valuesOperation.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
-      ad_utility::triple_component::LiteralOrIri::iriref("<y>"));
+      LocalVocabEntry::fromStringRepresentation(
+          "<y>", testQec->getLocalVocabContext()));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,

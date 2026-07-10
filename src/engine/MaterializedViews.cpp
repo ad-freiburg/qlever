@@ -27,6 +27,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
@@ -38,20 +39,17 @@
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
     std::string onDiskBase, std::string name,
-    const qlever::Qlever::QueryPlan& queryPlan,
+    const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
       name_{std::move(name)},
+      qet_{plannedQuery.sharedQueryExecutionTree()},
+      qec_{plannedQuery.sharedQueryExecutionContext()},
+      parsedQuery_{plannedQuery.parsedQuery()},
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
-  auto [qet, qec, parsedQuery] = queryPlan;
-  AD_CORRECTNESS_CHECK(qet != nullptr);
-  AD_CORRECTNESS_CHECK(qec != nullptr);
-  qet_ = qet;
-  qec_ = qec;
-  parsedQuery_ = std::move(parsedQuery);
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
@@ -63,11 +61,11 @@ MaterializedViewWriter::MaterializedViewWriter(
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
-    std::string name, const qlever::Qlever::QueryPlan& queryPlan,
+    std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
   unloadViewIfLoaded(name);
-  MaterializedViewWriter writer{onDiskBase_, std::move(name), queryPlan,
+  MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
 }
@@ -171,7 +169,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   if (result->isFullyMaterialized()) {
     // If we have a fully materialized result, we need to copy it for the
     // necessary modifications (permuting columns).
-    IdTable idTableCopyForPermutation = result->idTable().clone();
+    IdTable idTableCopyForPermutation = result->cloneIdTable();
     permuteIdTableAndCheckNoLocalVocabEntries(idTableCopyForPermutation);
     std::vector<IdTableStatic<0>> singleIdTable;
     singleIdTable.push_back(std::move(idTableCopyForPermutation));
@@ -215,7 +213,7 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
     // TODO<ullingerc> This could be avoided if
     // `CompressedExternalIdTableSorter::pushBlock` would also accept
     // `IdTableView`.
-    IdTable idTableCopyForPermutation = result->idTable().clone();
+    IdTable idTableCopyForPermutation = result->cloneIdTable();
     processBlock(idTableCopyForPermutation);
   } else {
     // Process lazy result blockwise
@@ -250,7 +248,7 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 }
 
 // _____________________________________________________________________________
-IndexMetaDataMmap MaterializedViewWriter::writePermutation(
+IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = getFilenameBase() + ".index.spo";
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
@@ -258,8 +256,7 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
-  IndexMetaDataMmap spoMetaData;
-  spoMetaData.setup(spoFilename + ".meta", ad_utility::CreateTag{});
+  IndexMetaData spoMetaData;
   auto spoCallback =
       [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {
         for (const auto& m : md) {
@@ -279,7 +276,8 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
   spoMetaData.setName(getFilenameBase());
   {
     ad_utility::File spoFile(spoFilename, "r+");
-    spoMetaData.appendToFile(&spoFile);
+    ad_utility::File spoMetaFile(spoFilename + META_FILE_SUFFIX, "w");
+    spoMetaData.appendToFile(spoFile, spoMetaFile);
   }
 
   return spoMetaData;
@@ -288,14 +286,19 @@ IndexMetaDataMmap MaterializedViewWriter::writePermutation(
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata() const {
   // Export column names to view info JSON file.
+  const auto& varToCol = qet_->getVariableColumns();
   nlohmann::json viewInfo = {
       {"version", MATERIALIZED_VIEWS_VERSION},
-      {"columns", (columnNames_ | ql::views::transform([](const Variable& v) {
-                     return v.name();
-                   }) |
-                   ::ranges::to<std::vector<std::string>>())},
-      {"query", parsedQuery_._originalString},
-  };
+      {"columns",
+       (columnNames_ | ql::views::transform([&varToCol](const Variable& v) {
+          return nlohmann::json{
+              {"name", v.name()},
+              {"always_defined",
+               varToCol.at(v).mightContainUndef_ ==
+                   ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}};
+        }) |
+        ::ranges::to<std::vector<nlohmann::json>>())},
+      {"query", parsedQuery_._originalString}};
   ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
       << viewInfo.dump() << std::endl;
 }
@@ -368,13 +371,32 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         ". Please re-write the materialized view.")};
   }
 
-  // Make variable to column map
-  auto columnNames = viewInfoJson.at("columns").get<std::vector<std::string>>();
-  for (const auto& [index, columnName] :
-       ::ranges::views::enumerate(columnNames)) {
-    varToColMap_.insert({Variable{columnName},
-                         {static_cast<ColumnIndex>(index),
-                          ColumnIndexAndTypeInfo::PossiblyUndefined}});
+  // Make variable to column map.
+  ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns;
+  for (const auto& [index, columnEntry] :
+       ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
+    std::string columnName;
+    ColumnIndexAndTypeInfo::UndefStatus undefStatus =
+        ColumnIndexAndTypeInfo::PossiblyUndefined;
+
+    // For backward compatibility, also accept columns as strings not
+    // object.
+    if (columnEntry.is_string()) {
+      columnName = columnEntry.get<std::string>();
+    } else {
+      // Restore column name and undef status.
+      AD_CORRECTNESS_CHECK(columnEntry.is_object());
+      columnName = columnEntry.at("name").get<std::string>();
+      undefStatus = columnEntry.at("always_defined").get<bool>()
+                        ? ColumnIndexAndTypeInfo::AlwaysDefined
+                        : ColumnIndexAndTypeInfo::PossiblyUndefined;
+    }
+
+    varToColMap_.insert({Variable{std::move(columnName)},
+                         {static_cast<ColumnIndex>(index), undefStatus}});
+    if (undefStatus == ColumnIndexAndTypeInfo::PossiblyUndefined) {
+      possiblyUndefinedColumns.insert(index);
+    }
   }
 
   // Restore original query string and parse it for query analysis.
@@ -393,10 +415,14 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         parsedQuery_.value(), varToColMap_);
   }
 
-  // Read permutation, and deactivate the graph post-processing of
-  // `CompressedRelationReader`, including row deduplication, which is not the
-  // intended behavior for materialized views.
-  permutation_->loadFromDisk(filename, false, false);
+  // Read the permutation and set its type to `MATERIALIZED_VIEW`. This
+  // deactivates the graph post-processing of `CompressedRelationReader`,
+  // including row deduplication, which is not the intended behavior for
+  // materialized views. Also provide the `Permutation` with the set of columns
+  // potentially containing undef values.
+  permutation_->loadFromDisk(filename, false,
+                             Permutation::Type::MATERIALIZED_VIEW,
+                             std::move(possiblyUndefinedColumns));
   AD_CORRECTNESS_CHECK(permutation_->isLoaded());
 }
 
@@ -628,8 +654,8 @@ MaterializedView::makeEmptyLocatedTriplesState() const {
   LocalVocab emptyVocab;
 
   return std::make_shared<LocatedTriplesState>(
-      emptyLocatedTriples, emptyInternalLocatedTriples,
-      emptyVocab.getLifetimeExtender(), 0);
+      LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
+                          emptyVocab.getLifetimeExtender(), 0});
 }
 
 // _____________________________________________________________________________

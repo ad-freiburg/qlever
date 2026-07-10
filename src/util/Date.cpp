@@ -65,7 +65,7 @@ std::string Date::getFormattedYear() const {
                         : absl::StrFormat("%05d", getYear());
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
   auto epoch1 = toEpoch();
@@ -75,8 +75,8 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
     return std::nullopt;
   }
 
-  Date::Nanoseconds date1 = epoch1.value();
-  Date::Nanoseconds date2 = epoch2.value();
+  Date::Milliseconds date1 = epoch1.value();
+  Date::Milliseconds date2 = epoch2.value();
 
   DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
   auto difference = date1 - date2;
@@ -84,26 +84,36 @@ std::optional<DayTimeDuration> Date::operator-(const Date& rhs) const {
     durationType = DayTimeDuration::Type::Negative;
     difference = -difference;
   }
-  // Get total nanoseconds and convert them so a seconds double.
-  double second =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(difference).count() /
-      1'000'000'000;
-  // Only passing seconds to DayTimeDuration. The object itself will convert the
-  // input to days, hours, minutes and seconds.
-  return DayTimeDuration(durationType, 0, 0, 0, second);
+  // Get total seconds by converting stored milliseconds to seconds.
+  auto second =
+      std::chrono::duration_cast<std::chrono::milliseconds>(difference)
+          .count() /
+      1'000.0;
+  // Only passing seconds to `DayTimeDuration`. The object itself will convert
+  // the input to days, hours, minutes and seconds.
+  // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
+  // days) return UNDEF.
+  return DayTimeDuration::makeWithBoundsCheck(durationType, 0, 0, 0, second);
 }
 
 // _____________________________________________________________________________
-std::optional<Date::Nanoseconds> Date::toEpoch() const {
+std::optional<Date::Milliseconds> Date::toEpoch() const {
   using namespace std::chrono;
-  auto date = year_month_day{year(getYear()) / getMonth() / getDay()};
+  // For `xsd:gYear`s `getMonth/getDay`will return -1.
+  // In this case just assume Jan 1st of the respective year.
+  auto month = std::max(getMonth(), 1);
+  auto day = std::max(getDay(), 1);
+  auto date = year_month_day{year(getYear()) / month / day};
   if (date.ok()) {
     // Build timestamp from `Date`.
     auto second = duration<double>{getSecond()};
-    Date::Nanoseconds result =
-        sys_days(date) + hours{getHour() - getTimeZoneOffsetToUTCInHours()} +
+    // If getHour returns -1 the date does not specify time, therefore just
+    // assume 0 hours.
+    auto hour = std::max(getHour(), 0);
+    Date::Milliseconds result =
+        sys_days(date) + hours{hour - getTimeZoneOffsetToUTCInHours()} +
         minutes{getMinute()} +
-        duration_cast<nanoseconds>(
+        duration_cast<milliseconds>(
             second);  // Here all times are converted to a UTC time.
     return result;
   } else {
@@ -111,10 +121,24 @@ std::optional<Date::Nanoseconds> Date::toEpoch() const {
     return std::nullopt;
   }
 }
-#endif
+
 // _____________________________________________________________________________
-int8_t Date::getTimeZoneOffsetToUTCInHours() const {
-  TimeZone tz = getTimeZone();
+std::optional<int64_t> Date::toEpochInt() const {
+  std::optional<Date::Milliseconds> result = toEpoch();
+  if (!result.has_value()) {
+    return std::nullopt;  // Invalid date.
+  } else {
+    // First convert the timepoint to its duration representation and then cast
+    // to total seconds.
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               result.value().time_since_epoch())
+        .count();
+  }
+}
+#endif
+
+// _____________________________________________________________________________
+int8_t Date::getTimeZoneOffsetToUTCInHours(TimeZone tz) {
   // Handle different types contained in variant `TimeZone`.
   return std::visit(
       [](auto& value) {
@@ -129,4 +153,8 @@ int8_t Date::getTimeZoneOffsetToUTCInHours() const {
         }
       },
       tz);
+}
+
+int8_t Date::getTimeZoneOffsetToUTCInHours() const {
+  return Date::getTimeZoneOffsetToUTCInHours(getTimeZone());
 }

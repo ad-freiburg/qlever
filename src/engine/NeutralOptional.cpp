@@ -51,12 +51,15 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-bool NeutralOptional::supportsLimitOffset() const { return true; }
+LimitOffsetHandling NeutralOptional::handlesLimitOffset() const {
+  return LimitOffsetHandling::FULL;
+}
 
 // _____________________________________________________________________________
 void NeutralOptional::onLimitOffsetChanged(
-    const LimitOffsetClause& limitOffset) const {
-  tree_->applyLimit(limitOffset);
+    const LimitOffsetClause& limitOffset) {
+  tree_ = tree_->clone();
+  tree_->applyLimitOffset(limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -120,13 +123,13 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
   IdTable singleRowTable{getResultWidth(), allocator()};
   singleRowTable.push_back(std::vector(getResultWidth(), Id::makeUndefined()));
   if (childResult->isFullyMaterialized()) {
-    if (childResult->idTable().empty()) {
+    if (childResult->idTableView().empty()) {
       return {singleRowCroppedByLimit() ? IdTable{getResultWidth(), allocator()}
                                         : std::move(singleRowTable),
               resultSortedOn(),
               {}};
     }
-    return {childResult->idTable().clone(), childResult->sortedBy(),
+    return {childResult->cloneIdTable(), childResult->sortedBy(),
             childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {

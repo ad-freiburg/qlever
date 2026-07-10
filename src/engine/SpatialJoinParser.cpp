@@ -53,7 +53,8 @@ void WKTParser::processQueue(size_t t) {
         // bounding box for the geometry this `VocabIndex` is referring to.
         if (_usePrefiltering &&
             SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-                _prefilterLatLngBox, _index, job.valueId.getVocabIndex())) {
+                _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
+                job.boundingBox)) {
           prefilterCounter++;
           continue;
         }
@@ -106,8 +107,9 @@ void WKTParser::processQueue(size_t t) {
 }
 
 // _____________________________________________________________________________
-void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side) {
-  _curBatch.push_back({valueId, rowIndex, side, ""});
+void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+                                  std::optional<BoundingBox> boundingBox) {
+  _curBatch.push_back({valueId, rowIndex, side, "", std::move(boundingBox)});
 
   if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));

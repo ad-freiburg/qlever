@@ -21,11 +21,7 @@
 #include "util/Serializer/Serializer.h"
 
 struct ValueIdTest : public ::testing::Test {
-  ValueIdTest() {
-    // We need to initialize a (static). index, otherwise we can't compare
-    // VocabIndex to LocalVocabIndex entries
-    ad_utility::testing::getQec();
-  }
+  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
 
 TEST_F(ValueIdTest, makeFromDouble) {
@@ -38,8 +34,9 @@ TEST_F(ValueIdTest, makeFromDouble) {
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
       // The if is needed for the case of += infinity.
-      ASSERT_NEAR(id.getDouble(), d,
-                  std::abs(d / (1ul << (52 - ValueId::numDatatypeBits))));
+      ASSERT_NEAR(
+          id.getDouble(), d,
+          std::abs(d / (uint64_t{1} << (52 - ValueId::numDatatypeBits))));
     }
   };
 
@@ -319,15 +316,16 @@ TEST_F(ValueIdTest, Hashing) {
   {
     using namespace ad_utility::triple_component;
     using namespace ad_utility::testing;
-    const Index& index = getQec()->getIndex();
+    const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");
-    LocalVocabEntry lve1(iri);
-    LocalVocabEntry lve2(iri);
-    LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""));
-    LocalVocabEntry lve4(Iri::fromIriref("<x>"));
+    LocalVocabEntry lve1(iri, index);
+    LocalVocabEntry lve2(iri, index);
+    LocalVocabEntry lve3 =
+        LocalVocabEntry::fromStringRepresentation("\"foo\"", index);
+    LocalVocabEntry lve4 = LocalVocabEntry::fromIriref("<x>", index);
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -366,9 +364,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
   test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
-  auto str = LocalVocabEntry{
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          "SomeValue")};
+  auto str = LocalVocabEntry::literalWithoutQuotes(
+      "SomeValue", qec_->getLocalVocabContext());
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
@@ -398,14 +395,14 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   // Create an EncodedIriManager with some test prefixes
   std::vector<std::string> prefixes = {"http://example.org/",
                                        "http://test.com/"};
-  EncodedIriManager encodedIriManager{prefixes};
 
   // Create a test index config with the encoded IRI manager and call getQec
   // to set up the global index state
   using namespace ad_utility::testing;
   TestIndexConfig config;
-  config.encodedIriManager = encodedIriManager;
-  getQec(config);
+  config.encodedPrefixesWithoutAngleBrackets = prefixes;
+  qec_ = getQec(config);
+  const auto& encodedIriManager = qec_->getIndex().encodedIriManager();
 
   // Test case 1: IRI that can be encoded
   std::string encodableIri = "<http://example.org/123>";
@@ -418,7 +415,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   // Create a LocalVocabEntry with the same IRI
   auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
-  LocalVocabEntry localVocabEntry{iri};
+  LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
   auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
   // The encoded ID should compare equal to the LocalVocabEntry ID
@@ -433,7 +430,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   auto encodedId2 = *encodedIdOpt2;
   auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
-  LocalVocabEntry localVocabEntry2{iri2};
+  LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
   auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 
   EXPECT_EQ(encodedId2, localVocabId2)
@@ -468,4 +465,25 @@ TEST(ValueId, isTrivial) {
   EXPECT_FALSE(
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
+}
+
+// _____________________________________________________________________________
+TEST(ValueId, canBeComparedBitwise) {
+  EXPECT_TRUE(Id::makeUndefined().canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromBool(true).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromInt(1337).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromDouble(3.14).canBeComparedBitwise());
+  EXPECT_TRUE(
+      Id::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
+  EXPECT_FALSE(Id::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromTextRecordIndex(TextRecordIndex::make(0))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromWordVocabIndex(WordVocabIndex::make(0))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromEncodedVal(738).canBeComparedBitwise());
 }

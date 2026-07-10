@@ -60,12 +60,12 @@ struct PathQuery : MagicServiceQuery {
    *
    * @param side A vector of TripleComponents, containing either exactly one
    *             Variable or zero or more ValueIds
-   * @param vocab A Vocabulary containing the Ids of the TripleComponents.
-   *              The Vocab is only used if the given vector contains IRIs.
+   * @param index The IndexImpl instance containing the vocabulary containing
+   * the Ids of the TripleComponents. The Vocab is only used if the given vector
+   * contains IRIs.
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab,
-      const EncodedIriManager& encodedIriManager) const;
+      std::vector<TripleComponent> side, const IndexImpl& index) const;
 
   /**
    * @brief Convert this PathQuery into a PathSearchConfiguration object.
@@ -74,13 +74,12 @@ struct PathQuery : MagicServiceQuery {
    * A PathSearchException is thrown if required parameters are missing.
    * The required parameters are start, end, pathColumn and edgeColumn.
    *
-   * @param vocab A vocab containing the Ids of the IRIs in
-   *              sources_ and targets_
+   * @param index The IndexImpl instance containing the vocabulary containing
+   * the Ids of the IRIs in sources_ and targets_
    * @return A valid PathSearchConfiguration
    */
   PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab,
-      const EncodedIriManager& encodedIriManager) const;
+      const IndexImpl& index) const;
 
   constexpr std::string_view name() const override { return "path search"; };
 };

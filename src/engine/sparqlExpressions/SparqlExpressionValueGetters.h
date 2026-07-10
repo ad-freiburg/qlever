@@ -21,6 +21,7 @@
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
 #include "util/LruCache.h"
+#include "util/ParsedUri.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 
@@ -84,11 +85,11 @@ CPP_template(bool NanOrInfToUndef = false,
 }
 
 // All the numeric value getters have an `operator()` for `ValueId` and one for
-// `std::string`. This mixin adds the `operator()` for the `IdOrLiteralOrIri`
+// `std::string`. This mixin adds the `operator()` for the `IdOrLocalVocabEntry`
 // variant via the CRTP pattern.
 template <typename Self>
 struct Mixin {
-  decltype(auto) operator()(IdOrLiteralOrIri s,
+  decltype(auto) operator()(IdOrLocalVocabEntry s,
                             const EvaluationContext* ctx) const {
     return std::visit(
         [this, ctx](auto el) {
@@ -182,7 +183,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
 // all datatypes are removed, language tags are preserved,
-// see `ExportQueryExecutionTrees::idToLiteral` for details.
+// see `ql::exportIds::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
   using Value = std::optional<ad_utility::triple_component::Literal>;
@@ -450,12 +451,24 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
-  using Value = IdOrLiteralOrIri;
+  using Value = IdOrLocalVocabEntry;
   using Mixin<IriOrUriValueGetter>::operator();
-  IdOrLiteralOrIri operator()(ValueId id,
-                              const EvaluationContext* context) const;
-  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
-                              const EvaluationContext* context) const;
+  IdOrLocalVocabEntry operator()(ValueId id,
+                                 const EvaluationContext* context) const;
+  IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
+                                 const EvaluationContext* context) const;
+};
+
+// Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
+// that the parsing cost is not repeated for every row when the base is a
+// constant expression.
+struct ParsedUriGetter : Mixin<ParsedUriGetter> {
+  using Value = std::optional<qlever::util::ParsedUri>;
+  using Mixin<ParsedUriGetter>::operator();
+  [[noreturn]] std::optional<qlever::util::ParsedUri> operator()(
+      ValueId id, const EvaluationContext* context) const;
+  std::optional<qlever::util::ParsedUri> operator()(
+      const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
 };
 
 // Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`

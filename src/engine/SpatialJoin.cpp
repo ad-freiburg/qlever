@@ -1,18 +1,24 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+// 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/SpatialJoin.h"
 
 #include <absl/container/flat_hash_set.h>
+#include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <tuple>
@@ -28,7 +34,11 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
@@ -99,6 +109,17 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
                                        substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
+  }
+
+  // If the `SpatialJoin` is now fully constructed and query rewriting is
+  // allowed, try to push down `BIND`s to retrieve bounding box columns from the
+  // children.
+  if (sj->isConstructed() &&
+      getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+    if (auto sjWithBoundingBoxes = sj->cloneWithBoundingBoxColumns()) {
+      sj = sjWithBoundingBoxes.value();
+    }
   }
 
   // The new spatial join after adding a child needs to inherit the warnings of
@@ -247,7 +268,7 @@ size_t SpatialJoin::getResultWidth() const {
     // For the right join table we only use the selected columns.
     size_t sizeRight;
     if (config_.payloadVariables_.isAll()) {
-      sizeRight = childRight_->getResultWidth();
+      sizeRight = childRight_->getVariableColumns().size();
     } else {
       // We convert to a set here, because we allow multiple occurrences of
       // variables in payloadVariables_
@@ -257,7 +278,7 @@ size_t SpatialJoin::getResultWidth() const {
       // The payloadVariables_ may contain the right join variable
       sizeRight = pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
     }
-    auto widthChildren = childLeft_->getResultWidth() + sizeRight;
+    auto widthChildren = childLeft_->getVariableColumns().size() + sizeRight;
 
     if (config_.distanceVariable_.has_value()) {
       return widthChildren + 1;
@@ -363,12 +384,17 @@ float SpatialJoin::getMultiplicity(size_t col) {
 
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
+    // `getResultWidth` of the children can't be used here, because
+    // `SpatialJoin` only exports columns that appear in the childrens'
+    // `VariableToColumnMap`, but `getResultWidth` might include further
+    // invisible columns.
+    size_t widthLeft = childLeft_->getVariableColumns().size();
     size_t column = col;
     if (config_.distanceVariable_.has_value() && col == getResultWidth() - 1) {
       // as each distance is very likely to be unique (even if only after
       // a few decimal places), no multiplicities are assumed
       return 1;
-    } else if (col < childLeft_->getResultWidth()) {
+    } else if (col < widthLeft) {
       child = childLeft_;
     } else {
       child = childRight_;
@@ -377,8 +403,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
       // translate the column index on the spatial join to a column index in the
       // right child.
       auto filteredColumns = copySortedByColumnIndex(getVarColMapPayloadVars());
-      column = filteredColumns.at(column - childLeft_->getResultWidth())
-                   .second.columnIndex_;
+      column = filteredColumns.at(column - widthLeft).second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
     return static_cast<float>(childLeft_->getSizeEstimate() *
@@ -442,7 +467,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
-    auto idTablePtr = &resTable->idTable();
+    auto idTablePtr = &resTable->idTableView();
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
@@ -451,16 +476,20 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                    config_.joinType_.value() == SpatialJoinType::WITHIN;
   auto childLeft = swapSides ? childRight_ : childLeft_;
   auto childRight = swapSides ? childLeft_ : childRight_;
+  auto joinVarLeft = swapSides ? config_.right_ : config_.left_;
+  auto joinVarRight = swapSides ? config_.left_ : config_.right_;
 
-  // Input tables
+  // Input tables.
   auto [idTableLeft, resultLeft] = getIdTable(childLeft);
   auto [idTableRight, resultRight] = getIdTable(childRight);
 
-  // Input table columns for the join
-  ColumnIndex leftJoinCol =
-      childLeft->getVariableColumn(swapSides ? config_.right_ : config_.left_);
-  ColumnIndex rightJoinCol =
-      childRight->getVariableColumn(swapSides ? config_.left_ : config_.right_);
+  // Input table columns for the join.
+  ColumnIndex leftJoinCol = childLeft->getVariableColumn(joinVarLeft);
+  ColumnIndex rightJoinCol = childRight->getVariableColumn(joinVarRight);
+
+  // Column indices of precomputed bounding boxes, if applicable.
+  auto bbLeft = getBoundingBoxColumnIndices(childLeft, joinVarLeft);
+  auto bbRight = getBoundingBoxColumnIndices(childRight, joinVarRight);
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
@@ -471,12 +500,20 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return PreparedSpatialJoinParams{idTableLeft,       std::move(resultLeft),
-                                   idTableRight,      std::move(resultRight),
-                                   leftJoinCol,       rightJoinCol,
-                                   rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults(),
-                                   config_.joinType_, config_.rightCacheName_};
+  return PreparedSpatialJoinParams{idTableLeft,
+                                   std::move(resultLeft),
+                                   idTableRight,
+                                   std::move(resultRight),
+                                   leftJoinCol,
+                                   rightJoinCol,
+                                   rightSelectedCols,
+                                   numColumns,
+                                   getMaxDist(),
+                                   getMaxResults(),
+                                   config_.joinType_,
+                                   config_.rightCacheName_,
+                                   bbLeft,
+                                   bbRight};
 }
 
 // ____________________________________________________________________________
@@ -536,10 +573,10 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
       }
     };
 
-    // We add all columns from the left table, but only those from the right
-    // table that are actually selected by the payload variables, plus the join
-    // column
-    auto sizeLeft = childLeft_->getResultWidth();
+    // We add all (named) columns from the left table, but only those from the
+    // right table that are actually selected by the payload variables, plus the
+    // join column
+    auto sizeLeft = childLeft_->getVariableColumns().size();
     auto varColMapLeft = childLeft_->getVariableColumns();
     AD_CONTRACT_CHECK(
         !varColMapLeft.contains(config_.right_),
@@ -589,4 +626,90 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         return ad_utility::makeExecutionTree<SpatialJoin>(
             _executionContext, config_, std::move(left), std::move(right));
       });
+}
+
+// _____________________________________________________________________________
+std::pair<Variable, Variable> SpatialJoin::getBoundingBoxColumnNames(
+    const Variable& joinVar) {
+  auto base = joinVar.name().substr(1);
+  return {Variable{absl::StrCat("?_ql_sj_ll_", base)},
+          Variable{absl::StrCat("?_ql_sj_ur_", base)}};
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<ColumnIndex, ColumnIndex>>
+SpatialJoin::getBoundingBoxColumnIndices(
+    std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const {
+  auto [lowerLeft, upperRight] = getBoundingBoxColumnNames(joinVar);
+  auto colLowerLeft = child->getVariableColumnOrNullopt(lowerLeft);
+  auto colUpperRight = child->getVariableColumnOrNullopt(upperRight);
+  if (!colLowerLeft.has_value() || !colUpperRight.has_value()) {
+    return std::nullopt;
+  }
+  return std::pair<ColumnIndex, ColumnIndex>{colLowerLeft.value(),
+                                             colUpperRight.value()};
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<SpatialJoin>>
+SpatialJoin::cloneWithBoundingBoxColumns() const {
+  // Only the `libspatialjoin` algorithm benefits from bounding box columns.
+  if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return std::nullopt;
+  }
+
+  auto makeVariableExpr = [](const Variable& var) {
+    return std::make_unique<sparqlExpression::VariableExpression>(var);
+  };
+  auto singleBindPushDown = [&makeVariableExpr](
+                                auto factory,
+                                std::shared_ptr<QueryExecutionTree> child,
+                                const Variable& geomVar,
+                                const Variable& targetVar) {
+    return child->getRootOperation()->makeTreeWithBindColumn(parsedQuery::Bind{
+        sparqlExpression::SparqlExpressionPimpl{
+            factory(makeVariableExpr(geomVar)),
+            // The expression descriptor is not important as this
+            // `SparqlExpressionPimpl` is only used for `BIND` push down.
+            "Dummy descriptor for BIND push-down"},
+        targetVar});
+  };
+
+  // Factory functions to construct `BIND` instances for the bounding box
+  // functions.
+  auto bindLowerLeft = absl::bind_front(
+      singleBindPushDown, &sparqlExpression::makeEnvelopeLowerLeftExpression);
+  auto bindUpperRight = absl::bind_front(
+      singleBindPushDown, &sparqlExpression::makeEnvelopeUpperRightExpression);
+
+  // Try to push down both lower left and upper right `BIND`s into a child.
+  // Return the new child if it was successful and `nullopt` otherwise.
+  auto tryPushDown = [bindLowerLeft, bindUpperRight](
+                         std::shared_ptr<QueryExecutionTree> child,
+                         const Variable& geomVar)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+
+    // Try to push down `ql:envelopeLowerLeft`.
+    auto [varLowerLeft, varUpperRight] = getBoundingBoxColumnNames(geomVar);
+    auto pushDownLowerLeft = bindLowerLeft(child, geomVar, varLowerLeft);
+    if (!pushDownLowerLeft.has_value()) {
+      return std::nullopt;
+    }
+
+    // Try to push down `ql:envelopeUpperRight`.
+    return bindUpperRight(pushDownLowerLeft.value(), geomVar, varUpperRight);
+  };
+
+  // Try to push down both `BIND`s into each of the children. If at least one of
+  // them accepts the `BIND`s return a new `QueryExecutionTree`.
+  auto left = tryPushDown(childLeft_, config_.left_);
+  auto right = tryPushDown(childRight_, config_.right_);
+  if (!left.has_value() && !right.has_value()) {
+    return std::nullopt;
+  }
+  return std::make_shared<SpatialJoin>(
+      _executionContext, config_,
+      // Potentially unchanged child retrieved with `value_or`.
+      left.value_or(childLeft_), right.value_or(childRight_));
 }

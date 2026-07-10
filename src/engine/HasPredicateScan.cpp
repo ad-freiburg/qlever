@@ -265,25 +265,23 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   auto scan = makePatternScan(
       getExecutionContext(), TripleComponent{Variable{"?_s"}}, Variable{"?_o"});
   auto result = scan->getResult(true);
-  // The `callback` is invoked with a single-value span of the `idTable` if the
-  // result is fully materialized, because it expects a range of `IdTable`s.
-  // Because of caching we can potentially get a fully materialized result here.
+  // The `callback` is invoked with a single-value span of the `idTableView`
+  // if the result is fully materialized. Because of caching we can potentially
+  // get a fully materialized result here.
   auto runOnResult = [&result](auto callback) {
     if (result->isFullyMaterialized()) {
-      return std::invoke(callback, ql::span{&result->idTable(), 1});
+      return std::invoke(callback, ql::span{&result->idTableView(), 1});
     }
     auto idTables = result->idTables();
-    return std::invoke(
-        callback,
-        idTables | ql::views::transform(
-                       [](Result::IdTableVocabPair& pair) -> const auto& {
-                         return pair.idTable_;
-                       }));
+    return std::invoke(callback,
+                       idTables | ql::views::transform(
+                                      [](const Result::IdTableVocabPair& pair) {
+                                        return pair.idTable_.asStaticView<0>();
+                                      }));
   };
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id =
-        tc.toValueId(getIndex().getVocab(), getIndex().encodedIriManager());
+    std::optional<Id> id = tc.toValueId(getIndex());
     if (!id.has_value()) {
       AD_THROW("The entity '" + tc.toRdfLiteral() +
                "' required by `ql:has-predicate` is not in the vocabulary.");
@@ -351,7 +349,7 @@ void HasPredicateScan::computeFreeO(
   auto scan = makePatternScan(getExecutionContext(), std::move(subject),
                               Variable{"?_o"});
   auto result = scan->getResult(false);
-  const auto& hasPattern = result->idTable();
+  const auto& hasPattern = result->idTableView();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
@@ -387,7 +385,7 @@ Result HasPredicateScan::computeSubqueryS(
   auto subresult = subtree().getResult();
   auto patternCol = subtreeColIdx();
   auto result = std::move(*dynResult).toStatic<WIDTH>();
-  for (const auto& row : subresult->idTable().asStaticView<WIDTH>()) {
+  for (const auto& row : subresult->idTableView().asStaticView<WIDTH>()) {
     const auto& pattern = patterns[row[patternCol].getInt()];
     for (auto predicate : pattern) {
       result.push_back(row);

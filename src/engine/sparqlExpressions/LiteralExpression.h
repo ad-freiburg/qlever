@@ -24,7 +24,7 @@ class LiteralExpression : public SparqlExpression {
   // make the `const` evaluate function threadsafe and lock-free.
   // TODO<joka921> Make this unnecessary by completing multiple small groups at
   // once during the GROUP BY.
-  mutable std::atomic<IdOrLiteralOrIri*> cachedResult_ = nullptr;
+  mutable std::atomic<IdOrLocalVocabEntry*> cachedResult_ = nullptr;
 
  public:
   // ___________________________________________________________________________
@@ -52,14 +52,12 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       TripleComponent tc{s};
-      const auto& index = context->_qec.getIndex();
-      std::optional<Id> id =
-          tc.toValueId(index.getVocab(), index.encodedIriManager());
-      IdOrLiteralOrIri result =
-          id.has_value()
-              ? IdOrLiteralOrIri{id.value()}
-              : IdOrLiteralOrIri{ad_utility::triple_component::LiteralOrIri{s}};
-      auto ptrForCache = std::make_unique<IdOrLiteralOrIri>(result);
+      std::optional<Id> id = tc.toValueId(context->_qec.getIndex());
+      IdOrLocalVocabEntry result =
+          id.has_value() ? IdOrLocalVocabEntry{id.value()}
+                         : IdOrLocalVocabEntry{LocalVocabEntry{
+                               s, context->getLocalVocabContext()}};
+      auto ptrForCache = std::make_unique<IdOrLocalVocabEntry>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
       context->cancellationHandle_->throwIfCancelled();
@@ -155,6 +153,8 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
  protected:
   // ___________________________________________________________________________
   std::optional<::Variable> getVariableOrNullopt() const override {
@@ -196,11 +196,17 @@ class LiteralExpression : public SparqlExpression {
     if (!column.has_value()) {
       return Id::makeUndefined();
     }
-    // If a variable is grouped, then we know that it always has the same
-    // value and can treat it as a constant. This is not possible however when
-    // we are inside an aggregate, because for example `SUM(?variable)` must
-    // still compute the sum over the whole group.
-    if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
+    // When we work on aggregated data (i.e. as part of a GROUP BY, but outside
+    // of an aggregate), the variable is one of the grouped variables and thus
+    // always has the same value within the group, so we can treat it as a
+    // constant. This is not possible when we are inside an aggregate, because
+    // for example `SUM(?variable)` must still compute the sum over the whole
+    // group.
+    if (worksOnAggregatedData(context)) {
+      AD_CORRECTNESS_CHECK(
+          context->_groupedVariables.contains(variable),
+          "A non-grouped variable outside of an aggregate should have been "
+          "rejected by the parser");
       const auto& table = context->_inputTable;
       auto constantValue = table.at(context->_beginIndex, column.value());
       AD_EXPENSIVE_CHECK((
@@ -244,6 +250,8 @@ struct SingleUseExpression : public SparqlExpression {
   }
 
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+
+  [[nodiscard]] bool isDeterministic() const override { return true; }
 };
 
 }  // namespace detail
@@ -266,25 +274,17 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // function retrieves a corresponding `IdOrLocalVocabEntry` variant
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
 // contain a suitable type.
-// Given the boolean flag `stringAndIriOnly` is set to `true`, only `Literal`s,
-// `Iri`s and `ValueId`s of type `VocabIndex`/`LocalVocabIndex` are returned. If
-// `stringAndIriOnly` is set to `false` (default), all `ValueId` types retrieved
-// from `LiteralExpression<ValueId>` will be returned.
 inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
-                                            bool stringAndIriOnly = false) {
+                                            const LocalVocabContext& context) {
   using enum Datatype;
   if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
-    auto idType = idExpr->value().getDatatype();
-    if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
-      return std::nullopt;
-    }
     return idExpr->value();
   } else if (const auto* literalExpr =
                  dynamic_cast<const StringLiteralExpression*>(child)) {
-    return LocalVocabEntry{literalExpr->value()};
+    return LocalVocabEntry{literalExpr->value(), context};
   } else if (const auto* iriExpr = dynamic_cast<const IriExpression*>(child)) {
-    return LocalVocabEntry{iriExpr->value()};
+    return LocalVocabEntry{iriExpr->value(), context};
   } else {
     return std::nullopt;
   }

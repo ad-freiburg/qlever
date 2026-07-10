@@ -78,13 +78,17 @@ class CartesianProductJoin : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override;
 
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
+  [[nodiscard]] LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
+  }
 
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;

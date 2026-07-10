@@ -81,6 +81,10 @@ class SparqlExpressionPimpl {
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& variableToColumnMap) const;
 
+  // Return true iff this expression is guaranteed to produce the same result
+  // on every invocation. Delegates to `SparqlExpression::isDeterministic()`.
+  [[nodiscard]] bool isDeterministic() const;
+
   // Return true if we statically (without evaluating the expression) can
   // determine that its result will never contain undefined values / expression
   // errors.
@@ -124,8 +128,8 @@ class SparqlExpressionPimpl {
 
   // For a concise description of this method and its functionality, refer to
   // the corresponding declaration in SparqlExpression.h.
-  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata()
-      const;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      const LocalVocabContext& context) const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

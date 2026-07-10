@@ -1,20 +1,36 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de), UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
-#include "engine/ConstructQueryEvaluator.h"
+#include "./util/TripleComponentTestHelpers.h"
+#include "engine/ConstructBatchEvaluator.h"
+#include "engine/ConstructTemplatePreprocessor.h"
+#include "engine/ConstructTripleInstantiator.h"
+#include "engine/ConstructTypes.h"
+#include "engine/Result.h"
 #include "index/Index.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
+#include "rdfTypes/Iri.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;
 
 namespace {
+
+using Iri = ad_utility::triple_component::Iri;
+// Validating variant, used to test that invalid IRIs are rejected.
+auto iriV = Iri::fromIrirefValidated;
+
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
@@ -25,7 +41,7 @@ struct ContextWrapper {
   ConstructQueryExportContext createContextForRow(size_t row,
                                                   size_t rowOffset = 0) const {
     return {row,
-            _resultTable.idTable(),
+            _resultTable.idTableView(),
             _resultTable.localVocab(),
             _hashMap,
             _index,
@@ -39,13 +55,42 @@ struct ContextWrapper {
 };
 
 ContextWrapper prepareContext() { return {}; }
-}  // namespace
 
-namespace {
-constexpr auto evaluate = [](auto&&... args) {
-  return qlever::constructExport::ConstructQueryEvaluator::evaluateTerm(
-      AD_FWD(args)...);
-};
+// Test helper that simulates the CONSTRUCT export pipeline for a single
+// `GraphTerm` in isolation. The real pipeline (in `ConstructTripleGenerator`)
+// operates on whole preprocessed templates and batches of result rows; there
+// is no production API for evaluating a single `GraphTerm` to its string
+// representation. This function manually stitches together the individual
+// pipeline stages (preprocessTerm -> evaluateBatch -> instantiateTerm ->
+// formatTerm) with a synthetic single-row batch, so that tests can verify
+// each `GraphTerm` variant independently.
+std::optional<std::string> evaluate(
+    const GraphTerm& term, const ConstructQueryExportContext& exportCtx,
+    PositionInTriple position) {
+  using namespace qlever::constructExport;
+  auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
+
+  auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
+      term, position, exportCtx._variableColumns);
+  if (!preprocessed) return std::nullopt;
+
+  BatchEvaluationResult batchResult;
+  batchResult.numRows_ = 1;
+
+  if (const auto* var = std::get_if<PrecomputedVariable>(&*preprocessed)) {
+    IdCache cache{1};
+    std::vector<size_t> cols{var->columnIndex_};
+    BatchEvaluationContext ctx{exportCtx.idTable_,
+                               exportCtx.resultTableRowIndex_,
+                               exportCtx.resultTableRowIndex_ + 1};
+    batchResult = ConstructBatchEvaluator::evaluateBatch(
+        cols, ctx, exportCtx.localVocab_, exportCtx._qecIndex, cache);
+  }
+
+  auto result = instantiateTerm(*preprocessed, batchResult, 0, rowIdx);
+  if (!result) return std::nullopt;
+  return formatTerm(**result, false);
+}
 }  // namespace
 
 TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
@@ -105,58 +150,60 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
-  EXPECT_THROW(Iri{"http://linkwithoutangularbrackets"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<<nestedangularbrackets>>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<duplicatedangularbracker>>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<<duplicatedangularbracker>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<noend"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"nostart>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<\"withdoublequote>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<{withcurlybrace>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<}withcurlybrace>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<|withpipesymbol>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<^withcaret>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<\\withbackslash>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<`withbacktick>"}, ad_utility::Exception);
+  EXPECT_THROW(iriV("http://linkwithoutangularbrackets"),
+               ad_utility::Exception);
+  EXPECT_THROW(iriV("<<nestedangularbrackets>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<duplicatedangularbracker>>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<<duplicatedangularbracker>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<noend"), ad_utility::Exception);
+  EXPECT_THROW(iriV("nostart>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\"withdoublequote>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<{withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<}withcurlybrace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<|withpipesymbol>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<^withcaret>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<\\withbackslash>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<`withbacktick>"), ad_utility::Exception);
   // U+0000 (NULL) to U+0020 (Space) are all forbidden characters
   // but the following two are probably the most common cases
-  EXPECT_THROW(Iri{"<with whitespace>"}, ad_utility::Exception);
-  EXPECT_THROW(Iri{"<with\r\nnewline>"}, ad_utility::Exception);
+  EXPECT_THROW(iriV("<with whitespace>"), ad_utility::Exception);
+  EXPECT_THROW(iriV("<with\r\nnewline>"), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
-  ASSERT_EQ(Iri{"<http://valid-iri>"}.iri(), "<http://valid-iri>");
+  EXPECT_EQ(iriV("<http://valid-iri>").toStringRepresentation(),
+            "<http://valid-iri>");
 }
 
 TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
-  Iri iri{iriString};
+  Iri iriVal = iriV(iriString);
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
-  EXPECT_THAT(evaluate(iri, context0, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context0, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context0, OBJECT), Optional(iriString));
 
   ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_THAT(evaluate(iri, context1337, SUBJECT), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, PREDICATE), Optional(iriString));
-  EXPECT_THAT(evaluate(iri, context1337, OBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(evaluate(iriVal, context1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  Iri iri{"<http://some-iri>"};
+  Iri iriVal = iriV("<http://some-iri>");
   ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
 
-  EXPECT_THAT(evaluate(iri, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
-  EXPECT_THAT(evaluate(GraphTerm{iri}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(iriVal, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iriVal}, context, SUBJECT), expectedString);
+  EXPECT_THAT(evaluate(GraphTerm{iriVal}, context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {

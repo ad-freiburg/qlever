@@ -5,11 +5,14 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <boost/url/url_view.hpp>
+#include <charconv>
 #include <thread>
 
 #include "HttpTestHelpers.h"
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
+#include "util/Random.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -32,43 +35,219 @@ std::string toString(cppcoro::generator<ql::span<std::byte>> generator) {
 }
 }  // namespace
 
-TEST(HttpServer, HttpTest) {
-  ad_utility::SharedCancellationHandle handle =
+namespace {
+
+// Returns a string representation of an HTTP verb for use in echo responses.
+std::string_view verbName(verb v) { return toStd(to_string(v)); }
+
+// Assembles the full request body from an eager-mode request (reads from
+// `req.body()`) or a lazy-mode `bodyGetter` (accumulates chunks). Both
+// overloads return `net::awaitable<std::string>` so callers can uniformly
+// use `co_await consumeBody(req, args...)`.
+boost::asio::awaitable<std::string> consumeBody(
+    http::request<http::string_body> req) {
+  co_return req.body();
+}
+boost::asio::awaitable<std::string> consumeBody(
+    [[maybe_unused]] const auto& request, auto bodyGetter) {
+  std::string body;
+  while (auto chunk = co_await bodyGetter()) {
+    body += chunk.value();
+  }
+  co_return body;
+}
+
+// Echo handler: sends "METHOD\nTARGET\nBODY". Works for both eager mode
+// (no extra args) and lazy mode (bodyGetter as last arg) via variadic `args`.
+auto makeEchoHandler() {
+  return
+      [](auto req, auto&& send, auto... args) -> boost::asio::awaitable<void> {
+        std::string body = co_await consumeBody(req, args...);
+        co_await send(
+            createOkResponse(absl::StrCat(verbName(req.method()), "\n",
+                                          toStd(req.target()), "\n", body),
+                             req, ad_utility::MediaType::textPlain));
+      };
+}
+
+// Creates an echo server for `mode` with the given chunk size and returns it.
+template <BodyReadMode mode>
+auto makeEchoServer(size_t chunkSize) {
+  auto handler = makeEchoHandler();
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
+}
+
+// Creates an ignore-body server for `mode`: always responds with a fixed
+// string without reading the request body.
+template <BodyReadMode mode>
+auto makeIgnoreBodyServer(size_t chunkSize) {
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    co_await send(createOkResponse("ignored body", req,
+                                   ad_utility::MediaType::textPlain));
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
+}
+
+// Sends an echo response (METHOD\nTARGET\nBODY) and then rethrows `exception`.
+// Shared between eager and lazy `makeThrowingEchoServer` handlers.
+boost::asio::awaitable<void> throwingEchoBody(const auto& req, auto& send,
+                                              std::string_view body,
+                                              std::exception_ptr exception) {
+  co_await send(createOkResponse(absl::StrCat(verbName(req.method()), "\n",
+                                              toStd(req.target()), "\n", body),
+                                 req, ad_utility::MediaType::textPlain));
+  std::rethrow_exception(exception);
+}
+
+// Creates an echo server that throws `exception` after sending the response.
+template <BodyReadMode mode>
+auto makeThrowingEchoServer(std::exception_ptr exception, size_t chunkSize) {
+  auto handler = [exception](auto req, auto&& send,
+                             auto... args) -> boost::asio::awaitable<void> {
+    std::string body = co_await consumeBody(req, args...);
+    co_return co_await throwingEchoBody(req, send, body, exception);
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
+}
+
+// Common redirect/success handler logic: inspects URL parameters to redirect
+// or respond with "Success", and sets `lastTarget` to the request target.
+boost::asio::awaitable<void> redirectHandlerCore(const auto& req, auto& send,
+                                                 std::string& lastTarget) {
+  boost::url_view url{req.target()};
+  lastTarget = req.target();
+  auto redirectIt = url.params().find("location");
+  if (redirectIt == url.params().end()) {
+    co_return co_await send(
+        createOkResponse("Success", req, ad_utility::MediaType::textPlain));
+  }
+  http::response<http::string_body> resp;
+  unsigned redirectStatus = 200;
+  auto statusIt = url.params().find("status");
+  if (statusIt != url.params().end()) {
+    std::string statusString = (*statusIt)->value;
+    auto result = std::from_chars(statusString.data(),
+                                  statusString.data() + statusString.size(),
+                                  redirectStatus);
+    AD_CORRECTNESS_CHECK(result.ec == std::errc());
+  }
+  resp.result(redirectStatus);
+  resp.set(http::field::content_type, "text/plain");
+  resp.set(http::field::location, (*redirectIt)->value.data());
+  resp.body() = "";
+  resp.prepare_payload();
+  co_await send(std::move(resp));
+}
+
+// Creates a redirect/success server for `mode`. The redirect logic is
+// body-mode-agnostic; `args` is empty in eager mode or holds `bodyGetter`
+// in lazy mode.
+template <BodyReadMode mode>
+auto makeRedirectServer(std::string& lastTarget, size_t chunkSize) {
+  auto handler = [&lastTarget](auto req, auto&& send,
+                               auto...) -> boost::asio::awaitable<void> {
+    co_return co_await redirectHandlerCore(req, send, lastTarget);
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
+}
+
+}  // namespace
+
+// Fixture type tag: wraps `BodyReadMode` as a type so it can be used with
+// `TYPED_TEST_SUITE`.
+template <BodyReadMode M>
+using ModeTag = std::integral_constant<BodyReadMode, M>;
+
+template <typename T>
+class HttpServerBodyTest : public ::testing::Test {
+ protected:
+  static constexpr BodyReadMode kMode = T::value;
+  // Eager mode ignores the chunk size; 100 bytes keeps lazy-mode tests small.
+  static constexpr size_t lazyChunkSize = 100u;
+
+  ad_utility::SharedCancellationHandle handle_ =
       std::make_shared<ad_utility::CancellationHandle<>>();
+};
+
+using AllBodyReadModes =
+    ::testing::Types<ModeTag<BodyReadMode::Eager>, ModeTag<BodyReadMode::Lazy>>;
+TYPED_TEST_SUITE(HttpServerBodyTest, AllBodyReadModes);
+
+// POST with a small body is echoed correctly.
+TYPED_TEST(HttpServerBodyTest, EchoPostSmallBody) {
+  auto server = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
+  server.runInOwnThread();
+
+  auto httpClient = std::make_unique<HttpClient>(
+      "localhost", std::to_string(server.getPort()));
+  auto response =
+      HttpClient::sendRequest(std::move(httpClient), verb::post, "localhost",
+                              "/target", this->handle_, "hello body");
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "POST\n/target\nhello body");
+}
+
+// GET with no body: `bodyGetter` immediately yields nullopt in lazy mode;
+// `req.body()` is empty in eager mode.
+TYPED_TEST(HttpServerBodyTest, EchoGetNoBody) {
+  auto server = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
+  server.runInOwnThread();
+
+  auto httpClient = std::make_unique<HttpClient>(
+      "localhost", std::to_string(server.getPort()));
+  auto response = HttpClient::sendRequest(std::move(httpClient), verb::get,
+                                          "localhost", "/other", this->handle_);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "GET\n/other\n");
+}
+
+// Body that spans multiple chunks (3 × lazyChunkSize bytes) is echoed in full.
+TYPED_TEST(HttpServerBodyTest, EchoPostMultipleChunks) {
+  auto server = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
+  server.runInOwnThread();
+
+  ad_utility::SlowRandomIntGenerator<int> gen('a', 'z');
+  std::string largeBody(3 * this->lazyChunkSize, '\0');
+  // Note: we need the explicit casting to `char`, because
+  // `SlowRandomIntGenerator<char>` doesn't compile on AppleClang, because the
+  // libc++ variation there requires actual integer types for the random
+  // distributions.
+  ql::ranges::generate(largeBody,
+                       [&gen]() { return static_cast<char>(gen()); });
+  auto httpClient = std::make_unique<HttpClient>(
+      "localhost", std::to_string(server.getPort()));
+  auto response =
+      HttpClient::sendRequest(std::move(httpClient), verb::post, "localhost",
+                              "/large", this->handle_, largeBody);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "POST\n/large\n" + largeBody);
+}
+
+// The handler may send a response without consuming the body; the connection
+// should still close cleanly.
+TYPED_TEST(HttpServerBodyTest, EarlyResponse) {
+  auto server = makeIgnoreBodyServer<TypeParam::value>(this->lazyChunkSize);
+  server.runInOwnThread();
+
+  auto httpClient = std::make_unique<HttpClient>(
+      "localhost", std::to_string(server.getPort()));
+  auto response =
+      HttpClient::sendRequest(std::move(httpClient), verb::post, "localhost",
+                              "/skip", this->handle_, "unread body content");
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "ignored body");
+}
+
+// Runs GET/POST echo, WebSocket upgrade and rejection, and
+// `sendHttpOrHttpsRequest` for both body-read modes.
+TYPED_TEST(HttpServerBodyTest, HttpTest) {
   // This test used to spuriously crash because of something that we (joka92,
   // RobinTF) currently consider to be a bug in Boost::ASIO. (See
   // `util/http/beast.h` for details). Repeat this test several times to make
   // such failures less spurious should they ever reoccur in the future.
   for (size_t k = 0; k < 10; ++k) {
-    // Create and run an HTTP server, which replies to each request with three
-    // lines: the request method (GET, POST, or OTHER), a copy of the request
-    // target (might be empty), and a copy of the request body (might be empty).
-    TestHttpServer httpServer([](auto request,
-                                 auto&& send) -> boost::asio::awaitable<void> {
-      std::string methodName;
-      switch (request.method()) {
-        case boost::beast::http::verb::get:
-          methodName = "GET";
-          break;
-        case boost::beast::http::verb::post:
-          methodName = "POST";
-          break;
-        default:
-          methodName = "OTHER";
-      }
-
-      auto response = [](std::string methodName, std::string target,
-                         std::string body) -> cppcoro::generator<std::string> {
-        co_yield methodName;
-        co_yield "\n";
-        co_yield target;
-        co_yield "\n";
-        co_yield body;
-      }(methodName, std::string(toStd(request.target())), request.body());
-
-      co_return co_await send(createOkResponse(
-          std::move(response), request, ad_utility::MediaType::textPlain));
-    });
+    auto httpServer = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
     httpServer.runInOwnThread();
 
     // Create a client, and send a GET request.
@@ -84,10 +263,9 @@ TEST(HttpServer, HttpTest) {
             {
               auto httpClient = std::make_unique<HttpClient>(
                   "localhost", std::to_string(httpServer.getPort()));
-
-              auto response =
-                  HttpClient::sendRequest(std::move(httpClient), verb::get,
-                                          "localhost", "target1", handle);
+              auto response = HttpClient::sendRequest(std::move(httpClient),
+                                                      verb::get, "localhost",
+                                                      "target1", this->handle_);
               ASSERT_EQ(response.status_, boost::beast::http::status::ok);
               ASSERT_EQ(response.contentType_, "text/plain");
               ASSERT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
@@ -102,15 +280,15 @@ TEST(HttpServer, HttpTest) {
     {
       auto httpClient = std::make_unique<HttpClient>(
           "localhost", std::to_string(httpServer.getPort()));
-      auto response =
-          HttpClient::sendRequest(std::move(httpClient), verb::post,
-                                  "localhost", "target2", handle, "body2");
+      auto response = HttpClient::sendRequest(std::move(httpClient), verb::post,
+                                              "localhost", "target2",
+                                              this->handle_, "body2");
       ASSERT_EQ(response.status_, boost::beast::http::status::ok);
       ASSERT_EQ(response.contentType_, "text/plain");
       ASSERT_EQ(toString(std::move(response.body_)), "POST\ntarget2\nbody2");
     }
 
-    // Test if websocket is correctly opened and closed
+    // Test if websocket is correctly opened and closed.
     for (size_t i = 0; i < 20; ++i) {
       {
         HttpClient httpClient("localhost",
@@ -122,7 +300,7 @@ TEST(HttpServer, HttpTest) {
       }
     }
 
-    // Test if websocket is denied on wrong paths
+    // Test if websocket is denied on wrong paths.
     {
       HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
       auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
@@ -131,17 +309,18 @@ TEST(HttpServer, HttpTest) {
       ASSERT_EQ(response.base().result(), http::status::not_found);
     }
 
-    // Also test the convenience function `sendHttpOrHttpsRequest` (which
-    // creates an own client for each request).
+    // Also test the convenience function `sendHttpOrHttpsRequest`, which
+    // creates an own client for each request.
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get).body_),
-                "GET\n/target\n");
       ASSERT_EQ(
-          toString(
-              sendHttpOrHttpsRequest(url, handle, verb::post, "body").body_),
-          "POST\n/target\nbody");
+          toString(sendHttpOrHttpsRequest(url, this->handle_, verb::get).body_),
+          "GET\n/target\n");
+      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, this->handle_, verb::post,
+                                                "body")
+                             .body_),
+                "POST\n/target\nbody");
     }
 
     // Check that after shutting down, no more new connections are accepted.
@@ -152,66 +331,17 @@ TEST(HttpServer, HttpTest) {
 }
 
 // Test the various `catch` clauses in `HttpServer::session`.
-TEST(HttpServer, ErrorHandlingInSession) {
-  // We will interfere with the logging to test it, so we have to reset the
-  // logging after we are done.
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
-  ad_utility::SharedCancellationHandle handle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
+TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
+  // Do the following: Create an HttpServer that echoes the response and then
+  // throws `exceptionObject`. Send an HTTP request to trigger the exception.
+  // Capture the server log and return it for inspection.
+  // Note: We need a separate server for each call because we must shut down
+  // before reading the log to avoid a race condition on the logging stream.
+  auto throwAndCaptureLog = [this](auto exceptionObject) {
+    // We interfere with the logging to test it.
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
-  // Create an HTTP server, which replies to each request with three
-  // lines: the request method (GET, POST, or OTHER), a copy of the request
-  // target (might be empty), and a copy of the request body (might be empty).
-  // After sending the response, the exception denoted by the `exceptionPtr`
-  // will be thrown. This exception will be propagated to the
-  // `HttpServer::session` method, the exception behavior of which we want to
-  // test.
-  auto makeHttpServer = [](std::exception_ptr exceptionPtr) {
-    AD_CORRECTNESS_CHECK(exceptionPtr);
-    return TestHttpServer([exception = std::move(exceptionPtr)](
-                              auto request,
-                              auto&& send) -> boost::asio::awaitable<void> {
-      std::string methodName;
-      switch (request.method()) {
-        case boost::beast::http::verb::get:
-          methodName = "GET";
-          break;
-        case boost::beast::http::verb::post:
-          methodName = "POST";
-          break;
-        default:
-          methodName = "OTHER";
-      }
-
-      auto response = [](std::string methodName, std::string target,
-                         std::string body) -> cppcoro::generator<std::string> {
-        co_yield methodName;
-        co_yield "\n";
-        co_yield target;
-        co_yield "\n";
-        co_yield body;
-      }(methodName, std::string(toStd(request.target())), request.body());
-
-      // First send a response, to make the client happy.
-      co_await send(createOkResponse(std::move(response), request,
-                                     ad_utility::MediaType::textPlain));
-      // Then throw an exception.
-      AD_CORRECTNESS_CHECK(exception);
-      std::rethrow_exception(exception);
-    });
-  };
-
-  // Do the following: Create an HtttpServer using the above method that throws
-  // the `exceptionObject` after sending the response. Then send an HTTP request
-  // to that server to trigger the exception. Capture the log of the server and
-  // return it, s.t. it can be tested.
-  auto throwAndCaptureLog = [&makeHttpServer, &handle](auto exceptionObject) {
-    // Redirect the log, s.t. we can return it later.
-    std::stringstream logStream;
-    ad_utility::setGlobalLoggingStream(&logStream);
-
-    // Convert the `exceptionObject` to an `exception_ptr`
+    // Convert the `exceptionObject` to an `exception_ptr`.
     std::exception_ptr exception;
     try {
       throw exceptionObject;
@@ -219,21 +349,15 @@ TEST(HttpServer, ErrorHandlingInSession) {
       exception = std::current_exception();
     }
 
-    // Create and run a server and send a request to it. The exception will be
-    // caught by the `session` method, and a log statement will be issued
-    // depending on the exception. Note: We need a separate server for each
-    // test, because we need to shut down the server before extracting its log,
-    // otherwise we have a race condition on the logging. An alternative would
-    // be to implement a threadsafe `stringstream`, but the chosen approach also
-    // works for our purposes.
-    auto httpServer = makeHttpServer(exception);
+    auto httpServer = makeThrowingEchoServer<TypeParam::value>(
+        exception, this->lazyChunkSize);
     httpServer.runInOwnThread();
     auto httpClient = std::make_unique<HttpClient>(
         "localhost", std::to_string(httpServer.getPort()));
 
-    auto response = HttpClient::sendRequest(std::move(httpClient), verb::get,
-                                            "localhost", "target1", handle);
-    // Check the response.
+    auto response =
+        HttpClient::sendRequest(std::move(httpClient), verb::get, "localhost",
+                                "target1", this->handle_);
     EXPECT_EQ(response.status_, boost::beast::http::status::ok);
     EXPECT_EQ(response.contentType_, "text/plain");
     EXPECT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
@@ -241,7 +365,6 @@ TEST(HttpServer, ErrorHandlingInSession) {
     // We need to shut down the server first to not have a race condition on the
     // logging stream.
     httpServer.shutDown();
-    // logStream.emit();
     return logStream.str();
   };
 
@@ -257,7 +380,7 @@ TEST(HttpServer, ErrorHandlingInSession) {
   // further debugging.
   EXPECT_THAT(s, AnyOf(HasSubstr("not found"), Eq("")));
 
-  // The `timeout`and `eof` exceptions are only logged in the `TRACE` level,
+  // The `timeout` and `eof` exceptions are only logged at `TRACE` level;
   // normally they are silently caught and ignored.
   s = throwAndCaptureLog(beast::system_error{beast::error::timeout});
   s += throwAndCaptureLog(beast::system_error{boost::asio::error::eof});
@@ -282,37 +405,10 @@ TEST(HttpServer, ErrorHandlingInSession) {
   }
 }
 
-// Test the request body size limit
-TEST(HttpServer, RequestBodySizeLimit) {
-  ad_utility::SharedCancellationHandle handle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
-
-  TestHttpServer httpServer([](auto request,
-                               auto&& send) -> boost::asio::awaitable<void> {
-    std::string methodName;
-    switch (request.method()) {
-      case verb::get:
-        methodName = "GET";
-        break;
-      case verb::post:
-        methodName = "POST";
-        break;
-      default:
-        methodName = "OTHER";
-    }
-
-    auto response = [](std::string methodName,
-                       std::string target) -> cppcoro::generator<std::string> {
-      co_yield methodName;
-      co_yield "\n";
-      co_yield target;
-    }(methodName, std::string(toStd(request.target())));
-
-    // Send a response.
-    co_await send(createOkResponse(std::move(response), request,
-                                   ad_utility::MediaType::textPlain));
-  });
-
+// Test the request body size limit (eager mode) and basic body handling (lazy).
+TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
+  constexpr BodyReadMode kMode = TypeParam::value;
+  auto httpServer = makeIgnoreBodyServer<TypeParam::value>(this->lazyChunkSize);
   httpServer.runInOwnThread();
 
   auto ResponseMetadata = [](const status status,
@@ -339,49 +435,290 @@ TEST(HttpServer, RequestBodySizeLimit) {
     EXPECT_THAT(toString(std::move(response.body_)), expectedBody);
   };
 
-  auto expectRequestFails = [&ResponseMetadata, &expectRequestHelper](
-                                const ad_utility::MemorySize& requestBodySize) {
-    const ad_utility::MemorySize currentLimit =
-        getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
-    // For large requests we get an exception while writing to the request
-    // stream when going over the limit. For small requests we get the response
-    // normally. We would need the HttpClient to return the response even
-    // if it couldn't send the request fully in that case.
-    expectRequestHelper(
-        requestBodySize,
-        "Request body size exceeds the allowed size (" +
-            currentLimit.asString() +
-            "), send a smaller request or set the allowed size via the runtime "
-            "parameter `request-body-limit`",
-        ResponseMetadata(status::payload_too_large, "text/plain"));
+  if constexpr (kMode == BodyReadMode::Eager) {
+    auto expectRequestFails =
+        [&ResponseMetadata,
+         &expectRequestHelper](const ad_utility::MemorySize& requestBodySize) {
+          const ad_utility::MemorySize currentLimit =
+              getRuntimeParameter<&RuntimeParameters::requestBodyLimit_>();
+          // For large requests we get an exception while writing to the request
+          // stream when going over the limit. For small requests we get the
+          // response normally. We would need the HttpClient to return the
+          // response even if it couldn't send the request fully in that case.
+          expectRequestHelper(
+              requestBodySize,
+              "Request body size exceeds the allowed size (" +
+                  currentLimit.asString() +
+                  "), send a smaller request or set the allowed size via the "
+                  "runtime parameter `request-body-limit`",
+              ResponseMetadata(status::payload_too_large, "text/plain"));
+        };
+    auto expectRequestSucceeds =
+        [&expectRequestHelper,
+         &ResponseMetadata](const ad_utility::MemorySize requestBodySize) {
+          expectRequestHelper(requestBodySize, "ignored body",
+                              ResponseMetadata(status::ok, "text/plain"));
+        };
+    constexpr auto testingRequestBodyLimit = 50_kB;
+
+    // Set a smaller limit for testing. The default of 100 MB is quite large.
+    setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(50_kB);
+    // Requests with bodies smaller than the request body limit are processed.
+    expectRequestSucceeds(3_B);
+    // Exactly the limit is allowed.
+    expectRequestSucceeds(testingRequestBodyLimit);
+    // Larger than the limit is forbidden.
+    expectRequestFails(testingRequestBodyLimit + 1_B);
+
+    // Setting a smaller request-body limit.
+    setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(1_B);
+    expectRequestFails(3_B);
+    // Only the request body size counts. The empty body is allowed even if the
+    // body is limited to 1 byte.
+    expectRequestSucceeds(0_B);
+
+    // Disable the request body limit, by setting it to 0.
+    setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(0_B);
+    // Arbitrarily large requests are now allowed.
+    expectRequestSucceeds(10_kB);
+    expectRequestSucceeds(5_MB);
+  } else {
+    // In lazy mode the server does not enforce a body size limit; verify that
+    // requests of various sizes all succeed. Use small bodies to avoid broken-
+    // pipe issues when the handler ignores the body.
+    auto expectSucceeds = [&expectRequestHelper,
+                           &ResponseMetadata](ad_utility::MemorySize size) {
+      expectRequestHelper(size, "ignored body",
+                          ResponseMetadata(status::ok, "text/plain"));
+    };
+    expectSucceeds(0_B);
+    expectSucceeds(3_B);
+    expectSucceeds(100_B);
+  }
+}
+
+// Test HTTP redirect handling in `sendHttpOrHttpsRequest`.
+TYPED_TEST(HttpServerBodyTest, Redirects) {
+  using ::testing::AllOf;
+
+  std::string lastTarget;
+  auto server =
+      makeRedirectServer<TypeParam::value>(lastTarget, this->lazyChunkSize);
+  server.runInOwnThread();
+
+  // Test that all four redirect types (301, 302, 307, 308) work.
+  for (auto redirectStatus :
+       {status::moved_permanently, status::found, status::temporary_redirect,
+        status::permanent_redirect}) {
+    std::string redirectUrl =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/?status=", redirectStatus, "&location=%2Fok");
+
+    // Send request with `maxRedirects = 1'.
+    auto response = sendHttpOrHttpsRequest(Url{redirectUrl}, this->handle_,
+                                           verb::get, "", "", "", 1);
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "Success");
+  }
+
+  // Test that redirect with empty `Location` header throws.
+  {
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/?status=301&location=");
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, this->handle_, verb::get, "", "", "",
+                               1),
+        AllOf(HasSubstr("redirect status code"),
+              HasSubstr("no Location header")));
+  }
+
+  // Test that redirect with invalid `Location` header throws.
+  {
+    std::string url =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/?status=301&location=Not%20a%20valid%20URL");
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, this->handle_, verb::get, "", "", "",
+                               1),
+        AllOf(HasSubstr("redirect status code")));
+  }
+
+  // Test that relative URLs are properly resolved.
+  {
+    std::string url =
+        absl::StrCat("http://localhost:", server.getPort(),
+                     "/some/relative/path?status=301&location=..%2Fabc");
+
+    auto response = sendHttpOrHttpsRequest(Url{url}, this->handle_, verb::get,
+                                           "", "", "", 1);
+    EXPECT_EQ(lastTarget, "/some/abc");
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), "Success");
+  }
+
+  // Test that exceeding max redirects throws, using a chain of two redirects.
+  {
+    std::string url = absl::StrCat(
+        "http://localhost:", server.getPort(),
+        "/?status=301&location=%2Fredirect%3Fstatus%3D301%26location%3D%2Fok");
+
+    // With maxRedirects=1, this should fail (needs 2 redirects)
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, this->handle_, verb::get, "", "", "",
+                               1),
+        AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
+  }
+
+  // Test that `maxRedirects = 0` means no redirects are followed.
+  {
+    std::string url = absl::StrCat("http://localhost:", server.getPort(),
+                                   "/?status=301&location=%2F");
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        sendHttpOrHttpsRequest(Url{url}, this->handle_, verb::get, "", "", "",
+                               0),
+        AllOf(HasSubstr("exceeded"), HasSubstr("redirect limit")));
+  }
+  server.shutDown();
+}
+
+namespace {
+
+// Minimal stubs to instantiate `HttpServer` solely for accessing its public
+// static helpers `readIntoBuffer` and `materializeBody`. No actual server is
+// constructed.
+struct DummyWsHandler {
+  net::awaitable<void> operator()(const http::request<http::string_body>&,
+                                  tcp::socket) const {
+    co_return;
+  }
+};
+struct DummyHttpHandler {
+  template <typename Send>
+  net::awaitable<void> operator()(http::request<http::string_body>,
+                                  Send&&) const {
+    co_return;
+  }
+};
+using TestServer =
+    HttpServer<BodyReadMode::Eager, DummyHttpHandler, DummyWsHandler>;
+
+// Sets up a local TCP loopback pair. The writer side sends `body` as the body
+// of a POST request; the reader side reads only the request headers and then
+// co_awaits `fn(stream, buffer, parser)`. Everything runs on the calling
+// executor so a single `io_context::run()` drives both sides to completion.
+template <typename Fn>
+net::awaitable<void> withParsedRequest(std::string body, Fn fn) {
+  auto ex = co_await net::this_coro::executor;
+  tcp::acceptor acceptor(ex, {tcp::v4(), 0});
+  const auto port = acceptor.local_endpoint().port();
+
+  // Use a capture-free IIFE to avoid a GCC 11 ICE with capturing coroutine
+  // lambdas defined inside a coroutine.
+  net::co_spawn(
+      ex,
+      [](std::string body, unsigned short port) -> net::awaitable<void> {
+        tcp::socket sock(co_await net::this_coro::executor);
+        co_await sock.async_connect(tcp::endpoint(tcp::v4(), port),
+                                    net::use_awaitable);
+        std::string request = absl::StrCat(
+            "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: ",
+            body.size(), "\r\n\r\n", body);
+        co_await net::async_write(sock, net::buffer(request),
+                                  net::use_awaitable);
+        sock.shutdown(tcp::socket::shutdown_send);
+      }(std::move(body), port),
+      net::detached);
+
+  tcp::socket sock = co_await acceptor.async_accept(net::use_awaitable);
+  beast::tcp_stream stream(std::move(sock));
+  beast::flat_buffer buffer;
+  http::request_parser<http::buffer_body> parser;
+  parser.body_limit(boost::none);
+  co_await http::async_read_header(stream, buffer, parser, net::use_awaitable);
+  co_await fn(stream, buffer, parser);
+}
+
+// Runs `coro` on a fresh `io_context` to exhaustion on the calling thread.
+// Rethrows any exception raised by the coroutine.
+void runCoroutine(net::awaitable<void> coro) {
+  net::io_context ioc;
+  std::exception_ptr eptr;
+  net::co_spawn(ioc.get_executor(), std::move(coro),
+                [&eptr](std::exception_ptr p) { eptr = p; });
+  ioc.run();
+  if (eptr) {
+    std::rethrow_exception(eptr);
+  }
+}
+
+}  // namespace
+
+// Test `HttpServer::readIntoBuffer` in isolation, covering three cases:
+// body fits in the output buffer (all bytes read); output buffer smaller than
+// the body (exactly `bufferSize` bytes read); body and buffer the same size.
+TYPED_TEST(HttpServerBodyTest, ReadIntoBuffer) {
+  struct Case {
+    std::string body;
+    size_t bufferSize;
+    size_t expectedRead;
+    std::string name;
   };
-  auto expectRequestSucceeds =
-      [&expectRequestHelper,
-       &ResponseMetadata](const ad_utility::MemorySize requestBodySize) {
-        expectRequestHelper(requestBodySize, "POST\ntarget",
-                            ResponseMetadata(status::ok, "text/plain"));
-      };
-  constexpr auto testingRequestBodyLimit = 50_kB;
+  const std::vector<Case> cases = {
+      {"hello", 100, 5, "bodyFitsInBuffer"},
+      {std::string(200, 'b'), 50, 50, "bufferSmallerThanBody"},
+      {std::string(100, 'c'), 100, 100, "exactFit"},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(c.name);
+    runCoroutine(withParsedRequest(
+        c.body,
+        [expectedBody = c.body.substr(0, c.expectedRead),
+         bufferSize = c.bufferSize, expectedRead = c.expectedRead](
+            beast::tcp_stream& stream, beast::flat_buffer& buffer,
+            http::request_parser<http::buffer_body>& parser)
+            -> net::awaitable<void> {
+          std::vector<char> out(bufferSize, '\0');
+          const size_t n = co_await TestServer::readIntoBuffer(
+              stream, buffer, parser, ql::span<char>{out.data(), bufferSize});
+          EXPECT_EQ(n, expectedRead);
+          EXPECT_EQ((std::string{out.data(), n}), expectedBody);
+        }));
+  }
+}
 
-  // Set a smaller limit for testing. The default of 100 MB is quite large.
-  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(50_kB);
-  // Requests with bodies smaller than the request body limit are processed.
-  expectRequestSucceeds(3_B);
-  // Exactly the limit is allowed.
-  expectRequestSucceeds(testingRequestBodyLimit);
-  // Larger than the limit is forbidden.
-  expectRequestFails(testingRequestBodyLimit + 1_B);
-
-  // Setting a smaller request-body limit.
-  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(1_B);
-  expectRequestFails(3_B);
-  // Only the request body size counts. The empty body is allowed even if the
-  // body is limited to 1 byte.
-  expectRequestSucceeds(0_B);
-
-  // Disable the request body limit, by setting it to 0.
-  setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(0_B);
-  // Arbitrarily large requests are now allowed.
-  expectRequestSucceeds(10_kB);
-  expectRequestSucceeds(5_MB);
+// Test `HttpServer::materializeBody` in isolation. The internal read chunk is
+// `min(bodyLimit, 4096)` bytes, so a body larger than 4096 bytes forces the
+// loop to iterate more than once. Cases covered: small body (single chunk,
+// body exhausted early); body exactly one chunk; body spanning two chunks
+// (loop iterates twice); body truncated by `bodyLimit`; two full chunks.
+TYPED_TEST(HttpServerBodyTest, MaterializeBody) {
+  struct Case {
+    std::string body;
+    size_t limit;
+    std::string expected;
+    std::string name;
+  };
+  const std::vector<Case> cases = {
+      {"hello", 100, "hello", "smallBody"},
+      {std::string(4096, 'a'), 4096, std::string(4096, 'a'), "exactOneChunk"},
+      {std::string(5000, 'b'), 5000, std::string(5000, 'b'), "loopRequired"},
+      {std::string(5000, 'c'), 3000, std::string(3000, 'c'),
+       "truncatedByLimit"},
+      {std::string(8192, 'd'), 8192, std::string(8192, 'd'), "twoFullChunks"},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(c.name);
+    runCoroutine(withParsedRequest(
+        c.body,
+        [expected = c.expected, limit = c.limit](
+            beast::tcp_stream& stream, beast::flat_buffer& buffer,
+            http::request_parser<http::buffer_body>& parser)
+            -> net::awaitable<void> {
+          auto result = co_await TestServer::materializeBody(stream, buffer,
+                                                             parser, limit);
+          EXPECT_EQ(result, expected);
+        }));
+  }
 }
