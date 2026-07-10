@@ -459,49 +459,136 @@ class FakeMetricsReader : public ad_utility::metrics::MetricsReader {
 // _____________________________________________________________________________
 TEST(ServerTest, metricsEndpoint) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
-  auto expectMetrics =
-      [&qec](std::optional<std::string> accessToken,
-             std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
-             const auto& responseMatcher, const auto& bodyMatcher,
-             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(l);
-        ServerForTesting sim{
+  auto makeServerWithMetrics =
+      [&qec](
+          std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader) {
+        return ServerForTesting{
             1, "accessToken",
             getDefaultConfigWithName(qec->getIndex().getOnDiskBase()), false,
             std::move(metricsReader)};
-        auto request = makeGetRequest("/metrics");
-        if (accessToken) {
-          request.set(http::field::authorization,
-                      "Bearer " + accessToken.value());
-        }
-        auto response = sim.process(request);
-
-        EXPECT_THAT(response, responseMatcher);
-        EXPECT_THAT(responseBodyToString(std::move(response.body())),
-                    bodyMatcher);
       };
-  auto expectRequiresAccessToken = [&](auto reader) {
+  auto expectMetrics = [](std::optional<std::string> accessToken,
+                          ServerForTesting& server, const auto& responseMatcher,
+                          const auto& bodyMatcher,
+                          ad_utility::source_location l =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto request = makeGetRequest("/metrics");
+    if (accessToken) {
+      request.set(http::field::authorization, "Bearer " + accessToken.value());
+    }
+    auto response = server.process(request);
+
+    EXPECT_THAT(response, responseMatcher);
+    EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
+  };
+  auto expectRequiresAccessToken = [&](auto& server,
+                                       ad_utility::source_location l =
+                                           AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        expectMetrics(std::nullopt, reader, testing::_, testing::_),
+        expectMetrics(std::nullopt, server, testing::_, testing::_),
         testing::HasSubstr("metrics requires a valid access token"));
   };
+  auto UpdateRequest = [](std::string update) {
+    return makeRequest(
+        http::verb::post, "/",
+        {{http::field::content_type, "application/sparql-update"},
+         {http::field::authorization, "Bearer accessToken"}},
+        update);
+  };
+  auto QueryRequest = [](std::string query) {
+    return makeRequest(
+        http::verb::post, "/",
+        {{http::field::content_type, "application/sparql-query"}}, query);
+  };
+  using Label = std::pair<std::string_view, std::string_view>;
+  auto MetricIs = [](std::string_view metric, std::string_view value,
+                     std::optional<Label> label = std::nullopt) {
+    std::string labelText =
+        label.has_value()
+            ? absl::StrCat("{", label->first, "=\"", label->second, "\"}")
+            : "";
+    return testing::HasSubstr(absl::StrCat(metric, labelText, " ", value));
+  };
+  auto IsZero = [&MetricIs](std::string_view metric,
+                            std::optional<Label> label = std::nullopt) {
+    return MetricIs(metric, "0", label);
+  };
+  auto ExpectMetricsChange = [&makeServerWithMetrics, &expectMetrics](
+                                 auto matcherBefore, auto request,
+                                 auto matcherAfter,
+                                 ad_utility::source_location l =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
+                  matcherBefore);
+    EXPECT_THAT(server.process(request), testing::_);
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
+                  matcherAfter);
+  };
   {
-    expectMetrics("accessToken", nullptr, StatusIs(http::status::not_found),
+    auto server = makeServerWithMetrics(nullptr);
+    expectRequiresAccessToken(server);
+    expectMetrics("accessToken", server, StatusIs(http::status::not_found),
                   testing::StrEq("Metrics not enabled (use --enable-metrics)"));
-    expectRequiresAccessToken(nullptr);
   }
   {
-    auto fakeReader = std::make_shared<FakeMetricsReader>();
-    expectMetrics("accessToken", fakeReader, StatusIs(http::status::ok),
+    auto server = makeServerWithMetrics(std::make_shared<FakeMetricsReader>());
+    expectRequiresAccessToken(server);
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
                   testing::HasSubstr("fake_counter 42"));
-    expectRequiresAccessToken(fakeReader);
   }
   {
-    auto reader = ad_utility::metrics::initialize(true);
-    expectMetrics("accessToken", reader, StatusIs(http::status::ok),
-                  testing::HasSubstr("qlever_memory_cache_used_bytes 0"));
-    expectRequiresAccessToken(reader);
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    expectRequiresAccessToken(server);
   }
+  Label Update{"operation", "update"};
+  Label Query{"operation", "query"};
+  Label SyntaxError{"type", "syntax"};
+  std::string qlever_delta_triples = "qlever_delta_triples";
+  std::string qlever_sparql_operation_started_total =
+      "qlever_sparql_operation_started_total";
+  std::string qlever_sparql_operation_running =
+      "qlever_sparql_operation_running";
+  std::string qlever_http_errors_total = "qlever_http_errors_total";
+  std::string qlever_sparql_operation_errors_total =
+      "qlever_sparql_operation_errors_total";
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qlever_delta_triples),
+                     IsZero(qlever_sparql_operation_started_total, Update),
+                     IsZero(qlever_sparql_operation_started_total, Query),
+                     IsZero(qlever_sparql_operation_running, Update),
+                     IsZero(qlever_sparql_operation_running, Query)),
+      UpdateRequest("INSERT DATA { <a> <b> <c> . <d> <e> <f> }"),
+      testing::AllOf(
+          MetricIs(qlever_delta_triples, "2"),
+          MetricIs(qlever_sparql_operation_started_total, "1", Update),
+          IsZero(qlever_sparql_operation_started_total, Query),
+          IsZero(qlever_sparql_operation_running, Update),
+          IsZero(qlever_sparql_operation_running, Query)));
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qlever_delta_triples),
+                     IsZero(qlever_sparql_operation_started_total, Update),
+                     IsZero(qlever_sparql_operation_started_total, Query),
+                     IsZero(qlever_sparql_operation_running, Update),
+                     IsZero(qlever_sparql_operation_running, Query)),
+      QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
+      testing::AllOf(
+          MetricIs(qlever_delta_triples, "0"),
+          IsZero(qlever_sparql_operation_started_total, Update),
+          MetricIs(qlever_sparql_operation_started_total, "1", Query),
+          IsZero(qlever_sparql_operation_running, Update),
+          IsZero(qlever_sparql_operation_running, Query)));
+  ExpectMetricsChange(
+      IsZero(qlever_sparql_operation_errors_total, SyntaxError),
+      QueryRequest("Foo"),
+      MetricIs(qlever_sparql_operation_errors_total, "1", SyntaxError));
+  ExpectMetricsChange(
+      IsZero(qlever_sparql_operation_errors_total, SyntaxError),
+      UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
+      MetricIs(qlever_sparql_operation_errors_total, "1", SyntaxError));
 }
 
 // _____________________________________________________________________________
