@@ -459,6 +459,7 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
   cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
   cfg.computeDE9IM = false;
+  cfg.forceTwoSided = true;
   cfg.writeRelCb = {};
   cfg.logCb = {};
   cfg.statsCb = {};
