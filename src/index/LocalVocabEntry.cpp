@@ -9,7 +9,7 @@
 
 // ___________________________________________________________________________
 std::shared_ptr<const TripleComponentComparator>
-localVocabEntryDetail::comparatorFromContext(
+LocalVocabEntry::comparatorFromContext(
     const LocalVocabContext& context) noexcept {
   return context.getVocab().getCaseComparatorPtr();
 }

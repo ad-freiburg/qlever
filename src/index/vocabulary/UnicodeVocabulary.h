@@ -23,6 +23,9 @@ class UnicodeVocabulary {
   // The comparator is stored via a `shared_ptr` so that it can be safely
   // shared with objects that may outlive this vocabulary (in particular
   // `LocalVocabEntry`, see `getComparatorPtr` below).
+  // NOTE: A moved-from `UnicodeVocabulary` therefore has a null comparator
+  // (previously it held a valid but unspecified value), so a moved-from
+  // vocabulary must not be used except for assignment or destruction.
   std::shared_ptr<UnicodeComparator> _comparator;
   UnderlyingVocabulary _underlyingVocabulary;
 
