@@ -169,6 +169,26 @@ TEST_F(MaterializedViewsTest, Basic) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewReferencingAnotherViewDoesNotDeadlock) {
+  // A materialized view's defining query may (via the `view:` magic-IRI
+  // syntax) itself scan another materialized view. Analyzing such a view for
+  // the query pattern cache (to compute its cache key) re-plans its defining
+  // query with materialized view rewriting disabled. If that re-planning
+  // did not respect the flag for this magic-IRI syntax too, it would try to
+  // load the referenced view while already holding the (non-reentrant) write
+  // lock on `loadedViews_`, deadlocking. This must fail fast instead.
+  qlv().writeMaterializedView("baseView", simpleWriteQuery_);
+  qlv().loadMaterializedView("baseView");
+  qlv().writeMaterializedView("outerView", R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * { ?s view:baseView-g ?x }
+    )");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlv().loadMaterializedView("outerView"),
+      ::testing::HasSubstr("must not itself reference a materialized view"));
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ParserConfigChecks) {
   // Helper that checks that parsing the given query produces the expected error
   // message.

@@ -268,8 +268,8 @@ inline void expectNotSuitableForRewrite(
   auto plan = qlv.parseAndPlanQuery(query);
   auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
   manager.writeViewToDisk(viewName, plan);
-  auto view = manager.getView(viewName, qec);
-  EXPECT_FALSE(qpc.analyzeView(view, qec));
+  auto view = manager.getView(viewName, qec.get());
+  EXPECT_FALSE(qpc.analyzeView(view, qec.get()));
   manager.unloadViewIfLoaded(viewName);
 };
 

@@ -332,7 +332,7 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
 const Variable& MaterializedView::dummySubject() {
   static const Variable var{"?_ql_materialized_view_s"};
   return var;
-};
+}
 // _____________________________________________________________________________
 const Variable& MaterializedView::dummyPredicate() {
   static const Variable var{"?_ql_materialized_view_p"};
@@ -445,8 +445,8 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(
-    const std::string& name, std::shared_ptr<QueryExecutionContext> qec) const {
+void MaterializedViewsManager::loadView(const std::string& name,
+                                        QueryExecutionContext* qec) const {
   auto lock = loadedViews_.wlock();
   if (lock->views_.contains(name)) {
     return;
@@ -476,7 +476,7 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
-    const std::string& name, std::shared_ptr<QueryExecutionContext> qec) const {
+    const std::string& name, QueryExecutionContext* qec) const {
   loadView(name, qec);
   return loadedViews_.rlock()->views_.at(name);
 }
@@ -736,9 +736,16 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
         "To read from a materialized view its name must be set in the "
         "query configuration.");
   }
-  // TODO
-  auto view = getView(viewQuery.viewName_.value(),
-                      std::make_shared<QueryExecutionContext>(*qec));
+  if (qec->disableMaterializedViewRewriting()) {
+    // This branch is only reached while a materialized view's own query is
+    // being analyzed for the query pattern cache (see `computeCacheKey`),
+    // which holds a write lock on `loadedViews_`. `getView` below would try
+    // to acquire that same (non-reentrant) lock again and deadlock.
+    throw MaterializedViewConfigException(
+        "The query of a materialized view must not itself reference a "
+        "materialized view.");
+  }
+  auto view = getView(viewQuery.viewName_.value(), qec);
   return view->makeIndexScan(qec, viewQuery);
 }
 
@@ -764,12 +771,13 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 
 // _____________________________________________________________________________
 MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
-MaterializedView::computeCacheKey(
-    std::shared_ptr<QueryExecutionContext> qecOriginal) const {
+MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
   if (qecOriginal == nullptr || !originalQuery_.has_value()) {
     return {std::nullopt, std::nullopt};
   }
-  // Do we need this copy?
+  // Copy the `QueryExecutionContext` so that `disableMaterializedViewRewriting`
+  // is only set for planning this view's own query below, and not for the
+  // caller's context (which may be reused for other views).
   QueryExecutionContext qec{*qecOriginal};
   qec.setDisableMaterializedViewRewriting(true);
   auto encodedIriManager = qec.getIndex().encodedIriManager();

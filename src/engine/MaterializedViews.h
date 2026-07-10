@@ -262,7 +262,7 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
     std::optional<CacheKeyAndColumnMapping> withoutInvariants_;
   };
   CacheKeyWithAndWithoutInvariantPatterns computeCacheKey(
-      std::shared_ptr<QueryExecutionContext> qec) const;
+      QueryExecutionContext* qec) const;
 
   // If the materialized view contains a top-level `BIND` statement where the
   // expression matches the given cache key, return the column index of the
@@ -314,8 +314,7 @@ class MaterializedViewsManager {
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).
-  void loadView(const std::string& name,
-                std::shared_ptr<QueryExecutionContext> qec) const;
+  void loadView(const std::string& name, QueryExecutionContext* qec) const;
 
   // Unload a materialized view if it is loaded. This function is a no-op
   // otherwise. It is `const` for the same reason described above.
@@ -324,8 +323,7 @@ class MaterializedViewsManager {
   // Load the given view if it is not already loaded and return it. This pointer
   // is never `nullptr`. If the view does not exist, the function throws.
   std::shared_ptr<const MaterializedView> getView(
-      const std::string& name,
-      std::shared_ptr<QueryExecutionContext> qec) const;
+      const std::string& name, QueryExecutionContext* qec) const;
 
   // The same as `MaterializedView::makeIndexScan` above, but load and use the
   // right view automatically as requested in the `MaterializedViewQuery`.
