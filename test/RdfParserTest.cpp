@@ -62,6 +62,21 @@ bool isNegativeInfinity(const TripleComponent& value) {
 }
 }  // namespace
 
+// Call the given member function pointer `Method` on `parser` twice. Used
+// with `checkParseResult`/`parseRule` below to invoke a parser rule (e.g.
+// `&Re2Parser::statement`) twice in a row. `Method` must be formed at the
+// call site (so that access checks for a protected `Method` are done in a
+// context that has the appropriate `FRIEND_TEST` access), and a specific
+// instantiation of this function template then decays to an ordinary
+// function pointer, which can itself be used as the non-type template
+// argument expected by `checkParseResult`/`parseRule` - unlike a
+// non-capturing lambda, which cannot be used there directly pre-C++20
+// (P1907's literal-class-type template arguments).
+template <auto Method, typename Parser>
+bool callTwice(Parser& parser) {
+  return std::invoke(Method, parser) && std::invoke(Method, parser);
+}
+
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
 // of this file. Set up a `Parser` with the given `input` and call the given
 // `rule` (a member function of `Parser` that returns a bool). Return the
@@ -951,7 +966,8 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
       auto predicate = absl::StrCat("<", i / 100, ">");
       auto object = absl::StrCat("<", i / 10, ">");
       of << subject << ' ' << predicate << ' ' << object << ".\n";
-      expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
+      expectedTriples.push_back(
+          TurtleTriple{iri(subject), iri(predicate), iri(object)});
     }
   }
 
@@ -1288,15 +1304,16 @@ TEST(RdfParserTest, nQuadParser) {
     auto iri = ad_utility::testing::iri;
     auto lit = ad_utility::testing::tripleComponentLiteral;
     std::vector<TurtleTriple> expected;
-    expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
+    expected.push_back(
+        TurtleTriple{iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>")});
     auto internalGraphId =
         qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
     // Blank node labels include the parser prefix (42) for cross-file
     // uniqueness.
-    expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_42_blank",
-                          internalGraphId);
-    expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"),
-                          "_:u_42_blank2");
+    expected.push_back(TurtleTriple{iri("<x2>"), iri("<y2>"), "_:u_42_blank",
+                                    internalGraphId});
+    expected.push_back(TurtleTriple{iri("<x2>"), iri("<y2>"), lit("literal"),
+                                    "_:u_42_blank2"});
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
     auto expectParsingFails = [](const std::string& input) {
@@ -1370,10 +1387,10 @@ TEST(RdfParserTest, multifileParser) {
       f << nq;
     }
     std::vector<qlever::InputFileSpecification> specs;
-    specs.emplace_back(file1, qlever::Filetype::Turtle, "defaultGraphTTL",
-                       useParallelParser);
-    specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
-                       useParallelParser);
+    specs.push_back(qlever::InputFileSpecification{
+        file1, qlever::Filetype::Turtle, "defaultGraphTTL", useParallelParser});
+    specs.push_back(qlever::InputFileSpecification{
+        file2, qlever::Filetype::NQuad, "defaultGraphNQ", useParallelParser});
     Parser p{ad_utility::InputRangeTypeErased{std::move(specs)},
              encodedIriManager()};
     std::vector<TurtleTriple> result;
@@ -1406,12 +1423,11 @@ TEST(RdfParserTest, specialPredicateA) {
              lit("\"object\"")}});
   };
 
-  auto parseTwoStatements = [](auto& parser) {
-    return parser.statement() && parser.statement();
-  };
-
-  auto checkRe2 = checkParseResult<Re2Parser, parseTwoStatements>;
-  auto checkCTRE = checkParseResult<CtreParser, parseTwoStatements>;
+  auto checkRe2 =
+      checkParseResult<Re2Parser, callTwice<&Re2Parser::statement, Re2Parser>>;
+  auto checkCTRE =
+      checkParseResult<CtreParser,
+                       callTwice<&CtreParser::statement, CtreParser>>;
   runCommonTests(checkRe2);
   runCommonTests(checkCTRE);
 }
