@@ -1052,6 +1052,8 @@ TEST_F(DeltaTriplesTest, vacuum) {
   EXPECT_EQ(result["internal"]["totalKept"], 0);
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, remapId) {
   auto I = &Id::makeFromInt;
@@ -1082,8 +1084,6 @@ TEST_F(DeltaTriplesTest, remapId) {
   EXPECT_EQ(remap(V(5)), V(6));
   EXPECT_EQ(remap(V(4)), V(4));
 }
-
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 namespace {
 qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(

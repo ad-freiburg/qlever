@@ -6,6 +6,7 @@
 #define QLEVER_TEST_UTIL_IDTESTHELPERS_H
 
 #include "IndexTestHelpers.h"
+#include "backports/concepts.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "index/LocalVocab.h"
@@ -32,7 +33,8 @@ inline auto BlankNodeId = [](const auto& v) {
   return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(v));
 };
 
-inline auto LocalVocabId = [](std::integral auto v) {
+inline auto LocalVocabId =
+    CPP_template_lambda()(typename T)(T v)(requires ql::concepts::integral<T>) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
   using namespace ad_utility::triple_component;
   // Use `getQec()` to obtain a valid `LocalVocabContext` reference for creating
