@@ -445,7 +445,7 @@ void OptionalJoin::optionalJoin(
       ad_utility::specialOptionalJoin(joinColumns.size(), joinColumnsLeft,
                                       joinColumnsRight, rowAdderOnIterators,
                                       addOptionalRow, checkCancellationLambda);
-      return 0UL;
+      return size_t{0};
     } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
@@ -456,9 +456,9 @@ void OptionalJoin::optionalJoin(
             joinColumnsLeft, joinColumnsRight, lessThanBoth,
             rowAdderOnIterators, ad_utility::noop, ad_utility::noop,
             addOptionalRow, checkCancellationLambda);
-        AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
+        AD_CORRECTNESS_CHECK(shouldBeZero == size_t{0});
       }
-      return 0UL;
+      return size_t{0};
     } else {
       return ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight, lessThanBoth, rowAdderOnIterators,
