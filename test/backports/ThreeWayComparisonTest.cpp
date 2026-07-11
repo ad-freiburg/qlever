@@ -49,6 +49,11 @@ class TestClassWithCustomComparison {
   constexpr bool operator==(const TestClassWithCustomComparison& other) const {
     return ql::compareThreeWay(*this, other) == 0;
   }
+  // Unlike C++20, C++17 doesn't rewrite `a != b` as `!(a == b)`, so this has
+  // to be provided explicitly.
+  constexpr bool operator!=(const TestClassWithCustomComparison& other) const {
+    return !(*this == other);
+  }
 
   constexpr TestClassWithCustomComparison(int x, int y) : x(x), y(y) {}
 };
@@ -171,6 +176,11 @@ class TestTemplateClass {
 
   constexpr bool operator==(const TestTemplateClass& other) const {
     return ql::compareThreeWay(*this, other) == 0;
+  }
+  // Unlike C++20, C++17 doesn't rewrite `a != b` as `!(a == b)`, so this has
+  // to be provided explicitly.
+  constexpr bool operator!=(const TestTemplateClass& other) const {
+    return !(*this == other);
   }
 
   constexpr TestTemplateClass(T val) : value(val) {}
