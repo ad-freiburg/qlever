@@ -221,8 +221,3 @@ TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
               readVocabulary[WordVocabIndex::make(i)]);
   }
 }
-
-// _____________________________________________________________________________
-TEST(Vocabulary, lookupBatch) {
-  // TODO
-}
