@@ -62,7 +62,10 @@ TEST(InputFileSpecification, FactorySource) {
 
 // _____________________________________________________________________________
 TEST(InputFileSpecification, FiletypeFromMediaType) {
-  using enum ad_utility::MediaType;
+  constexpr auto turtle = ad_utility::MediaType::turtle,
+                 ntriples = ad_utility::MediaType::ntriples,
+                 nquads = ad_utility::MediaType::nquads,
+                 json = ad_utility::MediaType::json;
   EXPECT_EQ(filetypeFromMediaType(turtle), Filetype::Turtle);
   EXPECT_EQ(filetypeFromMediaType(ntriples), Filetype::Turtle);
   EXPECT_EQ(filetypeFromMediaType(nquads), Filetype::NQuad);

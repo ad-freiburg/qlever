@@ -678,7 +678,8 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using ad_utility::MemorySize;
   using V = Variable;
   using I = TripleComponent::Iri;
-  using enum Permutation::Enum;
+  constexpr auto PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 SPO = Permutation::Enum::SPO;
   auto qec = getQecWithoutPatterns();
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");

@@ -146,7 +146,11 @@ void runSelectQueryTestCase(
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
-  using enum ad_utility::MediaType;
+  constexpr auto tsv = ad_utility::MediaType::tsv,
+                 csv = ad_utility::MediaType::csv,
+                 qleverJson = ad_utility::MediaType::qleverJson,
+                 sparqlJson = ad_utility::MediaType::sparqlJson,
+                 sparqlXml = ad_utility::MediaType::sparqlXml;
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, tsv, useTextIndex),
       testCase.resultTsv);
@@ -190,7 +194,10 @@ void runConstructQueryTestCase(
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
-  using enum ad_utility::MediaType;
+  constexpr auto tsv = ad_utility::MediaType::tsv,
+                 csv = ad_utility::MediaType::csv,
+                 qleverJson = ad_utility::MediaType::qleverJson,
+                 turtle = ad_utility::MediaType::turtle;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
@@ -221,7 +228,13 @@ void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "runAskQueryTestCase");
-  using enum ad_utility::MediaType;
+  constexpr auto tsv = ad_utility::MediaType::tsv,
+                 csv = ad_utility::MediaType::csv,
+                 octetStream = ad_utility::MediaType::octetStream,
+                 turtle = ad_utility::MediaType::turtle,
+                 qleverJson = ad_utility::MediaType::qleverJson,
+                 sparqlJson = ad_utility::MediaType::sparqlJson,
+                 sparqlXml = ad_utility::MediaType::sparqlXml;
   // TODO<joka921> match the exception
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
@@ -1578,7 +1591,13 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
   runAskQueryTestCase(askResultFalse(false));
 }
 
-using enum ad_utility::MediaType;
+constexpr auto turtle = ad_utility::MediaType::turtle,
+               sparqlXml = ad_utility::MediaType::sparqlXml,
+               tsv = ad_utility::MediaType::tsv,
+               csv = ad_utility::MediaType::csv,
+               octetStream = ad_utility::MediaType::octetStream,
+               sparqlJson = ad_utility::MediaType::sparqlJson,
+               qleverJson = ad_utility::MediaType::qleverJson;
 
 // ____________________________________________________________________________
 class StreamableMediaTypesFixture

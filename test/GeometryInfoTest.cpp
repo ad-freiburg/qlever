@@ -186,7 +186,9 @@ const auto getAllTestLiterals = []() {
 };
 
 const auto getAllExpectedParseResults = []() {
-  using enum WKTType;
+  using WKTType::POINT, WKTType::LINESTRING, WKTType::POLYGON,
+      WKTType::MULTIPOINT, WKTType::MULTILINESTRING, WKTType::MULTIPOLYGON,
+      WKTType::COLLECTION;
   return std::vector<ParseResult>{{POINT, expectedPoint},
                                   {LINESTRING, expectedLine},
                                   {POLYGON, expectedPolygon},
@@ -336,7 +338,10 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
-  using enum ad_utility::BoundingCoordinate;
+  constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X,
+                 MIN_Y = ad_utility::BoundingCoordinate::MIN_Y,
+                 MAX_X = ad_utility::BoundingCoordinate::MAX_X,
+                 MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
 
   BoundingBox bb1{{2, 1}, {4, 3}};
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);
@@ -576,7 +581,13 @@ TEST(GeometryInfoTest, AnyGeometryMember) {
   // Test that the enum we define corresponds to the geometry type identifiers
   // used by `libspatialjoin`.
   using namespace util::geo;
-  using enum AnyGeometryMember;
+  constexpr auto POINT = AnyGeometryMember::POINT,
+                 LINE = AnyGeometryMember::LINE,
+                 POLYGON = AnyGeometryMember::POLYGON,
+                 MULTILINE = AnyGeometryMember::MULTILINE,
+                 MULTIPOLYGON = AnyGeometryMember::MULTIPOLYGON,
+                 MULTIPOINT = AnyGeometryMember::MULTIPOINT,
+                 COLLECTION = AnyGeometryMember::COLLECTION;
 
   checkAnyGeometryMemberEnum({DPoint{}}, POINT);
   checkAnyGeometryMemberEnum({DLine{}}, LINE);

@@ -16,7 +16,10 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS,
+               CONTAINS = SpatialJoinType::CONTAINS,
+               WITHIN = SpatialJoinType::WITHIN,
+               WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various carefully selected literals. It

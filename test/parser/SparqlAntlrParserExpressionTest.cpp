@@ -361,7 +361,10 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
                      matchUnary(&makeNumGeometriesExpression));
 
-  using enum ad_utility::BoundingCoordinate;
+  constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X,
+                 MIN_Y = ad_utility::BoundingCoordinate::MIN_Y,
+                 MAX_X = ad_utility::BoundingCoordinate::MAX_X,
+                 MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
   expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
                      matchUnary(&makeBoundingCoordinateExpression<MIN_X>));
   expectFunctionCall(absl::StrCat(geof, "minY>(?x)"),
@@ -617,7 +620,10 @@ template <typename AggregateExpr>
       return ::testing::_;
     }
   }();
-  using enum SparqlExpression::AggregateStatus;
+  constexpr auto DistinctAggregate =
+                     SparqlExpression::AggregateStatus::DistinctAggregate,
+                 NonDistinctAggregate =
+                     SparqlExpression::AggregateStatus::NonDistinctAggregate;
   auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
   return Pointee(AllOf(
       AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
@@ -636,7 +642,10 @@ template <typename AggregateExpr>
   using namespace m::builtInCall;
   using Exp = SparqlExpression;
 
-  using enum SparqlExpression::AggregateStatus;
+  constexpr auto DistinctAggregate =
+                     SparqlExpression::AggregateStatus::DistinctAggregate,
+                 NonDistinctAggregate =
+                     SparqlExpression::AggregateStatus::NonDistinctAggregate;
   auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
   return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
                        WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
@@ -664,7 +673,10 @@ TEST(SparqlParser, aggregateExpressions) {
       [&typeIdLambda, typeIdxCountStar](
           bool distinct) -> ::testing::Matcher<const SparqlExpression::Ptr&> {
     using namespace ::testing;
-    using enum SparqlExpression::AggregateStatus;
+    constexpr auto DistinctAggregate =
+                       SparqlExpression::AggregateStatus::DistinctAggregate,
+                   NonDistinctAggregate =
+                       SparqlExpression::AggregateStatus::NonDistinctAggregate;
     auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
     return Pointee(
         AllOf(AD_PROPERTY(SparqlExpression, isAggregate, Eq(aggregateStatus)),

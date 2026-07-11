@@ -223,7 +223,10 @@ class ValuesForTesting : public Operation {
             return ql::ranges::any_of(table.getColumn(i),
                                       [](Id id) { return id.isUndefined(); });
           });
-      using enum ColumnIndexAndTypeInfo::UndefStatus;
+      constexpr auto PossiblyUndefined =
+          ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+      constexpr auto AlwaysDefined =
+          ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
           i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }

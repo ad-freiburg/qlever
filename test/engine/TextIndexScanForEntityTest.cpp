@@ -69,7 +69,8 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   ASSERT_EQ("\"the test on friday was really hard\"",
             h::getEntityFromResultTable(qec, result, 2));
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+      ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?entityVar2"}, {1, AlwaysDefined}},
@@ -89,7 +90,8 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(result.idTableView().numColumns(), 2);
   ASSERT_EQ(result.idTableView().size(), 1);
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+      ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   VariableToColumnMap expectedVariables = {
       {Variable{"?text3"}, {0, AlwaysDefined}},
       {Variable{

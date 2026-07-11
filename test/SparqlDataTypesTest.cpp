@@ -23,7 +23,9 @@
 
 using namespace std::string_literals;
 using ::testing::Optional;
-using enum PositionInTriple;
+constexpr auto SUBJECT = PositionInTriple::SUBJECT,
+               PREDICATE = PositionInTriple::PREDICATE,
+               OBJECT = PositionInTriple::OBJECT;
 
 namespace {
 
@@ -108,7 +110,9 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   BlankNode blankNodeA{false, "a"};
   BlankNode blankNodeB{true, "b"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
-  using enum PositionInTriple;
+  constexpr auto SUBJECT = PositionInTriple::SUBJECT,
+                 PREDICATE = PositionInTriple::PREDICATE,
+                 OBJECT = PositionInTriple::OBJECT;
 
   EXPECT_THAT(evaluate(blankNodeA, context0, SUBJECT), Optional("_:u0_a"s));
   EXPECT_THAT(evaluate(blankNodeA, context0, PREDICATE), Optional("_:u0_a"s));

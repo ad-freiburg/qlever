@@ -20,8 +20,10 @@ namespace queryRewriteUtilTestHelpers {
 using namespace makeSparqlExpression;
 using Loc = ad_utility::source_location;
 using V = Variable;
-using enum SpatialJoinType;
-using enum UnitOfMeasurement;
+constexpr auto WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
+constexpr auto METERS = UnitOfMeasurement::METERS,
+               KILOMETERS = UnitOfMeasurement::KILOMETERS,
+               MILES = UnitOfMeasurement::MILES;
 using ad_utility::triple_component::Iri;
 using Ptr = SparqlExpression::Ptr;
 

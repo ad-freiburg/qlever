@@ -223,7 +223,6 @@ TEST(QueryPlanner, testBFSLeaveOut) {
 
 TEST(QueryPlanner, indexScanZeroVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
   h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z>}",
@@ -237,7 +236,7 @@ TEST(QueryPlanner, indexScanZeroVariables) {
 
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO;
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
@@ -255,7 +254,7 @@ TEST(QueryPlanner, indexScanOneVariable) {
 
 TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO;
 
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -266,7 +265,6 @@ TEST(QueryPlanner, indexScanTwoVariables) {
 
 TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x \n "
@@ -308,7 +306,7 @@ TEST(QueryPlanner, joinOfFullScans) {
 
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
-  using enum ::OrderBy::AscOrDesc;
+  constexpr auto Asc = OrderBy::AscOrDesc::Asc;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
@@ -372,7 +370,9 @@ TEST(QueryPlanner, testFilterAfterJoin) {
 
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  constexpr auto SPO = Permutation::Enum::SPO, PSO = Permutation::Enum::PSO,
+                 SOP = Permutation::Enum::SOP, OSP = Permutation::Enum::OSP,
+                 POS = Permutation::Enum::POS;
 
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -636,7 +636,8 @@ TEST(QueryPlanner, testSimpleOptional) {
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, SOP = Permutation::Enum::SOP,
+                 PSO = Permutation::Enum::PSO;
 
   auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
@@ -648,7 +649,8 @@ TEST(QueryPlanner, SimpleTripleOneVariable) {
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO,
+                 SOP = Permutation::Enum::SOP, SPO = Permutation::Enum::SPO;
 
   // In the following tests we need the query planner to be aware that the index
   // contains the entities `<s> <p> <o>` that are used below, otherwise it will
@@ -688,7 +690,9 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {
-  using enum Permutation::Enum;
+  constexpr auto SPO = Permutation::Enum::SPO, SOP = Permutation::Enum::SOP,
+                 PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 OSP = Permutation::Enum::OSP, OPS = Permutation::Enum::OPS;
 
   // Fixed predicate.
   // Don't care about the sorting.
@@ -2523,7 +2527,7 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
-  using enum ::OrderBy::AscOrDesc;
+  constexpr auto Asc = OrderBy::AscOrDesc::Asc;
   // Unbound variable in ORDER BY.
   h::expect(
       "SELECT * {} ORDER BY ?x",

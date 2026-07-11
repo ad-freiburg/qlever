@@ -28,7 +28,7 @@ using namespace ad_utility::detail::parallel_wkt_parser;
 
 // _____________________________________________________________________________
 TEST(SpatialJoinParser, AddValueIdToQueue) {
-  using enum SpatialJoinType;
+  constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS;
 
   // Prepare test index
   auto kg = buildLibSJTestDataset();

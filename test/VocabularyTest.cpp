@@ -143,7 +143,11 @@ TEST(Vocabulary, PrefixFilter) {
 // _____________________________________________________________________________
 TEST(Vocabulary, IsGeoInfoAvailable) {
   using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+  constexpr auto OnDiskCompressed = VocabularyType::Enum::OnDiskCompressed,
+                 InMemoryUncompressed =
+                     VocabularyType::Enum::InMemoryUncompressed,
+                 OnDiskCompressedGeoSplit =
+                     VocabularyType::Enum::OnDiskCompressedGeoSplit;
 
   RdfsVocabulary v1;
   v1.resetToType(VocabularyType{OnDiskCompressed});
@@ -164,7 +168,8 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
 // _____________________________________________________________________________
 TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
   using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+  constexpr auto InMemoryUncompressed =
+      VocabularyType::Enum::InMemoryUncompressed;
 
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(VocabularyType{InMemoryUncompressed});
@@ -191,7 +196,7 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
 // _____________________________________________________________________________
 TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
   using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+  constexpr auto OnDiskCompressed = VocabularyType::Enum::OnDiskCompressed;
 
   RdfsVocabulary vocabulary;
   vocabulary.resetToType(VocabularyType{OnDiskCompressed});

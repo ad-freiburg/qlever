@@ -44,7 +44,12 @@ std::vector<char> fileToBuffer(const std::string& filename) {
 // Select the correct suffixes.
 std::vector<std::string> getVocabSuffixesForType(
     ad_utility::VocabularyType::Enum type) {
-  using enum ad_utility::VocabularyType::Enum;
+  using E = ad_utility::VocabularyType::Enum;
+  constexpr auto InMemoryUncompressed = E::InMemoryUncompressed,
+                 OnDiskUncompressed = E::OnDiskUncompressed,
+                 InMemoryCompressed = E::InMemoryCompressed,
+                 OnDiskCompressed = E::OnDiskCompressed,
+                 OnDiskCompressedGeoSplit = E::OnDiskCompressedGeoSplit;
   switch (type) {
     case InMemoryUncompressed:
       return {""};

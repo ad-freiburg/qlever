@@ -224,7 +224,10 @@ TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
   // Check that the variable to column map has the correct undef status.
   auto varColMap = bind.getExternallyVisibleVariableColumns();
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+                     ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined,
+                 PossiblyUndefined =
+                     ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   auto expectedStatus = isDefined ? AlwaysDefined : PossiblyUndefined;
 
   // Check the input variable ?x.

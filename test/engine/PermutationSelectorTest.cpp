@@ -48,7 +48,8 @@ TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
     }
   }
 
-  using enum Permutation::Enum;
+  constexpr auto OPS = Permutation::OPS, OSP = Permutation::OSP,
+                 SOP = Permutation::SOP, SPO = Permutation::SPO;
   // Unsupported configurations.
   for (auto permutation : {OPS, OSP, SOP, SPO}) {
     EXPECT_THROW(qlever::getPermutationForTriple(
