@@ -10,15 +10,18 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
-#include <sys/resource.h>
 
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
 
-#ifdef __APPLE__
+// The readings use platform-specific APIs; pull in each platform's headers
+// only where they exist. `getrusage` (CPU time) is shared by both.
+#if defined(__APPLE__)
 #include <mach/mach.h>
-#else
+#include <sys/resource.h>
+#elif defined(__linux__)
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include <fstream>
@@ -28,7 +31,7 @@ namespace ad_utility::resource_monitor {
 
 // _____________________________________________________________________________
 std::optional<uint64_t> currentRssBytes() {
-#ifdef __APPLE__
+#if defined(__APPLE__)
   // `task_info` serves many query flavors through one generic buffer
   // pointer, hence the `reinterpret_cast`; `count` tells the kernel how
   // much room the struct has.
@@ -39,7 +42,7 @@ std::optional<uint64_t> currentRssBytes() {
     return std::nullopt;
   }
   return info.resident_size;
-#else
+#elif defined(__linux__)
   // Field 2 of `/proc/self/statm` is the resident size, counted in
   // pages, so multiply by the machine's page size.
   std::ifstream statm{"/proc/self/statm"};
@@ -48,11 +51,14 @@ std::optional<uint64_t> currentRssBytes() {
     return std::nullopt;
   }
   return residentPages * static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
+#else
+  return std::nullopt;
 #endif
 }
 
 // _____________________________________________________________________________
 std::optional<double> cpuTimeSeconds() {
+#if defined(__APPLE__) || defined(__linux__)
   struct rusage usage;
   if (getrusage(RUSAGE_SELF, &usage) != 0) {
     return std::nullopt;
@@ -63,6 +69,9 @@ std::optional<double> cpuTimeSeconds() {
     return static_cast<double>(time.tv_sec) + time.tv_usec * 1e-6;
   };
   return toSeconds(usage.ru_utime) + toSeconds(usage.ru_stime);
+#else
+  return std::nullopt;
+#endif
 }
 
 }  // namespace ad_utility::resource_monitor
@@ -82,10 +91,17 @@ ResourceMonitor::~ResourceMonitor() {
 // _____________________________________________________________________________
 void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
                             std::chrono::milliseconds interval) {
-  AD_CONTRACT_CHECK(interval > std::chrono::milliseconds{0},
-                    "ResourceMonitor: the sampling interval must be positive.");
+#if defined(__APPLE__) || defined(__linux__)
   AD_CONTRACT_CHECK(!started_.exchange(true),
                     "ResourceMonitor::start may only be called once.");
+  // Monitoring is optional: on a bad interval or an unwritable file, warn
+  // and let QLever run on rather than aborting the process.
+  if (interval <= std::chrono::milliseconds{0}) {
+    AD_LOG_WARN << "ResourceMonitor: the sampling interval must be positive; "
+                   "continuing without a resource-usage log."
+                << std::endl;
+    return;
+  }
   namespace fs = std::filesystem;
   // Decide about the header before opening: truncating destroys the
   // old file size. A missing file or failed stat also gets a header.
@@ -94,8 +110,12 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
   bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
   auto openMode = mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
   stream_.open(path, std::ios::out | openMode);
-  AD_CONTRACT_CHECK(stream_.is_open(),
-                    "ResourceMonitor: failed to open output file.");
+  if (!stream_.is_open()) {
+    AD_LOG_WARN << "ResourceMonitor: failed to open the output file; "
+                   "continuing without a resource-usage log."
+                << std::endl;
+    return;
+  }
   if (writeHeader) {
     stream_ << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n" << std::flush;
   }
@@ -112,12 +132,22 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
                    << std::endl;
     }
   }};
+#else
+  // No implementation for this platform, and monitoring is optional: skip
+  // it and let QLever run normally rather than failing.
+  (void)path;
+  (void)mode;
+  (void)interval;
+  AD_LOG_WARN << "ResourceMonitor: not supported on this platform; "
+                 "continuing without a resource-usage log."
+              << std::endl;
+#endif
 }
 
 // _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   Timer timer{Timer::Started};
-  // Baseline for the CPU deltas; empty until the first successful probe.
+  // Baseline for the CPU deltas; empty until the first successful reading.
   std::optional<double> lastCpuSeconds = resource_monitor::cpuTimeSeconds();
   double lastElapsed = 0.0;
   bool warnedWriteFailure = false;
@@ -138,7 +168,7 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
 
     // CPU usage = CPU time consumed per wall-clock time, as a percent of
     // one core. Baselines only advance on success, so after a failed
-    // probe the next value averages over the whole gap.
+    // reading the next value averages over the whole gap.
     std::string cpuColumn;
     if (cpuSeconds.has_value()) {
       if (lastCpuSeconds.has_value() && elapsed > lastElapsed) {

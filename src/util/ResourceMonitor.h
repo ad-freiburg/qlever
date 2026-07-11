@@ -34,7 +34,7 @@ std::optional<double> cpuTimeSeconds();
 
 // Samples the RSS and CPU usage of this process on a background thread
 // and appends one TSV row (`elapsed_s`, `timestamp_ms`, `rss`,
-// `cpu_percent`) per interval; failed probes become empty cells. The
+// `cpu_percent`) per interval; failed readings become empty cells. The
 // destructor stops the sampling thread and closes the file.
 class ResourceMonitor {
  public:
@@ -49,9 +49,9 @@ class ResourceMonitor {
   ResourceMonitor& operator=(const ResourceMonitor&) = delete;
 
   // Open the TSV at `path` (header written unless appending to a
-  // non-empty file) and start sampling. Throws if called more than
-  // once, if the file cannot be opened, or if `interval` is not
-  // positive.
+  // non-empty file) and start sampling. Monitoring is optional: a
+  // non-positive `interval` or a file that cannot be opened only warns
+  // and disables monitoring. Throws only if called more than once.
   void start(const std::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval = std::chrono::seconds{1});
 

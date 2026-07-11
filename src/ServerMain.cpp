@@ -264,7 +264,7 @@ int main(int argc, char** argv) {
     }
     server.run();
   } catch (const std::exception& e) {
-    // Reached if opening one of the log files fails; server.run() otherwise
+    // Reached if opening the metrics log fails; server.run() otherwise
     // handles its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
