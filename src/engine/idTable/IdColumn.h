@@ -435,15 +435,17 @@ class IdColumnSpan {
 
   // The usual `subspan`, `first`, and `last` members, analogous to
   // `ql::span`.
-  constexpr IdColumnSpan subspan(size_t offset,
-                                 size_t count = size_t(-1)) const {
+  // Note: The following functions are not `constexpr`, because the check
+  // macros call non-`constexpr` functions (GCC rejects this with
+  // `-Winvalid-constexpr`).
+  IdColumnSpan subspan(size_t offset, size_t count = size_t(-1)) const {
     AD_EXPENSIVE_CHECK(offset <= size_);
     auto actualCount = count == size_t(-1) ? size_ - offset : count;
     AD_EXPENSIVE_CHECK(offset + actualCount <= size_);
     return {payload_ + offset, datatype_ + offset, actualCount};
   }
-  constexpr IdColumnSpan first(size_t count) const { return subspan(0, count); }
-  constexpr IdColumnSpan last(size_t count) const {
+  IdColumnSpan first(size_t count) const { return subspan(0, count); }
+  IdColumnSpan last(size_t count) const {
     return subspan(size_ - count, count);
   }
 };

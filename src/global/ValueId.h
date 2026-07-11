@@ -224,7 +224,7 @@ class ValueId {
   // on the underlying bits, which allows much better code generation (e.g.
   // vectorization). In particular, this method should for example be used
   // during index building.
-  constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
+  auto compareWithoutLocalVocab(const ValueId& other) const {
     // NOTE: If this static assertion is violated at some point, make sure to
     // check all callers of this function if they are still correct.
     static_assert(isOnlyLocalVocabNotBitwiseComparable);
