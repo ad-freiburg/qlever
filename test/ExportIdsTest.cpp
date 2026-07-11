@@ -14,6 +14,7 @@
 
 #include "engine/IndexScan.h"
 #include "index/ExportIds.h"
+#include "index/LocalVocabEntry.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Literal.h"
@@ -343,6 +344,44 @@ void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
 }
 
 // _____________________________________________________________________________
+// Mirror of `expectResolveVocabMatchesOracle` for `resolveNonVocabIndexIds`:
+// resolve the (non-`VocabIndex`) IDs at `positions` and check that every
+// resolved slot matches the per-ID `idToStringAndType` path, while every other
+// slot is left untouched (`std::nullopt`).
+template <bool RemoveQuotesAndAngleBrackets = false,
+          bool returnOnlyLiterals = false,
+          typename EscapeFunction = ql::identity>
+void expectResolveNonVocabMatchesOracle(const Index& index,
+                                        ql::span<const Id> ids,
+                                        const LocalVocab& localVocab,
+                                        ql::span<const size_t> positions,
+                                        const EscapeFunction& escape) {
+  SCOPED_TRACE(absl::StrCat(
+      "removeQuotesAndAngleBrackets=", RemoveQuotesAndAngleBrackets,
+      " returnOnlyLiterals=", returnOnlyLiterals));
+  std::vector<std::optional<std::pair<std::string, const char*>>> results(
+      ids.size());
+
+  ql::exportIds::resolveNonVocabIndexIds<RemoveQuotesAndAngleBrackets,
+                                         returnOnlyLiterals, EscapeFunction>(
+      index, ids, localVocab, positions, results, escape);
+  std::set<size_t> resolved(positions.begin(), positions.end());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    if (resolved.count(i) != 0) {
+      // The result must equal the per-ID path (which itself may be
+      // `std::nullopt`, e.g. for `Undefined` or a filtered-out non-literal).
+      auto expected =
+          ql::exportIds::idToStringAndType<RemoveQuotesAndAngleBrackets,
+                                           returnOnlyLiterals, EscapeFunction>(
+              index, ids[i], localVocab, escape);
+      EXPECT_EQ(results[i], expected);
+    } else {
+      EXPECT_EQ(results[i], std::nullopt);
+    }
+  }
+}
+
+// _____________________________________________________________________________
 // An escape function that visibly transforms its input. Using `ql::identity`
 // here would make "the escape function was applied" indistinguishable from
 // "the escape function was silently dropped".
@@ -501,6 +540,85 @@ TEST(ExportIds, partitionIdPositions) {
   // underlying vocabulary indices are not. `resolveVocabIndexIds` relies on
   // this to scatter the batched lookup results back to the right slots.
   expectPartition({VocabId(9), IntId(0), VocabId(1)}, {0, 2}, {1});
+}
+
+// _____________________________________________________________________________
+// Resolve `VocabIndex` IDs and verify the batched lookup against the per-ID
+// path for every combination of the two template flags.
+TEST(ExportIds, resolveVocabIndexIds) {
+  using namespace ad_utility::testing;
+  std::string kg = "<s> <p> <o> . <s> <q> \"hello\" . <s> <p> \"world\"@en .";
+  auto qec = getQec(kg);
+  const Index& index = qec->getIndex();
+  auto getId = makeGetId(index);
+
+  std::vector<Id> ids{getId("<s>"), getId("<p>"), getId("<o>"),
+                      getId("\"hello\""), getId("\"world\"@en")};
+
+  auto check = [&](const std::vector<size_t>& positions) {
+    expectResolveVocabMatchesOracle<false, false>(index, ids, positions,
+                                                  escapeWithMarker);
+    expectResolveVocabMatchesOracle<true, false>(index, ids, positions,
+                                                 escapeWithMarker);
+    expectResolveVocabMatchesOracle<false, true>(index, ids, positions,
+                                                 escapeWithMarker);
+    expectResolveVocabMatchesOracle<true, true>(index, ids, positions,
+                                                escapeWithMarker);
+  };
+
+  // Empty positions: early return, every slot stays `std::nullopt`.
+  check({});
+  // All positions resolved.
+  check({0, 1, 2, 3, 4});
+  // A subset: the untouched slots must remain `std::nullopt`.
+  check({1, 3});
+  // Positions given out of order (and not in underlying-vocab-index order) to
+  // exercise the scatter back to the correct result slot.
+  check({4, 0, 2});
+}
+
+// _____________________________________________________________________________
+// Resolve non-`VocabIndex` IDs (encoded values and a `LocalVocabIndex`) and
+// verify against the per-ID path for every combination of the two template
+// flags.
+TEST(ExportIds, resolveNonVocabIndexIds) {
+  using namespace ad_utility::testing;
+  auto qec = getQec("<s> <p> <o>");
+  const Index& index = qec->getIndex();
+
+  // Populate a `LocalVocab` with a literal so the `LocalVocabIndex` resolution
+  // path is exercised, not just the values encoded directly in the ID bits.
+  LocalVocab localVocab{};
+  auto localVocabIndex = localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry::literalWithoutQuotes("localLit",
+                                            qec->getLocalVocabContext()));
+  Id localVocabId = Id::makeFromLocalVocabIndex(localVocabIndex);
+
+  std::vector<Id> ids{
+      Id::makeFromInt(42),
+      Id::makeFromDouble(3.14),
+      Id::makeUndefined(),
+      localVocabId,
+  };
+
+  auto check = [&](const std::vector<size_t>& positions) {
+    expectResolveNonVocabMatchesOracle<false, false>(
+        index, ids, localVocab, positions, escapeWithMarker);
+    expectResolveNonVocabMatchesOracle<true, false>(
+        index, ids, localVocab, positions, escapeWithMarker);
+    expectResolveNonVocabMatchesOracle<false, true>(
+        index, ids, localVocab, positions, escapeWithMarker);
+    expectResolveNonVocabMatchesOracle<true, true>(index, ids, localVocab,
+                                                   positions, escapeWithMarker);
+  };
+
+  // Empty positions: nothing is resolved.
+  check({});
+  // All positions: encoded int/double, `Undefined` (resolves to `nullopt`) and
+  // the local-vocab literal.
+  check({0, 1, 2, 3});
+  // A subset (`Undefined` + local literal); untouched slots stay `nullopt`.
+  check({2, 3});
 }
 
 }  // namespace

@@ -266,9 +266,7 @@ void resolveVocabIndexIds(
 // IDs form a single contiguous block: even when the `ids` are sorted, IDs of
 // datatype `LocalVocabIndex` might be interspersed between the `VocabIndex`
 // IDs. We therefore check each ID's datatype individually to partition the
-// positions. All `VocabIndex` IDs are then gathered and resolved in a single
-// `lookupBatch` call; every other ID is resolved immediately. Results are
-// returned in the same order as `ids`.
+// positions.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
