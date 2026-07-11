@@ -579,14 +579,14 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
   }
   size_t alias_counter = 0;
   for (size_t i = 0; i < selection.size(); i++) {
-    if (holds_alternative<::Variable>(selection[i])) {
-      if (get<::Variable>(selection[i]) != selectedVariables[i]) {
+    if (std::holds_alternative<::Variable>(selection[i])) {
+      if (std::get<::Variable>(selection[i]) != selectedVariables[i]) {
         *result_listener << "where Variable#" << i << " = "
                          << testing::PrintToString(selectedVariables[i]);
         return false;
       }
     } else {
-      auto pair = get<std::pair<std::string, ::Variable>>(selection[i]);
+      auto pair = std::get<std::pair<std::string, ::Variable>>(selection[i]);
       if (alias_counter >= arg.getAliases().size()) {
         *result_listener << "where selected Variables contain less Aliases ("
                          << testing::PrintToString(alias_counter)
@@ -740,7 +740,7 @@ inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
   return AD_FIELD(ParsedQuery, _rootGraphPattern, m);
 };
 
-template <auto SubMatcherLambda>
+template <auto& SubMatcherLambda>
 struct MatcherWithDefaultFilters {
   Matcher<const p::GraphPatternOperation&> operator()(
       std::vector<std::string>&& filters, const auto&... childMatchers) {
@@ -753,7 +753,7 @@ struct MatcherWithDefaultFilters {
   }
 };
 
-template <auto SubMatcherLambda>
+template <auto& SubMatcherLambda>
 struct MatcherWithDefaultFiltersAndOptional {
   Matcher<const ParsedQuery::GraphPattern&> operator()(
       bool optional, std::vector<std::string>&& filters,

@@ -118,7 +118,14 @@ class PropertyPath {
   // before the negation.
   static PropertyPath makeNegated(std::vector<PropertyPath> children);
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PropertyPath, path_)
+  // Use the friend (non-member) form rather than `..._LOCAL`: a member
+  // `operator==` doesn't get C++20's rewritten reversed-argument candidates
+  // under the C++17 backport, so comparisons like
+  // `std::optional<std::reference_wrapper<const PropertyPath>> ==
+  // std::optional<PropertyPath>` (which need the LHS converted to
+  // `const PropertyPath&` as the *argument*, not the object) wouldn't
+  // otherwise find this operator.
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(PropertyPath, path_)
 
   // Serialize this object into an output stream.
   void writeToStream(std::ostream& out) const;
