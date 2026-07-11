@@ -343,11 +343,6 @@ void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
 }
 
 // _____________________________________________________________________________
-TEST(ExportIds, resolveVocabIndexIds) {
-  // TODO
-}
-
-// _____________________________________________________________________________
 // An escape function that visibly transforms its input. Using `ql::identity`
 // here would make "the escape function was applied" indistinguishable from
 // "the escape function was silently dropped".
@@ -506,11 +501,6 @@ TEST(ExportIds, partitionIdPositions) {
   // underlying vocabulary indices are not. `resolveVocabIndexIds` relies on
   // this to scatter the batched lookup results back to the right slots.
   expectPartition({VocabId(9), IntId(0), VocabId(1)}, {0, 2}, {1});
-}
-
-// _____________________________________________________________________________
-TEST(ExportIds, resolveNonVocabIndexIds) {
-  // TODO
 }
 
 }  // namespace
