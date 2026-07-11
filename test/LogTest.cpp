@@ -119,9 +119,13 @@ TEST(LogTest, ThreadSafety) {
   for (auto line : absl::StrSplit(ss.str(), '\n', absl::SkipEmpty())) {
     auto match = ctre::match<kPattern>(line);
     ASSERT_TRUE(match) << "Line does not match expected log format: " << line;
-    auto pair = std::pair{match.get<"thread">().to_number<size_t>(),
-                          match.get<"msg">().to_number<size_t>()};
-    ASSERT_TRUE(expected.contains(pair))
+    // Refer to the `thread` and `msg` capture groups by their numeric index
+    // (1 and 2, since index 0 is the whole match) instead of by name, because
+    // name-based lookup via `ctll::fixed_string` non-type template arguments
+    // requires C++20.
+    auto pair = std::pair{match.get<1>().to_number<size_t>(),
+                          match.get<2>().to_number<size_t>()};
+    ASSERT_TRUE(expected.find(pair) != expected.end())
         << "Unexpected or duplicate: thread=" << pair.first
         << " msg=" << pair.second;
     expected.erase(pair);
