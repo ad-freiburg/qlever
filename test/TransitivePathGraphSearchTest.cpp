@@ -23,6 +23,10 @@
 #include "util/GTestHelpers.h"
 #include "util/Log.h"
 
+// Transitive paths are not yet migrated to C++17, see the comment on
+// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` in `CMakeLists.txt`.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 using namespace qlever::graphSearch;
 using namespace ::testing;
 
@@ -283,3 +287,5 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
       HasSubstr(
           "The TEST graph search algorithm received a cancellation signal."));
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

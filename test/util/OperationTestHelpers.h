@@ -11,6 +11,7 @@
 #include "./GTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Iterators.h"
 
 using namespace std::chrono_literals;
 
@@ -140,12 +141,12 @@ class AlwaysFailOperation : public Operation {
     if (!requestLaziness) {
       throw std::runtime_error{"AlwaysFailOperation"};
     }
-    return {[]() -> Result::Generator {
+    return {
+        ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+            []() -> std::optional<Result::IdTableVocabPair> {
               throw std::runtime_error{"AlwaysFailOperation"};
-              // Required so that the exception only occurs within the generator
-              co_return;
-            }(),
-            resultSortedOn()};
+            }}},
+        resultSortedOn()};
   }
 
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

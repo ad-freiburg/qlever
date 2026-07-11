@@ -20,6 +20,10 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+// Transitive paths are not yet migrated to C++17, see the comment on
+// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` in `CMakeLists.txt`.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 using ad_utility::testing::getQec;
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -2136,3 +2140,5 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphsWithGraphs) {
                 UnorderedElementsAre());
   }
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
