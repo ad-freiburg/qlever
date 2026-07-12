@@ -104,6 +104,24 @@ class File {
     return fileno(file_);
   }
 
+  // Return a new `File` for the same underlying file, with an independent
+  // read position, by duplicating the file descriptor. In contrast to opening
+  // the file again by name, this also works when the file has been renamed
+  // since it was opened (which happens to the files of the active index
+  // during `Qlever::swapInRebuiltIndex`).
+  [[nodiscard]] File duplicateForReading() const {
+    AD_CONTRACT_CHECK(isOpen());
+    int newFd = dup(fd());
+    AD_CONTRACT_CHECK(newFd != -1, "Duplicating the file descriptor for file ",
+                      name_, " failed");
+    FILE* newFile = fdopen(newFd, "r");
+    AD_CONTRACT_CHECK(newFile != nullptr);
+    File result;
+    result.name_ = name_;
+    result.file_ = newFile;
+    return result;
+  }
+
   //! Close file.
   bool close() {
     if (not isOpen()) {
