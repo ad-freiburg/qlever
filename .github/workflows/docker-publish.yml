@@ -17,6 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 # This workflow is heavily based on https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners .
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:

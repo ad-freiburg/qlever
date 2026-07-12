@@ -18,6 +18,13 @@ on:
     types:
       - completed
 
+# Reads the repository and downloads the triggering run's artifact
+# (`actions: read`). The upload to Codecov uses `secrets.CODECOV_TOKEN`, not the
+# GITHUB_TOKEN, so no write scopes are needed.
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   upload:
     runs-on: ubuntu-latest

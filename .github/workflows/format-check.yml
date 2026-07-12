@@ -7,6 +7,10 @@ on:
     branches: [ master ]
   merge_group:
 
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
