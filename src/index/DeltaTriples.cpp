@@ -731,6 +731,12 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 }
 
 // _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdates(
+    std::string filename) {
+  deltaTriples_.wlock()->setPersists(std::move(filename));
+}
+
+// _____________________________________________________________________________
 std::pair<
     std::vector<LocalVocabIndex>,
     std::vector<

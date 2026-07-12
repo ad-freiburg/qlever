@@ -12,6 +12,8 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
 #include <string>
 #include <variant>
@@ -506,11 +508,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     } else {
       absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
       logCommand(cmd, "rebuilding index");
-      auto fileName =
-          checkParameter("index-name", std::nullopt).value_or("new_index");
-      co_await rebuildIndex(fileName);
-      response =
-          createOkResponse("Done writing", request, MediaType::textPlain);
+      auto config = co_await rebuildIndex(
+          checkParameter("tmp-dir-for-rebuild", std::nullopt),
+          checkParameter("dir-for-old-index", std::nullopt));
+      nlohmann::json json;
+      json["message"] = "Index successfully rebuilt and swapped in";
+      json["dir-for-old-index"] = config.dirForOldIndex_;
+      json["new-index-basename"] = config.finalBasename();
+      response = createJsonResponse(json, request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
@@ -1504,23 +1509,72 @@ void Server::writeMaterializedView(
 }
 
 // _____________________________________________________________________________
-Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
-  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
-    throw std::runtime_error{absl::StrCat(
-        "Can't build index with base name \"", indexBaseName,
-        "\" because there are already files with the same base name "
-        "in the same directory")};
-  }
-  if (!qlever::util::isSubdirectoryOf(indexBaseName, originalBasename_)) {
-    throw std::runtime_error{absl::StrCat(
-        "Can't build index with base name \"", indexBaseName,
-        "\" because it is not located in the same directory as the "
-        "current index")};
-  }
+Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
+    std::optional<std::string> tmpDirForRebuild,
+    std::optional<std::string> dirForOldIndex) {
+  namespace fs = std::filesystem;
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   auto indexAndViews = indexAndViewsSnapshot();
   auto& [index, oldManager] = *indexAndViews;
+
+  // Assemble the full rebuild configuration. The defaults are: build the new
+  // index in `rebuild.<current datetime>.tmp`, move the old index to
+  // `previous.<datetime of the build of the current index>`, and serve the
+  // new index from the place of the old one.
+  qlever::IndexRebuildConfig config;
+  config.tmpDirForRebuild_ =
+      std::move(tmpDirForRebuild)
+          .value_or(
+              absl::StrCat("rebuild.",
+                           absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
+                                            absl::Now(), absl::UTCTimeZone()),
+                           ".tmp"));
+  config.dirForOldIndex_ =
+      std::move(dirForOldIndex)
+          .value_or(
+              absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
+  fs::path originalPath{originalBasename_};
+  config.dirForNewIndex_ = originalPath.has_parent_path()
+                               ? originalPath.parent_path().string()
+                               : std::string{"."};
+  config.basenameForNewIndex_ = originalPath.filename().string();
+
+  // Check the two directories that can be set via command parameters: they
+  // must be relative paths (they are resolved against the working directory
+  // of the server, like the base name of the current index), they must be
+  // empty or not exist yet, and they must be subdirectories of the directory
+  // of the current index. The appended dummy file name makes
+  // `isSubdirectoryOf` (which compares the PARENT directories of its
+  // arguments) applicable to a directory.
+  for (const auto& dir : {config.tmpDirForRebuild_, config.dirForOldIndex_}) {
+    fs::path path{dir};
+    if (!path.is_relative()) {
+      throw std::runtime_error{
+          absl::StrCat("The directory \"", dir, "\" must be a relative path")};
+    }
+    if (fs::exists(path) && !fs::is_empty(path)) {
+      throw std::runtime_error{absl::StrCat(
+          "The directory \"", dir, "\" already exists and is not empty")};
+    }
+    if (!qlever::util::isSubdirectoryOf((path / "x").string(),
+                                        originalBasename_)) {
+      throw std::runtime_error{absl::StrCat(
+          "The directory \"", dir,
+          "\" is not a subdirectory of the directory of the current index")};
+    }
+  }
+  // When the old index and the new index end up in the same directory, the
+  // base name of the new index must differ from the current one, otherwise
+  // the renames during the swap would collide.
+  if (fs::path{config.dirForOldIndex_}.lexically_normal() ==
+          fs::path{config.dirForNewIndex_}.lexically_normal() &&
+      config.basenameForNewIndex_ == originalPath.filename().string()) {
+    throw std::runtime_error{absl::StrCat(
+        "The old index cannot be moved to \"", config.dirForOldIndex_,
+        "\" because the new index is served from that directory under the "
+        "same base name")};
+  }
   // Warn if state that won't carry over to the rebuilt index was previously
   // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
   // with a fresh, empty `MaterializedViewsManager`.
@@ -1550,8 +1604,8 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // Conan setup.
   auto coroutine = ad_utility::runFunctionOnExecutor(
       queryThreadPool_.get_executor(),
-      [this, &index, &handle, &indexBaseName] {
-        return qlever().rebuildIndexToDisk(index, indexBaseName, handle);
+      [this, &index, &handle, &config] {
+        return qlever().rebuildIndexToDisk(index, config, handle);
       },
       net::use_awaitable);
   auto rebuildResult = co_await std::move(coroutine);
@@ -1561,12 +1615,29 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   // current index.
   auto swapRoutine = ad_utility::runFunctionOnExecutor(
       updateThreadPool_.get_executor(),
-      [this, &index, rebuildResult = std::move(rebuildResult),
-       &handle]() mutable {
-        qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle);
+      [this, &index, rebuildResult = std::move(rebuildResult), &handle,
+       &config]() mutable {
+        qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
+                                    config);
       },
       net::use_awaitable);
   co_await std::move(swapRoutine);
+
+  // Move the rebuild log to the directory of the old index (as a record of
+  // the rebuild that retired that index) and remove the now empty temporary
+  // directory.
+  auto logFile = config.tmpBasename() + ".rebuild-index-log.txt";
+  if (fs::exists(logFile)) {
+    fs::rename(logFile,
+               fs::path{config.dirForOldIndex_} /
+                   (config.basenameForNewIndex_ + ".rebuild-index-log.txt"));
+  }
+  std::error_code errorCode;
+  if (!fs::remove(config.tmpDirForRebuild_, errorCode) || errorCode) {
+    AD_LOG_WARN << "Could not remove the temporary directory \""
+                << config.tmpDirForRebuild_ << "\"" << std::endl;
+  }
+  co_return config;
 }
 
 // For helper function `Server::onlyForTestingProcess`

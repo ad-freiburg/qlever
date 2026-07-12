@@ -358,10 +358,17 @@ class Server {
       TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
-  // Trigger an index rebuild with `indexBaseName` as the base name for the new
-  // index. This assumes that the access token has already been checked and no
-  // other build is currently in progress.
-  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+  // Trigger an index rebuild: build a new index from the current state
+  // (including updates) in a temporary directory, swap it in, move the old
+  // index to the directory for the old index, and move the new index to the
+  // place of the old one (see `Qlever::swapInRebuiltIndex`). The two optional
+  // arguments override the defaults for the temporary directory and the
+  // directory for the old index; the full resolved configuration is returned.
+  // This assumes that the access token has already been checked and no other
+  // rebuild is currently in progress.
+  Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
+      std::optional<std::string> tmpDirForRebuild,
+      std::optional<std::string> dirForOldIndex);
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }

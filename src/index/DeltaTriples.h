@@ -434,6 +434,11 @@ class DeltaTriplesManager {
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 
+  // Set the file where the updates are persisted to WITHOUT reading it. Used
+  // when the persistence file of an already loaded index is moved (see
+  // `Qlever::swapInRebuiltIndex`).
+  void setFilenameForPersistentUpdates(std::string filename);
+
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.
   void clear();

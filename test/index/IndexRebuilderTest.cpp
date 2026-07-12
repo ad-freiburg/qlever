@@ -638,29 +638,29 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 }
 
 namespace {
-// Get rid of previous files with the specified prefix.
-void cleanFilesWithPrefix(std::string_view prefix) {
-  AD_CONTRACT_CHECK(!prefix.empty(),
-                    "This function is not meant to delete all files in the "
-                    "current directory. Please specify a prefix.");
+// Return the directories in the current directory whose name starts with
+// `prefix`.
+std::vector<std::filesystem::path> dirsWithPrefix(std::string_view prefix) {
   namespace fs = std::filesystem;
-  // Collect the matching entries first and delete them only afterwards.
-  // Deleting entries while iterating the directory is unspecified behavior and
-  // can cause entries to be skipped on some platforms (observed on macOS),
-  // leaving leftover files behind.
-  std::vector<fs::directory_entry> toDelete;
-  ql::ranges::copy_if(fs::directory_iterator("."), std::back_inserter(toDelete),
-                      [prefix](const auto& e) {
-                        return ql::starts_with(e.path().filename().string(),
-                                               prefix);
-                      });
-  AD_CONTRACT_CHECK(
-      ql::ranges::all_of(
-          toDelete, [](const auto& entry) { return entry.is_regular_file(); }),
-      "All entries matching the prefix must be regular files, this function "
-      "does not delete directories.");
-  for (const auto& entry : toDelete) {
-    ad_utility::deleteFile(entry.path());
+  std::vector<fs::path> result;
+  for (const auto& entry : fs::directory_iterator(".")) {
+    if (entry.is_directory() &&
+        ql::starts_with(entry.path().filename().string(), prefix)) {
+      result.push_back(entry.path());
+    }
+  }
+  return result;
+}
+
+// Remove all directories in the current directory whose name starts with
+// `prefix` (e.g. the `previous.*` directories created by the rebuild-index
+// tests below).
+void cleanDirsWithPrefix(std::string_view prefix) {
+  AD_CONTRACT_CHECK(!prefix.empty(),
+                    "This function is not meant to delete all directories in "
+                    "the current directory. Please specify a prefix.");
+  for (const auto& dir : dirsWithPrefix(prefix)) {
+    std::filesystem::remove_all(dir);
   }
 }
 }  // namespace
@@ -671,8 +671,10 @@ TEST(IndexRebuilder, serverIntegration) {
   GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
                   "integration).";
 #endif
-  cleanFilesWithPrefix("my-name");
-  cleanFilesWithPrefix("new_index");
+  namespace fs = std::filesystem;
+  cleanDirsWithPrefix("previous.");
+  cleanDirsWithPrefix("rebuild.");
+  cleanDirsWithPrefix("serverIntegration.");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -691,18 +693,17 @@ TEST(IndexRebuilder, serverIntegration) {
   };
 
   // Without access token this operation is not allowed!
-  auto request0 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name");
+  auto request0 = ad_utility::testing::makeGetRequest("/?cmd=rebuild-index");
   AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request0).get(),
                                ::testing::HasSubstr("access token"));
 
+  // Two rebuilds with default parameters at the same time: the first
+  // succeeds, the second is rejected because a rebuild is in progress.
   auto request1 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name&access-token="
-      "accessToken");
+      "/?cmd=rebuild-index&access-token=accessToken");
   auto future1 = performRequest(request1);
   auto request2 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name&access-token="
-      "accessToken");
+      "/?cmd=rebuild-index&access-token=accessToken");
   auto future2 = performRequest(request2);
 
   auto response1 = future1.get();
@@ -712,39 +713,52 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
 
-  // We use this config as a proxy for the index rebuilder having finished
-  // successfully.
-  EXPECT_TRUE(std::filesystem::exists("my-name.meta-data.json"));
+  // With the default parameters, the old index was moved to a
+  // `previous.<datetime>` directory, the new index took over the base name of
+  // the old index, and the temporary rebuild directory was removed again.
+  EXPECT_TRUE(fs::exists(indexName + ".meta-data.json"));
+  auto previousDirs = dirsWithPrefix("previous.");
+  ASSERT_EQ(previousDirs.size(), 1u);
+  EXPECT_TRUE(
+      fs::exists(previousDirs.front() / (indexName + ".meta-data.json")));
+  EXPECT_TRUE(dirsWithPrefix("rebuild.").empty());
 
+  // Rebuild with explicitly given directories.
   auto request3 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
+      "/?cmd=rebuild-index&access-token=accessToken"
+      "&tmp-dir-for-rebuild=serverIntegration.tmp"
+      "&dir-for-old-index=serverIntegration.old");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
-  // By default QLever should assign a default name for the new index.
-  EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+  EXPECT_TRUE(fs::exists(fs::path{"serverIntegration.old"} /
+                         (indexName + ".meta-data.json")));
+  EXPECT_FALSE(fs::exists("serverIntegration.tmp"));
 
-  // The index with the same name already exists, so we don't want to overwrite
-  // it.
+  // The directory for the old index must be empty or non-existing.
   auto request4 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
+      "/?cmd=rebuild-index&access-token=accessToken"
+      "&dir-for-old-index=serverIntegration.old");
   AD_EXPECT_THROW_WITH_MESSAGE(
       performRequest(request4).get(),
-      ::testing::HasSubstr("already files with the same base name"));
+      ::testing::HasSubstr("already exists and is not empty"));
 
-  // The index has to reside within the same directory as the original index.
+  // The directories must be relative paths and located inside the directory
+  // of the current index.
   auto request5 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request5).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+      "/?cmd=rebuild-index&access-token=accessToken"
+      "&dir-for-old-index=%2Fabsolute-path");
+  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request5).get(),
+                               ::testing::HasSubstr("must be a relative path"));
 
   auto request6 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request6).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+      "/?cmd=rebuild-index&access-token=accessToken"
+      "&tmp-dir-for-rebuild=..%2Fother");
+  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request6).get(),
+                               ::testing::HasSubstr("not a subdirectory"));
 
   threadPool.join();
+  cleanDirsWithPrefix("previous.");
+  cleanDirsWithPrefix("serverIntegration.");
 }
 
 // _____________________________________________________________________________
@@ -754,7 +768,7 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
                   "integration).";
 #endif
   SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
-  cleanFilesWithPrefix("dropped-state");
+  cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -783,7 +797,9 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
 
   auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
   auto request = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=dropped-state&access-token=accessToken");
+      "/?cmd=rebuild-index&access-token=accessToken"
+      "&tmp-dir-for-rebuild=droppedState.tmp"
+      "&dir-for-old-index=droppedState.old");
   using ResT = ad_utility::httpUtils::ResponseT;
   auto response =
       net::co_spawn(
@@ -800,4 +816,5 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
               ::testing::HasSubstr("Materialized views were loaded"));
 
   threadPool.join();
+  cleanDirsWithPrefix("droppedState.");
 }

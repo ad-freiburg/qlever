@@ -226,6 +226,9 @@ constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
+constexpr inline std::string_view UPDATE_TRIPLES_SUFFIX = ".update-triples";
+constexpr inline std::string_view ALLOCATED_GRAPHS_SUFFIX =
+    ".allocated-graphs-state";
 
 // The datetime format used for the `date-of-index-build` entry in the index
 // configuration (the time when the build started), e.g.

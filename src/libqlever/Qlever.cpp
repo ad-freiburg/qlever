@@ -313,8 +313,10 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
 // build, so they are not compiled in the reduced C++17 feature set.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 Qlever::RebuildResult Qlever::rebuildIndexToDisk(
-    Index& index, const std::string& indexBaseName,
+    Index& index, const IndexRebuildConfig& config,
     const ad_utility::SharedCancellationHandle& handle) const {
+  std::filesystem::create_directories(config.tmpDirForRebuild_);
+  auto indexBaseName = config.tmpBasename();
   auto logFileName = indexBaseName + ".rebuild-index-log.txt";
   auto [currentSnapshot, localVocabCopy, ownedBlocks] =
       index.deltaTriplesManager()
@@ -335,9 +337,73 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
 }
 
 // ___________________________________________________________________________
+std::string IndexRebuildConfig::tmpBasename() const {
+  return (std::filesystem::path{tmpDirForRebuild_} / basenameForNewIndex_)
+      .lexically_normal()
+      .string();
+}
+
+// ___________________________________________________________________________
+std::string IndexRebuildConfig::finalBasename() const {
+  return (std::filesystem::path{dirForNewIndex_} / basenameForNewIndex_)
+      .lexically_normal()
+      .string();
+}
+
+namespace {
+// Move the files of the old index (with base name `originalBase`, including
+// its materialized views) into the directory for the old index, move the
+// files of the freshly rebuilt index to their final base name (both given by
+// `config`), and re-anchor all path-derived state of the new index (on-disk
+// base, persistence files, views manager) accordingly. The renames keep the
+// open file handles of both indexes valid, so running queries are not
+// affected. Must be called before the swap and with the same exclusivity as
+// `swapInRebuiltIndex` itself (no concurrent updates), because an update
+// between the rename and the re-anchoring would persist to the old path.
+void moveRebuiltIndexIntoPlace(const std::string& originalBase,
+                               Qlever::IndexAndViews& newIndexAndViews,
+                               const IndexRebuildConfig& config) {
+  namespace fs = std::filesystem;
+  auto& [newIndex, newManager] = newIndexAndViews;
+  const std::string rebuildBase = newIndex.getOnDiskBase();
+  const std::string newBase = config.finalBasename();
+
+  // Move the old index's files (including its view files) into the directory
+  // for the old index.
+  const auto& oldIndexDir = config.dirForOldIndex_;
+  fs::create_directories(oldIndexDir);
+  auto moveToOldIndexDir = [&oldIndexDir](const std::string& file) {
+    fs::rename(file, fs::path{oldIndexDir} / fs::path{file}.filename());
+  };
+  ql::ranges::for_each(IndexImpl::allIndexFiles(originalBase),
+                       moveToOldIndexDir);
+  ql::ranges::for_each(MaterializedViewsManager::viewFilesOnDisk(originalBase),
+                       moveToOldIndexDir);
+
+  // Move the new index's files to their final base name.
+  for (const auto& file : IndexImpl::allIndexFiles(rebuildBase)) {
+    AD_CORRECTNESS_CHECK(ql::starts_with(file, rebuildBase));
+    fs::rename(file, absl::StrCat(newBase, std::string_view{file}.substr(
+                                               rebuildBase.size())));
+  }
+
+  // Re-anchor the path-derived state of the new index.
+  newIndex.getImpl().setOnDiskBase(newBase);
+  if (newIndex.deltaTriplesManager().persists()) {
+    newIndex.deltaTriplesManager().setFilenameForPersistentUpdates(
+        absl::StrCat(newBase, UPDATE_TRIPLES_SUFFIX));
+    newIndex.getImpl().graphNameManager().setFilenameForPersisting(
+        absl::StrCat(newBase, ALLOCATED_GRAPHS_SUFFIX));
+  }
+  newManager.setOnDiskBase(newBase);
+}
+}  // namespace
+
+// ___________________________________________________________________________
 void Qlever::swapInRebuiltIndex(
     const Index& index, RebuildResult rebuildResult,
-    const ad_utility::SharedCancellationHandle& handle) {
+    const ad_utility::SharedCancellationHandle& handle,
+    const IndexRebuildConfig& config) {
   auto& [oldSnapshot, mapping, newIndexAndViews] = rebuildResult;
   auto newSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
@@ -355,6 +421,15 @@ void Qlever::swapInRebuiltIndex(
                                          handle, tracer);
       },
       true);
+  // Move the old index out of the way and the new index into its final
+  // place, which by default is the place of the old index (in particular, a
+  // subsequent restart of the server then loads the latest index).
+  //
+  // NOTE: If this throws halfway through, the server keeps running
+  // consistently on the old index (the swap below has not happened and open
+  // file handles survive the renames), but the on-disk layout has to be
+  // repaired manually before the next restart.
+  moveRebuiltIndexIntoPlace(index.getOnDiskBase(), *newIndexAndViews, config);
   // TODO<RobinTF> add this function
   // oldIndex->removeOnDestruction();
   swapIndexAndViews(std::move(newIndexAndViews));

@@ -162,6 +162,14 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 }
 
 // _____________________________________________________________________
+std::vector<std::string> Permutation::fileNames(Enum permutation,
+                                                const std::string& onDiskBase) {
+  auto filename = absl::StrCat(onDiskBase, ".index.",
+                               ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename, META_FILE_SUFFIX)};
+}
+
+// _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
   using enum Permutation::Enum;
   switch (permutation) {
