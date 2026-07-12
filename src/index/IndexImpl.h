@@ -483,6 +483,13 @@ class IndexImpl {
   const std::string& getIndexId() const { return indexId_; }
   const std::string& getGitShortHash() const { return gitShortHash_; }
 
+  // Return the datetime when the build of this index started, in the format
+  // `2026-07-12T14:03:52Z` (UTC). For indexes that were built before this
+  // date was recorded in the configuration, the modification time of the
+  // configuration file is used instead (which approximates the END of the
+  // build).
+  std::string dateOfIndexBuild() const;
+
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
   size_t getNofEntityPostings() const {
