@@ -317,7 +317,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
     const ad_utility::SharedCancellationHandle& handle) const {
   std::filesystem::create_directories(config.tmpDirForRebuild_);
   auto indexBaseName = config.tmpBasename();
-  auto logFileName = indexBaseName + ".rebuild-index-log.txt";
+  auto logFileName = absl::StrCat(indexBaseName, REBUILD_INDEX_LOG_SUFFIX);
   auto [currentSnapshot, localVocabCopy, ownedBlocks] =
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
@@ -379,12 +379,27 @@ void moveRebuiltIndexIntoPlace(const std::string& originalBase,
                        moveToOldIndexDir);
   ql::ranges::for_each(MaterializedViewsManager::viewFilesOnDisk(originalBase),
                        moveToOldIndexDir);
+  // Move the old index's build log with it (it was either built originally or
+  // by a previous rebuild, so exactly one of the two variants exists).
+  for (auto suffix : {INDEX_LOG_SUFFIX, REBUILD_INDEX_LOG_SUFFIX}) {
+    auto logFile = absl::StrCat(originalBase, suffix);
+    if (fs::exists(logFile)) {
+      moveToOldIndexDir(logFile);
+    }
+  }
 
   // Move the new index's files to their final base name.
   for (const auto& file : IndexImpl::allIndexFiles(rebuildBase)) {
     AD_CORRECTNESS_CHECK(ql::starts_with(file, rebuildBase));
     fs::rename(file, absl::StrCat(newBase, std::string_view{file}.substr(
                                                rebuildBase.size())));
+  }
+  // Move the new index's rebuild log to its final place, next to the index it
+  // describes (from where it will later travel into the directory of the old
+  // index, when this index is in turn retired by a future rebuild).
+  auto rebuildLog = absl::StrCat(rebuildBase, REBUILD_INDEX_LOG_SUFFIX);
+  if (fs::exists(rebuildLog)) {
+    fs::rename(rebuildLog, absl::StrCat(newBase, REBUILD_INDEX_LOG_SUFFIX));
   }
 
   // Re-anchor the path-derived state of the new index.

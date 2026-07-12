@@ -1623,15 +1623,9 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
       net::use_awaitable);
   co_await std::move(swapRoutine);
 
-  // Move the rebuild log to the directory of the old index (as a record of
-  // the rebuild that retired that index) and remove the now empty temporary
-  // directory.
-  auto logFile = config.tmpBasename() + ".rebuild-index-log.txt";
-  if (fs::exists(logFile)) {
-    fs::rename(logFile,
-               fs::path{config.dirForOldIndex_} /
-                   (config.basenameForNewIndex_ + ".rebuild-index-log.txt"));
-  }
+  // The swap moved the new index and its rebuild log out of the temporary
+  // directory (see `moveRebuiltIndexIntoPlace`), so it is now empty and can be
+  // removed.
   std::error_code errorCode;
   if (!fs::remove(config.tmpDirForRebuild_, errorCode) || errorCode) {
     AD_LOG_WARN << "Could not remove the temporary directory \""
