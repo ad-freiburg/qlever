@@ -356,11 +356,21 @@ class ConcurrentCache {
     auto lockPtr = _cacheAndInProgressMap.wlock();
     AD_CONTRACT_CHECK(lockPtr->_inProgress.contains(key));
     bool pinned = lockPtr->_inProgress[key].first;
+    auto& cache = lockPtr->_cache;
+    //
+    // NOTE: The key might already be present in the cache: If the computation
+    // of this key is canceled after it has deregistered the key from
+    // `_inProgress`, then a thread that was waiting for that computation
+    // recomputes the result itself and inserts it (see `computeOnceImpl`),
+    // all before the canceled computation propagates its exception and dies.
+    // A thread that starts a fresh computation of the same key in that window
+    // ends up here with the key already inserted.
     if (pinned) {
-      lockPtr->_cache.insertPinned(std::move(key),
-                                   std::move(computationResult));
-    } else {
-      lockPtr->_cache.insert(std::move(key), std::move(computationResult));
+      if (!cache.containsAndMakePinnedIfExists(key)) {
+        cache.insertPinned(key, std::move(computationResult));
+      }
+    } else if (!cache.contains(key)) {
+      cache.insert(key, std::move(computationResult));
     }
     lockPtr->_inProgress.erase(key);
   }
