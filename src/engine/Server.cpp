@@ -1538,26 +1538,34 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
            "have to recompute them on the rebuilt index."
         << std::endl;
   }
+  // NOTE: We deliberately use the plain `runFunctionOnExecutor` and not
+  // `computeInNewThread` here: the latter wraps the awaitable in
+  // `ad_utility::interruptible`, whose cancellation-check timer is useless on
+  // this path (the `handle` above can never be cancelled) and whose
+  // timer/parallel-group machinery was the prime suspect in a rare, hard to
+  // reproduce case where a completed rebuild never resumed this coroutine
+  // (all rebuild work done, all threads idle, "Registered ..." never logged).
+  //
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
-  auto coroutine = computeInNewThread(
-      queryThreadPool_,
+  auto coroutine = ad_utility::runFunctionOnExecutor(
+      queryThreadPool_.get_executor(),
       [this, &index, &handle, &indexBaseName] {
         return qlever().rebuildIndexToDisk(index, indexBaseName, handle);
       },
-      handle);
+      net::use_awaitable);
   auto rebuildResult = co_await std::move(coroutine);
   // It is important that the swap is done in the update thread pool, because it
   // prevents other updates from being applied while the diff is computed for
   // the new index. Otherwise, the new index would be out of sync with the
   // current index.
-  auto swapRoutine = computeInNewThread(
-      updateThreadPool_,
+  auto swapRoutine = ad_utility::runFunctionOnExecutor(
+      updateThreadPool_.get_executor(),
       [this, &index, rebuildResult = std::move(rebuildResult),
        &handle]() mutable {
         qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle);
       },
-      handle);
+      net::use_awaitable);
   co_await std::move(swapRoutine);
 }
 
