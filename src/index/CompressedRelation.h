@@ -871,11 +871,13 @@ class CompressedRelationReader {
   const Allocator& allocator() const { return allocator_; }
 
   // Allow to construct a `CompressedRelationReader` using a different
-  // allocator.
+  // allocator. The underlying file descriptor is duplicated (instead of
+  // opening the file again by name), so this also works when the file has
+  // been renamed since it was opened (see `File::duplicateForReading`).
   CompressedRelationReader makeReaderWithReboundAllocator(
       Allocator allocator) const {
     return CompressedRelationReader{std::move(allocator),
-                                    ad_utility::File{file_.name(), "r"},
+                                    file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
 
