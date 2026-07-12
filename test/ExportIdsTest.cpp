@@ -334,7 +334,7 @@ void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
       // The batched result must equal the non-batched per-ID path.
       auto expected =
           ql::exportIds::idToStringAndType<RemoveQuotesAndAngleBrackets,
-                                           returnOnlyLiterals, EscapeFunction>(
+                                           returnOnlyLiterals>(
               index, ids[i], emptyLocalVocab, escape);
       EXPECT_EQ(results[i], expected);
     } else {
@@ -372,7 +372,7 @@ void expectResolveNonVocabMatchesOracle(const Index& index,
       // `std::nullopt`, e.g. for `Undefined` or a filtered-out non-literal).
       auto expected =
           ql::exportIds::idToStringAndType<RemoveQuotesAndAngleBrackets,
-                                           returnOnlyLiterals, EscapeFunction>(
+                                           returnOnlyLiterals>(
               index, ids[i], localVocab, escape);
       EXPECT_EQ(results[i], expected);
     } else {
