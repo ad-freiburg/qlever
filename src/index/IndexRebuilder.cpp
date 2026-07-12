@@ -10,6 +10,9 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "index/IndexRebuilder.h"
 
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+
 #include <array>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -408,6 +411,12 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
+  // The rebuilt index gets its own build date, namely the time when the
+  // rebuild started (the statistics below are derived from the configuration
+  // of the old index and hence contain the old date).
+  auto dateOfIndexBuild = absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
+                                           absl::Now(), absl::UTCTimeZone());
+
   auto logFile = ad_utility::makeOfstream(logFileName);
 
   // Macro for rebuild-specific logging with the same syntax as AD_LOG_INFO
@@ -426,6 +435,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
+  newStats["date-of-index-build"] = dateOfIndexBuild;
 
   auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
 

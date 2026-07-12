@@ -7,6 +7,9 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_join.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <cstdio>
@@ -392,6 +395,8 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
+  configurationJson_["date-of-index-build"] = absl::FormatTime(
+      DATE_OF_INDEX_BUILD_FORMAT, absl::Now(), absl::UTCTimeZone());
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1244,6 +1249,22 @@ void IndexImpl::writeConfiguration() const {
   configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::dateOfIndexBuild() const {
+  if (configurationJson_.contains("date-of-index-build")) {
+    return configurationJson_["date-of-index-build"].get<std::string>();
+  }
+  // For indexes that were built before the build date was recorded in the
+  // configuration, fall back to the modification time of the configuration
+  // file (it is written at the end of the index build).
+  struct stat fileStat;
+  AD_CONTRACT_CHECK(
+      stat((onDiskBase_ + CONFIGURATION_FILE).c_str(), &fileStat) == 0);
+  return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
+                          absl::FromTimeT(fileStat.st_mtime),
+                          absl::UTCTimeZone());
 }
 
 // ___________________________________________________________________________
