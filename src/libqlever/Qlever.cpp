@@ -358,6 +358,14 @@ void Qlever::swapInRebuiltIndex(
   // TODO<RobinTF> add this function
   // oldIndex->removeOnDestruction();
   swapIndexAndViews(std::move(newIndexAndViews));
+  // Clear the query cache, including pinned entries: cached results were
+  // computed against the old index, so their `VocabIndex` ids are in the old
+  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
+  // old index. The cache key alone does not protect against serving them: it
+  // only contains the query string and the delta triples version counter,
+  // and the counter of the new index starts over and can collide with a
+  // pre-swap value.
+  cache_.clearAll();
 }
 #endif
 }  // namespace qlever
