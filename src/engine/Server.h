@@ -231,10 +231,9 @@ class Server {
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         const ad_utility::Timer& requestTimer,
-                         TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle, TimeLimit timeLimit,
+                         const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)

@@ -789,8 +789,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     static constexpr size_t dummyTimeLimit = 1000 * 60 * 60;  // 1 hour
     std::chrono::milliseconds timeLimit{dummyTimeLimit};
     server.qlever().writeMaterializedView(
-        "testViewFromServer", std::move(query.query_), requestTimer,
-        query.datasetClauses_, std::move(cancellationHandle), timeLimit);
+        "testViewFromServer", std::move(query.query_), query.datasetClauses_,
+        std::move(cancellationHandle), timeLimit, requestTimer);
   }
 
   // Test the preloading of materialized views on server start.

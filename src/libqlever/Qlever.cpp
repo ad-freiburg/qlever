@@ -208,8 +208,8 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
-    QueryExecutionContext& qec, SharedCancellationHandle handle,
+    ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
@@ -252,8 +252,8 @@ PlannedQuery Qlever::parseAndPlanQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
       datasetClauses);
 
-  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr,
-                   std::move(handle), requestTimer);
+  return planQuery(std::move(parsedQuery), *qecPtr, std::move(handle),
+                   timeLimit, requestTimer);
 }
 
 // ___________________________________________________________________________
@@ -279,17 +279,24 @@ void IndexBuilderConfig::validate() const {
 // ___________________________________________________________________________
 void Qlever::writeMaterializedView(
     std::string name, std::string query,
-    boost::optional<const ad_utility::Timer&> requestTimer,
     const std::vector<DatasetClause>& datasetClauses,
     SharedCancellationHandle cancellationHandle,
-    std::optional<TimeLimit> timeLimit) const {
-  auto plan =
-      parseAndPlanQuery(std::move(query), datasetClauses,
+    std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  // Acquire the index and the manager via a single read lock so they are
+  // guaranteed to come from the same swap generation.
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto parsedQuery =
+      SparqlParser::parseQuery(&indexAndViews->index_.encodedIriManager(),
+                               std::move(query), datasetClauses);
+
+  auto qec = createQueryExecutionContext(indexAndViews);
+  auto plan = planQuery(std::move(parsedQuery), *qec,
                         std::move(cancellationHandle), timeLimit, requestTimer);
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  materializedViewsManager()->writeViewToDisk(std::move(name), plan,
-                                              memoryLimit);
+  indexAndViews->materializedViewsManager_.writeViewToDisk(std::move(name),
+                                                           plan, memoryLimit);
 }
 
 // ___________________________________________________________________________

@@ -274,11 +274,11 @@ class Qlever {
   // `Server` actually imposes time limits and then executes the queries right
   // away), but should be addressed in the future once the timeout management
   // also is moved into the `QLever` class.
-  PlannedQuery planQuery(
-      ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
-      QueryExecutionContext& qec, SharedCancellationHandle handle,
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
+  PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle,
+                         std::optional<TimeLimit> timeLimit,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
   // name, `query` may also be a SPARQL update operation).
@@ -356,11 +356,12 @@ class Qlever {
   // never-triggered cancellation handle, i.e. it always runs to completion.
   void writeMaterializedView(
       std::string name, std::string query,
-      boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
       const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt) const;
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
