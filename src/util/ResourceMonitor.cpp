@@ -43,18 +43,29 @@ std::optional<uint64_t> currentRssBytes() {
   }
   return info.resident_size;
 #elif defined(__linux__)
-  // Field 2 of `/proc/self/statm` is the resident size, counted in
-  // pages, so multiply by the machine's page size.
+  // Field 2 of `/proc/self/statm` is the resident size in pages, so scale by
+  // the machine's page size.
   std::ifstream statm{"/proc/self/statm"};
-  uint64_t totalPages, residentPages;
-  if (!(statm >> totalPages >> residentPages)) {
+  auto residentPages = parseResidentPages(statm);
+  if (!residentPages.has_value()) {
     return std::nullopt;
   }
-  return residentPages * static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
+  return *residentPages * static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
 #else
   return std::nullopt;
 #endif
 }
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+std::optional<uint64_t> parseResidentPages(std::istream& statm) {
+  uint64_t totalPages, residentPages;
+  if (!(statm >> totalPages >> residentPages)) {
+    return std::nullopt;
+  }
+  return residentPages;
+}
+#endif
 
 // _____________________________________________________________________________
 std::optional<double> cpuTimeSeconds() {
@@ -74,6 +85,34 @@ std::optional<double> cpuTimeSeconds() {
 #endif
 }
 
+// _____________________________________________________________________________
+std::optional<double> CpuPercentTracker::update(
+    std::optional<double> cpuSeconds, double elapsed) {
+  // Keep the old baseline on a failed reading, so the next value averages
+  // over the whole gap rather than jumping.
+  if (!cpuSeconds.has_value()) {
+    return std::nullopt;
+  }
+  std::optional<double> percent;
+  if (lastCpuSeconds_.has_value() && elapsed > lastElapsed_) {
+    percent =
+        (*cpuSeconds - *lastCpuSeconds_) / (elapsed - lastElapsed_) * 100.0;
+  }
+  lastCpuSeconds_ = cpuSeconds;
+  lastElapsed_ = elapsed;
+  return percent;
+}
+
+// _____________________________________________________________________________
+std::string formatTsvRow(double elapsed, int64_t timestampMs,
+                         std::optional<uint64_t> rss,
+                         std::optional<double> cpuPercent) {
+  return absl::StrFormat(
+      "%.1f\t%d\t%s\t%s\n", elapsed, timestampMs,
+      rss.has_value() ? absl::StrCat(*rss) : "",
+      cpuPercent.has_value() ? absl::StrFormat("%.1f", *cpuPercent) : "");
+}
+
 }  // namespace ad_utility::resource_monitor
 
 namespace ad_utility {
@@ -91,9 +130,9 @@ ResourceMonitor::~ResourceMonitor() {
 // _____________________________________________________________________________
 void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
                             std::chrono::milliseconds interval) {
-#if defined(__APPLE__) || defined(__linux__)
   AD_CONTRACT_CHECK(!started_.exchange(true),
                     "ResourceMonitor::start may only be called once.");
+#if defined(__APPLE__) || defined(__linux__)
   // Monitoring is optional: on a bad interval or an unwritable file, warn
   // and let QLever run on rather than aborting the process.
   if (interval <= std::chrono::milliseconds{0}) {
@@ -145,11 +184,17 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
 }
 
 // _____________________________________________________________________________
+void ResourceMonitor::setReadersForTesting(
+    resource_monitor::RssReader rssReader,
+    resource_monitor::CpuReader cpuReader) {
+  rssReader_ = std::move(rssReader);
+  cpuReader_ = std::move(cpuReader);
+}
+
+// _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   Timer timer{Timer::Started};
-  // Baseline for the CPU deltas; empty until the first successful reading.
-  std::optional<double> lastCpuSeconds = resource_monitor::cpuTimeSeconds();
-  double lastElapsed = 0.0;
+  resource_monitor::CpuPercentTracker cpuTracker{cpuReader_()};
   bool warnedWriteFailure = false;
 
   // Absolute deadlines keep the ticks on a steady grid, no matter how
@@ -163,26 +208,11 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     }
     deadline += interval;
     double elapsed = Timer::toSeconds(timer.value());
-    auto rss = resource_monitor::currentRssBytes();
-    auto cpuSeconds = resource_monitor::cpuTimeSeconds();
-
-    // CPU usage = CPU time consumed per wall-clock time, as a percent of
-    // one core. Baselines only advance on success, so after a failed
-    // reading the next value averages over the whole gap.
-    std::string cpuColumn;
-    if (cpuSeconds.has_value()) {
-      if (lastCpuSeconds.has_value() && elapsed > lastElapsed) {
-        double percent =
-            (*cpuSeconds - *lastCpuSeconds) / (elapsed - lastElapsed) * 100.0;
-        cpuColumn = absl::StrFormat("%.1f", percent);
-      }
-      lastCpuSeconds = cpuSeconds;
-      lastElapsed = elapsed;
-    }
-    stream_ << absl::StrFormat("%.1f\t%d\t%s\t%s\n", elapsed,
-                               epochMillis(std::chrono::system_clock::now()),
-                               rss.has_value() ? absl::StrCat(*rss) : "",
-                               cpuColumn);
+    auto rss = rssReader_();
+    auto cpuPercent = cpuTracker.update(cpuReader_(), elapsed);
+    stream_ << resource_monitor::formatTsvRow(
+        elapsed, epochMillis(std::chrono::system_clock::now()), rss,
+        cpuPercent);
     stream_.flush();
     // A failed stream drops all further writes; say so once.
     if (stream_.fail() && !warnedWriteFailure) {

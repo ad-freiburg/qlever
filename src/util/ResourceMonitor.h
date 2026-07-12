@@ -15,8 +15,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <istream>
 #include <mutex>
 #include <optional>
+#include <string>
 
 #include "util/jthread.h"
 
@@ -27,8 +30,41 @@ namespace resource_monitor {
 // Current resident set size (RSS) of this process in bytes.
 std::optional<uint64_t> currentRssBytes();
 
+#if defined(__linux__)
+// Resident page count from the content of `/proc/self/statm` (its 2nd field),
+// or `std::nullopt` if the content is malformed.
+std::optional<uint64_t> parseResidentPages(std::istream& statm);
+#endif
+
 // Total CPU time (user + system) used by this process so far, in seconds.
 std::optional<double> cpuTimeSeconds();
+
+// Turns successive cumulative CPU-time readings into CPU usage as a percentage
+// of one core. Stateful: each `update` is the baseline for the next.
+class CpuPercentTracker {
+ public:
+  explicit CpuPercentTracker(std::optional<double> initialCpuSeconds)
+      : lastCpuSeconds_{initialCpuSeconds} {}
+
+  // `std::nullopt` when usage cannot be computed yet: no reading this tick,
+  // no baseline, or no time elapsed since the baseline.
+  std::optional<double> update(std::optional<double> cpuSeconds,
+                               double elapsed);
+
+ private:
+  std::optional<double> lastCpuSeconds_;
+  double lastElapsed_ = 0.0;
+};
+
+// One TSV row; a missing `rss` or `cpuPercent` becomes an empty cell.
+std::string formatTsvRow(double elapsed, int64_t timestampMs,
+                         std::optional<uint64_t> rss,
+                         std::optional<double> cpuPercent);
+
+// The two OS readers, as swappable function objects (see
+// `ResourceMonitor::setReadersForTesting`).
+using RssReader = std::function<std::optional<uint64_t>()>;
+using CpuReader = std::function<std::optional<double>()>;
 
 }  // namespace resource_monitor
 
@@ -55,6 +91,11 @@ class ResourceMonitor {
   void start(const std::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval = std::chrono::seconds{1});
 
+  // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
+  // exercise the sampler's error handling.
+  void setReadersForTesting(resource_monitor::RssReader rssReader,
+                            resource_monitor::CpuReader cpuReader);
+
  private:
   // Body of the sampling thread.
   void runLoop(std::chrono::milliseconds interval);
@@ -62,6 +103,8 @@ class ResourceMonitor {
   // Declaration order is load-bearing: `sampler_` must be destroyed
   // (i.e. joined) first, while the members it uses are still alive.
   std::ofstream stream_;
+  resource_monitor::RssReader rssReader_ = resource_monitor::currentRssBytes;
+  resource_monitor::CpuReader cpuReader_ = resource_monitor::cpuTimeSeconds;
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;
