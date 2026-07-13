@@ -59,6 +59,10 @@ TEST(StringMapping, remapId) {
 }
 
 // _____________________________________________________________________________
+// This test builds a text index (`config.createTextIndex = true`), which is
+// not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(StringMapping, flush) {
   ad_utility::testing::TestIndexConfig config;
   config.turtleInput =
@@ -90,3 +94,4 @@ TEST(StringMapping, flush) {
       mapping.flush(index),
       ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

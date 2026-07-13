@@ -31,6 +31,10 @@ auto qecWithTextIndex = []() {
   return getQec(std::move(config));
 };
 
+// The tests below all build a text index via `qecWithTextIndex()`, which is
+// not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(TextIndexScanForEntity, ShortPrefixWord) {
   auto qec = qecWithTextIndex();
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
@@ -184,6 +188,7 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
                             "test"};
   ASSERT_TRUE(!s3.knownEmptyResult());
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(TextIndexScanForEntity, clone) {

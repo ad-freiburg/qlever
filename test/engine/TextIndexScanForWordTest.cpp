@@ -173,6 +173,10 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
       std::runtime_error);
 }
 
+// The tests below all build a text index via `getQecWithTextIndex()`, which
+// is not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(TextIndexScanForWord, WordScanPrefix) {
   auto qec = getQecWithTextIndex();
 
@@ -480,6 +484,7 @@ TEST(TextIndexScanForWord, KnownEmpty) {
   TextIndexScanForWord s5{qec, Variable{"?text1"}, "testing"};
   ASSERT_TRUE(!s5.knownEmptyResult());
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(TextIndexScanForWord, clone) {
