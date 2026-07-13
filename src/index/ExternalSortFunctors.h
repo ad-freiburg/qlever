@@ -26,6 +26,21 @@
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
+
+  // The indices of the columns that this comparator sorts by (in order).
+  // They are used by the `CompressedExternalIdTableSorter` to sort blocks
+  // with a fast columnar sort instead of a comparison sort on the rows (see
+  // `trySortByKeyColumnsBitwise`).
+  static constexpr size_t numKeyColumns = hasGraphColumn ? 4 : 3;
+  static constexpr std::array<size_t, numKeyColumns> sortedKeyColumnIndices_ =
+      []() {
+        if constexpr (hasGraphColumn) {
+          return std::array<size_t, 4>{size_t{i0}, size_t{i1}, size_t{i2},
+                                       ADDITIONAL_COLUMN_GRAPH_ID};
+        } else {
+          return std::array<size_t, 3>{size_t{i0}, size_t{i1}, size_t{i2}};
+        }
+      }();
   // comparison function
   template <typename T1, typename T2>
   bool operator()(const T1& a, const T2& b) const {

@@ -14,6 +14,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/IdColumnAlgorithms.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -621,6 +622,15 @@ struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   template <typename T>
   void operator()(T& block) {
+    // Fast path: If the comparator exposes its key columns (e.g. the
+    // `SortTriple` comparators used during index building), sort via the
+    // compact key/index array instead of a comparison sort on the rows.
+    if constexpr (requires { Comparator::sortedKeyColumnIndices_; }) {
+      if (columnBasedIdTable::trySortByKeyColumnsBitwise(
+              block, Comparator::sortedKeyColumnIndices_)) {
+        return;
+      }
+    }
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
@@ -749,12 +759,29 @@ class CompressedExternalIdTableSorter
   }
 
  private:
-  // Common implementation for the two `pushBlock` overloads above.
+  // Common implementation for the two `pushBlock` overloads above. Copy the
+  // input into the current block column-wise in chunks that respect the block
+  // size, instead of pushing the rows one by one.
   template <typename IdTableLike>
   void pushBlockImpl(const IdTableLike& block) {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    ql::ranges::for_each(block,
-                         [ptr = this](const auto& row) { ptr->push(row); });
+    size_t begin = 0;
+    const size_t numRows = block.numRows();
+    while (begin < numRows) {
+      auto& currentBlock = this->currentBlock_;
+      const size_t chunk =
+          std::min(this->blocksize_ - currentBlock.numRows(), numRows - begin);
+      currentBlock.insertAtEnd(block, begin, begin + chunk);
+      this->numElementsPushed_ += chunk;
+      begin += chunk;
+      if (currentBlock.size() >= this->blocksize_) {
+        // Note: Explicitly call the `pushBlock` of the base class, the
+        // `pushBlock` overloads of this class would be found first by the
+        // unqualified name lookup.
+        Base::pushBlock(std::move(currentBlock));
+        this->resetCurrentBlock(true);
+      }
+    }
   }
 
   template <typename RowGenVectorType, typename CompType>
@@ -829,6 +856,196 @@ class CompressedExternalIdTableSorter
     }
   };
 
+  // A block-based k-way merge that is used instead of the row-based
+  // `SortState` when the comparator exposes `sortedKeyColumnIndices_` (see
+  // e.g. `SortTriple` in `ExternalSortFunctors.h`). Such comparators order
+  // rows lexicographically by the bitwise `(datatype, payload)` representation
+  // of the key columns (i.e. by `Id::compareWithoutLocalVocab`), which allows
+  // two crucial optimizations:
+  // 1. Heap comparisons work directly on the raw payload and datatype arrays
+  //    of the current blocks (no materialization of row proxies or
+  //    `ValueId`s).
+  // 2. Consecutive rows from the same input that are all `<=` the smallest
+  //    row of the other inputs (found via galloping search) are copied to the
+  //    output in a single columnar `insertAtEnd` call.
+  template <size_t NumKeys>
+  struct BlockMergeState
+      : ad_utility::InputRangeMixin<BlockMergeState<NumKeys>> {
+    using Block = IdTableStatic<NumStaticCols>;
+    using BlockGenerator = ad_utility::InputRangeTypeErased<Block>;
+
+    // The state of a single sorted input: its generator of sorted blocks, the
+    // current block with the current row inside it, and raw pointers to the
+    // key columns of the current block.
+    struct Source {
+      BlockGenerator generator_;
+      std::optional<Block> block_ = std::nullopt;
+      size_t row_ = 0;
+      std::array<const uint64_t*, NumKeys> payloads_{};
+      std::array<const uint8_t*, NumKeys> types_{};
+    };
+
+    // Note: The heap only contains indices into the vector of sources, s.t.
+    // the (comparatively large) `Source` objects don't have to be moved
+    // around by the heap operations.
+    std::vector<Source> sources_;
+    std::vector<size_t> heap_;
+    std::array<size_t, NumKeys> keyColumns_;
+    bool isFinished_ = false;
+    Block result_;
+    CompressedExternalIdTableSorter* sorter_;
+    size_t numPopped_{0};
+    size_t blockSizeOutput_;
+
+    BlockMergeState(size_t numCols,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    const std::array<size_t, NumKeys>& keyColumns,
+                    std::vector<BlockGenerator> generators, size_t blockSize,
+                    CompressedExternalIdTableSorter* sorter)
+        : keyColumns_{keyColumns},
+          result_{numCols, allocator},
+          sorter_{sorter},
+          blockSizeOutput_{blockSize} {
+      sources_.reserve(generators.size());
+      for (auto& gen : generators) {
+        sources_.push_back(Source{std::move(gen)});
+      }
+    }
+
+    void start() {
+      for (size_t i = 0; i < sources_.size(); ++i) {
+        if (advanceBlock(sources_[i])) {
+          heap_.push_back(i);
+        }
+      }
+      ql::ranges::make_heap(heap_, heapComparator());
+      // Without that call, `begin() != end()` would always hold (even for
+      // empty sorters), and `*begin()` would always yield an empty block
+      // (even for non-empty sorters).
+      next();
+    }
+
+    bool isFinished() {
+      if (isFinished_) {
+        AD_CORRECTNESS_CHECK(numPopped_ == sorter_->numElementsPushed_, [this] {
+          return absl::StrCat("numPopped: ", numPopped_, "num elements pushed:",
+                              sorter_->numElementsPushed_);
+        });
+        return true;
+      } else {
+        return false;
+      }
+    }
+    auto& get() { return result_; }
+
+    void next() {
+      result_.clear();
+      result_.reserve(blockSizeOutput_);
+      const auto comparator = heapComparator();
+      while (!heap_.empty() && result_.size() < blockSizeOutput_) {
+        ql::ranges::pop_heap(heap_, comparator);
+        Source& source = sources_[heap_.back()];
+        // Determine the longest run of rows from this source that can be
+        // copied to the output before another source has to be consulted.
+        size_t runEnd = heap_.size() == 1
+                            ? source.block_->numRows()
+                            : findRunEnd(source, sources_[heap_.front()]);
+        runEnd =
+            std::min(runEnd, source.row_ + (blockSizeOutput_ - result_.size()));
+        result_.insertAtEnd(*source.block_, source.row_, runEnd);
+        source.row_ = runEnd;
+        if (source.row_ == source.block_->numRows() && !advanceBlock(source)) {
+          heap_.pop_back();
+        } else {
+          ql::ranges::push_heap(heap_, comparator);
+        }
+      }
+      numPopped_ += result_.numRows();
+      isFinished_ = result_.empty();
+    }
+
+   private:
+    // Store raw pointers to the payloads and datatypes of the key columns of
+    // the current block of the `source`.
+    void refreshColumnPointers(Source& source) {
+      for (size_t k = 0; k < NumKeys; ++k) {
+        auto column = source.block_->getColumn(keyColumns_[k]);
+        source.payloads_[k] = column.payloadSpan().data();
+        source.types_[k] = column.datatypeSpan().data();
+      }
+    }
+
+    // Compare the row `rowA` of source `a` with the current row of source `b`
+    // lexicographically by the bitwise `(datatype, payload)` representation
+    // of the key columns. Return `true` if the former is less than or equal
+    // to the latter.
+    bool rowNotGreater(const Source& a, size_t rowA, const Source& b) const {
+      for (size_t k = 0; k < NumKeys; ++k) {
+        uint8_t typeA = a.types_[k][rowA];
+        uint8_t typeB = b.types_[k][b.row_];
+        if (typeA != typeB) {
+          return typeA < typeB;
+        }
+        uint64_t payloadA = a.payloads_[k][rowA];
+        uint64_t payloadB = b.payloads_[k][b.row_];
+        if (payloadA != payloadB) {
+          return payloadA < payloadB;
+        }
+      }
+      return true;
+    }
+
+    // Return a comparator for the heap of source indices. The heap is a
+    // max-heap w.r.t. this comparator, so the comparison is inverted to
+    // obtain the source with the smallest current row at the top. As the
+    // bitwise key order is total, `b < a` is equivalent to `!(a <= b)`.
+    auto heapComparator() {
+      return [this](size_t a, size_t b) {
+        return !rowNotGreater(sources_[a], sources_[a].row_, sources_[b]);
+      };
+    }
+
+    // Return the index of the first row in the current block of `source`
+    // (starting after its current row) whose key is greater than the current
+    // row of `bound`, using galloping search. The current row of `source` is
+    // known to be `<=` the current row of `bound`.
+    size_t findRunEnd(const Source& source, const Source& bound) const {
+      const size_t numRows = source.block_->numRows();
+      size_t base = source.row_;
+      size_t step = 1;
+      while (base + step < numRows &&
+             rowNotGreater(source, base + step, bound)) {
+        base += step;
+        step *= 2;
+      }
+      size_t lo = base + 1;
+      size_t hi = std::min(base + step, numRows);
+      while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (rowNotGreater(source, mid, bound)) {
+          lo = mid + 1;
+        } else {
+          hi = mid;
+        }
+      }
+      return lo;
+    }
+
+    // Fetch the next nonempty block from the generator of the `source` and
+    // reset the current row. Return `false` if the source is exhausted.
+    bool advanceBlock(Source& source) {
+      do {
+        source.block_ = source.generator_.get();
+        if (!source.block_.has_value()) {
+          return false;
+        }
+      } while (source.block_->empty());
+      source.row_ = 0;
+      refreshColumnPointers(source);
+      return true;
+    }
+  };
+
   void clearUnderlying() override { this->clear(); }
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return an input range that yields the sorted elements.
@@ -871,6 +1088,26 @@ class CompressedExternalIdTableSorter
       return ad_utility::InputRangeTypeErased(std::move(chunked));
     }
 
+    // Fast path: If the comparator exposes the indices of its key columns
+    // (which implies that it sorts by the bitwise representation of those
+    // columns, see `SortTriple`), use the block-based columnar merge.
+    if constexpr (requires { Comparator::sortedKeyColumnIndices_; }) {
+      auto blockGenerators =
+          this->writer_.template getAllGenerators<NumStaticCols>();
+      const size_t blockSizeOutput = blocksize.value_or(
+          computeBlockSizeForMergePhase(blockGenerators.size()));
+      static constexpr auto keyColumns = Comparator::sortedKeyColumnIndices_;
+      auto toStaticBlock = [](auto& table) -> IdTableStatic<N> {
+        return std::move(table).template toStatic<N>();
+      };
+      using namespace ad_utility;
+      return InputRangeTypeErased{CachingTransformInputRange{
+          BlockMergeState<keyColumns.size()>{
+              this->writer_.numColumns(), this->writer_.allocator(), keyColumns,
+              std::move(blockGenerators), blockSizeOutput, this},
+          toStaticBlock}};
+    }
+
     auto rowGenerators =
         this->writer_.template getAllRowGenerators<NumStaticCols>();
 
@@ -900,6 +1137,13 @@ class CompressedExternalIdTableSorter
 
   // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
+    // Fast path, see `BlockSorter::operator()` above.
+    if constexpr (requires { Comparator::sortedKeyColumnIndices_; }) {
+      if (columnBasedIdTable::trySortByKeyColumnsBitwise(
+              block, Comparator::sortedKeyColumnIndices_)) {
+        return;
+      }
+    }
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
 #else

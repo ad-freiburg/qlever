@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 #include "backports/concepts.h"
@@ -339,6 +340,186 @@ inline bool trySortBySingleKeyColumn(::IdTable& table, ColumnIndex keyColumn) {
                 numRows * sizeof(uint64_t));
     std::memcpy(types.data(), scratchTypes.data(), numRows * sizeof(uint8_t));
   }
+  return true;
+}
+
+namespace detail {
+
+// Return `true` iff all elements of the `values` are equal.
+template <typename T>
+bool allElementsEqual(ql::span<T> values) {
+  if (values.empty()) {
+    return true;
+  }
+  const auto first = values.front();
+  for (const auto& value : values) {
+    if (value != first) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// The implementation of `trySortByKeyColumnsBitwise` below for a fixed number
+// of (non-constant) key columns. All preconditions (no `LocalVocabIndex` IDs
+// in the key columns, at most `uint32_t` many rows) have already been checked
+// by the caller.
+template <size_t NumKeys, typename Table>
+void sortByKeyColumnsBitwiseImpl(
+    Table& table, const std::array<size_t, NumKeys>& keyColumns) {
+  const size_t numRows = table.numRows();
+  struct Entry {
+    std::array<uint64_t, NumKeys> payloads_;
+    uint32_t index_;
+    std::array<uint8_t, NumKeys> types_;
+  };
+  std::vector<Entry> entries(numRows);
+  // Fill the entries row-major in a single pass (reads from `NumKeys`
+  // sequential streams, writes each entry exactly once).
+  {
+    std::array<const uint64_t*, NumKeys> payloads;
+    std::array<const uint8_t*, NumKeys> types;
+    for (size_t k = 0; k < NumKeys; ++k) {
+      auto column = table.getColumn(keyColumns[k]);
+      payloads[k] = column.payloadSpan().data();
+      types[k] = column.datatypeSpan().data();
+    }
+#pragma omp parallel for
+    for (size_t i = 0; i < numRows; ++i) {
+      auto& entry = entries[i];
+      for (size_t k = 0; k < NumKeys; ++k) {
+        entry.payloads_[k] = payloads[k][i];
+        entry.types_[k] = types[k][i];
+      }
+      entry.index_ = static_cast<uint32_t>(i);
+    }
+  }
+
+  auto comparator = [](const Entry& a, const Entry& b) {
+    for (size_t k = 0; k < NumKeys; ++k) {
+      if (a.types_[k] != b.types_[k]) {
+        return a.types_[k] < b.types_[k];
+      }
+      if (a.payloads_[k] != b.payloads_[k]) {
+        return a.payloads_[k] < b.payloads_[k];
+      }
+    }
+    return false;
+  };
+  if constexpr (USE_PARALLEL_SORT) {
+    // Note: Deliberately no thread limit here; this replaces the unlimited
+    // `parallel_sort` calls of the external sorter.
+    ad_utility::parallel_sort(entries.begin(), entries.end(), comparator);
+  } else {
+    std::sort(entries.begin(), entries.end(), comparator);
+  }
+
+  // Apply the permutation to all columns. The scratch buffers are reused
+  // across the columns, the gather loop is parallelized within each column.
+  const auto numColumns = table.numColumns();
+  std::vector<uint64_t> scratchPayloads(numRows);
+  std::vector<uint8_t> scratchTypes(numRows);
+  for (size_t c = 0; c < numColumns; ++c) {
+    decltype(auto) column = table.getColumn(c);
+    auto payloads = column.payloadSpan();
+    auto types = column.datatypeSpan();
+    // Constant columns are invariant under the permutation.
+    if (allElementsEqual(ql::span<const uint64_t>{payloads}) &&
+        allElementsEqual(ql::span<const uint8_t>{types})) {
+      continue;
+    }
+#pragma omp parallel for
+    for (size_t i = 0; i < numRows; ++i) {
+      scratchPayloads[i] = payloads[entries[i].index_];
+      scratchTypes[i] = types[entries[i].index_];
+    }
+    std::memcpy(payloads.data(), scratchPayloads.data(),
+                numRows * sizeof(uint64_t));
+    std::memcpy(types.data(), scratchTypes.data(), numRows * sizeof(uint8_t));
+  }
+}
+
+// Call `sortByKeyColumnsBitwiseImpl` with the first `numActive` entries of
+// the `activeKeys` as the (compile-time sized) array of key columns.
+CPP_template(size_t N, size_t MaxKeys, typename Table)(requires(
+    N >= 1 &&
+    N <= MaxKeys)) void sortByKeyColumnsBitwiseDispatch(Table& table,
+                                                        const std::array<
+                                                            size_t, MaxKeys>&
+                                                            activeKeys,
+                                                        size_t numActive) {
+  AD_CORRECTNESS_CHECK(numActive >= 1 && numActive <= MaxKeys);
+  if (numActive == N) {
+    std::array<size_t, N> keys;
+    std::copy(activeKeys.begin(), activeKeys.begin() + N, keys.begin());
+    sortByKeyColumnsBitwiseImpl<N>(table, keys);
+    return;
+  }
+  if constexpr (N > 1) {
+    sortByKeyColumnsBitwiseDispatch<N - 1>(table, activeKeys, numActive);
+  }
+}
+
+}  // namespace detail
+
+// Try to sort the `table` by the given `keyColumns` (compared in order,
+// each datatype-major bitwise, which is exactly the ID order as long as no
+// IDs of type `LocalVocabIndex` are involved). On success return `true`.
+// Return `false` without modifying the table if one of the key columns
+// contains an ID of type `LocalVocabIndex` (the caller then has to use a
+// generic comparison sort), or if the table has more than `uint32_t` many
+// rows (which in practice never happens for the blockwise sorts this
+// function is used for).
+//
+// The sort extracts the keys and row indices into a compact contiguous
+// array, sorts that array (in parallel if enabled), and then applies the
+// resulting permutation to all columns of the table, one column at a time.
+// This is much faster than a comparison sort on the rows of the table,
+// which has to touch all payload and datatype buffers of the table for
+// every swap (or, for the parallel multiway mergesort, has to materialize
+// complete rows into its temporary buffers). Key columns whose value is
+// constant within the `table` (e.g. typically the graph column) don't
+// influence the order and are excluded, which makes the key entries smaller
+// and the comparisons cheaper.
+CPP_template(size_t NumKeys, typename Table)(requires(
+    NumKeys >=
+    1)) bool trySortByKeyColumnsBitwise(Table& table,
+                                        const std::array<size_t, NumKeys>&
+                                            keyColumns) {
+  const size_t numRows = table.numRows();
+  if (numRows <= 1) {
+    return true;
+  }
+  if (numRows > std::numeric_limits<uint32_t>::max()) {
+    return false;
+  }
+  for (size_t keyColumn : keyColumns) {
+    auto types = table.getColumn(keyColumn).datatypeSpan();
+    if (std::memchr(types.data(), static_cast<int>(Datatype::LocalVocabIndex),
+                    types.size()) != nullptr) {
+      return false;
+    }
+  }
+
+  // Determine the key columns that are not constant.
+  std::array<size_t, NumKeys> activeKeys{};
+  size_t numActive = 0;
+  for (size_t keyColumn : keyColumns) {
+    auto column = table.getColumn(keyColumn);
+    if (!(detail::allElementsEqual(
+              ql::span<const uint64_t>{column.payloadSpan()}) &&
+          detail::allElementsEqual(
+              ql::span<const uint8_t>{column.datatypeSpan()}))) {
+      activeKeys[numActive] = keyColumn;
+      ++numActive;
+    }
+  }
+  // If all key columns are constant, the table is trivially sorted.
+  if (numActive == 0) {
+    return true;
+  }
+  detail::sortByKeyColumnsBitwiseDispatch<NumKeys>(table, activeKeys,
+                                                   numActive);
   return true;
 }
 

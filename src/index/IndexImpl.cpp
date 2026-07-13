@@ -770,20 +770,35 @@ auto IndexImpl::convertPartialToGlobalIds(
   ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
 
   // For all triple elements find their mapping from partial to global ids.
-  auto transformTriple = [](Buffer::row_reference& curTriple, auto& idMap) {
-    for (auto&& id : curTriple) {
-      // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
-      // probably the mapping should also be defined as `HashMap<VocabIndex,
-      // VocabIndex>` instead of `HashMap<Id, Id>`
-      if (id.getDatatype() != Datatype::VocabIndex) {
-        // Check that all the internal, special IDs which we have introduced
-        // for performance reasons are eliminated.
-        AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
-        continue;
+  // Work column-wise directly on the datatype bytes and payload words to
+  // avoid materializing the `Id`s for the (frequent) elements that don't have
+  // to be changed.
+  auto transformTriples = [](Buffer& triples, auto& idMap) {
+    // TODO<joka92> Since the mapping only maps `VocabIndex->VocabIndex`,
+    // probably the mapping should also be defined as `HashMap<VocabIndex,
+    // VocabIndex>` instead of `HashMap<Id, Id>`
+    static constexpr auto vocabType =
+        static_cast<uint8_t>(Datatype::VocabIndex);
+    static constexpr auto undefinedType =
+        static_cast<uint8_t>(Datatype::Undefined);
+    for (size_t col = 0; col < triples.numColumns(); ++col) {
+      auto column = triples.getColumn(col);
+      auto payloads = column.payloadSpan();
+      auto types = column.datatypeSpan();
+      for (size_t i = 0; i < types.size(); ++i) {
+        if (types[i] != vocabType) {
+          // Check that all the internal, special IDs which we have introduced
+          // for performance reasons are eliminated.
+          AD_CORRECTNESS_CHECK(types[i] != undefinedType);
+          continue;
+        }
+        auto iterator =
+            idMap.find(Id::makeFromVocabIndex(VocabIndex::make(payloads[i])));
+        AD_CORRECTNESS_CHECK(iterator != idMap.end());
+        const auto bits = iterator->second.getBits();
+        types[i] = bits.datatype_;
+        payloads[i] = bits.payload_;
       }
-      auto iterator = idMap.find(id);
-      AD_CORRECTNESS_CHECK(iterator != idMap.end());
-      id = iterator->second;
     }
   };
 
@@ -813,16 +828,14 @@ auto IndexImpl::convertPartialToGlobalIds(
   // Return a lambda that for each of the `triples` transforms its partial to
   // global IDs using the `idMap`. The map is passed as a `shared_ptr` because
   // multiple batches need access to the same map.
-  auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriple,
+  auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriples,
                         &getWriteTask](Buffer triples,
                                        std::shared_ptr<Map> idMap) {
     return [&isQLeverInternalTriple, &writeQueue,
             triples = std::make_shared<Buffer>(std::move(triples)),
             idMap = std::move(idMap), &getWriteTask,
-            &transformTriple]() mutable {
-      for (Buffer::row_reference triple : *triples) {
-        transformTriple(triple, *idMap);
-      }
+            &transformTriples]() mutable {
+      transformTriples(*triples, *idMap);
       auto beginInternal =
           std::partition(triples->begin(), triples->end(),
                          [&isQLeverInternalTriple](const auto& row) {

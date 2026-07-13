@@ -834,9 +834,25 @@ class IdTable {
             ql::ranges::fill(getColumn(i).subspan(oldSize), defaultValue);
             return;
           }
-          ql::ranges::copy(
-              table.getColumn(mappedIndex).subspan(begin, numInserted),
-              getColumn(i).begin() + oldSize);
+          auto sourceColumn = table.getColumn(mappedIndex);
+          auto targetColumn = getColumn(i);
+          // Fast path for the split-column storage: Copy the payloads and
+          // the datatype bytes separately (this compiles down to `memcpy`,
+          // whereas the generic path copies element-wise via proxies).
+          if constexpr (requires {
+                          sourceColumn.payloadSpan();
+                          targetColumn.payloadSpan();
+                        }) {
+            ql::ranges::copy(
+                sourceColumn.payloadSpan().subspan(begin, numInserted),
+                targetColumn.payloadSpan().begin() + oldSize);
+            ql::ranges::copy(
+                sourceColumn.datatypeSpan().subspan(begin, numInserted),
+                targetColumn.datatypeSpan().begin() + oldSize);
+          } else {
+            ql::ranges::copy(sourceColumn.subspan(begin, numInserted),
+                             targetColumn.begin() + oldSize);
+          }
         });
   }
 
@@ -855,9 +871,13 @@ class IdTable {
     const size_t oldSize = size();
     resize(numRows() + numInserted);
     // For each column, copy the requested rows into the reserved tail.
-    for (auto&& [destination, source] :
+    for (auto&& destinationAndSource :
          ::ranges::views::zip(ad_utility::allView(getColumns()),
                               ad_utility::allView(table.getColumns()))) {
+      // Note: No structured bindings here, because those cannot be captured
+      // in lambdas when compiling with OpenMP (`USE_PARALLEL`).
+      auto& destination = std::get<0>(destinationAndSource);
+      auto& source = std::get<1>(destinationAndSource);
       if constexpr (requires {
                       destination.payloadSpan();
                       source.payloadSpan();
