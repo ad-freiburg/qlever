@@ -20,17 +20,6 @@
 #include "engine/SpatialJoinParser.h"
 #include "rdfTypes/GeometryInfo.h"
 
-namespace ad_utility::detail::parallel_wkt_parser {
-// `SpatialJoinParseJob` (see `engine/SpatialJoinParser.h`) only defines
-// `operator==`. In C++20 the `!=` operator is synthesized from it, but in C++17
-// it must be spelled out explicitly, so provide it here for the `EXPECT_NE`
-// checks below.
-inline bool operator!=(const SpatialJoinParseJob& a,
-                       const SpatialJoinParseJob& b) {
-  return !(a == b);
-}
-}  // namespace ad_utility::detail::parallel_wkt_parser
-
 // _____________________________________________________________________________
 namespace {
 
