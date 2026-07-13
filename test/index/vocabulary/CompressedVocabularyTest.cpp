@@ -97,7 +97,7 @@ using Compressors =
 
 // _________________________________________________________________________
 template <typename Compressor>
-struct CompressedVocabularyF : public testing::Test {
+struct CompressedVocabularyF : public ::testing::Test {
   static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.

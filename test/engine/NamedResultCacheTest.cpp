@@ -11,6 +11,7 @@
 #include "index/LocalVocabEntry.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
@@ -26,7 +27,7 @@ TEST(NamedResultCache, basicWorkflow) {
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
   LocalVocab localVocab;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
       "<bliBlaBlubb>", qec->getLocalVocabContext()));
 
@@ -118,8 +119,8 @@ TEST(NamedResultCache, basicWorkflow) {
 }
 
 TEST(NamedResultCache, E2E) {
-  auto qec = ad_utility::testing::getQec(
-      "<s> <p> <o>. <s2> <p> <o> . <s3> <p2> <o2>.");
+  auto qec =
+      qlever::testing::getQec("<s> <p> <o>. <s2> <p> <o> . <s3> <p2> <o2>.");
   std::string pinnedQuery =
       "SELECT * { {?s <p> <o> } UNION {VALUES ?s { <notInVocab> }}} INTERNAL "
       "SORT BY ?s";
@@ -134,7 +135,7 @@ TEST(NamedResultCache, E2E) {
   // `false` means `not lazy` so `fully materialized`.
   auto result = qet.getResult(false);
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
   auto notInVocab = Id::makeFromLocalVocabIndex(
       dummyVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(

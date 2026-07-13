@@ -105,7 +105,7 @@ struct SimulateHttpRequest {
 
 // Helper function creating a simple config for testing.
 inline qlever::EngineConfig getDefaultConfig() {
-  auto qec = ad_utility::testing::getQec("<a> <b> <c>");
+  auto qec = qlever::testing::getQec("<a> <b> <c>");
   qlever::EngineConfig config;
   config.baseName_ = qec->getIndex().getOnDiskBase();
   config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);

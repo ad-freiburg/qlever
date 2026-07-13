@@ -24,7 +24,7 @@
 using namespace qlever;
 
 using namespace sparqlExpression;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using ad_utility::source_location;
 
 namespace {

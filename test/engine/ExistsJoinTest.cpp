@@ -16,7 +16,7 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
 using namespace qlever;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 
 namespace {
 auto V = VocabId;
@@ -101,7 +101,7 @@ void testExistsJoin(
     const std::vector<IdTable>& expectedResult, bool singleVar = false,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto left = makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
@@ -156,7 +156,7 @@ void testExistsJoin(
 }  // namespace
 
 TEST(ExistsJoin, computeResult) {
-  auto alloc = ad_utility::testing::makeAllocator();
+  auto alloc = qlever::testing::makeAllocator();
   // Single join column.
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
              {true, false, true}, 1);
@@ -196,7 +196,7 @@ TEST(ExistsJoin, computeResult) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -253,7 +253,7 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -325,7 +325,7 @@ TEST(ExistsJoin, rightIndexNestedLoopJoinOptimizationisSkippedWhenRightLarger) {
 
   IdTable right = makeIdTableFromVector({{1}, {2}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
@@ -351,7 +351,7 @@ TEST(ExistsJoin,
 
   IdTable right = makeIdTableFromVector({{U}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
@@ -376,7 +376,7 @@ TEST(ExistsJoin, leftIndexNestedLoopJoinOptimizationisSkippedWhenLeftLarger) {
 
   IdTable right = makeIdTableFromVector({{1}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
@@ -598,7 +598,7 @@ TEST(ExistsJoin, lazyExistsJoinSkipsEmptyTablesOnTheRight) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   {
     auto expected =
@@ -669,7 +669,7 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoinWithJoinColumnAtNonZeroIndex) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto expected =
       makeIdTableFromVector({{10, U, T}, {11, 1, F}, {12, 2, T}, {13, 3, F}});
@@ -918,7 +918,7 @@ TEST(ExistsJoin, resultSortedOn) {
 
   auto getSortOrder = [&smaller](const IdTable& reference,
                                  std::vector<ColumnIndex> sortOrder) {
-    auto* qec = ad_utility::testing::getQec();
+    auto* qec = qlever::testing::getQec();
     ExistsJoin existsJoin{
         qec,
         makeExecutionTree<ValuesForTesting>(

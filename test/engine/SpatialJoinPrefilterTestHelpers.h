@@ -38,7 +38,7 @@
 namespace SpatialJoinPrefilterTestHelpers {
 
 using namespace qlever;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace spatial_join_test_helpers;
 
 struct SweeperSingleResult {

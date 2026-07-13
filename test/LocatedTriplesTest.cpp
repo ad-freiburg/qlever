@@ -23,10 +23,11 @@
 #include "parser/Tokenizer.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace qlever {
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 // A default graph used in this test.
 int g = 123948;
 
@@ -50,39 +51,39 @@ auto CBM = [](const auto firstTriple, const auto lastTriple,
 };
 
 auto numBlocks =
-    [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+    [](size_t numBlocks) -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numBlocks,
-                     testing::Eq(numBlocks));
+                     ::testing::Eq(numBlocks));
 };
 
 auto numTriplesTotal =
-    [](size_t numTriples) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+    [](size_t numTriples) -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, numTriplesForTesting,
-                     testing::Eq(numTriples));
+                     ::testing::Eq(numTriples));
 };
 
 auto numTriplesInBlock = [](size_t blockIndex,
                             NumAddedAndDeleted insertsAndDeletes)
-    -> testing::Matcher<const LocatedTriplesPerBlock&> {
-  return testing::ResultOf(
+    -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
+  return ::testing::ResultOf(
       absl::StrCat(".numTriplesTotal(", std::to_string(blockIndex), ")"),
       [blockIndex](const LocatedTriplesPerBlock& ltpb) {
         return ltpb.numTriples(blockIndex);
       },
-      testing::Eq(insertsAndDeletes));
+      ::testing::Eq(insertsAndDeletes));
 };
 
 auto numTriplesBlockwise =
     [](const ad_utility::HashMap<size_t, NumAddedAndDeleted>&
            numTriplesBlockwise)
-    -> testing::Matcher<const LocatedTriplesPerBlock&> {
+    -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
   auto blockMatchers = ad_utility::transform(
       numTriplesBlockwise,
-      [](auto p) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+      [](auto p) -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
         auto [blockIndex, insertsAndDeletes] = p;
         return numTriplesInBlock(blockIndex, insertsAndDeletes);
       });
-  return testing::AllOfArray(blockMatchers);
+  return ::testing::AllOfArray(blockMatchers);
 };
 
 const KeyOrder keyOrder{0, 1, 2, 3};
@@ -106,13 +107,13 @@ class LocatedTriplesTest : public ::testing::Test {
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   auto locatedTriplesInBlock = [](const size_t blockIndex,
                                   const std::vector<LocatedTriple>& expectedLTs)
-      -> testing::Matcher<const LocatedTriplesPerBlock&> {
-    return testing::ResultOf(
+      -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
+    return ::testing::ResultOf(
         absl::StrCat(".map_.at(", std::to_string(blockIndex), ")"),
         [blockIndex](const LocatedTriplesPerBlock& ltpb) {
           return ltpb.map_.at(blockIndex).getSortedView();
         },
-        testing::ElementsAreArray(expectedLTs));
+        ::testing::ElementsAreArray(expectedLTs));
   };
 
   auto locatedTriplesAre =
@@ -122,17 +123,18 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
         auto blockMatchers = ad_utility::transform(
             locatedTriplesBlockwise,
             [&locatedTriplesInBlock](
-                auto p) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+                auto p) -> ::testing::Matcher<const LocatedTriplesPerBlock&> {
               auto [blockIndex, expectedLTs] = p;
               return locatedTriplesInBlock(blockIndex, expectedLTs);
             });
         // The macro does not work with templated types.
         using HashMapType = ad_utility::HashMap<size_t, LocatedTriples>;
-        return testing::AllOf(
-            AD_FIELD(LocatedTriplesPerBlock, map_,
-                     AD_PROPERTY(HashMapType, size,
-                                 testing::Eq(locatedTriplesBlockwise.size()))),
-            testing::AllOfArray(blockMatchers));
+        return ::testing::AllOf(
+            AD_FIELD(
+                LocatedTriplesPerBlock, map_,
+                AD_PROPERTY(HashMapType, size,
+                            ::testing::Eq(locatedTriplesBlockwise.size()))),
+            ::testing::AllOfArray(blockMatchers));
       };
   using LT = LocatedTriple;
 
@@ -264,14 +266,14 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     });
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
     merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 2 index columns. This may
@@ -306,14 +308,14 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     });
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
     merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 1 index column.
@@ -340,14 +342,14 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     });
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
     merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Inserting a Triple that already exists should have no effect.
@@ -358,14 +360,14 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable resultExpected = block.clone();
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
     merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Inserting a Triple that already exists should have no effect.
@@ -377,20 +379,20 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
     merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merging if the block has additional columns.
   {
-    auto IntId = ad_utility::testing::IntId;
-    auto UndefId = ad_utility::testing::UndefId;
+    auto IntId = qlever::testing::IntId;
+    auto UndefId = qlever::testing::UndefId;
 
     IdTable block = makeIdTableFromVector({{1, 2, 3, IntId(10), IntId(11)},
                                            {1, 3, 5, IntId(12), IntId(11)},
@@ -403,7 +405,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 7, 9, IntId(13), IntId(14)}});
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
@@ -413,7 +415,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     resultExpected.setColumnSubset(
         std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
     merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merging for a block that has no located triples returns an error.
@@ -546,7 +548,7 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
     });
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 2 index columns. This may
@@ -573,7 +575,7 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
                                                     {20, 10, 2}});  // Row 3
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 1 index column.
@@ -596,13 +598,13 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
     });
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 
   // Merging if the block has additional columns.
   {
-    auto IntId = ad_utility::testing::IntId;
-    auto UndefId = ad_utility::testing::UndefId;
+    auto IntId = qlever::testing::IntId;
+    auto UndefId = qlever::testing::UndefId;
 
     IdTable block = makeIdTableFromVector({{1, 2, 3, 0, IntId(10), IntId(11)},
                                            {1, 2, 3, 2, IntId(12), IntId(11)},
@@ -615,7 +617,7 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
                                {1, 2, 3, 2, IntId(12), IntId(11)}});
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    EXPECT_THAT(merged, ::testing::ElementsAreArray(resultExpected));
   }
 }
 
@@ -661,7 +663,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
              CBM(PT5, PT5), CBM(PT6, PT6), CBM(PT7, PT7), CBM(PT8, PT8)},
         keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
-                testing::ElementsAreArray(
+                ::testing::ElementsAreArray(
                     {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
                      LT(2, T4, false), LT(4, T5, false), LT(6, T6, false),
                      LT(7, T7, false), LT(8, T8, false)}));
@@ -679,10 +681,10 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
              CBM(PT8, PT8)},
         keyOrder, true, handle);
     EXPECT_THAT(locatedTriples,
-                testing::ElementsAreArray({LT(0, T1, true), LT(1, T2, true),
-                                           LT(1, T3, true), LT(1, T4, true),
-                                           LT(2, T5, true), LT(3, T6, true),
-                                           LT(4, T7, true), LT(5, T8, true)}));
+                ::testing::ElementsAreArray(
+                    {LT(0, T1, true), LT(1, T2, true), LT(1, T3, true),
+                     LT(1, T4, true), LT(2, T5, true), LT(3, T6, true),
+                     LT(4, T7, true), LT(5, T8, true)}));
   }
 
   {
@@ -691,7 +693,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         triplesToLocate, Span{CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
         keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
-                testing::ElementsAreArray(
+                ::testing::ElementsAreArray(
                     {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
                      LT(1, T4, false), LT(1, T5, false), LT(1, T6, false),
                      LT(2, T7, false), LT(3, T8, false)}));
@@ -706,7 +708,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         Span{CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)}, keyOrder, false,
         handle);
     EXPECT_THAT(locatedTriples,
-                testing::ElementsAreArray(
+                ::testing::ElementsAreArray(
                     {LT(3, T8, false), LT(2, T7, false), LT(1, T6, false),
                      LT(1, T5, false), LT(1, T4, false), LT(1, T3, false),
                      LT(1, T2, false), LT(0, T1, false)}));
@@ -717,7 +719,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate, Span{CBM(PT1, PT8)}, keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
-                testing::ElementsAreArray(
+                ::testing::ElementsAreArray(
                     {LT(0, T1, false), LT(0, T2, false), LT(0, T3, false),
                      LT(0, T4, false), LT(0, T5, false), LT(0, T6, false),
                      LT(0, T7, false), LT(1, T8, false)}));
@@ -755,7 +757,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.setOriginalMetadata(metadata);
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Adding no triples does no changed the augmented metadata.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
@@ -764,7 +766,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T1 is before block 0. The beginning of block 0 changes.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
@@ -775,7 +777,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T2 is inside block 1. Borders don't change.
     expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
@@ -785,7 +787,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
     // delete) add to the block borders. Borders don't change.
@@ -796,7 +798,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T4 is before block 4. The beginning of block 4 changes.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
@@ -808,7 +810,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Erasing the update of T4 restores the beginning of block 4.
     locatedTriplesPerBlock.erase(4, locatedTriples[0]);
@@ -819,14 +821,14 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // having no duplicates from the original metadata.
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = false;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Clearing the updates restores the original block borders.
     locatedTriplesPerBlock.clear();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(metadata));
+                ::testing::ElementsAreArray(metadata));
   }
 
   {
@@ -882,7 +884,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
   }
   {
     expectedAugmentedMetadata = metadata;
@@ -923,7 +925,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // deleted.
     auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     EXPECT_THAT(actualMetadata,
-                testing::ElementsAreArray(expectedAugmentedMetadata));
+                ::testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Test the case that a block loses its graph info if the added located
     // triples have too many distinct graphs.
@@ -968,27 +970,27 @@ TEST_F(LocatedTriplesTest, debugPrints) {
 
   {
     LocatedTriples lts;
-    EXPECT_THAT(lts, InsertIntoStream(testing::StrEq("{ }")));
+    EXPECT_THAT(lts, InsertIntoStream(::testing::StrEq("{ }")));
     lts.insert(LT(0, IT(1, 1, 1, 28), true));
     lts.consolidate();
-    EXPECT_THAT(lts, InsertIntoStream(testing::StrEq(
+    EXPECT_THAT(lts, InsertIntoStream(::testing::StrEq(
                          "{ LT(0 IdTriple(V:1, V:1, V:1, V:28, ) 1) }")));
   }
 
   {
     LocatedTriplesPerBlock ltpb;
     ltpb.setOriginalMetadata(std::vector{CBM(PT(1, 1, 1), PT(1, 10, 15))});
-    EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq("")));
+    EXPECT_THAT(ltpb, InsertIntoStream(::testing::StrEq("")));
     ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)});
     ltpb.consolidateAllBlocks();
-    EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq(
+    EXPECT_THAT(ltpb, InsertIntoStream(::testing::StrEq(
                           "LTs in Block #0: { LT(0 IdTriple(V:1, "
                           "V:1, V:1, V:123948, ) 1) }\n")));
   }
 
   {
     std::vector<IdTriple<0>> idts{IT(0, 0, 0), IT(1, 2, 3)};
-    EXPECT_THAT(idts, InsertIntoStream(testing::StrEq(
+    EXPECT_THAT(idts, InsertIntoStream(::testing::StrEq(
                           "IdTriple(V:0, V:0, V:0, V:123948, ), IdTriple(V:1, "
                           "V:2, V:3, V:123948, ), ")));
   }
@@ -998,9 +1000,9 @@ TEST_F(LocatedTriplesTest, debugPrints) {
 TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   static constexpr const char* testTurtle =
       "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
-  auto config = ad_utility::testing::TestIndexConfig{testTurtle};
+  auto config = qlever::testing::TestIndexConfig{testTurtle};
   config.blocksizePermutations = 1_kB;
-  auto* qec = ad_utility::testing::getQec(config);
+  auto* qec = qlever::testing::getQec(config);
 
   const auto& index = qec->getIndex().getImpl();
   auto& perm = index.getPermutation(Permutation::PSO);
@@ -1042,8 +1044,8 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
       auto cleanup = setRuntimeParameterForTest<
           &RuntimeParameters::vacuumMinimumBlockSize_>(3ul);
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
-      EXPECT_THAT(result.insertionsToRemove_, testing::IsEmpty());
-      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+      EXPECT_THAT(result.insertionsToRemove_, ::testing::IsEmpty());
+      EXPECT_THAT(result.deletionsToRemove_, ::testing::IsEmpty());
       EXPECT_EQ(result.stats_.totalRemoved(), 0u);
       EXPECT_EQ(result.stats_.totalKept(), 0u);
     }
@@ -1054,8 +1056,8 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
           &RuntimeParameters::vacuumMinimumBlockSize_>(1ul);
       auto result = ltpb.identifyTriplesToVacuum(perm, cancellationHandle);
       EXPECT_THAT(result.insertionsToRemove_,
-                  testing::UnorderedElementsAre(tInIdx1, tInIdx2));
-      EXPECT_THAT(result.deletionsToRemove_, testing::IsEmpty());
+                  ::testing::UnorderedElementsAre(tInIdx1, tInIdx2));
+      EXPECT_THAT(result.deletionsToRemove_, ::testing::IsEmpty());
       EXPECT_EQ(result.stats_.numInsertionsRemoved_, 2u);
       EXPECT_EQ(result.stats_.numDeletionsRemoved_, 0u);
       EXPECT_EQ(result.stats_.numInsertionsKept_, 0u);
@@ -1074,9 +1076,9 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
     const auto& ltpb4 = dt.getLocatedTriplesForPermutation(Permutation::PSO);
     auto result = ltpb4.identifyTriplesToVacuum(perm, cancellationHandle);
     EXPECT_THAT(result.insertionsToRemove_,
-                testing::UnorderedElementsAre(tInIdx1));
+                ::testing::UnorderedElementsAre(tInIdx1));
     EXPECT_THAT(result.deletionsToRemove_,
-                testing::UnorderedElementsAre(tNotIdx2, tNotIdx4));
+                ::testing::UnorderedElementsAre(tNotIdx2, tNotIdx4));
     EXPECT_EQ(result.stats_.numInsertionsRemoved_, 1u);
     EXPECT_EQ(result.stats_.numDeletionsRemoved_, 2u);
     EXPECT_EQ(result.stats_.numInsertionsKept_, 3u);

@@ -15,16 +15,16 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "parser/TripleComponent.h"
 
-namespace ad_utility::testing {
+namespace qlever::testing {
 
 // Helper class providing common functionality for testing lazy joins with
 // IndexScans. This is used by both IndexScanTest and OptionalJoinTest.
 class LazyJoinTestHelper {
  protected:
-  qlever::QueryExecutionContext* qec_ = nullptr;
+  QueryExecutionContext* qec_ = nullptr;
 
   // Convert a TripleComponent to a ValueId.
-  qlever::Id toValueId(const TripleComponent& tc) const {
+  Id toValueId(const TripleComponent& tc) const {
     return tc.toValueId(qec_->getIndex()).value();
   }
 
@@ -66,6 +66,6 @@ class LazyJoinTestHelper {
   }
 };
 
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_ENGINE_LAZYJOINTESTHELPERS_H

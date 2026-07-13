@@ -35,7 +35,7 @@ using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
 using NQuadCtreParser = RdfStringParser<NQuadParser<TokenizerCtre>>;
 
 namespace {
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto lit = qlever::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
@@ -849,11 +849,11 @@ TEST(RdfParserTest, iriref) {
     ASSERT_EQ(parser.lastParseResult_, iri(iriref_1));
     // The second IRI ref is accepted by both parsers, but produces a
     // warning for the Re2Parser.
-    testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStdout();
     parser.setInputStream(iriref_2);
     ASSERT_TRUE(parser.iriref());
     ASSERT_EQ(parser.lastParseResult_, iri(iriref_2));
-    std::string warning = testing::internal::GetCapturedStdout();
+    std::string warning = ::testing::internal::GetCapturedStdout();
     if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
       EXPECT_EQ(warning, "");
     } else {
@@ -1287,8 +1287,8 @@ TEST(RdfParserTest, nQuadParser) {
         "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 "
         ".");
     auto triples = parser.parseAndReturnAllTriples();
-    auto iri = ad_utility::testing::iri;
-    auto lit = ad_utility::testing::tripleComponentLiteral;
+    auto iri = qlever::testing::iri;
+    auto lit = qlever::testing::tripleComponentLiteral;
     std::vector<TurtleTriple> expected;
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
     auto internalGraphId = specialIds().at(std::string{DEFAULT_GRAPH_IRI});
@@ -1649,7 +1649,7 @@ TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
 
 TEST(RdfParserTest, parseTriplesObject) {
   using Parser = RdfStringParser<TurtleParser<TokenizerCtre>>;
-  using namespace testing;
+  using namespace ::testing;
   auto Iri = triple_component::Iri::fromIriref;
   auto Literal = triple_component::Literal::fromStringRepresentation;
   auto isTC = [](auto e) -> Matcher<const TripleComponent> {

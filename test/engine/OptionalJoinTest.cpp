@@ -27,8 +27,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 
-using ad_utility::testing::makeAllocator;
-using namespace ad_utility::testing;
+using qlever::testing::makeAllocator;
+using namespace qlever::testing;
 using namespace qlever;
 namespace {
 auto V = VocabId;
@@ -37,7 +37,7 @@ using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   {
     IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
                    makeAllocator()};
@@ -86,7 +86,7 @@ void testLazyOptionalJoin(
     const std::vector<IdTable>& expectedResult, bool singleVar = false,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto left = makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
@@ -410,7 +410,7 @@ TEST(OptionalJoin, gallopingJoin) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -472,7 +472,7 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -544,7 +544,7 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, clone) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto a = makeIdTableFromVector({{0}});
   auto left = idTableToExecutionTree(qec, a);
   auto right = idTableToExecutionTree(qec, a);
@@ -638,7 +638,7 @@ TEST(OptionalJoin, lazyOptionalJoinWithUndefLeftInSeparateTable) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto expected = makeIdTableFromVector({{U, V(10), V(20)},
                                          {V(1), V(11), V(20)},
@@ -785,7 +785,7 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, limitOffsetIsPropagated) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
 
   std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
@@ -869,9 +869,8 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
   }
 }
 // Test fixture for testing optionalJoinWithIndexScan with prefiltering.
-class OptionalJoinWithIndexScan
-    : public ::testing::TestWithParam<bool>,
-      public ad_utility::testing::LazyJoinTestHelper {
+class OptionalJoinWithIndexScan : public ::testing::TestWithParam<bool>,
+                                  public qlever::testing::LazyJoinTestHelper {
  protected:
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.

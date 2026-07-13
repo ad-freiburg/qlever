@@ -16,17 +16,14 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
 
-namespace {
-auto iri = ad_utility::testing::iri;
-}
-
 // Check the basic methods of the `Values` clause.
 TEST(Values, basicMethods) {
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
   ValuesComponents values{{TC{1}, TC{2}, TC{3}},
                           {TC{5}, TC{2}, TC{3}},
                           {TC{7}, TC{42}, TC{3}},
@@ -59,7 +56,7 @@ TEST(Values, basicMethods) {
 
 // Check some corner cases for an empty VALUES clause.
 TEST(Values, emptyValuesClause) {
-  auto testQec = ad_utility::testing::getQec();
+  auto testQec = qlever::testing::getQec();
   Values emptyValuesOp(testQec, {});
   EXPECT_TRUE(emptyValuesOp.knownEmptyResult());
   // The current implementation always returns `1.0` for nonexisting columns.
@@ -69,14 +66,14 @@ TEST(Values, emptyValuesClause) {
 // Check that `computeResult`, given a parsed VALUES clause, computes the
 // correct result table.
 TEST(Values, computeResult) {
-  auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQec = qlever::testing::getQec("<x> <x> <x> .");
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
   auto result = valuesOperation.getResult();
   const auto& table = result->idTableView();
-  Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
-  auto I = ad_utility::testing::IntId;
+  Id x = qlever::testing::makeGetId(testQec->getIndex())("<x>");
+  auto I = qlever::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
       LocalVocabEntry::fromStringRepresentation(
           "<y>", testQec->getLocalVocabContext()));
@@ -90,14 +87,14 @@ TEST(Values, computeResult) {
 // Check that if the number of variables and the number of values in each row
 // are not all equal, an exception is thrown.
 TEST(Values, illegalInput) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}}};
   ASSERT_ANY_THROW(Values(qec, {{Variable{"?x"}, Variable{"?y"}}, values}));
 }
 
 // _____________________________________________________________________________
 TEST(Values, clone) {
-  auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQec = qlever::testing::getQec("<x> <x> <x> .");
   ValuesComponents values{{TC{12}, TC{iri("<x>")}},
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});

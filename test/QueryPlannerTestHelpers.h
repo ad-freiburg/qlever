@@ -666,7 +666,7 @@ void expectWithGivenBudget(std::string query, auto matcher,
   // invariants which require the correct index to be set.
   // TODO<joka921>: revert to `value_or` with #2476
   QueryExecutionContext* qec =
-      optQec.has_value() ? *optQec : ad_utility::testing::getQec();
+      optQec.has_value() ? *optQec : qlever::testing::getQec();
   auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());

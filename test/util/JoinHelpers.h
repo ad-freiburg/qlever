@@ -18,6 +18,7 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
+using namespace qlever::testing;
 using qlever::ColumnIndex;
 using qlever::IdTable;
 using qlever::ValuesForTesting;
@@ -43,7 +44,7 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
   int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
                                    tableB.idTable.numColumns() - 1)};
   IdTable result{static_cast<size_t>(resultWidth),
-                 ad_utility::testing::makeAllocator()};
+                 qlever::testing::makeAllocator()};
 
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.
@@ -85,7 +86,7 @@ inline auto makeJoinLambda() {
         std::vector<std::optional<qlever::Variable>> rightVariables{
             {qlever::Variable{"?x"}}};
         rightVariables.resize(b.numColumns());
-        auto* qec = ad_utility::testing::getQec();
+        auto* qec = qlever::testing::getQec();
         auto leftTree = qlever::makeExecutionTree<ValuesForTesting>(
             qec, a.clone(), std::move(leftVariables), false, std::vector{jc1});
         auto rightTree = qlever::makeExecutionTree<ValuesForTesting>(

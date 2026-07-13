@@ -11,13 +11,13 @@
 using namespace qlever;
 
 namespace {
-auto I = ad_utility::testing::IntId;
-auto D = ad_utility::testing::DoubleId;
+auto I = qlever::testing::IntId;
+auto D = qlever::testing::DoubleId;
 }  // namespace
 
 class GroupByHashMapOptimizationTest : public ::testing::Test {
  protected:
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  QueryExecutionContext* qec_ = qlever::testing::getQec();
   VariableToColumnMap varToColMap_;
   LocalVocab localVocab_;
   IdTable table_{qec_->getAllocator()};

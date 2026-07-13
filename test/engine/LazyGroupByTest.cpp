@@ -14,9 +14,10 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
-auto I = ad_utility::testing::IntId;
+auto I = qlever::testing::IntId;
 }
 
 // _____________________________________________________________________________
@@ -25,7 +26,7 @@ class LazyGroupByTest : public ::testing::Test {
   // Unlimited allocator.
   ad_utility::AllocatorWithLimit<Id> ua =
       ad_utility::makeUnlimitedAllocator<Id>();
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  QueryExecutionContext* qec_ = qlever::testing::getQec();
   // Initialize dummy instance of GroupBy to be used for testing. The actual
   // operations will never get executed because we manually test `LazyGroupBy`
   // here.
@@ -138,7 +139,7 @@ TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
 namespace qlever {
 // _____________________________________________________________________________
 TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Variable variable{"?someVariable"};
   sparqlExpression::SparqlExpressionPimpl sparqlExpression{
       std::make_unique<sparqlExpression::GroupConcatExpression>(

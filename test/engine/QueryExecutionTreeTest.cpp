@@ -13,7 +13,7 @@
 #include "engine/StripColumns.h"
 #include "engine/Union.h"
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace qlever;
 
 // _____________________________________________________________________________
@@ -34,7 +34,7 @@ TEST(QueryExecutionTree, getVariableColumn) {
 TEST(QueryExecutionTree, sortedUnionSpecialCase) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});

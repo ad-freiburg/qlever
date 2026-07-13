@@ -178,7 +178,7 @@ void expectIncompleteParse(
 namespace matchers {
 
 using namespace qlever;
-using testing::Matcher;
+using ::testing::Matcher;
 // short namespace alias
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
@@ -202,12 +202,12 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
 // _____________________________________________________________________________
 inline auto NumericLiteralDouble =
     [](double value) -> Matcher<const std::variant<int64_t, double>&> {
-  return testing::VariantWith<double>(testing::DoubleEq(value));
+  return ::testing::VariantWith<double>(::testing::DoubleEq(value));
 };
 
 inline auto NumericLiteralInt =
     [](int64_t value) -> Matcher<const std::variant<int64_t, double>&> {
-  return testing::VariantWith<int64_t>(testing::Eq(value));
+  return ::testing::VariantWith<int64_t>(::testing::Eq(value));
 };
 // _____________________________________________________________________________
 namespace variant_matcher {
@@ -236,9 +236,9 @@ class MultiVariantMatcher {
       return false;
     }
 
-    testing::StringMatchResultListener subMatcherListener;
+    ::testing::StringMatchResultListener subMatcherListener;
     const bool match = matcher_.MatchAndExplain(*elem, &subMatcherListener);
-    *listener << "whose value " << testing::PrintToString(*elem)
+    *listener << "whose value " << ::testing::PrintToString(*elem)
               << (match ? " matches" : " doesn't match");
     // First add our own Explanation and then that of the sub matcher.
     *listener << subMatcherListener.str();
@@ -259,7 +259,7 @@ class MultiVariantMatcher {
 
  private:
   static std::string GetTypeName() {
-    return testing::internal::GetTypeName<ad_utility::Last<Ts...>>();
+    return ::testing::internal::GetTypeName<ad_utility::Last<Ts...>>();
   }
 
   const Matcher<const ad_utility::Last<Ts...>&> matcher_;
@@ -268,9 +268,9 @@ class MultiVariantMatcher {
 }  // namespace variant_matcher
 
 template <typename... Ts>
-testing::PolymorphicMatcher<variant_matcher::MultiVariantMatcher<Ts...>>
+::testing::PolymorphicMatcher<variant_matcher::MultiVariantMatcher<Ts...>>
 MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
-  return testing::MakePolymorphicMatcher(
+  return ::testing::MakePolymorphicMatcher(
       variant_matcher::MultiVariantMatcher<Ts...>(matcher));
 }
 
@@ -278,14 +278,14 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 inline auto Iri = [](const std::string& value) {
   using Iri = qlever::triple_component::Iri;
   return MultiVariantWith<qlever::GraphTerm, Iri>(
-      AD_PROPERTY(Iri, toStringRepresentation, testing::Eq(value)));
+      AD_PROPERTY(Iri, toStringRepresentation, ::testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
 inline auto Predicate = [](const qlever::triple_component::Iri& value) {
   return MultiVariantWith<qlever::sparql_types::VarOrPath,
                           qlever::PropertyPath>(
-      AD_PROPERTY(qlever::PropertyPath, getIri, testing::Eq(value)));
+      AD_PROPERTY(qlever::PropertyPath, getIri, ::testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
@@ -302,29 +302,29 @@ inline auto TripleComponentIri = [](const std::string& value) {
 
 // Returns a matcher that accepts a `GraphTerm` or `BlankNode`.
 inline auto BlankNode = [](bool generated, const std::string& label) {
-  return MultiVariantWith<qlever::GraphTerm, ::BlankNode>(testing::AllOf(
-      AD_PROPERTY(::BlankNode, isGenerated, testing::Eq(generated)),
-      AD_PROPERTY(::BlankNode, label, testing::Eq(label))));
+  return MultiVariantWith<qlever::GraphTerm, ::BlankNode>(::testing::AllOf(
+      AD_PROPERTY(::BlankNode, isGenerated, ::testing::Eq(generated)),
+      AD_PROPERTY(::BlankNode, label, ::testing::Eq(label))));
 };
 
 inline auto InternalVariable = [](const std::string& label) {
-  return MultiVariantWith<qlever::GraphTerm, qlever::Variable>(testing::AllOf(
+  return MultiVariantWith<qlever::GraphTerm, qlever::Variable>(::testing::AllOf(
       AD_PROPERTY(qlever::Variable, name,
-                  testing::StartsWith(QLEVER_INTERNAL_VARIABLE_PREFIX)),
-      AD_PROPERTY(qlever::Variable, name, testing::EndsWith(label))));
+                  ::testing::StartsWith(QLEVER_INTERNAL_VARIABLE_PREFIX)),
+      AD_PROPERTY(qlever::Variable, name, ::testing::EndsWith(label))));
 };
 
 // _____________________________________________________________________________
 
 inline auto Variable =
     [](const std::string& value) -> Matcher<const qlever::Variable&> {
-  return AD_PROPERTY(qlever::Variable, name, testing::Eq(value));
+  return AD_PROPERTY(qlever::Variable, name, ::testing::Eq(value));
 };
 
 // Returns a matcher that matches a variant that given a variant checks that it
 // contains a variable and that the variable matches.
 inline auto VariableVariant = [](const std::string& value) {
-  return testing::VariantWith<qlever::Variable>(Variable(value));
+  return ::testing::VariantWith<qlever::Variable>(Variable(value));
 };
 
 // _____________________________________________________________________________
@@ -332,7 +332,7 @@ inline auto VariableVariant = [](const std::string& value) {
 // Returns a matcher that accepts a `GraphTerm` or `Literal`.
 inline auto Literal = [](const std::string& value) {
   return MultiVariantWith<qlever::GraphTerm, ::Literal>(
-      AD_PROPERTY(::Literal, literal, testing::Eq(value)));
+      AD_PROPERTY(::Literal, literal, ::testing::Eq(value)));
 };
 
 // _____________________________________________________________________________
@@ -340,8 +340,8 @@ inline auto Literal = [](const std::string& value) {
 inline auto ConstructClause =
     [](const std::vector<std::array<qlever::GraphTerm, 3>>& elems)
     -> Matcher<const std::optional<qlever::parsedQuery::ConstructClause>&> {
-  return testing::Optional(AD_FIELD(qlever::parsedQuery::ConstructClause,
-                                    triples_, testing::Eq(elems)));
+  return ::testing::Optional(AD_FIELD(qlever::parsedQuery::ConstructClause,
+                                      triples_, ::testing::Eq(elems)));
 };
 
 // _____________________________________________________________________________
@@ -349,7 +349,7 @@ namespace detail {
 inline auto Expression = [](const std::string& descriptor)
     -> Matcher<const qlever::sparqlExpression::SparqlExpressionPimpl&> {
   return AD_PROPERTY(qlever::sparqlExpression::SparqlExpressionPimpl,
-                     getDescriptor, testing::Eq(descriptor));
+                     getDescriptor, ::testing::Eq(descriptor));
 };
 }  // namespace detail
 
@@ -359,15 +359,15 @@ inline auto Expression = [](const std::string& descriptor)
 template <typename ExpressionT>
 inline auto ExpressionWithType =
     []() -> Matcher<const qlever::sparqlExpression::SparqlExpression::Ptr&> {
-  return testing::Pointer(
-      testing::WhenDynamicCastTo<const ExpressionT*>(testing::NotNull()));
+  return ::testing::Pointer(
+      ::testing::WhenDynamicCastTo<const ExpressionT*>(::testing::NotNull()));
 };
 
 namespace detail {
 template <typename T>
 auto GraphPatternOperation = [](auto subMatcher)
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
-  return testing::VariantWith<T>(subMatcher);
+  return ::testing::VariantWith<T>(subMatcher);
 };
 }  // namespace detail
 
@@ -381,31 +381,31 @@ inline auto Bind = [](const qlever::Variable& variable,
                       const std::string& expression)
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return detail::GraphPatternOperation<qlever::parsedQuery::Bind>(
-      testing::AllOf(
-          BindExpression(expression),
-          AD_FIELD(qlever::parsedQuery::Bind, _target, testing::Eq(variable))));
+      ::testing::AllOf(BindExpression(expression),
+                       AD_FIELD(qlever::parsedQuery::Bind, _target,
+                                ::testing::Eq(variable))));
 };
 
 inline auto LimitOffset =
     [](std::optional<uint64_t> limit, std::optional<uint64_t> textLimit,
        uint64_t offset) -> Matcher<const LimitOffsetClause&> {
-  return testing::AllOf(
-      AD_FIELD(LimitOffsetClause, _limit, testing::Eq(limit)),
-      AD_FIELD(LimitOffsetClause, textLimit_, testing::Eq(textLimit)),
-      AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
+  return ::testing::AllOf(
+      AD_FIELD(LimitOffsetClause, _limit, ::testing::Eq(limit)),
+      AD_FIELD(LimitOffsetClause, textLimit_, ::testing::Eq(textLimit)),
+      AD_FIELD(LimitOffsetClause, _offset, ::testing::Eq(offset)));
 };
 
 inline auto VariableOrderKey =
     [](const qlever::Variable& variable,
        bool desc) -> Matcher<const qlever::VariableOrderKey&> {
-  return testing::AllOf(
-      AD_FIELD(qlever::VariableOrderKey, variable_, testing::Eq(variable)),
-      AD_FIELD(qlever::VariableOrderKey, isDescending_, testing::Eq(desc)));
+  return ::testing::AllOf(
+      AD_FIELD(qlever::VariableOrderKey, variable_, ::testing::Eq(variable)),
+      AD_FIELD(qlever::VariableOrderKey, isDescending_, ::testing::Eq(desc)));
 };
 
 inline auto VariableOrderKeyVariant =
     [](const qlever::Variable& key, bool desc) -> Matcher<const OrderKey&> {
-  return testing::VariantWith<qlever::VariableOrderKey>(
+  return ::testing::VariantWith<qlever::VariableOrderKey>(
       VariableOrderKey(key, desc));
 };
 
@@ -416,15 +416,16 @@ inline auto VariableOrderKeys =
   for (auto [key, desc] : orderKeys) {
     matchers.push_back(VariableOrderKey(key, desc));
   }
-  return testing::ElementsAreArray(matchers);
+  return ::testing::ElementsAreArray(matchers);
 };
 
 inline auto ExpressionOrderKey = [](const std::string& expr,
                                     bool desc) -> Matcher<const OrderKey&> {
-  return testing::VariantWith<qlever::ExpressionOrderKey>(testing::AllOf(
-      AD_FIELD(qlever::ExpressionOrderKey, expression_,
-               detail::Expression(expr)),
-      AD_FIELD(qlever::ExpressionOrderKey, isDescending_, testing::Eq(desc))));
+  return ::testing::VariantWith<qlever::ExpressionOrderKey>(
+      ::testing::AllOf(AD_FIELD(qlever::ExpressionOrderKey, expression_,
+                                detail::Expression(expr)),
+                       AD_FIELD(qlever::ExpressionOrderKey, isDescending_,
+                                ::testing::Eq(desc))));
 };
 
 using ExpressionOrderKeyTest = std::pair<std::string, bool>;
@@ -447,28 +448,30 @@ inline auto OrderKeys =
         ad_utility::OverloadCallOperator{variableOrderKey, expressionOrderKey},
         key));
   }
-  return testing::AllOf(
-      AD_FIELD(OrderClause, orderKeys, testing::ElementsAreArray(keyMatchers)),
-      AD_FIELD(OrderClause, isInternalSort, testing::Eq(isInternalSort)));
+  return ::testing::AllOf(
+      AD_FIELD(OrderClause, orderKeys,
+               ::testing::ElementsAreArray(keyMatchers)),
+      AD_FIELD(OrderClause, isInternalSort, ::testing::Eq(isInternalSort)));
 };
 
 inline auto VariableGroupKey =
     [](const std::string& key) -> Matcher<const qlever::GroupKey&> {
-  return testing::VariantWith<qlever::Variable>(
-      AD_PROPERTY(qlever::Variable, name, testing::Eq(key)));
+  return ::testing::VariantWith<qlever::Variable>(
+      AD_PROPERTY(qlever::Variable, name, ::testing::Eq(key)));
 };
 
 inline auto ExpressionGroupKey =
     [](const std::string& expr) -> Matcher<const qlever::GroupKey&> {
-  return testing::VariantWith<qlever::sparqlExpression::SparqlExpressionPimpl>(
+  return ::testing::VariantWith<
+      qlever::sparqlExpression::SparqlExpressionPimpl>(
       detail::Expression(expr));
 };
 
 inline auto AliasGroupKey =
     [](const std::string& expr,
        const qlever::Variable& variable) -> Matcher<const qlever::GroupKey&> {
-  return testing::VariantWith<qlever::Alias>(testing::AllOf(
-      AD_FIELD(qlever::Alias, _target, testing::Eq(variable)),
+  return ::testing::VariantWith<qlever::Alias>(::testing::AllOf(
+      AD_FIELD(qlever::Alias, _target, ::testing::Eq(variable)),
       AD_FIELD(qlever::Alias, _expression, detail::Expression(expr))));
 };
 
@@ -496,13 +499,13 @@ inline auto GroupKeys =
                                          aliasGroupKey},
         key));
   }
-  return testing::ElementsAreArray(keyMatchers);
+  return ::testing::ElementsAreArray(keyMatchers);
 };
 
 inline auto GroupByVariables = [](const std::vector<qlever::Variable>& vars)
     -> Matcher<const qlever::ParsedQuery&> {
   return AD_FIELD(qlever::ParsedQuery, _groupByVariables,
-                  testing::UnorderedElementsAreArray(vars));
+                  ::testing::UnorderedElementsAreArray(vars));
 };
 
 // Test that a `ParsedQuery` contains the `warnings` in any order. The
@@ -512,7 +515,7 @@ inline auto WarningsOfParsedQuery = [](const std::vector<std::string>& warnings)
   auto matchers = ad_utility::transform(
       warnings, [](const std::string& s) { return ::testing::HasSubstr(s); });
   return AD_PROPERTY(qlever::ParsedQuery, warnings,
-                     testing::UnorderedElementsAreArray(matchers));
+                     ::testing::UnorderedElementsAreArray(matchers));
 };
 
 inline auto Values =
@@ -522,10 +525,11 @@ inline auto Values =
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
   using SparqlValues = qlever::parsedQuery::SparqlValues;
-  return testing::AllOf(AD_FIELD(
-      qlever::parsedQuery::Values, _inlineValues,
-      testing::AllOf(AD_FIELD(SparqlValues, _variables, testing::Eq(vars)),
-                     AD_FIELD(SparqlValues, _values, testing::Eq(values)))));
+  return ::testing::AllOf(
+      AD_FIELD(qlever::parsedQuery::Values, _inlineValues,
+               ::testing::AllOf(
+                   AD_FIELD(SparqlValues, _variables, ::testing::Eq(vars)),
+                   AD_FIELD(SparqlValues, _values, ::testing::Eq(values)))));
 };
 
 inline auto InlineData =
@@ -543,14 +547,15 @@ inline auto Service = [](const qlever::TripleComponent::Iri& iri,
                          const std::string& graphPattern,
                          const std::string& prologue = "", bool silent = false)
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
-  auto serviceMatcher = testing::AllOf(
-      AD_FIELD(qlever::parsedQuery::Service, serviceIri_, testing::Eq(iri)),
+  auto serviceMatcher = ::testing::AllOf(
+      AD_FIELD(qlever::parsedQuery::Service, serviceIri_, ::testing::Eq(iri)),
       AD_FIELD(qlever::parsedQuery::Service, visibleVariables_,
-               testing::UnorderedElementsAreArray(variables)),
+               ::testing::UnorderedElementsAreArray(variables)),
       AD_FIELD(qlever::parsedQuery::Service, graphPatternAsString_,
-               testing::Eq(graphPattern)),
-      AD_FIELD(qlever::parsedQuery::Service, prologue_, testing::Eq(prologue)),
-      AD_FIELD(qlever::parsedQuery::Service, silent_, testing::Eq(silent)));
+               ::testing::Eq(graphPattern)),
+      AD_FIELD(qlever::parsedQuery::Service, prologue_,
+               ::testing::Eq(prologue)),
+      AD_FIELD(qlever::parsedQuery::Service, silent_, ::testing::Eq(silent)));
   return detail::GraphPatternOperation<qlever::parsedQuery::Service>(
       serviceMatcher);
 };
@@ -559,30 +564,30 @@ namespace detail {
 inline auto SelectBase =
     [](bool distinct,
        bool reduced) -> Matcher<const qlever::ParsedQuery::SelectClause&> {
-  return testing::AllOf(AD_FIELD(qlever::parsedQuery::SelectClause, distinct_,
-                                 testing::Eq(distinct)),
-                        AD_FIELD(qlever::parsedQuery::SelectClause, reduced_,
-                                 testing::Eq(reduced)),
-                        AD_PROPERTY(qlever::parsedQuery::SelectClause,
-                                    getAliases, testing::IsEmpty()));
+  return ::testing::AllOf(AD_FIELD(qlever::parsedQuery::SelectClause, distinct_,
+                                   ::testing::Eq(distinct)),
+                          AD_FIELD(qlever::parsedQuery::SelectClause, reduced_,
+                                   ::testing::Eq(reduced)),
+                          AD_PROPERTY(qlever::parsedQuery::SelectClause,
+                                      getAliases, ::testing::IsEmpty()));
 };
 }  // namespace detail
 
 inline auto AsteriskSelect = [](bool distinct = false, bool reduced = false)
     -> Matcher<const qlever::parsedQuery::SelectClause&> {
-  return testing::AllOf(detail::SelectBase(distinct, reduced),
-                        AD_PROPERTY(qlever::parsedQuery::SelectClause,
-                                    isAsterisk, testing::IsTrue()));
+  return ::testing::AllOf(detail::SelectBase(distinct, reduced),
+                          AD_PROPERTY(qlever::parsedQuery::SelectClause,
+                                      isAsterisk, ::testing::IsTrue()));
 };
 
 inline auto VariablesSelect =
     [](const std::vector<std::string>& variables, bool distinct = false,
        bool reduced =
            false) -> Matcher<const qlever::parsedQuery::SelectClause&> {
-  return testing::AllOf(
+  return ::testing::AllOf(
       detail::SelectBase(distinct, reduced),
       AD_PROPERTY(qlever::parsedQuery::SelectClause,
-                  getSelectedVariablesAsStrings, testing::Eq(variables)));
+                  getSelectedVariablesAsStrings, ::testing::Eq(variables)));
 };
 
 namespace detail {
@@ -603,14 +608,14 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
     if (holds_alternative<qlever::Variable>(selection[i])) {
       if (get<qlever::Variable>(selection[i]) != selectedVariables[i]) {
         *result_listener << "where Variable#" << i << " = "
-                         << testing::PrintToString(selectedVariables[i]);
+                         << ::testing::PrintToString(selectedVariables[i]);
         return false;
       }
     } else {
       auto pair = get<std::pair<std::string, qlever::Variable>>(selection[i]);
       if (alias_counter >= arg.getAliases().size()) {
         *result_listener << "where selected Variables contain less Aliases ("
-                         << testing::PrintToString(alias_counter)
+                         << ::testing::PrintToString(alias_counter)
                          << ") than provided to matcher";
         return false;
       }
@@ -619,7 +624,7 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
           pair.second != arg.getAliases()[alias_counter++]._target ||
           pair.second != selectedVariables[i]) {
         *result_listener << "where Alias#" << i << " = "
-                         << testing::PrintToString(
+                         << ::testing::PrintToString(
                                 arg.getAliases()[alias_counter - 1]);
         return false;
       }
@@ -630,7 +635,7 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
   for (const auto& [descriptor, variable] : hiddenAliases) {
     if (alias_counter >= arg.getAliases().size()) {
       *result_listener << "where selected variables contain less aliases ("
-                       << testing::PrintToString(alias_counter)
+                       << ::testing::PrintToString(alias_counter)
                        << ") than provided to matcher";
       return false;
     }
@@ -638,20 +643,21 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
             arg.getAliases()[alias_counter]._expression.getDescriptor() ||
         variable != arg.getAliases()[alias_counter]._target) {
       *result_listener << "where hidden alias#" << i << " = "
-                       << testing::PrintToString(
+                       << ::testing::PrintToString(
                               arg.getAliases()[alias_counter]);
       return false;
     }
     alias_counter++;
     i++;
   }
-  return testing::ExplainMatchResult(
-      testing::AllOf(AD_FIELD(qlever::parsedQuery::SelectClause, distinct_,
-                              testing::Eq(distinct)),
-                     AD_PROPERTY(qlever::parsedQuery::SelectClause, getAliases,
-                                 testing::SizeIs(testing::Eq(alias_counter))),
-                     AD_FIELD(qlever::parsedQuery::SelectClause, reduced_,
-                              testing::Eq(reduced))),
+  return ::testing::ExplainMatchResult(
+      ::testing::AllOf(
+          AD_FIELD(qlever::parsedQuery::SelectClause, distinct_,
+                   ::testing::Eq(distinct)),
+          AD_PROPERTY(qlever::parsedQuery::SelectClause, getAliases,
+                      ::testing::SizeIs(::testing::Eq(alias_counter))),
+          AD_FIELD(qlever::parsedQuery::SelectClause, reduced_,
+                   ::testing::Eq(reduced))),
       arg, result_listener);
 }
 }  // namespace detail
@@ -663,7 +669,7 @@ inline auto Select =
        bool distinct = false, bool reduced = false,
        std::vector<std::pair<std::string, qlever::Variable>> hiddenAliases = {})
     -> Matcher<const qlever::parsedQuery::SelectClause&> {
-  return testing::SafeMatcherCast<const qlever::parsedQuery::SelectClause&>(
+  return ::testing::SafeMatcherCast<const qlever::parsedQuery::SelectClause&>(
       detail::Select(distinct, reduced, std::move(selection),
                      std::move(hiddenAliases)));
 };
@@ -673,7 +679,7 @@ inline auto Select =
 inline auto stringMatchesFilter =
     [](const std::string& expectedDescriptor) -> Matcher<const SparqlFilter&> {
   auto inner = AD_PROPERTY(qlever::sparqlExpression::SparqlExpressionPimpl,
-                           getDescriptor, testing::Eq(expectedDescriptor));
+                           getDescriptor, ::testing::Eq(expectedDescriptor));
   return AD_FIELD(SparqlFilter, expression_, inner);
 };
 
@@ -685,7 +691,7 @@ inline auto stringsMatchFilters =
     -> Matcher<const std::vector<SparqlFilter>&> {
   auto matchers =
       ad_utility::transform(expectedDescriptors, stringMatchesFilter);
-  return testing::ElementsAreArray(matchers);
+  return ::testing::ElementsAreArray(matchers);
 };
 
 inline auto SolutionModifier =
@@ -697,21 +703,21 @@ inline auto SolutionModifier =
                                       ExpressionOrderKeyTest>>& orderKeys = {},
        const LimitOffsetClause& limitOffset = {})
     -> Matcher<const qlever::SolutionModifiers&> {
-  return testing::AllOf(
+  return ::testing::AllOf(
       AD_FIELD(qlever::SolutionModifiers, groupByVariables_,
                GroupKeys(groupKeys)),
       AD_FIELD(qlever::SolutionModifiers, havingClauses_,
                stringsMatchFilters(havingClauses)),
       AD_FIELD(qlever::SolutionModifiers, orderBy_, OrderKeys(orderKeys)),
       AD_FIELD(qlever::SolutionModifiers, limitOffset_,
-               testing::Eq(limitOffset)));
+               ::testing::Eq(limitOffset)));
 };
 
 inline auto Triples = [](const std::vector<qlever::SparqlTriple>& triples)
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return detail::GraphPatternOperation<qlever::parsedQuery::BasicGraphPattern>(
       AD_FIELD(qlever::parsedQuery::BasicGraphPattern, _triples,
-               testing::UnorderedElementsAreArray(triples)));
+               ::testing::UnorderedElementsAreArray(triples)));
 };
 
 // Same as above, but the triples have to be in the same order as specified.
@@ -722,7 +728,7 @@ inline auto OrderedTriples =
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return detail::GraphPatternOperation<qlever::parsedQuery::BasicGraphPattern>(
       AD_FIELD(qlever::parsedQuery::BasicGraphPattern, _triples,
-               testing::ElementsAreArray(triples)));
+               ::testing::ElementsAreArray(triples)));
 };
 
 namespace detail {
@@ -748,7 +754,7 @@ inline auto Group =
 inline auto Union = [](auto&& subMatcher1, auto&& subMatcher2)
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return detail::GraphPatternOperation<qlever::parsedQuery::Union>(
-      testing::AllOf(
+      ::testing::AllOf(
           AD_FIELD(qlever::parsedQuery::Union, _child1, subMatcher1),
           AD_FIELD(qlever::parsedQuery::Union, _child2, subMatcher2)));
 };
@@ -762,9 +768,9 @@ inline auto Minus = [](auto&& subMatcher)
 inline auto Load = [](const qlever::TripleComponent::Iri& iri, bool silent)
     -> Matcher<const qlever::parsedQuery::GraphPatternOperation&> {
   return detail::GraphPatternOperation<qlever::parsedQuery::Load>(
-      testing::AllOf(
-          AD_FIELD(qlever::parsedQuery::Load, iri_, testing::Eq(iri)),
-          AD_FIELD(qlever::parsedQuery::Load, silent_, testing::Eq(silent))));
+      ::testing::AllOf(
+          AD_FIELD(qlever::parsedQuery::Load, iri_, ::testing::Eq(iri)),
+          AD_FIELD(qlever::parsedQuery::Load, silent_, ::testing::Eq(silent))));
 };
 
 inline auto RootGraphPattern =
@@ -805,13 +811,13 @@ inline auto GraphPattern = [](bool optional,
                               const std::vector<std::string>& filters,
                               auto&&... childMatchers)
     -> Matcher<const qlever::ParsedQuery::GraphPattern&> {
-  return testing::AllOf(
+  return ::testing::AllOf(
       AD_FIELD(qlever::ParsedQuery::GraphPattern, _optional,
-               testing::Eq(optional)),
+               ::testing::Eq(optional)),
       AD_FIELD(qlever::ParsedQuery::GraphPattern, _filters,
                stringsMatchFilters(filters)),
       AD_FIELD(qlever::ParsedQuery::GraphPattern, _graphPatterns,
-               testing::ElementsAre(childMatchers...)));
+               ::testing::ElementsAre(childMatchers...)));
 };
 }  // namespace detail
 
@@ -866,9 +872,9 @@ inline auto SubSelect = [](auto&& selectMatcher, auto&& whereMatcher)
   return detail::GraphPatternOperation<qlever::parsedQuery::Subquery>(
       AD_PROPERTY(
           qlever::parsedQuery::Subquery, get,
-          testing::AllOf(
+          ::testing::AllOf(
               AD_PROPERTY(qlever::ParsedQuery, hasSelectClause,
-                          testing::IsTrue()),
+                          ::testing::IsTrue()),
               AD_PROPERTY(qlever::ParsedQuery, selectClause, selectMatcher),
               AD_FIELD(qlever::ParsedQuery, _rootGraphPattern, whereMatcher))));
 };
@@ -895,7 +901,7 @@ inline auto SelectQuery =
   using namespace ::testing;
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
   return AllOf(
-      AD_PROPERTY(qlever::ParsedQuery, hasSelectClause, testing::IsTrue()),
+      AD_PROPERTY(qlever::ParsedQuery, hasSelectClause, ::testing::IsTrue()),
       AD_PROPERTY(qlever::ParsedQuery, selectClause, selectMatcher),
       AD_FIELD(qlever::ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(graphPatternMatcher));
@@ -908,12 +914,13 @@ namespace pq {
 inline auto OriginalString = [](const std::string& originalString)
     -> Matcher<const qlever::ParsedQuery&> {
   return AD_FIELD(qlever::ParsedQuery, _originalString,
-                  testing::Eq(originalString));
+                  ::testing::Eq(originalString));
 };
 
 inline auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
     -> Matcher<const qlever::ParsedQuery&> {
-  return AD_FIELD(qlever::ParsedQuery, _limitOffset, testing::Eq(limitOffset));
+  return AD_FIELD(qlever::ParsedQuery, _limitOffset,
+                  ::testing::Eq(limitOffset));
 };
 inline auto Having = [](const std::vector<std::string>& havingClauses = {})
     -> Matcher<const qlever::ParsedQuery&> {
@@ -938,7 +945,7 @@ inline auto AskQuery =
   using namespace ::testing;
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
   return AllOf(
-      AD_PROPERTY(qlever::ParsedQuery, hasAskClause, testing::IsTrue()),
+      AD_PROPERTY(qlever::ParsedQuery, hasAskClause, ::testing::IsTrue()),
       AD_FIELD(qlever::ParsedQuery, datasetClauses_, datasetMatcher),
       pq::LimitOffset(LimitOffsetClause{1u, 0, std::nullopt}),
       RootGraphPattern(graphPatternMatcher));
@@ -952,11 +959,11 @@ inline auto ConstructQuery(
     qlever::parsedQuery::DatasetClauses::Graphs namedGraphs = std::nullopt)
     -> Matcher<const qlever::ParsedQuery&> {
   auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
-  return testing::AllOf(
-      AD_PROPERTY(qlever::ParsedQuery, hasConstructClause, testing::IsTrue()),
+  return ::testing::AllOf(
+      AD_PROPERTY(qlever::ParsedQuery, hasConstructClause, ::testing::IsTrue()),
       AD_PROPERTY(qlever::ParsedQuery, constructClause,
                   AD_FIELD(qlever::parsedQuery::ConstructClause, triples_,
-                           testing::ElementsAreArray(elems))),
+                           ::testing::ElementsAreArray(elems))),
       AD_FIELD(qlever::ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(m));
 }
@@ -995,7 +1002,7 @@ inline auto Describe =
 inline auto VisibleVariables = [](const std::vector<qlever::Variable>& elems)
     -> Matcher<const qlever::ParsedQuery&> {
   return AD_PROPERTY(qlever::ParsedQuery, getVisibleVariables,
-                     testing::Eq(elems));
+                     ::testing::Eq(elems));
 };
 
 using namespace qlever::updateClause;
@@ -1005,7 +1012,7 @@ inline auto MatchGraphUpdate(
     const Matcher<const qlever::updateClause::GraphUpdate::Triples&>& toDelete,
     const Matcher<const qlever::updateClause::GraphUpdate::Triples&>& toInsert)
     -> Matcher<const qlever::updateClause::GraphUpdate&> {
-  using namespace testing;
+  using namespace ::testing;
   return AllOf(AD_FIELD(GraphUpdate, toInsert_, toInsert),
                AD_FIELD(GraphUpdate, toDelete_, toDelete));
 }
@@ -1019,7 +1026,7 @@ inline auto GraphUpdate(
   auto getVec = [](const GraphUpdate::Triples& tr) -> decltype(auto) {
     return tr.triples_;
   };
-  using namespace testing;
+  using namespace ::testing;
   return matchers::MatchGraphUpdate(
       ResultOf(getVec, ElementsAreArray(toDelete)),
       ResultOf(getVec, ElementsAreArray(toInsert)));
@@ -1027,9 +1034,9 @@ inline auto GraphUpdate(
 
 inline auto EmptyDatasets = [] {
   return AllOf(AD_PROPERTY(qlever::ParsedQuery::DatasetClauses,
-                           activeDefaultGraphs, testing::Eq(std::nullopt)),
+                           activeDefaultGraphs, ::testing::Eq(std::nullopt)),
                AD_PROPERTY(qlever::ParsedQuery::DatasetClauses, namedGraphs,
-                           testing::Eq(std::nullopt)));
+                           ::testing::Eq(std::nullopt)));
 };
 
 using Graphs = ad_utility::HashSet<qlever::TripleComponent>;
@@ -1041,8 +1048,8 @@ inline auto UpdateClause =
        const Matcher<const qlever::ParsedQuery::DatasetClauses&>&
            datasetMatcher =
                EmptyDatasets()) -> Matcher<const qlever::ParsedQuery&> {
-  return testing::AllOf(
-      AD_PROPERTY(qlever::ParsedQuery, hasUpdateClause, testing::IsTrue()),
+  return ::testing::AllOf(
+      AD_PROPERTY(qlever::ParsedQuery, hasUpdateClause, ::testing::IsTrue()),
       AD_PROPERTY(qlever::ParsedQuery, updateClause,
                   AD_FIELD(qlever::parsedQuery::UpdateClause, op_, opMatcher)),
       AD_FIELD(qlever::ParsedQuery, datasetClauses_, datasetMatcher),
@@ -1050,20 +1057,21 @@ inline auto UpdateClause =
 };
 
 template <typename T>
-auto inline Variant = []() { return testing::VariantWith<T>(testing::_); };
+auto inline Variant = []() { return ::testing::VariantWith<T>(::testing::_); };
 
 auto inline GraphRefIri = [](const std::string& iri) {
-  return testing::VariantWith<GraphRef>(AD_PROPERTY(
-      qlever::TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
+  return ::testing::VariantWith<GraphRef>(
+      AD_PROPERTY(qlever::TripleComponent::Iri, toStringRepresentation,
+                  ::testing::Eq(iri)));
 };
 
 inline auto Quads = [](const qlever::sparql_types::Triples& freeTriples,
                        const std::vector<qlever::Quads::GraphBlock>& graphs)
     -> Matcher<const qlever::Quads&> {
   return AllOf(AD_FIELD(qlever::Quads, freeTriples_,
-                        testing::ElementsAreArray(freeTriples)),
+                        ::testing::ElementsAreArray(freeTriples)),
                AD_FIELD(qlever::Quads, graphTriples_,
-                        testing::ElementsAreArray(graphs)));
+                        ::testing::ElementsAreArray(graphs)));
 };
 
 // Some helper matchers for testing SparqlExpressions
@@ -1073,18 +1081,18 @@ using namespace qlever::sparqlExpression;
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // (via `dynamic_cast`) points to an object of type `Expression`, and that this
 // `Expression` matches the `matcher`.
-template <typename Expression, typename Matcher = decltype(testing::_)>
+template <typename Expression, typename Matcher = decltype(::testing::_)>
 auto matchPtr(Matcher matcher = Matcher{})
-    -> testing::Matcher<const SparqlExpression::Ptr&> {
-  return testing::Pointee(
-      testing::WhenDynamicCastTo<const Expression&>(matcher));
+    -> ::testing::Matcher<const SparqlExpression::Ptr&> {
+  return ::testing::Pointee(
+      ::testing::WhenDynamicCastTo<const Expression&>(matcher));
 }
 
 // Return a matcher that matches a `SparqlExpression::Ptr` that stores a
 // `VariableExpression` with the given  `variable`.
 inline auto variableExpressionMatcher = [](const qlever::Variable& variable) {
   return matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(variable)));
+      AD_PROPERTY(VariableExpression, value, ::testing::Eq(variable)));
 };
 
 // Return a matcher that matches a `SparqlExpression::Ptr`that stores an
@@ -1095,7 +1103,7 @@ auto matchPtrWithChildren(ChildrenMatchers&&... childrenMatchers)
     -> Matcher<const SparqlExpression::Ptr&> {
   return matchPtr<Expression>(
       AD_PROPERTY(SparqlExpression, childrenForTesting,
-                  testing::ElementsAre(childrenMatchers...)));
+                  ::testing::ElementsAre(childrenMatchers...)));
 }
 
 // Same as `matchPtrWithChildren` above, but the children are all variables.
@@ -1135,7 +1143,7 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
 
 inline auto idExpressionMatcher = [](qlever::Id id) {
   return matchPtr<IdExpression>(
-      AD_PROPERTY(IdExpression, value, testing::Eq(id)));
+      AD_PROPERTY(IdExpression, value, ::testing::Eq(id)));
 };
 
 // Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
@@ -1159,15 +1167,15 @@ template <typename T>
 auto matchLiteralExpression(const T& value)
     -> Matcher<const SparqlExpression::Ptr&> {
   using Expr = qlever::sparqlExpression::detail::LiteralExpression<T>;
-  return testing::Pointee(testing::WhenDynamicCastTo<const Expr&>(
-      AD_PROPERTY(Expr, value, testing::Eq(value))));
+  return ::testing::Pointee(::testing::WhenDynamicCastTo<const Expr&>(
+      AD_PROPERTY(Expr, value, ::testing::Eq(value))));
 }
 }  // namespace builtInCall
 
 // Match an EXISTS function
 inline auto Exists(Matcher<const qlever::ParsedQuery&> pattern) {
-  return testing::Pointee(
-      testing::WhenDynamicCastTo<
+  return ::testing::Pointee(
+      ::testing::WhenDynamicCastTo<
           const qlever::sparqlExpression::ExistsExpression&>(AD_PROPERTY(
           qlever::sparqlExpression::ExistsExpression, argument, pattern)));
 }
@@ -1197,7 +1205,7 @@ inline auto ContainsExistsFilter =
 inline auto Filters = [](const auto&... filterMatchers)
     -> Matcher<const qlever::ParsedQuery::GraphPattern&> {
   return AD_FIELD(qlever::ParsedQuery::GraphPattern, _filters,
-                  testing::ElementsAre(filterMatchers...));
+                  ::testing::ElementsAre(filterMatchers...));
 };
 
 // Matcher for `FILTER EXISTS` filters.
@@ -1328,7 +1336,7 @@ struct ExpectCompleteParse {
   }
 
   auto operator()(
-      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      const std::string& input, const ::testing::Matcher<const Value&>& matcher,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     return operator()(input, matcher, prefixMap_, l);
   }
@@ -1337,11 +1345,11 @@ struct ExpectCompleteParse {
       const std::string& input, const Value& value,
       qlever::SparqlQleverVisitor::PrefixMap prefixMap,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
-    return operator()(input, testing::Eq(value), std::move(prefixMap), l);
+    return operator()(input, ::testing::Eq(value), std::move(prefixMap), l);
   }
 
   auto operator()(
-      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      const std::string& input, const ::testing::Matcher<const Value&>& matcher,
       qlever::SparqlQleverVisitor::PrefixMap prefixMap,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
@@ -1354,7 +1362,7 @@ struct ExpectCompleteParse {
   }
 
   auto operator()(
-      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      const std::string& input, const ::testing::Matcher<const Value&>& matcher,
       qlever::ParsedQuery::DatasetClauses activeDatasetClauses,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
@@ -1367,7 +1375,7 @@ struct ExpectCompleteParse {
   }
 
   auto operator()(
-      const std::string& input, const testing::Matcher<const Value&>& matcher,
+      const std::string& input, const ::testing::Matcher<const Value&>& matcher,
       std::string_view baseIri,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
@@ -1387,18 +1395,18 @@ struct ExpectParseFails {
       disableSomeChecks =
           qlever::SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
-  auto operator()(
-      const std::string& input,
-      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto operator()(const std::string& input,
+                  const ::testing::Matcher<const std::string&>& messageMatcher =
+                      ::testing::_,
+                  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     return operator()(input, prefixMap_, messageMatcher, l);
   }
 
-  auto operator()(
-      const std::string& input,
-      qlever::SparqlQleverVisitor::PrefixMap prefixMap,
-      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto operator()(const std::string& input,
+                  qlever::SparqlQleverVisitor::PrefixMap prefixMap,
+                  const ::testing::Matcher<const std::string&>& messageMatcher =
+                      ::testing::_,
+                  ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
         parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),

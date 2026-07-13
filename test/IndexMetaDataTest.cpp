@@ -26,7 +26,7 @@
 using namespace qlever;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 // A default/dummy graph used for several tests.
 Id g = V(123405);
 }  // namespace

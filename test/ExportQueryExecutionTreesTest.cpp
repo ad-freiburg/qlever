@@ -22,6 +22,7 @@
 #include "util/RuntimeParametersTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -44,9 +45,9 @@ std::string runQueryStreamableResult(
     const std::string& kg, const std::string& query,
     ad_utility::MediaType mediaType, bool useTextIndex = false,
     std::optional<size_t> exportLimit = std::nullopt) {
-  ad_utility::testing::TestIndexConfig config{kg};
+  qlever::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
-  auto qec = ad_utility::testing::getQec(std::move(config));
+  auto qec = qlever::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
@@ -73,9 +74,9 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             ad_utility::MediaType mediaType,
                             bool useTextIndex = false,
                             std::optional<size_t> exportLimit = std::nullopt) {
-  ad_utility::testing::TestIndexConfig config{kg};
+  qlever::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
-  auto qec = ad_utility::testing::getQec(std::move(config));
+  auto qec = qlever::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
@@ -1465,8 +1466,8 @@ TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string result =
       runQueryStreamableResult(kg, query, ad_utility::MediaType::octetStream);
   ASSERT_EQ(4 * sizeof(Id), result.size());
-  auto qec = ad_utility::testing::getQec(kg);
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec(kg);
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
   auto p = getId("<p>");
   auto o = getId("<o>");
 
@@ -1478,9 +1479,9 @@ TEST(ExportQueryExecutionTrees, BinaryExport) {
 
   // The result is "p, 31" (first row) "o, 42" (second row)
   ASSERT_EQ(o, id0);
-  ASSERT_EQ(ad_utility::testing::IntId(42), id1);
+  ASSERT_EQ(qlever::testing::IntId(42), id1);
   ASSERT_EQ(p, id2);
-  ASSERT_EQ(ad_utility::testing::IntId(31), id3);
+  ASSERT_EQ(qlever::testing::IntId(31), id3);
 }
 
 // ____________________________________________________________________________
@@ -1519,7 +1520,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   ASSERT_EQ(resultNoColumns["results"]["bindings"].size(), 1);
   EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].is_object());
   EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
-  auto qec = ad_utility::testing::getQec(kg);
+  auto qec = qlever::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
       exportIds::idToStringAndType(qec->getIndex(), Id::max(), LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
@@ -1528,8 +1529,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
                                                LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      exportIds::idToStringAndTypeForEncodedValue(
-          ad_utility::testing::VocabId(12)),
+      exportIds::idToStringAndTypeForEncodedValue(qlever::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
 }
 
@@ -1591,7 +1591,7 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
-  auto* qec = ad_utility::testing::getQec(
+  auto* qec = qlever::testing::getQec(
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = parseQuery(GetParam() == turtle
@@ -1823,7 +1823,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
-  auto* qec = ad_utility::testing::getQec(
+  auto* qec = qlever::testing::getQec(
       "<s> <p1> 40,41,42,43,44,45,46,47,48,49"
       " ; <p2> 50,51,52,53,54,55,56,57,58,59");
   QueryPlanner qp{qec, cancellationHandle};
@@ -1921,7 +1921,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   auto qet1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}),
@@ -1957,10 +1957,10 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   auto encodedIriManager = std::make_shared<EncodedIriManager>(
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
-  ad_utility::testing::TestIndexConfig config{kg};
+  qlever::testing::TestIndexConfig config{kg};
   config.encodedPrefixesWithoutAngleBrackets =
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"};
-  auto qec = ad_utility::testing::getQec(std::move(config));
+  auto qec = qlever::testing::getQec(std::move(config));
 
   // Parse query with the same EncodedIriManager
   auto parsedQuery =

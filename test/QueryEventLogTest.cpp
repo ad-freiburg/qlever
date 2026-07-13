@@ -24,12 +24,12 @@
 namespace {
 namespace fs = std::filesystem;
 using ad_utility::QueryEventLog;
-using ad_utility::testing::readLines;
+using qlever::testing::readLines;
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, PushBeforeConfigureIsNoOp) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [path, cleanup] = qlever::testing::filenameForTesting();
   // Fresh local instance so the test is self-contained.
   QueryEventLog log;
   // No `setOutputFile` call. `push` must silently drop the line and not
@@ -40,8 +40,8 @@ TEST(QueryEventLog, PushBeforeConfigureIsNoOp) {
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, DoubleConfigureThrows) {
-  auto [first, cleanupFirst] = ad_utility::testing::filenameForTesting();
-  auto [second, cleanupSecond] = ad_utility::testing::filenameForTesting();
+  auto [first, cleanupFirst] = qlever::testing::filenameForTesting();
+  auto [second, cleanupSecond] = qlever::testing::filenameForTesting();
   QueryEventLog log;
   log.setOutputFile(first);
   EXPECT_ANY_THROW(log.setOutputFile(second));
@@ -49,7 +49,7 @@ TEST(QueryEventLog, DoubleConfigureThrows) {
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, SetOutputFileOpenFailureThrows) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [path, cleanup] = qlever::testing::filenameForTesting();
   QueryEventLog log;
   // `path` does not exist, so using it as a directory gives `child.log` a
   // non-existent parent and the file cannot be opened.
@@ -58,7 +58,7 @@ TEST(QueryEventLog, SetOutputFileOpenFailureThrows) {
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [path, cleanup] = qlever::testing::filenameForTesting();
   {
     QueryEventLog log;
     log.setOutputFile(path);
@@ -75,7 +75,7 @@ TEST(QueryEventLog, SingleProducerWritesAndFlushes) {
 
 // _____________________________________________________________________________
 TEST(QueryEventLog, ConcurrentProducersProduceWellFormedLines) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [path, cleanup] = qlever::testing::filenameForTesting();
   constexpr size_t kThreads = 8;
   constexpr size_t kLinesPerThread = 1000;
 

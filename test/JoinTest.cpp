@@ -34,7 +34,8 @@
 #include "util/SourceLocation.h"
 
 using namespace qlever;
-using ad_utility::testing::makeAllocator;
+using namespace qlever::testing;
+using qlever::testing::makeAllocator;
 namespace {
 
 using joinHelpers::CHUNK_SIZE;
@@ -307,7 +308,7 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
 }
 
 using enum Permutation::Enum;
-auto I = ad_utility::testing::IntId;
+auto I = qlever::testing::IntId;
 using Var = Variable;
 }  // namespace
 
@@ -315,7 +316,7 @@ struct JoinTestParametrized : public ::testing::TestWithParam<bool> {};
 
 TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
   bool keepJoinCol = GetParam();
-  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> <x>. <x> <a> 3.");
+  auto qec = qlever::testing::getQec("<x> <p> 1. <x> <o> <x>. <x> <a> 3.");
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
   auto fullScanPSO = makeExecutionTree<IndexScan>(
@@ -325,7 +326,7 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
 
   auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
 
-  auto id = ad_utility::testing::makeGetId(qec->getIndex());
+  auto id = qlever::testing::makeGetId(qec->getIndex());
 
   auto x = id("<x>");
   auto p = id("<p>");
@@ -381,7 +382,7 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
 TEST_P(JoinTestParametrized, joinWithColumnAndScan) {
   bool keepJoinCol = GetParam();
   auto test = [keepJoinCol](size_t materializationThreshold) {
-    auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
+    auto qec = qlever::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup = setRuntimeParameterForTest<
         &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
@@ -393,7 +394,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScan) {
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
-    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    auto getId = qlever::testing::makeGetId(qec->getIndex());
     auto idX = getId("<x>");
     auto expected = makeIdTableFromVector({{idX, I(1)}});
     VariableToColumnMap expectedVariables{
@@ -420,7 +421,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanEmptyInput) {
   auto keepJoinCol = GetParam();
   auto test = [keepJoinCol](size_t materializationThreshold,
                             bool lazyJoinValues) {
-    auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
+    auto qec = qlever::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup = setRuntimeParameterForTest<
         &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
@@ -462,7 +463,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
   auto keepJoinCol = GetParam();
   auto test = [keepJoinCol](size_t materializationThreshold,
                             bool lazyJoinValues) {
-    auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
+    auto qec = qlever::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup = setRuntimeParameterForTest<
         &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
         materializationThreshold);
@@ -477,7 +478,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
-    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    auto getId = qlever::testing::makeGetId(qec->getIndex());
     auto idX = getId("<x>");
     auto idX2 = getId("<x2>");
     auto expected = makeIdTableFromVector({{idX, I(1)}, {idX2, I(2)}});
@@ -515,7 +516,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
 TEST_P(JoinTestParametrized, joinTwoScans) {
   auto keepJoinCol = GetParam();
   auto test = [keepJoinCol](size_t materializationThreshold) {
-    auto qec = ad_utility::testing::getQec(
+    auto qec = qlever::testing::getQec(
         "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
     auto cleanup = setRuntimeParameterForTest<
         &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(
@@ -527,7 +528,7 @@ TEST_P(JoinTestParametrized, joinTwoScans) {
     auto join = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
-    auto id = ad_utility::testing::makeGetId(qec->getIndex());
+    auto id = qlever::testing::makeGetId(qec->getIndex());
     auto expected = makeIdTableFromVector(
         {{id("<x>"), I(3), I(1)}, {id("<x2>"), I(4), I(2)}});
     VariableToColumnMap expectedVariables{
@@ -565,11 +566,11 @@ TEST_P(JoinTestParametrized, joinTwoScans) {
 // it can be reproduced in a unit test.
 TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
   auto keepJoinCol = GetParam();
-  ad_utility::testing::TestIndexConfig config{
+  qlever::testing::TestIndexConfig config{
       "<x> <p1> <1> <g1> . <x> <p1> <2> <g1> . <x> <p2> <1> <g2> ."
       " <x> <p2> <2> <g2> ."};
   config.indexType = Filetype::NQuad;
-  auto qec = ad_utility::testing::getQec(config);
+  auto qec = qlever::testing::getQec(config);
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   using triple_component::Iri;
@@ -608,7 +609,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
   // Default block size is 16 bytes for testing, so the triples are spread
   // across 3 blocks in total.
   auto keepJoinCol = GetParam();
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<x> <p1> <1> . <x> <p1> <2> . <x> <p1> <3> . <x> <p1> <4> ."
       " <x> <p2> <5>");
   auto cleanup = setRuntimeParameterForTest<
@@ -620,7 +621,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
       qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p2>"), Var{"?o2"}});
   auto join = Join{qec, scanP2, scanP, 0, 0, keepJoinCol};
 
-  auto id = ad_utility::testing::makeGetId(qec->getIndex());
+  auto id = qlever::testing::makeGetId(qec->getIndex());
   auto expected = makeIdTableFromVector({{id("<x>"), id("<1>"), id("<5>")},
                                          {id("<x>"), id("<2>"), id("<5>")},
                                          {id("<x>"), id("<3>"), id("<5>")},
@@ -645,7 +646,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
 
 // _____________________________________________________________________________
 TEST(JoinTest, invalidJoinVariable) {
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
   auto valuesTree = makeValuesForSingleVariable(qec, "?s", {"<x>"});
   auto valuesTree2 = makeValuesForSingleVariable(qec, "?p", {"<x>"});
@@ -663,7 +664,7 @@ TEST_P(JoinTestParametrized, joinTwoLazyOperationsWithAndWithoutUndefValues) {
                     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         IdTable expected = expectedIn.clone();
         auto l = generateLocationTrace(loc);
-        auto qec = ad_utility::testing::getQec();
+        auto qec = qlever::testing::getQec();
         auto cleanup = setRuntimeParameterForTest<
             &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
         auto leftTree = makeExecutionTree<ValuesForTesting>(
@@ -755,7 +756,7 @@ TEST_P(JoinTestParametrized,
                     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(loc);
         IdTable expected = expectedIn.clone();
-        auto qec = ad_utility::testing::getQec();
+        auto qec = qlever::testing::getQec();
         auto cleanup = setRuntimeParameterForTest<
             &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
         auto leftTree = makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
@@ -830,7 +831,7 @@ TEST_P(JoinTestParametrized,
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, errorInSeparateThreadIsPropagatedCorrectly) {
   auto keepJoinCol = GetParam();
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   auto leftTree = makeExecutionTree<AlwaysFailOperation>(qec, Variable{"?s"});
@@ -844,15 +845,14 @@ TEST_P(JoinTestParametrized, errorInSeparateThreadIsPropagatedCorrectly) {
 
   auto idTables = result->idTables();
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(idTables.begin(),
-                                        testing::StrEq("AlwaysFailOperation"),
+                                        ::testing::StrEq("AlwaysFailOperation"),
                                         std::runtime_error);
 }
 
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
   auto keepJoinCol = GetParam();
-  auto qec =
-      ad_utility::testing::getQec("<x> <p> <g>. <x2> <p> <h>. <x> <a> <i>.");
+  auto qec = qlever::testing::getQec("<x> <p> <g>. <x2> <p> <h>. <x> <a> <i>.");
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
   auto U = Id::makeUndefined();
@@ -897,7 +897,7 @@ TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
         {Variable{"?p"}, makeAlwaysDefinedColumn(1)},
         {Variable{"?q"}, makeAlwaysDefinedColumn(2)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(3)}};
-    auto id = ad_utility::testing::makeGetId(qec->getIndex());
+    auto id = qlever::testing::makeGetId(qec->getIndex());
     auto expected =
         makeIdTableFromVector({{id("<x>"), I(1), I(2), id("<g>")},
                                {id("<x2>"), I(1), I(2), id("<h>")}});
@@ -922,7 +922,7 @@ TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
 
 // _____________________________________________________________________________
 TEST(JoinTest, clone) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto leftTree = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
       Vars{Variable{"?t"}, Variable{"?s"}, Variable{"?u"}}, false,
@@ -943,7 +943,7 @@ TEST(JoinTest, clone) {
 TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
   auto keepJoinCol = GetParam();
   using triple_component::Iri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   // Not in graph no undef
   auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
@@ -1029,7 +1029,7 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
   }
 
   // Set a low materialization threshold, so that our index scans will be lazy.
-  auto qec = ad_utility::testing::getQec(kg);
+  auto qec = qlever::testing::getQec(kg);
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1);
   qec->getQueryTreeCache().clearAll();

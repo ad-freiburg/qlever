@@ -17,17 +17,17 @@ using namespace qlever;
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
-using ad_utility::testing::DateId;
-using ad_utility::testing::DoubleId;
-using ad_utility::testing::IntId;
+using qlever::testing::DateId;
+using qlever::testing::DoubleId;
+using qlever::testing::IntId;
 using triple_component::LiteralOrIri;
 using strOpt = std::optional<std::string>;
 using LanguageTagGetter = sparqlExpression::detail::LanguageTagValueGetter;
 
-auto lit = ad_utility::testing::tripleComponentLiteral;
-auto T = ad_utility::testing::BoolId(true);
-auto F = ad_utility::testing::BoolId(false);
-auto U = ad_utility::testing::UndefId();
+auto lit = qlever::testing::tripleComponentLiteral;
+auto T = qlever::testing::BoolId(true);
+auto F = qlever::testing::BoolId(false);
+auto U = qlever::testing::UndefId();
 auto maxId = Id::max();
 
 // Define a test context like in SparqlExpressionTestHelpers.h (take a look for
@@ -47,7 +47,7 @@ struct TestContext {
       "<s7> <city_name> \"hamburg\"@de . "
       "<s8> <city_name> \"düsseldorf\"@de-AT";
 
-  QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
+  QueryExecutionContext* qec = qlever::testing::getQec(turtleInput);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
@@ -60,7 +60,7 @@ struct TestContext {
       std::make_shared<ad_utility::CancellationHandle<>>(),
       EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
-      ad_utility::testing::makeGetId(qec->getIndex());
+      qlever::testing::makeGetId(qec->getIndex());
 
   // Vocab Ids which represent literals (with and without language tags)
   Id litId1 = getId("\"leipzig\""), litId2 = getId("\"friburgo\"@es"),

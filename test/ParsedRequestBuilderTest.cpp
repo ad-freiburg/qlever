@@ -17,7 +17,7 @@ using namespace ad_utility::use_type_identity;
 using namespace qlever;
 using namespace qlever::url_parser;
 using namespace qlever::url_parser::sparqlOperation;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, Constructor) {
@@ -29,11 +29,12 @@ TEST(ParsedRequestBuilderTest, Constructor) {
     const auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(
         builder.parsedRequest_,
-        AllOf(AD_FIELD(ParsedRequest, path_, testing::Eq(path)),
-              AD_FIELD(ParsedRequest, accessToken_, testing::Eq(std::nullopt)),
-              AD_FIELD(ParsedRequest, parameters_, testing::Eq(params)),
-              AD_FIELD(ParsedRequest, operation_,
-                       testing::VariantWith<None>(None{}))));
+        AllOf(
+            AD_FIELD(ParsedRequest, path_, ::testing::Eq(path)),
+            AD_FIELD(ParsedRequest, accessToken_, ::testing::Eq(std::nullopt)),
+            AD_FIELD(ParsedRequest, parameters_, ::testing::Eq(params)),
+            AD_FIELD(ParsedRequest, operation_,
+                     ::testing::VariantWith<None>(None{}))));
   };
   expect(makeGetRequest("/"), "/", {});
   expect(makeGetRequest("/default?graph=bar"), "/default",
@@ -50,9 +51,10 @@ TEST(ParsedRequestBuilderTest, extractAccessToken) {
                        AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
-    EXPECT_THAT(builder.parsedRequest_.accessToken_, testing::Eq(std::nullopt));
+    EXPECT_THAT(builder.parsedRequest_.accessToken_,
+                ::testing::Eq(std::nullopt));
     builder.extractAccessToken(request);
-    EXPECT_THAT(builder.parsedRequest_.accessToken_, testing::Eq(expected));
+    EXPECT_THAT(builder.parsedRequest_.accessToken_, ::testing::Eq(expected));
   };
   expect(makeGetRequest("/"), std::nullopt);
   expect(makeGetRequest("/?query=foo"), std::nullopt);
@@ -84,8 +86,8 @@ TEST(ParsedRequestBuilderTest, extractDatasetClause) {
     builder.parsedRequest_.operation_ = T{"", {}};
     builder.extractDatasetClauses();
     EXPECT_THAT(builder.parsedRequest_.operation_,
-                testing::VariantWith<T>(
-                    AD_FIELD(T, datasetClauses_, testing::Eq(expected))));
+                ::testing::VariantWith<T>(
+                    AD_FIELD(T, datasetClauses_, ::testing::Eq(expected))));
   };
   auto Iri = qlever::triple_component::Iri::fromIriref;
   expect(makeGetRequest("/"), ti<Query>, {});
@@ -112,10 +114,10 @@ TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,
-                testing::VariantWith<None>(None{}));
+                ::testing::VariantWith<None>(None{}));
     // Initialize an empty operation with no dataset clauses set.
     builder.extractOperationIfSpecified<T>(paramName);
-    EXPECT_THAT(builder.parsedRequest_.operation_, testing::Eq(expected));
+    EXPECT_THAT(builder.parsedRequest_.operation_, ::testing::Eq(expected));
   };
   expect(makeGetRequest("/"), ti<Query>, "query", None{});
   expect(makeGetRequest("/?query=foo"), ti<Update>, "update", None{});
@@ -134,17 +136,17 @@ TEST(ParsedRequestBuilderTest, isGraphStoreOperationIndirect) {
     return builder.isGraphStoreOperationIndirect();
   };
   EXPECT_THAT(isGraphStoreOperationIndirect(makeGetRequest("/")),
-              testing::IsFalse());
+              ::testing::IsFalse());
   EXPECT_THAT(isGraphStoreOperationIndirect(
                   makeGetRequest("/?query=foo&access-token=bar")),
-              testing::IsFalse());
+              ::testing::IsFalse());
   EXPECT_THAT(isGraphStoreOperationIndirect(makeGetRequest("/?default")),
-              testing::IsTrue());
+              ::testing::IsTrue());
   EXPECT_THAT(isGraphStoreOperationIndirect(makeGetRequest("/?graph=foo")),
-              testing::IsTrue());
+              ::testing::IsTrue());
   EXPECT_THAT(isGraphStoreOperationIndirect(
                   makeGetRequest("/default?query=foo&access-token=bar")),
-              testing::IsFalse());
+              ::testing::IsFalse());
 }
 
 // _____________________________________________________________________________________________
@@ -166,7 +168,7 @@ TEST(ParsedRequestBuilderTest, isGraphStoreOperationDirect) {
   EXPECT_FALSE(isGraphOpDirect(
       absl::StrCat("/foo/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX)));
   AD_EXPECT_THROW_WITH_MESSAGE(isGraphOpDirect(":"),
-                               testing::StrEq("Failed to parse URL: \":\"."));
+                               ::testing::StrEq("Failed to parse URL: \":\"."));
 }
 
 // _____________________________________________________________________________________________
@@ -178,11 +180,11 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationIndirect) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,
-                testing::VariantWith<None>(None{}));
+                ::testing::VariantWith<None>(None{}));
     builder.extractGraphStoreOperationIndirect();
     EXPECT_THAT(builder.parsedRequest_.operation_,
-                testing::VariantWith<GraphStoreOperation>(
-                    AD_FIELD(GraphStoreOperation, graph_, testing::Eq(graph))));
+                ::testing::VariantWith<GraphStoreOperation>(AD_FIELD(
+                    GraphStoreOperation, graph_, ::testing::Eq(graph))));
   };
   expect(makeGetRequest("/?default"), DEFAULT{});
   expect(makeGetRequest("/?graph=foo"), Iri("<foo>"));
@@ -192,14 +194,14 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationIndirect) {
     auto builder = ParsedRequestBuilder(makeGetRequest("/?default&graph=foo"));
     AD_EXPECT_THROW_WITH_MESSAGE(
         builder.extractGraphStoreOperationIndirect(),
-        testing::HasSubstr(
+        ::testing::HasSubstr(
             R"(Parameters "graph" and "default" must not be set at the same time.)"));
   }
   {
     auto builder = ParsedRequestBuilder(makeGetRequest("/default"));
     builder.parsedRequest_.operation_ = Query{"foo", {}};
     AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperationIndirect(),
-                                 testing::HasSubstr(""));
+                                 ::testing::HasSubstr(""));
   }
 }
 
@@ -216,11 +218,11 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationDirect) {
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,
-                testing::VariantWith<None>(None{}));
+                ::testing::VariantWith<None>(None{}));
     builder.extractGraphStoreOperationDirect();
     EXPECT_THAT(builder.parsedRequest_.operation_,
-                testing::VariantWith<GraphStoreOperation>(
-                    AD_FIELD(GraphStoreOperation, graph_, testing::Eq(graph))));
+                ::testing::VariantWith<GraphStoreOperation>(AD_FIELD(
+                    GraphStoreOperation, graph_, ::testing::Eq(graph))));
   };
   expect(makeGet(absl::StrCat("/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX,
                               "/foo/bar/baz.ttl")),
@@ -238,14 +240,14 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationDirect) {
         absl::StrCat("/foo/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX)));
     AD_EXPECT_THROW_WITH_MESSAGE(
         builder.extractGraphStoreOperationDirect(),
-        testing::HasSubstr(
+        ::testing::HasSubstr(
             "Assertion `isGraphStoreOperationDirect()` failed."));
   }
   {
     auto builder = ParsedRequestBuilder(makeGetRequest("/default"));
     builder.parsedRequest_.operation_ = Query{"foo", {}};
     AD_EXPECT_THROW_WITH_MESSAGE(builder.extractGraphStoreOperationDirect(),
-                                 testing::HasSubstr(""));
+                                 ::testing::HasSubstr(""));
   }
 }
 
@@ -253,17 +255,17 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationDirect) {
 TEST(ParsedRequestBuilderTest, parametersContain) {
   auto builder =
       ParsedRequestBuilder(makeGetRequest("/?query=foo&access-token=bar&baz"));
-  EXPECT_THAT(builder.parametersContain("query"), testing::IsTrue());
-  EXPECT_THAT(builder.parametersContain("access-token"), testing::IsTrue());
-  EXPECT_THAT(builder.parametersContain("baz"), testing::IsTrue());
-  EXPECT_THAT(builder.parametersContain("default"), testing::IsFalse());
-  EXPECT_THAT(builder.parametersContain("graph"), testing::IsFalse());
+  EXPECT_THAT(builder.parametersContain("query"), ::testing::IsTrue());
+  EXPECT_THAT(builder.parametersContain("access-token"), ::testing::IsTrue());
+  EXPECT_THAT(builder.parametersContain("baz"), ::testing::IsTrue());
+  EXPECT_THAT(builder.parametersContain("default"), ::testing::IsFalse());
+  EXPECT_THAT(builder.parametersContain("graph"), ::testing::IsFalse());
   builder.parsedRequest_.parameters_ = {{"graph", {"foo"}}};
-  EXPECT_THAT(builder.parametersContain("query"), testing::IsFalse());
-  EXPECT_THAT(builder.parametersContain("access-token"), testing::IsFalse());
-  EXPECT_THAT(builder.parametersContain("baz"), testing::IsFalse());
-  EXPECT_THAT(builder.parametersContain("default"), testing::IsFalse());
-  EXPECT_THAT(builder.parametersContain("graph"), testing::IsTrue());
+  EXPECT_THAT(builder.parametersContain("query"), ::testing::IsFalse());
+  EXPECT_THAT(builder.parametersContain("access-token"), ::testing::IsFalse());
+  EXPECT_THAT(builder.parametersContain("baz"), ::testing::IsFalse());
+  EXPECT_THAT(builder.parametersContain("default"), ::testing::IsFalse());
+  EXPECT_THAT(builder.parametersContain("graph"), ::testing::IsTrue());
 }
 
 // _____________________________________________________________________________________________
@@ -272,7 +274,7 @@ TEST(ParsedRequestBuilderTest, reportUnsupportedContentTypeIfGraphStore) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       builderGraphStore.reportUnsupportedContentTypeIfGraphStore(
           "application/x-www-form-urlencoded"),
-      testing::HasSubstr(""));
+      ::testing::HasSubstr(""));
   auto builderQuery = ParsedRequestBuilder(makeGetRequest("/?query=foo"));
   EXPECT_NO_THROW(builderQuery.reportUnsupportedContentTypeIfGraphStore(
       "application/sparql-query"));
@@ -289,12 +291,12 @@ TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce) {
   auto builder = ParsedRequestBuilder(
       makeGetRequest("/?query=foo&access-token=bar&baz&query=baz"));
   EXPECT_THAT(builder.parameterIsContainedExactlyOnce("does-not-exist"),
-              testing::IsFalse());
+              ::testing::IsFalse());
   EXPECT_THAT(builder.parameterIsContainedExactlyOnce("access-token"),
-              testing::IsTrue());
+              ::testing::IsTrue());
   AD_EXPECT_THROW_WITH_MESSAGE(
       builder.parameterIsContainedExactlyOnce("query"),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Parameter \"query\" must be given exactly once. Is: 2"));
 }
 
@@ -309,21 +311,22 @@ TEST(ParsedRequestBuilderTest, extractTargetGraph) {
   // Equivalent to `/?graph=foo&graph=bar`
   AD_EXPECT_THROW_WITH_MESSAGE(
       extractTargetGraph({{"graph", {"foo", "bar"}}}),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Parameter \"graph\" must be given exactly once. Is: 2"));
   const std::string eitherDefaultOrGraphErrorMsg =
       R"(Exactly one of the query parameters "default" or "graph" must be set to identify the graph for the graph store protocol request.)";
   // Equivalent to `/` or `/?`
   AD_EXPECT_THROW_WITH_MESSAGE(
-      extractTargetGraph({}), testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
+      extractTargetGraph({}),
+      ::testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
   // Equivalent to `/?unrelated=a&unrelated=b`
   AD_EXPECT_THROW_WITH_MESSAGE(
       extractTargetGraph({{"unrelated", {"a", "b"}}}),
-      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
+      ::testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
   // Equivalent to `/?default&graph=foo`
   AD_EXPECT_THROW_WITH_MESSAGE(
       extractTargetGraph({{"default", {""}}, {"graph", {"foo"}}}),
-      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
+      ::testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
 }
 
 // _____________________________________________________________________________________________
@@ -335,42 +338,42 @@ TEST(ParsedRequestBuilderTest, determineAccessToken) {
     return ParsedRequestBuilder::determineAccessToken(request,
                                                       parsedUrl.parameters_);
   };
-  EXPECT_THAT(extract(makeGetRequest("/")), testing::Eq(std::nullopt));
+  EXPECT_THAT(extract(makeGetRequest("/")), ::testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makeGetRequest("/?access-token=foo")),
-              testing::Optional(testing::Eq("foo")));
+              ::testing::Optional(::testing::Eq("foo")));
   EXPECT_THAT(
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "Bearer foo"}})),
-      testing::Optional(testing::Eq("foo")));
+      ::testing::Optional(::testing::Eq("foo")));
   EXPECT_THAT(
       extract(makeRequest(http::verb::get, "/?access-token=foo",
                           {{http::field::authorization, "Bearer foo"}})),
-      testing::Optional(testing::Eq("foo")));
+      ::testing::Optional(::testing::Eq("foo")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Access token is specified both in the `Authorization` header and "
           "by the `access-token` parameter, but they are not the same"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "foo"}})),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Authorization header doesn't start with \"Bearer \"."));
   EXPECT_THAT(extract(makePostRequest("/", "text/turtle", "")),
-              testing::Eq(std::nullopt));
+              ::testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makePostRequest("/?access-token=foo", "text/turtle", "")),
-              testing::Optional(testing::Eq("foo")));
+              ::testing::Optional(::testing::Eq("foo")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Access token is specified both in the `Authorization` header and "
           "by the `access-token` parameter, but they are not the same"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "foo"}})),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Authorization header doesn't start with \"Bearer \"."));
 }
 

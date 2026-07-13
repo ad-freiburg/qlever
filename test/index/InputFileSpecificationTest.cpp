@@ -18,7 +18,7 @@
 #include "util/MemorySize/MemorySize.h"
 
 using namespace qlever;
-using namespace testing;
+using namespace ::testing;
 using namespace ad_utility::memory_literals;
 
 namespace {

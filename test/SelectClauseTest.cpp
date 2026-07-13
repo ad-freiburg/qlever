@@ -8,28 +8,28 @@
 #include "gtest/gtest.h"
 #include "parser/SelectClause.h"
 
-using qlever::Alias;
-using qlever::parsedQuery::SelectClause;
+using namespace qlever;
+
+using parsedQuery::SelectClause;
 
 using namespace ::testing;
 
 TEST(SelectClause, Asterisk) {
   SelectClause clause;
-  clause.addVisibleVariable(qlever::Variable{"?x"});
+  clause.addVisibleVariable(Variable{"?x"});
   clause.setAsterisk();
-  clause.addVisibleVariable(qlever::Variable{"?y"});
+  clause.addVisibleVariable(Variable{"?y"});
   EXPECT_THAT(clause.getSelectedVariables(),
-              ElementsAre(qlever::Variable{"?x"}, qlever::Variable{"?y"}));
+              ElementsAre(Variable{"?x"}, Variable{"?y"}));
   EXPECT_TRUE(clause.isAsterisk());
   EXPECT_THAT(clause.getAliases(), IsEmpty());
 }
 
 TEST(SelectClause, Variables) {
   SelectClause clause;
-  clause.setSelected(
-      std::vector{qlever::Variable{"?x"}, qlever::Variable{"?y"}});
+  clause.setSelected(std::vector{Variable{"?x"}, Variable{"?y"}});
   EXPECT_THAT(clause.getSelectedVariables(),
-              ElementsAre(qlever::Variable{"?x"}, qlever::Variable{"?y"}));
+              ElementsAre(Variable{"?x"}, Variable{"?y"}));
   EXPECT_FALSE(clause.isAsterisk());
   EXPECT_THAT(clause.getAliases(), IsEmpty());
 }
@@ -37,16 +37,15 @@ TEST(SelectClause, Variables) {
 TEST(SelectClause, VariablesAndAliases) {
   SelectClause clause;
   std::vector<SelectClause::VarOrAlias> v{
-      qlever::Variable{"?x"},
-      Alias{{std::make_unique<qlever::sparqlExpression::IdExpression>(
-                 qlever::Id::makeFromBool(false)),
+      Variable{"?x"},
+      Alias{{std::make_unique<sparqlExpression::IdExpression>(
+                 Id::makeFromBool(false)),
              "false"},
-            qlever::Variable{"?y"}},
-      qlever::Variable{"?z"}};
+            Variable{"?y"}},
+      Variable{"?z"}};
   clause.setSelected(v);
   EXPECT_THAT(clause.getSelectedVariables(),
-              ElementsAre(qlever::Variable{"?x"}, qlever::Variable{"?y"},
-                          qlever::Variable{"?z"}));
+              ElementsAre(Variable{"?x"}, Variable{"?y"}, Variable{"?z"}));
   EXPECT_FALSE(clause.isAsterisk());
   EXPECT_THAT(clause.getAliases(), ElementsAre(std::get<Alias>(v[1])));
 }

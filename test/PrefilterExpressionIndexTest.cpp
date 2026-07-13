@@ -12,12 +12,12 @@
 
 using namespace qlever;
 
-using ad_utility::testing::BlankNodeId;
-using ad_utility::testing::BoolId;
-using ad_utility::testing::DoubleId;
-using ad_utility::testing::IntId;
-using ad_utility::testing::UndefId;
-using ad_utility::testing::VocabId;
+using qlever::testing::BlankNodeId;
+using qlever::testing::BoolId;
+using qlever::testing::DoubleId;
+using qlever::testing::IntId;
+using qlever::testing::UndefId;
+using qlever::testing::VocabId;
 
 namespace {
 
@@ -118,10 +118,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
   // Given that we depend on LocalVocab and Vocab values during evaluation an
   // active Index + global vocabulary is required.
-  QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
+  QueryExecutionContext* qet = qlever::testing::getQec(turtleInput);
   const LocalVocabContext& lvc = qet->getLocalVocabContext();
   std::function<Id(const std::string&)> getVocabId =
-      ad_utility::testing::makeGetId(qet->getIndex());
+      qlever::testing::makeGetId(qet->getIndex());
   LocalVocab vocab{};
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
   const Id referenceDate2 = DateId(DateParser, "2005-02-27");

@@ -19,9 +19,10 @@
 
 #include "util/Random.h"
 
-namespace ad_utility::testing {
+namespace qlever::testing {
 inline auto filenameForTesting() {
-  auto tmpFile = std::filesystem::temp_directory_path() / UuidGenerator()();
+  auto tmpFile =
+      std::filesystem::temp_directory_path() / ad_utility::UuidGenerator()();
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[tmpFile]() { std::filesystem::remove(tmpFile); }};
@@ -41,6 +42,6 @@ inline std::vector<std::string> readLines(const std::filesystem::path& path) {
   }
   return lines;
 }
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_FILETESTHELPERS_H

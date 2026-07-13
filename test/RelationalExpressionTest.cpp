@@ -20,7 +20,7 @@
 using namespace qlever;
 
 using namespace sparqlExpression;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using ad_utility::source_location;
 using namespace std::literals;
 using enum valueIdComparators::Comparison;
@@ -752,7 +752,7 @@ TEST(RelationalExpression, VariableAndConstant) {
 
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
-  auto B = ad_utility::testing::BoolId;
+  auto B = qlever::testing::BoolId;
   testWithExplicitIdResult<GT>(IdOrLocalVocabEntry{LocalVocabEntry::fromIriref(
                                    "<xa>", qec->getLocalVocabContext())},
                                Variable{"?mixed"}, {U, U, B(true)});
@@ -783,7 +783,7 @@ TEST(RelationalExpression, VariableAndVariable) {
   testWithExplicitResult<EQ>(mixed, mixed, {true, true, true});
 
   auto U = Id::makeUndefined();
-  auto B = ad_utility::testing::BoolId;
+  auto B = qlever::testing::BoolId;
 
   // ?ints column is `1, 0, -1`
   // ?doubles column is `0.1, -0.1, 2.8`

@@ -15,10 +15,11 @@
 #include "util/IndexTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 // _____________________________________________________________________________
 TEST(IdTableUtils, countDistinct) {
-  auto alloc = ad_utility::testing::makeAllocator();
+  auto alloc = qlever::testing::makeAllocator();
   IdTable t1(alloc);
   t1.setNumColumns(0);
   auto noop = []() {};

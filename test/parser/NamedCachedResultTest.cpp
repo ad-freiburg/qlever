@@ -11,15 +11,14 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 
+using namespace qlever;
 using namespace qlever::parsedQuery;
-using qlever::SparqlTriple;
+using namespace qlever::sparql_types;
 
 namespace {
 
 // Helper function to create a simple SparqlTriple for testing
 SparqlTriple createTestTriple() {
-  using namespace qlever;
-  using namespace qlever::sparql_types;
   TripleComponent subject{Variable{"?s"}};
   VarOrPath predicate = Variable{"?p"};
   TripleComponent object{Variable{"?o"}};
@@ -34,13 +33,12 @@ class NamedCachedResultTest : public ::testing::Test {
  protected:
   void SetUp() override {
     testIdentifier_ = "test_query_name";
-    testIdentifierAsIri_ =
-        qlever::TripleComponent::Iri::fromIrirefWithoutBrackets(
-            absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, testIdentifier_));
+    testIdentifierAsIri_ = TripleComponent::Iri::fromIrirefWithoutBrackets(
+        absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, testIdentifier_));
     query_ = std::make_unique<NamedCachedResult>(testIdentifierAsIri_);
   }
 
-  qlever::TripleComponent::Iri testIdentifierAsIri_;
+  TripleComponent::Iri testIdentifierAsIri_;
   std::string testIdentifier_;
   std::unique_ptr<NamedCachedResult> query_;
 };
@@ -48,13 +46,12 @@ class NamedCachedResultTest : public ::testing::Test {
 // Test constructor
 TEST_F(NamedCachedResultTest, Construction) {
   AD_EXPECT_THROW_WITH_MESSAGE(
-      NamedCachedResult(qlever::TripleComponent::Iri::fromIriref(
-          "<someIRIThatIsNotACacheRequest>")),
+      NamedCachedResult(
+          TripleComponent::Iri::fromIriref("<someIRIThatIsNotACacheRequest>")),
       ::testing::HasSubstr("must start with"));
   // Test construction with identifier
-  NamedCachedResult query(
-      qlever::TripleComponent::Iri::fromIrirefWithoutBrackets(
-          absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, "my_query")));
+  NamedCachedResult query(TripleComponent::Iri::fromIrirefWithoutBrackets(
+      absl::StrCat(CACHED_RESULT_WITH_NAME_PREFIX, "my_query")));
   EXPECT_EQ(query.identifier(), "my_query");
 }
 
@@ -100,9 +97,9 @@ TEST_F(NamedCachedResultTest, SequenceOfOperations) {
 
   // addGraph should always fail regardless of state.
   auto errorMatcher = ::testing::HasSubstr("must be empty");
-  AD_EXPECT_THROW_WITH_MESSAGE(query_->addGraph(GraphPatternOperation(
-                                   qlever::parsedQuery::BasicGraphPattern())),
-                               errorMatcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      query_->addGraph(GraphPatternOperation(BasicGraphPattern())),
+      errorMatcher);
   // addParameter should always fail regardless of state
   SparqlTriple testTriple = createTestTriple();
   AD_EXPECT_THROW_WITH_MESSAGE(query_->addParameter(testTriple), errorMatcher);

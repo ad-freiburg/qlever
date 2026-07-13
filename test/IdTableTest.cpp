@@ -21,10 +21,10 @@
 
 using namespace qlever;
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 }
 
 // This unit tests is part of the documentation of the `IdTable` class. It
@@ -1256,8 +1256,8 @@ TEST(IdTable, moveOrCloneOnView) {
 // Typed test fixture for `subView`, covering both owned `IdTable` and
 // `IdTableView<0>`.
 template <typename T>
-class IdTableSubViewTest : public testing::Test {};
-using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
+class IdTableSubViewTest : public ::testing::Test {};
+using SubViewTestTypes = ::testing::Types<IdTable, IdTableView<0>>;
 TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
 
 TYPED_TEST(IdTableSubViewTest, subView) {

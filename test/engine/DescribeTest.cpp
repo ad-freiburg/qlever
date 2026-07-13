@@ -14,7 +14,7 @@
 
 using namespace qlever;
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 
 namespace {
 // Return a matcher that matches a `span<const Id>` or something similar  that

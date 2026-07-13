@@ -19,6 +19,7 @@
 #include "util/RuntimeParametersTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 
@@ -69,7 +70,7 @@ void checkSetPrefilterExpressionVariablePair(
 
 // _____________________________________________________________________________
 TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  QueryExecutionContext* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector(
@@ -105,7 +106,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
 
 // _____________________________________________________________________________
 TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  QueryExecutionContext* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   IdTable idTable = makeIdTableFromVector({{true},
                                            {true},
@@ -141,7 +142,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
 // _____________________________________________________________________________
 TEST(Filter,
      verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluationWithLazyChild) {
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  QueryExecutionContext* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector(
@@ -173,9 +174,8 @@ TEST(Filter,
 TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
   using namespace makeFilterExpression;
   using namespace makeSparqlExpression;
-  using namespace ad_utility::testing;
   std::string kg = "<a> <p> 22.5 .";
-  QueryExecutionContext* qec = ad_utility::testing::getQec(kg);
+  QueryExecutionContext* qec = getQec(kg);
   // For the following tests a <PrefilterExpression, Variable> pair should be
   // assigned to the IndexScan child (prefiltering is possible) with Filter
   // construction.
@@ -220,10 +220,10 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
 // _____________________________________________________________________________
 TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   using namespace makeSparqlExpression;
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  QueryExecutionContext* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
-  auto I = ad_utility::testing::IntId;
+  auto I = qlever::testing::IntId;
   idTables.push_back(makeIdTableFromVector({{1}, {2}, {3}, {3}, {4}}, I));
   idTables.push_back(makeIdTableFromVector({{4}, {5}}, I));
   idTables.push_back(makeIdTableFromVector({{6}, {7}}, I));
@@ -250,9 +250,9 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
 // _____________________________________________________________________________
 TEST(Filter, clone) {
   using namespace makeSparqlExpression;
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  QueryExecutionContext* qec = qlever::testing::getQec();
   std::vector<IdTable> idTables;
-  auto I = ad_utility::testing::IntId;
+  auto I = qlever::testing::IntId;
   idTables.push_back(makeIdTableFromVector({{1}}, I));
 
   ValuesForTesting values{
@@ -272,7 +272,7 @@ TEST(Filter, clone) {
 // _____________________________________________________________________________
 TEST(Filter, isDeterministic) {
   using namespace sparqlExpression;
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  QueryExecutionContext* qec = qlever::testing::getQec();
 
   auto makeTree = [qec]() {
     return makeExecutionTree<ValuesForTesting>(

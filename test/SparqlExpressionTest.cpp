@@ -43,7 +43,7 @@ using ad_utility::source_location;
 // Some useful shortcuts for the tests below.
 using namespace sparqlExpression;
 using namespace std::literals;
-using ad_utility::testing::iri;
+using qlever::testing::iri;
 template <typename T>
 using V = VectorWithMemoryLimit<T>;
 
@@ -51,12 +51,12 @@ auto naN = std::numeric_limits<double>::quiet_NaN();
 auto inf = std::numeric_limits<double>::infinity();
 auto negInf = -inf;
 
-auto D = ad_utility::testing::DoubleId;
-auto B = ad_utility::testing::BoolId;
-auto I = ad_utility::testing::IntId;
-auto Voc = ad_utility::testing::VocabId;
-auto Dat = ad_utility::testing::DateId;
-auto GP = ad_utility::testing::GeoPointId;
+auto D = qlever::testing::DoubleId;
+auto B = qlever::testing::BoolId;
+auto I = qlever::testing::IntId;
+auto Voc = qlever::testing::VocabId;
+auto Dat = qlever::testing::DateId;
+auto GP = qlever::testing::GeoPointId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
@@ -77,7 +77,7 @@ const auto& testContext() {
 
 auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
   return LocalVocabEntry{
-      ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype),
+      qlever::testing::tripleComponentLiteral(s, langtagOrDatatype),
       testContext().qec->getLocalVocabContext()};
 };
 
@@ -107,7 +107,7 @@ auto geoLit = [](std::string_view content) {
 // `VectorWithMemoryLimit`s, and these require an `AllocatorWithLimit`).
 //
 using ad_utility::AllocatorWithLimit;
-AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
+AllocatorWithLimit<Id> alloc = qlever::testing::makeAllocator();
 
 // A concept for a type that is either a `SingleExpressionResult`, a
 // `std::vector<T>` where `T` is a `SingleExpressionResult` or something that
@@ -146,7 +146,7 @@ CPP_template(typename T)(
     // NaN and NaN are considered equal, and we also use `FloatEq` and not
     // `DoubleEq` because the precision of a `ValueId` is less than 64 bits
     // because of the datatype bits.
-    testing::Matcher<float> doubleMatcher =
+    ::testing::Matcher<float> doubleMatcher =
         ::testing::NanSensitiveFloatEq(static_cast<float>(id.getDouble()));
     auto doubleMatcherCast =
         ::testing::MatcherCast<const double&>(doubleMatcher);
@@ -210,8 +210,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
                                  auto const&... operands) {
   CPP_assert(SingleExpressionResult<decltype(expected)> &&
              (SingleExpressionResult<decltype(operands)> && ...));
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::testing::makeAllocator()};
+  ad_utility::AllocatorWithLimit<Id> alloc{qlever::testing::makeAllocator()};
   VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
@@ -1482,7 +1481,7 @@ TEST(SparqlExpression, testToNumericExpression) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testToDateOrDateTimeExpression) {
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
   Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
@@ -1865,9 +1864,9 @@ TEST(SparqlExpression, ifAndCoalesce) {
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
   ASSERT_THAT(coalesceExpr->getCacheKey({}),
-              testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
-                             ::testing::HasSubstr("<bim>"),
-                             ::testing::HasSubstr("<bam>")));
+              ::testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
+                               ::testing::HasSubstr("<bim>"),
+                               ::testing::HasSubstr("<bam>")));
 }
 
 // ________________________________________________________________________________________
@@ -1910,9 +1909,9 @@ TEST(SparqlExpression, concatExpression) {
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
   ASSERT_THAT(coalesceExpr->getCacheKey({}),
-              testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
-                             ::testing::HasSubstr("<bim>"),
-                             ::testing::HasSubstr("<bam>")));
+              ::testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
+                               ::testing::HasSubstr("<bim>"),
+                               ::testing::HasSubstr("<bam>")));
   // Only constants with datatypes or language tags.
   checkConcat(
       IdOrLocalVocabEntry{lit("HelloWorld")},
@@ -2274,7 +2273,7 @@ TEST(ExistsExpression, basicFunctionality) {
   auto var = exists.variable();
   TestContext context;
   EXPECT_ANY_THROW(exists.evaluate(&context.context));
-  using namespace testing;
+  using namespace ::testing;
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("Uninitialized Exists"));
   context.varToColMap[var] = makeAlwaysDefinedColumn(437);
@@ -2290,7 +2289,7 @@ TEST(ExistsExpression, basicFunctionality) {
 TEST(OrExpression, getLanguageFilterExpression) {
   using LFD = SparqlExpression::LangFilterData;
   using namespace ::testing;
-  auto lit = ad_utility::testing::tripleComponentLiteral;
+  auto lit = qlever::testing::tripleComponentLiteral;
 
   auto makeSimpleLangFilter = [&](std::string_view language,
                                   Variable variable) {

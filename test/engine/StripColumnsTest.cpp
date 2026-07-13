@@ -22,7 +22,7 @@ using namespace qlever;
 
 namespace {
 using Vars = std::vector<std::optional<Variable>>;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace ::testing;
 
 // _____________________________________________________________________________
@@ -70,7 +70,7 @@ TEST(StripColumns, basicMembers) {
 // _____________________________________________________________________________
 TEST(StripColumns, computeResult) {
   using V = Variable;
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto makeOp = [&qec]() {
     LocalVocab voc;
     voc.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
@@ -117,8 +117,8 @@ TEST(StripColumns, computeResult) {
 // _____________________________________________________________________________
 TEST(StripColumns, resultSortedOnAndVarToColMap) {
   using V = Variable;
-  auto qec = ad_utility::testing::getQec();
-  auto alloc = ad_utility::testing::makeAllocator();
+  auto qec = qlever::testing::getQec();
+  auto alloc = qlever::testing::makeAllocator();
 
   auto a = V{"?a"};
   auto b = V{"?b"};
@@ -165,7 +165,7 @@ TEST(StripColumns, resultSortedOnAndVarToColMap) {
 
 // _____________________________________________________________________________
 TEST(StripColumns, clone) {
-  auto strip = makeStrip(ad_utility::testing::getQec(),
+  auto strip = makeStrip(qlever::testing::getQec(),
                          makeIdTableFromVector({{1, 2, 3}}), {Variable{"?b"}});
   auto clone = strip.clone();
   ASSERT_TRUE(clone != nullptr);

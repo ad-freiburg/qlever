@@ -14,6 +14,7 @@
 #include "util/TransparentFunctors.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 using namespace ad_utility;
 namespace {
@@ -606,8 +607,8 @@ auto makeTable = [](const VectorTable& table) {
 struct IdRowAdder {
   using TableWithJoinCols = IdTableAndFirstCols<2, IdTable>;
   IdJoinResult* target_{};
-  IdTableView<0> leftTable_{2, ad_utility::testing::makeAllocator()};
-  IdTableView<0> rightTable_{2, ad_utility::testing::makeAllocator()};
+  IdTableView<0> leftTable_{2, qlever::testing::makeAllocator()};
+  IdTableView<0> rightTable_{2, qlever::testing::makeAllocator()};
 
   // Called by cartesian product path with materialized tables.
   void setInput(const auto& left, const auto& right) {

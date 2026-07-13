@@ -21,6 +21,7 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -31,12 +32,12 @@ namespace {
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
 Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
   std::vector<std::optional<Variable>> vars;
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
-  auto subtree = makeExecutionTree<ValuesForTesting>(
-      ad_utility::testing::getQec(), std::move(input), vars);
+  auto subtree = makeExecutionTree<ValuesForTesting>(qlever::testing::getQec(),
+                                                     std::move(input), vars);
   return Sort{qec, subtree, sortColumns};
 }
 
@@ -48,7 +49,7 @@ Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
 void testSort(IdTable input, const IdTable& expected,
               source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   // Set up the vector of sort columns. Those will later be permuted.
   std::vector<ColumnIndex> sortColumns;
@@ -93,7 +94,7 @@ TEST(Sort, ComputeSortSingleIntColumn) {
 }
 
 TEST(Sort, TwoColumnsIntAndFloat) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   IdTable input{2, qec->getAllocator()};
   IdTable expected{2, qec->getAllocator()};
 
@@ -129,9 +130,9 @@ TEST(Sort, ComputeSortThreeColumns) {
 }
 
 TEST(Sort, mixedDatatypes) {
-  auto I = ad_utility::testing::IntId;
-  auto V = ad_utility::testing::VocabId;
-  auto D = ad_utility::testing::DoubleId;
+  auto I = qlever::testing::IntId;
+  auto V = qlever::testing::VocabId;
+  auto D = qlever::testing::DoubleId;
   auto U = Id::makeUndefined();
 
   VectorTable input{{I(13)}, {I(-7)}, {U}, {I(0)}, {D(12.3)}, {U},
@@ -248,7 +249,7 @@ TEST(Sort, clone) {
 // uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
 // "remaining blocks" loop in `computeResultExternal`.
 TEST(Sort, externalSortLazyInput) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   // Create multiple tables to simulate lazy input. Total size needs to exceed
   // the threshold. 4 batches × 2000 rows × 3 cols × 8 bytes = 192 KB.
@@ -292,7 +293,7 @@ TEST(Sort, externalSortLazyInput) {
 
 // Test external sorting with fully materialized input.
 TEST(Sort, externalSortMaterializedInput) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
   qec->getQueryTreeCache().clearAll();
@@ -337,7 +338,7 @@ TEST(Sort, externalSortMaterializedInput) {
 
 // Test external sorting with lazy output.
 TEST(Sort, externalSortLazyOutput) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   // Clear cache at start to avoid hits from previous tests.
   qec->getQueryTreeCache().clearAll();
@@ -388,7 +389,7 @@ TEST(Sort, externalSortLazyOutput) {
 // Test in-memory sorting with fully materialized input (exercises the code path
 // where the subtree returns a materialized result that fits in memory).
 TEST(Sort, inMemorySortMaterializedInput) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
   qec->getQueryTreeCache().clearAll();
@@ -430,7 +431,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
 
 // _____________________________________________________________________________
 TEST(Sort, limitOffsetIsPropagated) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
 
   std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
@@ -448,7 +449,7 @@ TEST(Sort, limitOffsetIsPropagated) {
 
 // _____________________________________________________________________________
 TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
 
   std::vector<std::optional<Variable>> vars = {Variable{"?x"}};

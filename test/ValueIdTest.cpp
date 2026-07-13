@@ -21,9 +21,10 @@
 #include "util/Serializer/Serializer.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 struct ValueIdTest : public ::testing::Test {
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  QueryExecutionContext* qec_ = getQec();
 };
 
 TEST_F(ValueIdTest, makeFromDouble) {
@@ -316,7 +317,6 @@ TEST_F(ValueIdTest, Hashing) {
   }
   {
     using namespace triple_component;
-    using namespace ad_utility::testing;
     const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
     LocalVocab lv1;
@@ -399,7 +399,6 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   // Create a test index config with the encoded IRI manager and call getQec
   // to set up the global index state
-  using namespace ad_utility::testing;
   TestIndexConfig config;
   config.encodedPrefixesWithoutAngleBrackets = prefixes;
   qec_ = getQec(config);

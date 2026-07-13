@@ -23,7 +23,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace ::testing;
 using namespace qlever;
 using ad_utility::CacheStatus;
@@ -61,18 +61,20 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
   LimitOffsetClause l;
   {
     NeutralElementOperation n{getQec()};
-    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
+    EXPECT_THAT(n.getCacheKey(),
+                ::testing::Not(::testing::HasSubstr("LIMIT 20")));
     l._limit = 20;
     n.applyLimitOffset(l);
-    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
-    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
+    EXPECT_THAT(n.getCacheKey(), ::testing::HasSubstr("LIMIT 20"));
+    EXPECT_THAT(n.getCacheKey(),
+                ::testing::Not(::testing::HasSubstr("OFFSET 34")));
   }
 
   {
     NeutralElementOperation n{getQec()};
     l._offset = 34;
     n.applyLimitOffset(l);
-    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
+    EXPECT_THAT(n.getCacheKey(), ::testing::HasSubstr("OFFSET 34"));
   }
 }
 
@@ -178,7 +180,7 @@ TEST(OperationTest, getLazyResultIsCachedWhenPinned) {
 // _____________________________________________________________________________
 
 /// Fixture to work with a generic operation
-class OperationTestFixture : public testing::Test {
+class OperationTestFixture : public ::testing::Test {
  protected:
   std::vector<std::string> jsonHistory;
 
@@ -918,7 +920,7 @@ TEST(OperationTest, disableCachingGlobally) {
 
 // _____________________________________________________________________________
 TEST(OperationTest, isDeterministicAlwaysTrueOperations) {
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   auto* qec = getQec();
 
   ValuesForTesting values{qec, IdTable{1, qec->getAllocator()},
@@ -935,7 +937,7 @@ TEST(OperationTest, isDeterministicAlwaysTrueOperations) {
 
 // _____________________________________________________________________________
 TEST(OperationTest, isDeterministicPropagatesFromChildren) {
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   using namespace sparqlExpression;
   auto* qec = getQec();
 

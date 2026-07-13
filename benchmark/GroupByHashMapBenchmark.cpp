@@ -272,7 +272,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // SELECT (AGGREGATE(?b) AS ?x) WHERE {
     //   VALUES ...
     // } GROUP BY ?a
-    GroupBy groupBy{ad_utility::testing::getQec(),
+    GroupBy groupBy{qlever::testing::getQec(),
                     {Variable{"?a"}},
                     {std::move(alias1)},
                     std::move(subtree)};
@@ -328,7 +328,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // SELECT (AGGREGATE1(?b) AS ?x) (AGGREGATE2(?b) AS ?y) WHERE {
     //   VALUES ...
     // } GROUP BY ?a
-    GroupBy groupBy{ad_utility::testing::getQec(),
+    GroupBy groupBy{qlever::testing::getQec(),
                     {Variable{"?a"}},
                     {std::move(alias1), std::move(alias2)},
                     std::move(subtree)};
@@ -366,7 +366,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     group.metadata().addKeyValuePair("Operation", opString.str());
 
     // Create `ValuesForTesting` object
-    auto qec = ad_utility::testing::getQec();
+    auto qec = qlever::testing::getQec();
     IdTable table{qec->getAllocator()};
     table.setNumColumns(2);
     table.resize(numInputRows);

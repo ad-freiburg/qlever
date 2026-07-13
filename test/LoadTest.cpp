@@ -20,6 +20,7 @@
 #include "util/RuntimeParametersTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
 
@@ -35,9 +36,9 @@ class LoadTest : public ::testing::Test {
   // Query execution context (with small test index) and allocator for testing,
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> testAllocator =
-      ad_utility::testing::makeAllocator();
+      qlever::testing::makeAllocator();
   BlankNodeManager blankNodeManager_;
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` that returns a
@@ -50,10 +51,10 @@ class LoadTest : public ::testing::Test {
          ad_utility::source_location loc =
              AD_CURRENT_SOURCE_LOC()) -> SendRequestType {
     httpClientTestHelpers::RequestMatchers matchers{
-        .method_ = testing::Eq(boost::beast::http::verb::get),
-        .postData_ = testing::Eq(""),
-        .contentType_ = testing::Eq(""),
-        .accept_ = testing::Eq(""),
+        .method_ = ::testing::Eq(boost::beast::http::verb::get),
+        .postData_ = ::testing::Eq(""),
+        .contentType_ = ::testing::Eq(""),
+        .accept_ = ::testing::Eq(""),
     };
     return httpClientTestHelpers::getResultFunctionFactory(
         predefinedResult, contentType, status, matchers, mockException, loc);
@@ -65,21 +66,22 @@ TEST_F(LoadTest, basicMethods) {
   Load load{testQec, pqLoad("https://mundhahs.dev")};
 
   // Test the basic methods.
-  EXPECT_THAT(load.getDescriptor(), testing::Eq("LOAD <https://mundhahs.dev>"));
-  EXPECT_THAT(load.getCacheKey(), testing::StartsWith("LOAD"));
-  EXPECT_THAT(load.getResultWidth(), testing::Eq(3));
-  EXPECT_THAT(load.getMultiplicity(0), testing::Eq(1));
-  EXPECT_THAT(load.getMultiplicity(1), testing::Eq(1));
-  EXPECT_THAT(load.getMultiplicity(2), testing::Eq(1));
+  EXPECT_THAT(load.getDescriptor(),
+              ::testing::Eq("LOAD <https://mundhahs.dev>"));
+  EXPECT_THAT(load.getCacheKey(), ::testing::StartsWith("LOAD"));
+  EXPECT_THAT(load.getResultWidth(), ::testing::Eq(3));
+  EXPECT_THAT(load.getMultiplicity(0), ::testing::Eq(1));
+  EXPECT_THAT(load.getMultiplicity(1), ::testing::Eq(1));
+  EXPECT_THAT(load.getMultiplicity(2), ::testing::Eq(1));
   EXPECT_THAT(load.getExternallyVisibleVariableColumns(),
-              testing::UnorderedElementsAreArray(VariableToColumnMap{
+              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
                   {Variable("?s"), makeAlwaysDefinedColumn(0)},
                   {Variable("?p"), makeAlwaysDefinedColumn(1)},
                   {Variable("?o"), makeAlwaysDefinedColumn(2)}}));
-  EXPECT_THAT(load.getSizeEstimate(), testing::Eq(100'000));
-  EXPECT_THAT(load.getCostEstimate(), testing::Eq(1'000'000));
-  EXPECT_THAT(load.knownEmptyResult(), testing::IsFalse());
-  EXPECT_THAT(load.getChildren(), testing::IsEmpty());
+  EXPECT_THAT(load.getSizeEstimate(), ::testing::Eq(100'000));
+  EXPECT_THAT(load.getCostEstimate(), ::testing::Eq(1'000'000));
+  EXPECT_THAT(load.knownEmptyResult(), ::testing::IsFalse());
+  EXPECT_THAT(load.getChildren(), ::testing::IsEmpty());
 }
 
 TEST_F(LoadTest, computeResult) {
@@ -92,8 +94,8 @@ TEST_F(LoadTest, computeResult) {
       auto tr = generateLocationTrace(loc);
       Load load{testQec, pq, sendFunc};
       auto res = load.computeResultOnlyForTesting();
-      EXPECT_THAT(res.idTableView(), testing::IsEmpty());
-      EXPECT_THAT(res.localVocab(), testing::IsEmpty());
+      EXPECT_THAT(res.idTableView(), ::testing::IsEmpty());
+      EXPECT_THAT(res.localVocab(), ::testing::IsEmpty());
     };
 
     auto tr = generateLocationTrace(loc);
@@ -112,7 +114,7 @@ TEST_F(LoadTest, computeResult) {
   auto expectThrowOnlyIfNotSilent =
       [this, testSilentBehavior](
           parsedQuery::Load pq, SendRequestType sendFunc,
-          const testing::Matcher<std::string>& expectedError,
+          const ::testing::Matcher<std::string>& expectedError,
           ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
@@ -123,7 +125,7 @@ TEST_F(LoadTest, computeResult) {
       };
   auto expectThrowAlways =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
-             const testing::Matcher<std::string>& expectedError,
+             const ::testing::Matcher<std::string>& expectedError,
              ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
         auto g = generateLocationTrace(loc);
         Load load{testQec, pq, sendFunc};
@@ -157,13 +159,13 @@ TEST_F(LoadTest, computeResult) {
             auto idOpt = field.toValueId(testQec->getIndex());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
-                          testing::IsTrue());
+                          ::testing::IsTrue());
               using LiteralOrIri = triple_component::LiteralOrIri;
               auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
                   field.isLiteral() ? LiteralOrIri{field.getLiteral()}
                                     : LiteralOrIri{field.getIri()},
                   testQec->getLocalVocabContext()});
-              ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
+              ASSERT_THAT(lveOpt, ::testing::Not(::testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }
             idVecRow.emplace_back(idOpt.value());
@@ -172,43 +174,43 @@ TEST_F(LoadTest, computeResult) {
 
         IdTable expectedId = makeIdTableFromVector(idVector);
         EXPECT_EQ(idTable, makeIdTableFromVector(idVector));
-        EXPECT_THAT(idTable, testing::Eq(std::ref(expectedId)));
+        EXPECT_THAT(idTable, ::testing::Eq(std::ref(expectedId)));
       };
   expectThrowOnlyIfNotSilent(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>",
                                boost::beast::http::status::not_found),
-      testing::HasSubstr("RDF dataset responded with HTTP status code: 404"));
+      ::testing::HasSubstr("RDF dataset responded with HTTP status code: 404"));
   expectThrowOnlyIfNotSilent(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                "foo/bar"),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Unsupported `Content-Type` of response: \"foo/bar\""));
   expectThrowOnlyIfNotSilent(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                "text/plain"),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Unsupported `Content-Type` of response: \"text/plain\""));
   expectThrowOnlyIfNotSilent(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                ""),
-      testing::HasSubstr("QLever requires the `Content-Type` header to be "
-                         "set for the HTTP response."));
+      ::testing::HasSubstr("QLever requires the `Content-Type` header to be "
+                           "set for the HTTP response."));
   expectThrowOnlyIfNotSilent(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory("this is not turtle",
                                boost::beast::http::status::ok, "text/turtle"),
-      testing::HasSubstr("Parse error at byte position 0"));
+      ::testing::HasSubstr("Parse error at byte position 0"));
   expectThrowAlways(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory(
           "<x> <y> <z>", boost::beast::http::status::ok, "text/turtle",
           std::make_exception_ptr(ad_utility::CancellationException(
               ad_utility::CancellationState::TIMEOUT))),
-      testing::HasSubstr("Operation timed out."));
+      ::testing::HasSubstr("Operation timed out."));
   expectThrowAlways(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory(
@@ -216,7 +218,7 @@ TEST_F(LoadTest, computeResult) {
           std::make_exception_ptr(
               ad_utility::detail::AllocationExceedsLimitException(10_GB,
                                                                   5_GB))),
-      testing::HasSubstr("Tried to allocate"));
+      ::testing::HasSubstr("Tried to allocate"));
 
   auto Iri = triple_component::Iri::fromIriref;
   auto Literal = triple_component::Literal::fromStringRepresentation;
@@ -245,16 +247,16 @@ TEST_F(LoadTest, getCacheKey) {
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
     Load load3{testQec, pqLoad("https://mundhahs.dev", true)};
-    EXPECT_THAT(load1.canResultBeCached(), testing::IsTrue());
-    EXPECT_THAT(load2.canResultBeCached(), testing::IsTrue());
-    EXPECT_THAT(load3.canResultBeCached(), testing::IsTrue());
-    EXPECT_THAT(load1.getCacheKey(), testing::Eq(load2.getCacheKey()));
+    EXPECT_THAT(load1.canResultBeCached(), ::testing::IsTrue());
+    EXPECT_THAT(load2.canResultBeCached(), ::testing::IsTrue());
+    EXPECT_THAT(load3.canResultBeCached(), ::testing::IsTrue());
+    EXPECT_THAT(load1.getCacheKey(), ::testing::Eq(load2.getCacheKey()));
     EXPECT_THAT(load1.getCacheKey(),
-                testing::Not(testing::Eq(load3.getCacheKey())));
+                ::testing::Not(::testing::Eq(load3.getCacheKey())));
     EXPECT_THAT(load1.getCacheKey(),
-                testing::Eq("LOAD <https://mundhahs.dev>"));
+                ::testing::Eq("LOAD <https://mundhahs.dev>"));
     EXPECT_THAT(load3.getCacheKey(),
-                testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
+                ::testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
     auto cleanup =
@@ -264,13 +266,13 @@ TEST_F(LoadTest, getCacheKey) {
     Load load1{testQec, pqLoad("https://mundhahs.dev")};
     Load load2{testQec, pqLoad("https://mundhahs.dev")};
     Load load3{testQec, pqLoad("https://mundhahs.dev", true)};
-    EXPECT_THAT(load1.canResultBeCached(), testing::IsFalse());
-    EXPECT_THAT(load2.canResultBeCached(), testing::IsFalse());
-    EXPECT_THAT(load3.canResultBeCached(), testing::IsFalse());
+    EXPECT_THAT(load1.canResultBeCached(), ::testing::IsFalse());
+    EXPECT_THAT(load2.canResultBeCached(), ::testing::IsFalse());
+    EXPECT_THAT(load3.canResultBeCached(), ::testing::IsFalse());
     EXPECT_THAT(load1.getCacheKey(),
-                testing::Not(testing::Eq(load2.getCacheKey())));
+                ::testing::Not(::testing::Eq(load2.getCacheKey())));
     EXPECT_THAT(load1.getCacheKey(),
-                testing::Not(testing::Eq(load3.getCacheKey())));
+                ::testing::Not(::testing::Eq(load3.getCacheKey())));
   }
 }
 
@@ -285,18 +287,18 @@ TEST_F(LoadTest, clone) {
         setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(
             false);
     auto clone = load.clone();
-    ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
-    EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
+    ASSERT_THAT(clone, ::testing::Not(::testing::Eq(nullptr)));
+    EXPECT_THAT(clone->getDescriptor(), ::testing::Eq(load.getDescriptor()));
     EXPECT_THAT(clone->getCacheKey(),
-                testing::Not(testing::Eq(load.getCacheKey())));
+                ::testing::Not(::testing::Eq(load.getCacheKey())));
   }
   // When the results are cached, we get decoupled object that is the same.
   {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::cacheLoadResults_>(true);
     auto clone = load.clone();
-    ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
-    EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
+    ASSERT_THAT(clone, ::testing::Not(::testing::Eq(nullptr)));
+    EXPECT_THAT(clone->getDescriptor(), ::testing::Eq(load.getDescriptor()));
     EXPECT_THAT(*clone, IsDeepCopy(load));
   }
 }
@@ -305,15 +307,14 @@ TEST_F(LoadTest, Integration) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
       "LOAD <https://mundhahs.dev>");
-  ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
-  auto qec =
-      ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
+  ASSERT_THAT(parsedUpdate, ::testing::SizeIs(1));
+  auto qec = qlever::testing::getQec(qlever::testing::TestIndexConfig{});
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp(qec, cancellationHandle);
   auto executionTree = qp.createExecutionTree(parsedUpdate[0]);
   Load* load = dynamic_cast<Load*>(executionTree.getRootOperation().get());
-  ASSERT_THAT(load, testing::NotNull()) << "Root operation is not a Load";
+  ASSERT_THAT(load, ::testing::NotNull()) << "Root operation is not a Load";
   load->resetGetResultFunctionForTesting(
       getResultFunctionFactory("<a> <b> <c> . <d> <e> <f>",
                                boost::beast::http::status::ok, "text/turtle"));

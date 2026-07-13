@@ -14,7 +14,7 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
-using namespace qlever;
+namespace qlever::testing {
 
 // ____________________________________________________________________________
 void compareIdTableWithExpectedContent(
@@ -74,7 +74,7 @@ IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::function<std::vector<ValueId>()>& rowGenerator) {
   // Creating the table and setting it to the wanted size.
-  IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
+  IdTable table{numberColumns, makeAllocator()};
   table.resize(numberRows);
 
   // Fill the table.
@@ -128,7 +128,7 @@ IdTable createRandomlyFilledIdTable(
       0, ValueId::maxIndex, randomSeed);
   std::function<ValueId()> normalEntryGenerator = [&randomNumberGenerator]() {
     // `IdTable`s don't take raw numbers, you have to transform them first.
-    return ad_utility::testing::VocabId(randomNumberGenerator());
+    return VocabId(randomNumberGenerator());
   };
 
   // Assigning the column number to a generator function.
@@ -211,7 +211,7 @@ IdTable createRandomlyFilledIdTable(
                      j.lowerBound_, j.upperBound_, j.randomSeed_)]() mutable {
                   // `IdTable`s don't take raw numbers, you have to transform
                   // them first.
-                  return ad_utility::testing::VocabId(generator());
+                  return VocabId(generator());
                 }});
       });
 
@@ -263,8 +263,10 @@ std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
 
 // _____________________________________________________________________________
 IdTable createIdTableOfSizeWithValue(size_t size, Id value) {
-  IdTable idTable{1, ad_utility::testing::makeAllocator()};
+  IdTable idTable{1, makeAllocator()};
   idTable.resize(size);
   ql::ranges::fill(idTable.getColumn(0), value);
   return idTable;
 }
+
+}  // namespace qlever::testing

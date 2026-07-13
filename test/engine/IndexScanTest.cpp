@@ -20,7 +20,7 @@
 
 using namespace qlever;
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace std::chrono_literals;
 using ad_utility::source_location;
 
@@ -465,7 +465,7 @@ TEST(IndexScan, namedGraphs) {
       TripleComponent::Iri::fromIriref("<graph2>")};
   auto scan = IndexScan{qec, Permutation::PSO, triple,
                         IndexScan::Graphs::Whitelist(graphs)};
-  using namespace testing;
+  using namespace ::testing;
   EXPECT_EQ(scan.graphsToFilter(), IndexScan::Graphs::Whitelist(graphs));
   // HashSet order is non-deterministic.
   EXPECT_THAT(scan.getCacheKey(),
@@ -820,7 +820,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
 TEST(IndexScan, checkEvaluationWithPrefiltering) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
-  auto I = ad_utility::testing::IntId;
+  auto I = qlever::testing::IntId;
   std::string kg =
       "<P1> <price_tag> 10 . <P2> <price_tag> 12 . <P3> <price_tag> "
       "18 . <P4> <price_tag> 22 . <P5> <price_tag> 25 . <P6> "
@@ -910,7 +910,7 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
 }
 
 class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
-                              public ad_utility::testing::LazyJoinTestHelper {
+                              public qlever::testing::LazyJoinTestHelper {
  protected:
   void SetUp() override {
     std::string kg =
@@ -1324,7 +1324,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
 
 INSTANTIATE_TEST_SUITE_P(IndexScanWithLazyJoinSuite, IndexScanWithLazyJoin,
                          ::testing::Bool(),
-                         [](const testing::TestParamInfo<bool>& info) {
+                         [](const ::testing::TestParamInfo<bool>& info) {
                            return info.param ? "RightSideFirst"
                                              : "LeftSideFirst";
                          });
@@ -1449,7 +1449,7 @@ TEST(IndexScanTest, StripColumns) {
   // Each triple will be in a separate block.
   config.blocksizePermutations = 8_B;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
-  auto qec = ad_utility::testing::getQec(config);
+  auto qec = qlever::testing::getQec(config);
 
   auto def = makeAlwaysDefinedColumn;
 
@@ -1781,7 +1781,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   using namespace ad_utility::memory_literals;
   config.blocksizePermutations = 8_B;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
-  auto qec = ad_utility::testing::getQec(config);
+  auto qec = qlever::testing::getQec(config);
 
   using namespace makeFilterExpression;
   using namespace filterHelper;

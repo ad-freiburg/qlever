@@ -17,6 +17,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
@@ -30,7 +31,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
  protected:
   // Blank node manager and allocator that can be used when we don't really
   // care about blank nodes and allocation details.
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  QueryExecutionContext* qec_ = qlever::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> alloc_{
       ad_utility::makeUnlimitedAllocator<Id>()};
 

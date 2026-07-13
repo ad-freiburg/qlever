@@ -9,6 +9,7 @@
 #include "util/IndexTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 using namespace std::chrono_literals;
 using ::testing::AnyOf;
@@ -134,7 +135,8 @@ TEST(Result, verifyIdTablesThrowsWhenFullyMaterialized) {
 
 // _____________________________________________________________________________
 using CIs = std::vector<ColumnIndex>;
-class ResultSortTest : public testing::TestWithParam<std::tuple<bool, CIs>> {};
+class ResultSortTest : public ::testing::TestWithParam<std::tuple<bool, CIs>> {
+};
 
 TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
@@ -209,7 +211,7 @@ TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
-  auto* queryExecutionContext = ad_utility::testing::getQec();
+  auto* queryExecutionContext = qlever::testing::getQec();
   auto idTable1 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}});
   auto idTable2 = makeIdTableFromVector({{3, 4, 0}});
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
@@ -503,7 +505,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     }
 
     EXPECT_EQ(totalRows, 2);
-    EXPECT_THAT(colSizes, ::testing::Each(testing::Eq(2)));
+    EXPECT_THAT(colSizes, ::testing::Each(::testing::Eq(2)));
   }
 }
 
@@ -601,7 +603,8 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
 
 // _____________________________________________________________________________
 using LIC = LimitOffsetClause;
-class ResultLimitTest : public testing::TestWithParam<std::tuple<bool, LIC>> {};
+class ResultLimitTest : public ::testing::TestWithParam<std::tuple<bool, LIC>> {
+};
 
 TEST_P(ResultLimitTest,
        verifyAssertThatLimitWasRespectedDoesNotThrowIfLimitWasRespected) {
@@ -640,7 +643,7 @@ INSTANTIATE_TEST_SUITE_P(FailureCases, ResultLimitTest,
 
 // _____________________________________________________________________________
 class ResultDefinednessTest
-    : public testing::TestWithParam<std::tuple<bool, const IdTable*>> {};
+    : public ::testing::TestWithParam<std::tuple<bool, const IdTable*>> {};
 
 auto u = Id::makeUndefined();
 auto correctTable1 = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});

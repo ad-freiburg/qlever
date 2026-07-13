@@ -20,11 +20,11 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
-using ad_utility::testing::makeAllocator;
-auto Int = ad_utility::testing::IntId;
-auto iri = ad_utility::testing::iri;
+using qlever::testing::makeAllocator;
+auto Int = qlever::testing::IntId;
 
 // A text fixture that is used in the following. It consists of a small index
 // and variables for all the IDs that appear in the index.
@@ -36,9 +36,9 @@ class HasPredicateScanTest : public ::testing::Test {
       "<o4>. <z> <p3> <o2>.";
   // Mapping from subjects to distinct predicates (makes reading the test
   // results easier). x -> p p2 y -> p p3 z -> p3
-  QueryExecutionContext* qec = ad_utility::testing::getQec(kg);
+  QueryExecutionContext* qec = qlever::testing::getQec(kg);
   std::function<Id(const std::string&)> getId =
-      ad_utility::testing::makeGetId(qec->getIndex());
+      qlever::testing::makeGetId(qec->getIndex());
   Id x = getId("<x>");
   Id y = getId("<y>");
   Id z = getId("<z>");
@@ -220,8 +220,8 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
 
 // ____________________________________________________________
 TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
-  auto I = ad_utility::testing::IntId;
-  auto Voc = ad_utility::testing::VocabId;
+  auto I = qlever::testing::IntId;
+  auto Voc = qlever::testing::VocabId;
   // The subtree of the `CountAvailablePredicates` is illegal, because the
   // pattern index column contains the entry `273` which is neither `NoPattern`
   // nor a valid pattern index.

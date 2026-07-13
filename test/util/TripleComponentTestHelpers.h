@@ -8,8 +8,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/TripleComponent.h"
 
-namespace ad_utility::testing {
-using qlever::TripleComponent;
+namespace qlever::testing {
 
 // Create a valid `TripleComponent::Literal` that can then be stored in a
 // `TripleComponent`. The contents of the literal are obtained by normalizing
@@ -26,8 +25,8 @@ constexpr auto tripleComponentLiteral =
         return TripleComponent::Literal::fromEscapedRdfLiteral(
             literal, std::string(langtagOrDatatype));
       } else if (ql::starts_with(langtagOrDatatype, "^^")) {
-        auto iri = qlever::triple_component::Iri::fromIriref(
-            langtagOrDatatype.substr(2));
+        auto iri =
+            triple_component::Iri::fromIriref(langtagOrDatatype.substr(2));
         return TripleComponent::Literal::fromEscapedRdfLiteral(literal,
                                                                std::move(iri));
       } else {
@@ -46,6 +45,6 @@ constexpr auto iri = [](std::string_view s) {
 constexpr auto iriV = [](std::string_view s) {
   return TripleComponent::Iri::fromIrirefValidated(s);
 };
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H

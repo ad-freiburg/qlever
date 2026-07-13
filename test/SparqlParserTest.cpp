@@ -15,24 +15,24 @@
 #include "util/Conversions.h"
 #include "util/TripleComponentTestHelpers.h"
 
+using namespace qlever;
+
 namespace m = matchers;
 
-using Var = qlever::Variable;
+using Var = Variable;
 namespace {
-auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iri = ad_utility::testing::iri;
-auto iriV = ad_utility::testing::iriV;
+auto lit = qlever::testing::tripleComponentLiteral;
+auto iri = qlever::testing::iri;
+auto iriV = qlever::testing::iriV;
 
-const std::string& getIriString(
-    const qlever::sparql_types::VarOrPath& varOrPath) {
-  const auto& tripleComponent =
-      std::get<qlever::PropertyPath>(varOrPath).getIri();
+const std::string& getIriString(const sparql_types::VarOrPath& varOrPath) {
+  const auto& tripleComponent = std::get<PropertyPath>(varOrPath).getIri();
   return tripleComponent.toStringRepresentation();
 }
 auto parseQuery(std::string query,
-                const std::vector<qlever::DatasetClause>& datasets = {}) {
-  static qlever::EncodedIriManager evM;
-  return qlever::SparqlParser::parseQuery(&evM, std::move(query), datasets);
+                const std::vector<DatasetClause>& datasets = {}) {
+  static EncodedIriManager evM;
+  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
 }
 }  // namespace
 
@@ -206,8 +206,8 @@ TEST(ParserTest, testParse) {
         "}");
 
     ASSERT_EQ(2u, pq.children().size());
-    const auto& opt = std::get<qlever::parsedQuery::Optional>(
-        pq._rootGraphPattern._graphPatterns[1]);
+    const auto& opt =
+        std::get<parsedQuery::Optional>(pq._rootGraphPattern._graphPatterns[1]);
     auto& child = opt._child;
     const auto& triples = child._graphPatterns[0].getBasic()._triples;
     auto filters = child._filters;
@@ -235,13 +235,13 @@ TEST(ParserTest, testParse) {
         "  }\n"
         "}");
     ASSERT_EQ(2u, pq._rootGraphPattern._graphPatterns.size());
-    const auto& optA = std::get<qlever::parsedQuery::Optional>(
+    const auto& optA = std::get<parsedQuery::Optional>(
         pq._rootGraphPattern._graphPatterns[1]);  // throws on error
     auto& child = optA._child;
     ASSERT_EQ(3u, child._graphPatterns.size());
-    const auto& opt2 = std::get<qlever::parsedQuery::Optional>(
+    const auto& opt2 = std::get<parsedQuery::Optional>(
         child._graphPatterns[1]);  // throws on error
-    const auto& opt3 = std::get<qlever::parsedQuery::Optional>(
+    const auto& opt3 = std::get<parsedQuery::Optional>(
         child._graphPatterns[2]);  // throws on error
     const auto& child2 = opt2._child._graphPatterns[0].getBasic();
     const auto& child3 = opt3._child._graphPatterns[0].getBasic();
@@ -266,14 +266,13 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
     const auto& values1 =
-        std::get<qlever::parsedQuery::Values>(pq.children()[0])._inlineValues;
+        std::get<parsedQuery::Values>(pq.children()[0])._inlineValues;
     const auto& values2 =
-        std::get<qlever::parsedQuery::Values>(pq.children()[1])._inlineValues;
+        std::get<parsedQuery::Values>(pq.children()[1])._inlineValues;
 
-    std::vector<qlever::Variable> vvars = {Var{"?a"}};
+    std::vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    std::vector<std::vector<qlever::TripleComponent>> vvals = {{iri("<1>")},
-                                                               {2}};
+    std::vector<std::vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
@@ -294,13 +293,13 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(2u, pq.children().size());
     ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
     const auto& values1 =
-        std::get<qlever::parsedQuery::Values>(pq.children()[0])._inlineValues;
+        std::get<parsedQuery::Values>(pq.children()[0])._inlineValues;
     const auto& values2 =
-        std::get<qlever::parsedQuery::Values>(pq.children()[1])._inlineValues;
+        std::get<parsedQuery::Values>(pq.children()[1])._inlineValues;
 
-    std::vector<qlever::Variable> vvars = {Var{"?a"}};
+    std::vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    std::vector<std::vector<qlever::TripleComponent>> vvals = {
+    std::vector<std::vector<TripleComponent>> vvals = {
         {iri("<Albert_Einstein>")}};
     ASSERT_EQ(vvals, values1._values);
 
@@ -332,10 +331,10 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(c._triples[0].o_, Var{"?citytype"});
 
     const auto& values1 =
-        std::get<qlever::parsedQuery::Values>(pq.children()[0])._inlineValues;
-    std::vector<qlever::Variable> vvars = {Var{"?citytype"}};
+        std::get<parsedQuery::Values>(pq.children()[0])._inlineValues;
+    std::vector<Variable> vvars = {Var{"?citytype"}};
     ASSERT_EQ(vvars, values1._variables);
-    std::vector<std::vector<qlever::TripleComponent>> vvals = {
+    std::vector<std::vector<TripleComponent>> vvals = {
         {iri("<http://www.wikidata.org/entity/Q515>")},
         {iri("<http://www.wikidata.org/entity/Q262166>")}};
     ASSERT_EQ(vvals, values1._values);
@@ -445,7 +444,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<qlever::parsedQuery::SelectClause>(pq._clause);
+    auto sc = get<parsedQuery::SelectClause>(pq._clause);
     ASSERT_EQ(true, sc.reduced_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -523,11 +522,11 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery
-    auto subQueryGroup = get<qlever::parsedQuery::GroupGraphPattern>(
+    auto subQueryGroup = get<parsedQuery::GroupGraphPattern>(
         pq._rootGraphPattern._graphPatterns[1]);
-    auto parsed_sub_query = get<qlever::parsedQuery::Subquery>(
-        subQueryGroup._child._graphPatterns[0]);
-    const auto& c_subquery = get<qlever::parsedQuery::BasicGraphPattern>(
+    auto parsed_sub_query =
+        get<parsedQuery::Subquery>(subQueryGroup._child._graphPatterns[0]);
+    const auto& c_subquery = get<parsedQuery::BasicGraphPattern>(
         parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
     ASSERT_EQ(2u, c_subquery._triples.size());
     ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
@@ -600,11 +599,11 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 1)
-    auto subQueryGroup = get<qlever::parsedQuery::GroupGraphPattern>(
+    auto subQueryGroup = get<parsedQuery::GroupGraphPattern>(
         pq._rootGraphPattern._graphPatterns[1]);
-    auto parsed_sub_query = get<qlever::parsedQuery::Subquery>(
-        subQueryGroup._child._graphPatterns[0]);
-    const auto& c_subquery = get<qlever::parsedQuery::BasicGraphPattern>(
+    auto parsed_sub_query =
+        get<parsedQuery::Subquery>(subQueryGroup._child._graphPatterns[0]);
+    const auto& c_subquery = get<parsedQuery::BasicGraphPattern>(
         parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
     ASSERT_EQ(1u, c_subquery._triples.size());
     ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
@@ -628,13 +627,12 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 2)
-    auto subsubQueryGroup = get<qlever::parsedQuery::GroupGraphPattern>(
+    auto subsubQueryGroup = get<parsedQuery::GroupGraphPattern>(
         parsed_sub_query.get()._rootGraphPattern._graphPatterns[1]);
     auto aux_parsed_sub_sub_query =
-        get<qlever::parsedQuery::Subquery>(
-            subsubQueryGroup._child._graphPatterns[0])
+        get<parsedQuery::Subquery>(subsubQueryGroup._child._graphPatterns[0])
             .get();
-    const auto& c_sub_subquery = get<qlever::parsedQuery::BasicGraphPattern>(
+    const auto& c_sub_subquery = get<parsedQuery::BasicGraphPattern>(
         aux_parsed_sub_sub_query._rootGraphPattern._graphPatterns[0]);
     ASSERT_EQ(1u, c_sub_subquery._triples.size());
     ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
@@ -665,14 +663,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT { ?x foaf:name ?name } \n"
         "WHERE  { ?x org:employeeName ?name }");
 
-    EXPECT_THAT(pq_1, m::ConstructQuery(
-                          {{qlever::Variable{"?x"},
-                            iriV("<http://xmlns.com/foaf/0.1/name>"),
-                            qlever::Variable{"?name"}}},
-                          m::GraphPattern(m::Triples({qlever::SparqlTriple{
-                              qlever::Variable{"?x"},
-                              iri("<http://example.com/ns#employeeName>"),
-                              qlever::Variable{"?name"}}}))));
+    EXPECT_THAT(
+        pq_1,
+        m::ConstructQuery(
+            {{Variable{"?x"}, iriV("<http://xmlns.com/foaf/0.1/name>"),
+              Variable{"?name"}}},
+            m::GraphPattern(m::Triples({SparqlTriple{
+                Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
+                Variable{"?name"}}}))));
 
     // Check Parse Construct (2)
     auto pq_2 = parseQuery(
@@ -681,15 +679,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
         "WHERE       { ?x foaf:name ?name } ");
 
-    EXPECT_THAT(
-        pq_2,
-        m::ConstructQuery(
-            {{iriV("<http://example.org/person#Alice>"),
-              iriV("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
-              qlever::Variable{"?name"}}},
-            m::GraphPattern(m::Triples({qlever::SparqlTriple{
-                qlever::Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
-                qlever::Variable{"?name"}}}))));
+    EXPECT_THAT(pq_2,
+                m::ConstructQuery(
+                    {{iriV("<http://example.org/person#Alice>"),
+                      iriV("<http://www.w3.org/2001/vcard-rdf/3.0#FN>"),
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
+                        Variable{"?name"}}}))));
   }
 
   {
@@ -724,7 +721,7 @@ TEST(ParserTest, testParse) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, testFilterWithoutDot) {
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
       "\n"
       "SELECT DISTINCT ?1 WHERE {\n"
@@ -753,7 +750,7 @@ TEST(ParserTest, testFilterWithoutDot) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, testExpandPrefixes) {
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
       "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
@@ -783,7 +780,7 @@ TEST(ParserTest, testExpandPrefixes) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, testLiterals) {
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * WHERE { "
       "true <test:myrel> 10 . 10.2 <test:myrel> \"2000-01-01\"^^xsd:date }");
   ASSERT_TRUE(pq.hasSelectClause());
@@ -803,8 +800,7 @@ TEST(ParserTest, testLiterals) {
 // _____________________________________________________________________________
 TEST(ParserTest, testSolutionModifiers) {
   {
-    qlever::ParsedQuery pq =
-        parseQuery("SELECT ?x WHERE \t {?x <test:myrel> ?y}");
+    ParsedQuery pq = parseQuery("SELECT ?x WHERE \t {?x <test:myrel> ?y}");
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -1022,7 +1018,7 @@ TEST(ParserTest, testSolutionModifiers) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, testGroupByAndAlias) {
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "SELECT (COUNT(?a) as ?count) WHERE { ?b <rel> ?a } GROUP BY ?b");
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
@@ -1038,13 +1034,12 @@ TEST(ParserTest, testGroupByAndAlias) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, Bind) {
-  qlever::ParsedQuery pq =
-      parseQuery("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }");
+  ParsedQuery pq = parseQuery("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }");
   ASSERT_TRUE(pq.hasSelectClause());
   ASSERT_EQ(pq.children().size(), 1);
-  qlever::parsedQuery::GraphPatternOperation child = pq.children()[0];
-  ASSERT_TRUE(holds_alternative<qlever::parsedQuery::Bind>(child));
-  qlever::parsedQuery::Bind bind = get<qlever::parsedQuery::Bind>(child);
+  parsedQuery::GraphPatternOperation child = pq.children()[0];
+  ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(child));
+  parsedQuery::Bind bind = get<parsedQuery::Bind>(child);
   ASSERT_EQ(bind._target, Var{"?a"});
   ASSERT_EQ(bind._expression.getDescriptor(), "10 - 5");
 }
@@ -1052,63 +1047,62 @@ TEST(ParserTest, Bind) {
 // _____________________________________________________________________________
 TEST(ParserTest, Order) {
   {
-    qlever::ParsedQuery pq =
-        parseQuery("SELECT ?x ?y WHERE { ?x <test/myrel> ?y }");
+    ParsedQuery pq = parseQuery("SELECT ?x ?y WHERE { ?x <test/myrel> ?y }");
     ASSERT_TRUE(pq._orderBy.empty());
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::BasicGraphPattern>(
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY ?x");
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?x"}, false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::BasicGraphPattern>(
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY ASC(?y)");
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?y"}, false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::BasicGraphPattern>(
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY DESC(?x)");
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?x"}, true));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::BasicGraphPattern>(
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x ORDER BY ?x");
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?x"}, false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::BasicGraphPattern>(
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x (COUNT(?y) as ?c) WHERE { ?x <test/myrel> "
         "?y } GROUP BY ?x ORDER BY ?c");
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?c"}, false));
   }
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY (?x - ?y)");
     ASSERT_EQ(pq._orderBy.size(), 1);
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::Bind>(variant));
-    auto helperBind = get<qlever::parsedQuery::Bind>(variant);
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "(?x - ?y)");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
   }
@@ -1134,29 +1128,29 @@ TEST(ParserTest, Order) {
 // _____________________________________________________________________________
 TEST(ParserTest, Group) {
   {
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x");
     EXPECT_THAT(pq, m::GroupByVariables({Var{"?x"}}));
   }
   {
     // grouping by a variable
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?y ?x");
     EXPECT_THAT(pq, m::GroupByVariables({Var{"?y"}, Var{"?x"}}));
   }
   {
     // grouping by an expression
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x - ?y) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::Bind>(variant));
-    auto helperBind = get<qlever::parsedQuery::Bind>(variant);
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("?x - ?y"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
   {
     // grouping by an expression with an alias
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
         "- ?y AS ?foo) ?x");
     EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
@@ -1165,23 +1159,23 @@ TEST(ParserTest, Group) {
   }
   {
     // grouping by a builtin call
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY COUNT(?x) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::Bind>(variant));
-    auto helperBind = get<qlever::parsedQuery::Bind>(variant);
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
   {
     // grouping by a function call
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY "
         "<http://www.opengis.net/def/function/geosparql/"
         "latitude>(?y) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<qlever::parsedQuery::Bind>(variant));
-    auto helperBind = get<qlever::parsedQuery::Bind>(variant);
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_THAT(
         helperBind,
         m::BindExpression(
@@ -1199,66 +1193,64 @@ TEST(ParserTest, Group) {
 // _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
   auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
-    return qlever::PropertyPath::fromIri(
-        ad_utility::convertToLanguageTaggedPredicate(iri(iriString),
-                                                     std::move(langTag)));
+    return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+        iri(iriString), std::move(langTag)));
   };
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * WHERE {?x <label> ?y . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
-    ASSERT_EQ((qlever::SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"),
-                                    Var{"?y"}}),
-              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}),
+        triples[0]);
   }
   {
     // The empty language tag can't be optimized.
-    qlever::ParsedQuery q =
+    ParsedQuery q =
         parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) = \"\")}");
     EXPECT_FALSE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
-    EXPECT_THAT(triples,
-                ::testing::ElementsAre(qlever::SparqlTriple{
-                    Var{"?x"}, qlever::PropertyPath::fromIri(iri("<label>")),
-                    Var{"?y"}}));
+    EXPECT_THAT(triples, ::testing::ElementsAre(SparqlTriple{
+                             Var{"?x"}, PropertyPath::fromIri(iri("<label>")),
+                             Var{"?y"}}));
   }
   {
-    qlever::ParsedQuery q =
+    ParsedQuery q =
         parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\"))}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     EXPECT_THAT(triples,
-                ::testing::ElementsAre(qlever::SparqlTriple{
+                ::testing::ElementsAre(SparqlTriple{
                     Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}));
   }
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     // The order is arbitrary because of the hash implementation so we have to
     // account for that.
-    qlever::SparqlTriple variantA{
+    SparqlTriple variantA{
         Var{"?x"},
-        qlever::PropertyPath::makeAlternative(
+        PropertyPath::makeAlternative(
             {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
         Var{"?y"}};
-    qlever::SparqlTriple variantB{
+    SparqlTriple variantB{
         Var{"?x"},
-        qlever::PropertyPath::makeAlternative(
+        PropertyPath::makeAlternative(
             {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
         Var{"?y"}};
     EXPECT_THAT(triples,
                 ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
   }
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * { ?x <label> ?y . "
         "FILTER (LANG(?y) = \"en\" || LANG(?y) = \"de\")}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1266,14 +1258,14 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     // The order is arbitrary because of the hash implementation so we have to
     // account for that.
-    qlever::SparqlTriple variantA{
+    SparqlTriple variantA{
         Var{"?x"},
-        qlever::PropertyPath::makeAlternative(
+        PropertyPath::makeAlternative(
             {makeTaggedPath("<label>", "de"), makeTaggedPath("<label>", "en")}),
         Var{"?y"}};
-    qlever::SparqlTriple variantB{
+    SparqlTriple variantB{
         Var{"?x"},
-        qlever::PropertyPath::makeAlternative(
+        PropertyPath::makeAlternative(
             {makeTaggedPath("<label>", "en"), makeTaggedPath("<label>", "de")}),
         Var{"?y"}};
     EXPECT_THAT(triples,
@@ -1282,133 +1274,126 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   // Test the case when we have no predicate to work with and more than one
   // language.
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * { <somebody> ?p ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
 
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
-    qlever::SparqlTriple tripleA{
-        Var{"?y"}, qlever::PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-        ad_utility::convertLangtagToEntityUri("en")};
-    qlever::SparqlTriple tripleB{
-        Var{"?y"}, qlever::PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-        ad_utility::convertLangtagToEntityUri("de")};
+    SparqlTriple tripleA{Var{"?y"},
+                         PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
+                         ad_utility::convertLangtagToEntityUri("en")};
+    SparqlTriple tripleB{Var{"?y"},
+                         PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
+                         ad_utility::convertLangtagToEntityUri("de")};
 
-    auto hasSingleTriple = [](const qlever::SparqlTriple& triple) {
+    auto hasSingleTriple = [](const SparqlTriple& triple) {
       return AD_FIELD(
-          qlever::parsedQuery::GraphPattern, _graphPatterns,
+          parsedQuery::GraphPattern, _graphPatterns,
           ::testing::ElementsAre(
-              ::testing::VariantWith<qlever::parsedQuery::BasicGraphPattern>(
-                  AD_FIELD(qlever::parsedQuery::BasicGraphPattern, _triples,
+              ::testing::VariantWith<parsedQuery::BasicGraphPattern>(
+                  AD_FIELD(parsedQuery::BasicGraphPattern, _triples,
                            ::testing::ElementsAre(triple)))));
     };
     auto makeArbitraryUnionMatcher =
-        [](const ::testing::Matcher<qlever::parsedQuery::GraphPattern>& child1,
-           const ::testing::Matcher<qlever::parsedQuery::GraphPattern>&
-               child2) {
+        [](const ::testing::Matcher<parsedQuery::GraphPattern>& child1,
+           const ::testing::Matcher<parsedQuery::GraphPattern>& child2) {
           return ::testing::AnyOf(
-              ::testing::AllOf(
-                  AD_FIELD(qlever::parsedQuery::Union, _child1, child1),
-                  AD_FIELD(qlever::parsedQuery::Union, _child2, child2)),
-              ::testing::AllOf(
-                  AD_FIELD(qlever::parsedQuery::Union, _child1, child2),
-                  AD_FIELD(qlever::parsedQuery::Union, _child2, child1)));
+              ::testing::AllOf(AD_FIELD(parsedQuery::Union, _child1, child1),
+                               AD_FIELD(parsedQuery::Union, _child2, child2)),
+              ::testing::AllOf(AD_FIELD(parsedQuery::Union, _child1, child2),
+                               AD_FIELD(parsedQuery::Union, _child2, child1)));
         };
     EXPECT_THAT(
         q._rootGraphPattern._graphPatterns,
         ::testing::ElementsAre(
-            ::testing::VariantWith<qlever::parsedQuery::BasicGraphPattern>(
-                AD_FIELD(qlever::parsedQuery::BasicGraphPattern, _triples,
-                         ::testing::ElementsAre(qlever::SparqlTriple{
-                             iri("<somebody>"), qlever::Variable{"?p"},
-                             qlever::Variable{"?y"}}))),
-            ::testing::VariantWith<qlever::parsedQuery::Union>(
+            ::testing::VariantWith<parsedQuery::BasicGraphPattern>(AD_FIELD(
+                parsedQuery::BasicGraphPattern, _triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    iri("<somebody>"), Variable{"?p"}, Variable{"?y"}}))),
+            ::testing::VariantWith<parsedQuery::Union>(
                 makeArbitraryUnionMatcher(hasSingleTriple(tripleA),
                                           hasSingleTriple(tripleB)))));
   }
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * WHERE {<somebody> ?p ?y . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((qlever::SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ(
-        (qlever::SparqlTriple{Var{"?y"},
-                              qlever::PropertyPath::fromIri(
-                                  iri("<http://qlever.cs.uni-freiburg.de/"
-                                      "builtin-functions/langtag>")),
-                              ad_utility::convertLangtagToEntityUri("en")}),
-        triples[1]);
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?y"},
+                  PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                            "builtin-functions/langtag>")),
+                  ad_utility::convertLangtagToEntityUri("en")}),
+              triples[1]);
   }
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * { <somebody> ?p ?y OPTIONAL {} . FILTER (LANG(?y) = "
         "\"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& patterns = q._rootGraphPattern._graphPatterns;
     ASSERT_EQ(patterns.size(), 3);
     EXPECT_THAT(patterns[0].getBasic()._triples,
-                ::testing::ElementsAre(qlever::SparqlTriple{
-                    iri("<somebody>"), Var{"?p"}, Var{"?y"}}));
-    EXPECT_THAT(
-        patterns[2].getBasic()._triples,
-        ::testing::ElementsAre(qlever::SparqlTriple{
-            Var{"?y"}, qlever::PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-            ad_utility::convertLangtagToEntityUri("en")}));
+                ::testing::ElementsAre(
+                    SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}));
+    EXPECT_THAT(patterns[2].getBasic()._triples,
+                ::testing::ElementsAre(SparqlTriple{
+                    Var{"?y"}, PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
+                    ad_utility::convertLangtagToEntityUri("en")}));
   }
 
   // Test that the language filter never changes triples with
   // `ql:contains-entity` etc.
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * WHERE {?x <label> ?y . ?text ql:contains-entity ?y. FILTER "
         "(LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((qlever::SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"),
-                                    Var{"?y"}}),
-              triples[0]);
-    ASSERT_EQ((qlever::SparqlTriple{
-                  Var{"?text"},
-                  qlever::PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
-                  Var{"?y"}}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}),
+        triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?text"},
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
+                      Var{"?y"}}),
+        triples[1]);
   }
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * WHERE {<somebody> ?p ?y . ?text ql:contains-entity ?y FILTER "
         "(LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(3u, triples.size());
-    ASSERT_EQ((qlever::SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((qlever::SparqlTriple{
-                  Var{"?text"},
-                  qlever::PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
-                  Var{"?y"}}),
-              triples[1]);
     ASSERT_EQ(
-        (qlever::SparqlTriple{
+        (SparqlTriple{Var{"?text"},
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
+                      Var{"?y"}}),
+        triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{
             Var{"?y"},
-            qlever::PropertyPath::fromIri(
-                iri("<http://qlever.cs.uni-freiburg.de/"
-                    "builtin-functions/langtag>")),
+            PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                      "builtin-functions/langtag>")),
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
   // Ensure filter is applied regularly if variable does not originate from
   // triple
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * { VALUES ?x { \"test\"@en } . FILTER (LANG(?x) = \"en\")}");
 
-    EXPECT_TRUE(std::holds_alternative<qlever::parsedQuery::Values>(
+    EXPECT_TRUE(std::holds_alternative<parsedQuery::Values>(
         q._rootGraphPattern._graphPatterns[0]));
     ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
@@ -1416,7 +1401,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   }
   // Ensure filter is applied regularly if list is empty.
   {
-    qlever::ParsedQuery q =
+    ParsedQuery q =
         parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?x) IN ())}");
 
     ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
@@ -1426,22 +1411,22 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   // Verify the filter is not applied as a regular filter if it is used
   // somewhere in a triple
   {
-    qlever::ParsedQuery q =
+    ParsedQuery q =
         parseQuery("SELECT * { ?x ?y ?z . FILTER (LANG(?x) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
   {
-    qlever::ParsedQuery q =
+    ParsedQuery q =
         parseQuery("SELECT * { ?x ?y ?z . FILTER (LANG(?z) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
   {
-    qlever::ParsedQuery q =
+    ParsedQuery q =
         parseQuery("SELECT * { ?x ?y ?z . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
   {
-    qlever::ParsedQuery q = parseQuery(
+    ParsedQuery q = parseQuery(
         "SELECT * { ?x ?y ?z . ?a ?b ?c ."
         "?d <a> ?f . FILTER (LANG(?a) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1450,7 +1435,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
 
 // _____________________________________________________________________________
 namespace {
-std::string getFirstTriple(const qlever::ParsedQuery& q) {
+std::string getFirstTriple(const ParsedQuery& q) {
   return q._rootGraphPattern._graphPatterns.at(0)
       .getBasic()
       ._triples.at(0)
@@ -1460,23 +1445,22 @@ std::string getFirstTriple(const qlever::ParsedQuery& q) {
 
 // _____________________________________________________________________________
 TEST(ParserTest, HandlesBasicUnicodeEscapeSequences) {
-  qlever::ParsedQuery q1 = parseQuery(
+  ParsedQuery q1 = parseQuery(
       R"(SELECT * WHERE { ?s <http://a.example/p1> '\u0080\u07FF\u0800\u0FFF\u1000\uCFFF\uD000\uD7FF\uE000\uFFFD\U00010000\U0003FFFD\U00040000\U000FFFFD\U00100000\U0010FFFD'})");
   EXPECT_EQ(getFirstTriple(q1),
             "{s: ?s, p: <http://a.example/p1>, o: "
             "\"\u0080\u07FF\u0800\u0FFF\u1000\uCFFF\uD000\uD7FF\uE000\uFFFD"
             "\U00010000\U0003FFFD\U00040000\U000FFFFD\U00100000\U0010FFFD\"}");
 
-  qlever::ParsedQuery q2 =
-      parseQuery(R"(SELECT * WHERE { ?s ?p "\U0001f46a" . })");
+  ParsedQuery q2 = parseQuery(R"(SELECT * WHERE { ?s ?p "\U0001f46a" . })");
   EXPECT_EQ(getFirstTriple(q2), "{s: ?s, p: ?p, o: \"\U0001f46a\"}");
 
-  qlever::ParsedQuery q3 = parseQuery(
+  ParsedQuery q3 = parseQuery(
       R"(PREFIX \u03B1: <http://example.com/\u00E9fg> SELECT * WHERE { ?s ?p α\u003Aba . })");
   EXPECT_EQ(getFirstTriple(q3),
             "{s: ?s, p: ?p, o: <http://example.com/éfgba>}");
 
-  qlever::ParsedQuery q4 = parseQuery(
+  ParsedQuery q4 = parseQuery(
       R"(SELECT * WHERE { <http://example.com/\U0001F937\U0001F3FD\u200D\U00002642\ufe0F> ?p\u00201. })");
   EXPECT_EQ(getFirstTriple(q4),
             "{s: <http://example.com/🤷🏽‍♂️>, p: ?p, o: 1}");
@@ -1489,7 +1473,7 @@ TEST(ParserTest, HandlesBasicUnicodeEscapeSequences) {
 // _____________________________________________________________________________
 TEST(ParserTest, HandlesSurrogatesCorrectly) {
   using ::testing::HasSubstr;
-  qlever::ParsedQuery q = parseQuery(
+  ParsedQuery q = parseQuery(
       R"(SELECT * WHERE { "\uD83E\udD37\uD83C\uDFFD\u200D\u2642\uFE0F" ?p 1. })");
   EXPECT_EQ(getFirstTriple(q), "{s: \"🤷🏽‍♂️\", p: ?p, o: 1}");
 
@@ -1585,41 +1569,40 @@ TEST(ParserTest, parseWithDatasets) {
       m::GraphPattern(m::Triples({{Var("?s"), Var{"?p"}, Var("?o")}}));
   EXPECT_THAT(parseQuery(query, {}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher));
-  EXPECT_THAT(parseQuery(query, {{qlever::DatasetClause{iri("<foo>"), true}}}),
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iri("<foo>"), true}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                              noGraphs, {{iri("<foo>")}}));
-  EXPECT_THAT(parseQuery(query, {{qlever::DatasetClause{iri("<bar>"), false}}}),
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iri("<bar>"), false}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                              {{iri("<bar>")}}, noGraphs));
-  EXPECT_THAT(parseQuery(query, {{qlever::DatasetClause{iri("<bar>"), false},
-                                  qlever::DatasetClause{iri("<foo>"), true},
-                                  qlever::DatasetClause{iri("<baz>"), false}}}),
+  EXPECT_THAT(parseQuery(query, {{DatasetClause{iri("<bar>"), false},
+                                  DatasetClause{iri("<foo>"), true},
+                                  DatasetClause{iri("<baz>"), false}}}),
               m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                              {{iri("<bar>"), iri("<baz>")}}, {{iri("<foo>")}}));
-  qlever::parsedQuery::DatasetClauses::Graphs datasets{{iri("<h>")}};
+  parsedQuery::DatasetClauses::Graphs datasets{{iri("<h>")}};
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
 
-  qlever::BlankNodeManager bnm;
-  qlever::EncodedIriManager ev;
+  BlankNodeManager bnm;
+  EncodedIriManager ev;
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlever::SparqlParser::parseUpdate(
-          &bnm, &ev,
-          "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
-          "?z FILTER EXISTS {?a ?b ?c} }",
-          {{{iri("<h>"), false}}}),
+      SparqlParser::parseUpdate(&bnm, &ev,
+                                "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+                                "?z FILTER EXISTS {?a ?b ?c} }",
+                                {{{iri("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
-  AD_EXPECT_THROW_WITH_MESSAGE(qlever::SparqlParser::parseUpdate(
-                                   &bnm, &ev,
-                                   "WITH <g> DELETE { ?x <b> <c> } WHERE { "
-                                   "?x ?y ?z "
-                                   "FILTER EXISTS {?a ?b ?c} }",
-                                   {{{iri("<h>"), false}}}),
-                               ::testing::HasSubstr("`WITH` is disallowed"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseUpdate(&bnm, &ev,
+                                "WITH <g> DELETE { ?x <b> <c> } WHERE { "
+                                "?x ?y ?z "
+                                "FILTER EXISTS {?a ?b ?c} }",
+                                {{{iri("<h>"), false}}}),
+      ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
       parseQuery(
           "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
@@ -1632,7 +1615,7 @@ TEST(ParserTest, parseWithDatasets) {
   EXPECT_THAT(parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { "
                          "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
                          {{{iri("<h>"), false}}}),
-              m::ConstructQuery({std::array<qlever::GraphTerm, 3>{
+              m::ConstructQuery({std::array<GraphTerm, 3>{
                                     iriV("<a>"), iriV("<b>"), iriV("<c>")}},
                                 filterGraphPattern, datasets, noGraphs));
   EXPECT_THAT(
@@ -1644,20 +1627,20 @@ TEST(ParserTest, parseWithDatasets) {
                                      filterGraphPattern)),
           datasets, noGraphs));
   auto deleteWhereOp =
-      m::GraphUpdate({qlever::SparqlTripleSimpleWithGraph{
-                         Var("?s"), Var("?p"), Var("?o"), std::monostate{}}},
+      m::GraphUpdate({SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                  Var("?o"), std::monostate{}}},
                      {});
   auto deleteWherePattern =
       m::GraphPattern(m::Triples({{Var("?s"), Var("?p"), Var("?o")}}));
   auto insertDataOp = m::GraphUpdate(
-      {}, {qlever::SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"),
-                                               iri("<c>"), std::monostate{}}});
+      {}, {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
+                                       std::monostate{}}});
   EXPECT_THAT(
-      qlever::SparqlParser::parseUpdate(
+      SparqlParser::parseUpdate(
           &bnm, &ev, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-          {qlever::DatasetClause{iri("<foo>"), false},
-           qlever::DatasetClause{iri("<bar>"), true}}),
-      testing::ElementsAre(
+          {DatasetClause{iri("<foo>"), false},
+           DatasetClause{iri("<bar>"), true}}),
+      ::testing::ElementsAre(
           m::UpdateClause(
               deleteWhereOp, deleteWherePattern,
               m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}})),
@@ -1673,12 +1656,11 @@ TEST(ParserTest, variablesInMinusAreHidden) {
           "SELECT * { VALUES ?a { 1 } MINUS { VALUES (?a ?b) { ( 2 2 ) } } }"),
       m::SelectQuery(
           m::VariablesSelect({"?a"}, false, false),
-          m::GraphPattern(m::InlineData({qlever::Variable{"?a"}},
-                                        {{qlever::TripleComponent{1}}}),
-                          m::Minus(m::GraphPattern(m::InlineData(
-                              {qlever::Variable{"?a"}, qlever::Variable{"?b"}},
-                              {{qlever::TripleComponent{2},
-                                qlever::TripleComponent{2}}}))))));
+          m::GraphPattern(
+              m::InlineData({Variable{"?a"}}, {{TripleComponent{1}}}),
+              m::Minus(m::GraphPattern(m::InlineData(
+                  {Variable{"?a"}, Variable{"?b"}},
+                  {{TripleComponent{2}, TripleComponent{2}}}))))));
 }
 
 // _____________________________________________________________________________
@@ -1691,31 +1673,30 @@ TEST(ParserTest, ensureTypeIriDoesntViolateAssertion) {
           "{ ?s !<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?o }"),
       m::SelectQuery(
           m::AsteriskSelect(),
-          m::GraphPattern(m::Triples({qlever::SparqlTriple{
-              qlever::TripleComponent{qlever::Variable{"?s"}},
-              qlever::PropertyPath::makeNegated({qlever::PropertyPath::fromIri(
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::fromIri(
                   iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
-              qlever::TripleComponent{qlever::Variable{"?o"}}}}))));
+              TripleComponent{Variable{"?o"}}}}))));
 
   // Other tests for similar variants.
   EXPECT_THAT(
       parseQuery("SELECT * { ?s !a ?o }"),
       m::SelectQuery(
           m::AsteriskSelect(),
-          m::GraphPattern(m::Triples({qlever::SparqlTriple{
-              qlever::TripleComponent{qlever::Variable{"?s"}},
-              qlever::PropertyPath::makeNegated({qlever::PropertyPath::fromIri(
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::fromIri(
                   iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"))}),
-              qlever::TripleComponent{qlever::Variable{"?o"}}}}))));
+              TripleComponent{Variable{"?o"}}}}))));
   EXPECT_THAT(
       parseQuery("SELECT * { ?s !^a ?o }"),
-      m::SelectQuery(m::AsteriskSelect(),
-                     m::GraphPattern(m::Triples({qlever::SparqlTriple{
-                         qlever::TripleComponent{qlever::Variable{"?s"}},
-                         qlever::PropertyPath::makeNegated(
-                             {qlever::PropertyPath::makeInverse(
-                                 qlever::PropertyPath::fromIri(
-                                     iri("<http://www.w3.org/1999/02/"
-                                         "22-rdf-syntax-ns#type>")))}),
-                         qlever::TripleComponent{qlever::Variable{"?o"}}}}))));
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples({SparqlTriple{
+              TripleComponent{Variable{"?s"}},
+              PropertyPath::makeNegated({PropertyPath::makeInverse(
+                  PropertyPath::fromIri(iri("<http://www.w3.org/1999/02/"
+                                            "22-rdf-syntax-ns#type>")))}),
+              TripleComponent{Variable{"?o"}}}}))));
 }

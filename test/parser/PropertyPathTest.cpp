@@ -184,7 +184,7 @@ TEST(PropertyPath, getInvertedChild) {
 TEST(PropertyPath, handlePath) {
   auto path0 = PropertyPath::fromIri(iri("<a>"));
   EXPECT_EQ(path0.handlePath<int>(
-                [](const qlever::triple_component::Iri& value) {
+                [](const Iri& value) {
                   EXPECT_EQ(value, iri("<a>"));
                   return 0;
                 },
@@ -200,7 +200,7 @@ TEST(PropertyPath, handlePath) {
 
   auto path1 = PropertyPath::makeInverse(path0);
   EXPECT_EQ(path1.handlePath<int>(
-                [](const qlever::triple_component::Iri&) {
+                [](const Iri&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -220,7 +220,7 @@ TEST(PropertyPath, handlePath) {
       PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>")));
   auto path2 = PropertyPath::makeNegated({innerPath2});
   EXPECT_EQ(path2.handlePath<int>(
-                [](const qlever::triple_component::Iri&) {
+                [](const Iri&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -237,7 +237,7 @@ TEST(PropertyPath, handlePath) {
             1);
   auto path3 = PropertyPath::makeAlternative({path1, path2});
   EXPECT_EQ(path3.handlePath<int>(
-                [](const qlever::triple_component::Iri&) {
+                [](const Iri&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -255,7 +255,7 @@ TEST(PropertyPath, handlePath) {
 
   auto path4 = PropertyPath::makeSequence({path1, path2});
   EXPECT_EQ(path4.handlePath<int>(
-                [](const qlever::triple_component::Iri&) {
+                [](const Iri&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -273,7 +273,7 @@ TEST(PropertyPath, handlePath) {
 
   auto path5 = PropertyPath::makeWithLength(path0, 0, 1);
   EXPECT_EQ(path5.handlePath<int>(
-                [](const qlever::triple_component::Iri&) {
+                [](const Iri&) {
                   ADD_FAILURE() << "This should not be executed";
                   return 0;
                 },
@@ -310,8 +310,7 @@ TEST(PropertyPath, Getters) {
       {PropertyPath::fromIri(iri1), PropertyPath::fromIri(iri2)});
   EXPECT_FALSE(path4.isIri());
   EXPECT_TRUE(path4.isSequence());
-  auto matchIri = [](qlever::triple_component::Iri iri)
-      -> ::testing::Matcher<PropertyPath> {
+  auto matchIri = [](Iri iri) -> ::testing::Matcher<PropertyPath> {
     return ::testing::AllOf(
         ::testing::Property(&PropertyPath::isIri, ::testing::IsTrue()),
         ::testing::Property(&PropertyPath::getIri, ::testing::Eq(iri)));

@@ -11,6 +11,7 @@
 #include "util/IndexTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
 static constexpr auto U = Id::makeUndefined();
@@ -305,7 +306,7 @@ bool vocabContainsString(const LocalVocab& vocab, std::string_view string,
 
 // _____________________________________________________________________________
 TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
@@ -377,7 +378,7 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
 
 // _____________________________________________________________________________
 TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);
@@ -404,7 +405,7 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
 
 // _____________________________________________________________________________
 TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto outputTable = makeIdTableFromVector({});
   outputTable.setNumColumns(3);

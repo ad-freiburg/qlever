@@ -18,9 +18,10 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
-using ad_utility::testing::makeAllocator;
+using namespace qlever::testing;
+using qlever::testing::makeAllocator;
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 }
 
 TEST(EngineTest, multiColumnJoinTest) {
@@ -36,7 +37,7 @@ TEST(EngineTest, multiColumnJoinTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
@@ -86,7 +87,7 @@ TEST(EngineTest, multiColumnJoinTest) {
 
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   IdTable a = makeIdTableFromVector({{4, 1, 2}});
   MultiColumnJoin join{qec, idTableToExecutionTree(qec, a),
                        idTableToExecutionTree(qec, a)};
@@ -114,7 +115,7 @@ TEST(MultiColumnJoin, clone) {
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
   using triple_component::Iri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   // Not in graph no undef
   auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),

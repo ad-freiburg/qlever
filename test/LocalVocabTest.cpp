@@ -58,7 +58,7 @@ auto lit(std::string_view s) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   // Test collection of words.
   TestWords testWords =
       getTestCollectionOfWords(1000, qec->getLocalVocabContext());
@@ -119,7 +119,7 @@ TEST(LocalVocab, constructionAndAccess) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
@@ -161,7 +161,7 @@ TEST(LocalVocab, merge) {
   std::vector<LocalVocabIndex> indices;
   LocalVocab vocA;
   LocalVocab vocB;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   constexpr auto lit = [](std::string_view s) {
     return triple_component::LiteralOrIri::literalWithoutQuotes(s);
@@ -218,7 +218,7 @@ TEST(LocalVocab, merge) {
 TEST(LocalVocab, propagation) {
   // Query execution context (with small test index), see `IndexTestHelpers.h`.
   using ad_utility::AllocatorWithLimit;
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
 
   // Lambda that checks the contents of the local vocabulary after the specified
   // operation.
@@ -276,7 +276,7 @@ TEST(LocalVocab, propagation) {
   // literal "x", we would have to write TripleComponent{"\"x\""}. For the
   // purposes of this test, we just want something that's not yet in the index,
   // so "x" etc. is just fine (and also different from the "<x>" below).
-  auto iri = ad_utility::testing::iri;
+  auto iri = qlever::testing::iri;
   Values values1(
       testQec,
       {{Variable{"?x"}, Variable{"?y"}},
@@ -439,7 +439,7 @@ TEST(LocalVocab, getBlankNodeIndex) {
 // _____________________________________________________________________________
 TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
   using triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
@@ -459,7 +459,7 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   using ::testing::UnorderedElementsAre;
   using triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
@@ -488,7 +488,7 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
   using triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
@@ -530,7 +530,7 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   using triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");

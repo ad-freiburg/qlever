@@ -21,10 +21,11 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
-using ad_utility::testing::getQec;
+using qlever::testing::getQec;
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
 auto U = Id::makeUndefined();
 using namespace ::testing;
@@ -34,7 +35,7 @@ using namespace ::testing;
 // based search (false). The second bool indicates if the result should be
 // requested lazily.
 class TransitivePathTest
-    : public testing::TestWithParam<std::tuple<bool, bool>> {
+    : public ::testing::TestWithParam<std::tuple<bool, bool>> {
  public:
   [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
                                  QueryExecutionContext*>
@@ -43,7 +44,7 @@ class TransitivePathTest
            std::optional<std::string> turtleInput = std::nullopt,
            const std::optional<Variable>& graphVariable = std::nullopt) {
     bool useBinSearch = std::get<0>(GetParam());
-    ad_utility::testing::TestIndexConfig config;
+    qlever::testing::TestIndexConfig config;
     config.turtleInput = std::move(turtleInput);
     config.indexType =
         graphVariable.has_value() ? Filetype::NQuad : Filetype::Turtle;
@@ -945,7 +946,7 @@ TEST_P(TransitivePathTest, zeroLengthWithLiteralsNotInIndex) {
       },
       Id::makeFromInt);
 
-  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+  auto expected = IdTable{2, qlever::testing::makeAllocator()};
 
   {
     TransitivePathSide left(std::nullopt, 0, 1337, 0);
@@ -998,7 +999,7 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
       },
       Id::makeFromInt);
 
-  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+  auto expected = IdTable{2, qlever::testing::makeAllocator()};
 
   {
     TransitivePathSide left(std::nullopt, 0, 1337, 0);
@@ -1043,7 +1044,7 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   using triple_component::Literal;
-  ad_utility::testing::TestIndexConfig config;
+  qlever::testing::TestIndexConfig config;
   config.turtleInput = "<a> a 0 , 1 , 2 , 4 .";
   auto* qec = getQec(std::move(config));
   std::string literal = "my-literal";
@@ -1911,7 +1912,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
-    [](const testing::TestParamInfo<std::tuple<bool, bool>>& info) {
+    [](const ::testing::TestParamInfo<std::tuple<bool, bool>>& info) {
       std::string result = std::get<0>(info.param) ? "TransitivePathBinSearch"
                                                    : "TransitivePathHashMap";
       result += std::get<1>(info.param) ? "Lazy" : "FullyMaterialized";

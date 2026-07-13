@@ -9,13 +9,13 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 
-namespace ad_utility::testing {
+namespace qlever::testing {
 // Create an unlimited allocator.
-inline ad_utility::AllocatorWithLimit<qlever::Id> makeAllocator(
-    MemorySize memorySize = MemorySize::max()) {
-  ad_utility::AllocatorWithLimit<qlever::Id> a{
+inline ad_utility::AllocatorWithLimit<Id> makeAllocator(
+    ad_utility::MemorySize memorySize = ad_utility::MemorySize::max()) {
+  ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(memorySize)};
   return a;
 }
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 #endif  // QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H

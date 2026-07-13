@@ -33,7 +33,7 @@ using namespace qlever;
 
 namespace {  // anonymous namespace to avoid linker problems
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace spatial_join_test_helpers;
 
 // Shortcut for SpatialJoin task parameters
@@ -1752,14 +1752,14 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
   addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
 
-  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  qlever::testing::TestIndexConfig idxConfig{kg};
   std::optional<VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
 
   // A plain base (no full path) is the default.
-  auto qec = ad_utility::testing::getQec(std::move(idxConfig));
+  auto qec = qlever::testing::getQec(std::move(idxConfig));
 
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?area1"});
@@ -1787,13 +1787,13 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
 
   auto base = std::filesystem::current_path() / "_spatialjoinAbsTestIndex";
 
-  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  qlever::testing::TestIndexConfig idxConfig{kg};
   std::optional<VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
   idxConfig.blocksizePermutations = 16_MB;
   idxConfig.parserBufferSize = 10_kB;
 
-  auto qec = ad_utility::testing::getQec(base.string(), std::move(idxConfig));
+  auto qec = qlever::testing::getQec(base.string(), std::move(idxConfig));
 
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?area1"});
@@ -1836,7 +1836,7 @@ TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
 
   auto vocabType = VocabularyType::fromString("on-disk-compressed-geo-split");
-  auto qec = ad_utility::testing::getQec(kb, vocabType);
+  auto qec = qlever::testing::getQec(kb, vocabType);
   auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
   auto result = scan->getResult();
   auto col = scan->getVariableColumn(Variable{"?geo"});

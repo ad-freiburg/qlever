@@ -414,9 +414,9 @@ TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
 
   auto ResponseMetadata = [](const status status,
                              std::string_view content_type) {
-    return AllOf(
-        AD_FIELD(HttpOrHttpsResponse, status_, testing::Eq(status)),
-        AD_FIELD(HttpOrHttpsResponse, contentType_, testing::Eq(content_type)));
+    return AllOf(AD_FIELD(HttpOrHttpsResponse, status_, ::testing::Eq(status)),
+                 AD_FIELD(HttpOrHttpsResponse, contentType_,
+                          ::testing::Eq(content_type)));
   };
   auto expectRequestHelper = [&httpServer](
                                  const ad_utility::MemorySize& requestBodySize,

@@ -19,7 +19,7 @@ using namespace binary_export;
 
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {
-  auto* qec = ad_utility::testing::getQec("<a> <b> <c> .");
+  auto* qec = qlever::testing::getQec("<a> <b> <c> .");
   auto toMappedId = [](size_t count) {
     return Id::makeFromLocalVocabIndex(
         reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
@@ -62,11 +62,11 @@ TEST(StringMapping, remapId) {
 
 // _____________________________________________________________________________
 TEST(StringMapping, flush) {
-  ad_utility::testing::TestIndexConfig config;
+  qlever::testing::TestIndexConfig config;
   config.turtleInput =
       "<a> <b> \"The quick brown fox jumps over the lazy dog\" .";
   config.createTextIndex = true;
-  auto* qec = ad_utility::testing::getQec(std::move(config));
+  auto* qec = qlever::testing::getQec(std::move(config));
   StringMapping mapping;
 
   const auto& index = qec->getIndex();

@@ -21,6 +21,7 @@
 #include "util/RandomTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 /*
 @brief Calculate all sub-sets of a container of elements. Note: Duplicated
@@ -138,8 +139,8 @@ void generalIdTableCheck(const IdTable& table,
   if (allEntriesWereSet) {
     ASSERT_TRUE(ql::ranges::all_of(table, [](const auto& row) {
       return ql::ranges::all_of(row, [](const ValueId& entry) {
-        return ad_utility::testing::VocabId(0) <= entry &&
-               entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
+        return qlever::testing::VocabId(0) <= entry &&
+               entry <= qlever::testing::VocabId(ValueId::maxIndex);
       });
     }));
   }
@@ -181,8 +182,8 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
     ASSERT_TRUE(ql::ranges::all_of(
         table.getColumn(columnNumber),
         [&lowerBound, &upperBound](const ValueId& entry) {
-          return ad_utility::testing::VocabId(lowerBound) <= entry &&
-                 entry <= ad_utility::testing::VocabId(upperBound);
+          return qlever::testing::VocabId(lowerBound) <= entry &&
+                 entry <= qlever::testing::VocabId(upperBound);
         }));
   };
 
@@ -231,7 +232,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
 TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
   // Creates a 'generator', that counts one up, every time it's called.
   auto createCountUpGenerator = []() {
-    return [i = 0]() mutable { return ad_utility::testing::VocabId(i++); };
+    return [i = 0]() mutable { return qlever::testing::VocabId(i++); };
   };
 
   // Compares the content of a specific column with a given vector.
@@ -241,7 +242,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
         ASSERT_EQ(table.numRows(), expectedContent.size());
         for (size_t i = 0; i < table.numRows(); i++) {
           ASSERT_EQ(table(i, columnNumber),
-                    ad_utility::testing::VocabId(expectedContent.at(i)));
+                    qlever::testing::VocabId(expectedContent.at(i)));
         }
       };
 
@@ -321,7 +322,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
   IdTable result = createRandomlyFilledIdTable(
       10, 10,
       {{0, createCountUpGenerator()},
-       {1, []() { return ad_utility::testing::VocabId(42); }}});
+       {1, []() { return qlever::testing::VocabId(42); }}});
   generalIdTableCheck(result, 10, 10, true);
   compareColumnsWithVectors(result, 0, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
   compareColumnsWithVectors(result, 1,
@@ -350,8 +351,7 @@ TEST(IdTableHelpersTest, createLazyIdTablesSingleBlock) {
   // Each integer is transformed via IntId; compare via MatchesIdTableFromVector
   // using the same IntId transformation as in createLazyIdTables.
   VectorTable expected = block;
-  EXPECT_THAT(t,
-              matchesIdTableFromVector(expected, ad_utility::testing::IntId));
+  EXPECT_THAT(t, matchesIdTableFromVector(expected, qlever::testing::IntId));
 }
 
 TEST(IdTableHelpersTest, createLazyIdTablesMultipleBlocks) {
@@ -375,8 +375,7 @@ TEST(IdTableHelpersTest, createLazyIdTablesMultipleBlocks) {
     const auto& t1 = idTables[0];
     ASSERT_EQ(t1.numRows(), 2u);
     ASSERT_EQ(t1.numColumns(), 1u);
-    EXPECT_THAT(t1,
-                matchesIdTableFromVector(block1, ad_utility::testing::IntId));
+    EXPECT_THAT(t1, matchesIdTableFromVector(block1, qlever::testing::IntId));
   }
 
   // Second block.
@@ -384,8 +383,7 @@ TEST(IdTableHelpersTest, createLazyIdTablesMultipleBlocks) {
     const auto& t2 = idTables[1];
     ASSERT_EQ(t2.numRows(), 1u);
     ASSERT_EQ(t2.numColumns(), 2u);
-    EXPECT_THAT(t2,
-                matchesIdTableFromVector(block2, ad_utility::testing::IntId));
+    EXPECT_THAT(t2, matchesIdTableFromVector(block2, qlever::testing::IntId));
   }
 }
 
@@ -401,7 +399,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
       std::vector<ValueId> row(width);
 
       // Fill the row.
-      ql::ranges::fill(row, ad_utility::testing::VocabId(i));
+      ql::ranges::fill(row, qlever::testing::VocabId(i));
 
       i++;
       return row;
@@ -416,7 +414,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
     std::vector<ValueId> row(i < 3 ? 5 : 20);
 
     // Fill the row.
-    ql::ranges::fill(row, ad_utility::testing::VocabId(4));
+    ql::ranges::fill(row, qlever::testing::VocabId(4));
 
     i++;
     return row;
@@ -427,7 +425,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
   generalIdTableCheck(table, 5, 5, true);
   for (size_t row = 0; row < 5; row++) {
     ASSERT_TRUE(ql::ranges::all_of(table[row], [&row](const auto& entry) {
-      return entry == ad_utility::testing::VocabId(row);
+      return entry == qlever::testing::VocabId(row);
     }));
   }
 
@@ -459,10 +457,10 @@ TEST(IdTableHelpersTest, randomSeed) {
                 seed));
         ASSERT_EQ(createRandomlyFilledIdTable(
                       NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
-                      []() { return ad_utility::testing::VocabId(1); }, seed),
+                      []() { return qlever::testing::VocabId(1); }, seed),
                   createRandomlyFilledIdTable(
                       NUM_ROWS, NUM_COLUMNS, std::vector<size_t>{},
-                      []() { return ad_utility::testing::VocabId(1); }, seed));
+                      []() { return qlever::testing::VocabId(1); }, seed));
         ASSERT_EQ(createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,
                                               JoinColumnAndBounds{}, seed),
                   createRandomlyFilledIdTable(NUM_ROWS, NUM_COLUMNS,

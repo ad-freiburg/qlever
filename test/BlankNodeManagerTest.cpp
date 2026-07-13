@@ -15,8 +15,6 @@
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
 
-using namespace qlever;
-
 namespace qlever {
 
 // ____________________________________________________________________________
@@ -528,7 +526,7 @@ TEST_F(BlankNodeManagerTestFixture,
     [[maybe_unused]] auto block = bnm->allocateExplicitBlock(100);
   };
   AD_EXPECT_THROW_WITH_MESSAGE(doAllocate(),
-                               testing::HasSubstr("has to happen before"));
+                               ::testing::HasSubstr("has to happen before"));
 }
 
 // _____________________________________________________________________________

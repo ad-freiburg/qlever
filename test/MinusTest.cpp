@@ -20,9 +20,10 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 constexpr auto U = Id::makeUndefined();
 
 // Helper function to test minus implementations.
@@ -32,7 +33,7 @@ void testMinus(std::vector<IdTable> leftTables,
                bool singleVar = false,
                ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto left = makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
@@ -98,7 +99,7 @@ TEST(Minus, computeMinus) {
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Minus m{qec,
           makeExecutionTree<ValuesForTesting>(
               qec, a.clone(),
@@ -147,7 +148,7 @@ TEST(Minus, computeMinus) {
 
 // _____________________________________________________________________________
 TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
   IdTable b = makeIdTableFromVector({{0}});
@@ -176,7 +177,7 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
 
 // _____________________________________________________________________________
 TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocabEntry entryA =
       LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
@@ -231,7 +232,7 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocabEntry entryA =
       LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
@@ -298,7 +299,7 @@ TEST(Minus, rightIndexNestedLoopJoinOptimizationisSkippedWhenRightLarger) {
 
   IdTable right = makeIdTableFromVector({{1}, {2}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   Minus m{qec,
           makeExecutionTree<ValuesForTesting>(
@@ -321,7 +322,7 @@ TEST(Minus, rightIndexNestedLoopJoinOptimizationisSkippedWhenPotentialUndef) {
 
   IdTable right = makeIdTableFromVector({{U}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   Minus m{qec,
           makeExecutionTree<ValuesForTesting>(
@@ -344,7 +345,7 @@ TEST(Minus, leftIndexNestedLoopJoinOptimizationisSkippedWhenLeftLarger) {
 
   IdTable right = makeIdTableFromVector({{1}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   Minus m{qec,
           makeExecutionTree<ValuesForTesting>(
@@ -370,7 +371,7 @@ TEST(Minus, computeMinusWithEmptyTables) {
   std::vector<std::array<ColumnIndex, 2>> jcls;
   jcls.push_back(std::array<ColumnIndex, 2>{{0, 0}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Minus m{
       qec,
       makeExecutionTree<ValuesForTesting>(
@@ -405,7 +406,7 @@ TEST(Minus, computeMinusWithUndefined) {
   jcls.push_back(std::array<ColumnIndex, 2>{{0, 1}});
   jcls.push_back(std::array<ColumnIndex, 2>{{1, 0}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Minus m{qec,
           makeExecutionTree<ValuesForTesting>(
               qec, a.clone(),
@@ -422,7 +423,7 @@ TEST(Minus, computeMinusWithUndefined) {
 
 // _____________________________________________________________________________
 TEST(Minus, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Minus minus{
       qec,
       makeExecutionTree<ValuesForTesting>(
@@ -441,7 +442,7 @@ TEST(Minus, clone) {
 // _____________________________________________________________________________
 TEST(Minus, columnOriginatesFromGraphOrUndef) {
   using triple_component::Iri;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
@@ -568,7 +569,7 @@ TEST(Minus, lazyMinusWithUndefLeftInSeparateTable) {
 
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithOneMaterializedTable) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto expected = makeIdTableFromVector({{U, V(10)}, {1, 11}, {3, 13}});
 
@@ -635,7 +636,7 @@ TEST(Minus, lazyMinusWithOneMaterializedTable) {
 
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithPermutedColumns) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
@@ -667,7 +668,7 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   LocalVocabEntry testLiteral = LocalVocabEntry::fromStringRepresentation(
       "\"Abc\"", qec->getLocalVocabContext());
@@ -758,7 +759,7 @@ struct Wrapper {
 
 // _____________________________________________________________________________
 TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   LocalVocabEntry testLiteral = LocalVocabEntry::fromStringRepresentation(
       "\"Abc\"", qec->getLocalVocabContext());
@@ -809,7 +810,7 @@ TEST(Minus, resultSortedOn) {
 
   auto getSortOrder = [&smaller](const IdTable& reference,
                                  std::vector<ColumnIndex> sortOrder) {
-    auto* qec = ad_utility::testing::getQec();
+    auto* qec = qlever::testing::getQec();
     Minus m{qec,
             makeExecutionTree<ValuesForTesting>(
                 qec, reference.clone(),

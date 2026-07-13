@@ -18,16 +18,17 @@
 #include "parser/TripleComponent.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
-using ad_utility::testing::makeAllocator;
-using ad_utility::testing::VocabId;
+using qlever::testing::makeAllocator;
+using qlever::testing::VocabId;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 
 namespace {
 
 // Helper function to create a test QueryExecutionContext
-QueryExecutionContext* getTestQec() { return ad_utility::testing::getQec(); }
+QueryExecutionContext* getTestQec() { return qlever::testing::getQec(); }
 
 // Helper function to create a simple test IdTable
 std::shared_ptr<IdTable> createTestIdTable(size_t numRows, size_t numCols) {

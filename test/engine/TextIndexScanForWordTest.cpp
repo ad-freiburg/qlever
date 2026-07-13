@@ -18,7 +18,7 @@
 #include "engine/TextIndexScanForWord.h"
 #include "parser/ParsedQuery.h"
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace qlever;
 using ad_utility::source_location;
 namespace h = textIndexScanTestHelpers;
@@ -143,7 +143,7 @@ struct TextResult {
 // scores can be specified.
 auto getQecWithTextIndex(
     std::optional<TextScoringMetric> textScoring = std::nullopt) {
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;

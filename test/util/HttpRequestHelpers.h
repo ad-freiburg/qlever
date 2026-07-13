@@ -8,7 +8,7 @@
 #include "util/HashMap.h"
 #include "util/http/beast.h"
 
-namespace ad_utility::testing {
+namespace qlever::testing {
 
 namespace http = boost::beast::http;
 
@@ -54,6 +54,6 @@ inline auto makePostRequest(std::string_view target,
                      {{http::field::content_type, contentType}}, body);
 }
 
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_HTTPREQUESTHELPERS_H

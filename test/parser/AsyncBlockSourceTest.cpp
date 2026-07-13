@@ -25,15 +25,17 @@
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace ad_utility::memory_literals;
 
 // Synchronously drive an `AsyncBlockSource` until EOF and return all blocks
 // in order. Throws if the source signals an error.
-std::vector<qlever::parser::ByteBlock> drainAllBlocks(
-    qlever::parser::AsyncBlockSource& source) {
-  std::vector<qlever::parser::ByteBlock> result;
+std::vector<parser::ByteBlock> drainAllBlocks(
+    parser::AsyncBlockSource& source) {
+  std::vector<parser::ByteBlock> result;
   while (auto opt = source.asyncGetNextBlock(boost::asio::use_future).get()) {
     result.push_back(std::move(*opt));
   }
@@ -72,10 +74,9 @@ TEST(AsyncFileBlockSource, ReadsInBlocks) {
 
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 4_B;
-  qlever::parser::AsyncFileBlockSource buf(pool.get_executor(), blocksize,
-                                           filename);
+  parser::AsyncFileBlockSource buf(pool.get_executor(), blocksize, filename);
   EXPECT_EQ(buf.getBlocksize(), blocksize);
-  std::vector<qlever::parser::ByteBlock> expected{
+  std::vector<parser::ByteBlock> expected{
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};
 
   auto actual = drainAllBlocks(buf);
@@ -96,12 +97,12 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // Blocks always end with a number that is followed by a letter. The
     // `AsyncStatementBoundaryBlockSource` cuts after the last digit that
     // precedes a letter, as determined by `findDigitFollowedByLetter`.
-    qlever::parser::AsyncStatementBoundaryBlockSource buf(
+    parser::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qlever::parser::AsyncFileBlockSource>(
-            pool.get_executor(), blocksize, filename),
+        std::make_unique<parser::AsyncFileBlockSource>(pool.get_executor(),
+                                                       blocksize, filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
-    std::vector<qlever::parser::ByteBlock> expected{
+    std::vector<parser::ByteBlock> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
     EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
@@ -109,10 +110,10 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
   {
     // The following pattern is not found in the data, and the data is too
     // large for one block, so the parsing fails.
-    qlever::parser::AsyncStatementBoundaryBlockSource buf(
+    parser::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qlever::parser::AsyncFileBlockSource>(
-            pool.get_executor(), blocksize, filename),
+        std::make_unique<parser::AsyncFileBlockSource>(pool.get_executor(),
+                                                       blocksize, filename),
         findXToZ, "a letter from x to z");
     AD_EXPECT_THROW_WITH_MESSAGE(
         drainAllBlocks(buf), ::testing::ContainsRegex("No statement boundary"));
@@ -121,12 +122,12 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // The same example but with a larger blocksize, s.t. the complete input
     // fits into a single block. In this case it is no error that the pattern
     // can never be found.
-    qlever::parser::AsyncStatementBoundaryBlockSource buf(
+    parser::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qlever::parser::AsyncFileBlockSource>(
-            pool.get_executor(), 100_B, filename),
+        std::make_unique<parser::AsyncFileBlockSource>(pool.get_executor(),
+                                                       100_B, filename),
         findXToZ, "a letter from x to z");
-    std::vector<qlever::parser::ByteBlock> expected{
+    std::vector<parser::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
     auto actual = drainAllBlocks(buf);
     EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
@@ -149,12 +150,12 @@ TEST(AsyncStatementBoundaryBlockSource, LongLookahead) {
   {
     // The only position that ends a statement is far from the end of the block,
     // so the manual scan has to look back across many bytes.
-    qlever::parser::AsyncStatementBoundaryBlockSource buf(
+    parser::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qlever::parser::AsyncFileBlockSource>(
-            pool.get_executor(), blocksize, filename),
+        std::make_unique<parser::AsyncFileBlockSource>(pool.get_executor(),
+                                                       blocksize, filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
-    std::vector<qlever::parser::ByteBlock> expected{
+    std::vector<parser::ByteBlock> expected{
         {'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');
     auto actual = drainAllBlocks(buf);
@@ -171,7 +172,7 @@ TEST(AsyncBlockSource, UseFutureToken) {
   absl::Cleanup fileCleanup{[&] { ad_utility::deleteFile(filename); }};
 
   boost::asio::thread_pool pool{1};
-  qlever::parser::AsyncFileBlockSource buf(pool.get_executor(), 3_B, filename);
+  parser::AsyncFileBlockSource buf(pool.get_executor(), 3_B, filename);
 
   // Retrieve blocks via `use_future` and verify success and EOF paths.
   EXPECT_THAT(buf.asyncGetNextBlock(boost::asio::use_future).get(),

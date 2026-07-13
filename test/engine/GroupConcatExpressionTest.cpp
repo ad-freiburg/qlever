@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
 using namespace sparqlExpression;
@@ -73,7 +74,7 @@ auto lit = [](std::string s) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, basicConcatenation) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   expectLiteralsAreConcatenatedTo(qec, false, {}, lit("\"\""));
   expectLiteralsAreConcatenatedTo(qec, true, {}, lit("\"\""));
   expectLiteralsAreConcatenatedTo(qec, false, {lit("\"\"")}, lit("\"\""));
@@ -99,7 +100,7 @@ TEST(GroupConcatExpression, basicConcatenation) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab;
   expectIdsAreConcatenatedTo(qec, false,
                              makeIdTableFromVector({{Id::makeUndefined()}}),
@@ -119,7 +120,7 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithLanguageTags) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\"@en")}, lit("\"a\""));
   expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en")}, lit("\"a\""));
   expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en"), lit("\"a\"@en")},

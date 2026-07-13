@@ -26,12 +26,7 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
-using qlever::Id;
-using qlever::IdTable;
-using qlever::IdTableStatic;
-using qlever::IdTableView;
-using qlever::LocalVocab;
-using qlever::ValueId;
+namespace qlever::testing {
 
 /*
  * Does what it says on the tin: Save an IdTable with the corresponding
@@ -60,7 +55,7 @@ class CopyableIdTable : public TableImpl<N> {
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using IntOrId = std::variant<int64_t, qlever::Id>;
+using IntOrId = std::variant<int64_t, Id>;
 using VectorTable = std::vector<std::vector<IntOrId>>;
 
 // Helper: construct a single-column VectorTable containing the exclusive
@@ -79,18 +74,18 @@ inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
  * `transformation` to each of them. All rows of `content` must have the
  * same length.
  */
-template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+template <typename Transformation = decltype(testing::VocabId)>
 IdTable makeIdTableFromVector(const VectorTable& content,
                               Transformation transformation = {}) {
   size_t numCols = content.empty() ? 0UL : content.at(0).size();
-  IdTable result{numCols, ad_utility::testing::makeAllocator()};
+  IdTable result{numCols, testing::makeAllocator()};
   result.reserve(content.size());
   for (const auto& row : content) {
     AD_CONTRACT_CHECK(row.size() == result.numColumns());
     result.emplace_back();
     for (size_t i = 0; i < result.numColumns(); ++i) {
-      if (std::holds_alternative<qlever::Id>(row.at(i))) {
-        result.back()[i] = std::get<qlever::Id>(row.at(i));
+      if (std::holds_alternative<Id>(row.at(i))) {
+        result.back()[i] = std::get<Id>(row.at(i));
       } else {
         result.back()[i] = transformation(std::get<int64_t>(row.at(i)));
       }
@@ -105,7 +100,7 @@ inline std::vector<IdTable> createLazyIdTables(
     const std::vector<VectorTable>& blocks) {
   return ::ranges::to<std::vector>(
       blocks | ql::views::transform([](const auto& block) {
-        return makeIdTableFromVector(block, ad_utility::testing::IntId);
+        return makeIdTableFromVector(block, testing::IntId);
       }));
 }
 
@@ -114,7 +109,7 @@ inline std::vector<IdTable> createLazyIdTables(
 // particular, the matcher also deals with `IdTable` not being copyable, which
 // requires a workaround for GMock/GTest.
 struct MatchesIdTableFromVector {
-  template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+  template <typename Transformation = decltype(testing::VocabId)>
   auto operator()(const VectorTable& content, Transformation t = {}) const {
     return ::testing::Eq(
         CopyShield<IdTable>(makeIdTableFromVector(content, std::move(t))));
@@ -156,14 +151,20 @@ struct MatchesIdTable {
 };
 static constexpr MatchesIdTable matchesIdTable;
 
+}  // namespace qlever::testing
+
 // Allow comparing `IdTableView<N>` with `CopyShield<IdTable>` in gtest
-// matchers. The actual comparison clones the view into an `IdTable`.
+// matchers. The actual comparison clones the view into an `IdTable`. Note:
+// This operator must live at global scope (not inside `qlever::testing`) so
+// that it is found via ADL for `CopyShield`, which is also at global scope.
 template <int N>
-inline bool operator==(const IdTableView<N>& view,
-                       const CopyShield<IdTable>& shield) {
-  IdTable viewAsTable{view.clone()};
+inline bool operator==(const qlever::IdTableView<N>& view,
+                       const CopyShield<qlever::IdTable>& shield) {
+  qlever::IdTable viewAsTable{view.clone()};
   return shield == viewAsTable;
 }
+
+namespace qlever::testing {
 
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample
@@ -202,7 +203,7 @@ be thrown.
 */
 IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const std::function<std::vector<qlever::ValueId>()>& rowGenerator);
+    const std::function<std::vector<ValueId>()>& rowGenerator);
 
 /*
 @brief Create an `IdTable`, where the content of the join columns are given via
@@ -218,7 +219,7 @@ content for the non join column entries.
 */
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
-    const std::vector<std::pair<size_t, std::function<qlever::ValueId()>>>&
+    const std::vector<std::pair<size_t, std::function<ValueId()>>>&
         joinColumnWithGenerator,
     const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
@@ -239,7 +240,7 @@ content for the non join column entries.
 IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::vector<size_t>& joinColumns,
-    const std::function<qlever::ValueId()>& generator,
+    const std::function<ValueId()>& generator,
     const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
@@ -302,16 +303,18 @@ IdTable createRandomlyFilledIdTable(
 
 /// Turn a given `IdTable` into a `QueryExecutionTree` by cloning the table
 /// and filling it with dummy variables.
-std::shared_ptr<qlever::QueryExecutionTree> idTableToExecutionTree(
-    qlever::QueryExecutionContext*, const IdTable&);
+std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
+    QueryExecutionContext*, const IdTable&);
 
 // Fully consume a given generator and store it in an `IdTable` and store the
 // local vocabs in a vector.
-std::pair<IdTable, std::vector<qlever::LocalVocab>> aggregateTables(
-    qlever::Result::LazyResult generator, size_t numColumns);
+std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
+    Result::LazyResult generator, size_t numColumns);
 
 // Create an `IdTable` of the given size with width 1, filled with the given
 // value.
-IdTable createIdTableOfSizeWithValue(size_t size, qlever::Id value);
+IdTable createIdTableOfSizeWithValue(size_t size, Id value);
+
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

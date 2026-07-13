@@ -15,8 +15,8 @@
 using namespace qlever;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
-auto I = ad_utility::testing::IntId;
+auto V = qlever::testing::VocabId;
+auto I = qlever::testing::IntId;
 ad_utility::MemorySize memForStxxl = 10_MB;
 
 using TripleVec = std::vector<std::array<Id, 3>>;

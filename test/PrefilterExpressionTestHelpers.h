@@ -17,7 +17,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
-using ad_utility::testing::DateId;
+using qlever::testing::DateId;
 
 constexpr auto DateParser = &DateYearOrDuration::parseXsdDate;
 

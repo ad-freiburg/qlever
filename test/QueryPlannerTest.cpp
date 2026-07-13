@@ -20,27 +20,19 @@
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
-using qlever::EncodedIriManager;
-using qlever::PathSearchAlgorithm;
-using qlever::PathSearchConfiguration;
-using qlever::SparqlParser;
-using qlever::TextIndexScanForEntityConfiguration;
-using qlever::TextIndexScanForWordConfiguration;
-using qlever::TransitivePathSide;
-using qlever::VarOrFixedEntity;
+using namespace qlever;
 
 namespace h = queryPlannerTestHelpers;
 namespace {
-using Var = qlever::Variable;
-constexpr auto iri = ad_utility::testing::iri;
+using Var = Variable;
+constexpr auto iri = qlever::testing::iri;
 using queryPlannerTestHelpers::NamedTag;
 }  // namespace
 using ::testing::HasSubstr;
 
-qlever::QueryPlanner makeQueryPlanner() {
-  return qlever::QueryPlanner{
-      ad_utility::testing::getQec(),
-      std::make_shared<ad_utility::CancellationHandle<>>()};
+QueryPlanner makeQueryPlanner() {
+  return QueryPlanner{qlever::testing::getQec(),
+                      std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
 auto parseQuery(std::string query) {
@@ -49,89 +41,84 @@ auto parseQuery(std::string query) {
 }
 
 TEST(QueryPlanner, createTripleGraph) {
-  using TripleGraph = qlever::QueryPlanner::TripleGraph;
-  using Node = qlever::QueryPlanner::TripleGraph::Node;
+  using TripleGraph = QueryPlanner::TripleGraph;
+  using Node = QueryPlanner::TripleGraph::Node;
   using std::vector;
 
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "PREFIX : <http://rdf.myprefix.com/>\n"
         "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
         "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
         "SELECT ?x ?z \n "
         "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
         "<http://abc.de>}");
-    qlever::QueryPlanner qp = makeQueryPlanner();
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(
         &pq._rootGraphPattern._graphPatterns[0].getBasic());
     TripleGraph expected =
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
-                 qlever::QueryPlanner::TripleGraph::Node(
-                     0, qlever::SparqlTriple(
-                            Var{"?x"}, iri("<http://rdf.myprefix.com/myrel>"),
-                            Var{"?y"})),
+                 QueryPlanner::TripleGraph::Node(
+                     0, SparqlTriple(Var{"?x"},
+                                     iri("<http://rdf.myprefix.com/myrel>"),
+                                     Var{"?y"})),
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
-                 qlever::QueryPlanner::TripleGraph::Node(
-                     1,
-                     qlever::SparqlTriple(
-                         Var{"?y"}, iri("<http://rdf.myprefix.com/ns/myrel>"),
-                         Var{"?z"})),
+                 QueryPlanner::TripleGraph::Node(
+                     1, SparqlTriple(Var{"?y"},
+                                     iri("<http://rdf.myprefix.com/ns/myrel>"),
+                                     Var{"?z"})),
                  {0, 2}),
              std::make_pair<Node, vector<size_t>>(
-                 qlever::QueryPlanner::TripleGraph::Node(
-                     2,
-                     qlever::SparqlTriple(
-                         Var{"?y"}, iri("<http://rdf.myprefix.com/xxx/rel2>"),
-                         iri("<http://abc.de>"))),
+                 QueryPlanner::TripleGraph::Node(
+                     2, SparqlTriple(Var{"?y"},
+                                     iri("<http://rdf.myprefix.com/xxx/rel2>"),
+                                     iri("<http://abc.de>"))),
                  {0, 1})}));
 
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
   {
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-    qlever::QueryPlanner qp = makeQueryPlanner();
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     TripleGraph expected =
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
-                 qlever::QueryPlanner::TripleGraph::Node(
-                     0, qlever::SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
+                 QueryPlanner::TripleGraph::Node(
+                     0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
-                 qlever::QueryPlanner::TripleGraph::Node(
-                     1,
-                     qlever::SparqlTriple(Var{"?x"}, Var{"?p2"}, iri("<Y>"))),
+                 QueryPlanner::TripleGraph::Node(
+                     1, SparqlTriple(Var{"?x"}, Var{"?p2"}, iri("<Y>"))),
                  {0}),
              std::make_pair<Node, vector<size_t>>(
-                 qlever::QueryPlanner::TripleGraph::Node(
-                     2,
-                     qlever::SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
+                 QueryPlanner::TripleGraph::Node(
+                     2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
                  {0})}));
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
   {
-    qlever::ParsedQuery pq = parseQuery(
+    ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
         "?x <Author> <Anthony_Newman_(Author)> }");
-    qlever::QueryPlanner qp = makeQueryPlanner();
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
     TripleGraph expected =
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
-                qlever::QueryPlanner::TripleGraph::Node(
-                    0, qlever::SparqlTriple(Var{"?x"}, iri("<is-a>"),
-                                            iri("<Book>"))),
+                QueryPlanner::TripleGraph::Node(
+                    0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
                 {1}),
             std::make_pair<Node, vector<size_t>>(
-                qlever::QueryPlanner::TripleGraph::Node(
-                    1, qlever::SparqlTriple(Var{"?x"}, iri("<Author>"),
-                                            iri("<Anthony_Newman_(Author)>"))),
+                QueryPlanner::TripleGraph::Node(
+                    1, SparqlTriple(Var{"?x"}, iri("<Author>"),
+                                    iri("<Anthony_Newman_(Author)>"))),
                 {0}),
         }));
     ASSERT_TRUE(tg.isSimilar(expected));
@@ -140,9 +127,9 @@ TEST(QueryPlanner, createTripleGraph) {
 
 TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
   {
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-    qlever::QueryPlanner qp = makeQueryPlanner();
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
     ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
@@ -154,7 +141,7 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         tg.asString());
     {
       std::vector<size_t> keep;
-      qlever::QueryPlanner::TripleGraph tgnew(tg, keep);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
@@ -162,7 +149,7 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
-      qlever::QueryPlanner::TripleGraph tgnew(tg, keep);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ(
           "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
           "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
@@ -175,7 +162,7 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
     {
       std::vector<size_t> keep;
       keep.push_back(0);
-      qlever::QueryPlanner::TripleGraph tgnew(tg, keep);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
@@ -183,7 +170,7 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       std::vector<size_t> keep;
       keep.push_back(0);
       keep.push_back(1);
-      qlever::QueryPlanner::TripleGraph tgnew(tg, keep);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ(
           "0 {s: ?x, p: ?p, o: <X>} : (1)\n"
           "1 {s: ?x, p: ?p2, o: <Y>} : (0)",
@@ -196,9 +183,9 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
 
 TEST(QueryPlanner, testBFSLeaveOut) {
   {
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-    qlever::QueryPlanner qp = makeQueryPlanner();
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(3u, tg._adjLists.size());
     ad_utility::HashSet<size_t> lo;
@@ -216,9 +203,9 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     ASSERT_EQ(1u, out.size());
   }
   {
-    qlever::ParsedQuery pq =
+    ParsedQuery pq =
         parseQuery("SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
-    qlever::QueryPlanner qp = makeQueryPlanner();
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ad_utility::HashSet<size_t> lo;
     auto out = tg.bfsLeaveOut(0, lo);
@@ -238,7 +225,7 @@ TEST(QueryPlanner, testBFSLeaveOut) {
 
 TEST(QueryPlanner, indexScanZeroVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
   h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z>}",
@@ -252,7 +239,7 @@ TEST(QueryPlanner, indexScanZeroVariables) {
 
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
@@ -270,7 +257,7 @@ TEST(QueryPlanner, indexScanOneVariable) {
 
 TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
 
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -281,7 +268,7 @@ TEST(QueryPlanner, indexScanTwoVariables) {
 
 TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x \n "
@@ -323,14 +310,14 @@ TEST(QueryPlanner, joinOfFullScans) {
 
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
-  using enum qlever::OrderBy::AscOrDesc;
+  using enum OrderBy::AscOrDesc;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
       "ORDER BY ?a",
       h::OrderBy(
-          {{qlever::Variable{"?a"}, Asc}},
+          {{Variable{"?a"}, Asc}},
           h::UnorderedJoins(scan("?a", "<pre/profession>", "<pre/Actor>"),
                             scan("?a", "<pre/born-in>", "?c"),
                             scan("?c", "<pre/in>", "<pre/Europe>"))));
@@ -353,7 +340,7 @@ TEST(QueryPlanner, testStarTwoFree) {
 
 TEST(QueryPlanner, testFilterAfterSeed) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<s> <r> <x>, <x2>, <x3>. <s2> <r> <y1>, <y2>, <y3>.");
   // The following query leads to a different query plan with the dynamic
   // programming and the greedy query planner, because the greedy planner
@@ -375,7 +362,7 @@ TEST(QueryPlanner, testFilterAfterSeed) {
 
 TEST(QueryPlanner, testFilterAfterJoin) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<s> <r> <x>");
+  auto qec = qlever::testing::getQec("<s> <r> <x>");
   h::expect(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
@@ -387,7 +374,7 @@ TEST(QueryPlanner, testFilterAfterJoin) {
 
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
 
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -409,7 +396,7 @@ TEST(QueryPlanner, threeVarTriples) {
 }
 
 TEST(QueryPlanner, threeVarTriplesTCJ) {
-  auto qec = ad_utility::testing::getQec("<s> <p> <x>");
+  auto qec = qlever::testing::getQec("<s> <p> <x>");
   auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -505,11 +492,11 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
 }
 
 TEST(QueryExecutionTreeTest, testCyclicQuery) {
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
       "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
-  qlever::QueryPlanner qp = makeQueryPlanner();
-  qlever::QueryExecutionTree qet = qp.createExecutionTree(pq);
+  QueryPlanner qp = makeQueryPlanner();
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
 
   // There are four possible outcomes of this test with the same size
   // estimate. It is currently very hard to make the query planning
@@ -616,7 +603,7 @@ qet-width: 3
 }
 
 TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
       "SELECT DISTINCT ?1 ?0 WHERE {\n"
       "fb:m.0fkvn fb:government.government_office_category.officeholders "
@@ -629,10 +616,10 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "FILTER (?1 != fb:m.0vmt) .\n"
       "FILTER (?1 != fb:m.018mts)"
       "} LIMIT 300");
-  qlever::QueryPlanner qp = makeQueryPlanner();
-  qlever::QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_TRUE(qet.isVariableCovered(qlever::Variable{"?1"}));
-  ASSERT_TRUE(qet.isVariableCovered(qlever::Variable{"?0"}));
+  QueryPlanner qp = makeQueryPlanner();
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_TRUE(qet.isVariableCovered(Variable{"?1"}));
+  ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
 }
 
 TEST(QueryPlanner, testSimpleOptional) {
@@ -645,13 +632,13 @@ TEST(QueryPlanner, testSimpleOptional) {
       "SELECT ?a ?b \n "
       "WHERE  {?a <rel1> ?b . "
       "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b",
-      h::OrderBy({{qlever::Variable{"?b"}, qlever::OrderBy::AscOrDesc::Asc}},
+      h::OrderBy({{Variable{"?b"}, OrderBy::AscOrDesc::Asc}},
                  h::OptionalJoin(scan("?a", "<rel1>", "?b"),
                                  scan("?a", "<rel2>", "?c"))));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
 
   auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
@@ -663,7 +650,7 @@ TEST(QueryPlanner, SimpleTripleOneVariable) {
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
 
   // In the following tests we need the query planner to be aware that the index
   // contains the entities `<s> <p> <o>` that are used below, otherwise it will
@@ -671,7 +658,7 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
   // a sort (because both plans have a cost of zero if the index scan is known
   // to be empty).
 
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+  auto qec = qlever::testing::getQec("<s> <p> <o>");
   auto scan = h::IndexScanFromStrings;
 
   // Fixed predicate.
@@ -703,7 +690,7 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {
-  using enum qlever::Permutation::Enum;
+  using enum Permutation::Enum;
 
   // Fixed predicate.
   // Don't care about the sorting.
@@ -764,8 +751,8 @@ std::string internalVar(int i) {
 
 TEST(QueryPlanner, TransitivePathUnbound) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 0, qlever::Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>+ ?y }",
@@ -775,12 +762,12 @@ TEST(QueryPlanner, TransitivePathUnbound) {
 
 TEST(QueryPlanner, TransitivePathLeftId) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+  auto qec = qlever::testing::getQec("<s> <p> <o>");
 
-  using qlever::triple_component::Iri;
+  using triple_component::Iri;
 
   TransitivePathSide left{std::nullopt, 0, Iri::fromIriref("<s>"), 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable("?y"), 1};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
       "SELECT ?y WHERE { <s> <p>+ ?y }",
       h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
@@ -790,11 +777,11 @@ TEST(QueryPlanner, TransitivePathLeftId) {
 
 TEST(QueryPlanner, TransitivePathRightId) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+  auto qec = qlever::testing::getQec("<s> <p> <o>");
 
-  using qlever::triple_component::Iri;
+  using triple_component::Iri;
 
-  TransitivePathSide left{std::nullopt, 1, qlever::Variable("?x"), 0};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 0, Iri::fromIriref("<o>"), 1};
   h::expect(
       "SELECT ?y WHERE { ?x <p>+ <o> }",
@@ -805,8 +792,8 @@ TEST(QueryPlanner, TransitivePathRightId) {
 
 TEST(QueryPlanner, TransitivePathBindLeft) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 0, qlever::Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "<s> <p> ?x."
@@ -818,33 +805,33 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
 
 TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 1, qlever::Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 0, qlever::Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 0, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>* ?y."
       "?y <p> <o> }",
-      h::transitivePath(left, right, 0, std::numeric_limits<size_t>::max(),
-                        scan("?y", "<p>", "<o>"),
-                        scan(internalVar(0), "<p>", internalVar(1),
-                             {qlever::Permutation::POS})),
-      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          scan("?y", "<p>", "<o>"),
+          scan(internalVar(0), "<p>", internalVar(1), {Permutation::POS})),
+      qlever::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
 TEST(QueryPlanner, PathSearchSingleTarget) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x>")};
-  std::vector<qlever::Id> targets{getId("<z>")};
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -865,18 +852,18 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
 
 TEST(QueryPlanner, PathSearchMultipleTargets) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x>")};
-  std::vector<qlever::Id> targets{getId("<y>"), getId("<z>")};
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -898,19 +885,18 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
 
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargets) {
   auto scan = h::IndexScanFromStrings;
-  auto qec =
-      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<qlever::Id> targets{getId("<y>"), getId("<z>")};
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -933,19 +919,18 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargets) {
 
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
   auto scan = h::IndexScanFromStrings;
-  auto qec =
-      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<qlever::Id> targets{getId("<y>"), getId("<z>")};
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -969,19 +954,18 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
 
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
   auto scan = h::IndexScanFromStrings;
-  auto qec =
-      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<qlever::Id> targets{getId("<y>"), getId("<z>")};
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {},
                                  false};
   h::expect(
@@ -1007,19 +991,18 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, numPathsPerTarget) {
   auto scan = h::IndexScanFromStrings;
-  auto qec =
-      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<qlever::Id> targets{getId("<y>"), getId("<z>")};
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {},
                                  true,
                                  1};
@@ -1046,20 +1029,20 @@ TEST(QueryPlanner, numPathsPerTarget) {
 TEST(QueryPlanner, PathSearchWithEdgeProperties) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join;
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x>")};
-  std::vector<qlever::Id> targets{getId("<z>")};
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
-                                 {qlever::Variable("?middle")}};
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {Variable("?middle")}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -1085,26 +1068,26 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
 TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::UnorderedJoins;
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<x> <p1> <m1>."
       "<m1> <p3> <n1>."
       "<m1> <p2> <y>."
       "<y> <p1> <m2>."
       "<m2> <p3> <n2>."
       "<m2> <p2> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x>")};
-  std::vector<qlever::Id> targets{getId("<z>"), getId("<y>")};
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>"), getId("<y>")};
   PathSearchConfiguration config{
       PathSearchAlgorithm::ALL_PATHS,
       sources,
       targets,
-      qlever::Variable("?start"),
-      qlever::Variable("?end"),
-      qlever::Variable("?path"),
-      qlever::Variable("?edge"),
-      {qlever::Variable("?middle"), qlever::Variable("?middleAttribute")}};
+      Variable("?start"),
+      Variable("?end"),
+      Variable("?path"),
+      Variable("?edge"),
+      {Variable("?middle"), Variable("?middleAttribute")}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -1134,20 +1117,20 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
 TEST(QueryPlanner, PathSearchJoinOnEdgeProperty) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join;
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x>")};
-  std::vector<qlever::Id> targets{getId("<z>")};
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
-                                 {qlever::Variable("?middle")}};
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {Variable("?middle")}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -1175,18 +1158,18 @@ TEST(QueryPlanner, PathSearchJoinOnEdgeProperty) {
 
 TEST(QueryPlanner, PathSearchSourceBound) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  qlever::Variable sources{"?source"};
-  std::vector<qlever::Id> targets{getId("<z>")};
+  Variable sources{"?source"};
+  std::vector<Id> targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1210,18 +1193,18 @@ TEST(QueryPlanner, PathSearchSourceBound) {
 
 TEST(QueryPlanner, PathSearchTargetBound) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  std::vector<qlever::Id> sources{getId("<x>")};
-  qlever::Variable targets{"?target"};
+  std::vector<Id> sources{getId("<x>")};
+  Variable targets{"?target"};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1245,18 +1228,18 @@ TEST(QueryPlanner, PathSearchTargetBound) {
 
 TEST(QueryPlanner, PathSearchBothBound) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  qlever::Variable sources{"?source"};
-  qlever::Variable targets{"?target"};
+  Variable sources{"?source"};
+  Variable targets{"?target"};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1280,18 +1263,18 @@ TEST(QueryPlanner, PathSearchBothBound) {
 
 TEST(QueryPlanner, PathSearchBothBoundIndividually) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  qlever::Variable sources{"?source"};
-  qlever::Variable targets{"?target"};
+  Variable sources{"?source"};
+  Variable targets{"?target"};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
-                                 qlever::Variable("?start"),
-                                 qlever::Variable("?end"),
-                                 qlever::Variable("?path"),
-                                 qlever::Variable("?edge"),
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
                                  {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1317,8 +1300,8 @@ TEST(QueryPlanner, PathSearchBothBoundIndividually) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchMissingStart) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1333,16 +1316,15 @@ TEST(QueryPlanner, PathSearchMissingStart) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      h::parseAndPlan(std::move(query), qec),
-      HasSubstr("Missing parameter <start>"),
-      qlever::parsedQuery::PathSearchException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
+                                        HasSubstr("Missing parameter <start>"),
+                                        parsedQuery::PathSearchException);
 }
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchMultipleStarts) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1368,8 +1350,8 @@ TEST(QueryPlanner, PathSearchMultipleStarts) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchMissingEnd) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1384,16 +1366,15 @@ TEST(QueryPlanner, PathSearchMissingEnd) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}";
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      h::parseAndPlan(std::move(query), qec),
-      HasSubstr("Missing parameter <end>"),
-      qlever::parsedQuery::PathSearchException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
+                                        HasSubstr("Missing parameter <end>"),
+                                        parsedQuery::PathSearchException);
 }
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchMultipleEnds) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1419,8 +1400,8 @@ TEST(QueryPlanner, PathSearchMultipleEnds) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchStartNotVariable) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1444,8 +1425,8 @@ TEST(QueryPlanner, PathSearchStartNotVariable) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchPredicateNotIri) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1468,8 +1449,8 @@ TEST(QueryPlanner, PathSearchPredicateNotIri) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchUnsupportedArgument) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1494,8 +1475,8 @@ TEST(QueryPlanner, PathSearchUnsupportedArgument) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchTwoVariablesForSource) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1515,13 +1496,13 @@ TEST(QueryPlanner, PathSearchTwoVariablesForSource) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("Only one variable is allowed per search side"),
-      qlever::parsedQuery::PathSearchException);
+      parsedQuery::PathSearchException);
 }
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchUnsupportedElement) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1548,8 +1529,8 @@ TEST(QueryPlanner, PathSearchUnsupportedElement) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchUnsupportedAlgorithm) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1574,8 +1555,8 @@ TEST(QueryPlanner, PathSearchUnsupportedAlgorithm) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchWrongArgumentCartesian) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1601,8 +1582,8 @@ TEST(QueryPlanner, PathSearchWrongArgumentCartesian) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1628,8 +1609,8 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
-  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
   auto query =
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
@@ -1657,20 +1638,20 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
       " BIND (3 + 5 AS ?x) }",
-      h::Bind(h::NeutralElement(), "3 + 5", qlever::Variable{"?x"}));
+      h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
 namespace {
 // Get a `QueryExecutionContext` with a text index. This is used in several
 // tests below.
 auto getQecWithTextIndex = []() {
-  ad_utility::testing::TestIndexConfig config{
+  qlever::testing::TestIndexConfig config{
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
       "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
       "test\" . <a> <p> \"only this text contains the word opti \" . "
       "<a> <p> \"testing and picking\""};
   config.createTextIndex = true;
-  return ad_utility::testing::getQec(std::move(config));
+  return qlever::testing::getQec(std::move(config));
 };
 }  // namespace
 
@@ -1739,9 +1720,9 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
                         wordScan(Var{"?text"}, "picking*")),
       qec);
 
-  qlever::ParsedQuery pq =
+  ParsedQuery pq =
       parseQuery("SELECT * WHERE { ?text ql:contains-entity ?scientist . }");
-  qlever::QueryPlanner qp = makeQueryPlanner();
+  QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
       ::testing::ContainsRegex(
@@ -1944,14 +1925,14 @@ TEST(QueryPlanner, TextSearchService) {
 
   // toConfigs errors
   // No word or entity
-  qlever::ParsedQuery pq = parseQuery(
+  ParsedQuery pq = parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
       "?t qlts:contains [qlts:prefix-match ?fail ] ."
       "}"
       "}");
-  qlever::QueryPlanner qp = makeQueryPlanner();
+  QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
       ::testing::HasSubstr(
@@ -2227,8 +2208,8 @@ TEST(QueryPlanner, TextLimit) {
       h::TextLimit(10,
                    h::Join(wordScan(Var{"?text"}, "test*"),
                            entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"}, std::vector<qlever::Variable>{},
-                   std::vector<qlever::Variable>{
+                   Var{"?text"}, std::vector<Variable>{},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
@@ -2240,8 +2221,8 @@ TEST(QueryPlanner, TextLimit) {
           10,
           h::Join(wordScan(Var{"?text"}, "test*"),
                   entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
-          Var{"?text"}, std::vector<qlever::Variable>{Var{"?scientist"}},
-          std::vector<qlever::Variable>{
+          Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"})}),
       qec);
 
@@ -2255,9 +2236,8 @@ TEST(QueryPlanner, TextLimit) {
                        wordScan(Var{"?text"}, "test*"),
                        entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
                        entityScan(Var{"?text"}, "<testEntity>", "test*")),
-                   Var{"?text"},
-                   std::vector<qlever::Variable>{Var{"?scientist"}},
-                   std::vector<qlever::Variable>{
+                   Var{"?text"}, std::vector<Variable>{Var{"?scientist"}},
+                   std::vector<Variable>{
                        Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
                        Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
@@ -2274,8 +2254,8 @@ TEST(QueryPlanner, TextLimit) {
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
           Var{"?text"},
-          std::vector<qlever::Variable>{Var{"?scientist"}, Var{"?scientist2"}},
-          std::vector<qlever::Variable>{
+          std::vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
       qec);
@@ -2292,8 +2272,8 @@ TEST(QueryPlanner, TextLimit) {
               5,
               h::Join(wordScan(Var{"?text1"}, "test*"),
                       entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
-              Var{"?text1"}, std::vector<qlever::Variable>{Var{"?scientist1"}},
-              std::vector<qlever::Variable>{
+              Var{"?text1"}, std::vector<Variable>{Var{"?scientist1"}},
+              std::vector<Variable>{
                   Var{"?text1"}.getEntityScoreVariable(Var{"?scientist1"})}),
           h::TextLimit(
               5,
@@ -2302,8 +2282,8 @@ TEST(QueryPlanner, TextLimit) {
                   entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
               Var{"?text2"},
-              std::vector<qlever::Variable>{Var{"?author1"}, Var{"?author2"}},
-              std::vector<qlever::Variable>{
+              std::vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              std::vector<Variable>{
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);
@@ -2357,8 +2337,8 @@ TEST(QueryPlanner, TooManyTriples) {
     query = absl::StrCat(query, " ?x <p> ?y .");
   }
   query = absl::StrCat(query, "}");
-  qlever::ParsedQuery pq = parseQuery(query);
-  qlever::QueryPlanner qp = makeQueryPlanner();
+  ParsedQuery pq = parseQuery(query);
+  QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
       ::testing::ContainsRegex("At most 64 triples allowed at the moment."));
@@ -2402,7 +2382,7 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
-  qlever::QueryPlanner qp{ad_utility::testing::getQec(), cancellationHandle};
+  QueryPlanner qp{qlever::testing::getQec(), cancellationHandle};
   auto pq = parseQuery("SELECT * WHERE { ?x ?y ?z }");
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
@@ -2440,8 +2420,8 @@ TEST(QueryPlanner, DatasetClause) {
 
   auto g12 = Graphs{"<g1>", "<g2>"};
   auto noGraphs = Graphs{};
-  auto varG = std::vector{qlever::Variable{"?g"}};
-  std::vector<qlever::ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
+  auto varG = std::vector{Variable{"?g"}};
+  std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
   h::expect(
       "SELECT * FROM <x> FROM NAMED <g1> FROM NAMED <g2> WHERE { GRAPH ?g {<a> "
       "<b> <c>}}",
@@ -2456,8 +2436,7 @@ TEST(QueryPlanner, DatasetClause) {
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({qlever::Variable{"?p"}}, {},
-                 scan("<d>", "?p", "<z2>", {}, g2)));
+      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
 
   // A complex example with graph variables.
   h::expect(
@@ -2466,13 +2445,12 @@ TEST(QueryPlanner, DatasetClause) {
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "{SELECT * {<d> ?p <z2>}}"
       "} <e> ?p <z3> }",
-      h::UnorderedJoins(scan("<a>", "?p", "<x>", {}, g1),
-                        scan("<b>", "?p", "<y>", {}, g1),
-                        scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
-                        h::GroupBy({qlever::Variable{"?p"}}, {},
-                                   scan("<d>", "?p", "<z2>", {}, g2)),
-                        scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
-                        scan("<e>", "?p", "<z3>", {}, g1)));
+      h::UnorderedJoins(
+          scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
+          scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
+          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
+          scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
+          scan("<e>", "?p", "<z3>", {}, g1)));
 }
 
 // _____________________________________________________________________________
@@ -2482,61 +2460,60 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
   h::expect("SELECT * { GRAPH ?x { ?x <b> <c> } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
                       scan("?x", "<b>", "<c>", {}, NamedTag{},
-                           {qlever::Variable{internalVar(0)}}, {3})));
+                           {Variable{internalVar(0)}}, {3})));
   h::expect("SELECT * { GRAPH ?x { <a> ?x <c> } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
                       scan("<a>", "?x", "<c>", {}, NamedTag{},
-                           {qlever::Variable{internalVar(0)}}, {3})));
+                           {Variable{internalVar(0)}}, {3})));
   h::expect("SELECT * { GRAPH ?x { <a> <b> ?x } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
                       scan("<a>", "<b>", "?x", {}, NamedTag{},
-                           {qlever::Variable{internalVar(0)}}, {3})));
+                           {Variable{internalVar(0)}}, {3})));
   // Two variables
   h::expect(
       "SELECT * { GRAPH ?x { ?x ?x <c> } }",
       h::Filter("?x = ?_QLever_internal_variable_qp_1",
                 h::Filter("?_QLever_internal_variable_qp_0=?x",
                           scan(internalVar(0), "?x", "<c>", {}, NamedTag{},
-                               {qlever::Variable{internalVar(1)}}, {3}))));
+                               {Variable{internalVar(1)}}, {3}))));
   h::expect(
       "SELECT * { GRAPH ?x { ?x <b> ?x } }",
       h::Filter("?x = ?_QLever_internal_variable_qp_1",
                 h::Filter("?_QLever_internal_variable_qp_0=?x",
                           scan("?x", "<b>", internalVar(0), {}, NamedTag{},
-                               {qlever::Variable{internalVar(1)}}, {3}))));
+                               {Variable{internalVar(1)}}, {3}))));
   h::expect(
       "SELECT * { GRAPH ?x { <a> ?x ?x } }",
       h::Filter("?x = ?_QLever_internal_variable_qp_1",
                 h::Filter("?_QLever_internal_variable_qp_0=?x",
                           scan("<a>", "?x", internalVar(0), {}, NamedTag{},
-                               {qlever::Variable{internalVar(1)}}, {3}))));
+                               {Variable{internalVar(1)}}, {3}))));
   // Three variables
   h::expect(
       "SELECT * { GRAPH ?x { ?x ?x ?x } }",
-      h::Filter(
-          "?x = ?_QLever_internal_variable_qp_2",
-          h::Filter("?_QLever_internal_variable_qp_1=?x",
-                    h::Filter("?_QLever_internal_variable_qp_0=?x",
-                              scan(internalVar(1), "?x", internalVar(0), {},
-                                   NamedTag{},
-                                   {qlever::Variable{internalVar(2)}}, {3})))));
+      h::Filter("?x = ?_QLever_internal_variable_qp_2",
+                h::Filter("?_QLever_internal_variable_qp_1=?x",
+                          h::Filter("?_QLever_internal_variable_qp_0=?x",
+                                    scan(internalVar(1), "?x", internalVar(0),
+                                         {}, NamedTag{},
+                                         {Variable{internalVar(2)}}, {3})))));
   // Three distinct variables
   h::expect("SELECT * { GRAPH ?x { ?x ?y ?z } }",
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
                       scan("?x", "?y", "?z", {}, NamedTag{},
-                           {qlever::Variable{internalVar(0)}}, {3})));
+                           {Variable{internalVar(0)}}, {3})));
 
   // Wrapped in subquery (one of the compliance tests)
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
       h::Filter("?g = ?_QLever_internal_variable_qp_0",
                 scan("?x", "?p", "?g", {}, NamedTag{},
-                     {qlever::Variable{internalVar(0)}}, {3})));
+                     {Variable{internalVar(0)}}, {3})));
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p ?g { ?x ?p ?g } } } }",
       h::Filter("?g = ?_QLever_internal_variable_qp_0",
                 scan("?x", "?p", "?g", {}, NamedTag{},
-                     {qlever::Variable{internalVar(0)}}, {3})));
+                     {Variable{internalVar(0)}}, {3})));
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
       scan("?x", "?p", "?g", {}, NamedTag{}));
@@ -2544,15 +2521,15 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
-  using enum qlever::OrderBy::AscOrDesc;
+  using enum OrderBy::AscOrDesc;
   // Unbound variable in ORDER BY.
   h::expect(
       "SELECT * {} ORDER BY ?x",
       h::QetWithWarnings({"?x was used by ORDER BY"}, h::NeutralElement()));
-  h::expect("SELECT * { ?x <is-a> <y> } ORDER BY ?x ?y ",
-            h::QetWithWarnings(
-                {"?y was used by ORDER BY"},
-                h::OrderBy({{qlever::Variable{"?x"}, Asc}}, ::testing::_)));
+  h::expect(
+      "SELECT * { ?x <is-a> <y> } ORDER BY ?x ?y ",
+      h::QetWithWarnings({"?y was used by ORDER BY"},
+                         h::OrderBy({{Variable{"?x"}, Asc}}, ::testing::_)));
 
   // Unbound variable in GROUP BY.
   h::expect("SELECT ?x {} GROUP BY ?x",
@@ -2561,19 +2538,19 @@ TEST(QueryPlanner, WarningsOnUnboundVariables) {
   h::expect("SELECT ?x ?y { ?x <is-a> <y> } GROUP BY ?x ?y ",
             h::QetWithWarnings(
                 {"?y was used by GROUP BY"},
-                h::GroupBy({qlever::Variable{"?x"}}, {},
+                h::GroupBy({Variable{"?x"}}, {},
                            h::IndexScanFromStrings("?x", "<is-a>", "<y>"))));
 
   // Unbound variable in BIND.
-  h::expect("SELECT ?x {BIND (?a as ?x)}",
-            h::QetWithWarnings(
-                {"?a was used in the expression of a BIND"},
-                h::Bind(h::NeutralElement(), "?a", qlever::Variable{"?x"})));
+  h::expect(
+      "SELECT ?x {BIND (?a as ?x)}",
+      h::QetWithWarnings({"?a was used in the expression of a BIND"},
+                         h::Bind(h::NeutralElement(), "?a", Variable{"?x"})));
 
   // Unbound variable in Subquery.
   h::expect("SELECT ?x { {SELECT * {BIND (?a as ?x)}} ?x <p> ?o}",
             h::QetWithWarnings({"?a was used in the expression of a BIND"},
-                               testing::_));
+                               ::testing::_));
 }
 
 // ___________________________________________________________________________
@@ -2596,7 +2573,7 @@ TEST(QueryPlanner, Describe) {
 
 // ____________________________________________________________________________
 TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
-  auto matcher = h::GroupBy({qlever::Variable{"?x"}}, {},
+  auto matcher = h::GroupBy({Variable{"?x"}}, {},
                             h::IndexScanFromStrings("?x", "?y", "?z"));
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
@@ -2609,14 +2586,14 @@ TEST(QueryPlanner, Exists) {
   auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
   auto def = h::IndexScanFromStrings("?d", "?e", "?f");
   auto ghi = h::IndexScanFromStrings("?g", "?h", "?i");
-  using V = qlever::Variable;
+  using V = Variable;
 
   // Simple tests for EXISTS with FILTER, BIND, and GROUP BY.
   h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
             h::Filter("EXISTS {?a ?b ?c}", h::ExistsJoin(xyz, abc)));
   h::expect("SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} as ?bound) }",
             h::Bind(h::ExistsJoin(xyz, abc), "EXISTS {?a ?b ?c}",
-                    qlever::Variable("?bound")));
+                    Variable("?bound")));
   h::expect(
       "SELECT ?x (SAMPLE(EXISTS{?a ?b ?c}) as ?s) { ?x ?y ?z } GROUP BY ?x",
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
@@ -2632,7 +2609,7 @@ TEST(QueryPlanner, Exists) {
       "SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f} as "
       "?bound)}",
       h::Bind(existsAbcDef, "EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}",
-              qlever::Variable("?bound")));
+              Variable("?bound")));
 
   h::expect(
       "SELECT ?x (SAMPLE(EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}) as ?s) "
@@ -2659,8 +2636,8 @@ TEST(QueryPlanner, Exists) {
             h::Describe(::testing::_, filter));
 
   // Test the interaction of FROM NAMES with EXISTS
-  auto varG = std::vector{qlever::Variable{"?g"}};
-  std::vector<qlever::ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
+  auto varG = std::vector{Variable{"?g"}};
+  std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
   auto uvcg =
       h::IndexScanFromStrings("?u", "?v", "?c", {}, H{"<g2>"}, varG, graphCol);
   existsJoin = h::ExistsJoin(xyzg, h::UnorderedJoins(abcg, uvcg));
@@ -2672,26 +2649,25 @@ TEST(QueryPlanner, Exists) {
   // Make sure we get the correct permutation.
   h::expect("SELECT ?s { ?s <p> <o> FILTER EXISTS { ?s ?p ?o } }",
             h::Filter("EXISTS { ?s ?p ?o }",
-                      h::ExistsJoin(h::IndexScanFromStrings("?s", "<p>", "<o>"),
-                                    h::IndexScanFromStrings(
-                                        "?s", "?p", "?o",
-                                        {qlever::Permutation::Enum::SPO,
-                                         qlever::Permutation::Enum::SOP}))));
-  h::expect(
-      "SELECT ?s { ?s ?p <o> FILTER EXISTS { ?s ?p ?o } }",
-      h::Filter("EXISTS { ?s ?p ?o }",
-                h::ExistsJoin(
-                    h::IndexScanFromStrings("?s", "?p", "<o>",
-                                            {qlever::Permutation::Enum::OSP}),
-                    h::IndexScanFromStrings(
-                        "?s", "?p", "?o", {qlever::Permutation::Enum::SPO}))));
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "<p>", "<o>"),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO,
+                                                   Permutation::Enum::SOP}))));
+  h::expect("SELECT ?s { ?s ?p <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "?p", "<o>",
+                                                  {Permutation::Enum::OSP}),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO}))));
 }
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
   h::expect("SELECT * { SELECT ?s { ?s <a> [] } ORDER BY RAND() }",
             h::OrderBy({std::pair{Var{"?_QLever_internal_variable_1"},
-                                  qlever::OrderBy::AscOrDesc::Asc}},
+                                  OrderBy::AscOrDesc::Asc}},
                        h::Bind(h::IndexScanFromStrings(
                                    "?s", "<a>", "?_QLever_internal_variable_0"),
                                "RAND()", Var{"?_QLever_internal_variable_1"})));
@@ -2765,9 +2741,9 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
       "SELECT * WHERE { GRAPH ?g { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 } }",
       h::Join(
           h::Sort(h::IndexScanFromStrings("?s1", "?p1", "?o1", {}, NamedTag{},
-                                          {qlever::Variable{"?g"}}, {3})),
+                                          {Variable{"?g"}}, {3})),
           h::Sort(h::IndexScanFromStrings("?s2", "?p2", "?o2", {}, NamedTag{},
-                                          {qlever::Variable{"?g"}}, {3}))));
+                                          {Variable{"?g"}}, {3}))));
   // Sanity check case without a GRAPH clause
   h::expect(
       "SELECT * WHERE { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 }",
@@ -2777,12 +2753,12 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnion) {
-  auto* qec = ad_utility::testing::getQec();
-  TransitivePathSide left1{
-      std::nullopt, 0, qlever::Variable("?_QLever_internal_variable_qp_0"), 0};
-  TransitivePathSide left2{
-      std::nullopt, 0, qlever::Variable("?_QLever_internal_variable_qp_7"), 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable("?type"), 1};
+  auto* qec = qlever::testing::getQec();
+  TransitivePathSide left1{std::nullopt, 0,
+                           Variable("?_QLever_internal_variable_qp_0"), 0};
+  TransitivePathSide left2{std::nullopt, 0,
+                           Variable("?_QLever_internal_variable_qp_7"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?type"), 1};
   std::string query =
       "SELECT * WHERE {\n"
       "  <Q11629> <P279>/(<P279>*|<P31>*) | <P31>/(<P279>*|<P31>*) ?type .\n"
@@ -2823,8 +2799,8 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
                       "?_QLever_internal_variable_qp_12")))),
       qec, {4, 16, 64'000'000});
 
-  TransitivePathSide left3{std::nullopt, 0, qlever::Variable("?s"), 0};
-  TransitivePathSide right2{std::nullopt, 1, qlever::Variable("?y"), 1};
+  TransitivePathSide left3{std::nullopt, 0, Variable("?s"), 0};
+  TransitivePathSide right2{std::nullopt, 1, Variable("?y"), 1};
 
   h::expectWithGivenBudgets(
       "SELECT * WHERE { ?s <P31> ?o . { ?s <P279>+ ?y } UNION { VALUES ?x { 1 "
@@ -2882,8 +2858,9 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionDoesntExplode) {
   // Make sure that this is enabled for this test to actually test something.
-  auto cleanup = setRuntimeParameterForTest<
-      &qlever::RuntimeParameters::enableDistributiveUnion_>(true);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
   // This is a regression test to ensure the following query, which joins two
   // unions doesn't result in an OOM because the possible query plan variations
   // explode.
@@ -2910,14 +2887,14 @@ TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
       UnorderedElementsAre(
           Truly([](const auto& plan) {
             // Case where join is at the top level.
-            return std::dynamic_pointer_cast<qlever::Join>(
+            return std::dynamic_pointer_cast<Join>(
                 plan._qet->getRootOperation());
           }),
           Truly([](const auto& plan) {
             // Case where join is pushed into the union.
             auto operation = plan._qet->getRootOperation();
-            return std::dynamic_pointer_cast<qlever::Union>(operation) &&
-                   std::dynamic_pointer_cast<qlever::Join>(
+            return std::dynamic_pointer_cast<Union>(operation) &&
+                   std::dynamic_pointer_cast<Join>(
                        operation->getChildren().at(1)->getRootOperation());
           })));
 }
@@ -2927,34 +2904,35 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
   using namespace ::testing;
   auto qp = makeQueryPlanner();
 
-  auto cleanup = setRuntimeParameterForTest<
-      &qlever::RuntimeParameters::enableDistributiveUnion_>(false);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          false);
   auto query = parseQuery(
       "SELECT * { VALUES ?s { 1 } { ?s <P31> ?o } UNION { ?s <P31> ?o }  }");
   auto plans = qp.createExecutionTrees(query);
 
   ASSERT_EQ(plans.size(), 1);
-  EXPECT_TRUE(std::dynamic_pointer_cast<qlever::Join>(
-      plans.at(0)._qet->getRootOperation()));
+  EXPECT_TRUE(
+      std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
 }
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
-  auto* qec = ad_utility::testing::getQec(
+  auto* qec = qlever::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."
       " <i> <P279> <j> . <a> <P31> <b> . <c> <P31> <d> . <e> <P31> <f> ."
       " <g> <P31> <h> . <i> <P31> <j> .");
-  TransitivePathSide left1{
-      std::nullopt, 2, qlever::Variable("?_QLever_internal_variable_qp_0"), 0};
-  TransitivePathSide left2{
-      std::nullopt, 0, qlever::Variable("?_QLever_internal_variable_qp_4"), 0};
-  TransitivePathSide left3{
-      std::nullopt, 0, qlever::Variable("?_QLever_internal_variable_qp_13"), 0};
-  TransitivePathSide right1{std::nullopt, 1, qlever::Variable("?type"), 1};
-  TransitivePathSide right2{
-      std::nullopt, 1, qlever::Variable("?_QLever_internal_variable_qp_3"), 1};
-  TransitivePathSide right3{
-      std::nullopt, 1, qlever::Variable("?_QLever_internal_variable_qp_12"), 1};
+  TransitivePathSide left1{std::nullopt, 2,
+                           Variable("?_QLever_internal_variable_qp_0"), 0};
+  TransitivePathSide left2{std::nullopt, 0,
+                           Variable("?_QLever_internal_variable_qp_4"), 0};
+  TransitivePathSide left3{std::nullopt, 0,
+                           Variable("?_QLever_internal_variable_qp_13"), 0};
+  TransitivePathSide right1{std::nullopt, 1, Variable("?type"), 1};
+  TransitivePathSide right2{std::nullopt, 1,
+                            Variable("?_QLever_internal_variable_qp_3"), 1};
+  TransitivePathSide right3{std::nullopt, 1,
+                            Variable("?_QLever_internal_variable_qp_12"), 1};
   std::string query =
       "SELECT * WHERE {\n"
       "  <Q11629> "
@@ -3044,7 +3022,7 @@ TEST(QueryPlanner, InverseGraphPattern) {
 TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
   auto hasLimit = [](const LimitOffsetClause& limit) {
     return queryPlannerTestHelpers::RootOperationBase(
-        AD_PROPERTY(qlever::Operation, getLimitOffset, ::testing::Eq(limit)));
+        AD_PROPERTY(Operation, getLimitOffset, ::testing::Eq(limit)));
   };
 
   h::expect("SELECT * { SELECT ?a { ?a ?b ?c } LIMIT 1 }",
@@ -3079,8 +3057,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 // _____________________________________________________________________________
 TEST(QueryPlanner,
      PropertyPathWithGraphVariableNoSpecialHandlingWhenJoiningOnGraph) {
-  TransitivePathSide left{std::nullopt, 0, qlever::Variable{"?a"}, 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable{"?b"}, 1};
+  TransitivePathSide left{std::nullopt, 0, Variable{"?a"}, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?b"}, 1};
   h::expect(
       "SELECT * { GRAPH ?g { ?a <a>+ ?b . ?c <a> ?d } }",
       h::Join(h::Sort(h::transitivePath(
@@ -3088,9 +3066,9 @@ TEST(QueryPlanner,
                   h::Sort(h::IndexScanFromStrings(
                       "?_QLever_internal_variable_qp_0", "<a>",
                       "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                      {qlever::Variable{"?g"}}, {3})))),
+                      {Variable{"?g"}}, {3})))),
               h::Sort(h::IndexScanFromStrings("?c", "<a>", "?d", {}, NamedTag{},
-                                              {qlever::Variable{"?g"}}, {3}))));
+                                              {Variable{"?g"}}, {3}))));
 }
 
 // _____________________________________________________________________________
@@ -3108,7 +3086,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           "?_QLever_internal_variable_qp_0",
                           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
                           "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                          {qlever::Variable{"?g"}}, {3})))));
+                          {Variable{"?g"}}, {3})))));
   }
   {
     TransitivePathSide left{std::nullopt, 0, Var{"?a"}, 0};
@@ -3117,12 +3095,12 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
               h::transitivePath(
                   left, right, 1, std::numeric_limits<size_t>::max(),
                   h::IndexScanFromStrings("?a", "<is-a>", "?c", {}, NamedTag{},
-                                          {qlever::Variable{"?g"}}, {3}),
+                                          {Variable{"?g"}}, {3}),
                   // Sort by ?g
                   h::Sort(h::IndexScanFromStrings(
                       "?_QLever_internal_variable_qp_0", "<label>",
                       "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                      {qlever::Variable{"?g"}}, {3}))));
+                      {Variable{"?g"}}, {3}))));
     // Verify query planning also works when ?g is the first variable.
     h::expect(
         "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>+ ?b } }",
@@ -3132,7 +3110,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
                               "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                              {qlever::Variable{"?g"}}, {3}))));
+                              {Variable{"?g"}}, {3}))));
 
     // Ensure join with too many columns doesn't result in an exception. (This
     // could be optimized in the future.)
@@ -3147,7 +3125,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                 h::Sort(h::IndexScanFromStrings(
                     "?_QLever_internal_variable_qp_0", "<label>",
                     "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                    {qlever::Variable{"?g"}}, {3}))))));
+                    {Variable{"?g"}}, {3}))))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
@@ -3157,7 +3135,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
                               "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                              {qlever::Variable{"?g"}}, {3}))),
+                              {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { 1 } } }",
@@ -3167,7 +3145,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                           h::Sort(h::IndexScanFromStrings(
                               "?_QLever_internal_variable_qp_0", "<label>",
                               "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                              {qlever::Variable{"?g"}}, {3}))),
+                              {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
 
     // Verify undef value is joined to graph
@@ -3180,21 +3158,20 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     {0, 1},
                     // The sorts of index scans are because of missing graph
                     // permutations.
-                    h::Union(
-                        h::Sort(h::IndexScanFromStrings(
-                            "?a", "?internal_property_path_variable_a",
-                            "?internal_property_path_variable_b", {},
-                            NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)),
-                        h::Sort(h::IndexScanFromStrings(
-                            "?internal_property_path_variable_c",
-                            "?internal_property_path_variable_d", "?a", {},
-                            NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)))),
+                    h::Union(h::Sort(h::IndexScanFromStrings(
+                                 "?a", "?internal_property_path_variable_a",
+                                 "?internal_property_path_variable_b", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
+                             h::Sort(h::IndexScanFromStrings(
+                                 "?internal_property_path_variable_c",
+                                 "?internal_property_path_variable_d", "?a", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
                 h::Sort(h::ValuesClause("VALUES (?a) { (UNDEF) }"))),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
                 "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                {qlever::Variable{"?g"}}, {3}))));
+                {Variable{"?g"}}, {3}))));
     h::expect(
         "SELECT * WHERE { GRAPH ?g { ?a <label>* ?b . VALUES ?a { 1 } } }",
         h::transitivePath(
@@ -3204,21 +3181,20 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     {0, 1},
                     // The sorts of index scans are because of missing graph
                     // permutations.
-                    h::Union(
-                        h::Sort(h::IndexScanFromStrings(
-                            "?a", "?internal_property_path_variable_a",
-                            "?internal_property_path_variable_b", {},
-                            NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)),
-                        h::Sort(h::IndexScanFromStrings(
-                            "?internal_property_path_variable_c",
-                            "?internal_property_path_variable_d", "?a", {},
-                            NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)))),
+                    h::Union(h::Sort(h::IndexScanFromStrings(
+                                 "?a", "?internal_property_path_variable_a",
+                                 "?internal_property_path_variable_b", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
+                             h::Sort(h::IndexScanFromStrings(
+                                 "?internal_property_path_variable_c",
+                                 "?internal_property_path_variable_d", "?a", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
                 h::Sort(h::ValuesClause("VALUES (?a) { (1) }"))),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
                 "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                {qlever::Variable{"?g"}}, {3}))));
+                {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>* ?b } }",
@@ -3230,20 +3206,19 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                     {0, 1},
                     // The sorts of index scans are because of missing graph
                     // permutations.
-                    h::Union(
-                        h::Sort(h::IndexScanFromStrings(
-                            "?a", "?internal_property_path_variable_a",
-                            "?internal_property_path_variable_b", {},
-                            NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)),
-                        h::Sort(h::IndexScanFromStrings(
-                            "?internal_property_path_variable_c",
-                            "?internal_property_path_variable_d", "?a", {},
-                            NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2))))),
+                    h::Union(h::Sort(h::IndexScanFromStrings(
+                                 "?a", "?internal_property_path_variable_a",
+                                 "?internal_property_path_variable_b", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2)),
+                             h::Sort(h::IndexScanFromStrings(
+                                 "?internal_property_path_variable_c",
+                                 "?internal_property_path_variable_d", "?a", {},
+                                 NamedTag{}, {Variable{"?g"}}, {3}, 2))))),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
                 "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                {qlever::Variable{"?g"}}, {3}))),
+                {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
 
     TransitivePathSide left2{std::nullopt, 0, Var{"?g"}, 0};
@@ -3261,29 +3236,29 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                                 "?g", "?internal_property_path_variable_a",
                                 "?internal_property_path_variable_b", {},
                                 NamedTag{},
-                                {qlever::Variable{
+                                {Variable{
                                     "?_Qlever_internal_transitive_path_graph"}},
                                 {3}, 2)),
                             h::Sort(h::IndexScanFromStrings(
                                 "?internal_property_path_variable_c",
                                 "?internal_property_path_variable_d", "?g", {},
                                 NamedTag{},
-                                {qlever::Variable{
+                                {Variable{
                                     "?_Qlever_internal_transitive_path_graph"}},
                                 {3}, 2))))),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings(
                 "?_QLever_internal_variable_qp_0", "<label>",
                 "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                {qlever::Variable{"?g"}}, {3}))));
+                {Variable{"?g"}}, {3}))));
   }
 }
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphIri) {
   using HS = ad_utility::HashSet<std::string>;
-  TransitivePathSide left{std::nullopt, 0, qlever::Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
       "SELECT * WHERE { GRAPH <abc> { ?x a* ?y } } ",
       h::transitivePath(
@@ -3377,7 +3352,7 @@ TEST(QueryPlanner, transitivePathWithoutVariables) {
   h::expect(
       "SELECT * { 1 <a>+ 1 . 1 <a> 1 }",
       h::CartesianProductJoin(
-          h::IndexScan(1, qlever::TripleComponent::Iri::fromIriref("<a>"), 1),
+          h::IndexScan(1, TripleComponent::Iri::fromIriref("<a>"), 1),
           h::transitivePath(
               left, right, 1, std::numeric_limits<size_t>::max(),
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
@@ -3387,7 +3362,7 @@ TEST(QueryPlanner, transitivePathWithoutVariables) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithLiterals) {
   TransitivePathSide left{std::nullopt, 0, 1, 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable{"?var"}, 1};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
   h::expect(
       "SELECT * { 1 <a>* ?var }",
       h::transitivePath(
@@ -3484,7 +3459,7 @@ TEST(QueryPlanner, emptyPathWithMismatchingLiterals) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithLiteralsBound) {
   TransitivePathSide left{std::nullopt, 0, 1, 0};
-  TransitivePathSide right{std::nullopt, 1, qlever::Variable{"?var"}, 1};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
   h::expect(
       "SELECT * { 1 <a>* ?var . VALUES ?var { 2 } }",
       h::Join(
@@ -3515,7 +3490,7 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1")))));
 
-  TransitivePathSide left2{std::nullopt, 1, qlever::Variable{"?var"}, 0};
+  TransitivePathSide left2{std::nullopt, 1, Variable{"?var"}, 0};
   TransitivePathSide right2{std::nullopt, 0, 1, 1};
   h::expect(
       "SELECT * { ?var <a>* 1 . VALUES ?var { 2 } }",
@@ -3550,8 +3525,8 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
-  TransitivePathSide left{std::nullopt, 1, qlever::Variable{"?x"}, 0};
-  TransitivePathSide right{std::nullopt, 0, qlever::Variable{"?x"}, 1};
+  TransitivePathSide left{std::nullopt, 1, Variable{"?x"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?x"}, 1};
   h::expect("SELECT * { ?x <a>+ ?x . ?x <b> <c> }",
             h::transitivePath(std::move(left), std::move(right), 1,
                               std::numeric_limits<size_t>::max(),
@@ -3578,7 +3553,7 @@ TEST(QueryPlanner, correctFiltersHandling) {
   // https://github.com/ad-freiburg/qlever/issues/2194. Note: We need to run
   // this test on an index where the used predicates actually exist, otherwise
   // we will get a garbage plan.
-  auto qec = ad_utility::testing::getQec(
+  auto qec = qlever::testing::getQec(
       "<a> <b> <c>. <a2> <b> 4. <x> <p> <y>. <x> <c> 43");
   h::expect(
       "SELECT * { ?x <b> ?c . FILTER(?c < 5) OPTIONAL { ?a <c> ?d } ?x <p> ?a "
@@ -3617,22 +3592,22 @@ TEST(QueryPlanner, correctFiltersHandling) {
   h::expect(
       "SELECT * { ?x <b> ?c FILTER(?c < 5) BIND(42 AS ?unrelated) FILTER(?c >= "
       "1) }",
-      h::AnyOf(h::Filter("?c >= 1",
-                         h::Bind(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
-                                 "42", qlever::Variable{"?unrelated"})),
-               h::Filter("?c >= 1",
-                         h::Filter("?c < 5",
-                                   h::Bind(scan("?x", "<b>", "?c"), "42",
-                                           qlever::Variable{"?unrelated"}))),
-               h::Bind(h::Filter("?c >= 1",
-                                 h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
-                       "42", qlever::Variable{"?unrelated"})));
+      h::AnyOf(
+          h::Filter("?c >= 1",
+                    h::Bind(h::Filter("?c < 5", scan("?x", "<b>", "?c")), "42",
+                            Variable{"?unrelated"})),
+          h::Filter("?c >= 1",
+                    h::Filter("?c < 5", h::Bind(scan("?x", "<b>", "?c"), "42",
+                                                Variable{"?unrelated"}))),
+          h::Bind(h::Filter("?c >= 1",
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                  "42", Variable{"?unrelated"})));
 }
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithJoinOptimization) {
-  TransitivePathSide left{std::nullopt, 1, qlever::Variable{"?other"}, 0};
-  TransitivePathSide right{std::nullopt, 0, qlever::Variable{"?var"}, 1};
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
   h::expect(
       "SELECT * { ?other <a>* ?var . VALUES ?var { 2 } }",
       h::transitivePath(
@@ -3651,8 +3626,8 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
-  TransitivePathSide left2{std::nullopt, 0, qlever::Variable{"?var"}, 0};
-  TransitivePathSide right2{std::nullopt, 1, qlever::Variable{"?other"}, 1};
+  TransitivePathSide left2{std::nullopt, 0, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 1, Variable{"?other"}, 1};
   h::expect(
       "SELECT * { ?var <a>* ?other . VALUES ?var { 2 } }",
       h::transitivePath(
@@ -3679,7 +3654,7 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
-  auto* qec = ad_utility::testing::getQec(
+  auto* qec = qlever::testing::getQec(
       "<d> <c> <d> . <d1> <c> <d> . <d2> <c> <d> . <d> <a> <b> . <d2> <a> <b> "
       ". <d3> <a> <b> . <d4> <a> <b> . <d5> <a> <b> . <d6> <a> <b>");
 
@@ -3706,10 +3681,10 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
-  auto* qec = ad_utility::testing::getQec(
+  auto* qec = qlever::testing::getQec(
       "<1> <a> <1> .  <1> <a> <2> . <1> <a> <3> .  <1> <a> <4> .  <1> <b> <2>");
-  TransitivePathSide left{std::nullopt, 0, qlever::Variable{"?s"}, 0};
-  TransitivePathSide right1{std::nullopt, 1, qlever::Variable{"?o"}, 1};
+  TransitivePathSide left{std::nullopt, 0, Variable{"?s"}, 0};
+  TransitivePathSide right1{std::nullopt, 1, Variable{"?o"}, 1};
   h::expectWithGivenBudgets(
       "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?s2 . ?g <b> ?g2 }",
       h::Join(h::Sort(h::transitivePath(
@@ -3719,7 +3694,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                   h::Sort(h::IndexScanFromStrings(
                       "?_QLever_internal_variable_qp_0", "<a>",
                       "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                      {qlever::Variable{"?g"}}, {3})))),
+                      {Variable{"?g"}}, {3})))),
               h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
   h::expectWithGivenBudgets(
@@ -3730,21 +3705,20 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
               h::Join(
                   h::Distinct(
                       {0, 1},
-                      h::Union(
-                          h::Sort(h::IndexScanFromStrings(
-                              "?s", "?internal_property_path_variable_a",
-                              "?internal_property_path_variable_b", {},
-                              NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)),
-                          h::Sort(h::IndexScanFromStrings(
-                              "?internal_property_path_variable_c",
-                              "?internal_property_path_variable_d", "?s", {},
-                              NamedTag{}, {qlever::Variable{"?g"}}, {3}, 2)))),
+                      h::Union(h::Sort(h::IndexScanFromStrings(
+                                   "?s", "?internal_property_path_variable_a",
+                                   "?internal_property_path_variable_b", {},
+                                   NamedTag{}, {Variable{"?g"}}, {3}, 2)),
+                               h::Sort(h::IndexScanFromStrings(
+                                   "?internal_property_path_variable_c",
+                                   "?internal_property_path_variable_d", "?s",
+                                   {}, NamedTag{}, {Variable{"?g"}}, {3}, 2)))),
                   h::IndexScanFromStrings("?s", "<b>", "?s2")),
               // The sort is because of missing graph permutations.
               h::Sort(h::IndexScanFromStrings(
                   "?_QLever_internal_variable_qp_0", "<a>",
                   "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                  {qlever::Variable{"?g"}}, {3})))),
+                  {Variable{"?g"}}, {3})))),
           h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
   // Double bind is currently not supported
@@ -3756,11 +3730,11 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                     h::Sort(h::IndexScanFromStrings(
                         "?_QLever_internal_variable_qp_0", "<a>",
                         "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                        {qlever::Variable{"?g"}}, {3})))),
+                        {Variable{"?g"}}, {3})))),
                 h::IndexScanFromStrings("?s", "<b>", "?o")),
             qec);
 
-  TransitivePathSide right2{std::nullopt, 1, qlever::Variable{"?g"}, 1};
+  TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};
   h::expect("SELECT * { { GRAPH ?g { ?s <a>+ ?g } ?s <b> ?s2 } . ?g <b> ?g2 }",
             h::Join(h::Sort(h::transitivePath(
                         left, right2, 1, std::numeric_limits<size_t>::max(),
@@ -3769,7 +3743,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                         h::Sort(h::IndexScanFromStrings(
                             "?_QLever_internal_variable_qp_0", "<a>",
                             "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                            {qlever::Variable{"?g"}}, {3})))),
+                            {Variable{"?g"}}, {3})))),
                     h::IndexScanFromStrings("?g", "<b>", "?g2")),
             qec);
 }
@@ -3886,8 +3860,7 @@ LIMIT 1
 TEST(QueryPlanner, SubqueryColumnStripping) {
   // Save current strip-columns setting and ensure it's enabled for this test
   auto cleanup =
-      setRuntimeParameterForTest<&qlever::RuntimeParameters::stripColumns_>(
-          true);
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
 
   // Test a subquery that selects only some variables, causing others to be
   // stripped
@@ -3897,14 +3870,13 @@ TEST(QueryPlanner, SubqueryColumnStripping) {
     }
   )";
 
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   for (bool doStrip : {true, false}) {
     qec->clearCacheUnpinnedOnly();
 
     // The outer cleanup will reset the original status, so we can safely
     // modify the global parameter here.
-    qlever::setRuntimeParameter<&qlever::RuntimeParameters::stripColumns_>(
-        doStrip);
+    setRuntimeParameter<&RuntimeParameters::stripColumns_>(doStrip);
 
     // The inner subquery should have ?z and ?w stripped (as they're not
     // selected) but since it's a subquery, the stripped variables should not be
@@ -3924,7 +3896,7 @@ TEST(QueryPlanner, NamedCachedResult) {
   // First test all the error cases that might appear during the parsing and
   // query planning.
   std::string query = "SELECT * { SERVICE ql:cached-result-with-name-3 {}}";
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::parseAndPlan(query, qec),
       ::testing::HasSubstr("is not contained in the named result cache"));
@@ -3960,7 +3932,7 @@ TEST(QueryPlanner, NamedCachedResult) {
   // Now pin a query to the named result cache, and check that the query
   // planning works as expected.
   std::string queryToPin = "SELECT ?s { ?s <p> ?o} INTERNAL SORT BY ?s";
-  qec = ad_utility::testing::getQec(
+  qec = qlever::testing::getQec(
       "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
   qec->pinResultWithName() = {"dummyQuery"};
   auto plan = h::parseAndPlan(queryToPin, qec);
@@ -4011,8 +3983,9 @@ GROUP BY ?p
 // the UNION branches (which would require cloning the BIND and produce
 // different blank-node IDs for each branch).
 TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
-  auto cleanup = setRuntimeParameterForTest<
-      &qlever::RuntimeParameters::enableDistributiveUnion_>(true);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
   // This previously triggered an assertion violation because the query planner
   // tried to clone the BIND(BNODE(...)) subquery to push it into both branches
   // of the UNION.
@@ -4023,6 +3996,6 @@ TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
       "}",
       // The non-deterministic BIND must not be distributed into the UNION, so
       // the join has to be on top!
-      h::Join(::testing::A<const qlever::QueryExecutionTree&>(),
-              ::testing::A<const qlever::QueryExecutionTree&>()));
+      h::Join(::testing::A<const QueryExecutionTree&>(),
+              ::testing::A<const QueryExecutionTree&>()));
 }

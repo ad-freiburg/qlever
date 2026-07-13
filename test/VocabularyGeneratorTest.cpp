@@ -43,7 +43,7 @@ bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
   return true;
 }
 
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 }  // namespace
 
 // Test fixture that sets up the binary files for partial vocabulary and

@@ -15,9 +15,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
-using namespace qlever;
-
-namespace ad_utility::testing {
+namespace qlever::testing {
 
 // ______________________________________________________________
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
@@ -354,7 +352,8 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            index_, cache_.get(),
+            makeAllocator(ad_utility::MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
             materializedViewsManager_);
   };
@@ -418,4 +417,4 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
     return id.value();
   };
 }
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing

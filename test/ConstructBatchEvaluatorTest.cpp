@@ -13,6 +13,7 @@
 #include "engine/ConstructBatchEvaluator.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
 
@@ -50,12 +51,12 @@ static const EvaluatedVariableValues& getColumn(
 class ConstructBatchEvaluatorTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ =
-      ad_utility::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
+      qlever::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
 
   const Index& index_ = qec_->getIndex();
 
   Id getId_(const std::string& s) const {
-    return ad_utility::testing::makeGetId(index_)(s);
+    return qlever::testing::makeGetId(index_)(s);
   }
 
   Id idS_ = getId_("<s>");

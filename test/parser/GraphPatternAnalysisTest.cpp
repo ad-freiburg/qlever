@@ -11,11 +11,11 @@
 #include "parser/SparqlTriple.h"
 #include "parser/VariableCounter.h"
 
-using namespace qlever::graphPatternAnalysis;
-using qlever::SparqlTriple;
-using qlever::SparqlTripleSimple;
-using qlever::Variable;
-using qlever::parsedQuery::VariableCounter;
+using namespace qlever;
+
+using namespace graphPatternAnalysis;
+
+using parsedQuery::VariableCounter;
 using V = Variable;
 
 // _____________________________________________________________________________
@@ -25,15 +25,15 @@ TEST(BasicGraphPatternsInvariantToTest, Bind) {
   BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test that BIND is invariant when its target variable is not in our set.
-  qlever::parsedQuery::Bind bind1{
-      qlever::sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+  parsedQuery::Bind bind1{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
           Variable{"?a"}),
       Variable{"?z"}};
   EXPECT_TRUE(invariantTo(bind1));
 
   // Test that BIND is not invariant when its target variable is in our set.
-  qlever::parsedQuery::Bind bind2{
-      qlever::sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+  parsedQuery::Bind bind2{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
           Variable{"?a"}),
       Variable{"?x"}};
 
@@ -41,8 +41,8 @@ TEST(BasicGraphPatternsInvariantToTest, Bind) {
 
   // Test that BIND is invariant when we have no variables to check.
   BasicGraphPatternsInvariantTo invariantTo2{VariableCounter{}};
-  qlever::parsedQuery::Bind bind{
-      qlever::sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+  parsedQuery::Bind bind{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
           Variable{"?a"}),
       Variable{"?x"}};
   EXPECT_TRUE(invariantTo2(bind));
@@ -55,32 +55,32 @@ TEST(BasicGraphPatternsInvariantToTest, Values) {
   BasicGraphPatternsInvariantTo invariantTo{counter};
 
   // Test VALUES with exactly one row and no variable overlap.
-  qlever::parsedQuery::Values values;
+  parsedQuery::Values values;
   values._inlineValues._variables = {Variable{"?a"}, Variable{"?b"}};
   values._inlineValues._values = {
-      {qlever::TripleComponent::Iri::fromIriref("<value1>"),
-       qlever::TripleComponent::Iri::fromIriref("<value2>")}};
+      {TripleComponent::Iri::fromIriref("<value1>"),
+       TripleComponent::Iri::fromIriref("<value2>")}};
   EXPECT_TRUE(invariantTo(values));
 
   // Test VALUES with one row but with variable overlap.
-  qlever::parsedQuery::Values values2;
+  parsedQuery::Values values2;
   values2._inlineValues._variables = {Variable{"?x"}, Variable{"?b"}};
   values2._inlineValues._values = {
-      {qlever::TripleComponent::Iri::fromIriref("<value1>"),
-       qlever::TripleComponent::Iri::fromIriref("<value2>")}};
+      {TripleComponent::Iri::fromIriref("<value1>"),
+       TripleComponent::Iri::fromIriref("<value2>")}};
   EXPECT_FALSE(invariantTo(values2));
 
   // Test VALUES with multiple rows (not invariant even without variable
   // overlap).
-  qlever::parsedQuery::Values values3;
+  parsedQuery::Values values3;
   values3._inlineValues._variables = {Variable{"?a"}};
   values3._inlineValues._values = {
-      {qlever::TripleComponent::Iri::fromIriref("<value1>")},
-      {qlever::TripleComponent::Iri::fromIriref("<value2>")}};
+      {TripleComponent::Iri::fromIriref("<value1>")},
+      {TripleComponent::Iri::fromIriref("<value2>")}};
   EXPECT_FALSE(invariantTo(values3));
 
   // Test VALUES with zero rows (not invariant).
-  qlever::parsedQuery::Values values4;
+  parsedQuery::Values values4;
   values4._inlineValues._variables = {Variable{"?a"}};
   values4._inlineValues._values = {};
   EXPECT_FALSE(invariantTo(values4));
@@ -95,9 +95,9 @@ TEST(BasicGraphPatternsInvariantToTest, NotInvariant) {
 
   SparqlTripleSimple example{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}};
   auto triple = SparqlTriple::fromSimple(example);
-  qlever::parsedQuery::BasicGraphPattern bgp{{triple}};
+  parsedQuery::BasicGraphPattern bgp{{triple}};
   EXPECT_FALSE(invariantTo(bgp));
 
-  qlever::parsedQuery::Optional optional{qlever::parsedQuery::GraphPattern{}};
+  parsedQuery::Optional optional{parsedQuery::GraphPattern{}};
   EXPECT_FALSE(invariantTo(optional));
 }

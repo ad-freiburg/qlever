@@ -25,12 +25,13 @@
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
+using namespace qlever::testing;
 using namespace indexRebuilder;
 using namespace std::string_literals;
 
 namespace {
-auto V = ad_utility::testing::VocabId;
-auto B = ad_utility::testing::BlankNodeId;
+auto V = qlever::testing::VocabId;
+auto B = qlever::testing::BlankNodeId;
 
 // Read a file into a buffer.
 std::vector<char> fileToBuffer(const std::string& filename) {
@@ -82,17 +83,17 @@ void deleteVocabFiles(const std::string& vocabBasename,
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   auto type = VocabularyType::random();
-  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+  qlever::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
-  auto oldIndex = ad_utility::testing::makeTestIndex(
-      "materializeEmptyLocalVocab", std::move(config));
+  auto oldIndex = qlever::testing::makeTestIndex("materializeEmptyLocalVocab",
+                                                 std::move(config));
   std::string vocabPrefix = "/tmp/materializeEmptyLocalVocab";
   std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
   absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
     deleteVocabFiles(vocabFileName, type.value());
   }};
 
-  auto getId = ad_utility::testing::makeGetId(oldIndex);
+  auto getId = qlever::testing::makeGetId(oldIndex);
   auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab({}, oldIndex.getVocab(), vocabPrefix);
   EXPECT_THAT(insertionPositions, ::testing::ElementsAre());
@@ -108,20 +109,20 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
   auto type = VocabularyType::random();
-  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+  qlever::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
-  auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
-                                                     std::move(config));
+  auto oldIndex = qlever::testing::makeTestIndex("materializeLocalVocab",
+                                                 std::move(config));
   std::string vocabPrefix = "/tmp/materializeLocalVocab";
   absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
+    return LocalVocabEntry{qlever::testing::iri(str), oldIndex};
   };
 
-  auto getId = ad_utility::testing::makeGetId(oldIndex);
+  auto getId = qlever::testing::makeGetId(oldIndex);
   auto b = makeVocabEntry("<b>");
   auto c = getId("<c>");
   auto d = makeVocabEntry("<d>");
@@ -262,8 +263,8 @@ TEST(IndexRebuilder, remapBlankNodeId) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, readIndexAndRemap) {
-  auto index = ad_utility::testing::makeTestIndex(
-      "readIndexAndRemap", "<a> <b> <c> . <d> <e> _:f .");
+  auto index = qlever::testing::makeTestIndex("readIndexAndRemap",
+                                              "<a> <b> <c> . <d> <e> _:f .");
   const auto& permutation =
       index.getImpl().getPermutation(Permutation::Enum::PSO);
   auto cancellationHandle =
@@ -397,7 +398,7 @@ TEST(IndexRebuilder, getNumberOfColumnsAndAdditionalColumns) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, createPermutationWriterTask) {
-  auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
+  auto* qec = qlever::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   std::string prefix = "/tmp/createPermutationWriterTask";
@@ -453,12 +454,12 @@ TEST(IndexRebuilder, materializeToIndex) {
   for (auto [usePatterns, loadAllPermutations] :
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
-    ad_utility::testing::TestIndexConfig config;
+    qlever::testing::TestIndexConfig config;
     config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
     config.loadAllPermutations = loadAllPermutations;
     config.usePatterns = usePatterns;
-    auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
-                                                    std::move(config));
+    auto index =
+        qlever::testing::makeTestIndex("materializeToIndex", std::move(config));
     index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
                                                  DeltaTriples& deltaTriples) {
       auto g =
@@ -516,8 +517,8 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   std::string logFile = newIndexName + ".log";
 
   // Build the on-disk source index using the default unlimited allocator.
-  ad_utility::testing::makeTestIndex(sourceIndexName,
-                                     "<a> <b> <c> . <d> <e> _:f .");
+  qlever::testing::makeTestIndex(sourceIndexName,
+                                 "<a> <b> <c> . <d> <e> _:f .");
 
   // Load the source index with a zero-memory allocator.
   Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
@@ -557,7 +558,7 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
 
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   const auto& index = qec->getIndex();
 
   auto [state, vocab, blankNodes] =
@@ -606,7 +607,7 @@ TEST(IndexRebuilder, serverIntegration) {
   net::thread_pool threadPool{1};
 
   std::string indexName = "IndexRebuilder_serverIntegration";
-  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
+  qlever::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
   EngineConfig config;
   config.baseName_ = indexName;
@@ -620,16 +621,16 @@ TEST(IndexRebuilder, serverIntegration) {
   };
 
   // Without access token this operation is not allowed!
-  auto request0 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name");
+  auto request0 =
+      qlever::testing::makeGetRequest("/?cmd=rebuild-index&index-name=my-name");
   AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request0).get(),
                                ::testing::HasSubstr("access token"));
 
-  auto request1 = ad_utility::testing::makeGetRequest(
+  auto request1 = qlever::testing::makeGetRequest(
       "/?cmd=rebuild-index&index-name=my-name&access-token="
       "accessToken");
   auto future1 = performRequest(request1);
-  auto request2 = ad_utility::testing::makeGetRequest(
+  auto request2 = qlever::testing::makeGetRequest(
       "/?cmd=rebuild-index&index-name=my-name&access-token="
       "accessToken");
   auto future2 = performRequest(request2);
@@ -645,7 +646,7 @@ TEST(IndexRebuilder, serverIntegration) {
   // successfully.
   EXPECT_TRUE(std::filesystem::exists("my-name.meta-data.json"));
 
-  auto request3 = ad_utility::testing::makeGetRequest(
+  auto request3 = qlever::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
@@ -654,20 +655,20 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // The index with the same name already exists, so we don't want to overwrite
   // it.
-  auto request4 = ad_utility::testing::makeGetRequest(
+  auto request4 = qlever::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   AD_EXPECT_THROW_WITH_MESSAGE(
       performRequest(request4).get(),
       ::testing::HasSubstr("already files with the same base name"));
 
   // The index has to reside within the same directory as the original index.
-  auto request5 = ad_utility::testing::makeGetRequest(
+  auto request5 = qlever::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
   AD_EXPECT_THROW_WITH_MESSAGE(
       performRequest(request5).get(),
       ::testing::HasSubstr("not located in the same directory"));
 
-  auto request6 = ad_utility::testing::makeGetRequest(
+  auto request6 = qlever::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
   AD_EXPECT_THROW_WITH_MESSAGE(
       performRequest(request6).get(),

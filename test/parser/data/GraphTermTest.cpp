@@ -11,8 +11,8 @@ using namespace qlever;
 
 namespace {
 
-constexpr auto iri = ad_utility::testing::iri;
-constexpr auto lit = ad_utility::testing::tripleComponentLiteral;
+constexpr auto iri = qlever::testing::iri;
+constexpr auto lit = qlever::testing::tripleComponentLiteral;
 
 // _____________________________________________________________________________
 TEST(GraphTerm, toSparql) {

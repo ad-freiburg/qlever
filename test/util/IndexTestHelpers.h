@@ -22,8 +22,7 @@
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
 // be used for unit tests.
 
-namespace ad_utility::testing {
-using qlever::Index;
+namespace qlever::testing {
 
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
@@ -45,7 +44,7 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // a function that takes this struct and creates an index from it.
 
 struct TestIndexConfig {
-  using TextScoringMetric = qlever::TextScoringMetric;
+  using TextScoringMetric = TextScoringMetric;
   // A turtle string, from which the index is built. If `nullopt`, a default
   // input will be used and the resulting index will have the following
   // properties: Its vocabulary contains the literals `"alpha", "älpha", "A",
@@ -67,8 +66,8 @@ struct TestIndexConfig {
   ad_utility::MemorySize parserBufferSize = 1_kB;
   std::optional<TextScoringMetric> scoringMetric = std::nullopt;
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
-  qlever::Filetype indexType = qlever::Filetype::Turtle;
-  std::optional<qlever::VocabularyType> vocabularyType = std::nullopt;
+  Filetype indexType = Filetype::Turtle;
+  std::optional<VocabularyType> vocabularyType = std::nullopt;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during
@@ -120,27 +119,27 @@ inline Index makeTestIndex(std::string turtle) {
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
-qlever::QueryExecutionContext* getQec(TestIndexConfig config);
+QueryExecutionContext* getQec(TestIndexConfig config);
 
 // Return a static `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above) at a basename derived from
 // `indexBasenamePrefix` by suffixing it with the test name and the context-map
 // size (see implementation). Use this overload if the test needs control over
 // the on-disk location (e.g. to verify behaviour on an absolute path).
-qlever::QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
-                                      TestIndexConfig config);
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                              TestIndexConfig config);
 
 // Overload of `getQec` for the simple case where we only care about the turtle
 // input. All other settings are left at their default values.
-qlever::QueryExecutionContext* getQec(
+QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
-    std::optional<qlever::VocabularyType> vocabularyType = std::nullopt);
+    std::optional<VocabularyType> vocabularyType = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the
 // string cannot be found in the vocabulary.
-std::function<qlever::Id(const std::string&)> makeGetId(const Index& index);
+std::function<Id(const std::string&)> makeGetId(const Index& index);
 
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_INDEXTESTHELPERS_H

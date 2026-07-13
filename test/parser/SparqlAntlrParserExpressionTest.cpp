@@ -21,20 +21,22 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "rdfTypes/GeometryInfo.h"
 
+using namespace qlever;
+
 namespace {
-using namespace qlever::sparqlParserHelpers;
+using namespace sparqlParserHelpers;
 using namespace sparqlParserTestHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
-using Var = qlever::Variable;
-auto iri = ad_utility::testing::iri;
+using Var = Variable;
+auto iri = qlever::testing::iri;
 
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto lit = qlever::testing::tripleComponentLiteral;
 
 // ___________________________________________________________________________
 TEST(SparqlParser, primaryExpression) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
   auto expectPrimaryExpression =
       ExpectCompleteParse<&Parser::primaryExpression>{};
@@ -48,7 +50,7 @@ TEST(SparqlParser, primaryExpression) {
 
 // ___________________________________________________________________________
 TEST(SparqlParser, builtInCall) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
@@ -57,28 +59,28 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("lCase(?x)", matchUnary(&makeLowercaseExpression));
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall(
-      "iRI(?x)", matchNaryWithChildrenMatchers(
-                     &makeIriOrUriExpression,
-                     variableExpressionMatcher(qlever::Variable{"?x"}),
-                     matchLiteralExpression(qlever::triple_component::Iri{})));
+      "iRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(triple_component::Iri{})));
   expectBuiltInCall(
-      "uRI(?x)", matchNaryWithChildrenMatchers(
-                     &makeIriOrUriExpression,
-                     variableExpressionMatcher(qlever::Variable{"?x"}),
-                     matchLiteralExpression(qlever::triple_component::Iri{})));
+      "uRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(triple_component::Iri{})));
   // Repeat the tests with a BASE IRI.
-  expectBuiltInCall("IRI(?x)",
-                    matchNaryWithChildrenMatchers(
-                        &makeIriOrUriExpression,
-                        variableExpressionMatcher(qlever::Variable{"?x"}),
-                        matchLiteralExpression(iri("<http://example.org/>"))),
-                    "http://example.org/");
-  expectBuiltInCall("URI(?x)",
-                    matchNaryWithChildrenMatchers(
-                        &makeIriOrUriExpression,
-                        variableExpressionMatcher(qlever::Variable{"?x"}),
-                        matchLiteralExpression(iri("<http://example.org/>"))),
-                    "http://example.org/");
+  expectBuiltInCall(
+      "IRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
+  expectBuiltInCall(
+      "URI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/>"))),
+      "http://example.org/");
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
@@ -191,7 +193,7 @@ TEST(SparqlParser, builtInCall) {
   const auto& blankNodeExpression = makeUniqueBlankNodeExpression();
   const auto& reference = *blankNodeExpression;
   expectBuiltInCall(
-      "bnode()", testing::Pointee(::testing::ResultOf(
+      "bnode()", ::testing::Pointee(::testing::ResultOf(
                      [](const SparqlExpression& expr) -> const std::type_info& {
                        return typeid(expr);
                      },
@@ -202,7 +204,7 @@ TEST(SparqlParser, builtInCall) {
 }
 
 TEST(SparqlParser, unaryExpression) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
   auto expectUnary = ExpectCompleteParse<&Parser::unaryExpression>{};
 
@@ -211,11 +213,11 @@ TEST(SparqlParser, unaryExpression) {
 }
 
 TEST(SparqlParser, multiplicativeExpression) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
-  qlever::Variable x{"?x"};
-  qlever::Variable y{"?y"};
-  qlever::Variable z{"?z"};
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
   auto expectMultiplicative =
       ExpectCompleteParse<&Parser::multiplicativeExpression>{};
   expectMultiplicative("?x * ?y", matchNary(&makeMultiplyExpression, x, y));
@@ -233,10 +235,10 @@ TEST(SparqlParser, multiplicativeExpression) {
 }
 
 TEST(SparqlParser, relationalExpression) {
-  qlever::Variable x{"?x"};
-  qlever::Variable y{"?y"};
-  qlever::Variable z{"?z"};
-  using namespace qlever::sparqlExpression;
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
   auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
   expectRelational("?x IN (?y, ?z)",
@@ -250,64 +252,60 @@ TEST(SparqlParser, relationalExpression) {
 }
 
 // Return a matcher for an `OperatorAndExpression`.
-::testing::Matcher<const qlever::SparqlQleverVisitor::OperatorAndExpression&>
+::testing::Matcher<const SparqlQleverVisitor::OperatorAndExpression&>
 matchOperatorAndExpression(
-    qlever::SparqlQleverVisitor::Operator op,
-    const ::testing::Matcher<
-        const qlever::sparqlExpression::SparqlExpression::Ptr&>&
+    SparqlQleverVisitor::Operator op,
+    const ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&>&
         expressionMatcher) {
-  using OpAndExp = qlever::SparqlQleverVisitor::OperatorAndExpression;
+  using OpAndExp = SparqlQleverVisitor::OperatorAndExpression;
   return ::testing::AllOf(AD_FIELD(OpAndExp, operator_, ::testing::Eq(op)),
                           AD_FIELD(OpAndExp, expression_, expressionMatcher));
 }
 
 TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
-  qlever::Variable x{"?x"};
-  qlever::Variable y{"?y"};
-  qlever::Variable z{"?z"};
-  using Op = qlever::SparqlQleverVisitor::Operator;
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  using Op = SparqlQleverVisitor::Operator;
   auto expectMultiplicative = ExpectCompleteParse<
       &Parser::multiplicativeExpressionWithLeadingSignButNoSpace>{};
-  auto matchVariableExpression = [](qlever::Variable var) {
+  auto matchVariableExpression = [](Variable var) {
     return matchPtr<VariableExpression>(
         AD_PROPERTY(VariableExpression, value, ::testing::Eq(var)));
   };
-  auto matchIdExpression = [](qlever::Id id) {
+  auto matchIdExpression = [](Id id) {
     return matchPtr<IdExpression>(
         AD_PROPERTY(IdExpression, value, ::testing::Eq(id)));
   };
 
-  expectMultiplicative(
-      "-3 * ?y",
-      matchOperatorAndExpression(
-          Op::Minus, matchNaryWithChildrenMatchers(
-                         &makeMultiplyExpression,
-                         matchIdExpression(qlever::Id::makeFromInt(3)),
-                         matchVariableExpression(y))));
+  expectMultiplicative("-3 * ?y",
+                       matchOperatorAndExpression(
+                           Op::Minus, matchNaryWithChildrenMatchers(
+                                          &makeMultiplyExpression,
+                                          matchIdExpression(Id::makeFromInt(3)),
+                                          matchVariableExpression(y))));
   expectMultiplicative(
       "-3.7 / ?y",
       matchOperatorAndExpression(
-          Op::Minus, matchNaryWithChildrenMatchers(
-                         &makeDivideExpression,
-                         matchIdExpression(qlever::Id::makeFromDouble(3.7)),
-                         matchVariableExpression(y))));
+          Op::Minus,
+          matchNaryWithChildrenMatchers(
+              &makeDivideExpression, matchIdExpression(Id::makeFromDouble(3.7)),
+              matchVariableExpression(y))));
 
+  expectMultiplicative("+5 * ?y",
+                       matchOperatorAndExpression(
+                           Op::Plus, matchNaryWithChildrenMatchers(
+                                         &makeMultiplyExpression,
+                                         matchIdExpression(Id::makeFromInt(5)),
+                                         matchVariableExpression(y))));
   expectMultiplicative(
-      "+5 * ?y",
-      matchOperatorAndExpression(
-          Op::Plus, matchNaryWithChildrenMatchers(
-                        &makeMultiplyExpression,
-                        matchIdExpression(qlever::Id::makeFromInt(5)),
-                        matchVariableExpression(y))));
-  expectMultiplicative(
-      "+3.9 / ?y",
-      matchOperatorAndExpression(
-          Op::Plus, matchNaryWithChildrenMatchers(
-                        &makeDivideExpression,
-                        matchIdExpression(qlever::Id::makeFromDouble(3.9)),
-                        matchVariableExpression(y))));
+      "+3.9 / ?y", matchOperatorAndExpression(
+                       Op::Plus, matchNaryWithChildrenMatchers(
+                                     &makeDivideExpression,
+                                     matchIdExpression(Id::makeFromDouble(3.9)),
+                                     matchVariableExpression(y))));
   expectMultiplicative(
       "-3.2 / abs(?x) * ?y",
       matchOperatorAndExpression(
@@ -315,13 +313,13 @@ TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
                          &makeMultiplyExpression,
                          matchNaryWithChildrenMatchers(
                              &makeDivideExpression,
-                             matchIdExpression(qlever::Id::makeFromDouble(3.2)),
+                             matchIdExpression(Id::makeFromDouble(3.2)),
                              matchUnary(&makeAbsExpression)),
                          matchVariableExpression(y))));
 }
 
 TEST(SparqlParser, FunctionCall) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
@@ -355,7 +353,7 @@ TEST(SparqlParser, FunctionCall) {
         return makePrefixMatchExpression(
             AD_FWD(expression),
             std::make_unique<StringLiteralExpression>(
-                qlever::TripleComponent::Literal::fromStringRepresentation(
+                TripleComponent::Literal::fromStringRepresentation(
                     "\"Prefix\"")));
       }));
   expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
@@ -365,7 +363,7 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
                      matchUnary(&makeNumGeometriesExpression));
 
-  using enum qlever::BoundingCoordinate;
+  using enum BoundingCoordinate;
   expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
                      matchUnary(&makeBoundingCoordinateExpression<MIN_X>));
   expectFunctionCall(absl::StrCat(geof, "minY>(?x)"),
@@ -376,22 +374,22 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeBoundingCoordinateExpression<MAX_Y>));
 
   // The different distance functions:
-  expectFunctionCall(absl::StrCat(geof, "metricDistance>(?a, ?b)"),
-                     matchNary(&makeMetricDistExpression,
-                               qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "metricDistance>(?a, ?b)"),
+      matchNary(&makeMetricDistExpression, Variable{"?a"}, Variable{"?b"}));
   // Compatibility version of geof:distance with two arguments
-  expectFunctionCall(absl::StrCat(geof, "distance>(?a, ?b)"),
-                     matchNary(&makeDistExpression, qlever::Variable{"?a"},
-                               qlever::Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "distance>(?a, ?b)"),
+      matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
   // geof:distance with IRI as unit in third argument
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b, <http://qudt.org/vocab/unit/M>)"),
       matchNaryWithChildrenMatchers(
           &makeDistWithUnitExpression,
-          variableExpressionMatcher(qlever::Variable{"?a"}),
-          variableExpressionMatcher(qlever::Variable{"?b"}),
-          matchLiteralExpression<qlever::triple_component::Iri>(
-              qlever::triple_component::Iri::fromIriref(
+          variableExpressionMatcher(Variable{"?a"}),
+          variableExpressionMatcher(Variable{"?b"}),
+          matchLiteralExpression<triple_component::Iri>(
+              triple_component::Iri::fromIriref(
                   "<http://qudt.org/vocab/unit/M>"))));
 
   // geof:distance with xsd:anyURI literal as unit in third argument
@@ -402,10 +400,10 @@ TEST(SparqlParser, FunctionCall) {
                    "XMLSchema#anyURI>)"),
       matchNaryWithChildrenMatchers(
           &makeDistWithUnitExpression,
-          variableExpressionMatcher(qlever::Variable{"?a"}),
-          variableExpressionMatcher(qlever::Variable{"?b"}),
-          matchLiteralExpression<qlever::triple_component::Literal>(
-              qlever::triple_component::Literal::fromStringRepresentation(
+          variableExpressionMatcher(Variable{"?a"}),
+          variableExpressionMatcher(Variable{"?b"}),
+          matchLiteralExpression<triple_component::Literal>(
+              triple_component::Literal::fromStringRepresentation(
                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
                   "XMLSchema#anyURI>"))));
 
@@ -413,56 +411,56 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(geof, "distance>(?a, ?b, ?unit)"),
                      matchNaryWithChildrenMatchers(
                          &makeDistWithUnitExpression,
-                         variableExpressionMatcher(qlever::Variable{"?a"}),
-                         variableExpressionMatcher(qlever::Variable{"?b"}),
-                         variableExpressionMatcher(qlever::Variable{"?unit"})));
+                         variableExpressionMatcher(Variable{"?a"}),
+                         variableExpressionMatcher(Variable{"?b"}),
+                         variableExpressionMatcher(Variable{"?unit"})));
 
   // Length functions
   expectFunctionCall(absl::StrCat(geof, "metricLength>(?x)"),
                      matchUnary(&makeMetricLengthExpression));
-  expectFunctionCall(absl::StrCat(geof, "length>(?a, ?b)"),
-                     matchNary(&makeLengthExpression, qlever::Variable{"?a"},
-                               qlever::Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "length>(?a, ?b)"),
+      matchNary(&makeLengthExpression, Variable{"?a"}, Variable{"?b"}));
 
   // Geometry N
-  expectFunctionCall(absl::StrCat(geof, "geometryN>(?a, ?b)"),
-                     matchNary(&makeGeometryNExpression, qlever::Variable{"?a"},
-                               qlever::Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "geometryN>(?a, ?b)"),
+      matchNary(&makeGeometryNExpression, Variable{"?a"}, Variable{"?b"}));
 
   // Simplify geometry (QLever-internal function)
   expectFunctionCall(absl::StrCat(ql, "simplifyGeometry>(?a, ?b)"),
-                     matchNary(&makeSimplifyGeometryExpression,
-                               qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+                     matchNary(&makeSimplifyGeometryExpression, Variable{"?a"},
+                               Variable{"?b"}));
 
   // Geometric relation functions
   expectFunctionCall(
       absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::INTERSECTS>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::INTERSECTS>,
+                Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfContains>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::CONTAINS>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::CONTAINS>,
+                Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::CROSSES>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>,
+                Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfTouches>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::TOUCHES>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>,
+                Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfEquals>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::EQUALS>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>,
+                Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::OVERLAPS>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
+                Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfWithin>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<qlever::SpatialJoinType::WITHIN>,
-                qlever::Variable{"?a"}, qlever::Variable{"?b"}));
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
+                Variable{"?a"}, Variable{"?b"}));
 
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
@@ -477,9 +475,9 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
-  expectFunctionCall(absl::StrCat(math, "pow>(?a, ?b)"),
-                     matchNary(&makePowExpression, qlever::Variable{"?a"},
-                               qlever::Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(math, "pow>(?a, ?b)"),
+      matchNary(&makePowExpression, Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
                      matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
@@ -503,9 +501,9 @@ TEST(SparqlParser, FunctionCall) {
   // Geometry area functions
   expectFunctionCall(absl::StrCat(geof, "metricArea>(?x)"),
                      matchUnary(&makeMetricAreaExpression));
-  expectFunctionCall(absl::StrCat(geof, "area>(?a, ?b)"),
-                     matchNary(&makeAreaExpression, qlever::Variable{"?a"},
-                               qlever::Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "area>(?a, ?b)"),
+      matchNary(&makeAreaExpression, Variable{"?a"}, Variable{"?b"}));
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
@@ -549,19 +547,18 @@ TEST(SparqlParser, FunctionCall) {
   // Check that arbitrary nonexisting functions with a single argument silently
   // return an `IdExpression(UNDEF)` in the syntax test mode.
   auto cleanup =
-      setRuntimeParameterForTest<&qlever::RuntimeParameters::syntaxTestMode_>(
-          true);
+      setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
   expectFunctionCall(
       absl::StrCat(prefixNexistepas, "nada>(?x)"),
-      matchPtr<IdExpression>(AD_PROPERTY(
-          IdExpression, value, ::testing::Eq(qlever::Id::makeUndefined()))));
+      matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,
+                                         ::testing::Eq(Id::makeUndefined()))));
 }
 
 // ______________________________________________________________________________
 TEST(SparqlParser, substringExpression) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
-  using V = qlever::Variable;
+  using V = Variable;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
   expectBuiltInCall("SUBSTR(?x, ?y, ?z)", matchNary(&makeSubstrExpression,
@@ -572,10 +569,10 @@ TEST(SparqlParser, substringExpression) {
   // accordingly.
   expectBuiltInCall(
       "SUBSTR(?x, 7)",
-      matchNaryWithChildrenMatchers(
-          &makeSubstrExpression, variableExpressionMatcher(V{"?x"}),
-          idExpressionMatcher(IntId(7)),
-          idExpressionMatcher(IntId(qlever::Id::maxInt))));
+      matchNaryWithChildrenMatchers(&makeSubstrExpression,
+                                    variableExpressionMatcher(V{"?x"}),
+                                    idExpressionMatcher(IntId(7)),
+                                    idExpressionMatcher(IntId(Id::maxInt))));
   // Too few arguments
   expectBuiltInCallFails("SUBSTR(?x)");
   // Too many arguments
@@ -584,9 +581,9 @@ TEST(SparqlParser, substringExpression) {
 
 // _________________________________________________________
 TEST(SparqlParser, binaryStringExpressions) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
-  using V = qlever::Variable;
+  using V = Variable;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
 
@@ -602,7 +599,7 @@ TEST(SparqlParser, binaryStringExpressions) {
 }
 
 namespace aggregateTestHelpers {
-using namespace qlever::sparqlExpression;
+using namespace sparqlExpression;
 
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // points to an `AggregateExpr`, that the distinctness and the child variable of
@@ -610,8 +607,7 @@ using namespace qlever::sparqlExpression;
 // cast) matches all the `additionalMatchers`.
 template <typename AggregateExpr>
 ::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
-    bool distinct, const qlever::Variable& child,
-    const auto&... additionalMatchers) {
+    bool distinct, const Variable& child, const auto&... additionalMatchers) {
   using namespace ::testing;
   using namespace m::builtInCall;
   using Exp = SparqlExpression;
@@ -645,16 +641,16 @@ template <typename AggregateExpr>
   using enum SparqlExpression::AggregateStatus;
   auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
   return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
-                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
+                       WhenDynamicCastTo<const AggregateExpr&>(::testing::_)));
 }
 }  // namespace aggregateTestHelpers
 
 // ___________________________________________________________
 TEST(SparqlParser, aggregateExpressions) {
-  using namespace qlever::sparqlExpression;
+  using namespace sparqlExpression;
   using namespace m::builtInCall;
   using namespace aggregateTestHelpers;
-  using V = qlever::Variable;
+  using V = Variable;
   auto expectAggregate = ExpectCompleteParse<&Parser::aggregate>{};
   auto expectAggregateFails = ExpectParseFails<&Parser::aggregate>{};
 

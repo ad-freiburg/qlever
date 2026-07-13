@@ -298,7 +298,7 @@ TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
 // Tests for `InputRangeFromLoopControlGet`.
 TEST(InputRangeFromLoopControlGet, BasicTests) {
   using namespace ad_utility;
-  using namespace testing;
+  using namespace ::testing;
   using L = LoopControl<int>;
   auto f = [i = 0]() mutable -> L {
     auto val = i++;
@@ -348,7 +348,7 @@ TEST(InputRangeFromLoopControlGet, BasicTests) {
 // ________________________________________________________________
 TEST(InputRangeFromLoopControlGet, BreakWithYieldAll) {
   using namespace ad_utility;
-  using namespace testing;
+  using namespace ::testing;
   using L = LoopControl<int>;
 
   // Test BreakWithYieldAll: should yield all values from range and then break

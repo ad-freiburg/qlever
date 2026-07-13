@@ -36,7 +36,7 @@ struct TestContextWithGivenTTl {
   std::string turtleInput;
   std::optional<qlever::VocabularyType> vocabularyType = std::nullopt;
   qlever::QueryExecutionContext* qec =
-      ad_utility::testing::getQec(turtleInput, vocabularyType);
+      qlever::testing::getQec(turtleInput, vocabularyType);
   qlever::VariableToColumnMap varToColMap;
   qlever::LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
@@ -49,7 +49,7 @@ struct TestContextWithGivenTTl {
       std::make_shared<ad_utility::CancellationHandle<>>(),
       sparqlExpression::EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
-      ad_utility::testing::makeGetId(qec->getIndex());
+      qlever::testing::makeGetId(qec->getIndex());
   TestContextWithGivenTTl(
       std::string turtle,
       std::optional<qlever::VocabularyType> vocabularyType = std::nullopt)

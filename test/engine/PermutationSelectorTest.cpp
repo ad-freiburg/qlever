@@ -12,7 +12,7 @@ using namespace qlever;
 
 // _____________________________________________________________________________
 TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& index = qec->getIndex();
   TripleComponent internalIri{
       triple_component::Iri::fromIriref(makeQleverInternalIri("something"))};

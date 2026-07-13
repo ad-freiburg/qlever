@@ -54,7 +54,7 @@ using namespace qlever;
 namespace {
 
 using namespace materializedViewsTestHelpers;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using V = Variable;
 
 }  // namespace

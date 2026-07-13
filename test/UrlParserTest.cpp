@@ -11,7 +11,7 @@
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace qlever;
 
 TEST(UrlParserTest, getParameterCheckAtMostOnce) {

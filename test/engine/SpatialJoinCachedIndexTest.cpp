@@ -54,7 +54,7 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
 
   // Build a `QueryExecutionContext` and pin the query result of `?s <p> ?o`
   // together with an s2 index on `?o`.
-  auto qec = ad_utility::testing::getQec(kb);
+  auto qec = qlever::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
@@ -125,7 +125,7 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 
   // First, pin the linestrings as a named s2 index
   const std::string pinQuery = "SELECT * { ?s2 <asWKT> ?geo2 }";
-  auto qec = ad_utility::testing::getQec(kb);
+  auto qec = qlever::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   const auto pinResultCacheKey = plan.getCacheKey();

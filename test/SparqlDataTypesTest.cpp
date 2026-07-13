@@ -36,7 +36,7 @@ auto iriV = Iri::fromIrirefValidated;
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
-      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
+      IdTable{qlever::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
 
@@ -285,7 +285,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
-  IdTable table{ad_utility::testing::makeAllocator()};
+  IdTable table{qlever::testing::makeAllocator()};
   table.setNumColumns(1);
   Id value1 = Id::makeFromInt(69);
   Id value2 = Id::makeFromInt(420);
@@ -336,7 +336,7 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
-  IdTable table{ad_utility::testing::makeAllocator()};
+  IdTable table{qlever::testing::makeAllocator()};
   table.setNumColumns(1);
   Id value = Id::makeFromInt(69);
   table.push_back({value});

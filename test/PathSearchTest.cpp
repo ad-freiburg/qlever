@@ -15,10 +15,11 @@
 #include "util/OperationTestHelpers.h"
 
 using namespace qlever;
-using ad_utility::testing::getQec;
+using namespace qlever::testing;
+using qlever::testing::getQec;
 namespace {
-auto V = ad_utility::testing::VocabId;
-auto I = ad_utility::testing::IntId;
+auto V = qlever::testing::VocabId;
+auto I = qlever::testing::IntId;
 using Var = Variable;
 using Vars = std::vector<std::optional<Variable>>;
 

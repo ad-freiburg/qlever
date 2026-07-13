@@ -14,7 +14,8 @@
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
-using namespace testing;
+using namespace qlever::testing;
+using namespace ::testing;
 
 // _____________________________________________________________________________
 TEST(LibQlever, buildIndexAndRunQuery) {
@@ -355,7 +356,7 @@ TEST(LibQlever, externallySpecifiedValues) {
 
     auto res = qet.getResult();
     auto i = &Id::makeFromInt;
-    auto getId = ad_utility::testing::makeGetId(qec.getIndex());
+    auto getId = qlever::testing::makeGetId(qec.getIndex());
     // The order of the two columns `?x` and `?o` might not be deterministic.
     auto expected =
         makeIdTableFromVector({{getId("<s1>"), i(1)}, {getId("<s3>"), i(3)}});

@@ -420,7 +420,7 @@ inline std::string createTrueDistanceDataset() {
 // defaults to higher values to make it possible to test large geometric
 // literals. `vocabType` can be set
 inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
-  ad_utility::testing::TestIndexConfig config{turtleKg};
+  qlever::testing::TestIndexConfig config{turtleKg};
   std::optional<VocabularyType> vocabType = std::nullopt;
   if (useGeoVocab) {
     using enum VocabularyType::Enum;
@@ -429,7 +429,7 @@ inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
   config.vocabularyType = vocabType;
   config.blocksizePermutations = 16_MB;
   config.parserBufferSize = 10_kB;
-  return ad_utility::testing::getQec(std::move(config));
+  return qlever::testing::getQec(std::move(config));
 }
 
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false,

@@ -20,7 +20,7 @@ using namespace sparqlExpression;
 using ad_utility::source_location;
 
 namespace {
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto lit = qlever::testing::tripleComponentLiteral;
 
 constexpr auto T = Id::makeFromBool(true);
 constexpr auto F = Id::makeFromBool(false);
@@ -207,7 +207,7 @@ TEST(RegexExpression, nonPrefixRegex) {
 
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   // Our expression is a fixed string literal: "hallo".
   VectorWithMemoryLimit<IdOrLocalVocabEntry> input{qec->getAllocator()};
