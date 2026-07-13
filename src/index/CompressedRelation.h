@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -545,6 +546,15 @@ class CompressedRelationReader {
   using ColumnIndicesRef = ql::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+
+  // Optional override for the number of threads used to read and decompress
+  // blocks in `asyncParallelBlockGenerator`. When set, it takes precedence over
+  // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
+  // runtime index rebuild, which scans the old permutations through a dedicated
+  // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
+  // read/decompress parallelism without affecting query scans (which use the
+  // permutation's shared reader, where this stays `nullopt`).
+  std::optional<size_t> lazyScanNumThreadsOverride_ = std::nullopt;
 
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
