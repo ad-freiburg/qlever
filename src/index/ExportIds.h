@@ -202,11 +202,17 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   }
 }
 
+// Positions (indices into the `ids` span) split by datatype: `VocabIndex` ids
+// need an on-disk vocabulary lookup and are batched together: all others are
+// resolved from the id bits or `LocalVocab`. Each stored position is also the
+// index of the `results` slot to scatter that id's resolved value back into.
 struct PartitionedIdPositions {
   std::vector<size_t> vocabIndexIndices_;
   std::vector<size_t> nonVocabIndexIndices_;
 };
 
+// Partition the positions `0 ... ids.size()-1` by whether `ids[i]` is a
+// `VocabIndex`.
 PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids);
 
 // Resolve the IDs at `positions` (all non-`VocabIndex`) immediately via

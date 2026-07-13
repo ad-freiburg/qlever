@@ -298,7 +298,7 @@ auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
   return vocabulary_[idx.get()];
 }
 
-// _____________________________________________________________________________
+// Will be replaced by a more efficient implementation in PR #3056.
 template <typename S, typename C, typename I>
 VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
     ql::span<const size_t> indices) const {
