@@ -31,9 +31,9 @@ namespace resource_monitor {
 std::optional<uint64_t> currentRssBytes();
 
 #if defined(__linux__)
-// Resident page count from the content of `/proc/self/statm` (its 2nd field),
-// or `std::nullopt` if the content is malformed.
-std::optional<uint64_t> parseResidentPages(std::istream& statm);
+// RSS in bytes from a stream shaped like `/proc/self/statm` (its 2nd field is
+// the resident size in pages), or `std::nullopt` if the content is malformed.
+std::optional<uint64_t> rssBytesFromStatm(std::istream& statm);
 #endif
 
 // Total CPU time (user + system) used by this process so far, in seconds.

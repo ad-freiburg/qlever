@@ -9,6 +9,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+// For `sysconf` in the statm test below.
+#if defined(__linux__)
+#include <unistd.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -18,6 +23,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -57,19 +63,20 @@ TEST(ResourceMonitor, ReadsCurrentMemoryAndCpuUsage) {
 
 #if defined(__linux__)
 // _____________________________________________________________________________
-TEST(ResourceMonitor, ParseResidentPagesReadsSecondFieldAndRejectsGarbage) {
-  using ad_utility::resource_monitor::parseResidentPages;
-  // `/proc/self/statm` lists total pages, then the resident pages we want.
+TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
+  using ad_utility::resource_monitor::rssBytesFromStatm;
+  // `/proc/self/statm` lists total pages, then the resident pages we want,
+  // which are scaled to bytes by the machine's page size.
   std::istringstream valid{"100 42 7 0 0 0 0"};
-  auto pages = parseResidentPages(valid);
-  ASSERT_TRUE(pages.has_value());
-  EXPECT_EQ(pages.value(), 42u);
+  auto bytes = rssBytesFromStatm(valid);
+  ASSERT_TRUE(bytes.has_value());
+  EXPECT_EQ(bytes.value(), 42u * sysconf(_SC_PAGESIZE));
 
   std::istringstream garbage{"not a number"};
-  EXPECT_FALSE(parseResidentPages(garbage).has_value());
+  EXPECT_FALSE(rssBytesFromStatm(garbage).has_value());
 
   std::istringstream empty{""};
-  EXPECT_FALSE(parseResidentPages(empty).has_value());
+  EXPECT_FALSE(rssBytesFromStatm(empty).has_value());
 }
 #endif
 
@@ -253,3 +260,30 @@ TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
     EXPECT_THAT(logStream.str(), ::testing::HasSubstr("sampling stopped"));
   }
 }
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+TEST(ResourceMonitor, FailedWritesAreWarnedAboutExactlyOnce) {
+  // `/dev/full` opens successfully but fails every write (it simulates a
+  // full disk), which is exactly the failure the sampler must warn about.
+  if (!fs::exists("/dev/full")) {
+    GTEST_SKIP() << "/dev/full is not available";
+  }
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  {
+    ResourceMonitor monitor;
+    // Short interval plus a longer sleep, so the thread attempts several
+    // writes: the first must warn, the later ones must stay silent.
+    monitor.start("/dev/full", ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+  }
+  // The monitor is destroyed (thread joined), so the log is complete.
+  auto log = logStream.str();
+  constexpr std::string_view message = "writing to the output file failed";
+  auto first = log.find(message);
+  ASSERT_NE(first, std::string::npos);
+  EXPECT_EQ(log.find(message, first + 1), std::string::npos)
+      << "the write-failure warning was logged more than once";
+}
+#endif

@@ -43,14 +43,8 @@ std::optional<uint64_t> currentRssBytes() {
   }
   return info.resident_size;
 #elif defined(__linux__)
-  // Field 2 of `/proc/self/statm` is the resident size in pages, so scale by
-  // the machine's page size.
   std::ifstream statm{"/proc/self/statm"};
-  auto residentPages = parseResidentPages(statm);
-  if (!residentPages.has_value()) {
-    return std::nullopt;
-  }
-  return *residentPages * static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
+  return rssBytesFromStatm(statm);
 #else
   return std::nullopt;
 #endif
@@ -58,12 +52,14 @@ std::optional<uint64_t> currentRssBytes() {
 
 #if defined(__linux__)
 // _____________________________________________________________________________
-std::optional<uint64_t> parseResidentPages(std::istream& statm) {
+std::optional<uint64_t> rssBytesFromStatm(std::istream& statm) {
+  // Field 2 of `/proc/self/statm` is the resident size in pages, so scale by
+  // the machine's page size.
   uint64_t totalPages, residentPages;
   if (!(statm >> totalPages >> residentPages)) {
     return std::nullopt;
   }
-  return residentPages;
+  return residentPages * static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
 }
 #endif
 
