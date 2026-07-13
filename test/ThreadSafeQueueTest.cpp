@@ -5,6 +5,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/bind_front.h>
 #include <gmock/gmock.h>
 
 #include <atomic>
@@ -152,7 +153,7 @@ TEST(ThreadSafeQueue, Concurrency) {
     if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
       ql::ranges::sort(result);
     }
-    EXPECT_THAT(result, ::testing::ElementsAreArray(std::views::iota(
+    EXPECT_THAT(result, ::testing::ElementsAreArray(ql::views::iota(
                             size_t{0}, numValues * numThreads)));
   };
   runWithBothQueueTypes(runTest);
@@ -333,8 +334,8 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
                                    ::testing::StartsWith("Consumer"));
     }
   };
-  runWithBothQueueTypes(std::bind_front(runTest, true));
-  runWithBothQueueTypes(std::bind_front(runTest, false));
+  runWithBothQueueTypes(absl::bind_front(runTest, true));
+  runWithBothQueueTypes(absl::bind_front(runTest, false));
 }
 
 struct RunQueueManagerTest {
@@ -403,7 +404,7 @@ struct RunQueueManagerTest {
         ql::ranges::sort(result);
       }
       EXPECT_THAT(result, ::testing::ElementsAreArray(
-                              std::views::iota(size_t{0}, numValues)));
+                              ql::views::iota(size_t{0}, numValues)));
     }
     // The probably most important test of all is that the destructors which are
     // run at the following closing brace never lead to a deadlock.
@@ -424,12 +425,14 @@ TEST(ThreadSafeQueue, queueManager) {
                  normalExecution = TestType::normalExecution,
                  consumerFinishesEarly = TestType::consumerFinishesEarly,
                  bothThrowImmediately = TestType::bothThrowImmediately;
-  runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, consumerThrows));
-  runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, producerThrows));
   runWithBothQueueTypes(
-      std::bind_front(RunQueueManagerTest{}, consumerFinishesEarly));
+      absl::bind_front(RunQueueManagerTest{}, consumerThrows));
   runWithBothQueueTypes(
-      std::bind_front(RunQueueManagerTest{}, normalExecution));
+      absl::bind_front(RunQueueManagerTest{}, producerThrows));
   runWithBothQueueTypes(
-      std::bind_front(RunQueueManagerTest{}, bothThrowImmediately));
+      absl::bind_front(RunQueueManagerTest{}, consumerFinishesEarly));
+  runWithBothQueueTypes(
+      absl::bind_front(RunQueueManagerTest{}, normalExecution));
+  runWithBothQueueTypes(
+      absl::bind_front(RunQueueManagerTest{}, bothThrowImmediately));
 }

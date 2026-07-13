@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
+#include <absl/functional/bind_front.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -556,8 +557,8 @@ TEST(ExecuteUpdate, resolveVariable) {
       makeIdTableFromVector({{V(0), V(1), V(2)},
                              {V(3), V(4), V(5)},
                              {V(6), Id::makeUndefined(), V(8)}});
-  auto resolveVariable = std::bind_front(&ExecuteUpdate::resolveVariable,
-                                         idTable.asStaticView<0>());
+  auto resolveVariable = absl::bind_front(&ExecuteUpdate::resolveVariable,
+                                          idTable.asStaticView<0>());
   EXPECT_THAT(resolveVariable(0, V(10)), Eq(V(10)));
   EXPECT_THAT(resolveVariable(0, uint64_t{1}), Eq(V(1)));
   EXPECT_THAT(resolveVariable(1, uint64_t{1}), Eq(V(4)));
