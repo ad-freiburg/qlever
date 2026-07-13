@@ -70,19 +70,21 @@ const auto equalityCheckPrefilterVectors =
 // `<PrefilterExpression, Variable>` pair is provided, the expected value for
 // the `SparqlExpression` is an empty vector.
 auto makeEvalAndEqualityCheck(const LocalVocabContext& context) {
-  return [&context](std::unique_ptr<SparqlExpression> sparqlExpr,
-                    std::convertible_to<
-                        PrefilterExprVariablePair> auto&&... prefilterArgs) {
-    std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
-    if constexpr (sizeof...(prefilterArgs) > 0) {
-      (prefilterVarPair.emplace_back(
-           std::forward<PrefilterExprVariablePair>(prefilterArgs)),
-       ...);
-    }
-    equalityCheckPrefilterVectors(
-        sparqlExpr->getPrefilterExpressionForMetadata(context),
-        std::move(prefilterVarPair));
-  };
+  return
+      [&context](std::unique_ptr<SparqlExpression> sparqlExpr,
+                 QL_CONCEPT_OR_NOTHING(
+                     ql::concepts::convertible_to<
+                         PrefilterExprVariablePair>) auto&&... prefilterArgs) {
+        std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
+        if constexpr (sizeof...(prefilterArgs) > 0) {
+          (prefilterVarPair.emplace_back(
+               std::forward<PrefilterExprVariablePair>(prefilterArgs)),
+           ...);
+        }
+        equalityCheckPrefilterVectors(
+            sparqlExpr->getPrefilterExpressionForMetadata(context),
+            std::move(prefilterVarPair));
+      };
 }
 
 }  // namespace
