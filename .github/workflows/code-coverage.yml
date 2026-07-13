@@ -30,16 +30,16 @@ jobs:
   build:
     env:
           compiler: clang
-          compiler-version: 16
+          compiler-version: 22
           build-type: Debug
           warnings: "-Wall -Wextra "
           # we disable the `assert()` macro as it messes with the coverage reports
           asan-flags: "-DNDEBUG"
           ubsan-flags: ""
           coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
-          cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
+          cmake-flags: "-DCMAKE_C_COMPILER=clang-22 -DCMAKE_CXX_COMPILER=clang++-22"
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -51,15 +51,15 @@ jobs:
       uses: ./.github/workflows/install-compiler-ubuntu
       with:
         compiler: "clang"
-        compiler-version: "16"
+        compiler-version: "22"
     - name: Install coverage tools
       run: |
-        sudo apt install -y llvm-16
+        sudo apt install -y llvm-22
         sudo apt install mold
     - name: Show path
       run: |
-        which llvm-profdata-16
-        which llvm-cov-16
+        which llvm-profdata-22
+        which llvm-cov-22
     - name: Create build directory
       run: mkdir ${{github.workspace}}/build
     - name: Configure CMake
@@ -81,8 +81,8 @@ jobs:
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
       run:  >
-        llvm-profdata-16 merge -sparse *.profraw -o default.profdata;
-        llvm-cov-16 export ./QLeverAllUnitTestsMain --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" --ignore-filename-regex="/benchmark/" > ./coverage.lcov
+        llvm-profdata-22 merge -sparse *.profraw -o default.profdata;
+        llvm-cov-22 export ./QLeverAllUnitTestsMain --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" --ignore-filename-regex="/benchmark/" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
