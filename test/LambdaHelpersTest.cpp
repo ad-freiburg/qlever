@@ -10,8 +10,15 @@ TEST(MakeAssignableLambda, SimpleLambda) {
   // Non-capturing lambdas are assignable (they decay to function pointers.)
   auto twice = [](int x) { return 2 * x; };
   using T = decltype(twice);
+  // The closure type of a non-capturing lambda only gained a defaulted
+  // (rather than deleted) copy/move assignment operator in C++20 (P0624).
+#ifndef QLEVER_CPP_17
   static_assert(std::is_copy_assignable_v<T>);
   static_assert(std::is_move_assignable_v<T>);
+#else
+  static_assert(!std::is_copy_assignable_v<T>);
+  static_assert(!std::is_move_assignable_v<T>);
+#endif
 
   // Capturing lambdas are not assignable.
   int m = 4;
