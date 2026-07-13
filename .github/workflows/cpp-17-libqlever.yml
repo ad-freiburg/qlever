@@ -123,6 +123,21 @@ jobs:
         run: |
           python ${{ github.workspace }}/misc/gcc8_logs_analyzer.py /tmp/build.log --on-github
         id: gcc8_log_analyzer
+
+      - name: Build and run unit tests under real C++17 (gcc8)
+        # This builds and runs the unit test suite itself (as opposed to the
+        # `LibQLeverExample`-only build above), tolerating the known set of
+        # test targets listed in `misc/cpp17_test_exclude_list.txt`, which
+        # either link the `http`/`server` CMake targets (excluded entirely
+        # under `REDUCED_FEATURE_SET_FOR_CPP17`) or directly exercise
+        # `cppcoro::generator`-based coroutine machinery (likewise excluded).
+        # `misc/run_cpp17_tests.sh` fails the build if the set of test
+        # targets that actually fail to compile no longer matches that list,
+        # so both regressions and stale exclusions get caught.
+        if: matrix.compiler-version == 8
+        run: ${{ github.workspace }}/misc/run_cpp17_tests.sh ${{github.workspace}}/build
+        id: cpp17_unit_tests
+
       - name: Test
         id: runTest
         if: (matrix.compiler-version == 11)
