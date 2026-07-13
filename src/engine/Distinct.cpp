@@ -115,6 +115,61 @@ Result Distinct::computeResult(bool requestLaziness) {
                       resultSortedOn()};
 }
 
+namespace {
+// Return the indices of all rows of the `table` (a table or a view) with
+// `index >= startIndex` that differ from their predecessor row in at least
+// one of the `keepIndices` columns. The comparison is performed directly on
+// the datatype bytes and payload words of the split column storage; only
+// where IDs of type `LocalVocabIndex` are involved (those do not compare
+// bitwise), the semantic `Id` comparison is used. `checkCancellation` is
+// called periodically.
+template <typename Table>
+std::vector<size_t> indicesOfRowsThatDifferFromPredecessor(
+    const Table& table, ql::span<const ColumnIndex> keepIndices,
+    size_t startIndex, const auto& checkCancellation) {
+  constexpr uint8_t localVocabType =
+      static_cast<uint8_t>(Datatype::LocalVocabIndex);
+  struct ColumnSpans {
+    ql::span<const uint64_t> payloads_;
+    ql::span<const uint8_t> types_;
+  };
+  std::vector<ColumnSpans> columns;
+  columns.reserve(keepIndices.size());
+  for (ColumnIndex keepIndex : keepIndices) {
+    auto column = table.getColumn(keepIndex);
+    columns.push_back({column.payloadSpan(), column.datatypeSpan()});
+  }
+
+  auto rowsDiffer = [&columns](size_t a, size_t b) {
+    for (const auto& [payloads, types] : columns) {
+      if (payloads[a] != payloads[b] || types[a] != types[b]) {
+        // Bitwise different. This means semantically different, unless an
+        // ID of type `LocalVocabIndex` is involved.
+        if (types[a] != localVocabType && types[b] != localVocabType) {
+          return true;
+        }
+        if (Id::fromBits({types[a], payloads[a]}) !=
+            Id::fromBits({types[b], payloads[b]})) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  std::vector<size_t> result;
+  for (size_t i = std::max<size_t>(startIndex, 1); i < table.numRows(); ++i) {
+    if (rowsDiffer(i, i - 1)) {
+      result.push_back(i);
+    }
+    if ((i & ((size_t{1} << 16) - 1)) == 0) {
+      checkCancellation();
+    }
+  }
+  return result;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 template <typename T1, typename T2>
 bool Distinct::matchesRow(const T1& a, const T2& b) const {
@@ -130,46 +185,41 @@ IdTable Distinct::distinct(
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
   AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
-
-  // Variant of `ql::ranges::unique` that allows to skip the begin rows of
-  // elements found in the previous table.
-  auto begin =
-      ql::ranges::find_if(result, [this, &previousRow](const auto& row) {
-        // Without explicit this clang seems to
-        // think the this capture is redundant.
-        return !previousRow.has_value() ||
-               !this->matchesRow(row, previousRow.value());
-      });
-  auto end = result.end();
-
-  auto dest = result.begin();
-  if (begin == dest) {
-    // Optimization to avoid redundant move operations.
-    begin = ql::ranges::adjacent_find(begin, end,
-                                      [this](const auto& a, const auto& b) {
-                                        // Without explicit this clang seems to
-                                        // think the this capture is redundant.
-                                        return this->matchesRow(a, b);
-                                      });
-    dest = begin;
-    if (begin != end) {
-      ++begin;
-    }
-  } else if (begin != end) {
-    *dest = std::move(*begin);
+  if (result.empty()) {
+    return std::move(result).toDynamic();
   }
 
-  if (begin != end) {
-    while (++begin != end) {
-      if (!matchesRow(*dest, *begin)) {
-        *++dest = std::move(*begin);
-        checkCancellation();
-      }
-    }
-    ++dest;
+  // Compute the indices of the rows that are kept: the first row is kept iff
+  // it differs from the last row of the previous table, all other rows are
+  // kept iff they differ from their predecessor.
+  auto checkCancellationLambda = [this] { checkCancellation(); };
+  std::vector<size_t> keptIndices = indicesOfRowsThatDifferFromPredecessor(
+      result, keepIndices_, 1, checkCancellationLambda);
+  bool keepFirstRow =
+      !previousRow.has_value() || !matchesRow(result[0], previousRow.value());
+  if (keepFirstRow) {
+    keptIndices.insert(keptIndices.begin(), 0);
   }
   checkCancellation();
-  result.erase(dest, end);
+
+  if (keptIndices.size() == result.size()) {
+    // All rows are distinct, no copying is required at all.
+    return std::move(result).toDynamic();
+  }
+
+  // Move the kept rows to the front, column by column. Note: The kept
+  // indices are ascending and `keptIndices[k] >= k` always holds, so the
+  // forward copy is safe.
+  for (size_t c = 0; c < result.numColumns(); ++c) {
+    decltype(auto) column = result.getColumn(c);
+    auto payloads = column.payloadSpan();
+    auto types = column.datatypeSpan();
+    for (size_t k = 0; k < keptIndices.size(); ++k) {
+      payloads[k] = payloads[keptIndices[k]];
+      types[k] = types[keptIndices[k]];
+    }
+  }
+  result.resize(keptIndices.size());
   checkCancellation();
 
   AD_LOG_DEBUG << "Distinct done.\n";
@@ -183,35 +233,19 @@ IdTable Distinct::outOfPlaceDistinct(const IdTableView<0>& dynInput) const {
   AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();
   IdTableStatic<WIDTH> output{dynInput.numColumns(), allocator()};
-
-  auto begin = inputView.begin();
-  auto end = inputView.end();
-  while (begin < end) {
-    int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
-    begin = ql::ranges::unique_copy(begin, begin + allowedOffset,
-                                    std::back_inserter(output),
-                                    [this](const auto& a, const auto& b) {
-                                      // Without explicit this clang seems to
-                                      // think the this capture is redundant.
-                                      return this->matchesRow(a, b);
-                                    })
-                .in;
-    checkCancellation();
-    // Skip to next unique value
-    do {
-      allowedOffset = std::min(end - begin, CHUNK_SIZE);
-      // This can only be called when dynInput is not empty, so `begin[-1]` is
-      // always valid.
-      auto lastRow = begin[-1];
-      begin = ql::ranges::find_if(begin, begin + allowedOffset,
-                                  [this, &lastRow](const auto& row) {
-                                    // Without explicit this clang seems to
-                                    // think the this capture is redundant.
-                                    return !this->matchesRow(row, lastRow);
-                                  });
-      checkCancellation();
-    } while (begin != end && matchesRow(*begin, begin[-1]));
+  if (inputView.empty()) {
+    return std::move(output).toDynamic();
   }
+
+  // Compute the indices of the distinct rows (the first row is always kept)
+  // and then copy them to the output column by column.
+  auto checkCancellationLambda = [this] { checkCancellation(); };
+  std::vector<size_t> keptIndices = indicesOfRowsThatDifferFromPredecessor(
+      inputView, keepIndices_, 1, checkCancellationLambda);
+  keptIndices.insert(keptIndices.begin(), 0);
+  checkCancellation();
+  output.insertSubsetAtEnd(inputView, keptIndices);
+  checkCancellation();
 
   AD_LOG_DEBUG << "Distinct done.\n";
   return std::move(output).toDynamic();

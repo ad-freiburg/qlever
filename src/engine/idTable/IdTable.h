@@ -858,8 +858,24 @@ class IdTable {
     for (auto&& [destination, source] :
          ::ranges::views::zip(ad_utility::allView(getColumns()),
                               ad_utility::allView(table.getColumns()))) {
-      ql::ranges::transform(indices, destination.begin() + oldSize,
-                            [&source](size_t idx) { return source[idx]; });
+      if constexpr (requires {
+                      destination.payloadSpan();
+                      source.payloadSpan();
+                    }) {
+        // Fast path for split `Id` columns: gather directly on the payload
+        // and datatype arrays.
+        auto destinationPayloads = destination.payloadSpan();
+        auto destinationTypes = destination.datatypeSpan();
+        auto sourcePayloads = source.payloadSpan();
+        auto sourceTypes = source.datatypeSpan();
+        for (size_t k = 0; k < numInserted; ++k) {
+          destinationPayloads[oldSize + k] = sourcePayloads[indices[k]];
+          destinationTypes[oldSize + k] = sourceTypes[indices[k]];
+        }
+      } else {
+        ql::ranges::transform(indices, destination.begin() + oldSize,
+                              [&source](size_t idx) { return source[idx]; });
+      }
     }
   }
 

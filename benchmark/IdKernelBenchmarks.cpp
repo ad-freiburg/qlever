@@ -38,10 +38,14 @@
 #include "../test/engine/ValuesForTesting.h"
 #include "../test/util/IndexTestHelpers.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "engine/Distinct.h"
+#include "engine/ExistsJoin.h"
+#include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/AllocatorWithLimit.h"
@@ -224,7 +228,7 @@ IdTable makeTable(const Options& opts, bool sorted, uint64_t seedOffset) {
   for (size_t c = 1; c <= opts.numPayloadCols_; ++c) {
     decltype(auto) col = table.getColumn(c);
     for (size_t i = 0; i < opts.numRows_; ++i) {
-      col[i] = Id::makeFromInt(static_cast<int64_t>(rng() >> 2));
+      col[i] = Id::makeFromInt(static_cast<int64_t>(rng() >> 5));
     }
   }
   return table;
@@ -353,6 +357,141 @@ void benchSort(const Options& opts) {
 }
 
 // _____________________________________________________________________________
+// Split a table into blocks of `blockSize` rows (as inputs for the lazy
+// operation variants).
+std::vector<Result::IdTableVocabPair> splitIntoBlocks(const IdTable& table,
+                                                      size_t blockSize) {
+  std::vector<Result::IdTableVocabPair> blocks;
+  for (size_t begin = 0; begin < table.numRows(); begin += blockSize) {
+    size_t size = std::min(blockSize, table.numRows() - begin);
+    IdTable block{table.numColumns(), allocator()};
+    block.insertAtEnd(table, begin, begin + size);
+    blocks.emplace_back(std::move(block), LocalVocab{});
+  }
+  return blocks;
+}
+
+// Consume a `Result` (materialized or lazy) and return a checksum.
+uint64_t consumeResult(std::shared_ptr<const Result> result) {
+  if (result->isFullyMaterialized()) {
+    return checksum(result->idTableView());
+  }
+  uint64_t sum = 1;
+  for (auto& pair : result->idTables()) {
+    sum = sum * 31 + checksum(pair.idTable_);
+  }
+  return sum;
+}
+
+// Make a `ValuesForTesting` tree, either fully materialized or as lazy
+// blocks.
+std::shared_ptr<QueryExecutionTree> makeInputTree(
+    QueryExecutionContext* qec, const IdTable& table,
+    std::vector<std::optional<Variable>> vars, bool lazy, bool sorted,
+    size_t blockSize) {
+  std::vector<ColumnIndex> sortedColumns =
+      sorted ? std::vector<ColumnIndex>{0} : std::vector<ColumnIndex>{};
+  if (lazy) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, splitIntoBlocks(table, blockSize), std::move(vars), false,
+        sortedColumns);
+  }
+  return ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, table.clone(), std::move(vars), false, sortedColumns, LocalVocab{},
+      std::nullopt, true);
+}
+
+// _____________________________________________________________________________
+// Kernel 4: FILTER with a conceptually simple expression (`?b < constant`
+// with ~50% selectivity, where `?b` is a random `Int` column).
+void benchFilter(const Options& opts, bool lazy) {
+  using namespace sparqlExpression;
+  auto qec = ad_utility::testing::getQec();
+  IdTable input = makeTable(opts, false, 0);
+  std::vector<std::optional<Variable>> vars;
+  for (size_t i = 0; i < input.numColumns(); ++i) {
+    vars.emplace_back(Variable{absl::StrCat("?v", i)});
+  }
+  // The payload columns contain uniform 59-bit random integers (which are
+  // exactly representable on both ID layouts), so this threshold yields a
+  // selectivity of ~50%.
+  Id threshold = Id::makeFromInt(int64_t{1} << 58);
+
+  auto setup = [&]() {
+    qec->getQueryTreeCache().clearAll();
+    auto tree = makeInputTree(qec, input, vars, lazy, false, opts.blockSize_);
+    auto expression = std::make_unique<LessThanExpression>(
+        std::array<SparqlExpression::Ptr, 2>{
+            std::make_unique<VariableExpression>(Variable{"?v1"}),
+            std::make_unique<IdExpression>(threshold)});
+    return std::make_unique<Filter>(
+        qec, std::move(tree),
+        SparqlExpressionPimpl{std::move(expression), "?v1 < threshold"});
+  };
+  auto kernel = [&](std::unique_ptr<Filter> filter) {
+    return consumeResult(
+        filter->getResult(false, lazy ? ComputationMode::LAZY_IF_SUPPORTED
+                                      : ComputationMode::FULLY_MATERIALIZED));
+  };
+  runAndReport(lazy ? "filter-lazy" : "filter", opts.reps_, setup, kernel);
+}
+
+// _____________________________________________________________________________
+// Kernel 5: DISTINCT on the sorted key column (column 0).
+void benchDistinct(const Options& opts, bool lazy) {
+  auto qec = ad_utility::testing::getQec();
+  IdTable input = makeTable(opts, true, 0);
+  std::vector<std::optional<Variable>> vars;
+  for (size_t i = 0; i < input.numColumns(); ++i) {
+    vars.emplace_back(Variable{absl::StrCat("?v", i)});
+  }
+
+  auto setup = [&]() {
+    qec->getQueryTreeCache().clearAll();
+    auto tree = makeInputTree(qec, input, vars, lazy, true, opts.blockSize_);
+    return std::make_unique<Distinct>(qec, std::move(tree),
+                                      std::vector<ColumnIndex>{0});
+  };
+  auto kernel = [&](std::unique_ptr<Distinct> distinct) {
+    return consumeResult(
+        distinct->getResult(false, lazy ? ComputationMode::LAZY_IF_SUPPORTED
+                                        : ComputationMode::FULLY_MATERIALIZED));
+  };
+  runAndReport(lazy ? "distinct-lazy" : "distinct", opts.reps_, setup, kernel);
+}
+
+// _____________________________________________________________________________
+// Kernel 6: EXISTS join on the sorted key column.
+void benchExists(const Options& opts, bool lazy) {
+  auto qec = ad_utility::testing::getQec();
+  IdTable left = makeTable(opts, true, 0);
+  IdTable right = makeTable(opts, true, 1);
+  std::vector<std::optional<Variable>> varsLeft;
+  std::vector<std::optional<Variable>> varsRight;
+  for (size_t i = 0; i < left.numColumns(); ++i) {
+    varsLeft.emplace_back(Variable{absl::StrCat("?v", i)});
+    varsRight.emplace_back(
+        Variable{absl::StrCat(i == 0 ? "?v" : "?w", i == 0 ? 0 : i)});
+  }
+
+  auto setup = [&]() {
+    qec->getQueryTreeCache().clearAll();
+    auto leftTree =
+        makeInputTree(qec, left, varsLeft, lazy, true, opts.blockSize_);
+    auto rightTree =
+        makeInputTree(qec, right, varsRight, lazy, true, opts.blockSize_);
+    return std::make_unique<ExistsJoin>(
+        qec, std::move(leftTree), std::move(rightTree), Variable{"?exists"});
+  };
+  auto kernel = [&](std::unique_ptr<ExistsJoin> exists) {
+    return consumeResult(
+        exists->getResult(false, lazy ? ComputationMode::LAZY_IF_SUPPORTED
+                                      : ComputationMode::FULLY_MATERIALIZED));
+  };
+  runAndReport(lazy ? "exists-lazy" : "exists", opts.reps_, setup, kernel);
+}
+
+// _____________________________________________________________________________
 // Kernel 3: GROUP BY on sorted input with a single group column and a
 // `SUM(?b)` aggregate. This exercises the sorted (non-hash-map) path of
 // `GroupByImpl` through the full operation.
@@ -401,6 +540,18 @@ int main(int argc, char** argv) {
     benchJoinBlocks(opts);
   } else if (opts.kernel_ == "sort") {
     benchSort(opts);
+  } else if (opts.kernel_ == "filter") {
+    benchFilter(opts, false);
+  } else if (opts.kernel_ == "filter-lazy") {
+    benchFilter(opts, true);
+  } else if (opts.kernel_ == "distinct") {
+    benchDistinct(opts, false);
+  } else if (opts.kernel_ == "distinct-lazy") {
+    benchDistinct(opts, true);
+  } else if (opts.kernel_ == "exists") {
+    benchExists(opts, false);
+  } else if (opts.kernel_ == "exists-lazy") {
+    benchExists(opts, true);
   } else if (opts.kernel_ == "groupby") {
     benchGroupBy(opts, false);
   } else if (opts.kernel_ == "groupby-lazy") {

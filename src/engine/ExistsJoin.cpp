@@ -10,6 +10,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Result.h"
 #include "engine/Sort.h"
+#include "engine/idTable/IdColumnAlgorithms.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
@@ -220,7 +221,21 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
       runZipperJoin(ad_utility::findSmallerUndefRanges);
     }
   };
-  ad_utility::callFixedSizeVi(numJoinColumns, runForNumJoinCols);
+  if (numJoinColumns == 1 && isCheap) {
+    // Fast path: For a single join column without UNDEF values, compute the
+    // non-existing rows directly on the datatype bytes and payload words of
+    // the split column storage (IDs of type `LocalVocabIndex` are handled
+    // gracefully inside).
+    columnBasedIdTable::zipperJoinIdColumns(
+        joinColumnsLeft.getColumn(0), joinColumnsRight.getColumn(0),
+        ad_utility::noop, ad_utility::noop,
+        [&notExistsIndices](size_t index) {
+          notExistsIndices.push_back(index);
+        },
+        [this] { checkCancellation(); });
+  } else {
+    ad_utility::callFixedSizeVi(numJoinColumns, runForNumJoinCols);
+  }
 
   // Add the result column from the computed `notExistsIndices` (which tell us
   // where the value should be `false`).
@@ -455,12 +470,23 @@ struct LazyExistsJoinImpl
         leftJoinColumn_{leftJoinColumn},
         rightJoinColumn_{rightJoinColumn} {}
 
+  // The payload words and datatype bytes of the join column of the current
+  // right block. Cached, s.t. the hot comparison loop can work directly on
+  // the split column storage.
+  ql::span<const uint64_t> rightPayloads_;
+  ql::span<const uint8_t> rightTypes_;
+
   // Fetch and store the next non-empty result from `rightRange_` in
   // `currentRight_`.
   void fetchNextRightBlock() {
     do {
       currentRight_ = rightRange_.get();
     } while (currentRight_.has_value() && currentRight_.value().empty());
+    if (currentRight_.has_value()) {
+      auto column = currentRight_.value().getColumn(rightJoinColumn_);
+      rightPayloads_ = column.payloadSpan();
+      rightTypes_ = column.datatypeSpan();
+    }
   }
 
   // Increment `currentRightIndex_` by one, or fetch the next non-empty element
@@ -479,20 +505,36 @@ struct LazyExistsJoinImpl
     }
   }
 
-  // Check if the `id` has a match on the right side. This will increment the
-  // index until a match is found, or no matches exist.
-  bool hasMatch(Id id) {
-    if (id.isUndefined()) {
-      // This is correct, because undefined values are processed first and
-      // `currentRight_` is not-reassigned until a non-undefined value is
-      // processed.
+  // Check if the ID given by `type` and `payload` has a match on the right
+  // side. This will increment the index until a match is found, or no
+  // matches exist. The comparisons are performed directly on the datatype
+  // bytes and payload words; only where IDs of type `LocalVocabIndex` are
+  // involved, the semantic `Id` comparison is used.
+  bool hasMatch(uint8_t type, uint64_t payload) {
+    constexpr uint8_t localVocabType =
+        static_cast<uint8_t>(Datatype::LocalVocabIndex);
+    if (type == 0 && payload == 0) {
+      // The ID is undefined. This is correct, because undefined values are
+      // processed first and `currentRight_` is not-reassigned until a
+      // non-undefined value is processed.
       return currentRight_.has_value();
     }
     // Search for the next match.
     while (currentRight_.has_value()) {
       AD_CORRECTNESS_CHECK(currentRightIndex_ < currentRight_.value().size());
-      auto comparison = ql::compareThreeWay(
-          currentRight_.value().at(currentRightIndex_, rightJoinColumn_), id);
+      uint8_t rightType = rightTypes_[currentRightIndex_];
+      uint64_t rightPayload = rightPayloads_[currentRightIndex_];
+      int comparison;
+      if (rightType != localVocabType && type != localVocabType) [[likely]] {
+        comparison = rightType != type ? (rightType < type ? -1 : 1)
+                                       : (rightPayload < payload    ? -1
+                                          : rightPayload == payload ? 0
+                                                                    : 1);
+      } else {
+        auto res = Id::fromBits({rightType, rightPayload})
+                       .compareThreeWay(Id::fromBits({type, payload}));
+        comparison = res < 0 ? -1 : res == 0 ? 0 : 1;
+      }
       if (comparison == 0) {
         return true;
       }
@@ -531,11 +573,20 @@ struct LazyExistsJoinImpl
                                                         FastForwardState::Yes));
       } else {
         auto leftJoinColumn = idTable.getColumn(leftJoinColumn_);
+        auto leftPayloads = leftJoinColumn.payloadSpan();
+        auto leftTypes = leftJoinColumn.datatypeSpan();
+        auto outputPayloads = outputColumn.payloadSpan();
+        auto outputTypes = outputColumn.datatypeSpan();
+        const auto trueBits = Id::makeFromBool(true).getBits();
+        const auto falseBits = Id::makeFromBool(false).getBits();
 
         for (size_t rowIndex = 0; rowIndex < leftJoinColumn.size();
              rowIndex++) {
-          outputColumn[rowIndex] =
-              Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
+          const auto& bits =
+              hasMatch(leftTypes[rowIndex], leftPayloads[rowIndex]) ? trueBits
+                                                                    : falseBits;
+          outputPayloads[rowIndex] = bits.payload_;
+          outputTypes[rowIndex] = bits.datatype_;
         }
       }
     }

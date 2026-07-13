@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 // This file contains the types that implement the storage-efficient columns
 // of `Id`s that are used by the `IdTable` class. A materialized `ValueId`
@@ -557,9 +558,22 @@ class IdColumnVectorImpl {
            std::is_constructible_v<IdColumnVectorImpl, const Allocator&>)
   IdColumnVectorImpl(It first, It last, const Allocator& allocator)
       : IdColumnVectorImpl{allocator} {
-    reserve(static_cast<size_t>(last - first));
-    for (; first != last; ++first) {
-      push_back(*first);
+    const auto numElements = static_cast<size_t>(last - first);
+    if constexpr (ad_utility::SimilarToAny<
+                      It, IdColumnIterator<ad_utility::IsConst::False>,
+                      IdColumnIterator<ad_utility::IsConst::True>>) {
+      // Fast path for iterators into another split column: directly copy
+      // the contiguous payload and datatype arrays (`memcpy` speed). This
+      // is in particular the path taken by `IdTable::clone()`.
+      payloads_.insert(payloads_.end(), first.payloadPtr(),
+                       first.payloadPtr() + numElements);
+      types_.insert(types_.end(), first.datatypePtr(),
+                    first.datatypePtr() + numElements);
+    } else {
+      reserve(numElements);
+      for (; first != last; ++first) {
+        push_back(*first);
+      }
     }
   }
 
