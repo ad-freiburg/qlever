@@ -48,16 +48,12 @@ auto getAllTriplesWithGraph() {
                      "SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }");
 }
 
-// The IRI QLever uses for the default graph (without surrounding `<>`), as it
-// appears in query results.
 const std::string defaultGraph =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/default-graph";
+const std::vector<std::string> header = {"s", "p", "o", "g"};
 
-// Construct the CSV representation (as produced by the query export) of the
-// given `rows`. Each inner vector is one row (the first typically being the
-// header); the cells are joined by `,` and each row is terminated by `\n`.
-// Building the expected result this way keeps it readable and lets individual
-// identifiers or whole rows be reused.
+// Constructs a CSV string from the input. Each inner vector is one row (the
+// first one is the header).
 std::string toCsv(const std::vector<std::vector<std::string>>& rows) {
   std::string result;
   for (const auto& row : rows) {
@@ -548,11 +544,10 @@ TEST(ServerTest, gspPut) {
                 finalState);
   };
   testPut("text/turtle", "<a> <b> <c> .", "default", StatusIs(http::status::ok),
-          testing::Eq(
-              toCsv({{"s", "p", "o", "g"}, {"a", "b", "c", defaultGraph}})));
+          testing::Eq(toCsv({header, {"a", "b", "c", defaultGraph}})));
   testPut("text/turtle", "<a> <b> <c> .", "graph=foo",
           StatusIs(http::status::created),
-          testing::Eq(toCsv({{"s", "p", "o", "g"},
+          testing::Eq(toCsv({header,
                              {"a", "b", "c", "foo"},
                              {"a", "b", "c", defaultGraph},
                              {"a", "b", "d", defaultGraph}})));
@@ -581,9 +576,9 @@ TEST(ServerTest, gspDelete) {
                 finalState);
   };
   testDelete("default", StatusIs(http::status::ok),
-             testing::Eq(toCsv({{"s", "p", "o", "g"}})));
+             testing::Eq(toCsv({header})));
   testDelete("graph=foo", StatusIs(http::status::not_found),
-             testing::Eq(toCsv({{"s", "p", "o", "g"},
+             testing::Eq(toCsv({header,
                                 {"a", "b", "c", defaultGraph},
                                 {"a", "b", "d", defaultGraph}})));
 }
@@ -624,33 +619,31 @@ TEST(ServerTest, gspPost) {
                 StatusIs(http::status::no_content));
     EXPECT_THAT(responseBodyToString(
                     serverForTesting.process(getAllTriplesWithGraph()).body()),
-                testing::Eq(toCsv({{"s", "p", "o", "g"}})));
+                testing::Eq(toCsv({header})));
   }
   {
     auto serverForTesting = makeServerForTesting(baseName);
     EXPECT_THAT(
         serverForTesting.process(makePost("<a> <b> <c> .", "graph=foo")),
         StatusIs(http::status::ok));
-    EXPECT_THAT(
-        responseBodyToString(
-            serverForTesting.process(getAllTriplesWithGraph()).body()),
-        testing::Eq(toCsv({{"s", "p", "o", "g"}, {"a", "b", "c", "foo"}})));
+    EXPECT_THAT(responseBodyToString(
+                    serverForTesting.process(getAllTriplesWithGraph()).body()),
+                testing::Eq(toCsv({header, {"a", "b", "c", "foo"}})));
     // `<a> <b> <c>` is already contained.
     EXPECT_THAT(serverForTesting.process(
                     makePost("<a> <b> <c> . <d> <e> <f> .", "graph=foo")),
                 StatusIs(http::status::ok));
     EXPECT_THAT(responseBodyToString(
                     serverForTesting.process(getAllTriplesWithGraph()).body()),
-                testing::Eq(toCsv({{"s", "p", "o", "g"},
-                                   {"a", "b", "c", "foo"},
-                                   {"d", "e", "f", "foo"}})));
+                testing::Eq(toCsv(
+                    {header, {"a", "b", "c", "foo"}, {"d", "e", "f", "foo"}})));
     // Insert the same triples again but now into the default graph.
     EXPECT_THAT(serverForTesting.process(
                     makePost("<a> <b> <c> . <d> <e> <f> .", "default")),
                 StatusIs(http::status::ok));
     EXPECT_THAT(responseBodyToString(
                     serverForTesting.process(getAllTriplesWithGraph()).body()),
-                testing::Eq(toCsv({{"s", "p", "o", "g"},
+                testing::Eq(toCsv({header,
                                    {"a", "b", "c", "foo"},
                                    {"a", "b", "c", defaultGraph},
                                    {"d", "e", "f", "foo"},
