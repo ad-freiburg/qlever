@@ -93,7 +93,7 @@ TEST(Variable, ScoreAndMatchUnicodeExhaustive) {
     if (isError) {
       throw std::runtime_error("Invalid UChar32 code point.");
     }
-    std::string_view s{buffer.data(), buffer.data() + offset};
+    std::string_view s{buffer.data(), static_cast<size_t>(offset)};
     try {
       Variable("?x").getMatchingWordVariable(s);
       numSuccesful++;
