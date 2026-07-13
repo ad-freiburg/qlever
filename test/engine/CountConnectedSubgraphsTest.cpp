@@ -19,7 +19,7 @@ Graph makeClique(uint64_t size) {
   uint64_t all = ad_utility::bitMaskForLowerBits(size);
   for (uint64_t i = 0; i < size; ++i) {
     uint64_t notSelf = ~(1ull << i);
-    clique.emplace_back(all & notSelf);
+    clique.push_back(Node{all & notSelf});
   }
   return clique;
 }
@@ -46,7 +46,7 @@ Graph makeChain(uint64_t n) {
   for (uint64_t i = 0; i < n; ++i) {
     uint64_t left = i > 0 ? (1ull << (i - 1)) : 0;
     uint64_t right = i + 1 < n ? (1ull << (i + 1)) : 0;
-    clique.emplace_back(left | right);
+    clique.push_back(Node{left | right});
   }
   return clique;
 }
