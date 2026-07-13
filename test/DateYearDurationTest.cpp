@@ -530,7 +530,7 @@ TEST(Date, parseErrors) {
   ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
 }
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(Date, toEpoch) {
   {
@@ -621,7 +621,6 @@ TEST(Date, Subtraction) {
   EXPECT_EQ(DayTimeDuration(DayTimeDuration::Type::Negative, 2),
             (date4 - date3).value());
 }
-#endif
 
 // _____________________________________________________________________________
 TEST(Date, toEpochInt) {
@@ -640,6 +639,7 @@ TEST(Date, toEpochInt) {
   result = date.toEpochInt();
   ASSERT_FALSE(result.has_value());
 }
+#endif
 
 // _____________________________________________________________________________
 TEST(Date, getTimeZoneOffsetToUTCInHours) {
@@ -1135,5 +1135,5 @@ TEST(DateYearOrDuration, Addition) {
     EXPECT_EQ(duration2 + duration, std::nullopt);
   }
 }
-}
 #endif
+}  // namespace
