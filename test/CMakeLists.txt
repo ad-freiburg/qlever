@@ -538,7 +538,7 @@ addLinkAndDiscoverTest(ExportIdsTest engine parser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
-addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
+addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine mediaTypes)
 
 addLinkAndDiscoverTest(FilesystemHelpersTest util)
 
