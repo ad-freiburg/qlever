@@ -35,6 +35,7 @@
 #include "global/Id.h"
 #include "global/ValueId.h"
 #include "index/ExportIds.h"
+#include "index/LocalVocabEntry.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
@@ -1258,5 +1259,80 @@ INSTANTIATE_TEST_SUITE_P(
                                          MultiplicityOrSizeEst::SizeEstimate)));
 
 }  // namespace getMultiplicityAndSizeEstimate
+
+namespace invalidGeometries {
+
+using namespace ::testing;
+
+// Regression test for assertion error caused by only invalid geometries
+// surviving prefiltering:
+//
+// PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+// PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+// SELECT * {
+//   VALUES ?a { "POINT(0 0)"^^geo:wktLiteral }
+//   VALUES ?b { "<a>"^^geo:wktLiteral "<b>"^^geo:wktLiteral
+//               "POINT(1 1)"^^geo:wktLiteral }
+//   FILTER geof:sfContains(?a, ?b)
+// }
+TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
+  auto* qec = ad_utility::testing::getQec();
+
+  // Build the valid and invalid literals.
+  LocalVocab localVocab;
+  auto wktLiteralIri =
+      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+          GEO_WKT_LITERAL);
+  auto wktId = [&](std::string_view wkt) {
+    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
+        wkt, wktLiteralIri);
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+  };
+  Id pointLeft = ValueId::makeFromGeoPoint({0, 0});
+  Id invalidLiteralA = wktId("<a>");
+  Id invalidLiteralB = wktId("<b>");
+  Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
+
+  // `?a`: a single, valid point.
+  auto leftChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{pointLeft}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, localVocab.clone());
+
+  // `?b`: two literals that are not valid WKT geometries, plus one valid
+  // point (which does not lie within `?a`, so no row of `?b` matches).
+  auto rightChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{invalidLiteralA}, {invalidLiteralB}, {validLiteral}}),
+      std::vector<std::optional<Variable>>{Variable{"?b"}}, false,
+      std::vector<ColumnIndex>{}, localVocab.clone());
+
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{
+          MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?b"}, std::nullopt,
+          PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+          SpatialJoinType::CONTAINS},
+      leftChild, rightChild);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+
+  // This must neither crash nor throw, despite the two invalid WKT literals
+  // in `?b`, and the result must be empty because no value of `?b` is
+  // actually contained in `?a`.
+  auto result = spatialJoin->computeResult(false);
+  EXPECT_EQ(result.idTableView().numRows(), 0);
+
+  // Only `POINT(0 0)` from `?a` is a valid geometry that was added to the
+  // sweeper; none of the values of `?b` (two invalid literals and one point
+  // that is not contained in `?a`) contribute a valid geometry.
+  auto details = spatialJoin->runtimeInfo().details_;
+  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                             HasKeyMatching("num-geoms-parsed", Eq(3))));
+}
+
+}  // namespace invalidGeometries
 
 }  // anonymous namespace
