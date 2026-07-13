@@ -5,7 +5,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <ranges>
 #include <vector>
 
 #include "../util/IdTableHelpers.h"

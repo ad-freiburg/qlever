@@ -150,12 +150,32 @@ class TaskQueue {
     } else {
       // We are responsible for finishing, but we already have set the
       // `startedFinishing_` to true, so we can run the `impl` directly.
-      ad_utility::terminateIfThrows([this]() { finishImpl(); },
+      ad_utility::terminateIfThrows(FinishImplAction{this},
                                     "In the destructor of TaskQueue.");
     }
   }
 
  private:
+  // Functors for `~TaskQueue` and `finishImpl` below. Named (rather than
+  // local lambda) types are used here because GCC fails to emit a definition
+  // for a `concepts`-library helper function when it is instantiated with a
+  // lambda type that is local to an inline member function, under
+  // `-std=gnu++17`.
+  struct FinishImplAction {
+    TaskQueue* self_;
+    void operator()() const { self_->finishImpl(); }
+  };
+  struct JoinThread {
+    void operator()(ad_utility::JThread& thread) const {
+      // If `finish` was called from inside the queue, the calling thread cannot
+      // join itself.
+      AD_CORRECTNESS_CHECK(thread.joinable());
+      if (thread.get_id() != std::this_thread::get_id()) {
+        thread.join();
+      }
+    }
+  };
+
   // _________________________________________________________________________
   void function_for_thread() {
     while (auto task = queuedTasks_.pop()) {
@@ -167,14 +187,7 @@ class TaskQueue {
   // that set `startedFinishing_` from false to true.
   void finishImpl() {
     queuedTasks_.finish();
-    ql::ranges::for_each(threads_, [](auto& thread) {
-      // If `finish` was called from inside the queue, the calling thread cannot
-      // join itself.
-      AD_CORRECTNESS_CHECK(thread.joinable());
-      if (thread.get_id() != std::this_thread::get_id()) {
-        thread.join();
-      }
-    });
+    ql::ranges::for_each(threads_, JoinThread{});
     finishedFinishing_.test_and_set();
     finishedFinishing_.notify_all();
   }

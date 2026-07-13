@@ -2279,7 +2279,11 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   // If `hasChild` is `true`, then the aggregate is expected to have at least
   // one child. This is the case for all aggregates except the
   // `CountStarExpression`.
-  auto match = [](bool distinct, bool hasChild = true) {
+  // Capture `DistinctAggregate`/`NonDistinctAggregate` explicitly: even
+  // though they are `constexpr` and their use below does not odr-use them,
+  // GCC 8 (unlike later GCC versions) requires them to be captured anyway.
+  auto match = [DistinctAggregate, NonDistinctAggregate](bool distinct,
+                                                         bool hasChild = true) {
     auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
     auto distinctMatcher =
         AD_PROPERTY(SparqlExpression, isAggregate, aggStatus);

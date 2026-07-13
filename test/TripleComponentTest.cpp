@@ -317,14 +317,25 @@ TEST(TripleComponent, invalidDatatypeForLiteral) {
   ASSERT_ANY_THROW(lit("\"alpha\"", "fr-ca"));
 }
 
+namespace {
+// Functor for the `TripleComponent.toString` test below. A named (rather
+// than local lambda) type is used here because GCC 8 fails to emit a
+// definition for `testing::internal::ResultOfMatcher::Impl`'s constructor
+// when it is instantiated with a lambda type that is local to an inline
+// function.
+struct MakeTcAndToString {
+  template <typename T>
+  std::string operator()(T&& val) const {
+    return TripleComponent{AD_FWD(val)}.toString();
+  }
+};
+}  // namespace
+
 // _____________________________________________________________________________1
 TEST(TripleComponent, toString) {
   using namespace ::testing;
   auto match = [](const auto& matcher) {
-    auto makeTcAndToString = [](auto&& val) {
-      return TripleComponent{AD_FWD(val)}.toString();
-    };
-    return ResultOf(makeTcAndToString, matcher);
+    return ResultOf(MakeTcAndToString{}, matcher);
   };
 
   EXPECT_THAT(GeoPoint(13, 14), match(StartsWith("G:POINT(14.")));

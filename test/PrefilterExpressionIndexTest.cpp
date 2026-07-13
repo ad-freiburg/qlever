@@ -129,11 +129,11 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id referenceDateEqual = DateId(DateParser, "2000-01-01");
   const LocalVocabEntry augsburg = LVE("\"Augsburg\"", lvc);
   const LocalVocabEntry berlin = LVE("\"Berlin\"", lvc);
-  const LocalVocabEntry düsseldorf = LVE("\"Düsseldorf\"", lvc);
+  const LocalVocabEntry duesseldorf = LVE("\"Düsseldorf\"", lvc);
   const LocalVocabEntry frankfurt = LVE("\"Frankfurt\"", lvc);
   const LocalVocabEntry hamburg = LVE("\"Hamburg\"", lvc);
-  const LocalVocabEntry köln = LVE("\"Köln\"", lvc);
-  const LocalVocabEntry münchen = LVE("\"München\"", lvc);
+  const LocalVocabEntry koeln = LVE("\"Köln\"", lvc);
+  const LocalVocabEntry muenchen = LVE("\"München\"", lvc);
   const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"", lvc);
   const LocalVocabEntry wolfsburg = LVE("\"Wolfsburg\"", lvc);
   const LocalVocabEntry iri0 = LVE("<a>", lvc);
@@ -147,13 +147,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id vocabIdBe = getVocabId("\"Be\"");
   const Id vocabIdBern = getVocabId("\"Bern\"");
   const Id vocabIdBerlin = getVocabId("\"Berlin\"");
-  const Id vocabIdDüsseldorf = getVocabId("\"Düsseldorf\"");
+  const Id vocabIdDuesseldorf = getVocabId("\"Düsseldorf\"");
   const Id vocabIdH = getVocabId("\"H\"");
   const Id vocabIdHam = getVocabId("\"Ham\"");
   const Id vocabIdHamb = getVocabId("\"Hamb\"");
   const Id vocabIdHamburg = getVocabId("\"Hamburg\"");
   const Id vocabIdHamburgAltona = getVocabId("\"Hamburg Altona\"");
-  const Id vocabIdMünchen = getVocabId("\"München\"");
+  const Id vocabIdMuenchen = getVocabId("\"München\"");
   const Id vocabIdStuttgart = getVocabId("\"Stuttgart\"");
   const Id idWolfsburg = getId(wolfsburg, vocab);
   const Id idB = getId(LVE("\"B\"", lvc), vocab);
@@ -163,11 +163,11 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id idStuttgartZuffenhausen =
       getId(LVE("\"Stuttgart-Zuffenhausen\"", lvc), vocab);
   const Id idBerlin = getId(berlin, vocab);
-  const Id idDüsseldorf = getId(düsseldorf, vocab);
+  const Id idDuesseldorf = getId(duesseldorf, vocab);
   const Id idFrankfurt = getId(frankfurt, vocab);
   const Id idHamburg = getId(hamburg, vocab);
-  const Id idKöln = getId(köln, vocab);
-  const Id idMünchen = getId(münchen, vocab);
+  const Id idKoeln = getId(koeln, vocab);
+  const Id idMuenchen = getId(muenchen, vocab);
   const Id idStuttgart = getId(stuttgart, vocab);
   const Id idIri0 = getId(iri0, vocab);
   const Id idIri1 = getId(iri1, vocab);
@@ -209,11 +209,12 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       makeBlock(DoubleId(-14.01), idAugsburg);  // 14
   const CompressedBlockMetadata b18GapIriAndLiteral =
       makeBlock(DoubleId(-14.01), DateId(DateParser, "1999-01-01"));
-  const CompressedBlockMetadata b19 = makeBlock(idDüsseldorf, idHamburg);  // 15
-  const CompressedBlockMetadata b21 = makeBlock(idHamburg, idMünchen);     // 16
-  const CompressedBlockMetadata b22 = makeBlock(idStuttgart, idIri0);      // 17
-  const CompressedBlockMetadata b23 = makeBlock(idIri1, idIri2);           // 18
-  const CompressedBlockMetadata b24 = makeBlock(idIri3, idIri4);           // 19
+  const CompressedBlockMetadata b19 =
+      makeBlock(idDuesseldorf, idHamburg);                               // 15
+  const CompressedBlockMetadata b21 = makeBlock(idHamburg, idMuenchen);  // 16
+  const CompressedBlockMetadata b22 = makeBlock(idStuttgart, idIri0);    // 17
+  const CompressedBlockMetadata b23 = makeBlock(idIri1, idIri2);         // 18
+  const CompressedBlockMetadata b24 = makeBlock(idIri3, idIri4);         // 19
   const CompressedBlockMetadata b25 =
       makeBlock(idIri5, DateId(DateParser, "1999-01-01"));  // 20
   const CompressedBlockMetadata b26 =
@@ -269,7 +270,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       makeBlock(vocabIdBerlin, vocabIdBern);
   // "Bern" to "Düsseldorf"
   const CompressedBlockMetadata b3RegexTest =
-      makeBlock(vocabIdBern, vocabIdDüsseldorf);
+      makeBlock(vocabIdBern, vocabIdDuesseldorf);
   // "H" to "Ham"
   const CompressedBlockMetadata b4RegexTest = makeBlock(vocabIdH, vocabIdHam);
   // "Hamb" to "Hamburg"
@@ -280,7 +281,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       makeBlock(idHamburg, idHamburgAlt);
   // "Hamburg Altona" to "München"
   const CompressedBlockMetadata b7RegexTest =
-      makeBlock(vocabIdHamburgAltona, vocabIdMünchen);
+      makeBlock(vocabIdHamburgAltona, vocabIdMuenchen);
   // "Stuttgart" to "Stuttgart"
   const CompressedBlockMetadata b8RegexTest =
       makeBlock(vocabIdStuttgart, vocabIdStuttgart);
@@ -544,14 +545,24 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
 }  // namespace
 
+namespace {
+// Functor for the `testBlockFormatForDebugging` test below. A named (rather
+// than local lambda) type is used here because GCC 8 fails to emit a
+// definition for `testing::internal::ResultOfMatcher::Impl`'s constructor
+// when it is instantiated with a lambda type that is local to an inline
+// function.
+struct BlockMetadataToString {
+  std::string operator()(const CompressedBlockMetadata& b) const {
+    return (std::stringstream{} << b).str();
+  }
+};
+}  // namespace
+
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
-  auto toString = [](const CompressedBlockMetadata& b) {
-    return (std::stringstream{} << b).str();
-  };
-
-  auto matcher = [&toString](const std::string& substring) {
-    return ::testing::ResultOf(toString, ::testing::HasSubstr(substring));
+  auto matcher = [](const std::string& substring) {
+    return ::testing::ResultOf(BlockMetadataToString{},
+                               ::testing::HasSubstr(substring));
   };
   EXPECT_THAT(
       b11,
@@ -640,7 +651,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessThanExpressions) {
   makeTest(lt(augsburg), {b18});
   makeTest(lt(frankfurt), {b18, b19});
   makeTest(lt(hamburg), {b18, b19}, true);
-  makeTest(lt(münchen), {b18, b19, b21});
+  makeTest(lt(muenchen), {b18, b19, b21});
   makeTest(lt(IntId(100)), {b6, b7, b8, b9, b10, b13, b14, b15, b16, b17, b18});
   makeTest(lt(undef), {});
   makeTest(lt(falseId), {}, true);
@@ -721,8 +732,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
   makeTest(ge(DoubleId(7.999999)), {b8, b11, b14});
   makeTest(ge(DoubleId(10.0001)), {});
   makeTest(ge(hamburg), {b18, b19, b21, b26}, true);
-  makeTest(ge(düsseldorf), {b18, b19, b21, b26});
-  makeTest(ge(münchen), {b18, b21, b26});
+  makeTest(ge(duesseldorf), {b18, b19, b21, b26});
+  makeTest(ge(muenchen), {b18, b21, b26});
   makeTest(ge(undef), {}, true);
   makeTest(ge(falseId), {b2, b4}, true);
   makeTest(ge(trueId), {b4});
@@ -749,7 +760,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualExpression) {
   makeTest(eq(berlin), {b18});
   makeTest(eq(hamburg), {b18, b19, b21}, true);
   makeTest(eq(frankfurt), {b18, b19});
-  makeTest(eq(köln), {b18, b21});
+  makeTest(eq(koeln), {b18, b21});
   makeTest(eq(IntId(-4)), {b10, b11, b15}, true);
   makeTest(eq(trueId), {b4});
   makeTest(eq(referenceDate1), {b26});
@@ -778,7 +789,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(augsburg), {b19, b21, b26});
   makeTest(neq(berlin), {b18, b19, b21, b26}, true);
   makeTest(neq(hamburg), {b18, b19, b21, b26});
-  makeTest(neq(münchen), {b18, b19, b21, b26});
+  makeTest(neq(muenchen), {b18, b19, b21, b26});
   makeTest(neq(undef), {});
   makeTest(neq(falseId), {b4}, true);
   makeTest(neq(referenceDateEqual), {b26, b28});
@@ -961,7 +972,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
   auto date2001 = DateId(DateParser, "2000-01-01");
   // IN
   makeTest(inExpr({}), {});
-  makeTest(inExpr({idDüsseldorf}), {b19});
+  makeTest(inExpr({idDuesseldorf}), {b19});
   makeTest(inExpr({idAugsburg, idHamburg}), {b18, b19, b21});
   makeTest(inExpr({falseId, IntId(0), DoubleId(2.5), idStuttgart, date2001}),
            {b2, b4, b6, b11, b27});
@@ -978,14 +989,14 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
   makeTest(inExpr({idHamburg}, true),
            {b1,  b2,  b4,  b6,  b7,  b8,  b9,  b10, b11, b13,
             b14, b15, b16, b17, b18, b19, b21, b26, b27, b28});
-  makeTest(inExpr({idMünchen, idHamburg, idDüsseldorf}, true),
+  makeTest(inExpr({idMuenchen, idHamburg, idDuesseldorf}, true),
            {b1,  b2,  b4,  b6,  b7,  b8,  b9,  b10, b11, b13,
             b14, b15, b16, b17, b18, b19, b21, b26, b27, b28});
   makeTest(inExpr({DoubleId(0.00), DoubleId(-6.25), IntId(-4)}, true),
            {b1, b2, b4, b6, b7, b8, b9, b11, b13, b14, b15, b16, b17, b18, b19,
             b21, b26, b27, b28});
   makeTest(inExpr({DoubleId(0.00), DoubleId(-6.25), IntId(-4), idHamburg,
-                   idDüsseldorf, date2001},
+                   idDuesseldorf, date2001},
                   true),
            {b1, b2, b4, b6, b7, b8, b9, b11, b13, b14, b15, b16, b17, b18, b19,
             b21, b26, b28});
@@ -997,13 +1008,13 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
-  makeTest(andExpr(ge(düsseldorf), gt(düsseldorf)), {b19, b21, b26});
-  makeTest(andExpr(ge(düsseldorf), ge(düsseldorf)), {b19, b21, b26}, true);
-  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b26});
-  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b26}, true);
-  makeTest(andExpr(ge(düsseldorf), lt(hamburg)), {b19}, true);
-  makeTest(andExpr(le(augsburg), lt(düsseldorf)), {b18});
-  makeTest(andExpr(le(münchen), lt(münchen)), {b18, b19, b21});
+  makeTest(andExpr(ge(duesseldorf), gt(duesseldorf)), {b19, b21, b26});
+  makeTest(andExpr(ge(duesseldorf), ge(duesseldorf)), {b19, b21, b26}, true);
+  makeTest(andExpr(ge(frankfurt), gt(muenchen)), {b26});
+  makeTest(andExpr(ge(frankfurt), gt(muenchen)), {b26}, true);
+  makeTest(andExpr(ge(duesseldorf), lt(hamburg)), {b19}, true);
+  makeTest(andExpr(le(augsburg), lt(duesseldorf)), {b18});
+  makeTest(andExpr(le(muenchen), lt(muenchen)), {b18, b19, b21});
   makeTest(andExpr(ge(DoubleId(-6.25)), lt(IntId(-7))), {});
   makeTest(andExpr(gt(DoubleId(-6.25)), lt(DoubleId(-6.25))), {});
   makeTest(andExpr(gt(IntId(0)), lt(IntId(0))), {});
@@ -1037,8 +1048,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(lt(stuttgart), le(augsburg)), {b18, b19, b21});
-  makeTest(orExpr(le(augsburg), ge(köln)), {b18, b21, b26});
-  makeTest(orExpr(gt(münchen), ge(münchen)), {b21, b26});
+  makeTest(orExpr(le(augsburg), ge(koeln)), {b18, b21, b26});
+  makeTest(orExpr(gt(muenchen), ge(muenchen)), {b21, b26});
   makeTest(orExpr(lt(DoubleId(-5.95)), eq(hamburg)),
            {b9, b15, b16, b17, b18, b19, b21});
   makeTest(orExpr(eq(DoubleId(0)), neq(hamburg)), {b6, b11, b18, b19, b21},
@@ -1050,8 +1061,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(eq(IntId(0)), orExpr(lt(IntId(-10)), gt(IntId(8)))),
            {b6, b8, b11, b14, b17, b18}, true);
   makeTest(orExpr(gt(referenceDate2), eq(trueId)), {b4});
-  makeTest(orExpr(eq(münchen), orExpr(lt(augsburg), gt(stuttgart))), {b21, b26},
-           true);
+  makeTest(orExpr(eq(muenchen), orExpr(lt(augsburg), gt(stuttgart))),
+           {b21, b26}, true);
   makeTest(orExpr(eq(undef), gt(referenceDateEqual)), {b28});
   makeTest(orExpr(gt(IntId(8)), gt(DoubleId(22.1))), {b8, b14});
   makeTest(orExpr(lt(DoubleId(-8.25)), le(IntId(-10))), {b9, b17, b18}, true);
@@ -1095,7 +1106,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
   makeTest(notExpr(notExpr(eq(IntId(0)))), {b4, b6, b11}, true);
   makeTest(notExpr(notExpr(neq(DoubleId(-6.25)))),
            {b4, b6, b7, b8, b9, b10, b11, b13, b14, b15, b16, b17, b18});
-  makeTest(notExpr(notExpr(lt(düsseldorf))), {b18});
+  makeTest(notExpr(notExpr(lt(duesseldorf))), {b18});
   makeTest(notExpr(notExpr(ge(DoubleId(3.99)))), {b6, b7, b8, b11, b13, b14},
            true);
   makeTest(notExpr(andExpr(le(IntId(0)), ge(IntId(0)))),
@@ -1109,11 +1120,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
            {b6, b7, b11, b13, b14}, true);
   makeTest(notExpr(orExpr(ge(DoubleId(0)), gt(IntId(-10)))),
            {b9, b11, b17, b18}, true);
-  makeTest(notExpr(orExpr(lt(düsseldorf), gt(düsseldorf))), {b19});
+  makeTest(notExpr(orExpr(lt(duesseldorf), gt(duesseldorf))), {b19});
   makeTest(notExpr(orExpr(lt(DoubleId(-4)), gt(IntId(-4)))), {b10, b11, b15},
            true);
   makeTest(notExpr(orExpr(gt(IntId(-42)), ge(augsburg))), {b11}, true);
-  makeTest(notExpr(orExpr(ge(hamburg), gt(köln))), {b18, b19});
+  makeTest(notExpr(orExpr(ge(hamburg), gt(koeln))), {b18, b19});
 }
 
 //______________________________________________________________________________
@@ -1137,10 +1148,11 @@ TEST_F(PrefilterExpressionOnMetadataTest,
       {b10, b11, b15});
   makeTest(orExpr(notExpr(andExpr(lt(IntId(10)), gt(IntId(5)))), eq(IntId(0))),
            {b4, b6, b7, b9, b10, b11, b13, b14, b15, b16, b17, b18});
-  makeTest(andExpr(orExpr(gt(köln), le(berlin)), gt(DoubleId(7.25))), {}, true);
+  makeTest(andExpr(orExpr(gt(koeln), le(berlin)), gt(DoubleId(7.25))), {},
+           true);
   makeTest(andExpr(lt(falseId), orExpr(lt(IntId(10)), gt(DoubleId(17.25)))),
            {});
-  makeTest(orExpr(andExpr(gt(köln), ge(münchen)), gt(DoubleId(7.25))),
+  makeTest(orExpr(andExpr(gt(koeln), ge(muenchen)), gt(DoubleId(7.25))),
            {b8, b14, b18, b21, b26});
   makeTest(orExpr(eq(trueId), andExpr(gt(referenceDate1), lt(referenceDate2))),
            {b4, b26, b27}, true);
@@ -1257,7 +1269,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(
       orExpr(orExpr(le(LVE("<iri/id5>", lvc)), gt(LVE("<iri/id22>", lvc))),
              neq(LVE("<iri/id10>", lvc))));
-  makeTestClone(inExpr({referenceDate2, idDüsseldorf, idHamburg, IntId(0)}));
+  makeTestClone(inExpr({referenceDate2, idDuesseldorf, idHamburg, IntId(0)}));
   makeTestClone(inExpr({falseId, IntId(10), DoubleId(42.5)}, true));
   makeTestClone(prefixRegex(L("prefixPreeefix")));
   makeTestClone(prefixRegex(L("prefixPreeefix"), true));
@@ -1437,7 +1449,7 @@ TEST_F(PrefilterExpressionOnMetadataTest,
               matcher("Prefilter NotExpression:\nchild {Prefilter "
                       "IsDatatypeExpression:\nPrefilter for datatype: "
                       "Numeric\nis negated: true.\n}\n.\n"));
-  EXPECT_THAT(*inExpr({idStuttgart, idDüsseldorf}),
+  EXPECT_THAT(*inExpr({idStuttgart, idDuesseldorf}),
               matcher("Prefilter IsInExpression\nisNegated: false\nWith the "
                       "following number of reference values: 2.\n"));
   EXPECT_THAT(*inExpr({DoubleId33}, true),

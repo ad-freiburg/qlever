@@ -82,6 +82,16 @@ TEST(LogTest, StreamFiltering) {
   EXPECT_THAT(ss.str(), ::testing::Not(::testing::HasSubstr("hello-error")));
 }
 
+namespace {
+// Pattern for the `LogTest.ThreadSafety` test below. This has to be a
+// variable with linkage (not function-local), because a `const auto&`
+// non-type template parameter can only bind to an object with static
+// storage duration and linkage, not to a function-local variable (unlike
+// in C++20, which allows literal-class-type template arguments directly).
+constexpr ctll::fixed_string kPattern{
+    R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} - FATAL: Thread (?<thread>\d+) message (?<msg>\d+) end)"};
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(LogTest, ThreadSafety) {
   static constexpr size_t numThreads = 8;
@@ -108,8 +118,6 @@ TEST(LogTest, ThreadSafety) {
   // the log-line prefix pattern, and its pair must still be in the set (first
   // occurrence); the pair is then removed. Any interleaved write would produce
   // a line that fails the regex, and a duplicate would fail the contains check.
-  static constexpr ctll::fixed_string kPattern{
-      R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} - FATAL: Thread (?<thread>\d+) message (?<msg>\d+) end)"};
   std::set<std::pair<size_t, size_t>> expected;
   for (size_t t = 0; t < numThreads; ++t) {
     for (size_t m = 0; m < msgsPerThread; ++m) {

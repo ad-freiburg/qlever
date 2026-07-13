@@ -9,7 +9,6 @@
 #include <gmock/gmock.h>
 
 #include <atomic>
-#include <ranges>
 
 #include "./util/GTestHelpers.h"
 #include "util/ThreadSafeQueue.h"

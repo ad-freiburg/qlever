@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 #include <unicode/unistr.h>
 
-#include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>

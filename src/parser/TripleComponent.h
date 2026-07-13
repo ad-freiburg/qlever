@@ -94,6 +94,21 @@ class TripleComponent {
     checkThatStringIsValid();
   }
 
+#ifdef QLEVER_CPP_17
+  /// Construct from any integral type other than `bool` and `int64_t` by
+  /// converting it to `int64_t` first. This constructor is only needed in
+  /// C++17 mode: the converting constructor of `std::variant`, before the
+  /// fix for LWG3204 (P0608) that some standard library implementations
+  /// (for example GCC 8's libstdc++) do not yet have, cannot unambiguously
+  /// choose between the `double`, `int64_t`, and `bool` alternatives of
+  /// `Variant` when constructing directly from a narrower integral type
+  /// like `int`.
+  CPP_template(typename Int)(
+      requires std::is_integral_v<Int>&& CPP_NOT(std::is_same_v<Int, bool>) &&
+      CPP_NOT(std::is_same_v<Int, int64_t>)) TripleComponent(Int value)
+      : TripleComponent(static_cast<int64_t>(value)) {}
+#endif
+
   /// Defaulted copy and move constructors.
   TripleComponent(const TripleComponent&) = default;
   TripleComponent(TripleComponent&&) noexcept = default;

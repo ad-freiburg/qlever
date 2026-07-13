@@ -671,8 +671,9 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       // behavior.
       std::string input{
           "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
-      std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
-                                         {iri("<e>"), iri("<f>"), 234}};
+      std::vector<TurtleTriple> expected{
+          {iri("<a>"), iri("<b>"), int64_t{123}},
+          {iri("<e>"), iri("<f>"), int64_t{234}}};
       Parser parser{encodedIriManager()};
       parser.invalidLiteralsAreSkipped() = true;
       auto result = parseAllTriples(parser, input);
@@ -686,7 +687,7 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
           "<e> <f> 234"};
       std::vector<TurtleTriple> expected{
           {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
-          {iri("<e>"), iri("<f>"), 234}};
+          {iri("<e>"), iri("<f>"), int64_t{234}}};
       Parser parser{encodedIriManager()};
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.invalidLiteralsAreSkipped() = true;
@@ -833,7 +834,7 @@ TEST(RdfParserTest, collection) {
     checker("()", nil);
 
     checker("(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
-            std::vector<TT>{{"_:g_22_0", first, 42},
+            std::vector<TT>{{"_:g_22_0", first, int64_t{42}},
                             {"_:g_22_0", rest, "_:g_22_1"},
                             {"_:g_22_1", first, iri("<alpha>")},
                             {"_:g_22_1", rest, "_:g_22_2"},

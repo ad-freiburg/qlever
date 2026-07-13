@@ -8,7 +8,6 @@
 #include <array>
 #include <ctre.hpp>
 #include <random>
-#include <ranges>
 #include <unordered_set>
 
 #include "../test/util/RandomTestHelpers.h"
@@ -273,15 +272,22 @@ TEST(RandomShuffleTest, Seed) {
       });
 }
 
+namespace {
+// Pattern for checking that a UUID is properly formatted. This has to be a
+// variable with linkage (not function-local), because a `const auto&`
+// non-type template parameter can only bind to an object with static
+// storage duration and linkage, not to a function-local variable (unlike
+// in C++20, which allows literal-class-type template arguments directly).
+constexpr auto uuidPattern = ctll::fixed_string{
+    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{"
+    "3}-[0-9a-fA-F]{12}$"};
+}  // namespace
+
 TEST(UuidGeneratorTest, StrUuidGeneratorTest) {
   // Test few times that the returned UUID str is not
   // "00000000-0000-0000-0000-000000000000" (nil-UUID)
   // and that none of the str-UUIDS is rquivalent to the already
   // created ones.
-  // Pattern for checking that UUID is properly formatted
-  static constexpr auto uuidPattern = ctll::fixed_string{
-      "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{"
-      "3}-[0-9a-fA-F]{12}$"};
   boost::uuids::string_generator getUuid;
   UuidGenerator gen = UuidGenerator();
   std::unordered_set<std::string> setUuids;

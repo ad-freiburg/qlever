@@ -6,8 +6,6 @@
 
 #include <gtest/gtest.h>
 
-#include <concepts>
-
 #include "../test/util/ConfigOptionHelpers.h"
 #include "../test/util/GTestHelpers.h"
 #include "backports/type_traits.h"

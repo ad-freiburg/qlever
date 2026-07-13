@@ -443,7 +443,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   auto en = TripleComponent{ad_utility::convertLangtagToEntityUri("en")};
   auto es = TripleComponent{ad_utility::convertLangtagToEntityUri("es")};
   EXPECT_THAT(deltaTriples,
-              TriplesAre({{a, b, TripleComponent{1}},
+              TriplesAre({{a, b, TripleComponent{int64_t{1}}},
                           {a, b, lit("\"abc\"")},
                           {a, b, lit("\"abc\"@de")},
                           {a, b, lit("\"abc\"@en")},
@@ -475,7 +475,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   EXPECT_THAT(
       deltaTriples,
       TriplesAre({},
-                 {{a, b, TripleComponent{1}},
+                 {{a, b, TripleComponent{int64_t{1}}},
                   {a, b, lit("\"abc\"")},
                   {a, b, lit("\"abc\"@de")},
                   {a, b, lit("\"abc\"@en")},

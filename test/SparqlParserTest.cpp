@@ -1651,10 +1651,11 @@ TEST(ParserTest, variablesInMinusAreHidden) {
       m::SelectQuery(
           m::VariablesSelect({"?a"}, false, false),
           m::GraphPattern(
-              m::InlineData({Variable{"?a"}}, {{TripleComponent{1}}}),
-              m::Minus(m::GraphPattern(m::InlineData(
-                  {Variable{"?a"}, Variable{"?b"}},
-                  {{TripleComponent{2}, TripleComponent{2}}}))))));
+              m::InlineData({Variable{"?a"}}, {{TripleComponent{int64_t{1}}}}),
+              m::Minus(m::GraphPattern(
+                  m::InlineData({Variable{"?a"}, Variable{"?b"}},
+                                {{TripleComponent{int64_t{2}},
+                                  TripleComponent{int64_t{2}}}}))))));
 }
 
 // _____________________________________________________________________________

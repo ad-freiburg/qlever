@@ -49,13 +49,18 @@ bool TokenTestCtreHelper::matchIriref(std::string_view s) {
   return ctre::match<T::Iriref>(s);
 }
 
+namespace {
+// The result of `cls(...)` has to be bound to a named variable before being
+// used as a template argument, because a `const auto&` non-type template
+// parameter can only bind to an object with static storage duration and
+// linkage, not to a temporary or a function-local variable (unlike in
+// C++20, which allows literal-class-type template arguments directly). A
+// variable at namespace scope (unlike a function-local `static constexpr`
+// variable) has linkage.
+constexpr auto pnCharsBasePattern = cls(TurtleTokenCtre::PnCharsBaseString);
+}  // namespace
+
 // _________________________________________________________________________
 bool TokenTestCtreHelper::matchPnCharsBaseString(std::string_view s) {
-  // The result of `cls(...)` has to be bound to a named `static constexpr`
-  // variable before being used as a template argument, because a `const
-  // auto&` non-type template parameter can only bind to an object with
-  // static storage duration, not to a temporary (unlike in C++20, which
-  // allows literal-class-type template arguments directly).
-  static constexpr auto pattern = cls(T::PnCharsBaseString);
-  return ctre::match<pattern>(s);
+  return ctre::match<pnCharsBasePattern>(s);
 }
