@@ -352,13 +352,14 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
                               std::vector<std::array<FakeId, 2>> expected,
                               source_location l = AD_CURRENT_SOURCE_LOC()) {
   using namespace std::placeholders;
-  using namespace std::ranges;
   auto trace = generateLocationTrace(l);
   auto compare = [](FakeId l, FakeId r) {
     return static_cast<Id>(l) < static_cast<Id>(r);
   };
-  AD_CONTRACT_CHECK(is_sorted(a | views::join, {}, ad_utility::staticCast<Id>));
-  AD_CONTRACT_CHECK(is_sorted(b | views::join, {}, ad_utility::staticCast<Id>));
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(a | ql::views::join, {},
+                                          ad_utility::staticCast<Id>));
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(b | ql::views::join, {},
+                                          ad_utility::staticCast<Id>));
   auto validationProjection = [](const std::array<FakeId, 2>& fakeIds) -> Id {
     const auto& [x, y] = fakeIds;
     return x == Id::makeUndefined() ? y : x;
@@ -368,7 +369,8 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
     zipperJoinForBlocksWithPotentialUndef(a, b, compare, adder);
     const auto& result = adder.getOutput();
     // The result must be sorted on the first column
-    EXPECT_TRUE(is_sorted(result, std::less<>{}, validationProjection));
+    EXPECT_TRUE(
+        ql::ranges::is_sorted(result, std::less<>{}, validationProjection));
     // The exact order of the elements with the same first column is not
     // important and depends on implementation details. We therefore do not
     // enforce it here.
@@ -383,7 +385,8 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
     RowAdderWithUndef adder{};
     zipperJoinForBlocksWithPotentialUndef(b, a, compare, adder);
     const auto& result = adder.getOutput();
-    EXPECT_TRUE(is_sorted(result, std::less<>{}, validationProjection));
+    EXPECT_TRUE(
+        ql::ranges::is_sorted(result, std::less<>{}, validationProjection));
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   }
 }
