@@ -18,6 +18,36 @@ namespace ad_utility {
 namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
 constexpr ctll::fixed_string digitCaptureGroup = "digit";
+
+// Helper for `insertThousandSeparator` below. This has to be a class
+// template (rather than a function-local `static constexpr` variable),
+// because a function-local variable never has linkage, but a `const auto&`
+// non-type template parameter (used for `ctre::search_all` below) requires
+// an object with linkage in C++17 (unlike in C++20, which allows
+// literal-class-type template arguments directly). A static data member of
+// a class template, unlike a function-local variable, does have linkage.
+template <const char floatingPointSignifier>
+struct DigitSequencePattern {
+  // A `ctll::fixed_string` of `floatingPointSignifier`, that can be used
+  // inside regex character classes, without being confused with one of the
+  // reserved characters.
+  static constexpr auto adjustedSignifier = []() {
+    constexpr ctll::fixed_string floatingPointSignifierAsFixedString(
+        {floatingPointSignifier, '\0'});
+
+    // Inside a regex character class are fewer reserved characters.
+    if constexpr (contains(R"--(^-[]\)--", floatingPointSignifier)) {
+      return "\\" + floatingPointSignifierAsFixedString;
+    } else {
+      return floatingPointSignifierAsFixedString;
+    }
+  }();
+
+  // The pattern finds any digit sequence, that is long enough for inserting
+  // thousand separators and is not the fractual part of a floating point.
+  static constexpr ctll::fixed_string value{"(?:^|[^\\d" + adjustedSignifier +
+                                            "])(?<digit>\\d{4,})"};
+};
 }  // namespace detail
 
 // _____________________________________________________________________________
@@ -30,23 +60,6 @@ std::string insertThousandSeparator(const std::string_view str,
   };
   AD_CONTRACT_CHECK(!isDigit(separatorSymbol) &&
                     !isDigit(floatingPointSignifier));
-
-  /*
-  Create a `ctll::fixed_string` of `floatingPointSignifier`, that can be used
-  inside regex character classes, without being confused with one of the
-  reserved characters.
-  */
-  static constexpr auto adjustFloatingPointSignifierForRegex = []() {
-    constexpr ctll::fixed_string floatingPointSignifierAsFixedString(
-        {floatingPointSignifier, '\0'});
-
-    // Inside a regex character class are fewer reserved character.
-    if constexpr (contains(R"--(^-[]\)--", floatingPointSignifier)) {
-      return "\\" + floatingPointSignifierAsFixedString;
-    } else {
-      return floatingPointSignifierAsFixedString;
-    }
-  };
 
   /*
   As string view doesn't support the option to insert new values between old
@@ -75,16 +88,10 @@ std::string insertThousandSeparator(const std::string_view str,
     }
   };
 
-  /*
-  The pattern finds any digit sequence, that is long enough for inserting
-  thousand separators and is not the fractual part of a floating point.
-  */
-  static constexpr ctll::fixed_string regexPatDigitSequence{
-      "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
-      "])(?<digit>\\d{4,})"};
   const char* parsePointer = str.data();
   ql::ranges::for_each(
-      ctre::search_all<regexPatDigitSequence>(str),
+      ctre::search_all<
+          detail::DigitSequencePattern<floatingPointSignifier>::value>(str),
       [&parsePointer, &ostream, &insertSeparator](const auto& match) {
         auto digitSequence =
             match.template get<detail::digitCaptureGroup>().to_view();

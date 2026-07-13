@@ -368,6 +368,14 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
                operator()<SingleParameter, ReturnType, ParameterType>());
         }
       });
+#ifndef QLEVER_CPP_17
+  // This triply-nested generic-lambda instantiation (a cartesian-product
+  // lambda whose body calls another lambda that is itself parameterized over
+  // every type variant) triggers an internal compiler error in GCC 8
+  // (`internal compiler error: in tsubst_copy, at cp/pt.c`). It is skipped
+  // under `QLEVER_CPP_17` because it only exercises an additional edge case
+  // of the same `DoubleParameter` check already covered above, not any
+  // C++17-specific behavior.
   callWithCartesianProductOfEveryVariantOfType(
       ti<bool>, [&bothInvocableWithExactReturnType,
                  &callWithEveryVariantOfType](auto t1, auto t2) {
@@ -389,6 +397,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
               }
             });
       });
+#endif
 }
 
 TEST(TypeTraits, Rvalue) {

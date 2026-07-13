@@ -553,7 +553,13 @@ namespace {
 // function.
 struct BlockMetadataToString {
   std::string operator()(const CompressedBlockMetadata& b) const {
-    return (std::stringstream{} << b).str();
+    // Use a named `stringstream` instead of chaining directly off of a
+    // temporary: GCC 8's libstdc++ (unlike later versions) only has an
+    // `operator<<` overload for rvalue streams that returns `std::ostream&`,
+    // losing the `stringstream`-ness needed for the subsequent `.str()`.
+    std::stringstream ss;
+    ss << b;
+    return ss.str();
   }
 };
 }  // namespace
@@ -1366,15 +1372,33 @@ TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
                                     {{6, 8}, {10, 12}});
 }
 
+namespace {
+// Functor for the `checkPrintFormattedPrefilterExpression` test below. A
+// named (rather than local lambda) type is used here because GCC 8 fails to
+// emit a definition for `testing::internal::ResultOfMatcher::Impl`'s
+// constructor when it is instantiated with a lambda type that is local to
+// an inline function.
+struct PrefilterExpressionToString {
+  template <typename T>
+  std::string operator()(const T& expr) const {
+    // Use a named `stringstream` instead of chaining directly off of a
+    // temporary: GCC 8's libstdc++ (unlike later versions) only has an
+    // `operator<<` overload for rvalue streams that returns `std::ostream&`,
+    // losing the `stringstream`-ness needed for the subsequent `.str()`.
+    std::stringstream ss;
+    ss << expr;
+    return ss.str();
+  }
+};
+}  // namespace
+
 //______________________________________________________________________________
 // Test PrefilterExpression content formatting for debugging.
 TEST_F(PrefilterExpressionOnMetadataTest,
        checkPrintFormattedPrefilterExpression) {
-  auto exprToString = [](const auto& expr) {
-    return (std::stringstream{} << expr).str();
-  };
-  auto matcher = [&exprToString](const std::string& substring) {
-    return ::testing::ResultOf(exprToString, ::testing::Eq(substring));
+  auto matcher = [](const std::string& substring) {
+    return ::testing::ResultOf(PrefilterExpressionToString{},
+                               ::testing::Eq(substring));
   };
 
   EXPECT_THAT(*lt(IntId(10)),
