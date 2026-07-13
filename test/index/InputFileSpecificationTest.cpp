@@ -10,9 +10,9 @@
 #include <gmock/gmock.h>
 
 #include <boost/asio/thread_pool.hpp>
-#include <filesystem>
 #include <fstream>
 
+#include "backports/filesystem.h"
 #include "index/InputFileSpecification.h"
 #include "parser/AsyncBlockSource.h"
 #include "util/MemorySize/MemorySize.h"
@@ -71,8 +71,8 @@ TEST(InputFileSpecification, FiletypeFromMediaType) {
 
 // _____________________________________________________________________________
 TEST(InputFileSpecification, MakeAsyncBlockSourceFileBased) {
-  std::filesystem::path tmpFile =
-      std::filesystem::temp_directory_path() / "qlever_ifs_test.ttl";
+  ql::filesystem::path tmpFile =
+      ql::filesystem::temp_directory_path() / "qlever_ifs_test.ttl";
   std::ofstream{tmpFile} << "<s> <p> <o> .\n";
 
   boost::asio::thread_pool pool{1};
@@ -82,7 +82,7 @@ TEST(InputFileSpecification, MakeAsyncBlockSourceFileBased) {
   EXPECT_NE(dynamic_cast<qlever::parser::AsyncFileBlockSource*>(src.get()),
             nullptr);
 
-  std::filesystem::remove(tmpFile);
+  ql::filesystem::remove(tmpFile);
 }
 
 // _____________________________________________________________________________

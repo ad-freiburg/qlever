@@ -10,6 +10,7 @@
 
 #include "./util/FileTestHelpers.h"
 #include "ServerTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
@@ -677,7 +678,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
 // _____________________________________________________________________________
 // Read a query-event-log file and parse each JSONL line.
 namespace {
-std::vector<json> parseEventLog(const std::filesystem::path& path) {
+std::vector<json> parseEventLog(const ql::filesystem::path& path) {
   std::vector<json> events;
   for (const auto& line : ad_utility::testing::readLines(path)) {
     events.push_back(json::parse(line));

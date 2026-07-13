@@ -9,14 +9,14 @@
 
 #include "util/FilesystemHelpers.h"
 
-#include <filesystem>
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 
 namespace qlever::util {
-namespace fs = std::filesystem;
+namespace fs = ql::filesystem;
 
 // _____________________________________________________________________________
 bool doesDirectoryContainFileWithBasename(const std::string& baseName) {

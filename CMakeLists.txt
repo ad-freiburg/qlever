@@ -281,9 +281,9 @@ endif ()
 if (REDUCED_FEATURE_SET_FOR_CPP17)
   # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
   # which is only available in Boost versions >= 1.81
-  find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container filesystem REQUIRED CONFIG)
 else()
-  find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container filesystem REQUIRED CONFIG)
 endif()
 include_directories(${Boost_INCLUDE_DIR})
 
@@ -303,7 +303,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container Boost::filesystem uriparser)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")

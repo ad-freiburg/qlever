@@ -12,7 +12,6 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
-#include <filesystem>
 
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
@@ -20,6 +19,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
@@ -486,7 +486,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
-    EXPECT_FALSE(std::filesystem::exists(prefix + suffix))
+    EXPECT_FALSE(ql::filesystem::exists(prefix + suffix))
         << "File " << prefix + suffix
         << " should not exist before the task is executed.";
   }
@@ -503,7 +503,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   net::co_spawn(threadPool, std::move(task), net::detached);
   threadPool.join();
   for (std::string_view suffix : suffixes) {
-    EXPECT_TRUE(std::filesystem::exists(prefix + suffix));
+    EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
     EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
               fileToBuffer(prefix + suffix));
   }
@@ -541,13 +541,13 @@ TEST(IndexRebuilder, materializeToIndex) {
         index.deltaTriplesManager()
             .getCurrentLocatedTriplesSharedStateWithVocab();
 
-    std::filesystem::create_directory(baseFolder);
+    ql::filesystem::create_directory(baseFolder);
     absl::Cleanup removeIndexFiles{
-        [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(std::filesystem::exists(logFile));
+    EXPECT_TRUE(ql::filesystem::exists(logFile));
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
@@ -606,9 +606,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  std::filesystem::create_directory(baseFolder);
+  ql::filesystem::create_directory(baseFolder);
   absl::Cleanup removeIndexFiles{
-      [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
   EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
                                              state, vocab, blankNodes,
@@ -643,7 +643,7 @@ void cleanFilesWithPrefix(std::string_view prefix) {
   AD_CONTRACT_CHECK(!prefix.empty(),
                     "This function is not meant to delete all files in the "
                     "current directory. Please specify a prefix.");
-  namespace fs = std::filesystem;
+  namespace fs = ql::filesystem;
   // Collect the matching entries first and delete them only afterwards.
   // Deleting entries while iterating the directory is unspecified behavior and
   // can cause entries to be skipped on some platforms (observed on macOS),
@@ -714,14 +714,14 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // We use this config as a proxy for the index rebuilder having finished
   // successfully.
-  EXPECT_TRUE(std::filesystem::exists("my-name.meta-data.json"));
+  EXPECT_TRUE(ql::filesystem::exists("my-name.meta-data.json"));
 
   auto request3 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
-  EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+  EXPECT_TRUE(ql::filesystem::exists("new_index.meta-data.json"));
 
   // The index with the same name already exists, so we don't want to overwrite
   // it.

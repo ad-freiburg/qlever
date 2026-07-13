@@ -23,9 +23,9 @@
 #include <util/geo/Geo.h>
 
 #include <cmath>
-#include <filesystem>
 #include <set>
 
+#include "backports/filesystem.h"
 #include "backports/three_way_comparison.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
@@ -512,7 +512,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   };
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  auto basePath = std::filesystem::path(qec_->getIndex().getOnDiskBase());
+  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
 
   std::string sweeperTmpPath = basePath.parent_path().string();
 

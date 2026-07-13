@@ -16,6 +16,7 @@
 
 #include "Permutation.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
@@ -657,13 +658,13 @@ void DeltaTriples::writeToDisk() const {
                }) |
            ql::views::join;
   };
-  std::filesystem::path tempPath = filenameForPersisting_.value();
+  ql::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
   ad_utility::serializeIds(
       tempPath, localVocab_,
       std::array{toRange(triplesSetsNormal_.triplesDeleted_),
                  toRange(triplesSetsNormal_.triplesInserted_)});
-  std::filesystem::rename(tempPath, filenameForPersisting_.value());
+  ql::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
 // _____________________________________________________________________________

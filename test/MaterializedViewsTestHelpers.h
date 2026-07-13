@@ -14,6 +14,7 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
@@ -50,10 +51,10 @@ inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
   std::cout << "Removing test files " << basename << ".*" << std::endl;
   for (const auto& entry :
-       std::filesystem::directory_iterator(std::filesystem::current_path())) {
+       ql::filesystem::directory_iterator(ql::filesystem::current_path())) {
     if (entry.is_regular_file() &&
         std::regex_match(entry.path().filename().string(), pattern)) {
-      std::filesystem::remove(entry.path());
+      ql::filesystem::remove(entry.path());
     }
   }
 }

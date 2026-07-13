@@ -15,6 +15,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/filesystem.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
@@ -110,12 +111,12 @@ auto makeTemporaryDirectory(std::string_view name) {
   AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
   directory += name;
   // Create directory.
-  std::filesystem::create_directory(directory);
+  ql::filesystem::create_directory(directory);
 
   // Remove all files in directory when done.
   absl::Cleanup cleanup{[directory]() {
     std::error_code ec;
-    std::filesystem::remove_all(directory, ec);
+    ql::filesystem::remove_all(directory, ec);
     if (ec) {
       AD_LOG(ERROR) << "Could not remove temporary directory " << directory
                     << ": " << ec.message();
@@ -850,8 +851,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
@@ -860,8 +861,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
   permutation.loadFromDisk(onDiskBase, true);
   index.deltaTriplesManager().modify<void>(
@@ -910,7 +911,7 @@ TEST(IndexImpl, writePatternsToFile) {
   index.getPatterns() = CompactVectorOfStrings{data};
   index.writePatternsToFile();
 
-  ASSERT_TRUE(std::filesystem::exists(onDiskBase + ".index.patterns"));
+  ASSERT_TRUE(ql::filesystem::exists(onDiskBase + ".index.patterns"));
 
   double avgNumDistinctSubjectsPerPredicate;
   double avgNumDistinctPredicatesPerSubject;

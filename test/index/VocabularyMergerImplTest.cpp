@@ -11,9 +11,9 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <string>
 
+#include "backports/filesystem.h"
 #include "index/VocabularyMergerImpl.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"

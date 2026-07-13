@@ -7,6 +7,7 @@
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
@@ -168,7 +169,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // false positive when we later check that the patterns or the missing
   // permutations are not present, because they would actually be present from
   // the previous index build.
-  namespace fs = std::filesystem;
+  namespace fs = ql::filesystem;
   for (const auto& entry : fs::directory_iterator(fs::current_path())) {
     if (!entry.is_regular_file()) continue;
 

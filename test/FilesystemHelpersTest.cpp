@@ -10,15 +10,15 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
-#include <filesystem>
 #include <fstream>
 #include <string>
 
+#include "backports/filesystem.h"
 #include "util/FilesystemHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/Log.h"
 
-namespace fs = std::filesystem;
+namespace fs = ql::filesystem;
 using qlever::util::doesDirectoryContainFileWithBasename;
 using ::testing::HasSubstr;
 
@@ -135,7 +135,7 @@ TEST(DoesDirectoryContainFileWithBasename, parentIsNotADirectoryReturnsTrue) {
 TEST(DoesDirectoryContainFileWithBasename,
      trailingSlashHasNoFilenameComponent) {
   TempDir tmp;
-  // A path ending in a separator has an empty filename() in std::filesystem.
+  // A path ending in a separator has an empty filename() in ql::filesystem.
   std::string base = tmp.path().string() + "/";
   touch(tmp.path() / "some-file.txt");
   EXPECT_TRUE(doesDirectoryContainFileWithBasename(base));
