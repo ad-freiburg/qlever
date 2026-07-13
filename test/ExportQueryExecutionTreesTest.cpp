@@ -1561,7 +1561,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       runQueryStreamableResult(kg, constructQuery,
                                ad_utility::MediaType::sparqlXml),
-      ::testing::ContainsRegex(
+      ::testing::ContainsSubstr(
           "application/sparql-results+xml is not supported for CONSTRUCT "
           "queries."));
 
