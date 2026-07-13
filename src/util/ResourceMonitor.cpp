@@ -8,7 +8,6 @@
 
 #include "util/ResourceMonitor.h"
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
 #include "util/Exception.h"
@@ -55,7 +54,8 @@ std::optional<uint64_t> currentRssBytes() {
 std::optional<uint64_t> rssBytesFromStatm(std::istream& statm) {
   // Field 2 of `/proc/self/statm` is the resident size in pages, so scale by
   // the machine's page size.
-  uint64_t totalPages, residentPages;
+  uint64_t totalPages;
+  uint64_t residentPages;
   if (!(statm >> totalPages >> residentPages)) {
     return std::nullopt;
   }
@@ -66,14 +66,15 @@ std::optional<uint64_t> rssBytesFromStatm(std::istream& statm) {
 // _____________________________________________________________________________
 std::optional<double> cpuTimeSeconds() {
 #if defined(__APPLE__) || defined(__linux__)
-  struct rusage usage;
+  rusage usage;
   if (getrusage(RUSAGE_SELF, &usage) != 0) {
     return std::nullopt;
   }
   // User time = running our code, system time = kernel work on our
   // behalf (I/O etc.); their sum is what counts as "CPU used".
   auto toSeconds = [](const timeval& time) {
-    return static_cast<double>(time.tv_sec) + time.tv_usec * 1e-6;
+    return static_cast<double>(time.tv_sec) +
+           static_cast<double>(time.tv_usec) * 1e-6;
   };
   return toSeconds(usage.ru_utime) + toSeconds(usage.ru_stime);
 #else
@@ -103,10 +104,11 @@ std::optional<double> CpuPercentTracker::update(
 std::string formatTsvRow(double elapsed, int64_t timestampMs,
                          std::optional<uint64_t> rss,
                          std::optional<double> cpuPercent) {
-  return absl::StrFormat(
-      "%.1f\t%d\t%s\t%s\n", elapsed, timestampMs,
-      rss.has_value() ? absl::StrCat(*rss) : "",
-      cpuPercent.has_value() ? absl::StrFormat("%.1f", *cpuPercent) : "");
+  return absl::StrFormat("%.1f\t%d\t%s\t%s\n", elapsed, timestampMs,
+                         rss.has_value() ? std::to_string(rss.value()) : "",
+                         cpuPercent.has_value()
+                             ? absl::StrFormat("%.1f", cpuPercent.value())
+                             : "");
 }
 
 }  // namespace ad_utility::resource_monitor
@@ -185,7 +187,6 @@ void ResourceMonitor::setReadersForTesting(
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   Timer timer{Timer::Started};
   resource_monitor::CpuPercentTracker cpuTracker{cpuReader_()};
-  bool warnedWriteFailure = false;
 
   // Absolute deadlines keep the ticks on a steady grid, no matter how
   // long each sample takes.
@@ -204,11 +205,11 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
         elapsed, epochMillis(std::chrono::system_clock::now()), rss,
         cpuPercent);
     stream_.flush();
-    // A failed stream drops all further writes; say so once.
-    if (stream_.fail() && !warnedWriteFailure) {
-      AD_LOG_WARN << "ResourceMonitor: writing to the output file failed"
+    if (stream_.fail()) {
+      AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "
+                     "stopping the resource-usage log."
                   << std::endl;
-      warnedWriteFailure = true;
+      break;
     }
   }
 }

@@ -9,13 +9,14 @@
 #ifndef QLEVER_SRC_UTIL_RESOURCEMONITOR_H
 #define QLEVER_SRC_UTIL_RESOURCEMONITOR_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <istream>
 #include <mutex>
 #include <optional>
@@ -63,8 +64,8 @@ std::string formatTsvRow(double elapsed, int64_t timestampMs,
 
 // The two OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).
-using RssReader = std::function<std::optional<uint64_t>()>;
-using CpuReader = std::function<std::optional<double>()>;
+using RssReader = absl::AnyInvocable<std::optional<uint64_t>()>;
+using CpuReader = absl::AnyInvocable<std::optional<double>()>;
 
 }  // namespace resource_monitor
 

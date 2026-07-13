@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -54,7 +55,7 @@ int main(int argc, char** argv) {
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
-  unsigned resourceUsageIntervalS;
+  uint32_t resourceUsageIntervalS;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};

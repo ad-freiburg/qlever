@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -194,7 +195,7 @@ int main(int argc, char** argv) {
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
   bool noResourceUsageLog = false;
-  unsigned resourceUsageIntervalS;
+  uint32_t resourceUsageIntervalS;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");

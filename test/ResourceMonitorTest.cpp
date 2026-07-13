@@ -264,7 +264,7 @@ TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
 
 #if defined(__linux__)
 // _____________________________________________________________________________
-TEST(ResourceMonitor, FailedWritesAreWarnedAboutExactlyOnce) {
+TEST(ResourceMonitor, WriteFailureWarnsOnceAndStopsSampling) {
   // `/dev/full` opens successfully but fails every write (it simulates a
   // full disk), which is exactly the failure the sampler must warn about.
   if (!fs::exists("/dev/full")) {
@@ -273,8 +273,9 @@ TEST(ResourceMonitor, FailedWritesAreWarnedAboutExactlyOnce) {
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   {
     ResourceMonitor monitor;
-    // Short interval plus a longer sleep, so the thread attempts several
-    // writes: the first must warn, the later ones must stay silent.
+    // Short interval plus a longer sleep, so the thread would tick many
+    // times: the first failed write must warn and end the sampling, so
+    // the warning appears exactly once.
     monitor.start("/dev/full", ResourceMonitor::Mode::Truncate,
                   std::chrono::milliseconds{5});
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
