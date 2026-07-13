@@ -40,6 +40,13 @@ auto parseQuery(std::string query,
                                   datasets);
 }
 
+auto getAllTriplesWithGraph() {
+  return makeRequest(http::verb::post, "/",
+                     {{http::field::content_type, "application/sparql-query"},
+                      {http::field::accept, "text/csv"}},
+                     "SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }");
+}
+
 }  // namespace
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
@@ -502,23 +509,34 @@ TEST(ServerTest, gspPut) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   // Each request runs on a fresh server, so that the sub-tests are
   // independent of each other.
+  auto resetValue = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
   auto testPut = [&qec](
                      const std::string& contentType, const std::string& body,
                      const std::string& graph, const auto& bodyMatcher,
+                     const auto& finalState,
                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto request =
         makeRequest(http::verb::put, "/?" + graph,
                     {{http::field::authorization, "Bearer accessToken"}}, body);
     request.set(http::field::content_type, contentType);
-    auto response =
-        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(request);
+    auto testServer = makeServerForTesting(qec->getIndex().getOnDiskBase());
+    auto response = testServer.process(request);
     EXPECT_THAT(response, bodyMatcher);
+    EXPECT_THAT(responseBodyToString(
+                    testServer.process(getAllTriplesWithGraph()).body()),
+                finalState);
   };
-  testPut("text/turtle", "<a> <b> <c> .", "default",
-          StatusIs(http::status::ok));
+  testPut("text/turtle", "<a> <b> <c> .", "default", StatusIs(http::status::ok),
+          testing::Eq("s,p,o,g\na,b,c,http://qlever.cs.uni-freiburg.de/"
+                      "builtin-functions/default-graph\n"));
   testPut("text/turtle", "<a> <b> <c> .", "graph=foo",
-          StatusIs(http::status::created));
+          StatusIs(http::status::created),
+          testing::Eq("s,p,o,g\na,b,c,foo\na,b,c,http://"
+                      "qlever.cs.uni-freiburg.de/builtin-functions/"
+                      "default-graph\na,b,d,http://qlever.cs.uni-freiburg.de/"
+                      "builtin-functions/default-graph\n"));
 }
 
 // _____________________________________________________________________________
@@ -526,19 +544,31 @@ TEST(ServerTest, gspDelete) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   // Each request runs on a fresh server, so that the sub-tests are
   // independent of each other.
-  auto testDelete = [&qec](const std::string& graph, const auto& bodyMatcher,
-                           ad_utility::source_location l =
-                               AD_CURRENT_SOURCE_LOC()) {
+  auto getAllTriples = []() {
+    return makeRequest(http::verb::post, "/",
+                       {{http::field::content_type, "application/sparql-query"},
+                        {http::field::accept, "text/csv"}},
+                       "SELECT * WHERE { ?s ?p ?o }");
+  };
+  auto testDelete = [&getAllTriples, &qec](const std::string& graph,
+                                           const auto& bodyMatcher,
+                                           const auto& finalState,
+                                           ad_utility::source_location l =
+                                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto request =
         makeRequest(http::verb::delete_, "/?" + graph,
                     {{http::field::authorization, "Bearer accessToken"}});
-    auto response =
-        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(request);
+    auto testServer = makeServerForTesting(qec->getIndex().getOnDiskBase());
+    auto response = testServer.process(request);
     EXPECT_THAT(response, bodyMatcher);
+    EXPECT_THAT(
+        responseBodyToString(testServer.process(getAllTriples()).body()),
+        finalState);
   };
-  testDelete("default", StatusIs(http::status::ok));
-  testDelete("graph=foo", StatusIs(http::status::not_found));
+  testDelete("default", StatusIs(http::status::ok), testing::Eq("s,p,o\n"));
+  testDelete("graph=foo", StatusIs(http::status::not_found),
+             testing::Eq("s,p,o\na,b,c\na,b,d\n"));
 }
 
 MATCHER(PairwiseUnequal, "contains no duplicate elements") {
@@ -560,35 +590,52 @@ MATCHER(PairwiseUnequal, "contains no duplicate elements") {
 
 // _____________________________________________________________________________
 TEST(ServerTest, gspPost) {
-  // TODO<qup42> test more thoroughly including the exact delta triples state
   auto baseName = gtestCurrentTestName();
   makeTestIndex(baseName, "");
-  auto serverForTesting = makeServerForTesting(baseName);
-  auto expectPost = [&serverForTesting](std::string body,
-                                        const auto& responseMatcher) {
-    auto request =
-        makeRequest(http::verb::post, "/?graph=foo",
-                    {{http::field::authorization, "Bearer accessToken"},
-                     {http::field::host, "example.org"},
-                     {http::field::content_type, "text/turtle"}},
-                    std::move(body));
-    auto response = serverForTesting.process(request);
-    EXPECT_THAT(response, responseMatcher);
+  auto makePost = [](std::string body, std::string graph) {
+    return makeRequest(http::verb::post, absl::StrCat("/?", graph),
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       std::move(body));
   };
-  auto NumDeltaTriples = [](const auto& matcher) {
-    return testing::ResultOf(
-        [](const ServerForTesting& server) {
-          return server.deltaTriplesManager()
-              .getCurrentLocatedTriplesSharedState()
-              ->getLocatedTriplesForPermutation<false>(Permutation::PSO)
-              .numTriplesForTesting();
-        },
-        matcher);
-  };
-  expectPost("", StatusIs(http::status::no_content));
-  EXPECT_THAT(serverForTesting, NumDeltaTriples(testing::Eq(0)));
-  expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
-  EXPECT_THAT(serverForTesting, NumDeltaTriples(testing::Eq(1)));
+  auto resetValue = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
+  {
+    auto serverForTesting = makeServerForTesting(baseName);
+    EXPECT_THAT(serverForTesting.process(makePost("", "graph=foo")),
+                StatusIs(http::status::no_content));
+    EXPECT_THAT(responseBodyToString(
+                    serverForTesting.process(getAllTriplesWithGraph()).body()),
+                testing::Eq("s,p,o,g\n"));
+  }
+  {
+    auto serverForTesting = makeServerForTesting(baseName);
+    EXPECT_THAT(
+        serverForTesting.process(makePost("<a> <b> <c> .", "graph=foo")),
+        StatusIs(http::status::ok));
+    EXPECT_THAT(responseBodyToString(
+                    serverForTesting.process(getAllTriplesWithGraph()).body()),
+                testing::Eq("s,p,o,g\na,b,c,foo\n"));
+    // `<a> <b> <c>` is already contained.
+    EXPECT_THAT(serverForTesting.process(
+                    makePost("<a> <b> <c> . <d> <e> <f> .", "graph=foo")),
+                StatusIs(http::status::ok));
+    EXPECT_THAT(responseBodyToString(
+                    serverForTesting.process(getAllTriplesWithGraph()).body()),
+                testing::Eq("s,p,o,g\na,b,c,foo\nd,e,f,foo\n"));
+    // Insert the same triples again but now into the default graph.
+    EXPECT_THAT(serverForTesting.process(
+                    makePost("<a> <b> <c> . <d> <e> <f> .", "default")),
+                StatusIs(http::status::ok));
+    EXPECT_THAT(
+        responseBodyToString(
+            serverForTesting.process(getAllTriplesWithGraph()).body()),
+        testing::Eq(
+            "s,p,o,g\na,b,c,foo\na,b,c,http://qlever.cs.uni-freiburg.de/"
+            "builtin-functions/default-graph\nd,e,f,foo\nd,e,f,http://"
+            "qlever.cs.uni-freiburg.de/builtin-functions/default-graph\n"));
+  }
 }
 
 // _____________________________________________________________________________
