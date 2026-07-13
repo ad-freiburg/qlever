@@ -9,6 +9,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
@@ -127,13 +128,28 @@ namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION(testNamespaceA::G) { serializer | arg.a; }
 }  // namespace ad_utility::serialization
 
-// Test that the claims about serializability are in fact true.
+// Test that the claims about serializability are in fact true. Use
+// `std::void_t`-based detection traits (instead of C++20
+// `requires`-expressions) to check whether `serialize(s, t)` is well-formed.
+template <typename T, typename = void>
+struct IsReadSerializable : std::false_type {};
 template <typename T>
-static constexpr bool isReadSerializable =
-    requires(ByteBufferReadSerializer s, T& t) { serialize(s, t); };
+struct IsReadSerializable<
+    T, std::void_t<decltype(serialize(std::declval<ByteBufferReadSerializer&>(),
+                                      std::declval<T&>()))>> : std::true_type {
+};
 template <typename T>
-static constexpr bool isWriteSerializable =
-    requires(ByteBufferWriteSerializer s, T t) { serialize(s, t); };
+static constexpr bool isReadSerializable = IsReadSerializable<T>::value;
+
+template <typename T, typename = void>
+struct IsWriteSerializable : std::false_type {};
+template <typename T>
+struct IsWriteSerializable<
+    T, std::void_t<decltype(serialize(
+           std::declval<ByteBufferWriteSerializer&>(), std::declval<T&>()))>>
+    : std::true_type {};
+template <typename T>
+static constexpr bool isWriteSerializable = IsWriteSerializable<T>::value;
 
 // Simple dummy "compression" for testing (modify the data in a way that is
 // simple, and reversed in the below dummy decompression function)
@@ -548,10 +564,8 @@ TEST(Serializer, CopyAndMove) {
     using Writer = std::decay_t<decltype(writer)>;
 
     // Assert that write serializers cannot be copied.
-    static_assert(!requires(Writer w1, Writer w2) {
-      { w1 = w2 };
-    });
-    static_assert(!std::constructible_from<Writer, const Writer&>);
+    static_assert(!std::is_assignable_v<Writer&, Writer&>);
+    static_assert(!ql::concepts::constructible_from<Writer, const Writer&>);
 
     // Assert that moving writers consistently writes to the same resource.
     writer | 1;
@@ -563,10 +577,8 @@ TEST(Serializer, CopyAndMove) {
     auto reader = makeReaderFromWriter();
     // Assert that read serializers cannot be copied.
     using Reader = decltype(reader);
-    static_assert(!requires(Reader r1, Reader r2) {
-      { r1 = r2 };
-    });
-    static_assert(!std::constructible_from<Reader, const Reader&>);
+    static_assert(!std::is_assignable_v<Reader&, Reader&>);
+    static_assert(!ql::concepts::constructible_from<Reader, const Reader&>);
     // Assert that moving writers consistently reads from the same resource.
     int i;
     reader | i;
