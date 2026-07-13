@@ -42,12 +42,12 @@ std::exception_ptr getNoStatementBoundaryError(std::string_view description,
 }  // namespace
 
 // ____________________________________________________________________________
-BlockingAsyncBlockSource::BlockingAsyncBlockSource(
-    const net::any_io_executor& exec, ad_utility::MemorySize blocksize)
+BlockingBlockSource::BlockingBlockSource(const net::any_io_executor& exec,
+                                         ad_utility::MemorySize blocksize)
     : AsyncBlockSource{exec, blocksize}, strand_{net::make_strand(exec)} {}
 
 // ____________________________________________________________________________
-void BlockingAsyncBlockSource::asyncGetNextBlockImpl(Handler handler) {
+void BlockingBlockSource::asyncGetNextBlockImpl(Handler handler) {
   net::post(strand_, [this, h = std::move(handler)]() mutable {
     try {
       h(nullptr, getNextBlockImpl());
@@ -58,15 +58,15 @@ void BlockingAsyncBlockSource::asyncGetNextBlockImpl(Handler handler) {
 }
 
 // ____________________________________________________________________________
-AsyncFileBlockSource::AsyncFileBlockSource(const net::any_io_executor& exec,
-                                           ad_utility::MemorySize blocksize,
-                                           const std::string& filename)
-    : BlockingAsyncBlockSource{exec, blocksize} {
+FileBlockSource::FileBlockSource(const net::any_io_executor& exec,
+                                 ad_utility::MemorySize blocksize,
+                                 const std::string& filename)
+    : BlockingBlockSource{exec, blocksize} {
   file_.open(filename, "r");
 }
 
 // ____________________________________________________________________________
-std::optional<ByteBlock> AsyncFileBlockSource::getNextBlockImpl() {
+std::optional<ByteBlock> FileBlockSource::getNextBlockImpl() {
   AD_CORRECTNESS_CHECK(file_.isOpen());
   if (eof_) {
     return std::nullopt;
@@ -92,8 +92,9 @@ AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
       description_{std::move(description)} {}
 
 // ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::assembleAndDeliver(
-    const Handler& handler, Block& rawInput, size_t endPosition) {
+void AsyncStatementBoundaryBlockSource::assembleAndDeliver(Handler& handler,
+                                                           Block& rawInput,
+                                                           size_t endPosition) {
   Block result;
   result.reserve(remainder_.size() + endPosition);
   result.insert(result.end(), remainder_.begin(), remainder_.end());
@@ -105,8 +106,7 @@ void AsyncStatementBoundaryBlockSource::assembleAndDeliver(
 }
 
 // ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::deliverRemainder(
-    const Handler& handler) {
+void AsyncStatementBoundaryBlockSource::deliverRemainder(Handler& handler) {
   exhausted_ = true;
   if (remainder_.empty()) {
     handler(nullptr, std::nullopt);
@@ -120,22 +120,26 @@ void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
                                                               Block rawInput) {
   AsyncBlockSource::callAsyncGetNextBlockImpl(
       *inner_,
-      [this, handler = std::move(handler), rawInput = std::move(rawInput)](
-          std::exception_ptr ep, std::optional<Block> peek) mutable {
-        if (ep) {
-          return handler(ep, std::nullopt);
-        }
-        if (!peek.has_value()) {
-          // The current block is the last one: return remainder_ + rawInput.
-          exhausted_ = true;
-          return assembleAndDeliver(handler, rawInput, rawInput.size());
-        }
-        // Inner source has more data: this is a real "statement too large"
-        // error.
-        return handler(
-            getNoStatementBoundaryError(description_, rawInput.size()),
-            std::nullopt);
-      });
+      AsyncBlockSource::forwardErrors(
+          std::move(handler),
+          [this, rawInput = std::move(rawInput)](
+              Handler handler, std::optional<Block> peek) mutable {
+            if (!peek.has_value()) {
+              // `peek` is the result of fetching another block from
+              // `inner_` right after `rawInput`, so `nullopt` here means
+              // `inner_` is genuinely exhausted and `rawInput` is the last
+              // block. It is thus correct to also mark this source
+              // exhausted and return `remainder_ + rawInput` without
+              // requiring a statement boundary in it.
+              exhausted_ = true;
+              return assembleAndDeliver(handler, rawInput, rawInput.size());
+            }
+            // Inner source has more data: this is a real "statement too
+            // large" error.
+            return handler(
+                getNoStatementBoundaryError(description_, rawInput.size()),
+                std::nullopt);
+          }));
 }
 
 // ____________________________________________________________________________
@@ -149,32 +153,31 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
   // genuinely asynchronous source (e.g. an HTTP-body-backed one); blocking
   // here could deadlock if the inner completion happens to be scheduled on
   // the very executor we would be blocking (see the
-  // `BlockingAsyncBlockSource` class comment).
+  // `BlockingBlockSource` class comment).
   AsyncBlockSource::callAsyncGetNextBlockImpl(
-      *inner_, [this, handler = std::move(handler)](
-                   std::exception_ptr ep, std::optional<Block> rawOpt) mutable {
-        if (ep) {
-          return handler(ep, std::nullopt);
-        }
-        if (!rawOpt.has_value()) {
-          return deliverRemainder(handler);
-        }
-        Block rawInput = std::move(*rawOpt);
+      *inner_,
+      AsyncBlockSource::forwardErrors(
+          std::move(handler),
+          [this](Handler handler, std::optional<Block> rawOpt) mutable {
+            if (!rawOpt.has_value()) {
+              return deliverRemainder(handler);
+            }
+            Block rawInput = std::move(*rawOpt);
 
-        // Search for the end of the last statement near the end of the raw
-        // block.
-        auto endPosition = findEndPosition_(
-            std::string_view{rawInput.data(), rawInput.size()});
-        if (endPosition.has_value()) {
-          return assembleAndDeliver(handler, rawInput, endPosition.value());
-        }
+            // Search for the end of the last statement near the end of the
+            // raw block.
+            auto endPosition = findEndPosition_(
+                std::string_view{rawInput.data(), rawInput.size()});
+            if (endPosition.has_value()) {
+              return assembleAndDeliver(handler, rawInput, endPosition.value());
+            }
 
-        // No boundary found. Peek at the next raw block to decide how to
-        // handle this: if the inner source has more data, the current block
-        // is too short for a full statement and parsing must fail. If the
-        // inner source is exhausted, the current block is the last one;
-        // return it without requiring a match.
-        handleMissingBoundary(std::move(handler), std::move(rawInput));
-      });
+            // No boundary found. Peek at the next raw block to decide how
+            // to handle this: if the inner source has more data, the
+            // current block is too short for a full statement and parsing
+            // must fail. If the inner source is exhausted, the current
+            // block is the last one; return it without requiring a match.
+            handleMissingBoundary(std::move(handler), std::move(rawInput));
+          }));
 }
 }  // namespace qlever::parser

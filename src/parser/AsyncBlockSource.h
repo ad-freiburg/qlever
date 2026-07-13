@@ -18,7 +18,6 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/strand.hpp>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -44,7 +43,8 @@ class AsyncBlockSource {
   // Completion handler signature for `asyncGetNextBlockImpl`. Called exactly
   // once, from any thread. A null `exception_ptr` together with `nullopt`
   // signals EOF; a non-null `exception_ptr` signals an error.
-  using Handler = std::function<void(std::exception_ptr, std::optional<Block>)>;
+  using Handler =
+      absl::AnyInvocable<void(std::exception_ptr, std::optional<Block>)>;
 
  private:
   boost::asio::any_io_executor executor_;
@@ -105,6 +105,26 @@ class AsyncBlockSource {
                                         Handler handler) {
     src.asyncGetNextBlockImpl(std::move(handler));
   }
+
+  // Helper for combinator sources that call `callAsyncGetNextBlockImpl` on an
+  // inner source: wrap `onSuccess` into a `Handler` that, on an exception,
+  // forwards it directly to `handler` (`onSuccess` is never called), and on
+  // success calls `onSuccess(std::move(handler), std::move(block))`. This
+  // factors out the `if (ep) { return handler(ep, std::nullopt); }` preamble
+  // that would otherwise have to be repeated at the top of every callback
+  // passed to `callAsyncGetNextBlockImpl`. `handler` is passed on to
+  // `onSuccess` rather than being captured by both closures because `Handler`
+  // is move-only.
+  template <typename OnSuccess>
+  static Handler forwardErrors(Handler handler, OnSuccess onSuccess) {
+    return [handler = std::move(handler), onSuccess = std::move(onSuccess)](
+               std::exception_ptr ep, std::optional<Block> block) mutable {
+      if (ep) {
+        return handler(std::move(ep), std::nullopt);
+      }
+      onSuccess(std::move(handler), std::move(block));
+    };
+  }
 };
 
 // An `AsyncBlockSource` whose actual byte-fetching is synchronous/blocking.
@@ -123,15 +143,15 @@ class AsyncBlockSource {
 // that very same strand/executor. See `AsyncStatementBoundaryBlockSource`,
 // which derives from `AsyncBlockSource` directly and chains onto its inner
 // source via callbacks instead of blocking on it.
-class BlockingAsyncBlockSource : public AsyncBlockSource {
+class BlockingBlockSource : public AsyncBlockSource {
  private:
   boost::asio::strand<boost::asio::any_io_executor> strand_;
 
  public:
   // Construct from an executor (on which a strand is created to serialize the
   // calls to `getNextBlockImpl`) and a blocksize.
-  BlockingAsyncBlockSource(const boost::asio::any_io_executor& exec,
-                           ad_utility::MemorySize blocksize);
+  BlockingBlockSource(const boost::asio::any_io_executor& exec,
+                      ad_utility::MemorySize blocksize);
 
  protected:
   // Synchronously produce the next block of bytes. Called from within the
@@ -145,7 +165,7 @@ class BlockingAsyncBlockSource : public AsyncBlockSource {
 
 // An `AsyncBlockSource` (see above) that reads blocks sequentially from a
 // given file.
-class AsyncFileBlockSource : public BlockingAsyncBlockSource {
+class FileBlockSource : public BlockingBlockSource {
  private:
   ad_utility::File file_;
   bool eof_ = false;
@@ -153,9 +173,9 @@ class AsyncFileBlockSource : public BlockingAsyncBlockSource {
  public:
   // Open `filename` immediately and prepare to deliver `blocksize`-sized
   // blocks. Throw if the file cannot be opened.
-  AsyncFileBlockSource(const boost::asio::any_io_executor& exec,
-                       ad_utility::MemorySize blocksize,
-                       const std::string& filename);
+  FileBlockSource(const boost::asio::any_io_executor& exec,
+                  ad_utility::MemorySize blocksize,
+                  const std::string& filename);
 
  protected:
   std::optional<ByteBlock> getNextBlockImpl() override;
@@ -201,12 +221,12 @@ class AsyncStatementBoundaryBlockSource : public AsyncBlockSource {
   // Assemble the result block from `remainder_` and `rawInput[0,
   // endPosition)`, update `remainder_` to `rawInput[endPosition, end)`, and
   // pass the result to `handler`.
-  void assembleAndDeliver(const Handler& handler, Block& rawInput,
+  void assembleAndDeliver(Handler& handler, Block& rawInput,
                           size_t endPosition);
 
   // Mark this source exhausted and pass whatever is left in `remainder_` to
   // `handler` (`nullopt` if empty).
-  void deliverRemainder(const Handler& handler);
+  void deliverRemainder(Handler& handler);
 
   // Called when `findEndPosition_` found no boundary in `rawInput`. Peeks at
   // the next block from `inner_` to decide whether `rawInput` is simply the
