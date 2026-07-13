@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/ConstexprSmallString.h"
 
 using ad_utility::ConstexprSmallString;
@@ -164,8 +165,8 @@ TEST(ConstexprSmallString, UseWithStringFunctions) {
   ConstexprSmallString<20> str = "hello world";
   std::string_view sv = str;
 
-  EXPECT_TRUE(sv.starts_with("hello"));
-  EXPECT_TRUE(sv.ends_with("world"));
+  EXPECT_TRUE(ql::starts_with(sv, "hello"));
+  EXPECT_TRUE(ql::ends_with(sv, "world"));
   EXPECT_EQ(sv.find("world"), 6);
 }
 
@@ -207,9 +208,9 @@ TEST(ConstexprSmallString, HashWithUnorderedSet) {
   set.insert(ConstexprSmallString<15>("hello"));  // duplicate
 
   EXPECT_EQ(set.size(), 2);
-  EXPECT_TRUE(set.contains(ConstexprSmallString<15>("hello")));
-  EXPECT_TRUE(set.contains(ConstexprSmallString<15>("world")));
-  EXPECT_FALSE(set.contains(ConstexprSmallString<15>("foo")));
+  EXPECT_TRUE(set.find(ConstexprSmallString<15>("hello")) != set.end());
+  EXPECT_TRUE(set.find(ConstexprSmallString<15>("world")) != set.end());
+  EXPECT_FALSE(set.find(ConstexprSmallString<15>("foo")) != set.end());
 }
 
 // Test that hash values match string_view hashes
