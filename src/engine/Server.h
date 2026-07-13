@@ -296,14 +296,6 @@ class Server {
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
           const RequestT& request, std::string_view operation,
           std::string_view clientIp = {});
-  // Execute an update operation. The function must have exclusive access to the
-  // DeltaTriples object.
-  UpdateMetadata processUpdateImpl(
-      const Index& index, const PlannedQuery& plannedUpdate,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   static json composeErrorResponseJson(
       const std::string& query, const std::string& errorMsg,
