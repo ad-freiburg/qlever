@@ -32,7 +32,7 @@ bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
 
   std::string prefix = base.filename().string();
   return ql::ranges::any_of(
-      fs::directory_iterator(dir), [&prefix](const auto& entry) {
+      ql::directoryRange(dir), [&prefix](const auto& entry) {
         std::string name = entry.path().filename().string();
         return ql::starts_with(name, prefix);
       });

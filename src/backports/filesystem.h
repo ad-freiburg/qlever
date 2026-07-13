@@ -31,6 +31,8 @@
 #include <filesystem>
 #endif
 
+#include <utility>
+
 namespace ql {
 #ifdef QLEVER_CPP_17
 namespace filesystem = ::boost::filesystem;
@@ -46,6 +48,36 @@ static constexpr auto filesystem_perms_none =
 #else
 static constexpr auto filesystem_perms_none = ::std::filesystem::perms::none;
 #endif
+
+// A range over the entries of a directory. Prefer this over using a
+// `ql::filesystem::directory_iterator` directly as a range (for example in a
+// `ql::ranges` algorithm). In the C++17 backports mode `directory_iterator` is
+// `boost::filesystem::directory_iterator`, whose non-member `begin`/`end` take
+// the iterator by `const&` and therefore lose in overload resolution against
+// `range-v3`'s deleted poison-pill `begin`/`end` overloads. As a result the
+// iterator is not recognized as a range by `range-v3`. This wrapper instead
+// exposes member `begin()`/`end()`, which sidesteps the problem and works with
+// both `std::filesystem` and `boost::filesystem`.
+class DirectoryRange {
+ private:
+  filesystem::path directory_;
+
+ public:
+  explicit DirectoryRange(filesystem::path directory)
+      : directory_{std::move(directory)} {}
+
+  filesystem::directory_iterator begin() const {
+    return filesystem::directory_iterator{directory_};
+  }
+  filesystem::directory_iterator end() const {
+    return filesystem::directory_iterator{};
+  }
+};
+
+// Return a `DirectoryRange` over the entries of `directory`.
+inline DirectoryRange directoryRange(filesystem::path directory) {
+  return DirectoryRange{std::move(directory)};
+}
 }  // namespace ql
 
 #endif  // QLEVER_SRC_BACKPORTS_FILESYSTEM_H

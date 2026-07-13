@@ -50,8 +50,7 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
   std::cout << "Removing test files " << basename << ".*" << std::endl;
-  for (const auto& entry :
-       ql::filesystem::directory_iterator(ql::filesystem::current_path())) {
+  for (const auto& entry : ql::directoryRange(ql::filesystem::current_path())) {
     if (entry.is_regular_file() &&
         std::regex_match(entry.path().filename().string(), pattern)) {
       ql::filesystem::remove(entry.path());

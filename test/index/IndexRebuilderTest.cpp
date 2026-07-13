@@ -649,7 +649,7 @@ void cleanFilesWithPrefix(std::string_view prefix) {
   // can cause entries to be skipped on some platforms (observed on macOS),
   // leaving leftover files behind.
   std::vector<fs::directory_entry> toDelete;
-  ql::ranges::copy_if(fs::directory_iterator("."), std::back_inserter(toDelete),
+  ql::ranges::copy_if(ql::directoryRange("."), std::back_inserter(toDelete),
                       [prefix](const auto& e) {
                         return ql::starts_with(e.path().filename().string(),
                                                prefix);

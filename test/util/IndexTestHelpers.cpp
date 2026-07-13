@@ -170,7 +170,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // permutations are not present, because they would actually be present from
   // the previous index build.
   namespace fs = ql::filesystem;
-  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
+  for (const auto& entry : ql::directoryRange(fs::current_path())) {
     if (!entry.is_regular_file()) continue;
 
     std::string name = entry.path().filename().string();
