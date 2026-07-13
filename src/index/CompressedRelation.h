@@ -187,7 +187,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
-  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+  template <typename SequenceOfBlocks>
+  static bool checkInvariantsForSortedBlocks(
+      const SequenceOfBlocks& sequenceOfBlocks) {
     return ::ranges::all_of(
         ::ranges::views::sliding(sequenceOfBlocks, 2),
         [](const auto& adjacent) {

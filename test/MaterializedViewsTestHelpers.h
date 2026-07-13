@@ -196,7 +196,8 @@ inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-inline void qpExpect(qlever::Qlever& qlv, const auto& query,
+template <typename Query>
+inline void qpExpect(qlever::Qlever& qlv, const Query& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -227,9 +228,10 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
 };
 
 // _____________________________________________________________________________
+template <typename ViewName, typename Query>
 inline void expectNotSuitableForRewrite(
     const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
-    const auto& viewName, const auto& query,
+    const ViewName& viewName, const Query& query,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;

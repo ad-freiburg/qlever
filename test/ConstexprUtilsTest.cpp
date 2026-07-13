@@ -240,7 +240,8 @@ struct PushToVector {
 struct PushToVectorWithTI {
   std::vector<std::string>* typeToStringVector;
 
-  void operator()(auto t) const {
+  template <typename TT>
+  void operator()(TT t) const {
     using T = typename decltype(t)::type;
     if constexpr (ad_utility::isSimilar<T, int>) {
       typeToStringVector->emplace_back("int");
@@ -276,9 +277,9 @@ auto typeToStringFactoryWithTI(std::vector<std::string>* typeToStringVector) {
 parameter pack and a lambda function argument, which it passes to a
 `constExprForEachType` function in the correct form.
 */
-template <typename F>
+template <typename F, typename Factory>
 void testConstExprForEachNormalCall(
-    const F& callToForEachWrapper, auto callToTypeToStringFactory,
+    const F& callToForEachWrapper, Factory callToTypeToStringFactory,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};

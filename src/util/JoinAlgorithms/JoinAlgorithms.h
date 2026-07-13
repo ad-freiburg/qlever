@@ -515,12 +515,12 @@ using CompareEqButLast = CompareAllButLastImpl<decltype(ql::ranges::equal)>;
  */
 CPP_template(typename LeftTableLike, typename RightTableLike,
              typename CompatibleActionT, typename NotFoundActionT,
-             typename CancellationFuncT)(
+             typename CancellationFuncT, typename NumColsT)(
     requires BinaryIteratorFunction<CompatibleActionT, LeftTableLike,
                                     RightTableLike>
         CPP_and UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
             CPP_and ql::concepts::invocable<
-                CancellationFuncT>) void specialOptionalJoin(auto
+                CancellationFuncT>) void specialOptionalJoin(NumColsT
                                                                  numJoinColumnsArg,
                                                              const LeftTableLike&
                                                                  left,
@@ -824,8 +824,14 @@ template <typename F1, typename F2>
 struct RowIndexAdder {
   F1 f1;
   F2 f2;
-  void operator()(auto&&... args) const { return f1(AD_FWD(args)...); }
-  void addRows(auto&&... args) const { return f2(AD_FWD(args)...); }
+  template <typename... Args>
+  void operator()(Args&&... args) const {
+    return f1(AD_FWD(args)...);
+  }
+  template <typename... Args>
+  void addRows(Args&&... args) const {
+    return f2(AD_FWD(args)...);
+  }
 };
 template <typename F1, typename F2>
 RowIndexAdder(F1, F2) -> RowIndexAdder<std::decay_t<F1>, std::decay_t<F2>>;
@@ -954,7 +960,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // blocks that contain elements <= `currentEl` have been added, and `false` if
   // the function returned because `FETCH_BLOCKS` blocks were added without
   // fulfilling the condition.
-  bool fillEqualToCurrentEl(Side& side, const ProjectedEl& currentEl) {
+  CPP_template_2(typename S)(
+      requires SameAsAny<
+          S, LeftSide, RightSide>) bool fillEqualToCurrentEl(S& side,
+                                                             const ProjectedEl&
+                                                                 currentEl) {
     auto& it = side.it_;
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < FETCH_BLOCKS;
@@ -1002,8 +1012,12 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // `rightSide_.currentBlocks`) s.t. only elements `> lastProcessedElement`
   // remain. This effectively removes all blocks completely, except maybe the
   // last one.
-  void removeEqualToCurrentEl(Blocks& blocks,
-                              const ProjectedEl& lastProcessedElement) {
+  CPP_template_2(typename B)(
+      requires SameAsAny<
+          B, LeftBlocks,
+          RightBlocks>) void removeEqualToCurrentEl(B& blocks,
+                                                    const ProjectedEl&
+                                                        lastProcessedElement) {
     // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
     if (blocks.size() > 1 && !blocks.front().empty()) {
@@ -1027,8 +1041,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // * A reference to the first full block
   // * The currently active subrange of that block
   // * An iterator pointing to the first element ` >= currentEl` in the block.
-  auto getFirstBlock(const Blocks& currentBlocks,
-                     const ProjectedEl& currentEl) {
+  CPP_template_2(typename B)(
+      requires SameAsAny<
+          B, LeftBlocks,
+          RightBlocks>) auto getFirstBlock(const B& currentBlocks,
+                                           const ProjectedEl& currentEl) {
     AD_CORRECTNESS_CHECK(!currentBlocks.empty());
     const auto& first = currentBlocks.at(0);
     // TODO<joka921> ql::ranges::lower_bound doesn't work here.
@@ -1040,7 +1057,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   }
 
   // Check if a side contains undefined values.
-  static bool hasUndef(const Side& side) {
+  CPP_template_2(typename S)(
+      requires SameAsAny<S, LeftSide,
+                         RightSide>) static bool hasUndef(const S& side) {
     if constexpr (potentiallyHasUndef) {
       return !side.undefBlocks_.empty();
     }
@@ -1092,7 +1111,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // `currentEl`. Effectively, these subranges cover all the blocks completely
   // except maybe the last one, which might contain elements `> currentEl` at
   // the end.
-  auto getEqualToCurrentEl(const Blocks& blocks, const ProjectedEl& currentEl) {
+  CPP_template_2(typename B)(
+      requires SameAsAny<
+          B, LeftBlocks,
+          RightBlocks>) auto getEqualToCurrentEl(const B& blocks,
+                                                 const ProjectedEl& currentEl) {
     auto result = blocks;
     if (result.empty()) {
       return result;
@@ -1255,7 +1278,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 
   // If the `targetBuffer` is empty, read the next nonempty block from `[it,
   // end)` if there is one.
-  void fillWithAtLeastOne(Side& side) {
+  CPP_template_2(typename S)(
+      requires SameAsAny<S, LeftSide,
+                         RightSide>) void fillWithAtLeastOne(S& side) {
     auto& targetBuffer = side.currentBlocks_;
     auto& it = side.it_;
     const auto& end = side.end_;
@@ -1410,8 +1435,12 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // Consume all remaining blocks from one side and add the Cartesian product of
   // those blocks with the undef blocks from the other side.
   // `reverse` is used to determine if the left or right side is consumed.
-  template <bool reversed>
-  void consumeRemainingBlocks(Side& side, const Blocks& undefBlocks) {
+  CPP_template_2(bool reversed, typename S, typename B)(
+      requires SameAsAny<S, LeftSide, RightSide> CPP_and_2
+          SameAsAny<B, LeftBlocks,
+                    RightBlocks>) void consumeRemainingBlocks(S& side,
+                                                              const B&
+                                                                  undefBlocks) {
     while (side.it_ != side.end_) {
       const auto& lBlock = *side.it_;
       for (const auto& rBlock : undefBlocks) {
@@ -1457,7 +1486,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // `side.undefBlocks_` and skipped for subsequent processing. The first block
   // containing defined values is split and the defined part is stored in
   // `side.currentBlocks_`.
-  void findFirstBlockWithoutUndef(Side& side) {
+  CPP_template_2(typename S)(
+      requires SameAsAny<S, LeftSide,
+                         RightSide>) void findFirstBlockWithoutUndef(S& side) {
     // The reference of `it` is there on purpose.
     for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
@@ -1851,10 +1882,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 // `rightBlocks`. The join matches on all-but-last columns, then performs a join
 // on the last column within matching groups.
 template <typename LeftBlocks, typename RightBlocks,
-          typename CompatibleRowAction>
+          typename CompatibleRowAction, typename NumJoinCols>
 void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
                                   RightBlocks&& rightBlocks,
-                                  auto numJoinColumns,
+                                  NumJoinCols numJoinColumns,
                                   CompatibleRowAction& compatibleRowAction) {
   using ProjectedLeft = ql::ranges::range_value_t<
       ql::ranges::range_value_t<std::decay_t<LeftBlocks>>>;
