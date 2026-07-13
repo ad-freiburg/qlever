@@ -120,6 +120,45 @@ class BatchManager final : public BatchManagerBase {
   }
 };
 
+// Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
+// in a synchronous (blocking) manner. Single-threaded use only.
+struct SyncIoPolicy {
+  using BatchHandle = uint64_t;
+
+  // `ringSize` is ignored; it exists only so the policy is constructible the
+  // same way as `IoUringPolicy`.
+  //
+  // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
+  // void.
+  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
+
+  ~SyncIoPolicy() = default;
+  SyncIoPolicy(const SyncIoPolicy&) = delete;
+  SyncIoPolicy& operator=(const SyncIoPolicy&) = delete;
+
+  // Immediately execute a batch of reads synchronously. This blocks the calling
+  // thread. Read `i` reads `numBytesToReadPerRequest[i]` bytes from file
+  // descriptor `fd`, starting at offset `fileOffsetPerRequest[i]` (from the
+  // start of the file), into the buffer starting at
+  // `targetBufferPerRequest[i]`. `handle` is unused (the batch completes before
+  // `addBatch` returns).
+  void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
+                ql::span<const uint64_t> fileOffsetPerRequest,
+                ql::span<char*> targetBufferPerRequest,
+                BatchHandle handle) const;
+
+  void wait(BatchHandle) const {
+      // No-op: `addBatch` already completed all reads synchronously.
+  };
+
+  // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
+  // (from the start of the file) into `targetBuffer`. Throws exception if the
+  // read fails or returns fewer bytes than requested (a partial read or end of
+  // file), since every read must be fully satisfied.
+  static void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
+                               uint64_t fileOffset);
+};
+
 // Persistent io_uring manager that accepts multiple named batches of indices to
 // be read from the underlying storage medium, submits all SQEs in `addBatch`
 // (blocking if the ring is full), and lets the caller block on a specific batch
@@ -191,45 +230,6 @@ class IoUringPolicy {
   // completed. (The `handle` was submitted along the read requests using
   // `addBatch`.) Throws on any I/O error.
   void wait(BatchHandle handle);
-};
-
-// Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
-// in a synchronous (blocking) manner. Single-threaded use only.
-struct SyncIoPolicy {
-  using BatchHandle = uint64_t;
-
-  // `ringSize` is ignored; it exists only so the policy is constructible the
-  // same way as `IoUringPolicy`.
-  //
-  // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
-  // void.
-  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
-
-  ~SyncIoPolicy() = default;
-  SyncIoPolicy(const SyncIoPolicy&) = delete;
-  SyncIoPolicy& operator=(const SyncIoPolicy&) = delete;
-
-  // Immediately execute a batch of reads synchronously. This blocks the calling
-  // thread. Read `i` reads `numBytesToReadPerRequest[i]` bytes from file
-  // descriptor `fd`, starting at offset `fileOffsetPerRequest[i]` (from the
-  // start of the file), into the buffer starting at
-  // `targetBufferPerRequest[i]`. `handle` is unused (the batch completes before
-  // `addBatch` returns).
-  void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
-                ql::span<const uint64_t> fileOffsetPerRequest,
-                ql::span<char*> targetBufferPerRequest,
-                BatchHandle handle) const;
-
-  void wait(BatchHandle) const {
-      // No-op: `addBatch` already completed all reads synchronously.
-  };
-
-  // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
-  // (from the start of the file) into `targetBuffer`. Throws exception if the
-  // read fails or returns fewer bytes than requested (a partial read or end of
-  // file), since every read must be fully satisfied.
-  static void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                               uint64_t fileOffset);
 };
 
 using BatchIoManager = BatchManager<IoUringPolicy>;
