@@ -86,9 +86,7 @@ class ExternalOverflowStorage {
   // Call `function` for each stored element, in insertion order.
   CPP_template(typename F)(requires ad_utility::InvocableWithExactReturnType<
                            F, void, const T&>) void forEach(F function) {
-    for (const T& element : buffer_) {
-      std::invoke(function, element);
-    }
+    ql::ranges::for_each(std::as_const(buffer_), function);
     if (numOverflowElements_ == 0) {
       return;
     }
