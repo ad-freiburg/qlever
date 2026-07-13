@@ -238,11 +238,11 @@ using BatchIoManager = BatchManager<SyncIoPolicy>;
 #endif
 
 // Build a batch manager. When io_uring is compiled in and the runtime flag
-// `preferIoUring` is set, try an io_backed-manager. If its setup syscall fails
-// at runtime (io_uring disabled in the kernel, e.g. the default docker image),
-// clear `preferIoUring` and fall back to the `SyncIoPolicy`. Passing the flag
-// by reference makes this probe-once: after the first failure, every subsequent
-// call goes straight to the sync manager, so we don't repeat a failing syscall.
+// `preferIoUring` is set, try to build an `IoUringManager`. If its setup
+// syscall fails at runtime clear `preferIoUring` and fall back to a
+// `SyncIoManager`. Passing the flag by reference makes this probe-once: after
+// the first failure, every subsequent call goes straight to the sync manager,
+// so we don't repeat a failing syscall.
 inline std::unique_ptr<BatchManagerBase> makeBatchManager(
     bool& preferIoUring, unsigned ringSize = 256) {
 #ifdef QLEVER_HAS_IO_URING
