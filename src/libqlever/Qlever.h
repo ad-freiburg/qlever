@@ -427,12 +427,6 @@ class Qlever {
 
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
-
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    auto snapshot = *indexAndViews_.rlock();
-    MaterializedViewsManager* manager = &snapshot->materializedViewsManager_;
-    return {std::move(snapshot), manager};
-  }
 };
 }  // namespace qlever
 

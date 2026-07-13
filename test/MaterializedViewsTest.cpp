@@ -799,8 +799,8 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     config.preloadMaterializedViews_ = {"testViewForServerPreload"};
     qlv().writeMaterializedView("testViewForServerPreload", simpleWriteQuery_);
     Server server{4321, 1, "accessToken", config};
-    EXPECT_TRUE(server.qlever_.materializedViewsManager()->isViewLoaded(
-        "testViewForServerPreload"));
+    EXPECT_TRUE(
+        server.qlever_.isMaterializedViewLoaded("testViewForServerPreload"));
   }
 
   // Try loading the new view.

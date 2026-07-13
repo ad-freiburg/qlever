@@ -283,30 +283,26 @@ void Qlever::writeMaterializedView(
     SharedCancellationHandle cancellationHandle,
     std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
-  // Acquire the index and the manager via a single read lock so they are
-  // guaranteed to come from the same swap generation.
-  auto indexAndViews = indexAndViewsSnapshot();
-  auto parsedQuery =
-      SparqlParser::parseQuery(&indexAndViews->index_.encodedIriManager(),
-                               std::move(query), datasetClauses);
-
-  auto qec = createQueryExecutionContext(indexAndViews);
-  auto plan = planQuery(std::move(parsedQuery), *qec,
+  auto plan =
+      parseAndPlanQuery(std::move(query), datasetClauses,
                         std::move(cancellationHandle), timeLimit, requestTimer);
+  const auto& viewsManager =
+      plan.queryExecutionContext().materializedViewsManager();
   auto memoryLimit =
       getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
-  indexAndViews->materializedViewsManager_.writeViewToDisk(std::move(name),
-                                                           plan, memoryLimit);
+  viewsManager.writeViewToDisk(std::move(name), plan, memoryLimit);
 }
 
 // ___________________________________________________________________________
 bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
-  return materializedViewsManager()->isViewLoaded(name);
+  const auto indexAndViews = indexAndViewsSnapshot();
+  return indexAndViews->materializedViewsManager_.isViewLoaded(name);
 }
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  materializedViewsManager()->loadView(name);
+  const auto indexAndViews = indexAndViewsSnapshot();
+  indexAndViews->materializedViewsManager_.loadView(name);
 }
 
 // ___________________________________________________________________________
