@@ -520,8 +520,7 @@ TEST(IndexTest, processTriple) {
 TEST(IndexTest, ZeroCopyVocabularyBlob) {
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   auto& vocab = index.getNonConstVocabForTesting();
-  vocab.resetToType(ad_utility::VocabularyType{
-      ad_utility::VocabularyType::Enum::InMemoryUncompressed});
+  vocab.resetToType(VocabularyType{VocabularyType::Enum::InMemoryUncompressed});
   ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
   auto filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };

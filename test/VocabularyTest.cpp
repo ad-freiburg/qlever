@@ -164,7 +164,6 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
-  using ad_utility::VocabularyType;
   using enum VocabularyType::Enum;
 
   RdfsVocabulary vocabulary;
@@ -191,7 +190,6 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
-  using ad_utility::VocabularyType;
   using enum VocabularyType::Enum;
 
   RdfsVocabulary vocabulary;

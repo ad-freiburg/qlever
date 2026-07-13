@@ -581,7 +581,7 @@ TEST(ServerTest, gspPost) {
     EXPECT_THAT(response, responseMatcher);
   };
   auto NumDeltaTriples = [](const auto& matcher) {
-    return testing::ResultOf(
+    return ::testing::ResultOf(
         [](const ServerForTesting& server) {
           return server.deltaTriplesManager()
               .getCurrentLocatedTriplesSharedState()
@@ -591,9 +591,9 @@ TEST(ServerTest, gspPost) {
         matcher);
   };
   expectPost("", StatusIs(http::status::no_content));
-  EXPECT_THAT(serverForTesting, NumDeltaTriples(testing::Eq(0)));
+  EXPECT_THAT(serverForTesting, NumDeltaTriples(::testing::Eq(0)));
   expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
-  EXPECT_THAT(serverForTesting, NumDeltaTriples(testing::Eq(1)));
+  EXPECT_THAT(serverForTesting, NumDeltaTriples(::testing::Eq(1)));
 }
 
 // _____________________________________________________________________________

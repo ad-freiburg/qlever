@@ -679,19 +679,19 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinVarColParamTest,
 // accessed columns by `QueryExecutionTree::getVariableColumns` which *only
 // includes externally visible columns*. This led to an out-of-bounds error.
 TEST(SpatialJoinVarColTest, ChildResultWidth) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = getQec();
 
   // Both these children have some hidden columns.
-  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}),
       std::vector<std::optional<Variable>>{V{"?a"}, std::nullopt, V{"?b"}},
       false);
-  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 3}}),
       std::vector<std::optional<Variable>>{std::nullopt, V{"?c"}, V{"?d"}},
       true);
 
-  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+  auto spatialJoin = makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
           MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?c"}, std::nullopt,
@@ -1278,16 +1278,15 @@ using namespace ::testing;
 //   FILTER geof:sfContains(?a, ?b)
 // }
 TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = getQec();
 
   // Build the valid and invalid literals.
   LocalVocab localVocab;
   auto wktLiteralIri =
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-          GEO_WKT_LITERAL);
+      triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
   auto wktId = [&](std::string_view wkt) {
-    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        wkt, wktLiteralIri);
+    auto literal =
+        triple_component::Literal::literalWithoutQuotes(wkt, wktLiteralIri);
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
   };
@@ -1297,21 +1296,21 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
 
   // `?a`: a single, valid point.
-  auto leftChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftChild = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{pointLeft}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, localVocab.clone());
 
   // `?b`: two literals that are not valid WKT geometries, plus one valid
   // point (which does not lie within `?a`, so no row of `?b` matches).
-  auto rightChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightChild = makeExecutionTree<ValuesForTesting>(
       qec,
       makeIdTableFromVector(
           {{invalidLiteralA}, {invalidLiteralB}, {validLiteral}}),
       std::vector<std::optional<Variable>>{Variable{"?b"}}, false,
       std::vector<ColumnIndex>{}, localVocab.clone());
 
-  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+  auto spatialJoinOperation = makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
           MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?b"}, std::nullopt,
