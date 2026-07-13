@@ -37,7 +37,7 @@ class SpatialJoinCachedIndexImpl {
       }
       if (simplificationErrorInMeters.has_value()) {
         p.value() = geometryConverters::simplifyPolyline(
-            std::move(p.value()), simplificationErrorInMeters.value());
+            p.value(), simplificationErrorInMeters.value());
       }
       auto shapeIndex = s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
           std::make_unique<S2Polyline>(std::move(p.value()))));
