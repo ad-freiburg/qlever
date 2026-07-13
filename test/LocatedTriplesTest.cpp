@@ -659,9 +659,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
-                    {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
-                     LT(2, T4, false), LT(4, T5, false), LT(6, T6, false),
-                     LT(7, T7, false), LT(8, T8, false)}));
+                    {LT{0, T1, false}, LT{1, T2, false}, LT{1, T3, false},
+                     LT{2, T4, false}, LT{4, T5, false}, LT{6, T6, false},
+                     LT{7, T7, false}, LT{8, T8, false}}));
   }
 
   {
@@ -676,10 +676,10 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
              CBM(PT8, PT8)},
         keyOrder, true, handle);
     EXPECT_THAT(locatedTriples,
-                testing::ElementsAreArray({LT(0, T1, true), LT(1, T2, true),
-                                           LT(1, T3, true), LT(1, T4, true),
-                                           LT(2, T5, true), LT(3, T6, true),
-                                           LT(4, T7, true), LT(5, T8, true)}));
+                testing::ElementsAreArray({LT{0, T1, true}, LT{1, T2, true},
+                                           LT{1, T3, true}, LT{1, T4, true},
+                                           LT{2, T5, true}, LT{3, T6, true},
+                                           LT{4, T7, true}, LT{5, T8, true}}));
   }
 
   {
@@ -689,9 +689,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
-                    {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
-                     LT(1, T4, false), LT(1, T5, false), LT(1, T6, false),
-                     LT(2, T7, false), LT(3, T8, false)}));
+                    {LT{0, T1, false}, LT{1, T2, false}, LT{1, T3, false},
+                     LT{1, T4, false}, LT{1, T5, false}, LT{1, T6, false},
+                     LT{2, T7, false}, LT{3, T8, false}}));
   }
 
   {
@@ -704,9 +704,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
-                    {LT(3, T8, false), LT(2, T7, false), LT(1, T6, false),
-                     LT(1, T5, false), LT(1, T4, false), LT(1, T3, false),
-                     LT(1, T2, false), LT(0, T1, false)}));
+                    {LT{3, T8, false}, LT{2, T7, false}, LT{1, T6, false},
+                     LT{1, T5, false}, LT{1, T4, false}, LT{1, T3, false},
+                     LT{1, T2, false}, LT{0, T1, false}}));
   }
 
   {
@@ -715,9 +715,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         triplesToLocate, Span{CBM(PT1, PT8)}, keyOrder, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
-                    {LT(0, T1, false), LT(0, T2, false), LT(0, T3, false),
-                     LT(0, T4, false), LT(0, T5, false), LT(0, T6, false),
-                     LT(0, T7, false), LT(1, T8, false)}));
+                    {LT{0, T1, false}, LT{0, T2, false}, LT{0, T3, false},
+                     LT{0, T4, false}, LT{0, T5, false}, LT{0, T6, false},
+                     LT{0, T7, false}, LT{1, T8, false}}));
   }
 }
 
@@ -966,7 +966,7 @@ TEST_F(LocatedTriplesTest, debugPrints) {
   {
     LocatedTriples lts;
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq("{ }")));
-    lts.insert(LT(0, IT(1, 1, 1, 28), true));
+    lts.insert(LT{0, IT(1, 1, 1, 28), true});
     lts.consolidate();
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq(
                          "{ LT(0 IdTriple(V:1, V:1, V:1, V:28, ) 1) }")));
@@ -976,7 +976,7 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     LocatedTriplesPerBlock ltpb;
     ltpb.setOriginalMetadata(std::vector{CBM(PT(1, 1, 1), PT(1, 10, 15))});
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq("")));
-    ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)});
+    ltpb.add(std::vector{LT{0, IT(1, 1, 1), true}});
     ltpb.consolidateAllBlocks();
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq(
                           "LTs in Block #0: { LT(0 IdTriple(V:1, "
