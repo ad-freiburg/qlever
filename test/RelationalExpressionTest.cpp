@@ -73,6 +73,16 @@ auto evaluateOnTestContext = [](const SparqlExpression& expression) {
   return expression.evaluate(&context.context);
 };
 
+// Detect whether a value of type `T` has a `.clone()` member function. This is
+// a C++17-compatible replacement for the `requires { input.clone(); }`
+// expression used below, which is only available since C++20.
+template <typename T, typename = void>
+constexpr bool hasCloneMethod = false;
+template <typename T>
+constexpr bool
+    hasCloneMethod<T, std::void_t<decltype(std::declval<const T&>().clone())>> =
+        true;
+
 // If `input` has a `.clone` member function, return the result of that
 // function. Otherwise, return a copy of `input` (via the copy constructor).
 // Used to generically create copies for `VectorWithMemoryLimit` (clone()
@@ -80,7 +90,7 @@ auto evaluateOnTestContext = [](const SparqlExpression& expression) {
 // (which have a copy constructor, but no `.clone()` method. The name `makeCopy`
 // was chosen because `clone` conflicts with the standard library.
 auto makeCopy = [](const auto& input) {
-  if constexpr (requires { input.clone(); }) {
+  if constexpr (hasCloneMethod<std::decay_t<decltype(input)>>) {
     return input.clone();
   } else {
     return input;
