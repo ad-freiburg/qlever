@@ -17,41 +17,48 @@ using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 
-[[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
-  return ql::starts_with(s, "\"a");
+// Use named function objects instead of lambdas, because `SplitVocabulary`
+// default-constructs the split functions and captureless lambdas are only
+// default-constructible since C++20.
+struct TestSplitTwoFunction {
+  uint8_t operator()(std::string_view s) const {
+    return ql::starts_with(s, "\"a");
+  }
 };
 
-[[maybe_unused]] auto testSplitFnTwoFunction =
-    [](std::string_view s) -> std::array<std::string, 2> {
-  return {std::string(s), absl::StrCat(s, ".a")};
+struct TestSplitFnTwoFunction {
+  std::array<std::string, 2> operator()(std::string_view s) const {
+    return {std::string(s), absl::StrCat(s, ".a")};
+  }
 };
 
 using TwoSplitVocabulary =
-    SplitVocabulary<decltype(testSplitTwoFunction),
-                    decltype(testSplitFnTwoFunction), VocabularyInMemory,
-                    VocabularyInMemory>;
+    SplitVocabulary<TestSplitTwoFunction, TestSplitFnTwoFunction,
+                    VocabularyInMemory, VocabularyInMemory>;
 
-[[maybe_unused]] auto testSplitThreeFunction =
-    [](std::string_view s) -> uint8_t {
-  if (ql::starts_with(s, "\"")) {
-    if (ql::ends_with(s, "\"^^<http://example.com>")) {
-      return 1;
-    } else if (ql::ends_with(s, "\"^^<blabliblu>")) {
-      return 2;
+struct TestSplitThreeFunction {
+  uint8_t operator()(std::string_view s) const {
+    if (ql::starts_with(s, "\"")) {
+      if (ql::ends_with(s, "\"^^<http://example.com>")) {
+        return 1;
+      } else if (ql::ends_with(s, "\"^^<blabliblu>")) {
+        return 2;
+      }
     }
+    return 0;
   }
-  return 0;
 };
 
-[[maybe_unused]] auto testSplitFnThreeFunction =
-    [](std::string_view s) -> std::array<std::string, 3> {
-  return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"), absl::StrCat(s, ".c")};
+struct TestSplitFnThreeFunction {
+  std::array<std::string, 3> operator()(std::string_view s) const {
+    return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"),
+            absl::StrCat(s, ".c")};
+  }
 };
 
 using ThreeSplitVocabulary =
-    SplitVocabulary<decltype(testSplitThreeFunction),
-                    decltype(testSplitFnThreeFunction), VocabularyInMemory,
-                    VocabularyInMemory, VocabularyInMemory>;
+    SplitVocabulary<TestSplitThreeFunction, TestSplitFnThreeFunction,
+                    VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
 
 }  // namespace splitVocabTestHelpers
 
