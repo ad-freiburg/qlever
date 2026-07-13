@@ -260,8 +260,19 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // member function needs additional arguments. Currently, the only additional
 // argument is the filename for the copy for `IdTables` that store their data in
 // a `BufferedVector`. For an example usage see the test cases below.
+// Detect whether a value of type `T` has a `.clone()` member function that can
+// be called without arguments. This is a C++17-compatible replacement for the
+// `requires { table.clone(); }` expression used below, which is only available
+// since C++20.
+template <typename T, typename = void>
+constexpr bool hasNoArgClone = false;
+template <typename T>
+constexpr bool
+    hasNoArgClone<T, std::void_t<decltype(std::declval<const T&>().clone())>> =
+        true;
+
 auto clone(const auto& table, auto... args) {
-  if constexpr (requires { table.clone(); }) {
+  if constexpr (hasNoArgClone<std::decay_t<decltype(table)>>) {
     return table.clone();
   } else {
     return table.clone(std::move(args)...);
