@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
+#include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -45,6 +46,24 @@ auto getAllTriplesWithGraph() {
                      {{http::field::content_type, "application/sparql-query"},
                       {http::field::accept, "text/csv"}},
                      "SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }");
+}
+
+// The IRI QLever uses for the default graph (without surrounding `<>`), as it
+// appears in query results.
+const std::string defaultGraph =
+    "http://qlever.cs.uni-freiburg.de/builtin-functions/default-graph";
+
+// Construct the CSV representation (as produced by the query export) of the
+// given `rows`. Each inner vector is one row (the first typically being the
+// header); the cells are joined by `,` and each row is terminated by `\n`.
+// Building the expected result this way keeps it readable and lets individual
+// identifiers or whole rows be reused.
+std::string toCsv(const std::vector<std::vector<std::string>>& rows) {
+  std::string result;
+  for (const auto& row : rows) {
+    absl::StrAppend(&result, absl::StrJoin(row, ","), "\n");
+  }
+  return result;
 }
 
 }  // namespace
@@ -529,14 +548,14 @@ TEST(ServerTest, gspPut) {
                 finalState);
   };
   testPut("text/turtle", "<a> <b> <c> .", "default", StatusIs(http::status::ok),
-          testing::Eq("s,p,o,g\na,b,c,http://qlever.cs.uni-freiburg.de/"
-                      "builtin-functions/default-graph\n"));
+          testing::Eq(
+              toCsv({{"s", "p", "o", "g"}, {"a", "b", "c", defaultGraph}})));
   testPut("text/turtle", "<a> <b> <c> .", "graph=foo",
           StatusIs(http::status::created),
-          testing::Eq("s,p,o,g\na,b,c,foo\na,b,c,http://"
-                      "qlever.cs.uni-freiburg.de/builtin-functions/"
-                      "default-graph\na,b,d,http://qlever.cs.uni-freiburg.de/"
-                      "builtin-functions/default-graph\n"));
+          testing::Eq(toCsv({{"s", "p", "o", "g"},
+                             {"a", "b", "c", "foo"},
+                             {"a", "b", "c", defaultGraph},
+                             {"a", "b", "d", defaultGraph}})));
 }
 
 // _____________________________________________________________________________
@@ -544,17 +563,12 @@ TEST(ServerTest, gspDelete) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   // Each request runs on a fresh server, so that the sub-tests are
   // independent of each other.
-  auto getAllTriples = []() {
-    return makeRequest(http::verb::post, "/",
-                       {{http::field::content_type, "application/sparql-query"},
-                        {http::field::accept, "text/csv"}},
-                       "SELECT * WHERE { ?s ?p ?o }");
-  };
-  auto testDelete = [&getAllTriples, &qec](const std::string& graph,
-                                           const auto& bodyMatcher,
-                                           const auto& finalState,
-                                           ad_utility::source_location l =
-                                               AD_CURRENT_SOURCE_LOC()) {
+  auto resetValue = setRuntimeParameterForTest<
+      &RuntimeParameters::treatDefaultGraphAsNamedGraph_>(true);
+  auto testDelete = [&qec](const std::string& graph, const auto& bodyMatcher,
+                           const auto& finalState,
+                           ad_utility::source_location l =
+                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto request =
         makeRequest(http::verb::delete_, "/?" + graph,
@@ -562,13 +576,16 @@ TEST(ServerTest, gspDelete) {
     auto testServer = makeServerForTesting(qec->getIndex().getOnDiskBase());
     auto response = testServer.process(request);
     EXPECT_THAT(response, bodyMatcher);
-    EXPECT_THAT(
-        responseBodyToString(testServer.process(getAllTriples()).body()),
-        finalState);
+    EXPECT_THAT(responseBodyToString(
+                    testServer.process(getAllTriplesWithGraph()).body()),
+                finalState);
   };
-  testDelete("default", StatusIs(http::status::ok), testing::Eq("s,p,o\n"));
+  testDelete("default", StatusIs(http::status::ok),
+             testing::Eq(toCsv({{"s", "p", "o", "g"}})));
   testDelete("graph=foo", StatusIs(http::status::not_found),
-             testing::Eq("s,p,o\na,b,c\na,b,d\n"));
+             testing::Eq(toCsv({{"s", "p", "o", "g"},
+                                {"a", "b", "c", defaultGraph},
+                                {"a", "b", "d", defaultGraph}})));
 }
 
 MATCHER(PairwiseUnequal, "contains no duplicate elements") {
@@ -607,34 +624,37 @@ TEST(ServerTest, gspPost) {
                 StatusIs(http::status::no_content));
     EXPECT_THAT(responseBodyToString(
                     serverForTesting.process(getAllTriplesWithGraph()).body()),
-                testing::Eq("s,p,o,g\n"));
+                testing::Eq(toCsv({{"s", "p", "o", "g"}})));
   }
   {
     auto serverForTesting = makeServerForTesting(baseName);
     EXPECT_THAT(
         serverForTesting.process(makePost("<a> <b> <c> .", "graph=foo")),
         StatusIs(http::status::ok));
-    EXPECT_THAT(responseBodyToString(
-                    serverForTesting.process(getAllTriplesWithGraph()).body()),
-                testing::Eq("s,p,o,g\na,b,c,foo\n"));
+    EXPECT_THAT(
+        responseBodyToString(
+            serverForTesting.process(getAllTriplesWithGraph()).body()),
+        testing::Eq(toCsv({{"s", "p", "o", "g"}, {"a", "b", "c", "foo"}})));
     // `<a> <b> <c>` is already contained.
     EXPECT_THAT(serverForTesting.process(
                     makePost("<a> <b> <c> . <d> <e> <f> .", "graph=foo")),
                 StatusIs(http::status::ok));
     EXPECT_THAT(responseBodyToString(
                     serverForTesting.process(getAllTriplesWithGraph()).body()),
-                testing::Eq("s,p,o,g\na,b,c,foo\nd,e,f,foo\n"));
+                testing::Eq(toCsv({{"s", "p", "o", "g"},
+                                   {"a", "b", "c", "foo"},
+                                   {"d", "e", "f", "foo"}})));
     // Insert the same triples again but now into the default graph.
     EXPECT_THAT(serverForTesting.process(
                     makePost("<a> <b> <c> . <d> <e> <f> .", "default")),
                 StatusIs(http::status::ok));
-    EXPECT_THAT(
-        responseBodyToString(
-            serverForTesting.process(getAllTriplesWithGraph()).body()),
-        testing::Eq(
-            "s,p,o,g\na,b,c,foo\na,b,c,http://qlever.cs.uni-freiburg.de/"
-            "builtin-functions/default-graph\nd,e,f,foo\nd,e,f,http://"
-            "qlever.cs.uni-freiburg.de/builtin-functions/default-graph\n"));
+    EXPECT_THAT(responseBodyToString(
+                    serverForTesting.process(getAllTriplesWithGraph()).body()),
+                testing::Eq(toCsv({{"s", "p", "o", "g"},
+                                   {"a", "b", "c", "foo"},
+                                   {"a", "b", "c", defaultGraph},
+                                   {"d", "e", "f", "foo"},
+                                   {"d", "e", "f", defaultGraph}})));
   }
 }
 
