@@ -41,15 +41,10 @@ static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
-  return PrecomputedConstant{std::make_shared<const EvaluatedTermData>(
-      EvaluatedTermData{iri.toSparql(), nullptr})};
-  // The parser/data `Iri` stores the already-normalized QLever internal string
-  // representation of `ad_utility::triple_component::Iri`, not raw SPARQL
-  // source text. Therefore, construct the `TripleComponent` from exactly that
-  // representation.
-  ValueId dedupId = resolveConstantDedupId(TripleComponent{
-      ad_utility::triple_component::Iri::fromStringRepresentation(
-          iri.toStringRepresentation())});
+  // `iri` is a `triple_component::Iri` taken directly from the CONSTRUCT
+  // template's `GraphTerm`, already in QLever's normalized internal form, so it
+  // can go straight into a `TripleComponent` to compute the dedup `ValueId`.
+  ValueId dedupId = resolveConstantDedupId(TripleComponent{iri});
   return PrecomputedConstant{
       std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
       dedupId};
