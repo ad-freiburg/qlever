@@ -429,6 +429,29 @@ TEST(ServerTest, parsePinGeoIndexSimplification) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, describePinResultWithNameForLog) {
+  // No pinned name - nothing to describe.
+  EXPECT_EQ(Server::describePinResultWithNameForLog(std::nullopt, std::nullopt,
+                                                    std::nullopt),
+            "");
+
+  // Pinned name only.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", std::nullopt,
+                                                    std::nullopt),
+            " [pin result with name \"myPin\"]");
+
+  // Pinned name and geo index, but no simplification.
+  EXPECT_EQ(
+      Server::describePinResultWithNameForLog("myPin", "geom", std::nullopt),
+      " [pin result with name \"myPin with geo index on ?geom\"]");
+
+  // Pinned name, geo index, and simplification.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", "geom", 5.0),
+            " [pin result with name \"myPin with geo index on ?geom, "
+            "simplification=5m\"]");
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
   auto config = serverTestHelpers::getDefaultConfig();
   Server server{4321, 1, "accessToken", config};

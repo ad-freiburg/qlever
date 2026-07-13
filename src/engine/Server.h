@@ -214,6 +214,15 @@ class Server {
   static std::optional<double> parsePinGeoIndexSimplification(
       const std::optional<std::string>& simplificationStr);
   FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
+  // Describe the pinning of a named result (and, if applicable, of its geo
+  // index) for the request log line, e.g. `" [pin result with name \"myPin
+  // with geo index on ?geom, simplification=5m\"]"`. Return the empty string
+  // if `pinResultWithName` is `std::nullopt`.
+  static std::string describePinResultWithNameForLog(
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters);
+  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
   auto prepareOperation(SharedIndexAndView indexAndViews,
                         std::string_view operationName,

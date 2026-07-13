@@ -271,6 +271,30 @@ std::optional<double> Server::parsePinGeoIndexSimplification(
 }
 
 // ____________________________________________________________________________
+std::string Server::describePinResultWithNameForLog(
+    const std::optional<std::string>& pinResultWithName,
+    const std::optional<std::string>& pinNamedGeoIndex,
+    std::optional<double> geoIndexSimplificationInMeters) {
+  if (!pinResultWithName.has_value()) {
+    return "";
+  }
+  // Describe the "with geo index on ?<var>" part (empty if `pinNamedGeoIndex`
+  // is not set).
+  std::string geoIndexDescription;
+  if (pinNamedGeoIndex.has_value()) {
+    std::string simplification =
+        geoIndexSimplificationInMeters
+            ? absl::StrCat(", simplification=",
+                           geoIndexSimplificationInMeters.value(), "m")
+            : "";
+    geoIndexDescription = absl::StrCat(
+        " with geo index on ?", pinNamedGeoIndex.value(), simplification);
+  }
+  return absl::StrCat(" [pin result with name \"", pinResultWithName.value(),
+                      geoIndexDescription, "\"]");
+}
+
+// ____________________________________________________________________________
 auto Server::prepareOperation(
     SharedIndexAndView indexAndViews, std::string_view operationName,
     std::string_view operationSPARQL,
@@ -294,35 +318,15 @@ auto Server::prepareOperation(
           params, "pin-geo-index-simplification", {});
   std::optional<double> geoIndexSimplificationInMeters =
       parsePinGeoIndexSimplification(pinGeoIndexSimplificationStr);
-  // Describe the "pin result with name" part of the log message below (empty
-  // if `pinResultWithName` is not set).
-  auto describePinResultWithName = [&]() -> std::string {
-    if (!pinResultWithName.has_value()) {
-      return "";
-    }
-    // Describe the "with geo index on ?<var>" part (empty if
-    // `pinNamedGeoIndex` is not set).
-    auto describeGeoIndex = [&]() -> std::string {
-      if (!pinNamedGeoIndex.has_value()) {
-        return "";
-      }
-      std::string simplification =
-          geoIndexSimplificationInMeters
-              ? absl::StrCat(", simplification=",
-                             geoIndexSimplificationInMeters.value(), "m")
-              : "";
-      return absl::StrCat(" with geo index on ?", pinNamedGeoIndex.value(),
-                          simplification);
-    };
-    return absl::StrCat(" [pin result with name \"", pinResultWithName.value(),
-                        describeGeoIndex(), "\"]");
-  };
   AD_LOG_INFO << "Processing the following " << operationName
               << (clientIp.empty() ? std::string{}
                                    : absl::StrCat(" from ", clientIp))
               << ":" << (pinResult ? " [pin result]" : "")
               << (pinSubtrees ? " [pin subresults]" : "")
-              << describePinResultWithName() << "\n"
+              << describePinResultWithNameForLog(pinResultWithName,
+                                                 pinNamedGeoIndex,
+                                                 geoIndexSimplificationInMeters)
+              << "\n"
               << ad_utility::truncateOperationString(operationSPARQL)
               << std::endl;
   auto sharedMessageSender =
