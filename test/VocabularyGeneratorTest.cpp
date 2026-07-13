@@ -7,6 +7,7 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -76,16 +77,16 @@ class MergeVocabularyTest : public ::testing::Test {
     _path0 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
     _path1 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
 
-    // create random subdirectory in /tmp
-    std::string tempPath = "";
-    _basePath = tempPath + _basePath + "/";
-    if (system(("mkdir -p " + _basePath).c_str())) {
-      // system should return 0 on success
-      std::cerr << "Could not create subfolder of tmp for test. this might "
-                   "lead to test failures\n";
+    // Create a subdirectory for the test files in the working directory.
+    _basePath = _basePath + "/";
+    std::error_code errorCode;
+    std::filesystem::create_directories(_basePath, errorCode);
+    if (errorCode) {
+      std::cerr << "Could not create the directory for the test files. This "
+                   "might lead to test failures\n";
     }
 
-    // make paths absolute under created tmp directory
+    // Prepend the created directory to the paths.
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
 
@@ -161,8 +162,9 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // __________________________________________________________________
   ~MergeVocabularyTest() {
-    // TODO: shall we delete the tmp files? doing so is cleaner, but makes it
-    // harder to debug test failures
+    // Delete the test files (to debug a test failure, comment this out).
+    std::error_code errorCode;
+    std::filesystem::remove_all(_basePath, errorCode);
   }
 
   // read all bytes from a file (e.g. to check equality of small test files)
@@ -241,7 +243,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
-  std::string basePath = "MergeVocabulary.mergeVocabularyAssertion";
+  std::string basePath = gtestCurrentTestName();
 
   auto writeUnorderedFile = [](const auto& path) {
     ad_utility::serialization::FileWriteSerializer partialVocab(path);

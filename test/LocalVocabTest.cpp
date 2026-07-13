@@ -30,6 +30,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
+#include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace qlever;

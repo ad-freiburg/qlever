@@ -1039,7 +1039,7 @@ TEST_F(DeltaTriplesTest, vacuum) {
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
-          0ul);
+          size_t{0});
 
   auto result = deltaTriples.vacuum(cancellationHandle);
 

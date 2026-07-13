@@ -12,8 +12,8 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "global/Pattern.h"
 #include "parser/ParsedQuery.h"
+#include "util/CompactStringVector.h"
 
 namespace qlever {
 

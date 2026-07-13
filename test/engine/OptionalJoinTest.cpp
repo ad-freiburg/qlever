@@ -373,8 +373,8 @@ TEST(OptionalJoin, gallopingJoin) {
     for (int64_t i = 0; i < 300; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
-    auto numElementsInLarger = static_cast<int64_t>(
-        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    auto numElementsInLarger =
+        std::max<int64_t>(10000, a.numRows() * GALLOP_THRESHOLD + 1);
     for (int64_t i = 400; i < numElementsInLarger; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
@@ -395,8 +395,8 @@ TEST(OptionalJoin, gallopingJoin) {
     for (int64_t i = 0; i < 300; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }
-    auto numElementsInLarger = static_cast<int64_t>(
-        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    auto numElementsInLarger =
+        std::max<int64_t>(10000, a.numRows() * GALLOP_THRESHOLD + 1);
     for (int64_t i = 400; i < numElementsInLarger; ++i) {
       bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
     }

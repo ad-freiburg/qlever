@@ -36,7 +36,7 @@
 
 // Forward declaration for testing.
 namespace serverTestHelpers {
-struct SimulateHttpRequest;
+class ServerForTesting;
 }
 
 namespace qlever {
@@ -56,7 +56,7 @@ class Server {
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
-  friend serverTestHelpers::SimulateHttpRequest;
+  friend serverTestHelpers::ServerForTesting;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,

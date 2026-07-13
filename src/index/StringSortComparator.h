@@ -24,6 +24,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
+#include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
 
 namespace qlever {
@@ -55,8 +56,11 @@ class LocaleManager {
    */
   // TODO<GCC12> As soon as we have constexpr std::string, this class can
   //  become constexpr.
-  using U8String = std::basic_string<uint8_t>;
-  using U8StringView = std::basic_string_view<uint8_t>;
+  // A `uint8_t` behaves like a `char`, so we use `GenericCharTraits` (see there
+  // for why we cannot rely on `std::char_traits` directly).
+  using U8CharTraits = ad_utility::GenericCharTraits<uint8_t>;
+  using U8String = std::basic_string<uint8_t, U8CharTraits>;
+  using U8StringView = std::basic_string_view<uint8_t, U8CharTraits>;
 
   CPP_template(typename T)(requires ad_utility::SimilarToAny<
                            T, U8String, U8StringView>) class SortKeyImpl {
@@ -87,8 +91,8 @@ class LocaleManager {
    private:
     T sortKey_;
   };
-  using SortKey = SortKeyImpl<std::basic_string<uint8_t>>;
-  using SortKeyView = SortKeyImpl<std::basic_string_view<uint8_t>>;
+  using SortKey = SortKeyImpl<U8String>;
+  using SortKeyView = SortKeyImpl<U8StringView>;
 
   /// Copy constructor
   LocaleManager(const LocaleManager& rhs)

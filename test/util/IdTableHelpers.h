@@ -74,11 +74,11 @@ inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
  * `transformation` to each of them. All rows of `content` must have the
  * same length.
  */
-template <typename Transformation = decltype(testing::VocabId)>
+template <typename Transformation = decltype(VocabId)>
 IdTable makeIdTableFromVector(const VectorTable& content,
                               Transformation transformation = {}) {
-  size_t numCols = content.empty() ? 0UL : content.at(0).size();
-  IdTable result{numCols, testing::makeAllocator()};
+  size_t numCols = content.empty() ? size_t{0} : content.at(0).size();
+  IdTable result{numCols, makeAllocator()};
   result.reserve(content.size());
   for (const auto& row : content) {
     AD_CONTRACT_CHECK(row.size() == result.numColumns());

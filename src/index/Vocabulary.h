@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "backports/three_way_comparison.h"
@@ -240,6 +241,67 @@ class Vocabulary {
   void resetToType(VocabularyType type) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
+    }
+  }
+
+  // Replace the currently held vocabulary with a `VocabularyInMemory` built
+  // as a non-owning, zero-copy view directly into `serializer`'s buffer (see
+  // `VocabularyInMemory::fromZeroCopyDeserializer`). This switches the active
+  // vocabulary implementation to `VocabularyInMemory`, regardless of what was
+  // previously loaded. Only possible if `UnderlyingVocabulary` is
+  // `PolymorphicVocabulary` or `VocabularyInMemory` itself; for any other
+  // vocabulary implementation, this fails to compile (via a `static_assert`).
+  // The returned vocabulary is only valid as long as the memory backing
+  // `serializer`'s buffer is valid and unchanged.
+  CPP_template(typename Serializer)(
+      requires ad_utility::serialization::ZeroCopyReadSerializer<
+          Serializer>) void loadFromZeroCopyDeserializer(Serializer&
+                                                             serializer) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      // `vocabulary_.getUnderlyingVocabulary()` returns the
+      // `PolymorphicVocabulary`, whose own `getUnderlyingVocabulary()` in
+      // turn returns a reference to the `std::variant` of the concrete
+      // vocabulary implementations that it can hold (see
+      // `PolymorphicVocabulary::getUnderlyingVocabulary`). Assigning a
+      // `VocabularyInMemory` to that variant switches the active
+      // implementation, which requires that `VocabularyInMemory` is one of
+      // the variant's alternatives (currently always true, see
+      // `PolymorphicVocabulary`'s `Variant` type alias).
+      vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary() =
+          VocabularyInMemory::fromZeroCopyDeserializer(serializer);
+    } else {
+      static_assert(std::is_same_v<UnderlyingVocabulary, VocabularyInMemory>,
+                    "`loadFromZeroCopyDeserializer` requires an in-memory or "
+                    "polymorphic vocabulary implementation");
+      vocabulary_.getUnderlyingVocabulary() =
+          VocabularyInMemory::fromZeroCopyDeserializer(serializer);
+    }
+  }
+
+  // Serialize the currently held vocabulary to `serializer`, in a format that
+  // can later be read back via `loadFromZeroCopyDeserializer`. Only possible
+  // if the vocabulary implementation currently in use is `VocabularyInMemory`
+  // (which is always the case if `UnderlyingVocabulary` is `VocabularyInMemory`
+  // itself, and is the case for a `PolymorphicVocabulary` only after
+  // `loadFromZeroCopyDeserializer` or `resetToType` with
+  // `VocabularyType::Enum::InMemoryUncompressed` was called); throws
+  // otherwise.
+  CPP_template(typename Serializer)(
+      requires ad_utility::serialization::WriteSerializer<
+          Serializer>) void writeAsZeroCopyBlob(Serializer& serializer) const {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      const auto& variant =
+          vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
+      AD_CORRECTNESS_CHECK(
+          std::holds_alternative<VocabularyInMemory>(variant),
+          "Writing a vocabulary to a combined blob currently requires the "
+          "in-memory, uncompressed vocabulary implementation");
+      serializer << std::get<VocabularyInMemory>(variant);
+    } else {
+      static_assert(std::is_same_v<UnderlyingVocabulary, VocabularyInMemory>,
+                    "`writeAsZeroCopyBlob` requires an in-memory or "
+                    "polymorphic vocabulary implementation");
+      serializer << vocabulary_.getUnderlyingVocabulary();
     }
   }
 };
