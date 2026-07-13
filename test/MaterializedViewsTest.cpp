@@ -170,13 +170,9 @@ TEST_F(MaterializedViewsTest, Basic) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ViewReferencingAnotherViewDoesNotDeadlock) {
-  // A materialized view's defining query may (via the `view:` magic-IRI
-  // syntax) itself scan another materialized view. Analyzing such a view for
-  // the query pattern cache (to compute its cache key) re-plans its defining
-  // query with materialized view rewriting disabled. If that re-planning
-  // did not respect the flag for this magic-IRI syntax too, it would try to
-  // load the referenced view while already holding the (non-reentrant) write
-  // lock on `loadedViews_`, deadlocking. This must fail fast instead.
+  // A materialized view's defining query may not itself scan another
+  // materialized view. Analyzing such a view for the query pattern cache would
+  // deadlock on the write lock for `loadedViews_`.
   qlv().writeMaterializedView("baseView", simpleWriteQuery_);
   qlv().loadMaterializedView("baseView");
   qlv().writeMaterializedView("outerView", R"(
@@ -1294,10 +1290,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   // A `BIND` cannot be pushed into a regular `IndexScan` (not a materialized
   // view) or a `StripColumns` operation containing a regular `IndexScan`.
   {
-    // NOTE: This must not use `<p2>`, because that is the predicate used by
-    // `bindWriteQuery` below to build `bindView`, so the query planner would
-    // rewrite a scan on it into a scan on the materialized view instead of a
-    // regular `IndexScan`.
     auto plannedQuery = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     EXPECT_FALSE(plannedQuery.queryExecutionTree()
                      .getRootOperation()

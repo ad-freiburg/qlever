@@ -7,8 +7,6 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/MaterializedViews.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <filesystem>
@@ -18,6 +16,7 @@
 
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -703,11 +702,12 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
     } else if (col == 2) {
       o = v;
     } else {
-      additionalCols.push_back({col, v});
+      additionalCols.emplace_back(col, v);
     }
   }
-  std::sort(additionalCols.begin(), additionalCols.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
+  ql::ranges::sort(additionalCols, [](const auto& a, const auto& b) {
+    return a.first < b.first;
+  });
   SparqlTripleSimple scanTriple{std::move(s), std::move(p), std::move(o),
                                 std::move(additionalCols)};
   auto v = varToCol | ql::ranges::views::keys;
@@ -737,10 +737,10 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
         "query configuration.");
   }
   if (qec->disableMaterializedViewRewriting()) {
-    // This branch is only reached while a materialized view's own query is
-    // being analyzed for the query pattern cache (see `computeCacheKey`),
-    // which holds a write lock on `loadedViews_`. `getView` below would try
-    // to acquire that same (non-reentrant) lock again and deadlock.
+    // This is importantwhen a materialized view's own query is being analyzed
+    // for the query pattern cache (see `computeCacheKey`), which holds a write
+    // lock on `loadedViews_`. `getView` below would try to acquire that same
+    // lock again and deadlock.
     throw MaterializedViewConfigException(
         "The query of a materialized view must not itself reference a "
         "materialized view.");

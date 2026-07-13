@@ -84,10 +84,8 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
 
   // When the same predicate is used multiple times, the extra occurrences are
   // joined normally. Since both occurrences of `<p2>` are structurally and
-  // semantically interchangeable here (neither is preferred by the query),
-  // and materialized view detection by cache key does not distinguish
-  // variable names, either occurrence may end up being the one served from
-  // the view. Both outcomes are correct, so the test accepts either.
+  // semantically interchangeable here, either occurrence may end up being
+  // rewritten.
   qpExpect(
       qlv, simpleStarJoinPredicateTwice,
       ::testing::AnyOf(h::Join(starView("?s", "?o1", "?o2"),
