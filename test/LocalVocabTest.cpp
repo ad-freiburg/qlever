@@ -249,7 +249,11 @@ TEST(LocalVocab, propagation) {
     // We currently allow the local vocab to have multiple IDs for the same
     // word, so we have to deduplicate first.
     ql::ranges::sort(localVocabWords);
-    localVocabWords.erase(std::ranges::unique(localVocabWords).begin(),
+    // NOTE: `ql::ranges::unique` currently doesn't work because its interface
+    // differs between the C++17 and C++20 implementations (see the comment in
+    // `backports/algorithm.h`), so `::ranges::unique` (the range-v3 library,
+    // which is always available) is used directly instead.
+    localVocabWords.erase(::ranges::unique(localVocabWords),
                           localVocabWords.end());
     ASSERT_THAT(localVocabWords,
                 ::testing::UnorderedElementsAreArray(expectedWords))
@@ -403,11 +407,16 @@ TEST(LocalVocab, propagation) {
   // NOTE: As part of an actual query, the child of a transitive path
   // operation is always an index scan, which has a non-empty
   // local-vocabulary. Still, it doesn't harm to test this.
+  //
+  // `TransitivePathBase` is excluded under the reduced C++17 feature set
+  // (see `engine/TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
   TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
   auto transitivePath = TransitivePathBase::makeTransitivePath(
       testQec, qet(values1), std::move(left), std::move(right), 1, 1);
   checkLocalVocab(*transitivePath, localVocab1);
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
   // PATTERN TRICK operations.
   HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, Variable{"?z"});
