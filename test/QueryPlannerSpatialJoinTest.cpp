@@ -1420,7 +1420,8 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
                  TOUCHES = SpatialJoinType::TOUCHES,
                  EQUALS = SpatialJoinType::EQUALS,
                  OVERLAPS = SpatialJoinType::OVERLAPS,
-                 WITHIN = SpatialJoinType::WITHIN;
+                 WITHIN = SpatialJoinType::WITHIN,
+                 WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
 
   std::vector<std::pair<std::string, SpatialJoinType>>
       geofFunctionNameAndSJType{
