@@ -151,8 +151,8 @@ compressedRelationTestWriteCompressedRelations(
   addGraphColumnIfNecessary(inputs);
   size_t numColumns = getNumColumns(inputs) + 1;
   AD_CORRECTNESS_CHECK(numColumns >= 4);
-  auto generator =
-      [&](size_t sorterBlockSize) -> cppcoro::generator<IdTableStatic<0>> {
+  auto generator = [&](size_t sorterBlockSize) {
+    std::vector<IdTableStatic<0>> blocks;
     IdTableStatic<0> buffer{numColumns, ad_utility::testing::makeAllocator()};
     for (const auto& input : inputs) {
       for (const auto& arr : input.col1And2_) {
@@ -160,14 +160,15 @@ compressedRelationTestWriteCompressedRelations(
         ql::ranges::transform(arr, std::back_inserter(row), V);
         buffer.push_back(row);
         if (buffer.numRows() > sorterBlockSize) {
-          co_yield buffer;
+          blocks.push_back(buffer.clone());
           buffer.clear();
         }
       }
     }
     if (!buffer.empty()) {
-      co_yield buffer;
+      blocks.push_back(std::move(buffer));
     }
+    return blocks;
   };
 
   // First create the on-disk permutation.
@@ -232,7 +233,7 @@ makeLocatedTriplesFromPartOfInput(float locatedProbab,
 
   for (const auto& input : inputs) {
     auto col0 = V(input.col0_);
-    result.emplace_back(input.col0_);
+    result.push_back(RelationInput{input.col0_, {}});
     auto& row = result.back().col1And2_;
     for (const auto& otherCols : input.col1And2_) {
       AD_CORRECTNESS_CHECK(otherCols.size() >= 3);
