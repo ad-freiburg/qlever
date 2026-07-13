@@ -30,7 +30,11 @@ if (NOT _NO_BENCHMARK)
     # Add benchmarks after here.
     addAndLinkBenchmark(BenchmarkExamples)
 
-    addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil memorySize)
+    # `JoinAlgorithmBenchmark` uses non-type template parameters of class type
+    # (e.g. lambdas passed by value), which requires C++20.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil memorySize)
+    endif ()
 
     addAndLinkBenchmark(ParallelMergeBenchmark testUtil)
 

@@ -9,7 +9,14 @@ addLinkAndDiscoverTest(GroupByHashMapOptimizationTest)
 addLinkAndDiscoverTest(LazyGroupByTest engine)
 addLinkAndDiscoverTest(CountConnectedSubgraphsTest)
 addLinkAndDiscoverTest(BindTest engine)
-addLinkAndRunAsSingleTest(SpatialJoinAlgorithmsTest engine)
+# `SpatialJoinAlgorithmsTest` does not compile under `REDUCED_FEATURE_SET_FOR_CPP17`
+# (it constructs the aggregate `MaxDistanceConfig` via parenthesized
+# initialization, which requires C++20), and even if it did, a large fraction
+# of its parameterized test matrix would throw "not supported in C++17 mode
+# currently" at runtime (see `SpatialJoinAlgorithms.cpp`).
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndRunAsSingleTest(SpatialJoinAlgorithmsTest engine)
+endif ()
 addLinkAndDiscoverTest(SpatialJoinPrefilterTest engine)
 addLinkAndDiscoverTest(SpatialJoinParserTest engine)
 addLinkAndDiscoverTest(SpatialJoinCachedIndexTest engine)

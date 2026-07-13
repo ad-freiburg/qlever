@@ -133,15 +133,35 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
-    addLinkAndDiscoverTest(ServerTest engine server)
+    # `ServerTest` links the `http`/`server` CMake targets, which are
+    # entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addLinkAndDiscoverTest(ServerTest engine server)
+    endif ()
 
-    addLinkAndDiscoverTest(SparqlProtocolTest engine)
+    # `SparqlProtocolTest` links the `http`/`server` CMake targets, which are
+    # entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addLinkAndDiscoverTest(SparqlProtocolTest engine)
+    endif ()
 
-    addLinkAndDiscoverTest(UrlParserTest)
+    # `UrlParserTest` links the `http`/`server` CMake targets, which are
+    # entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addLinkAndDiscoverTest(UrlParserTest)
+    endif ()
 
-    addLinkAndDiscoverTest(GraphStoreProtocolTest engine server)
+    # `GraphStoreProtocolTest` links the `http`/`server` CMake targets, which are
+    # entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addLinkAndDiscoverTest(GraphStoreProtocolTest engine server)
+    endif ()
 
-    addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+    # `ParsedRequestBuilderTest` links the `http`/`server` CMake targets, which are
+    # entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+    endif ()
 
     addLinkAndDiscoverTest(ExceptionHandlingTest)
 endif ()
@@ -278,9 +298,17 @@ addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(SparqlExpressionMemberFunctionsTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(StreamableBodyTest http)
+# `StreamableBodyTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(StreamableBodyTest http)
+endif ()
 
-addLinkAndDiscoverTest(StreamableGeneratorTest)
+# `StreamableGeneratorTest` directly exercises `cppcoro::generator`-based coroutine
+# machinery, which is entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(StreamableGeneratorTest)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(StringBatcherTest)
 
@@ -290,7 +318,11 @@ addLinkAndDiscoverTestNoLibs(CompactStringVectorTest parser)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest http)
+# `ContentEncodingHelperTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(ContentEncodingHelperTest http)
+endif ()
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
@@ -304,9 +336,17 @@ addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
-addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
+# `CompressorStreamTest` directly exercises `cppcoro::generator`-based coroutine
+# machinery, which is entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
+endif ()
 
-addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
+# `AsyncStreamTest` directly exercises `cppcoro::generator`-based coroutine
+# machinery, which is entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
+endif ()
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -316,7 +356,11 @@ addLinkAndDiscoverTest(GeoPointTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
-addLinkAndDiscoverTest(HttpUtilsTest util http)
+# `HttpUtilsTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(HttpUtilsTest util http)
+endif ()
 
 addLinkAndDiscoverTest(DateYearDurationTest util parser)
 
@@ -344,15 +388,27 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(ValuesTest engine)
 
-addLinkAndDiscoverTest(ServiceTest engine)
+# `ServiceTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(ServiceTest engine)
+endif ()
 
-addLinkAndDiscoverTest(LoadTest engine)
+# `LoadTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(LoadTest engine)
+endif ()
 
 # HttpTest is disabled for Emscripten: emsdk 6.0.2 miscompiles the boost::beast
 # websocket coroutine code under both Wasm EH modes (legacy: wasm-opt rejects an
 # invalid `rethrow`; standard EH: the WebAssemblyLateEHPrepare backend pass segfaults).
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
-    addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+    # `HttpTest` links the `http`/`server` CMake targets, which are
+    # entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+    endif ()
 endif ()
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
@@ -429,7 +485,11 @@ addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
-addLinkAndDiscoverTest(GeneratorTest)
+# `GeneratorTest` directly exercises `cppcoro::generator`-based coroutine
+# machinery, which is entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(GeneratorTest)
+endif ()
 
 addLinkAndDiscoverTest(MemorySizeTest memorySize)
 
@@ -437,7 +497,11 @@ addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
 
-addLinkAndDiscoverTest(AsioHelpersTest)
+# `AsioHelpersTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(AsioHelpersTest)
+endif ()
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
 # crashes on the coroutine `.resume` body in this file. Compiling just this
 # translation unit at -O1 avoids the crashing pass.
@@ -447,17 +511,37 @@ endif ()
 
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
-addLinkAndDiscoverTest(WebSocketSessionTest http)
+# `WebSocketSessionTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(WebSocketSessionTest http)
+endif ()
 
 addLinkAndDiscoverTest(QueryIdTest)
 
-addLinkAndDiscoverTest(QueryHubTest http)
+# `QueryHubTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(QueryHubTest http)
+endif ()
 
-addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
+# `QueryToSocketDistributorTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
+endif ()
 
-addLinkAndDiscoverTest(UpdateFetcherTest http)
+# `UpdateFetcherTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(UpdateFetcherTest http)
+endif ()
 
-addLinkAndDiscoverTest(MessageSenderTest http)
+# `MessageSenderTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(MessageSenderTest http)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
 
@@ -479,9 +563,17 @@ addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
-addLinkAndDiscoverTest(LazyJsonParserTest)
+# `LazyJsonParserTest` directly exercises `cppcoro::generator`-based coroutine
+# machinery, which is entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(LazyJsonParserTest)
+endif ()
 
-addLinkAndDiscoverTest(GeneratorsTest)
+# `GeneratorsTest` directly exercises `cppcoro::generator`-based coroutine
+# machinery, which is entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(GeneratorsTest)
+endif ()
 
 addLinkAndDiscoverTest(FilterTest engine)
 
@@ -515,9 +607,17 @@ addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
 addLinkAndDiscoverTest(UnitOfMeasurementTest util)
 
-addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+# `MaterializedViewsTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+# `MaterializedViewsStarRewriteTest` links the `http`/`server` CMake targets, which are
+# entirely excluded under `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
