@@ -15,8 +15,8 @@
 #include "util/Log.h"
 #include "util/Timer.h"
 
-// The readings use platform-specific APIs; pull in each platform's headers
-// only where they exist. `getrusage` (CPU time) is shared by both.
+// The readings use platform-specific APIs.
+// `getrusage` (CPU time) is shared by both linux and macOS.
 #if defined(__APPLE__)
 #include <mach/mach.h>
 #include <sys/resource.h>
@@ -120,7 +120,6 @@ ResourceMonitor::~ResourceMonitor() {
     stopRequested_ = true;
   }
   stopCondition_.notify_all();
-  // `sampler_` (declared last) is destroyed first and joins the thread.
 }
 
 // _____________________________________________________________________________
@@ -128,15 +127,11 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
                             std::chrono::milliseconds interval) {
   AD_CONTRACT_CHECK(!started_.exchange(true),
                     "ResourceMonitor::start may only be called once.");
+  AD_CONTRACT_CHECK(interval > std::chrono::milliseconds{0},
+                    "The resource-usage sampling interval must be positive.");
 #if defined(__APPLE__) || defined(__linux__)
-  // Monitoring is optional: on a bad interval or an unwritable file, warn
-  // and let QLever run on rather than aborting the process.
-  if (interval <= std::chrono::milliseconds{0}) {
-    AD_LOG_WARN << "ResourceMonitor: the sampling interval must be positive; "
-                   "continuing without a resource-usage log."
-                << std::endl;
-    return;
-  }
+  // Monitoring is optional: on an unwritable file, warn and let QLever run
+  // on rather than aborting the process.
   namespace fs = std::filesystem;
   // Decide about the header before opening: truncating destroys the
   // old file size. A missing file or failed stat also gets a header.
@@ -172,7 +167,6 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
   // it and let QLever run normally rather than failing.
   (void)path;
   (void)mode;
-  (void)interval;
   AD_LOG_WARN << "ResourceMonitor: not supported on this platform; "
                  "continuing without a resource-usage log."
               << std::endl;

@@ -31,8 +31,8 @@ namespace resource_monitor {
 std::optional<uint64_t> currentRssBytes();
 
 #if defined(__linux__)
-// RSS in bytes from a stream shaped like `/proc/self/statm` (its 2nd field is
-// the resident size in pages), or `std::nullopt` if the content is malformed.
+// RSS in bytes from `/proc/self/statm` stream (its 2nd field is the
+// resident size in pages), or `std::nullopt` if the content is malformed.
 std::optional<uint64_t> rssBytesFromStatm(std::istream& statm);
 #endif
 
@@ -85,11 +85,11 @@ class ResourceMonitor {
   ResourceMonitor& operator=(const ResourceMonitor&) = delete;
 
   // Open the TSV at `path` (header written unless appending to a
-  // non-empty file) and start sampling. Monitoring is optional: a
-  // non-positive `interval` or a file that cannot be opened only warns
-  // and disables monitoring. Throws only if called more than once.
+  // non-empty file) and start sampling. An unopenable file only warns
+  // and disables monitoring. Throws if called more than once or if
+  // `interval` is not positive.
   void start(const std::filesystem::path& path, Mode mode,
-             std::chrono::milliseconds interval = std::chrono::seconds{1});
+             std::chrono::milliseconds interval);
 
   // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
   // exercise the sampler's error handling.

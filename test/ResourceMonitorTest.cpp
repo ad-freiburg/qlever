@@ -126,15 +126,16 @@ TEST(ResourceMonitor, StartTwiceThrows) {
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, InvalidIntervalDisablesMonitoring) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  ResourceMonitor monitor;
-  // A zero interval is invalid, but monitoring is optional: `start` warns
-  // and disables itself instead of throwing, and it does not create the
-  // output file.
-  EXPECT_NO_THROW(monitor.start(path, ResourceMonitor::Mode::Truncate,
-                                std::chrono::milliseconds{0}));
-  EXPECT_FALSE(fs::exists(path));
+TEST(ResourceMonitor, NonPositiveIntervalThrows) {
+  for (auto interval :
+       {std::chrono::milliseconds{0}, std::chrono::milliseconds{-5}}) {
+    auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+    ResourceMonitor monitor;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        monitor.start(path, ResourceMonitor::Mode::Truncate, interval),
+        ::testing::HasSubstr("must be positive"));
+    EXPECT_FALSE(fs::exists(path));
+  }
 }
 
 // _____________________________________________________________________________
