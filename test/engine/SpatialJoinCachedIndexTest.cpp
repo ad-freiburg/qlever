@@ -67,10 +67,9 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   auto cacheEntry = qec->namedResultCache().get("dummy");
 
   ASSERT_NE(cacheEntry.get(), nullptr);
-  ASSERT_TRUE(std::holds_alternative<std::shared_ptr<const IdTable>>(
-      cacheEntry->result_));
-  ASSERT_NE(std::get<std::shared_ptr<const IdTable>>(cacheEntry->result_),
-            nullptr);
+  ASSERT_THAT(cacheEntry->result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
   auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
   EXPECT_EQ(resultView.numColumns(), 2);
   EXPECT_EQ(resultView.numRows(), 5);

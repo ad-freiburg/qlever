@@ -91,10 +91,9 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Check the result pointer is valid (the non-aligned serializer used here
   // always deserializes into the owning `shared_ptr<const IdTable>`
   // alternative, never a zero-copy view).
-  ASSERT_TRUE(std::holds_alternative<std::shared_ptr<const IdTable>>(
-      deserializedValue.result_));
-  ASSERT_NE(std::get<std::shared_ptr<const IdTable>>(deserializedValue.result_),
-            nullptr);
+  ASSERT_THAT(deserializedValue.result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
 
   // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
