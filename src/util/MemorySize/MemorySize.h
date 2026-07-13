@@ -293,9 +293,11 @@ CPP_template(typename T, typename Func)(requires Arithmetic<T> CPP_and(
   using PrecisionType =
       std::conditional_t<std::is_integral_v<T>, size_t, double>;
 
-  return MemorySize::bytes(detail::ceilAndCastToSizeT(
-      std::invoke(func, static_cast<PrecisionType>(m.getBytes()),
-                  static_cast<PrecisionType>(c))));
+  // Call `func` directly instead of via `std::invoke`, because `std::invoke`
+  // is only `constexpr` since C++20 and `func` is always a plain functor here.
+  return MemorySize::bytes(
+      detail::ceilAndCastToSizeT(func(static_cast<PrecisionType>(m.getBytes()),
+                                      static_cast<PrecisionType>(c))));
 }
 }  // namespace detail
 
