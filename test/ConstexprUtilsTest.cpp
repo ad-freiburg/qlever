@@ -75,6 +75,11 @@ bool compare(const ValueSequenceRef<T, Ts...>& v1,
   }
 }
 
+// `toIntegerSequence` takes the `std::array` as a by-value non-type template
+// parameter, which for a class type is only possible since C++20 (P1907). In
+// real C++17 mode the `toIntegerSequenceRef` variant (tested below) has to be
+// used instead, so this test is excluded there.
+#ifndef QLEVER_CPP_17
 TEST(ConstexprUtils, toIntegerSequence) {
   ASSERT_TRUE(compare(ValueSequence<int>{},
                       (toIntegerSequence<std::array<int, 0>{}>())));
@@ -99,6 +104,7 @@ TEST(ConstexprUtils, toIntegerSequence) {
   ASSERT_FALSE(compare(ValueSequence<int, -12, 4>{},
                        (toIntegerSequence<std::array{-12}>())));
 }
+#endif
 
 // Similar tests for `toIntegerSequenceRef`. The template parameters have to be
 // declared upfront, s.t. they are objects that have linkage and therefore can
@@ -138,6 +144,10 @@ TEST(ConstexprUtils, cartesianPowerAsArray) {
   ASSERT_EQ(c, (cartesianPowerAsArray<2, 3>()));
 }
 
+// This test builds a `ValueSequence` whose values are `std::array`s, i.e. it
+// passes class-type objects as by-value non-type template parameters, which is
+// only possible since C++20 (P1907), so it is excluded in real C++17 mode.
+#ifndef QLEVER_CPP_17
 TEST(ConstexprUtils, cartesianPowerAsIntegerArray) {
   ValueSequence<std::array<int, 1>, std::array{0}, std::array{1}, std::array{2},
                 std::array{3}>
@@ -155,6 +165,7 @@ TEST(ConstexprUtils, cartesianPowerAsIntegerArray) {
       c;
   ASSERT_TRUE(compare(c, (cartesianPowerAsIntegerArray<2, 3>())));
 }
+#endif
 
 TEST(ConstexprUtils, ConstexprForLoop) {
   size_t i{0};
@@ -216,8 +227,10 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   }
 
   // F1 can only be called with 0 and 1 as template arguments.
-  static_assert(std::invocable<decltype(ConstexprSwitch<0, 1>{}), F1, int>);
-  static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
+  static_assert(
+      ql::concepts::invocable<decltype(ConstexprSwitch<0, 1>{}), F1, int>);
+  static_assert(
+      !ql::concepts::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
 struct PushToVector {
@@ -434,6 +447,10 @@ TEST(ConstexprUtils, forEachValueInValueSequence) {
   }
 
   // Test with a ValueSequence of std::array.
+  // A class-type value like `std::array` can only be used as a non-type
+  // template argument by value since C++20 (P1907), so this block is excluded
+  // in real C++17 mode.
+#ifndef QLEVER_CPP_17
   {
     using ArrayType = std::array<int, 3>;
     std::vector<ArrayType> values;
@@ -445,4 +462,5 @@ TEST(ConstexprUtils, forEachValueInValueSequence) {
     ASSERT_EQ(values[0], (ArrayType{1, 2, 3}));
     ASSERT_EQ(values[1], (ArrayType{4, 5, 6}));
   }
+#endif
 }
