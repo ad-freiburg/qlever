@@ -486,7 +486,7 @@ TEST(ExistsJoin, originalTreesAreNotOverwrittenWhenJoinColumnsEmpty) {
                   .isUnconstrained());
   EXPECT_EQ(
       existsJoin.getChildren().at(1)->getRootOperation()->getLimitOffset(),
-      LimitOffsetClause(1, 0));
+      (LimitOffsetClause{1, 0}));
   EXPECT_TRUE(leftTree->getRootOperation()->getLimitOffset().isUnconstrained());
   EXPECT_TRUE(
       rightTree->getRootOperation()->getLimitOffset().isUnconstrained());

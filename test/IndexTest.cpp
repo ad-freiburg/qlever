@@ -444,6 +444,10 @@ TEST(IndexTest, emptyIndex) {
 }
 
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+//
+// The text index is not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`), so this test is excluded there.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(IndexTest, emptyTextIndex) {
   std::array<std::string, 2> inputs = {
       "<a:> <a:> <a:> .",
@@ -461,6 +465,7 @@ TEST(IndexTest, emptyTextIndex) {
     EXPECT_EQ(result.size(), 0);
   }
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedTripleComponent` that matches `content` and the bool
@@ -797,21 +802,21 @@ TEST(IndexImpl, recomputeStatistics) {
       indexImpl.SPOForTesting() = Permutation{
           Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
       // Zero out original values.
-      indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
-      indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
+      indexImpl.configurationJson_["num-subjects"] = NNAI{0, 0};
+      indexImpl.configurationJson_["num-objects"] = NNAI{0, 0};
     }
 
     auto newStats = indexImpl.recomputeStatistics(
         index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
-    EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
-    EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
+    EXPECT_EQ(newStats["num-triples"], (NNAI{6, 7}));
+    EXPECT_EQ(newStats["num-predicates"], (NNAI{2, 4}));
     if (loadAllPermutations) {
-      EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
-      EXPECT_EQ(newStats["num-objects"], NNAI(5, 0));
+      EXPECT_EQ(newStats["num-subjects"], (NNAI{4, 0}));
+      EXPECT_EQ(newStats["num-objects"], (NNAI{5, 0}));
     } else {
-      EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
-      EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
+      EXPECT_EQ(newStats["num-subjects"], (NNAI{0, 0}));
+      EXPECT_EQ(newStats["num-objects"], (NNAI{0, 0}));
     }
   }
 }

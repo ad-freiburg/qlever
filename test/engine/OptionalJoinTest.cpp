@@ -800,7 +800,7 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
 
     EXPECT_EQ(
         optionalJoin.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-        LimitOffsetClause(3, 0));
+        (LimitOffsetClause{3, 0}));
     EXPECT_TRUE(optionalJoin.getChildren()
                     .at(1)
                     ->getRootOperation()
