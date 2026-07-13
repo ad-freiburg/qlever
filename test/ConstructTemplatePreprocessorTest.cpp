@@ -111,7 +111,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
   Triples triples;
   triples.push_back({GraphTerm{iriV("<http://s>")},
                      GraphTerm{iriV("<http://p>")},
-                     GraphTerm{Literal{"hello"}}});
+                     GraphTerm{Literal{"\"hello\""}}});
 
   VariableToColumnMap varMap;
   auto result =
