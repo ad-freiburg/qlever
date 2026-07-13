@@ -30,18 +30,29 @@ class CartesianProductJoin : public Operation {
   // to mechanism to reverse this.
   bool forbiddenToRecompute_ = false;
 
+  // Functors for `childView` and `childView() const` below. Named (rather
+  // than local lambda) types are used here because GCC 11 fails to emit a
+  // definition for `ranges::indirected<Fn>`'s constructor when `Fn` is a
+  // lambda type local to an inline member function, under `-std=gnu++17`.
+  struct GetOperation {
+    Operation& operator()(
+        const std::shared_ptr<QueryExecutionTree>& child) const {
+      return *child->getRootOperation();
+    }
+  };
+  struct GetConstOperation {
+    const Operation& operator()(
+        const std::shared_ptr<QueryExecutionTree>& child) const {
+      return *child->getRootOperation();
+    }
+  };
+
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class
   // and clean up the implementation of several other children.
-  auto childView() {
-    return ql::views::transform(children_, [](auto& child) -> Operation& {
-      return *child->getRootOperation();
-    });
-  }
+  auto childView() { return ql::views::transform(children_, GetOperation{}); }
   auto childView() const {
-    return ql::views::transform(children_, [](auto& child) -> const Operation& {
-      return *child->getRootOperation();
-    });
+    return ql::views::transform(children_, GetConstOperation{});
   }
 
  public:

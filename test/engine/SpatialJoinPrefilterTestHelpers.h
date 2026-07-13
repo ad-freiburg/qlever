@@ -259,9 +259,9 @@ inline void runParsingAndSweeper(
     testResult = SweeperTestResult{};
     testResult.results_.reserve(resultNumRows);
     for (size_t i = 0; i < result.idTableView().numRows(); i++) {
-      testResult.results_.emplace_back(sjTask.joinType_,
-                                       result.idTableView().at(i, leftCol),
-                                       result.idTableView().at(i, rightCol), 0);
+      testResult.results_.push_back(SweeperSingleResultWithIds{
+          sjTask.joinType_, result.idTableView().at(i, leftCol),
+          result.idTableView().at(i, rightCol), 0});
     }
     if (spatialJoin->runtimeInfo().details_.contains(
             "num-geoms-dropped-by-prefilter")) {
@@ -340,7 +340,8 @@ inline void runParsingAndSweeper(
     auto valIdRight =
         prepared.idTableRight_->at(rightIdx, prepared.rightJoinCol_);
 
-    resultMatched.emplace_back(sjType, valIdLeft, valIdRight, dist);
+    resultMatched.push_back(
+        SweeperSingleResultWithIds{sjType, valIdLeft, valIdRight, dist});
   }
 
   // Convert aggregated bounding boxes from web mercator int32 to lat/lng double
