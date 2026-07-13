@@ -187,7 +187,7 @@ TEST(Bind, limitIsPropagated) {
 
   bind.applyLimitOffset({1, 1});
   EXPECT_EQ(bind.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-            LimitOffsetClause(1, 1));
+            (LimitOffsetClause{1, 1}));
   // We expect that the original subtree is unchanged.
   EXPECT_TRUE(
       valuesTree->getRootOperation()->getLimitOffset().isUnconstrained());
