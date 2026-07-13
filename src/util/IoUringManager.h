@@ -51,45 +51,6 @@ CPP_concept ReadPolicyConcept =
     concepts::unsigned_integral<typename T::BatchHandle> &&
     CPP_requires_ref(ReadPolicy_, T);
 
-// Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
-// in a synchronous (blocking) manner. Single-threaded use only.
-struct SyncIoPolicy {
-  using BatchHandle = uint64_t;
-
-  // `ringSize` is ignored; it exists only so the policy is constructible the
-  // same way as `IoUringPolicy`.
-  //
-  // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
-  // void.
-  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
-
-  ~SyncIoPolicy() = default;
-  SyncIoPolicy(const SyncIoPolicy&) = delete;
-  SyncIoPolicy& operator=(const SyncIoPolicy&) = delete;
-
-  // Immediately execute a batch of reads synchronously. This blocks the calling
-  // thread. Read `i` reads `numBytesToReadPerRequest[i]` bytes from file
-  // descriptor `fd`, starting at offset `fileOffsetPerRequest[i]` (from the
-  // start of the file), into the buffer starting at
-  // `targetBufferPerRequest[i]`. `handle` is unused (the batch completes before
-  // `addBatch` returns).
-  void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
-                ql::span<const uint64_t> fileOffsetPerRequest,
-                ql::span<char*> targetBufferPerRequest,
-                BatchHandle handle) const;
-
-  void wait(BatchHandle) const {
-      // No-op: `addBatch` already completed all reads synchronously.
-  };
-
-  // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
-  // (from the start of the file) into `targetBuffer`. Throws exception if the
-  // read fails or returns fewer bytes than requested (a partial read or end of
-  // file), since every read must be fully satisfied.
-  static void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
-                               uint64_t fileOffset);
-};
-
 // Abstract base of `BatchManager` so a pool can hold managers of different
 // `ReadPolicy`s behind a unified interface and pick the backend at runtime.
 class BatchManagerBase {
@@ -105,6 +66,10 @@ class BatchManagerBase {
   virtual void wait(BatchHandle handle) = 0;
 };
 
+// `BatchManager` owns the batch bookkeeping (minting a `BatchHandle` per batch,
+// validating the input spans) and delegates the reads from the underlying
+// Vocabulary to the `Policy`, which must satisfy the `ReadPolicy` concept
+// above.
 template <typename ReadPolicy>
 class BatchManager final : public BatchManagerBase {
   static_assert(
@@ -137,6 +102,7 @@ class BatchManager final : public BatchManagerBase {
     return handle;
   }
 
+  // Block until every read in `handle` has completed.
   void wait(BatchHandle handle) override { policy_.wait(handle); }
 
  private:
@@ -148,7 +114,7 @@ class BatchManager final : public BatchManagerBase {
     const auto n = ql::ranges::size(first);
     auto valid = ((ql::ranges::size(rest) == n) && ...);
     if (!valid) {
-      AD_THROW("spans should have same length");
+      AD_THROW("spans must have same length");
     }
     return;
   }
@@ -225,6 +191,45 @@ class IoUringPolicy {
   // completed. (The `handle` was submitted along the read requests using
   // `addBatch`.) Throws on any I/O error.
   void wait(BatchHandle handle);
+};
+
+// Fallback implementation for the `IoUringPolicy` below. Schedules pread calls
+// in a synchronous (blocking) manner. Single-threaded use only.
+struct SyncIoPolicy {
+  using BatchHandle = uint64_t;
+
+  // `ringSize` is ignored; it exists only so the policy is constructible the
+  // same way as `IoUringPolicy`.
+  //
+  // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
+  // void.
+  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
+
+  ~SyncIoPolicy() = default;
+  SyncIoPolicy(const SyncIoPolicy&) = delete;
+  SyncIoPolicy& operator=(const SyncIoPolicy&) = delete;
+
+  // Immediately execute a batch of reads synchronously. This blocks the calling
+  // thread. Read `i` reads `numBytesToReadPerRequest[i]` bytes from file
+  // descriptor `fd`, starting at offset `fileOffsetPerRequest[i]` (from the
+  // start of the file), into the buffer starting at
+  // `targetBufferPerRequest[i]`. `handle` is unused (the batch completes before
+  // `addBatch` returns).
+  void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
+                ql::span<const uint64_t> fileOffsetPerRequest,
+                ql::span<char*> targetBufferPerRequest,
+                BatchHandle handle) const;
+
+  void wait(BatchHandle) const {
+      // No-op: `addBatch` already completed all reads synchronously.
+  };
+
+  // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
+  // (from the start of the file) into `targetBuffer`. Throws exception if the
+  // read fails or returns fewer bytes than requested (a partial read or end of
+  // file), since every read must be fully satisfied.
+  static void readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
+                               uint64_t fileOffset);
 };
 
 using BatchIoManager = BatchManager<IoUringPolicy>;
