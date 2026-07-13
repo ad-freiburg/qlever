@@ -1202,9 +1202,10 @@ struct AddValidatorToConfigManager {
   F addValidatorFunction;
 
   template <typename... Ts>
-  void operator()(size_t variant, ConfigManager& m,
+  auto operator()(size_t variant, ConfigManager& m,
                   ConstConfigOptionProxy<Ts>... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      -> CPP_ret(void)(requires(sizeof...(Ts) ==
+                                sizeof...(validatorArguments))) {
     // Add the new validator
     addValidatorFunction(
         AdjustVariantArgument{}.template operator()<Ts...>(variant),
@@ -1297,11 +1298,12 @@ struct DoTestNoValidatorInSubManager {
   F addValidatorFunction;
 
   template <typename... Ts>
-  void operator()(
+  auto operator()(
       ConfigManager& m, const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      -> CPP_ret(void)(requires(sizeof...(Ts) ==
+                                sizeof...(validatorArguments))) {
     // How many validators are to be added?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 
@@ -1345,12 +1347,13 @@ struct DoTestAlwaysValidatorInSubManager {
   F addValidatorFunction;
 
   template <typename... Ts>
-  void operator()(
+  auto operator()(
       ConfigManager& m, ConfigManager& subM,
       const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      -> CPP_ret(void)(requires(sizeof...(Ts) ==
+                                sizeof...(validatorArguments))) {
     // How many validators are to be added to each of the managers?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 
@@ -2310,9 +2313,9 @@ struct ConfigOptionsAndValidatorsOrder {
   std::vector<std::string> validators_;
 
   // Appends the content of an different `ConfigOptionsAndValidatorsOrder`.
-  template <typename T>
-  requires isSimilar<T, ConfigOptionsAndValidatorsOrder>
-  void append(T&& order) {
+  CPP_template(typename T)(
+      requires isSimilar<
+          T, ConfigOptionsAndValidatorsOrder>) void append(T&& order) {
     appendVector(configOptions_, AD_FWD(order).configOptions_);
     appendVector(validators_, AD_FWD(order).validators_);
   }
