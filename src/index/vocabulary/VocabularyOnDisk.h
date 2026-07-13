@@ -41,7 +41,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // Pool of persistent `BatchIoManager`s for `lookupBatch`.
   mutable std::unique_ptr<ad_utility::data_structures::ThreadSafeQueue<
-      std::unique_ptr<ad_utility::BatchIoManager>>>
+      std::unique_ptr<ad_utility::BatchManagerBase>>>
       ioManagers_;
 
   // This suffix is appended to the filename of the main file, in order to get
@@ -151,14 +151,14 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
   // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
-  std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchIoManager& manager,
+  std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
                                           ql::span<const size_t> indices) const;
 
   // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
   // string data from `file_` into one contiguous buffer in a single batched
   // read via `manager`, and return it as a `VocabBatchLookupResult`.
   VocabBatchLookupResult readStrings(
-      ad_utility::BatchIoManager& manager,
+      ad_utility::BatchManagerBase& manager,
       ql::span<const OffsetPair> offsetPairs) const;
 };
 

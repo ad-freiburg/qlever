@@ -41,7 +41,8 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
 
 // _____________________________________________________________________________
 std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
-    ad_utility::BatchIoManager& manager, ql::span<const size_t> indices) const {
+    ad_utility::BatchManagerBase& manager,
+    ql::span<const size_t> indices) const {
   // For each requested index `i`, read its offset together with the next offset
   // (which bounds the string) as one 16-byte pair from `.offsets`.
   const size_t numIndices = indices.size();
@@ -62,7 +63,7 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
 
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::readStrings(
-    ad_utility::BatchIoManager& manager,
+    ad_utility::BatchManagerBase& manager,
     ql::span<const OffsetPair> offsetPairs) const {
   // Read the string data. String `i` starts at `offset_` with length
   // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
@@ -172,9 +173,10 @@ void VocabularyOnDisk::open(const std::string& filename) {
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
-      std::unique_ptr<ad_utility::BatchIoManager>>>(
+      std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
+  bool preferIoUring = true;
   for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(std::make_unique<ad_utility::BatchIoManager>());
+    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
   }
 }
