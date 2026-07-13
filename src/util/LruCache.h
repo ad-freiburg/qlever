@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_LRUCACHE_H
 
 #include <absl/container/flat_hash_map.h>
+#include <gtest/gtest_prod.h>
 
 #include <boost/optional.hpp>
 #include <cstddef>
@@ -34,6 +35,11 @@ class LRUCache {
   size_t capacity_;
   // Stores keys in order of usage (MRU at front).
   std::list<K> keys_;
+  // Maps each key to its mapped value. The mapped value is itself a pair. Its
+  // `.first` is the cached value `V`. Its `.second` is an iterator (a
+  // "bookmark") into `keys_` that marks this key's position in the recency
+  // list. Storing the iterator lets a cache hit move the key to the front (MRU)
+  // in O(1) without searching `keys_`.
   absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
 
  public:
@@ -49,18 +55,19 @@ class LRUCache {
   // compute anything.
   template <typename Key>
   boost::optional<const V&> tryGet(const Key& key) {
-    auto it = cache_.find(key);
-    if (it == cache_.end()) return boost::none;
-    const auto& [value, listIterator] = it->second;
-    // Move accessed key to front (most recently used).
-    keys_.splice(keys_.begin(), keys_, listIterator);
+    auto cacheHitIterator = cache_.find(key);
+    if (cacheHitIterator == cache_.end()) return boost::none;
+    const auto& [value, listIterator] = cacheHitIterator->second;
+    markMRU(listIterator);
     return boost::optional<const V&>(value);
   }
 
-  // Check if `key` is in the cache and return a reference to the value if it is
-  // found. Otherwise, compute the value using `computeFunction` and store it in
-  // the cache. If the cache is already at maximum capacity, evict the least
-  // recently used element.
+  // Check if `key` is in the cache. If it is found, return a reference to the
+  // value. Otherwise, compute the value by calling `computeFunction(key)`.
+  // `computeFunction` is invoked with the key as a `const K&` and must return
+  // something convertible to `V`. The computed value is stored in the cache,
+  // and a reference to it is returned. If the cache is already at maximum
+  // capacity, the least recently used element is evicted first.
   CPP_template(typename Key, typename Func)(
       requires ad_utility::InvocableWithConvertibleReturnType<
           Func, V, const K&>) const V& getOrCompute(Key&& key,
@@ -69,73 +76,101 @@ class LRUCache {
     if (optValue) {
       return optValue.value();
     }
-    // Evict LRU if cache is full.
-    if (cache_.size() >= capacity_) {
-      K& lruKey = keys_.back();
-      cache_.erase(lruKey);
-      // Reuse allocated memory by moving node and reassigning key.
-      keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
-      lruKey = key;
-    } else {
-      // Push new element if not full
-      keys_.push_front(K{key});
-    }
-    auto result = cache_.try_emplace(
-        AD_FWD(key), computeFunction(keys_.front()), keys_.begin());
-    AD_CORRECTNESS_CHECK(result.second);
-    return result.first->second.first;
+    return insertNewEntry(AD_FWD(key), [&computeFunction, this] {
+      return computeFunction(keys_.front());
+    });
   }
 
   // Insert the key-value pair into the cache.
   //
-  // Returns true if `key` was not previously present and inserts it. If `key`
+  // Returns `true` if `key` was not previously present and inserts it. If `key`
   // is already present, update the stored value, mark the entry as most
-  // recently used and return false. If the cache is full, evict the least
+  // recently used and return `false`. If the cache is full, evict the least
   // recently used entry first.
   template <typename Key, typename Value>
-  bool insert(Key&& key, Value&& v) {
-    auto it = cache_.find(key);
-    if (it != cache_.end()) {
-      // Move to MRU position.
-      keys_.splice(keys_.begin(), keys_, it->second.second);
+  bool insert(Key&& key, Value&& newValue) {
+    // `find` returns an iterator to the matching `{key, mapped value}` entry,
+    // or `end()` if the key is absent.
+    auto cacheHitIterator = cache_.find(key);
 
-      // Replace the old cached value with the newly provided value.
-      it->second.first = std::forward<Value>(v);
-
+    if (cacheHitIterator != cache_.end()) {
+      // Cache hit: mark most-recently-used, then overwrite the stored value.
+      auto& [oldValue, listIteratorToKey] = cacheHitIterator->second;
+      markMRU(listIteratorToKey);
+      oldValue = AD_FWD(newValue);
       return false;
-    }
-
-    // Evict LRU if necessary.
-    if (cache_.size() >= capacity_) {
-      K& lruKey = keys_.back();
-      cache_.erase(lruKey);
-
-      keys_.splice(keys_.begin(), keys_, std::prev(keys_.end()));
-      lruKey = K{std::forward<Key>(key)};
-
-      auto result = cache_.try_emplace(keys_.front(), std::forward<Value>(v),
-                                       keys_.begin());
-
-      AD_CORRECTNESS_CHECK(result.second);
     } else {
-      keys_.push_front(K{std::forward<Key>(key)});
-
-      auto result = cache_.try_emplace(keys_.front(), std::forward<Value>(v),
-                                       keys_.begin());
-
-      AD_CORRECTNESS_CHECK(result.second);
+      // Cache miss: make room at the front and insert the new entry there.
+      insertNewEntry(AD_FWD(key), [&newValue] { return AD_FWD(newValue); });
+      return true;
     }
-
-    return true;
   }
 
   // Set-like insertion for empty value types. This stores a default-constructed
-  // empty value and returns true iff the key was not already present.
+  // empty value and returns `true` iff the key was not already present.
   CPP_template(typename Key)(
       requires std::is_empty_v<V> CPP_and
           std::is_default_constructible_v<V>) bool insert(Key&& key) {
-    return insert(std::forward<Key>(key), V{});
+    return insert(AD_FWD(key), V{});
   }
+
+ private:
+  // Move the list node `node` to the front of `keys_`, marking its key as the
+  // most recently used. O(1); does not invalidate any iterators into `keys_`,
+  // including the ones stored as bookmarks in `cache_` (the `.second.second` of
+  // each entry).
+  void markMRU(typename std::list<K>::iterator node) {
+    keys_.splice(keys_.begin(), keys_, node);
+  }
+
+  // Seat `key` as the most-recently-used key at the front of `keys_`, evicting
+  // the least-recently-used key first if the cache is full (this removes that
+  // old key from both `keys_` and `cache_`).
+  //
+  // This only updates `keys_`. It does NOT add a `cache_` entry for the new
+  // `key`. After this returns, `keys_.front()` holds `key` but `cache_` has no
+  // entry for it yet, so the cache is temporarily inconsistent. The caller must
+  // complete the insertion of the key-value-pair by adding the matching
+  // `cache_` entry, keyed on `keys_.front()`.
+  // Precondition: `key` is not already present in the cache.
+  template <typename Key>
+  void evictLRUKeyIfFullAndMarkNewKeyAsMRU(Key&& key) {
+    if (cache_.size() >= capacity_) {
+      cache_.erase(keys_.back());
+      // Recycle the evicted (back) node by moving it to the front and
+      // reassigning its key.
+      auto leastRecentlyUsedKey = std::prev(keys_.end());
+      markMRU(leastRecentlyUsedKey);
+      // Replace least recently used key with new key.
+      keys_.front() = AD_FWD(key);
+    } else {
+      // If the capacity is not full, just insert new key as most recently used
+      // key (at the front of the list).
+      keys_.push_front(K{AD_FWD(key)});
+    }
+  }
+
+  // Insert a brand-new entry for `key` as the most-recently-used element,
+  // evicting the least-recently-used entry first if the cache is full.
+  // The value is obtained by invoking `makeValue()` (after `key` has been
+  // seated at the front, so it may read `keys_.front()`).
+  // Returns a reference to the stored value.
+  // Precondition: `key` is not already present in the cache.
+  CPP_template(typename Key, typename MakeValue)(
+      requires ad_utility::InvocableWithConvertibleReturnType<MakeValue, V>)
+      V& insertNewEntry(Key&& key, MakeValue&& makeValue) {
+    evictLRUKeyIfFullAndMarkNewKeyAsMRU(AD_FWD(key));
+    auto result = cache_.try_emplace(keys_.front(), makeValue(), keys_.begin());
+    AD_CORRECTNESS_CHECK(result.second);
+    return result.first->second.first;
+  }
+
+  FRIEND_TEST(LRUCache, markMRUReordersKeysList);
+  FRIEND_TEST(LRUCache,
+              evictLRUKeyIfFullAndMarkNewKeyAsMRUPushesFrontWhenNotFull);
+  FRIEND_TEST(LRUCache,
+              evictLRUKeyIfFullAndMarkNewKeyAsMRUEvictsAndRecyclesWhenFull);
+  FRIEND_TEST(LRUCache, insertNewEntrySeatsKeyBeforeComputingValue);
 };
 
 }  // namespace ad_utility::util

@@ -167,7 +167,7 @@ TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
 
   // For use within the range tests.
   const std::vector<NumericalRange<size_t>> ranges{
-      {4ul, 7ul}, {200ul, 70171ul}, {71747ul, 1936556173ul}};
+      {4, 7}, {200, 70171}, {71747, 1936556173}};
 
   testSeedWithRange(
       [](const auto rangeMin, const auto rangeMax, RandomSeed seed) {

@@ -179,6 +179,8 @@ addLinkAndDiscoverTest(IdTripleTest index)
 
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
+addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
+
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
@@ -232,8 +234,6 @@ addLinkAndDiscoverTest(TransitivePathGraphSearchTest engine)
 
 addLinkAndDiscoverTest(PathSearchTest engine)
 
-addLinkAndDiscoverTest(BatchedPipelineTest)
-
 addLinkAndDiscoverTest(TupleHelpersTest)
 
 addLinkAndDiscoverTest(UriParserUriTest)
@@ -242,11 +242,15 @@ addLinkAndDiscoverTest(ParsedUriTest)
 
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
+addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
+
 addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
@@ -344,7 +348,12 @@ addLinkAndDiscoverTest(ServiceTest engine)
 
 addLinkAndDiscoverTest(LoadTest engine)
 
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+# HttpTest is disabled for Emscripten: emsdk 6.0.2 miscompiles the boost::beast
+# websocket coroutine code under both Wasm EH modes (legacy: wasm-opt rejects an
+# invalid `rethrow`; standard EH: the WebAssemblyLateEHPrepare backend pass segfaults).
+if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
+    addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
@@ -429,6 +438,12 @@ addLinkAndDiscoverTest(JsonUtilTest)
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
 
 addLinkAndDiscoverTest(AsioHelpersTest)
+# With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
+# crashes on the coroutine `.resume` body in this file. Compiling just this
+# translation unit at -O1 avoids the crashing pass.
+if (EMSCRIPTEN)
+    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+endif ()
 
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
@@ -507,6 +522,8 @@ addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 

@@ -64,7 +64,7 @@ void testLazyScan(
               partialLazyScanResult.details().numElementsRead_);
   }
 
-  auto resFullScan = fullScan.getResult()->idTable().clone();
+  auto resFullScan = fullScan.getResult()->cloneIdTable();
   IdTable expected{resFullScan.numColumns(), alloc};
 
   if (limitOffset.isUnconstrained()) {
@@ -226,8 +226,7 @@ const auto testSetAndMakeScanWithPrefilterExpr =
         // to the IndexScan.
         IdTable idTableFiltered = updatedQet->getRootOperation()
                                       ->computeResultOnlyForTesting()
-                                      .idTable()
-                                      .clone();
+                                      .cloneIdTable();
         auto isColumnIdSpan =
             idTableFiltered.getColumn(updatedQet->getVariableColumn(variable));
         ASSERT_EQ(
@@ -450,7 +449,7 @@ TEST(IndexScan, additionalColumn) {
   // subject, so it has no pattern.
   auto exp = makeIdTableFromVector(
       {{getId("<x>"), getId("<z>"), I(0), I(Pattern::NoPattern)}});
-  EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
+  EXPECT_THAT(res.idTableView(), ::testing::ElementsAreArray(exp));
 }
 
 // Test that the graphs by which an `IndexScan` is to be filtered is correctly
@@ -535,8 +534,8 @@ TEST(IndexScan, getResultSizeOfScan) {
     EXPECT_EQ(scan.getSizeEstimate(), 1);
     EXPECT_ANY_THROW(scan.getMultiplicity(0));
     auto res = scan.computeResultOnlyForTesting();
-    ASSERT_EQ(res.idTable().numRows(), 1);
-    ASSERT_EQ(res.idTable().numColumns(), 0);
+    ASSERT_EQ(res.idTableView().numRows(), 1);
+    ASSERT_EQ(res.idTableView().numColumns(), 0);
     EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
   {
@@ -554,8 +553,8 @@ TEST(IndexScan, getResultSizeOfScan) {
     EXPECT_EQ(scan.getSizeEstimate(), 0);
     EXPECT_ANY_THROW(scan.getMultiplicity(0));
     auto res = scan.computeResultOnlyForTesting();
-    ASSERT_EQ(res.idTable().numRows(), 0);
-    ASSERT_EQ(res.idTable().numColumns(), 0);
+    ASSERT_EQ(res.idTableView().numRows(), 0);
+    ASSERT_EQ(res.idTableView().numColumns(), 0);
     EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
 }
@@ -1473,7 +1472,7 @@ TEST(IndexScanTest, StripColumns) {
                                      AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     IdTable baseResult =
-        baseScan.computeResultOnlyForTesting(false).idTable().clone();
+        baseScan.computeResultOnlyForTesting(false).cloneIdTable();
     qec->clearCacheUnpinnedOnly();
     // Create set with variables to keep, plus non-existent variables to test
     // filtering
@@ -1520,7 +1519,7 @@ TEST(IndexScanTest, StripColumns) {
 
     // Test fully materialized evaluation.
     EXPECT_THAT(subsetScan->resultSortedOn(), ElementsAreArray(sortedOn));
-    EXPECT_THAT(subsetScan->getResult(false)->idTable(),
+    EXPECT_THAT(subsetScan->getResult(false)->idTableView(),
                 matchesIdTable(expectedResult.clone()));
 
     // Test lazy evaluation.
@@ -1864,8 +1863,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
             .value_or(makeBaseScan());
 
     qec->clearCacheUnpinnedOnly();
-    IdTable fullResult =
-        fullPrefilteredQet->getResult(false)->idTable().clone();
+    IdTable fullResult = fullPrefilteredQet->getResult(false)->cloneIdTable();
 
     // Create expected result by applying column subset (same logic as
     // infrastructure lambda)
@@ -1882,11 +1880,9 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
 
     // Now compare both approaches against the expected result
     qec->clearCacheUnpinnedOnly();
-    IdTable result1 =
-        prefilteredThenStripped->getResult(false)->idTable().clone();
+    IdTable result1 = prefilteredThenStripped->getResult(false)->cloneIdTable();
     qec->clearCacheUnpinnedOnly();
-    IdTable result2 =
-        strippedThenPrefiltered->getResult(false)->idTable().clone();
+    IdTable result2 = strippedThenPrefiltered->getResult(false)->cloneIdTable();
     EXPECT_THAT(result1, matchesIdTable(expectedResult.clone()))
         << "Approach 1 (prefilter-then-strip) should match expected result for "
         << varsToKeep.size() << " variables";
@@ -2077,7 +2073,7 @@ TEST_P(IndexScanWithLazyJoin,
         return std::move(block);
       });
   auto postCondition = [&numBlocksReadJoinSide,
-                        numBlocksExported = 0ul]() mutable {
+                        numBlocksExported = size_t{0}]() mutable {
     bool rightFirst = GetParam();
     if (rightFirst) {
       return;

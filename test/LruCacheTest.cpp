@@ -10,11 +10,23 @@
 
 #include <gtest/gtest.h>
 
+#include <list>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "util/LruCache.h"
 
-TEST(LRUCache, testLruCache) {
+namespace {
+// Copy a recency list `keys_` (MRU first) into a vector, for white-box
+// assertions on the internal ordering. The friend test reads `cache.keys_` and
+// passes it here.
+std::vector<int> GetKeysInOrder(const std::list<int>& keys) {
+  return std::vector<int>(keys.begin(), keys.end());
+}
+}  // namespace
+
+TEST(getOrCompute, computesOnMissAndReturnsCachedOnHit) {
   ad_utility::util::LRUCache<int, int> cache{2};
   // Type-erase the lambdas to get a better coverage report.
   using F = std::function<int(int)>;
@@ -53,7 +65,7 @@ TEST(LRUCache, testEmptyCapacityForbidden) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, tryGetReturnsNoneOnMiss) {
+TEST(LRUCache, returnsNoneOnMiss) {
   ad_utility::util::LRUCache<int, int> cache{2};
   auto prevCapacity = cache.capacity();
   EXPECT_FALSE(cache.tryGet(42));
@@ -112,7 +124,7 @@ TEST(LRUCache, insertReturnsWhetherKeyWasNewAndUpdatesValue) {
 }
 
 // _____________________________________________________________________________
-TEST(LRUCache, duplicateInsertPromotesToMostRecentlyUsed) {
+TEST(LRUCache, insertDuplicatePromotesToMostRecentlyUsed) {
   ad_utility::util::LRUCache<int, int> cache{2};
 
   EXPECT_TRUE(cache.insert(1, 10));
@@ -139,3 +151,93 @@ TEST(LRUCache, insertWithoutValueWorksForEmptyValueTypes) {
   EXPECT_FALSE(cache.tryGet(2));
   EXPECT_TRUE(cache.tryGet(3));
 }
+
+// White-box tests for the private helpers. These live in the same namespace as
+// `LRUCache` so the `FRIEND_TEST` friend declarations (which name the test
+// classes in `ad_utility::util`) actually grant access to the private members.
+namespace ad_utility::util {
+
+// _____________________________________________________________________________
+// `markMRU` moves the given list node to the front of `keys_` and leaves all
+// other nodes (and `cache_`) untouched.
+TEST(LRUCache, markMRUReordersKeysList) {
+  LRUCache<int, int> cache{3};
+  cache.insert(1, 10);
+  cache.insert(2, 20);
+  cache.insert(3, 30);
+  // After inserting 1, 2, 3 the recency list is 3, 2, 1 (MRU first).
+  ASSERT_EQ((std::vector<int>{3, 2, 1}), GetKeysInOrder(cache.keys_));
+
+  // Promote key 1 (currently LRU) to the front via its stored bookmark.
+  auto bookmarkOfKey1 = cache.cache_.find(1)->second.second;
+  cache.markMRU(bookmarkOfKey1);
+
+  EXPECT_EQ((std::vector<int>{1, 3, 2}), GetKeysInOrder(cache.keys_));
+  // `cache_` is unchanged in size and the bookmarks still resolve.
+  EXPECT_EQ(3u, cache.cache_.size());
+  EXPECT_EQ(10, cache.cache_.find(1)->second.first);
+}
+
+// _____________________________________________________________________________
+// When the cache is below capacity, `evictLRUKeyIfFullAndMarkNewKeyAsMRU`
+// simply pushes the new key to the front of `keys_` and evicts nothing. It does
+// NOT insert a `cache_` entry (that is the caller's responsibility).
+TEST(LRUCache, evictLRUKeyIfFullAndMarkNewKeyAsMRUPushesFrontWhenNotFull) {
+  LRUCache<int, int> cache{3};
+  cache.insert(1, 10);  // keys_: {1}, cache_: {1}
+
+  cache.evictLRUKeyIfFullAndMarkNewKeyAsMRU(2);
+
+  EXPECT_EQ((std::vector<int>{2, 1}), GetKeysInOrder(cache.keys_));
+  // No `cache_` entry was created for key 2 by the helper.
+  EXPECT_FALSE(cache.cache_.contains(2));
+  EXPECT_TRUE(cache.cache_.contains(1));
+  EXPECT_EQ(1u, cache.cache_.size());
+}
+
+// _____________________________________________________________________________
+// When the cache is full, `evictLRUKeyIfFullAndMarkNewKeyAsMRU` evicts the LRU
+// key from both `keys_` and `cache_`, recycles its list node to the front, and
+// seats the new key there. It only updates `keys_`: it does NOT add a `cache_`
+// entry for the new key, so afterwards `keys_.front()` holds the new key while
+// `cache_` has no entry for it yet. Adding the value that corresponds to this
+// newly added key to the `cache_` is the caller's responsibility.
+TEST(LRUCache, evictLRUKeyIfFullAndMarkNewKeyAsMRUEvictsAndRecyclesWhenFull) {
+  LRUCache<int, int> cache{2};
+  cache.insert(1, 10);
+  cache.insert(2, 20);  // keys_: {2, 1}; key 1 is LRU.
+
+  cache.evictLRUKeyIfFullAndMarkNewKeyAsMRU(3);
+
+  // The recycled node now holds key 3 at the front; key 1 was evicted.
+  EXPECT_EQ((std::vector<int>{3, 2}), GetKeysInOrder(cache.keys_));
+  // Key 1 is gone from `cache_`; key 2 remains; key 3 is not inserted yet.
+  EXPECT_FALSE(cache.cache_.contains(1));
+  EXPECT_TRUE(cache.cache_.contains(2));
+  EXPECT_FALSE(cache.cache_.contains(3));
+  EXPECT_EQ(1u, cache.cache_.size());
+}
+
+// _____________________________________________________________________________
+// `insertNewEntry` seats the key at the front BEFORE invoking the value factory
+// (so the factory may read `keys_.front()`), stores the produced value, and
+// returns a reference to the stored value.
+TEST(LRUCache, insertNewEntrySeatsKeyBeforeComputingValue) {
+  LRUCache<int, int> cache{2};
+
+  bool factoryCalled = false;
+  const int& stored = cache.insertNewEntry(7, [&] {
+    factoryCalled = true;
+    // The key must already be seated at the front when the factory runs.
+    EXPECT_EQ(7, cache.keys_.front());
+    return cache.keys_.front() * 10;
+  });
+
+  EXPECT_TRUE(factoryCalled);
+  EXPECT_EQ(70, stored);
+  // The returned reference aliases the stored value.
+  EXPECT_EQ(&stored, &cache.cache_.find(7)->second.first);
+  EXPECT_EQ((std::vector<int>{7}), GetKeysInOrder(cache.keys_));
+}
+
+}  // namespace ad_utility::util

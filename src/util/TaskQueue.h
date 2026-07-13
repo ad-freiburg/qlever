@@ -7,6 +7,10 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/any_invocable.h>
 
+#include <array>
+#include <atomic>
+#include <future>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <string>
@@ -79,6 +83,18 @@ class TaskQueue {
     // If TrackTimes==true, measure the time and add it to pushTime_,
     // else only perform the pushing.
     return executeAndUpdateTimer(action, pushTime_);
+  }
+
+  // Submit a callable and return a `std::future` for its result. The returned
+  // future resolves (or throws) once the task completes.
+  template <typename Func>
+  auto submit(Func&& func)
+      -> std::future<std::invoke_result_t<std::decay_t<Func>>> {
+    using R = std::invoke_result_t<std::decay_t<Func>>;
+    std::packaged_task<R()> task{AD_FWD(func)};
+    auto future = task.get_future();
+    push(std::move(task));
+    return future;
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more
@@ -167,6 +183,46 @@ class TaskQueue {
   friend std::pair<size_t, size_t> getThreadCountAndTaskSize(
       const TaskQueue<false>&);
 };
+
+// Start one thread per `producer` on `pool`. Each thread repeatedly calls its
+// `producer` (which returns a `std::optional`) and pushes the values to
+// `queue`, until the `producer` is exhausted (returns `std::nullopt`) or
+// `queue` is closed from the consuming side. Exceptions thrown by a `producer`
+// are propagated to `queue`, and `queue` is closed once all producers are done.
+// Returns an `absl::Cleanup` that closes `queue` and waits for the threads, so
+// the `queue` and the `producers` must outlive it. The caller must ensure the
+// passed `pool` has enough threads to run all producers, otherwise there might
+// be less parallelism than expected. The `pool` can be reused after that. The
+// threads become available again once the producers are done.
+template <typename Queue, typename... Producers>
+auto runProducers(ad_utility::TaskQueue<>& pool, Queue& queue,
+                  Producers... producers) {
+  auto numActiveProducers =
+      std::make_shared<std::atomic<size_t>>(sizeof...(Producers));
+  std::array futures{pool.submit(
+      [&queue, producer = std::move(producers), numActiveProducers]() {
+        try {
+          while (auto value = producer()) {
+            if (!queue.push(std::move(value.value()))) {
+              break;
+            }
+          }
+        } catch (...) {
+          queue.pushException(std::current_exception());
+        }
+        if (numActiveProducers->fetch_sub(1) == 1) {
+          queue.finish();
+        }
+      })...};
+  return absl::Cleanup{[&queue, futures = std::move(futures)]() {
+    // Finish the queue first, so a producer task blocked on a full queue
+    // unblocks and can be joined.
+    queue.finish();
+    for (auto& future : futures) {
+      future.wait();
+    }
+  }};
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_TASKQUEUE_H

@@ -93,15 +93,14 @@ Result Sort::computeResult(bool requestLaziness) {
 
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
-    const IdTable& inputTable = input->idTable();
-    if (inputTable.numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(inputTable.clone(),
+    if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
+      return computeResultInMemory(input->cloneIdTable(),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      ql::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTableView<0>> inputViewSpan{&input->idTableView(), 1};
       return computeResultExternal({}, std::move(localVocab),
-                                   inputTableSpan.begin(), inputTableSpan.end(),
+                                   inputViewSpan.begin(), inputViewSpan.end(),
                                    std::move(input), requestLaziness);
     }
   }
@@ -201,10 +200,9 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
       mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
     } else {
-      // NOTE: `pushBlock` with a const reference iterates over the rows and
-      // calls `push` for each, which buffers rows and flushes to disk when the
-      // buffer is full. This avoids having to clone the (potentially large)
-      // input table.
+      // NOTE: `pushBlock` iterates over the rows and calls `push` for each,
+      // which buffers rows and flushes to disk when the buffer is full. This
+      // avoids having to clone the (potentially large) input table.
       sorter->pushBlock(*it);
     }
     ++it;
