@@ -1006,8 +1006,8 @@ TEST(IndexImpl, dateOfIndexBuild) {
   auto systemTime =
       std::chrono::clock_cast<std::chrono::system_clock>(fileTime);
   auto expectedFallback =
-      absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
-                       absl::FromChrono(systemTime), absl::UTCTimeZone());
+      absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::FromChrono(systemTime),
+                       absl::UTCTimeZone());
   EXPECT_EQ(indexImpl.dateOfIndexBuild(), expectedFallback);
 }
 
