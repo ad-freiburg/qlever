@@ -922,15 +922,19 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   using LeftBlocks = typename LeftSide::CurrentBlocks;
   using RightBlocks = typename RightSide::CurrentBlocks;
 
-// We can't define aliases for these concepts, so we use macros instead. They
-// expand to a type constraint on a template parameter in C++20 and to a plain
-// `typename` under the C++17 backports, so they can be used as
-// `template <Side S> ... f(S& side)`.
-#if defined(Side) || defined(Blocks)
-#error Side or Blocks are already defined
+// We can't define aliases for these concepts, so we use macros instead. The
+// `Side` and `Blocks` macros expand to a type constraint on a template
+// parameter in C++20 and to a plain `typename` under the C++17 backports, so
+// they can be used as `template <Side S> ... f(S& side)`. The `SideC` and
+// `BlocksC` macros are the constrained-`auto` counterparts for use as (lambda)
+// parameter types, e.g. `[](const SideC& side) {...}`.
+#if defined(Side) || defined(Blocks) || defined(SideC) || defined(BlocksC)
+#error Side, Blocks, SideC or BlocksC are already defined
 #endif
 #define Side QL_CONCEPT_OR_TYPENAME(SameAsAny<LeftSide, RightSide>)
 #define Blocks QL_CONCEPT_OR_TYPENAME(SameAsAny<LeftBlocks, RightBlocks>)
+#define SideC QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
+#define BlocksC QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -949,7 +953,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
   ProjectedEl getCurrentEl() {
-    auto getFirst = [](const auto& side) -> ProjectedEl {
+    auto getFirst = [](const SideC& side) -> ProjectedEl {
       return side.projection_(side.currentBlocks_.front().back());
     };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
@@ -1342,8 +1346,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
     auto equalToCurrentElRight =
         getEqualToCurrentEl(currentBlocksRight, currentEl);
 
-    auto getNextBlocks = [this, &currentEl, &blockStatus](auto& target,
-                                                          auto& side) {
+    auto getNextBlocks = [this, &currentEl, &blockStatus](BlocksC& target,
+                                                          SideC& side) {
       // Explicit this to avoid false positive warning in clang.
       this->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
       bool allBlocksWereFilled = fillEqualToCurrentEl(side, currentEl);
@@ -1590,6 +1594,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // Don't clutter other compilation units with these aliases.
 #undef Side
 #undef Blocks
+#undef SideC
+#undef BlocksC
 };
 
 // Concrete implementation of BlockZipperJoinImpl that provides the default
