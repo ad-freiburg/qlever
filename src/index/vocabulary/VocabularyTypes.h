@@ -104,6 +104,43 @@ struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
 struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
+// The result type of every vocabulary's `scanAll`: a type-erased input range
+// that yields all words of the vocabulary in order, one `std::string_view` at
+// a time. Type erasure lets `PolymorphicVocabulary::scanAll` unify the
+// different concrete ranges of its underlying vocabularies. Each yielded
+// `std::string_view` is only valid until the range is advanced, and the
+// vocabulary that produced the range must stay alive (and unchanged) while the
+// range is used.
+using VocabularyScanRange = ad_utility::InputRangeTypeErased<std::string_view>;
+
+namespace ad_utility::vocabulary {
+
+// The (fixed) number of words that the batched `scanAll` implementations read
+// per underlying access. Reading in batches instead of word by word is what
+// makes `scanAll` much faster than a plain loop over `operator[]`.
+inline constexpr size_t scanAllBatchSize = 1024;
+
+// Generic fallback implementation of `scanAll` for vocabularies without a
+// specialized (batched) one: simply enumerate the words `[0, size())` via the
+// ordinary single-word `operator[]`. The current word is kept in a buffer so
+// that a `std::string_view` to it can be yielded (this also works when
+// `operator[]` returns an owning `std::string`). The `vocab` must stay alive
+// while the returned range is used.
+template <typename Vocab>
+VocabularyScanRange scanAllViaOperatorBracket(const Vocab* vocab) {
+  return VocabularyScanRange{ad_utility::InputRangeFromGetCallable{
+      [vocab, nextIdx = uint64_t{0}, buffer = std::string{}]() mutable
+          -> std::optional<std::string_view> {
+        if (nextIdx >= vocab->size()) {
+          return std::nullopt;
+        }
+        buffer = (*vocab)[nextIdx++];
+        return std::string_view{buffer};
+      }}};
+}
+
+}  // namespace ad_utility::vocabulary
+
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`
 // function. This can be used to represent words that are larger than the

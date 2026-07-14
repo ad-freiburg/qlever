@@ -3,6 +3,8 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
@@ -143,4 +145,27 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
   for (size_t i = 0; i < words.size(); ++i) {
     EXPECT_EQ(vocabulary[i], words[i]) << "at index " << i;
   }
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyOnDisk, ScanAll) {
+  // Use clearly more words than the internal batch size, so that the scan has
+  // to read (and stitch together) multiple batches.
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 3000; ++i) {
+    words.push_back(absl::StrCat("word", i, std::string(i % 7, 'x')));
+  }
+  VocabularyCreator creator{"vocabularyOnDiskScanAll.dat"};
+  auto vocabulary = creator.createVocabulary(words);
+
+  using ::testing::ElementsAreArray;
+  EXPECT_THAT(scanAllToVector(vocabulary.scanAll()), ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyOnDisk, ScanAllEmptyVocabulary) {
+  VocabularyCreator creator{"vocabularyOnDiskScanAllEmpty.dat"};
+  auto vocabulary = creator.createVocabulary({});
+  auto range = vocabulary.scanAll();
+  EXPECT_FALSE(range.get().has_value());
 }

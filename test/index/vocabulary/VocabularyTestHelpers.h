@@ -269,6 +269,15 @@ auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
 }
 
+// Collect all words that the given `scanAll` result yields into a vector.
+inline std::vector<std::string> scanAllToVector(VocabularyScanRange range) {
+  std::vector<std::string> result;
+  for (std::string_view word : range) {
+    result.emplace_back(word);
+  }
+  return result;
+}
+
 }  // namespace vocabulary_test
 
 #endif  // QLEVER_VOCABULARYTESTHELPERS_H

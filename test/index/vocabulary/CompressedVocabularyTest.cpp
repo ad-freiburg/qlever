@@ -173,3 +173,32 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
 }
 
 }  // namespace
+
+// _____________________________________________________________________________
+TYPED_TEST(CompressedVocabularyF, ScanAll) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 111; ++i) {
+    words.push_back(absl::StrCat("someWord", i, std::string(i % 13, 'y')));
+  }
+  // NOTE: The fixture uses a decoder block size of 4, so this vocabulary has
+  // many decoder blocks that the scan has to span.
+  auto vocab = createVocab(words);
+
+  using ::testing::ElementsAreArray;
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()), ElementsAreArray(words));
+  // Abandon a scan early; the destructor has to clean up properly.
+  {
+    auto range = vocab.scanAll();
+    auto word = range.get();
+    ASSERT_TRUE(word.has_value());
+    EXPECT_EQ(word.value(), words.at(0));
+  }
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompressedVocabularyF, ScanAllEmptyVocabulary) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  auto vocab = createVocab({});
+  EXPECT_FALSE(vocab.scanAll().get().has_value());
+}
