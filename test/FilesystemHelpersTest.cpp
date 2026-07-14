@@ -19,6 +19,7 @@
 #include "util/Log.h"
 
 namespace fs = ql::filesystem;
+using qlever::util::deleteFilesInDirectory;
 using qlever::util::doesDirectoryContainFileWithBasename;
 using ::testing::HasSubstr;
 
@@ -171,4 +172,98 @@ TEST(IsSubdirectoryOf, differentPaths) {
   // This only works if the test is not run inside `/`, but this should be fine.
   EXPECT_FALSE(isSubdirectoryOf("/malicious-path", "relative-path"));
   EXPECT_FALSE(isSubdirectoryOf("../malicious-path", "relative-path"));
+}
+
+// _____________________________________________________________________________
+TEST(DeleteFilesInDirectory, deletesOnlyMatchingRegularFiles) {
+  TempDir tmp;
+  touch(tmp.path() / "del_1.txt");
+  touch(tmp.path() / "del_2.txt");
+  touch(tmp.path() / "keep.txt");
+
+  size_t deleted = deleteFilesInDirectory(tmp.path(), [](const fs::path& p) {
+    return p.filename().string().rfind("del_", 0) == 0;
+  });
+
+  EXPECT_EQ(deleted, 2u);
+  EXPECT_FALSE(fs::exists(tmp.path() / "del_1.txt"));
+  EXPECT_FALSE(fs::exists(tmp.path() / "del_2.txt"));
+  EXPECT_TRUE(fs::exists(tmp.path() / "keep.txt"));
+}
+
+// _____________________________________________________________________________
+TEST(DeleteFilesInDirectory, deletesAllMatchingFiles) {
+  TempDir tmp;
+  constexpr int numMatching = 25;
+  for (int i = 0; i < numMatching; ++i) {
+    touch(tmp.path() / absl::StrCat("del_", i, ".tmp"));
+  }
+  touch(tmp.path() / "keep");
+
+  size_t deleted = deleteFilesInDirectory(tmp.path(), [](const fs::path& p) {
+    return p.extension().string() == ".tmp";
+  });
+
+  EXPECT_EQ(deleted, static_cast<size_t>(numMatching));
+  EXPECT_TRUE(fs::exists(tmp.path() / "keep"));
+  // No matching file is left behind (this is what the collect-then-delete
+  // strategy guarantees, even on platforms where deleting while iterating would
+  // skip entries).
+  size_t remaining = 0;
+  for (const auto& entry : ql::directoryRange(tmp.path())) {
+    if (entry.path().extension().string() == ".tmp") {
+      ++remaining;
+    }
+  }
+  EXPECT_EQ(remaining, 0u);
+}
+
+// _____________________________________________________________________________
+TEST(DeleteFilesInDirectory, ignoresSubdirectories) {
+  TempDir tmp;
+  touch(tmp.path() / "match_file");
+  fs::create_directory(tmp.path() / "match_dir");
+
+  // The predicate matches both, but only the regular file must be deleted.
+  size_t deleted = deleteFilesInDirectory(tmp.path(), [](const fs::path& p) {
+    return p.filename().string().rfind("match_", 0) == 0;
+  });
+
+  EXPECT_EQ(deleted, 1u);
+  EXPECT_FALSE(fs::exists(tmp.path() / "match_file"));
+  EXPECT_TRUE(fs::exists(tmp.path() / "match_dir"));
+}
+
+// _____________________________________________________________________________
+TEST(DeleteFilesInDirectory, predicateMatchingNothingDeletesNothing) {
+  TempDir tmp;
+  touch(tmp.path() / "a");
+  touch(tmp.path() / "b");
+
+  size_t deleted =
+      deleteFilesInDirectory(tmp.path(), [](const fs::path&) { return false; });
+
+  EXPECT_EQ(deleted, 0u);
+  EXPECT_TRUE(fs::exists(tmp.path() / "a"));
+  EXPECT_TRUE(fs::exists(tmp.path() / "b"));
+}
+
+// _____________________________________________________________________________
+TEST(DeleteFilesInDirectory, nonExistentDirectoryReturnsZero) {
+  TempDir tmp;
+  fs::path missing = tmp.path() / "does-not-exist";
+  size_t deleted =
+      deleteFilesInDirectory(missing, [](const fs::path&) { return true; });
+  EXPECT_EQ(deleted, 0u);
+}
+
+// _____________________________________________________________________________
+TEST(DeleteFilesInDirectory, pathThatIsNotADirectoryReturnsZero) {
+  TempDir tmp;
+  auto file = tmp.path() / "a-file";
+  touch(file);
+  size_t deleted =
+      deleteFilesInDirectory(file, [](const fs::path&) { return true; });
+  EXPECT_EQ(deleted, 0u);
+  EXPECT_TRUE(fs::exists(file));
 }

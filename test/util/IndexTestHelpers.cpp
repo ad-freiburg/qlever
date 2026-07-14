@@ -14,6 +14,7 @@
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
 
 using qlever::TextScoringMetric;
@@ -170,20 +171,16 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // permutations are not present, because they would actually be present from
   // the previous index build.
   namespace fs = ql::filesystem;
-  for (const auto& entry : ql::directoryRange(fs::current_path())) {
-    if (!entry.is_regular_file()) continue;
-
-    std::string name = entry.path().filename().string();
-
-    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
-        ql::starts_with(name, indexBasename + ".index") ||
-        ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
-        ql::starts_with(name, indexBasename + ".update-triples") ||
-        ql::starts_with(name, indexBasename + ".allocated-graphs-state")) {
-      ad_utility::deleteFile(entry.path());
-    }
-  }
+  qlever::util::deleteFilesInDirectory(
+      fs::current_path(), [&indexBasename](const auto& path) {
+        std::string name = path.filename().string();
+        return ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
+               ql::starts_with(name, indexBasename + ".index") ||
+               ql::starts_with(name, indexBasename + ".internal.index") ||
+               ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
+               ql::starts_with(name, indexBasename + ".update-triples") ||
+               ql::starts_with(name, indexBasename + ".allocated-graphs-state");
+      });
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
     c.turtleInput =

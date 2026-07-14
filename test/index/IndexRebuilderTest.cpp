@@ -25,6 +25,7 @@
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
+#include "util/FilesystemHelpers.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -643,25 +644,11 @@ void cleanFilesWithPrefix(std::string_view prefix) {
   AD_CONTRACT_CHECK(!prefix.empty(),
                     "This function is not meant to delete all files in the "
                     "current directory. Please specify a prefix.");
-  namespace fs = ql::filesystem;
-  // Collect the matching entries first and delete them only afterwards.
-  // Deleting entries while iterating the directory is unspecified behavior and
-  // can cause entries to be skipped on some platforms (observed on macOS),
-  // leaving leftover files behind.
-  std::vector<fs::directory_entry> toDelete;
-  ql::ranges::copy_if(ql::directoryRange("."), std::back_inserter(toDelete),
-                      [prefix](const auto& e) {
-                        return ql::starts_with(e.path().filename().string(),
-                                               prefix);
-                      });
-  AD_CONTRACT_CHECK(
-      ql::ranges::all_of(
-          toDelete, [](const auto& entry) { return entry.is_regular_file(); }),
-      "All entries matching the prefix must be regular files, this function "
-      "does not delete directories.");
-  for (const auto& entry : toDelete) {
-    ad_utility::deleteFile(entry.path());
-  }
+  // `deleteFilesInDirectory` collects the matching entries first and deletes
+  // them only afterwards, and only deletes regular files (not directories).
+  qlever::util::deleteFilesInDirectory(".", [prefix](const auto& path) {
+    return ql::starts_with(path.filename().string(), prefix);
+  });
 }
 }  // namespace
 

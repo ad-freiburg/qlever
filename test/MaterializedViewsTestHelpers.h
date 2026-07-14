@@ -18,6 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 
 namespace materializedViewsTestHelpers {
 
@@ -50,12 +51,10 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
   std::cout << "Removing test files " << basename << ".*" << std::endl;
-  for (const auto& entry : ql::directoryRange(ql::filesystem::current_path())) {
-    if (entry.is_regular_file() &&
-        std::regex_match(entry.path().filename().string(), pattern)) {
-      ql::filesystem::remove(entry.path());
-    }
-  }
+  qlever::util::deleteFilesInDirectory(
+      ql::filesystem::current_path(), [&pattern](const auto& path) {
+        return std::regex_match(path.filename().string(), pattern);
+      });
 }
 
 // _____________________________________________________________________________

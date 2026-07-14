@@ -10,10 +10,12 @@
 #include "util/FilesystemHelpers.h"
 
 #include <string>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "util/File.h"
 
 namespace qlever::util {
 namespace fs = ql::filesystem;
@@ -39,6 +41,29 @@ bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
         std::string name = entry.path().filename().string();
         return ql::starts_with(name, prefix);
       });
+}
+
+// _____________________________________________________________________________
+size_t deleteFilesInDirectory(
+    const fs::path& directory,
+    const std::function<bool(const fs::path&)>& shouldDelete) {
+  if (!fs::exists(directory) || !fs::is_directory(directory)) {
+    return 0;
+  }
+  // Collect the matching regular files first and delete them only afterwards.
+  // Deleting entries while iterating a directory is unspecified behavior and
+  // can cause entries to be skipped on some platforms (observed on macOS),
+  // leaving leftover files behind.
+  std::vector<fs::path> toDelete;
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (entry.is_regular_file() && shouldDelete(entry.path())) {
+      toDelete.push_back(entry.path());
+    }
+  }
+  for (const auto& path : toDelete) {
+    ad_utility::deleteFile(path);
+  }
+  return toDelete.size();
 }
 
 // _____________________________________________________________________________
