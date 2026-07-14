@@ -20,9 +20,12 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
-using ad_utility::testing::getQec;
+using namespace qlever;
+using namespace qlever::testing;
+
+using qlever::testing::getQec;
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
 auto U = Id::makeUndefined();
 using namespace ::testing;
@@ -32,7 +35,7 @@ using namespace ::testing;
 // based search (false). The second bool indicates if the result should be
 // requested lazily.
 class TransitivePathTest
-    : public testing::TestWithParam<std::tuple<bool, bool>> {
+    : public ::testing::TestWithParam<std::tuple<bool, bool>> {
  public:
   [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
                                  QueryExecutionContext*>
@@ -41,21 +44,20 @@ class TransitivePathTest
            std::optional<std::string> turtleInput = std::nullopt,
            const std::optional<Variable>& graphVariable = std::nullopt) {
     bool useBinSearch = std::get<0>(GetParam());
-    ad_utility::testing::TestIndexConfig config;
+    qlever::testing::TestIndexConfig config;
     config.turtleInput = std::move(turtleInput);
-    config.indexType = graphVariable.has_value() ? qlever::Filetype::NQuad
-                                                 : qlever::Filetype::Turtle;
+    config.indexType =
+        graphVariable.has_value() ? Filetype::NQuad : Filetype::Turtle;
     auto qec = getQec(std::move(config));
     // Clear the cache to avoid crosstalk between tests.
     qec->clearCacheUnpinnedOnly();
-    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(input), vars);
-    return {
-        TransitivePathBase::makeTransitivePath(
-            qec, std::move(subtree), std::move(left), std::move(right), minDist,
-            maxDist, useBinSearch,
-            qlever::index::GraphFilter<TripleComponent>::All(), graphVariable),
-        qec};
+    auto subtree =
+        makeExecutionTree<ValuesForTesting>(qec, std::move(input), vars);
+    return {TransitivePathBase::makeTransitivePath(
+                qec, std::move(subtree), std::move(left), std::move(right),
+                minDist, maxDist, useBinSearch,
+                index::GraphFilter<TripleComponent>::All(), graphVariable),
+            qec};
   }
 
   // ___________________________________________________________________________
@@ -85,11 +87,11 @@ class TransitivePathTest
                  minDist, maxDist, std::move(turtleInput), graphVariable);
     auto operation =
         std::holds_alternative<IdTable>(sideTable)
-            ? ad_utility::makeExecutionTree<ValuesForTesting>(
+            ? makeExecutionTree<ValuesForTesting>(
                   qec, std::move(std::get<IdTable>(sideTable)), sideVars, false,
                   std::vector<ColumnIndex>{sideTableCol}, LocalVocab{},
                   std::nullopt, forceFullyMaterialized)
-            : ad_utility::makeExecutionTree<ValuesForTesting>(
+            : makeExecutionTree<ValuesForTesting>(
                   qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
                   sideVars, false, std::vector<ColumnIndex>{sideTableCol});
     auto boundPath = isLeft ? T->bindLeftSide(operation, sideTableCol)
@@ -944,7 +946,7 @@ TEST_P(TransitivePathTest, zeroLengthWithLiteralsNotInIndex) {
       },
       Id::makeFromInt);
 
-  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+  auto expected = IdTable{2, qlever::testing::makeAllocator()};
 
   {
     TransitivePathSide left(std::nullopt, 0, 1337, 0);
@@ -997,7 +999,7 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
       },
       Id::makeFromInt);
 
-  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+  auto expected = IdTable{2, qlever::testing::makeAllocator()};
 
   {
     TransitivePathSide left(std::nullopt, 0, 1337, 0);
@@ -1041,8 +1043,8 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
-  using ad_utility::triple_component::Literal;
-  ad_utility::testing::TestIndexConfig config;
+  using triple_component::Literal;
+  qlever::testing::TestIndexConfig config;
   config.turtleInput = "<a> a 0 , 1 , 2 , 4 .";
   auto* qec = getQec(std::move(config));
   std::string literal = "my-literal";
@@ -1053,12 +1055,12 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
     bool useBinSearch = std::get<0>(GetParam());
     // Clear the cache to avoid crosstalk between tests.
     qec->clearCacheUnpinnedOnly();
-    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(input), vars);
+    auto subtree =
+        makeExecutionTree<ValuesForTesting>(qec, std::move(input), vars);
     return TransitivePathBase::makeTransitivePath(
         qec, std::move(subtree), std::move(left), std::move(right), minDist,
-        maxDist, useBinSearch,
-        qlever::index::GraphFilter<TripleComponent>::All(), std::nullopt);
+        maxDist, useBinSearch, index::GraphFilter<TripleComponent>::All(),
+        std::nullopt);
   };
 
   // Simulate entries in the delta triples by using entries that are not in the
@@ -1860,7 +1862,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   EXPECT_THAT(path->resultSortedOn(), ::testing::ElementsAre());
 
   {
-    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto operation = makeExecutionTree<ValuesForTesting>(
         qec, side.clone(),
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}});
@@ -1870,7 +1872,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   }
 
   {
-    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto operation = makeExecutionTree<ValuesForTesting>(
         qec, side.clone(),
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
@@ -1881,7 +1883,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   }
 
   {
-    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto operation = makeExecutionTree<ValuesForTesting>(
         qec, side.clone(),
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
@@ -1892,7 +1894,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   }
 
   {
-    auto operation = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto operation = makeExecutionTree<ValuesForTesting>(
         qec,
         makeIdTableFromVector({
             {Id::makeUndefined(), 10},
@@ -1910,7 +1912,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
-    [](const testing::TestParamInfo<std::tuple<bool, bool>>& info) {
+    [](const ::testing::TestParamInfo<std::tuple<bool, bool>>& info) {
       std::string result = std::get<0>(info.param) ? "TransitivePathBinSearch"
                                                    : "TransitivePathHashMap";
       result += std::get<1>(info.param) ? "Lazy" : "FullyMaterialized";

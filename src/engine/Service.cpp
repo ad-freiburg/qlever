@@ -24,6 +24,8 @@
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
+using namespace qlever;
+
 namespace {
 // CTRE regex patterns for C++17 compatibility
 constexpr ctll::fixed_string selectPatternRegex = "[ \t\r\n]*SELECT";
@@ -553,7 +555,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
     const Index& index, Id id, const LocalVocab& localVocab) {
   using enum Datatype;
   const auto& optionalStringAndXsdType =
-      ql::exportIds::idToStringAndType(index, id, localVocab);
+      exportIds::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
     return "UNDEF";
@@ -630,7 +632,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
-    std::string_view v = siblingUsed ? "yes"sv : "no"sv;
+    std::string_view v = siblingUsed ? "yes" : "no";
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
     sibling->runtimeInfo().addDetail("used-to-optimize-service-sibling", v);
   };

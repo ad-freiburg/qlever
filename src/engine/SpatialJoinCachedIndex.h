@@ -13,8 +13,12 @@
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/Serializer.h"
 
-// Forward declarations
+// Forward declaration of the third-party S2 class.
 class MutableS2ShapeIndex;
+
+namespace qlever {
+
+// Forward declaration.
 class SpatialJoinCachedIndexImpl;
 
 // This class holds a `MutableS2ShapeIndex` that is created once by the named
@@ -89,5 +93,7 @@ class SpatialJoinCachedIndex {
   // the serialization function above.
   void populateFromSerialized(std::string_view serializedS2Index);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCACHEDINDEX_H

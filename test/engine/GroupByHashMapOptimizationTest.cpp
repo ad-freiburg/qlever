@@ -8,14 +8,16 @@
 #include "../util/IndexTestHelpers.h"
 #include "engine/GroupByHashMapOptimization.h"
 
+using namespace qlever;
+
 namespace {
-auto I = ad_utility::testing::IntId;
-auto D = ad_utility::testing::DoubleId;
+auto I = qlever::testing::IntId;
+auto D = qlever::testing::DoubleId;
 }  // namespace
 
 class GroupByHashMapOptimizationTest : public ::testing::Test {
  protected:
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  QueryExecutionContext* qec_ = qlever::testing::getQec();
   VariableToColumnMap varToColMap_;
   LocalVocab localVocab_;
   IdTable table_{qec_->getAllocator()};
@@ -229,7 +231,7 @@ TEST_F(GroupByHashMapOptimizationTest,
 
   auto addStringWithLangTag = [&](std::string_view string,
                                   std::string langTag) {
-    using ad_utility::triple_component::Literal;
+    using triple_component::Literal;
     auto literal = Literal::literalWithoutQuotes(string, std::move(langTag));
     addValue(Id::makeFromLocalVocabIndex(
         localVocab_.getIndexAndAddIfNotContained(LocalVocabEntry{

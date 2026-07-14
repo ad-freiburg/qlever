@@ -12,6 +12,8 @@
 #include "absl/strings/str_cat.h"
 #include "util/HashSet.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 ExternalValues::ExternalValues(QueryExecutionContext* qec,
                                parsedQuery::SparqlValues parsedValues,

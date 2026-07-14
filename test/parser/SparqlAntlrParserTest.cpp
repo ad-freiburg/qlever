@@ -22,16 +22,17 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+
 namespace {
 using namespace sparqlParserTestHelpers;
 using std::string;
 
-auto iri = ad_utility::testing::iri;
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto iri = qlever::testing::iri;
+auto lit = qlever::testing::tripleComponentLiteral;
 
 PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIriref(iri));
+  return PropertyPath::fromIri(triple_component::Iri::fromIriref(iri));
 }
 
 const EncodedIriManager* encodedIriManager() {
@@ -70,7 +71,7 @@ TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
   {
-    static ad_utility::BlankNodeManager blankNodeManager;
+    static BlankNodeManager blankNodeManager;
     ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
                        "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
@@ -88,7 +89,7 @@ TEST(SparqlParser, Prefix) {
                       StrEq("<www.wikidata.org/bimbam>"));
   expectIncompleteParse(
       parse<&Parser::iriref>("<somethingsomething> <rest>", prefixMap),
-      "<rest>", testing::StrEq("<somethingsomething>"));
+      "<rest>", ::testing::StrEq("<somethingsomething>"));
 }
 
 TEST(SparqlExpressionParser, First) {
@@ -108,12 +109,11 @@ TEST(SparqlExpressionParser, First) {
   auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
   VariableToColumnMap map;
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::testing::makeAllocator()};
+  ad_utility::AllocatorWithLimit<Id> alloc{qlever::testing::makeAllocator()};
   IdTable table{alloc};
   LocalVocab localVocab;
   sparqlExpression::EvaluationContext input{
-      *ad_utility::testing::getQec(),
+      *qlever::testing::getQec(),
       map,
       table.asStaticView<0>(),
       alloc,
@@ -231,7 +231,7 @@ TEST(SparqlParser, BlankNodeLabelled) {
 
 TEST(SparqlParser, ConstructTemplateEmpty) {
   expectCompleteParse(parse<&Parser::constructTemplate>("{}"),
-                      testing::Eq(std::nullopt));
+                      ::testing::Eq(std::nullopt));
 }
 
 TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
@@ -815,7 +815,7 @@ TEST(SparqlParser, SelectClause) {
   auto expectSelectClause = ExpectCompleteParse<&Parser::selectClause>{};
   auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
 
-  using Alias = std::pair<string, ::Variable>;
+  using Alias = std::pair<string, Variable>;
   expectCompleteParse(parseSelectClause("SELECT *"),
                       m::AsteriskSelect(false, false));
   expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),
@@ -1046,7 +1046,7 @@ TEST(SparqlParser, SelectQuery) {
       m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
-      testing::AllOf(
+      ::testing::AllOf(
           m::SelectQuery(
               m::Select({Var{"?x"}}),
               m::GraphPattern(false, {"(?x != <foo>)"},
@@ -1055,18 +1055,18 @@ TEST(SparqlParser, SelectQuery) {
 
   // ORDER BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
-                    testing::AllOf(m::SelectQuery(m::Select({Var{"?x"}}),
-                                                  DummyGraphPatternMatcher),
-                                   m::pq::OrderKeys({{Var{"?y"}, false}})));
+                    ::testing::AllOf(m::SelectQuery(m::Select({Var{"?x"}}),
+                                                    DummyGraphPatternMatcher),
+                                     m::pq::OrderKeys({{Var{"?y"}, false}})));
 
   // Explicit GROUP BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
-                    testing::AllOf(m::SelectQuery(m::VariablesSelect({"?x"}),
-                                                  DummyGraphPatternMatcher),
-                                   m::pq::GroupKeys({Var{"?x"}})));
+                    ::testing::AllOf(m::SelectQuery(m::VariablesSelect({"?x"}),
+                                                    DummyGraphPatternMatcher),
+                                     m::pq::GroupKeys({Var{"?x"}})));
   expectSelectQuery(
       "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
-      testing::AllOf(
+      ::testing::AllOf(
           m::SelectQuery(m::Select({std::pair{"COUNT(?y)", Var{"?a"}}}),
                          DummyGraphPatternMatcher),
           m::pq::GroupKeys({Var{"?x"}})));
@@ -1074,7 +1074,7 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQuery(
       "SELECT (SUM(?x) as ?a) (COUNT(?y) + ?z AS ?b)  WHERE { ?x ?y ?z } GROUP "
       "BY ?z",
-      testing::AllOf(
+      ::testing::AllOf(
           m::SelectQuery(m::Select({std::pair{"SUM(?x)", Var{"?a"}},
                                     std::pair{"COUNT(?y) + ?z", Var{"?b"}}}),
                          DummyGraphPatternMatcher)));
@@ -1082,7 +1082,7 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQuery(
       "SELECT (SUM(?x) as ?a)  WHERE { ?x ?y ?z } GROUP "
       "BY ?z ORDER BY (COUNT(?y) + ?z)",
-      testing::AllOf(
+      ::testing::AllOf(
           m::SelectQuery(
               m::Select({std::pair{"SUM(?x)", Var{"?a"}}}, false, false,
                         {std::pair{"(COUNT(?y) + ?z)",
@@ -1110,19 +1110,20 @@ TEST(SparqlParser, SelectQuery) {
   // as input.
   expectSelectQuery(
       "SELECT (?x AS ?a) (?a AS ?aa) WHERE { ?x ?y ?z} GROUP BY ?x",
-      testing::AllOf(m::SelectQuery(m::Select({std::pair{"?x", Var{"?a"}},
-                                               std::pair{"?a", Var{"?aa"}}}),
-                                    DummyGraphPatternMatcher),
-                     m::pq::GroupKeys({Var{"?x"}})));
+      ::testing::AllOf(m::SelectQuery(m::Select({std::pair{"?x", Var{"?a"}},
+                                                 std::pair{"?a", Var{"?aa"}}}),
+                                      DummyGraphPatternMatcher),
+                       m::pq::GroupKeys({Var{"?x"}})));
 
   // Implicit GROUP BY.
   expectSelectQuery(
       "SELECT (SUM(?x) as ?a) (COUNT(?y) + AVG(?z) AS ?b)  WHERE { ?x ?y ?z }",
-      testing::AllOf(m::SelectQuery(m::Select({std::pair{"SUM(?x)", Var{"?a"}},
-                                               std::pair{"COUNT(?y) + AVG(?z)",
-                                                         Var{"?b"}}}),
-                                    DummyGraphPatternMatcher),
-                     m::pq::GroupKeys({})));
+      ::testing::AllOf(
+          m::SelectQuery(
+              m::Select({std::pair{"SUM(?x)", Var{"?a"}},
+                         std::pair{"COUNT(?y) + AVG(?z)", Var{"?b"}}}),
+              DummyGraphPatternMatcher),
+          m::pq::GroupKeys({})));
   // Implicit GROUP BY but the variable `?x` is not aggregated.
   expectSelectQueryFails("SELECT ?x (SUM(?y) AS ?z) WHERE { ?x <p> ?y}");
   // Implicit GROUP BY but the variable `?x` is not aggregated inside the
@@ -1173,7 +1174,7 @@ TEST(SparqlParser, ConstructQuery) {
                                 {{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
-      testing::AllOf(m::ConstructQuery(
+      ::testing::AllOf(m::ConstructQuery(
           {{Var{"?a"}, iri("<foo>"), Var{"?c"}}},
           m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})))));
   expectConstructQuery(
@@ -1186,7 +1187,7 @@ TEST(SparqlParser, ConstructQuery) {
                           m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
-      testing::AllOf(
+      ::testing::AllOf(
           m::ConstructQuery(
               {{Var{"?a"}, iri("<foo>"), Var{"?c"}}},
               m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
@@ -1224,8 +1225,9 @@ TEST(SparqlParser, ConstructQuery) {
 }
 
 // _____________________________________________________________________________
+namespace qlever {
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
-  static ad_utility::BlankNodeManager blankNodeManager;
+  static BlankNodeManager blankNodeManager;
   SparqlQleverVisitor visitor{
       &blankNodeManager, encodedIriManager(), {}, std::nullopt};
 
@@ -1236,6 +1238,7 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
       visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
       ad_utility::Exception);
 }
+}  // namespace qlever
 
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
@@ -1282,16 +1285,16 @@ TEST(SparqlParser, AskQuery) {
   // ASK with ORDER BY is allowed (even though the ORDER BY does not change the
   // result).
   expectAskQuery("ASK { ?x ?y ?z } ORDER BY ?y ",
-                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
-                                m::pq::OrderKeys({{Var{"?y"}, false}})));
+                 ::testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                  m::pq::OrderKeys({{Var{"?y"}, false}})));
 
   // ASK with GROUP BY is allowed.
   expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
-                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
-                                m::pq::GroupKeys({Var{"?x"}})));
+                 ::testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                  m::pq::GroupKeys({Var{"?x"}})));
   expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
-                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
-                                m::pq::GroupKeys({Var{"?x"}})));
+                 ::testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                  m::pq::GroupKeys({Var{"?x"}})));
 
   // HAVING is not allowed without GROUP BY
   expectAskQueryFails(
@@ -1308,7 +1311,7 @@ TEST(SparqlParser, Query) {
   // Test that `_originalString` is correctly set.
   expectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
-      testing::AllOf(
+      ::testing::AllOf(
           m::SelectQuery(m::AsteriskSelect(),
                          m::GraphPattern(m::Triples(
                              {{Var{"?a"}, iri("<bar>"), Var{"?foo"}}}))),
@@ -1327,14 +1330,14 @@ TEST(SparqlParser, Query) {
   // Test that visible variables are correctly set.
   expectQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
-      testing::AllOf(
+      ::testing::AllOf(
           m::ConstructQuery(
               {{Var{"?a"}, iri("<foo>"), Var{"?c"}}},
               m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
           m::VisibleVariables({Var{"?a"}, Var{"?b"}, Var{"?c"}})));
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
-      testing::AllOf(
+      ::testing::AllOf(
           m::ConstructQuery(
               {{Var{"?x"}, iri("<foo>"), iri("<bar>")}},
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
@@ -1346,7 +1349,7 @@ TEST(SparqlParser, Query) {
   // Construct query with GROUP BY
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x",
-      testing::AllOf(
+      ::testing::AllOf(
           m::ConstructQuery(
               {{Var{"?x"}, iri("<foo>"), iri("<bar>")}},
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
@@ -1361,7 +1364,7 @@ TEST(SparqlParser, Query) {
   // The same two tests with `ASK` queries
   expectQuery(
       "ASK WHERE { ?x ?y ?z } GROUP BY ?x",
-      testing::AllOf(
+      ::testing::AllOf(
           m::AskQuery(
 
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
@@ -1592,11 +1595,12 @@ TEST(SparqlParser, GraphOrDefault) {
   // supported.
   auto expectGraphOrDefault =
       ExpectCompleteParse<&Parser::graphOrDefault>{defaultPrefixMap};
-  expectGraphOrDefault("DEFAULT", testing::VariantWith<DEFAULT>(testing::_));
-  expectGraphOrDefault(
-      "GRAPH <foo>",
-      testing::VariantWith<GraphRef>(AD_PROPERTY(
-          TripleComponent::Iri, toStringRepresentation, testing::Eq("<foo>"))));
+  expectGraphOrDefault("DEFAULT",
+                       ::testing::VariantWith<DEFAULT>(::testing::_));
+  expectGraphOrDefault("GRAPH <foo>",
+                       ::testing::VariantWith<GraphRef>(AD_PROPERTY(
+                           TripleComponent::Iri, toStringRepresentation,
+                           ::testing::Eq("<foo>"))));
 }
 
 TEST(SparqlParser, GraphRef) {
@@ -1613,11 +1617,11 @@ TEST(SparqlParser, QuadsNotTriples) {
       ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
-  auto GraphBlock = [](const ad_utility::sparql_types::VarOrIri& graph,
-                       const ad_utility::sparql_types::Triples& triples)
-      -> testing::Matcher<const Quads::GraphBlock&> {
-    return testing::FieldsAre(testing::Eq(graph),
-                              testing::ElementsAreArray(triples));
+  auto GraphBlock = [](const sparql_types::VarOrIri& graph,
+                       const sparql_types::Triples& triples)
+      -> ::testing::Matcher<const Quads::GraphBlock&> {
+    return ::testing::FieldsAre(::testing::Eq(graph),
+                                ::testing::ElementsAreArray(triples));
   };
 
   expectQuadsNotTriples(
@@ -1702,7 +1706,7 @@ TEST(SparqlParser, Datasets) {
   expectUpdate(
       "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b "
       "?c} }",
-      testing::ElementsAre(m::UpdateClause(
+      ::testing::ElementsAre(m::UpdateClause(
           m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
           filterGraphPattern, m::datasetClausesMatcher(datasets, noGraphs))));
   expectQuery("SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
@@ -1734,7 +1738,7 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
       std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
   auto parseWithEncoding = [&](const std::string& input) {
-    static ad_utility::BlankNodeManager blankNodeManager;
+    static BlankNodeManager blankNodeManager;
     return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
         .parseTypesafe(&SparqlAutomaticParser::query);
   };

@@ -23,6 +23,8 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
@@ -1603,7 +1605,7 @@ auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
+    KeyOrder permutation,
     const PerBlockCallbacks& perBlockCallbacks) -> PermutationPairResult {
   PermutationWriter<true> permutationWriter{
       basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
@@ -1615,7 +1617,7 @@ auto CompressedRelationWriter::createPermutationPair(
 auto CompressedRelationWriter::createPermutation(
     WriterAndCallback writerAndCallback,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    qlever::KeyOrder permutation,
+    KeyOrder permutation,
     const PerBlockCallbacks& perBlockCallbacks) -> PermutationSingleResult {
   PermutationWriter<false> permutationWriter{
       std::move(writerAndCallback), std::move(permutation), perBlockCallbacks};
@@ -1886,3 +1888,5 @@ void CompressedRelationReader::LazyScanMetadata::aggregate(
   numBlocksPostprocessed_ += newValue.numBlocksPostprocessed_;
   numBlocksWithUpdate_ += newValue.numBlocksWithUpdate_;
 }
+
+}  // namespace qlever

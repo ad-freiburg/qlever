@@ -7,7 +7,7 @@
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 /// The GROUP_CONCAT Expression
 class GroupConcatExpression : public SparqlExpression {
  private:
@@ -40,6 +40,6 @@ class GroupConcatExpression : public SparqlExpression {
   // ___________________________________________________________________________
   ql::span<Ptr> childrenImpl() override { return {&child_, 1}; }
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_GROUPCONCATEXPRESSION_H

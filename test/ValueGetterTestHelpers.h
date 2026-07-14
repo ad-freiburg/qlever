@@ -24,6 +24,7 @@
 #include "util/TypeTraits.h"
 
 namespace valueGetterTestHelpers {
+using namespace qlever;
 
 const std::string ttl = R"(
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -33,11 +34,11 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
   )";
 struct TestContextWithGivenTTl {
   std::string turtleInput;
-  std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt;
-  QueryExecutionContext* qec =
-      ad_utility::testing::getQec(turtleInput, vocabularyType);
-  VariableToColumnMap varToColMap;
-  LocalVocab localVocab;
+  std::optional<qlever::VocabularyType> vocabularyType = std::nullopt;
+  qlever::QueryExecutionContext* qec =
+      qlever::testing::getQec(turtleInput, vocabularyType);
+  qlever::VariableToColumnMap varToColMap;
+  qlever::LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,
@@ -48,27 +49,27 @@ struct TestContextWithGivenTTl {
       std::make_shared<ad_utility::CancellationHandle<>>(),
       sparqlExpression::EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
-      ad_utility::testing::makeGetId(qec->getIndex());
+      qlever::testing::makeGetId(qec->getIndex());
   TestContextWithGivenTTl(
       std::string turtle,
-      std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt)
+      std::optional<qlever::VocabularyType> vocabularyType = std::nullopt)
       : turtleInput{std::move(turtle)}, vocabularyType{vocabularyType} {}
 };
 
 // Helper function to check literal value and datatype
 inline void checkLiteralContentAndDatatype(
-    const std::optional<ad_utility::triple_component::Literal>& literal,
+    const std::optional<qlever::triple_component::Literal>& literal,
     const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype) {
   ASSERT_EQ(literal.has_value(), expectedContent.has_value());
   if (!literal.has_value()) {
     return;
   }
-  auto expected = ad_utility::triple_component::Literal::literalWithoutQuotes(
+  auto expected = qlever::triple_component::Literal::literalWithoutQuotes(
       expectedContent.value());
   if (expectedDatatype.has_value()) {
     expected.addDatatype(
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+        qlever::triple_component::Iri::fromIrirefWithoutBrackets(
             expectedDatatype.value()));
   }
   ASSERT_EQ(literal.value(), expected);
@@ -98,14 +99,14 @@ inline void checkLiteralContentAndDatatypeFromId(
 // and datatype
 inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     const std::string_view& literalContent,
-    const std::optional<ad_utility::triple_component::Iri>& literalDescriptor,
+    const std::optional<qlever::triple_component::Iri>& literalDescriptor,
     const bool isIri, const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
     std::variant<sparqlExpression::detail::LiteralValueGetterWithStrFunction,
                  sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>
         getter) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
+  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using Literal = qlever::triple_component::Literal;
   TestContextWithGivenTTl testContext{ttl};
 
   auto toLiteralOrIri = [](std::string_view content, auto descriptor,
@@ -160,7 +161,8 @@ inline void checkUnitValueGetterFromId(
 // Helper to test UnitOfMeasurementValueGetter using ValueId input where the
 // ValueId represents an encoded value
 inline void checkUnitValueGetterFromIdEncodedValue(
-    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+    qlever::ValueId id,
+    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
   TestContextWithGivenTTl testContext{unitTtl};
   ASSERT_EQ(getter(id, &testContext.context), UnitOfMeasurement::UNKNOWN);
 }
@@ -171,10 +173,10 @@ inline void checkUnitValueGetterFromLiteralOrIri(
     sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
   TestContextWithGivenTTl testContext{unitTtl};
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = qlever::triple_component::LiteralOrIri;
+  using Iri = qlever::triple_component::Iri;
 
-  auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
+  auto doTest = [&](const qlever::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
     ASSERT_EQ(actualResult,
@@ -233,9 +235,9 @@ class ValueGetterTester {
     ValueGetter getter;
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
-    LocalVocab localVocab;
+    qlever::LocalVocab localVocab;
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(
+        qlever::LocalVocabEntry::fromStringRepresentation(
             std::move(literal), testContext.qec->getLocalVocabContext()));
     auto id = ValueId::makeFromLocalVocabIndex(idx);
     auto res = getter(id, &testContext.context);
@@ -250,7 +252,7 @@ class ValueGetterTester {
     auto l = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
-    VocabIndex idx;
+    qlever::VocabIndex idx;
     ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(literal, &idx))
         << "Given test literal is not contained in test dataset";
     auto id = ValueId::makeFromVocabIndex(idx);
@@ -278,7 +280,7 @@ class ValueGetterTester {
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
     auto litOrIri =
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+        qlever::triple_component::LiteralOrIri::fromStringRepresentation(
             literal);
     auto res = getter(litOrIri, &testContext.context);
     EXPECT_THAT(res, expected);
@@ -297,8 +299,8 @@ class ValueGetterTester {
 };
 
 using GeoInfoTester = ValueGetterTester<
-    sparqlExpression::detail::GeometryInfoValueGetter<ad_utility::GeometryInfo>,
-    ad_utility::GeometryInfo>;
+    sparqlExpression::detail::GeometryInfoValueGetter<qlever::GeometryInfo>,
+    qlever::GeometryInfo>;
 using GeoPointOrWktTester =
     ValueGetterTester<sparqlExpression::detail::GeoPointOrWktValueGetter,
                       GeoPointOrWkt>;
@@ -318,5 +320,4 @@ inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
 }
 
 }  // namespace geoInfoVGTestHelpers
-
 #endif  // QLEVER_TEST_VALUEGETTERTESTHELPERS_H

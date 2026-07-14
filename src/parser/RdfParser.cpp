@@ -33,6 +33,7 @@
 
 using namespace std::chrono_literals;
 
+namespace qlever {
 namespace {
 // CTRE regex patterns, defined as variables for C++17 compatibility. They are
 // written reversed because they are matched against the reversed input.
@@ -648,7 +649,7 @@ void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
-    const std::string& key, const ad_utility::triple_component::Iri& prefix) {
+    const std::string& key, const triple_component::Iri& prefix) {
   if (useSimplifiedGrammar_ &&
       (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
     raiseDisallowedPrefixOrBaseError();
@@ -659,8 +660,8 @@ void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setBaseIriOrThrow(
-    const ad_utility::triple_component::Iri& iri) {
-  qlever::util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
+    const triple_component::Iri& iri) {
+  util::ParsedUri uri{asStringViewUnsafe(iri.getContent())};
   if (useSimplifiedGrammar_ &&
       (!baseIri_.has_value() || baseIri_.value() != uri)) {
     raiseDisallowedPrefixOrBaseError();
@@ -1002,7 +1003,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
   this->triples_.resize(b.numTriples_);
   this->tok_.reset(b.tokenizerPosition_, b.tokenizerSize_);
 
-  qlever::parser::ByteBlock buf;
+  parser::ByteBlock buf;
 
   // Used for a more informative error message when a parse error occurs (see
   // function "raise").
@@ -1023,7 +1024,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
+void RdfStreamParser<T>::initialize(const InputFileSpecification& spec,
                                     ad_utility::MemorySize blocksize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
@@ -1231,12 +1232,11 @@ void RdfParallelParser<T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename T>
-void RdfParallelParser<T>::initialize(
-    const qlever::InputFileSpecification& spec,
-    ad_utility::MemorySize blocksize) {
+void RdfParallelParser<T>::initialize(const InputFileSpecification& spec,
+                                      ad_utility::MemorySize blocksize) {
   driver_.emplace(spec, blocksize, detail::findEndOfLastStatement,
                   "a dot followed by a newline");
-  qlever::parser::ByteBlock remainingBatchFromInitialization;
+  parser::ByteBlock remainingBatchFromInitialization;
   RdfStringParser<T> declarationParser{&this->encodedIriManager()};
   std::string_view remainder;
   while (remainder.empty()) {
@@ -1337,14 +1337,14 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const qlever::InputFileSpecification& input, const EncodedIriManager* ev,
+    const InputFileSpecification& input, const EncodedIriManager* ev,
     ad_utility::MemorySize bufferSize) {
   auto graph = [input]() -> TripleComponent {
     if (input.defaultGraph_.has_value()) {
       return TripleComponent::Iri::fromIrirefWithoutBrackets(
           input.defaultGraph_.value());
     } else {
-      return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+      return specialIds().at(DEFAULT_GRAPH_IRI);
     }
   };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
@@ -1365,7 +1365,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
   // arguments.
   return ad_utility::callFixedSize(
       std::array{input.parseInParallel_ ? 1 : 0,
-                 input.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
+                 input.filetype_ == Filetype::Turtle ? 1 : 0},
       makeRdfParserImpl);
 }
 
@@ -1389,8 +1389,7 @@ std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
 
 // _____________________________________________________________________________
 void RdfMultifileParser::parseFileAndPushBatches(
-    const qlever::InputFileSpecification& file,
-    ad_utility::MemorySize bufferSize) {
+    const InputFileSpecification& file, ad_utility::MemorySize bufferSize) {
   try {
     auto parser =
         makeSingleRdfParser<Tokenizer>(file, &encodedIriManager(), bufferSize);
@@ -1408,7 +1407,7 @@ void RdfMultifileParser::parseFileAndPushBatches(
 
 // ______________________________________________________________
 RdfMultifileParser::RdfMultifileParser(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    ad_utility::InputRangeTypeErased<InputFileSpecification> files,
     const EncodedIriManager* encodedIriManager,
     ad_utility::MemorySize bufferSize)
     : RdfParserBase(encodedIriManager) {
@@ -1467,3 +1466,5 @@ template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
+
+}  // namespace qlever

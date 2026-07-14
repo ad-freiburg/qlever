@@ -19,7 +19,10 @@
 namespace {
 
 using namespace ::testing;
-using parsedQuery::VariableCounter;
+using qlever::EncodedIriManager;
+using qlever::SparqlParser;
+using qlever::Variable;
+using qlever::parsedQuery::VariableCounter;
 using V = Variable;
 
 // Apply `VariableCounter` to the root graph pattern of the given SPARQL query.
@@ -126,22 +129,23 @@ TEST(VariableCounterTest, VariableCounts) {
   // Load.
   {
     VariableCounter count;
-    count(parsedQuery::Load{
-        TripleComponent::Iri::fromIriref("<https://example.org>"), false});
+    count(qlever::parsedQuery::Load{
+        qlever::TripleComponent::Iri::fromIriref("<https://example.org>"),
+        false});
     EXPECT_THAT(count, counts({}));
   }
 
   // `TripleComponent`.
   {
     VariableCounter count;
-    count(TripleComponent{V{"?x"}});
+    count(qlever::TripleComponent{V{"?x"}});
     EXPECT_THAT(count, counts({{V{"?x"}, 1}}));
   }
 
   // `TransPath`.
   {
     VariableCounter count;
-    parsedQuery::TransPath tp{
+    qlever::parsedQuery::TransPath tp{
         {V{"?left"}}, {V{"?right"}}, {V{"?ileft"}}, {V{"?iright"}}, 0, 5, {}};
     count(tp);
     EXPECT_THAT(count, counts({{V{"?left"}, 1},

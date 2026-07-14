@@ -17,6 +17,8 @@
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 using std::string;
 
 // ____________________________________________________________________________
@@ -228,7 +230,7 @@ auto Vocabulary<S, C, I>::lower_bound(
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+std::optional<GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     IndexType idx) const {
   // For more information on the concepts used here, please see
   // their definitions in `VocabularyConstraints.h`.
@@ -310,3 +312,5 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
+
+}  // namespace qlever

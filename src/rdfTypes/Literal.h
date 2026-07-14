@@ -24,7 +24,7 @@
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 
-namespace ad_utility::triple_component {
+namespace qlever::triple_component {
 
 // A class template to hold literal values. When `isOwning = true` (the
 // default), storage is `std::string`. When `isOwning = false`, storage is
@@ -204,6 +204,6 @@ class LiteralView : public BasicLiteral<false> {
   }
 };
 
-}  // namespace ad_utility::triple_component
+}  // namespace qlever::triple_component
 
 #endif  // QLEVER_SRC_PARSER_LITERAL_H

@@ -13,12 +13,13 @@
 
 #include "util/Exception.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // _____________________________________________________________________________
 BlankNodeManager::BlankNodeManager(uint64_t minIndex)
     : minIndex_(minIndex),
-      state_{SlowRandomIntGenerator<uint64_t>(0, totalAvailableBlocks_ - 1)} {}
+      state_{ad_utility::SlowRandomIntGenerator<uint64_t>(
+          0, totalAvailableBlocks_ - 1)} {}
 
 // _____________________________________________________________________________
 BlankNodeManager::Block BlankNodeManager::allocateBlock() {
@@ -228,4 +229,4 @@ BlankNodeManager::registerAndAllocateBlockSet(
   }
 }
 
-}  // namespace ad_utility
+}  // namespace qlever

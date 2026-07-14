@@ -10,6 +10,8 @@
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
+using namespace qlever;
+
 namespace {  // anonymous namespace to avoid linker problems
 
 TEST(PayloadVariablesTest, PayloadVariables) {

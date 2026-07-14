@@ -22,7 +22,8 @@
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
 // be used for unit tests.
 
-namespace ad_utility::testing {
+namespace qlever::testing {
+
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead. Using the parameter
@@ -43,7 +44,7 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // a function that takes this struct and creates an index from it.
 
 struct TestIndexConfig {
-  using TextScoringMetric = qlever::TextScoringMetric;
+  using TextScoringMetric = TextScoringMetric;
   // A turtle string, from which the index is built. If `nullopt`, a default
   // input will be used and the resulting index will have the following
   // properties: Its vocabulary contains the literals `"alpha", "älpha", "A",
@@ -65,7 +66,7 @@ struct TestIndexConfig {
   ad_utility::MemorySize parserBufferSize = 1_kB;
   std::optional<TextScoringMetric> scoringMetric = std::nullopt;
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
-  qlever::Filetype indexType = qlever::Filetype::Turtle;
+  Filetype indexType = Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
@@ -139,6 +140,6 @@ QueryExecutionContext* getQec(
 // string cannot be found in the vocabulary.
 std::function<Id(const std::string&)> makeGetId(const Index& index);
 
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_INDEXTESTHELPERS_H

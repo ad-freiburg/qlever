@@ -11,7 +11,10 @@
 #include "parser/SparqlTriple.h"
 #include "parser/VariableCounter.h"
 
+using namespace qlever;
+
 using namespace graphPatternAnalysis;
+
 using parsedQuery::VariableCounter;
 using V = Variable;
 

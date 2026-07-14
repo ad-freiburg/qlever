@@ -21,6 +21,7 @@
 namespace {
 
 using namespace ad_utility;
+using namespace qlever;
 using namespace geoInfoTestHelpers;
 
 // Example WKT literals for all supported geometry types
@@ -336,7 +337,7 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
-  using enum ad_utility::BoundingCoordinate;
+  using enum BoundingCoordinate;
 
   BoundingBox bb1{{2, 1}, {4, 3}};
   EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);
@@ -376,7 +377,7 @@ constexpr std::string_view example = "Example";
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryInfoHelpers) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   Point<double> p{50, 60};
   auto g = utilPointToGeoPoint(p);
   EXPECT_NEAR(g.getLng(), p.getX(), 0.0001);
@@ -389,7 +390,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
-  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
+  EXPECT_EQ(parseRes1.first, ::util::geo::WKTType::POINT);
   ASSERT_TRUE(parseRes1.second.has_value());
   auto parsed1 = parseRes1.second.value();
 
@@ -437,7 +438,7 @@ TEST(GeometryInfoTest, MetricLength) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   using Poly = Polygon<CoordType>;
 
   testMetricArea<Poly>(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
@@ -448,7 +449,7 @@ TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   using MultiP = MultiPolygon<CoordType>;
 
   testMetricArea<MultiP>(litRealWorldMultiPolygonFullyContained,
@@ -470,7 +471,7 @@ TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   using Coll = Collection<CoordType>;
 
   // Join two polygons and a line (no area) to a geometry collection literal
@@ -547,10 +548,10 @@ TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, WebMercProjection) {
-  util::geo::DBox b1{{1, 2}, {3, 4}};
+  ::util::geo::DBox b1{{1, 2}, {3, 4}};
   auto b1WebMerc = boxToWebMerc(b1);
   auto result1 =
-      ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
+      geometry_info_helpers::projectInt32WebMercToDoubleLatLng(b1WebMerc);
   checkUtilBoundingBox(result1, b1);
 }
 
@@ -575,7 +576,7 @@ TEST(GeometryInfoTest, NumGeometries) {
 TEST(GeometryInfoTest, AnyGeometryMember) {
   // Test that the enum we define corresponds to the geometry type identifiers
   // used by `libspatialjoin`.
-  using namespace util::geo;
+  using namespace ::util::geo;
   using enum AnyGeometryMember;
 
   checkAnyGeometryMemberEnum({DPoint{}}, POINT);
@@ -591,7 +592,7 @@ TEST(GeometryInfoTest, AnyGeometryMember) {
 TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
   // This test builds a big geometry collection containing one geometry of every
   // supported geometry type and feeds it to `computeMetricLength`.
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   double expected = 0.0;
   DCollection collection;
@@ -632,7 +633,7 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   auto fromSV = [](std::string_view lit) {
     return GeoPointOrWkt{std::string{lit}};
   };
@@ -659,7 +660,7 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   auto literals = getAllTestLiterals();
   auto geometries = getAllExpectedParseResults();
@@ -688,7 +689,7 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryN) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   using s = std::string;
   std::vector<ExpectedGeometryN> expected{
@@ -744,7 +745,7 @@ struct TwiceProjection {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ProjectionVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
 
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
               parseResultNear(ParseResult{NONE, std::nullopt}));
@@ -770,7 +771,7 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
 
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, MetricDistanceVisitor) {
-  using namespace ad_utility::detail;
+  using namespace geometry_info_helpers;
   // Distance between points (Freiburg Central Railway Station and Freiburg
   // Cathedral).
   EXPECT_THAT(computeMetricDistance(

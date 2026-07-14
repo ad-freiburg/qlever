@@ -22,6 +22,8 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
+using namespace qlever;
+
 using namespace std::chrono_literals;
 
 namespace {

@@ -7,6 +7,8 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 
+namespace qlever {
+
 namespace {
 
 // Helper function to turn a triple component into a `ValueId`.
@@ -89,3 +91,5 @@ void ScanSpecification::validate() const {
   };
   forEach(checkNulloptImpliesFollowingNullopt);
 }
+
+}  // namespace qlever

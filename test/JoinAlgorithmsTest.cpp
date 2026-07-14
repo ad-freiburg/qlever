@@ -13,6 +13,9 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/TransparentFunctors.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 using namespace ad_utility;
 namespace {
 
@@ -79,8 +82,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
   auto adder = makeRowAdder(result);
   if constexpr (DoOptionalJoin) {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder, ql::identity{},
-                                    ql::identity{},
-                                    ad_utility::OptionalJoinTag{});
+                                    ql::identity{}, OptionalJoinTag{});
   } else {
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
   }
@@ -224,7 +226,7 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
 // Regression tests for https://github.com/ad-freiburg/qlever/issues/2051
 TEST(JoinAlgorithms, JoinWithEquivalentValuesOverMultipleEnclosedBlocks) {
   // The number of equivalent blocks is based on this constant in the code.
-  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
+  static_assert(qlever::detail::FETCH_BLOCKS == 3);
   {
     NestedBlock a{{{1, 10}}, {{1, 11}}, {{1, 12}}, {{1, 13}}, {{2, 20}}};
     NestedBlock b{{{1, 100}}, {{1, 101}}, {{1, 102}}};
@@ -573,9 +575,8 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   RowAdderWithUndef adder{};
   std::vector<std::vector<FakeId>> dummyBlocks{};
   auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
-  auto joinSide = ad_utility::detail::makeJoinSide(dummyBlocks, ql::identity{});
-  ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
-                                               adder};
+  auto joinSide = qlever::detail::makeJoinSide(dummyBlocks, ql::identity{});
+  qlever::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare, adder};
   EXPECT_FALSE(impl.isUndefined_("Something"));
   EXPECT_FALSE(impl.isUndefined_(1));
   EXPECT_FALSE(impl.isUndefined_(I(1)));
@@ -604,10 +605,10 @@ auto makeTable = [](const VectorTable& table) {
 
 // RowAdder for Id-based blocks with payload columns.
 struct IdRowAdder {
-  using TableWithJoinCols = ad_utility::IdTableAndFirstCols<2, IdTable>;
+  using TableWithJoinCols = IdTableAndFirstCols<2, IdTable>;
   IdJoinResult* target_{};
-  IdTableView<0> leftTable_{2, ad_utility::testing::makeAllocator()};
-  IdTableView<0> rightTable_{2, ad_utility::testing::makeAllocator()};
+  IdTableView<0> leftTable_{2, qlever::testing::makeAllocator()};
+  IdTableView<0> rightTable_{2, qlever::testing::makeAllocator()};
 
   // Called by cartesian product path with materialized tables.
   void setInput(const auto& left, const auto& right) {
@@ -668,7 +669,7 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
   auto adder = makeIdRowAdder(result);
 
   // Wrap IdTables in IdTableAndFirstCols to expose only the join columns.
-  using TableWithJoinCols = ad_utility::IdTableAndFirstCols<2, IdTable>;
+  using TableWithJoinCols = IdTableAndFirstCols<2, IdTable>;
   std::vector<TableWithJoinCols> wrappedA;
   std::vector<TableWithJoinCols> wrappedB;
   for (auto& table : a) {
@@ -678,8 +679,8 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
     wrappedB.emplace_back(std::move(table), LocalVocab{});
   }
 
-  ad_utility::specialOptionalJoinForBlocks(
-      std::move(wrappedA), std::move(wrappedB), numJoinColumns, adder);
+  specialOptionalJoinForBlocks(std::move(wrappedA), std::move(wrappedB),
+                               numJoinColumns, adder);
 
   // The result must be sorted on the first two columns (the join columns).
   EXPECT_TRUE(ql::ranges::is_sorted(

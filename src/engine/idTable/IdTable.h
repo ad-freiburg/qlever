@@ -27,7 +27,8 @@
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
 
-namespace columnBasedIdTable {
+namespace qlever::columnBasedIdTable {
+
 // The `IdTable` class is QLever's central data structure. It is used to store
 // all intermediate and final query results in the ID space.
 //
@@ -892,7 +893,9 @@ class IdTable {
   }
 };
 
-}  // namespace columnBasedIdTable
+}  // namespace qlever::columnBasedIdTable
+
+namespace qlever {
 
 namespace detail {
 using DefaultAllocator =
@@ -989,5 +992,7 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

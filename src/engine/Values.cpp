@@ -13,6 +13,8 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
     : Operation(qec), parsedValues_(std::move(parsedValues)) {

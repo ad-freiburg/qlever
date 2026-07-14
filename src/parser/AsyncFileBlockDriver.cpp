@@ -17,8 +17,7 @@ namespace qlever::parser {
 
 // ____________________________________________________________________________
 AsyncFileBlockDriver::AsyncFileBlockDriver(
-    const qlever::InputFileSpecification& spec,
-    ad_utility::MemorySize blocksize,
+    const InputFileSpecification& spec, ad_utility::MemorySize blocksize,
     AsyncStatementBoundaryBlockSource::EndPositionFinder findEndPosition,
     std::string description) {
   fileBuffer_ = std::make_unique<AsyncStatementBoundaryBlockSource>(

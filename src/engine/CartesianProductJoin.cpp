@@ -13,6 +13,8 @@
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
+using namespace qlever;
+
 namespace {
 constexpr std::string_view recomputeMessage =
     "Cannot re-evaluate child results after applying limits, as the result set "

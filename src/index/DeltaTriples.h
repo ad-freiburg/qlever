@@ -25,6 +25,8 @@
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 
+namespace qlever {
+
 // Typedef for one `LocatedTriplesPerBlock` object for each of the six
 // permutations.
 template <bool isInternal>
@@ -136,8 +138,8 @@ class DeltaTriples {
   // of `makeInternalTriples`. For example in wikidata `wdt:P31`, or `wdt:P279`
   // are frequently used, so we try to avoid an expensive lookup from disk.
   static constexpr size_t predicateCacheSize_ = 1000;
-  ad_utility::util::LRUCache<Id::T, ad_utility::triple_component::Iri>
-      predicateCache_{predicateCacheSize_};
+  ad_utility::util::LRUCache<Id::T, triple_component::Iri> predicateCache_{
+      predicateCacheSize_};
 
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
@@ -302,27 +304,27 @@ class DeltaTriples {
   // Create a shallow copy of the local vocab such that it can be processed
   // without holding the lock. You have to make sure separately that the
   // pointers that the returned `LocalVocabIndex`es represent are still valid.
-  std::pair<std::vector<LocalVocabIndex>,
-            std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
-                            OwnedBlocksEntry>>
+  std::pair<
+      std::vector<LocalVocabIndex>,
+      std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
   copyLocalVocab() const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Compute the diff between `oldState` (the snapshot used to start the index
   // rebuild) and `newState` (the current snapshot), remap the IDs using
   // `idMapping`, and add the resulting triples to this `DeltaTriples` instance.
-  void addFromSnapshotDiff(
-      const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
-      const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
-      CancellationHandle cancellationHandle,
-      ad_utility::timer::TimeTracer& tracer);
+  void addFromSnapshotDiff(const LocatedTriplesState& oldState,
+                           const LocatedTriplesState& newState,
+                           const indexRebuilder::IndexRebuildMapping& idMapping,
+                           CancellationHandle cancellationHandle,
+                           ad_utility::timer::TimeTracer& tracer);
 
  private:
   // Remap the `Id` from the old index to the new index using the given
   // `idMapping`. If the `Id` can't be remapped, this means that it was added
   // after the mapping was created and will be left unchanged.
-  static void remapId(
-      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
+  static void remapId(const indexRebuilder::IndexRebuildMapping& idMapping,
+                      Id& id);
 #endif
 
   // Call `consolidateAll()` iff `consolidate` is `Consolidate::Yes`. Used by
@@ -445,10 +447,12 @@ class DeltaTriplesManager {
   // local vocab entries and blank nodes will remain valid. So the return value
   // basically acts as a complete shallow copy of the current state of the
   // `DeltaTriples`.
-  std::tuple<LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
-             std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
-                             OwnedBlocksEntry>>
+  std::tuple<
+      LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
+      std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
   getCurrentLocatedTriplesSharedStateWithVocab() const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

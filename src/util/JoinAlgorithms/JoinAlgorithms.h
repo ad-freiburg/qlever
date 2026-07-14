@@ -23,7 +23,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // Some helper concepts.
 
@@ -96,8 +96,9 @@ CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
  * but reversed: gets an element from `left` and returns the compatible but
  * smaller elements from `right`.
  * @param elFromFirstNotFoundAction This function is called for each iterator in
- * `left` for which no corresponding match in `right` was found. This is `noop`
- * for "normal` joins, but can be set to implement `OPTIONAL` or `MINUS`.
+ * `left` for which no corresponding match in `right` was found. This is
+ * `ad_utility::noop` for "normal` joins, but can be set to implement `OPTIONAL`
+ * or `MINUS`.
  * @param checkCancellation Is called many times during processing to allow
  * cancelling this join operation at arbitrary times. It is supposed to throw
  * a proper exception. Typically implementations will just
@@ -117,8 +118,8 @@ CPP_concept HasAddRows = CPP_requires_ref(HasAddRowsRequires, F, It1, It2);
 CPP_template(typename Range1, typename Range2, typename LessThan,
              typename CompatibleRowAction, typename FindSmallerUndefRangesLeft,
              typename FindSmallerUndefRangesRight,
-             typename ElFromFirstNotFoundAction = decltype(noop),
-             typename CheckCancellation = decltype(noop),
+             typename ElFromFirstNotFoundAction = decltype(ad_utility::noop),
+             typename CheckCancellation = decltype(ad_utility::noop),
              typename CoverUndefRanges = std::true_type)(
     requires ql::ranges::random_access_range<Range1> CPP_and
         ql::ranges::random_access_range<Range2>)
@@ -132,7 +133,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
-      !ad_utility::isSimilar<ElFromFirstNotFoundAction, decltype(noop)>;
+      !ad_utility::isSimilar<ElFromFirstNotFoundAction,
+                             decltype(ad_utility::noop)>;
 
   // Iterators for both ranges that will be used to advance during the zipper
   // algorithm.
@@ -173,7 +175,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   auto mergeWithUndefLeft = [&](auto itFromRight, auto leftBegin,
                                 auto leftEnd) {
     checkCancellation();
-    if constexpr (!isSimilar<FindSmallerUndefRangesLeft, Noop>) {
+    if constexpr (!ad_utility::isSimilar<FindSmallerUndefRangesLeft,
+                                         ad_utility::Noop>) {
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesLeft` generator.
       const auto& row = *itFromRight;
@@ -194,8 +197,10 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   // the following `mergeWithUndefRight` function.
   auto containsNoUndefined = [](const auto& row) {
     using T = std::decay_t<decltype(row)>;
-    if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> &&
-                  isSimilar<FindSmallerUndefRangesRight, Noop>) {
+    if constexpr (ad_utility::isSimilar<FindSmallerUndefRangesLeft,
+                                        ad_utility::Noop> &&
+                  ad_utility::isSimilar<FindSmallerUndefRangesRight,
+                                        ad_utility::Noop>) {
       return true;
     } else if constexpr (std::is_convertible_v<T, Id>) {
       return row != Id::makeUndefined();
@@ -217,7 +222,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   auto mergeWithUndefRight = [&](auto itFromLeft, auto beginRight,
                                  auto endRight, bool hasNoMatch) {
     checkCancellation();
-    if constexpr (!isSimilar<FindSmallerUndefRangesRight, Noop>) {
+    if constexpr (!ad_utility::isSimilar<FindSmallerUndefRangesRight,
+                                         ad_utility::Noop>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesRight` generator.
@@ -373,8 +379,9 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
  * CancellationHandle::throwIfCancelled().
  */
 CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
-             typename Action, typename ElementFromSmallerNotFoundAction = Noop,
-             typename CheckCancellation = Noop)(
+             typename Action,
+             typename ElementFromSmallerNotFoundAction = ad_utility::Noop,
+             typename CheckCancellation = ad_utility::Noop)(
     requires ql::ranges::random_access_range<RangeSmaller> CPP_and
         ql::ranges::random_access_range<
             RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
@@ -425,7 +432,7 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
     // Linear search in the smaller input.
     while (lessThan(*itSmall, elLarge)) {
       if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
-                                           Noop>) {
+                                           ad_utility::Noop>) {
         elementFromSmallerNotFoundAction(itSmall);
       }
       ++itSmall;
@@ -463,7 +470,7 @@ CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
     itLarge = endSameLarge;
   }
   if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
-                                       Noop>) {
+                                       ad_utility::Noop>) {
     while (itSmall != endSmall) {
       elementFromSmallerNotFoundAction(itSmall);
       ++itSmall;
@@ -639,9 +646,9 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     };
 
     // Perform the join on the last column.
-    size_t numOutOfOrder = ad_utility::zipperJoinWithUndef(
+    size_t numOutOfOrder = zipperJoinWithUndef(
         leftSub, rightSub, std::less<>{}, compAction, findSmallerUndefRangeLeft,
-        noop, notFoundAction, checkCancellation);
+        ad_utility::noop, notFoundAction, checkCancellation);
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
     it1 = endSame1;
     it2 = endSame2;
@@ -890,7 +897,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
              typename LessThan, typename CompatibleRowAction,
              typename IsUndef = AlwaysFalse)(
     requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
+        ad_utility::InvocableWithExactReturnType<
             IsUndef, bool,
             typename LeftSide::ProjectedEl>) struct BlockZipperJoinImplCRTP {
   // The left and right inputs of the join
@@ -920,8 +927,10 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 #if defined(Side) || defined(Blocks)
 #error Side or Blocks are already defined
 #endif
-#define Side QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
-#define Blocks QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
+#define Side \
+  QL_CONCEPT_OR_NOTHING(ad_utility::SameAsAny<LeftSide, RightSide>) auto
+#define Blocks \
+  QL_CONCEPT_OR_NOTHING(ad_utility::SameAsAny<LeftBlocks, RightBlocks>) auto
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -1232,7 +1241,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
       // use the simpler code path (with std::true_type for coverage).
       if (!hasUndef(leftSide_) && !hasUndef(rightSide_)) {
         // No UNDEFs found at runtime, use the simpler code path.
-        doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+        doJoin(ad_utility::noop, ad_utility::noop, addNotFoundRowIndex,
+               ad_utility::noop, std::true_type{});
       } else {
         // We pass `std::false_type`, to disable coverage checks for the
         // undefined values that are stored in `side.undefBlocks_`, which we
@@ -1241,10 +1251,11 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
         doJoin(
             findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
             findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
-            addNotFoundRowIndex, noop, std::false_type{});
+            addNotFoundRowIndex, ad_utility::noop, std::false_type{});
       }
     } else {
-      doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+      doJoin(ad_utility::noop, ad_utility::noop, addNotFoundRowIndex,
+             ad_utility::noop, std::true_type{});
     }
     compatibleRowAction_.flush();
 
@@ -1582,7 +1593,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 CPP_template(typename LeftSide, typename RightSide, typename LessThan,
              typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
     requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
+        ad_utility::InvocableWithExactReturnType<
             IsUndef, bool,
             typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl
     : BlockZipperJoinImplCRTP<BlockZipperJoinImpl<LeftSide, RightSide, LessThan,
@@ -1731,7 +1742,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Get allocator and number of columns from the first block.
     // TODO<joka921> pass in a proper allocator here.
-    auto allocator = makeUnlimitedAllocator<Id>();
+    auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
     AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
 
     // TODO<joka921> This can be much more efficient, in particular it could use
@@ -1801,9 +1812,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
     };
 
     // Perform the join on the last column only.
-    [[maybe_unused]] auto res = zipperJoinWithUndef(
-        lastColLeft, lastColRight, std::less<>{}, compAction,
-        findSmallerUndefRangeLeft, noop, notFoundAction, noop);
+    [[maybe_unused]] auto res =
+        zipperJoinWithUndef(lastColLeft, lastColRight, std::less<>{},
+                            compAction, findSmallerUndefRangeLeft,
+                            ad_utility::noop, notFoundAction, ad_utility::noop);
     AD_EXPENSIVE_CHECK(res == 0);
 
     this->compatibleRowAction_.flush();
@@ -1940,6 +1952,6 @@ void zipperJoinForBlocksWithPotentialUndef(
   impl.template runJoin<joinType>();
 }
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_JOINALGORITHMS_H

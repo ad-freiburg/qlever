@@ -14,6 +14,8 @@
 #include "index/Index.h"
 #include "parser/data/Types.h"
 
+using namespace qlever;
+
 namespace qlever::constructExport {
 
 // `PrintTo` overloads so gmock shows human-readable output instead of raw
@@ -35,11 +37,12 @@ namespace {
 using namespace std::string_literals;
 using ::testing::Optional;
 using enum PositionInTriple;
-using namespace qlever::constructExport;
-using Triples = ad_utility::sparql_types::Triples;
+using namespace constructExport;
+
+using Triples = sparql_types::Triples;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAre;
-auto iriV = ad_utility::testing::iriV;
+auto iriV = qlever::testing::iriV;
 
 // Composable matchers for `PreprocessedTerm` variants.
 // see https://github.com/google/googletest/blob/main/docs/reference/matchers.md

@@ -27,7 +27,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/UnitOfMeasurement.h"
 
-namespace ad_utility {
+namespace qlever {
 
 namespace detail {
 
@@ -96,7 +96,7 @@ class WktDist {
     if (!dist.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
-    return detail::kilometerToUnit(dist.value() / 1000.0, unit);
+    return ad_utility::detail::kilometerToUnit(dist.value() / 1000.0, unit);
   }
 };
 
@@ -118,8 +118,8 @@ class WktLength {
     if (!len.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromDouble(
-        detail::kilometerToUnit(len.value().length() / 1000.0, unit));
+    return ValueId::makeFromDouble(ad_utility::detail::kilometerToUnit(
+        len.value().length() / 1000.0, unit));
   }
 };
 
@@ -153,8 +153,10 @@ class WktEnvelope {
     if (!boundingBox.has_value()) {
       return ValueId::makeUndefined();
     }
-    using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
+    using triple_component::Iri;
+    using triple_component::LiteralOrIri;
+    auto lit = triple_component::Literal::literalWithoutQuotes(
+        boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -206,8 +208,9 @@ class WktGeometryType {
 
     // The geometry type should be returned as an xsd:anyURI literal according
     // to the GeoSPARQL standard.
-    using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(typeIri.value());
+    using triple_component::Iri;
+    using triple_component::LiteralOrIri;
+    auto lit = triple_component::Literal::literalWithoutQuotes(typeIri.value());
     lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -219,7 +222,8 @@ class WktGeometryN {
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
       const std::optional<int64_t>& n) const {
-    using namespace triple_component;
+    using triple_component::Iri;
+    using triple_component::LiteralOrIri;
     if (!wkt.has_value() || !n.has_value()) {
       return ValueId::makeUndefined();
     }
@@ -229,7 +233,8 @@ class WktGeometryN {
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }
-    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    auto lit =
+        triple_component::Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -243,7 +248,8 @@ class WktSimplify {
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& geom,
       const NumericVariant& tolerance) const {
-    using namespace triple_component;
+    using triple_component::Iri;
+    using triple_component::LiteralOrIri;
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
@@ -267,7 +273,8 @@ class WktSimplify {
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }
-    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    auto lit =
+        triple_component::Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
@@ -308,10 +315,11 @@ class WktArea {
       const std::optional<MetricArea>& area,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
     if (!area.has_value() ||
-        (unit.has_value() && !detail::isAreaUnit(unit.value()))) {
+        (unit.has_value() && !ad_utility::detail::isAreaUnit(unit.value()))) {
       return ValueId::makeUndefined();
     }
-    double val = detail::squareMeterToUnit(area.value().area(), unit);
+    double val =
+        ad_utility::detail::squareMeterToUnit(area.value().area(), unit);
     if (std::isnan(val)) {
       return ValueId::makeUndefined();
     }
@@ -330,6 +338,6 @@ class WktMetricArea {
   }
 };
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_GEOSPARQLHELPERS_H

@@ -15,6 +15,8 @@
 #include "util/Exception.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
 //! and retrieval via binary search.
@@ -119,5 +121,7 @@ class VocabularyInMemory
   // Generic serialization support.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemory) { serializer | arg._words; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

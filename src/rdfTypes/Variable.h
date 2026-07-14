@@ -14,6 +14,8 @@
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 class Variable {
  private:
   std::string _name;
@@ -82,5 +84,7 @@ class Variable {
   // Serialization for `Variable`s - just serialize the name.
   AD_SERIALIZE_FRIEND_FUNCTION(Variable) { serializer | arg._name; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_VARIABLE_H

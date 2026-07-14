@@ -7,6 +7,8 @@
 #include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
 copySortedByColumnIndex(VariableToColumnMap map) {
@@ -90,3 +92,5 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
   }
   return result;
 }
+
+}  // namespace qlever

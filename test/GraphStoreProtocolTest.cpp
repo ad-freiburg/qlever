@@ -14,8 +14,9 @@
 #include "parser/SparqlParserHelpers.h"
 
 namespace m = matchers;
-using namespace ad_utility::testing;
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever;
+using namespace qlever::testing;
+using namespace url_parser::sparqlOperation;
 
 using Var = Variable;
 using TC = TripleComponent;
@@ -23,8 +24,8 @@ using TC = TripleComponent;
 namespace {
 // A matcher that matches a ParsedQuery that is an updated that deletes all
 // triples from the given `graph`.
-auto ClearGraph = [](ad_utility::triple_component::Iri graph)
-    -> testing::Matcher<const ParsedQuery&> {
+auto ClearGraph =
+    [](triple_component::Iri graph) -> ::testing::Matcher<const ParsedQuery&> {
   return m::UpdateClause(
       m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"),
                        SparqlTripleSimpleWithGraph::Graph{graph}}},
@@ -35,9 +36,9 @@ auto ClearGraph = [](ad_utility::triple_component::Iri graph)
 };
 
 auto HasMiddleware =
-    AD_FIELD(ParsedQuery, responseMiddleware_, testing::Ne(std::nullopt));
+    AD_FIELD(ParsedQuery, responseMiddleware_, ::testing::Ne(std::nullopt));
 
-auto GetGraph = [](ad_utility::triple_component::Iri graph) {
+auto GetGraph = [](triple_component::Iri graph) {
   return m::ConstructQuery(
       {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
       m::GraphPattern(m::GroupGraphPatternWithGraph(
@@ -45,7 +46,7 @@ auto GetGraph = [](ad_utility::triple_component::Iri graph) {
                                                      TC(Var{"?o"}))}))));
 };
 
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto lit = qlever::testing::tripleComponentLiteral;
 
 const EncodedIriManager* encodedIriManager() {
   static EncodedIriManager encodedIriManager_;
@@ -53,6 +54,7 @@ const EncodedIriManager* encodedIriManager() {
 }
 }  // namespace
 
+namespace qlever {
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPostAndTsop) {
   auto runTests = [](auto transform, bool isInsertion) {
@@ -64,8 +66,8 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
     EXPECT_THAT(
         transform(makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."),
                   DEFAULT{}),
-        testing::AllOf(
-            testing::Not(HasMiddleware),
+        ::testing::AllOf(
+            ::testing::Not(HasMiddleware),
             m::UpdateClause(m::GraphUpdate(isInsertion ? empty : defaultGraph,
                                            isInsertion ? defaultGraph : empty),
                             m::GraphPattern())));
@@ -73,8 +75,8 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
         transform(makePostRequest("/?default", "application/n-triples",
                                   "<a> <b> <c> ."),
                   DEFAULT{}),
-        testing::AllOf(
-            testing::Not(HasMiddleware),
+        ::testing::AllOf(
+            ::testing::Not(HasMiddleware),
             m::UpdateClause(m::GraphUpdate(isInsertion ? empty : defaultGraph,
                                            isInsertion ? defaultGraph : empty),
                             m::GraphPattern())));
@@ -82,52 +84,52 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
         transform(makePostRequest("/?graph=bar", "application/n-triples",
                                   "<a> <b> <c> ."),
                   iri("<bar>")),
-        testing::AllOf(
-            testing::Not(HasMiddleware),
+        ::testing::AllOf(
+            ::testing::Not(HasMiddleware),
             m::UpdateClause(m::GraphUpdate(isInsertion ? empty : graph,
                                            isInsertion ? graph : empty),
                             m::GraphPattern())));
     AD_EXPECT_THROW_WITH_MESSAGE(
         transform(
-            ad_utility::testing::makePostRequest(
+            qlever::testing::makePostRequest(
                 "/?default", "application/sparql-results+xml", "<foo></foo>"),
             DEFAULT{}),
-        testing::HasSubstr(
+        ::testing::HasSubstr(
             "Mediatype \"application/sparql-results+xml\" is not supported for "
             "SPARQL Graph Store HTTP Protocol in QLever."));
     // This results in an HTTP status 204 which must have an empty response
     // body.
-    AD_EXPECT_THROW_WITH_MESSAGE(transform(ad_utility::testing::makePostRequest(
+    AD_EXPECT_THROW_WITH_MESSAGE(transform(qlever::testing::makePostRequest(
                                                "/?default", "text/turtle", ""),
                                            DEFAULT{}),
-                                 testing::StrEq(""));
+                                 ::testing::StrEq(""));
     // `application/n-quads` is a recognized `MediaType`, but not one that is
     // supported for the SPARQL Graph Store HTTP Protocol (which only accepts
     // graph-less RDF: turtle or N-Triples).
     AD_EXPECT_THROW_WITH_MESSAGE(
-        transform(ad_utility::testing::makePostRequest(
+        transform(qlever::testing::makePostRequest(
                       "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
                   DEFAULT{}),
-        testing::HasSubstr(
+        ::testing::HasSubstr(
             "Mediatype \"application/n-quads\" is not supported for "
             "SPARQL Graph Store HTTP Protocol in QLever."));
     AD_EXPECT_THROW_WITH_MESSAGE(
-        transform(ad_utility::testing::makePostRequest(
+        transform(qlever::testing::makePostRequest(
                       "/?default", "application/this-media-type-does-not-exist",
                       "fantasy"),
                   DEFAULT{}),
-        testing::HasSubstr(
+        ::testing::HasSubstr(
             "Not a single media type known to this parser was "
             "detected in \"application/this-media-type-does-not-exist\"."));
     AD_EXPECT_THROW_WITH_MESSAGE(
-        transform(ad_utility::testing::makePostRequest(
+        transform(qlever::testing::makePostRequest(
                       "/?default", "application/unknown", "fantasy"),
                   DEFAULT{}),
-        testing::HasSubstr("Not a single media type known to this parser was "
-                           "detected in \"application/unknown\"."));
+        ::testing::HasSubstr("Not a single media type known to this parser was "
+                             "detected in \"application/unknown\"."));
   };
 
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = qlever::testing::makeTestIndex(TestIndexConfig{});
   runTests(
       [&index](http::request<http::string_body> request, GraphOrDefault graph) {
         return GraphStoreProtocol::transformPost(request, graph, index);
@@ -144,7 +146,7 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
 TEST(GraphStoreProtocolTest, transformGet) {
   auto expectTransformGet =
       [](const GraphOrDefault& graph,
-         const testing::Matcher<const ParsedQuery&>& matcher,
+         const ::testing::Matcher<const ParsedQuery&>& matcher,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         EXPECT_THAT(
@@ -161,17 +163,18 @@ TEST(GraphStoreProtocolTest, transformGet) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPut) {
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = qlever::testing::makeTestIndex(TestIndexConfig{});
   auto expectTransformPut = CPP_template_lambda(&index)(typename RequestT)(
       const RequestT& request, const GraphOrDefault& graph,
-      const testing::Matcher<const ParsedQuery&>& dropMatcher,
-      const testing::Matcher<const ParsedQuery&>& insertMatcher,
+      const ::testing::Matcher<const ParsedQuery&>& dropMatcher,
+      const ::testing::Matcher<const ParsedQuery&>& insertMatcher,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(GraphStoreProtocol::transformPut(request, graph, index),
-                testing::ElementsAre(testing::AllOf(dropMatcher, HasMiddleware),
-                                     insertMatcher));
+    EXPECT_THAT(
+        GraphStoreProtocol::transformPut(request, graph, index),
+        ::testing::ElementsAre(::testing::AllOf(dropMatcher, HasMiddleware),
+                               insertMatcher));
   };
 
   expectTransformPut(
@@ -194,15 +197,15 @@ TEST(GraphStoreProtocolTest, transformPut) {
                       m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
-          ad_utility::testing::makeRequest(http::verb::put, "/?default"),
-          DEFAULT{}, index),
-      testing::HasSubstr("Mediatype empty or not set."));
+          qlever::testing::makeRequest(http::verb::put, "/?default"), DEFAULT{},
+          index),
+      ::testing::HasSubstr("Mediatype empty or not set."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
-          ad_utility::testing::makePostRequest(
+          qlever::testing::makePostRequest(
               "/?default", "application/sparql-results+xml", ""),
           DEFAULT{}, index),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Mediatype \"application/sparql-results+xml\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
   // `application/n-quads` is a recognized `MediaType`, but not one that is
@@ -210,36 +213,36 @@ TEST(GraphStoreProtocolTest, transformPut) {
   // graph-less RDF: turtle or N-Triples).
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
-          ad_utility::testing::makePostRequest(
-              "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
+          qlever::testing::makePostRequest("/?default", "application/n-quads",
+                                           "<a> <b> <c> <d> ."),
           DEFAULT{}, index),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Mediatype \"application/n-quads\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
-          ad_utility::testing::makePostRequest(
+          qlever::testing::makePostRequest(
               "/?default", "application/this-media-type-does-not-exist",
               "fantasy"),
           DEFAULT{}, index),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Not a single media type known to this parser was "
           "detected in \"application/this-media-type-does-not-exist\"."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
-          ad_utility::testing::makePostRequest(
-              "/?default", "application/unknown", "fantasy"),
+          qlever::testing::makePostRequest("/?default", "application/unknown",
+                                           "fantasy"),
           DEFAULT{}, index),
-      testing::HasSubstr("Not a single media type known to this parser was "
-                         "detected in \"application/unknown\"."));
+      ::testing::HasSubstr("Not a single media type known to this parser was "
+                           "detected in \"application/unknown\"."));
 }
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformDelete) {
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = qlever::testing::makeTestIndex(TestIndexConfig{});
   auto expectTransformDelete =
       [&index](const GraphOrDefault& graph,
-               const testing::Matcher<const ParsedQuery&>& matcher,
+               const ::testing::Matcher<const ParsedQuery&>& matcher,
                ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         EXPECT_THAT(GraphStoreProtocol::transformDelete(graph, index), matcher);
@@ -250,32 +253,32 @@ TEST(GraphStoreProtocolTest, transformDelete) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = qlever::testing::makeTestIndex(TestIndexConfig{});
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
-                  ad_utility::testing::makeGetRequest("/?default"), index),
-              testing::ElementsAre(m::ConstructQuery(
+                  qlever::testing::makeGetRequest("/?default"), index),
+              ::testing::ElementsAre(m::ConstructQuery(
                   {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
                   m::GraphPattern(matchers::Triples({SparqlTriple(
                       TC(Var{"?s"}), Var{"?p"}, TC(Var{"?o"}))})))));
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
-          ad_utility::testing::makePostRequest(
-              "/?default", "application/n-triples", "<foo> <bar> <baz> ."),
+          qlever::testing::makePostRequest("/?default", "application/n-triples",
+                                           "<foo> <bar> <baz> ."),
           index),
-      testing::ElementsAre(m::UpdateClause(
+      ::testing::ElementsAre(m::UpdateClause(
           m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                std::monostate{}}}),
           m::GraphPattern())));
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
-                  ad_utility::testing::makeRequest(
+                  qlever::testing::makeRequest(
                       "TSOP", "/?default",
                       {{http::field::content_type, "application/n-triples"}},
                       "<foo> <bar> <baz> ."),
                   index),
-              testing::ElementsAre(m::UpdateClause(
+              ::testing::ElementsAre(m::UpdateClause(
                   m::GraphUpdate({{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                    std::monostate{}}},
                                  {}),
@@ -283,28 +286,28 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{iri("<foo>")},
-          ad_utility::testing::makeRequest(http::verb::delete_, "/?graph=foo"),
+          qlever::testing::makeRequest(http::verb::delete_, "/?graph=foo"),
           index),
-      testing::ElementsAre(ClearGraph(iri("<foo>"))));
+      ::testing::ElementsAre(ClearGraph(iri("<foo>"))));
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{iri("<foo>")},
-          ad_utility::testing::makeRequest(
+          qlever::testing::makeRequest(
               http::verb::put, "/?graph=foo",
               {{http::field::content_type, "text/turtle"}}, "<a> <b> <c>"),
           index),
-      testing::ElementsAre(
+      ::testing::ElementsAre(
           ClearGraph(iri("<foo>")),
           m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
                                                iri("<c>"), iri("<foo>")}}),
                           m::GraphPattern())));
-  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
-                  GraphStoreOperation{iri("<foo>")},
-                  ad_utility::testing::makeRequest(http::verb::head,
-                                                   "/?graph=foo", {}, ""),
-                  index),
-              testing::ElementsAre(
-                  testing::AllOf(GetGraph(iri("<foo>")), HasMiddleware)));
+  EXPECT_THAT(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          GraphStoreOperation{iri("<foo>")},
+          qlever::testing::makeRequest(http::verb::head, "/?graph=foo", {}, ""),
+          index),
+      ::testing::ElementsAre(
+          ::testing::AllOf(GetGraph(iri("<foo>")), HasMiddleware)));
   auto expectUnsupportedMethod = [&index](const http::verb method,
                                           ad_utility::source_location l =
                                               AD_CURRENT_SOURCE_LOC()) {
@@ -312,8 +315,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         GraphStoreProtocol::transformGraphStoreProtocol(
             GraphStoreOperation{DEFAULT{}},
-            ad_utility::testing::makeRequest(method, "/?default"), index),
-        testing::HasSubstr(
+            qlever::testing::makeRequest(method, "/?default"), index),
+        ::testing::HasSubstr(
             absl::StrCat(std::string{boost::beast::http::to_string(method)},
                          " in the SPARQL Graph Store HTTP Protocol")));
   };
@@ -321,15 +324,15 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
-          ad_utility::testing::makeRequest(boost::beast::http::verb::connect,
-                                           "/?default"),
+          qlever::testing::makeRequest(boost::beast::http::verb::connect,
+                                       "/?default"),
           index),
-      testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
+      ::testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
-          ad_utility::testing::makeRequest("PUMPKIN", "/?default"), index),
-      testing::HasSubstr("Unsupported HTTP method \"PUMPKIN\""));
+          qlever::testing::makeRequest("PUMPKIN", "/?default"), index),
+      ::testing::HasSubstr("Unsupported HTTP method \"PUMPKIN\""));
 }
 
 // _____________________________________________________________________________________________
@@ -337,25 +340,26 @@ TEST(GraphStoreProtocolTest, extractMediatype) {
   using enum http::field;
   auto makeRequest =
       [](const ad_utility::HashMap<http::field, std::string>& headers) {
-        return ad_utility::testing::makeRequest(http::verb::get, "/", headers);
+        return qlever::testing::makeRequest(http::verb::get, "/", headers);
       };
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractMediatype(makeRequest({})),
-      testing::HasSubstr("Mediatype empty or not set."));
+      ::testing::HasSubstr("Mediatype empty or not set."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractMediatype(makeRequest({{content_type, ""}})),
-      testing::HasSubstr("Mediatype empty or not set."));
+      ::testing::HasSubstr("Mediatype empty or not set."));
   EXPECT_THAT(GraphStoreProtocol::extractMediatype(
                   makeRequest({{content_type, "text/csv"}})),
-              testing::Eq(ad_utility::MediaType::csv));
+              ::testing::Eq(ad_utility::MediaType::csv));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractMediatype(
           makeRequest({{content_type, "text/plain"}})),
-      testing::HasSubstr("Mediatype \"text/plain\" is not supported for SPARQL "
-                         "Graph Store HTTP Protocol in QLever."));
+      ::testing::HasSubstr(
+          "Mediatype \"text/plain\" is not supported for SPARQL "
+          "Graph Store HTTP Protocol in QLever."));
   EXPECT_THAT(GraphStoreProtocol::extractMediatype(
                   makeRequest({{content_type, "application/n-triples"}})),
-              testing::Eq(ad_utility::MediaType::ntriples));
+              ::testing::Eq(ad_utility::MediaType::ntriples));
 }
 
 // _____________________________________________________________________________________________
@@ -363,24 +367,24 @@ TEST(GraphStoreProtocolTest, parseTriples) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::parseTriples("<a> <b> <c>",
                                        ad_utility::MediaType::json),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Mediatype \"application/json\" is not supported for SPARQL "
           "Graph Store HTTP Protocol in QLever."));
   const auto expectedTriples =
       std::vector<TurtleTriple>{{{iri("<a>")}, {iri("<b>")}, {iri("<c>")}}};
   EXPECT_THAT(GraphStoreProtocol::parseTriples("<a> <b> <c> .",
                                                ad_utility::MediaType::ntriples),
-              testing::Eq(expectedTriples));
+              ::testing::Eq(expectedTriples));
   EXPECT_THAT(GraphStoreProtocol::parseTriples("<a> <b> <c> .",
                                                ad_utility::MediaType::turtle),
-              testing::Eq(expectedTriples));
+              ::testing::Eq(expectedTriples));
   EXPECT_THAT(
       GraphStoreProtocol::parseTriples("", ad_utility::MediaType::ntriples),
-      testing::Eq(std::vector<TurtleTriple>{}));
+      ::testing::Eq(std::vector<TurtleTriple>{}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::parseTriples("<a> <b>",
                                        ad_utility::MediaType::ntriples),
-      testing::HasSubstr(" Parse error at byte position 7"));
+      ::testing::HasSubstr(" Parse error at byte position 7"));
 }
 
 // _____________________________________________________________________________________________
@@ -390,8 +394,8 @@ MATCHER_P(IfBlankNode, sub, "") {
   if (arg.isId()) {
     auto id = arg.getId();
     if (id.getDatatype() == Datatype::BlankNodeIndex) {
-      return testing::ExplainMatchResult(sub, id.getBlankNodeIndex(),
-                                         result_listener);
+      return ::testing::ExplainMatchResult(sub, id.getBlankNodeIndex(),
+                                           result_listener);
     }
   }
   return true;
@@ -399,7 +403,7 @@ MATCHER_P(IfBlankNode, sub, "") {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = qlever::testing::makeTestIndex(TestIndexConfig{});
   Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
   auto expectConvert =
       [&bn](const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
@@ -410,26 +414,27 @@ TEST(GraphStoreProtocolTest, convertTriples) {
             GraphStoreProtocol::convertTriples(graph, std::move(triples), bn);
         EXPECT_THAT(convertedTriples,
                     AD_FIELD(updateClause::UpdateTriples, triples_,
-                             testing::Eq(expectedTriples)));
+                             ::testing::Eq(expectedTriples)));
         auto AllComponents =
-            [](const testing::Matcher<const TripleComponent&>& sub)
-            -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
-          return testing::AllOf(AD_FIELD(SparqlTripleSimpleWithGraph, s_, sub),
-                                AD_FIELD(SparqlTripleSimpleWithGraph, p_, sub),
-                                AD_FIELD(SparqlTripleSimpleWithGraph, o_, sub));
+            [](const ::testing::Matcher<const TripleComponent&>& sub)
+            -> ::testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+          return ::testing::AllOf(
+              AD_FIELD(SparqlTripleSimpleWithGraph, s_, sub),
+              AD_FIELD(SparqlTripleSimpleWithGraph, p_, sub),
+              AD_FIELD(SparqlTripleSimpleWithGraph, o_, sub));
         };
         auto BlankNodeContained = [](const LocalVocab& lv)
-            -> testing::Matcher<const BlankNodeIndex&> {
-          return testing::ResultOf(
+            -> ::testing::Matcher<const BlankNodeIndex&> {
+          return ::testing::ResultOf(
               [&lv](const BlankNodeIndex& i) {
                 return lv.isBlankNodeIndexContained(i);
               },
-              testing::IsTrue());
+              ::testing::IsTrue());
         };
         EXPECT_THAT(
             convertedTriples,
             AD_FIELD(updateClause::UpdateTriples, triples_,
-                     testing::Each(AllComponents(IfBlankNode(
+                     ::testing::Each(AllComponents(IfBlankNode(
                          BlankNodeContained(convertedTriples.localVocab_))))));
       };
   expectConvert(DEFAULT{}, {}, {});
@@ -459,13 +464,13 @@ TEST(GraphStoreProtocolTest, convertTriples) {
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
   // Create a simple index with default config for now
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = qlever::testing::makeTestIndex(TestIndexConfig{});
 
   // Test transformPost with IRIs that would be encoded if the feature were
   // enabled
   auto expectTransformPost = CPP_template_lambda(&index)(typename RequestT)(
       const RequestT& request, const GraphOrDefault& graph,
-      const testing::Matcher<const ParsedQuery&>& matcher,
+      const ::testing::Matcher<const ParsedQuery&>& matcher,
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
@@ -523,11 +528,11 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
       std::holds_alternative<parsedQuery::ConstructClause>(getQuery._clause));
 
   // Test transformGet with specific graph IRI
-  auto graphIri =
-      ad_utility::triple_component::Iri::fromIriref("<http://example.org/123>");
+  auto graphIri = triple_component::Iri::fromIriref("<http://example.org/123>");
   auto graphQuery =
       GraphStoreProtocol::transformGet(graphIri, encodedIriManager());
   EXPECT_THAT(
       graphQuery._originalString,
-      testing::HasSubstr("GRAPH <http://example.org/123> { ?s ?p ?o }"));
+      ::testing::HasSubstr("GRAPH <http://example.org/123> { ?s ?p ?o }"));
 }
+}  // namespace qlever

@@ -10,12 +10,12 @@
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // Make a `ValueId` from an int/ a double. Shorter name, as it will be used
 // often.
-using ad_utility::testing::DoubleId;
-using ad_utility::testing::IntId;
+using qlever::testing::DoubleId;
+using qlever::testing::IntId;
 
 // Struct that stores a `sparqlExpression::EvaluationContext` and all the data
 // structures that this context refers to. Most importantly it uses the
@@ -38,7 +38,7 @@ struct TestContext {
       "<y> <is-a> <x> . "
       "<z> <is-a> _:blank . "
       "<z> <label> \"zz\"@en";
-  QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
+  QueryExecutionContext* qec = qlever::testing::getQec(turtleInput);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
@@ -51,7 +51,7 @@ struct TestContext {
       std::make_shared<ad_utility::CancellationHandle<>>(),
       EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
-      ad_utility::testing::makeGetId(qec->getIndex());
+      qlever::testing::makeGetId(qec->getIndex());
   // IDs of literals and entities in the vocabulary of the index.
   Id x, label, alpha, aelpha, A, Beta, zz, blank;
   // IDs of literals (the first two) and entities (the latter two) in the local
@@ -137,7 +137,7 @@ struct TestContext {
     return result;
   }
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 // Add output for `SetOfIntervals for Gtest.
 namespace ad_utility {
@@ -147,5 +147,4 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   }
 }
 }  // namespace ad_utility
-
 #endif  // QLEVER_TEST_SPARQLEXPRESSIONTESTHELPERS_H

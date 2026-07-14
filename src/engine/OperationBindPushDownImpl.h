@@ -13,6 +13,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 CPP_template_def(typename MakeCloneWithNewChildren)(
     requires ad_utility::InvocableWithExactReturnType<
@@ -56,5 +58,7 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
   }
   return makeCloneWithNewChildren(std::move(children));
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_OPERATIONBINDPUSHDOWNIMPL_H_

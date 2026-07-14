@@ -14,7 +14,9 @@
 #include "util/Exception.h"
 #include "util/Log.h"
 
-namespace ad_utility {
+namespace qlever {
+
+using namespace geometry_info_helpers;
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -52,7 +54,6 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 // ____________________________________________________________________________
 std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
-  using namespace detail;
   auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
@@ -92,8 +93,7 @@ MetricLength::MetricLength(double length) : length_{length} {
 
 // ____________________________________________________________________________
 std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
-  auto wktType =
-      static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
+  auto wktType = static_cast<uint8_t>(getWKTType(removeDatatype(wkt)));
   if (wktType == 0) {
     // Type 0 represents invalid type
     return std::nullopt;
@@ -104,8 +104,8 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
   return {
-      util::geo::WKTType::POINT, {point, point},  Centroid{point}, {1},
-      MetricLength{0.0},         MetricArea{0.0},
+      ::util::geo::WKTType::POINT, {point, point},  Centroid{point}, {1},
+      MetricLength{0.0},           MetricArea{0.0},
   };
 }
 
@@ -118,7 +118,7 @@ GeometryType GeometryInfo::getWktType() const {
 
 // ____________________________________________________________________________
 std::optional<std::string_view> GeometryType::asIri() const {
-  return detail::wktTypeToIri(type_);
+  return wktTypeToIri(type_);
 }
 
 // ____________________________________________________________________________
@@ -129,11 +129,11 @@ Centroid GeometryInfo::getCentroid() const {
 
 // ____________________________________________________________________________
 std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parsed.value());
+  return centroidAsGeoPoint(parsed.value());
 }
 
 // ____________________________________________________________________________
@@ -144,11 +144,11 @@ BoundingBox GeometryInfo::getBoundingBox() const {
 
 // ____________________________________________________________________________
 std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return detail::boundingBoxAsGeoPoints(parsed.value());
+  return boundingBoxAsGeoPoints(parsed.value());
 }
 
 // ____________________________________________________________________________
@@ -166,12 +166,12 @@ MetricArea GeometryInfo::getMetricArea() const { return metricArea_; }
 
 // ____________________________________________________________________________
 std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
   try {
-    return MetricArea{detail::computeMetricArea(parsed.value())};
+    return MetricArea{computeMetricArea(parsed.value())};
   } catch (const InvalidPolygonError&) {
     return std::nullopt;
   }
@@ -179,7 +179,7 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
 
 // ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
-  return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
+  return boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
 
 // ____________________________________________________________________________
@@ -188,11 +188,11 @@ MetricLength GeometryInfo::getMetricLength() const { return metricLength_; };
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(
     const std::string_view& wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return {detail::computeMetricLength(parsed.value())};
+  return {computeMetricLength(parsed.value())};
 };
 
 // ____________________________________________________________________________
@@ -238,11 +238,11 @@ NumGeometries GeometryInfo::getNumGeometries() const {
 // ____________________________________________________________________________
 std::optional<NumGeometries> GeometryInfo::getNumGeometries(
     std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [type, parsed] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
-  return NumGeometries{detail::countChildGeometries(parsed.value())};
+  return NumGeometries{countChildGeometries(parsed.value())};
 }
 
 // ____________________________________________________________________________
@@ -315,4 +315,4 @@ GeometryInfo::getRequestedInfo<MetricLength>(std::string_view wkt);
 template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
     std::string_view wkt);
 
-}  // namespace ad_utility
+}  // namespace qlever

@@ -22,6 +22,8 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 
+using namespace qlever;
+
 using std::size_t;
 using std::string;
 
@@ -34,7 +36,7 @@ int main(int argc, char** argv) {
   setRuntimeParameter<&RuntimeParameters::stripColumns_>(true);
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
-  qlever::version::copyVersionInfo();
+  version::copyVersionInfo();
   setlocale(LC_CTYPE, "");
 
   std::locale loc;
@@ -46,7 +48,7 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   using ad_utility::NonNegative;
 
-  qlever::EngineConfig config;
+  EngineConfig config;
   std::string accessToken;
   bool noAccessCheck = false;
   unsigned short port;
@@ -222,7 +224,7 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     if (optionsMap.count("version")) {
-      std::cout << argv[0] << " " << qlever::version::ProjectVersion << '\n';
+      std::cout << argv[0] << " " << version::ProjectVersion << '\n';
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
@@ -232,9 +234,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever server " << qlever::version::ProjectVersion
-              << ", compiled on " << qlever::version::DatetimeOfCompilation
-              << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
+  AD_LOG_INFO << EMPH_ON << "QLever server " << version::ProjectVersion
+              << ", compiled on " << version::DatetimeOfCompilation
+              << " using git hash " << version::GitShortHash << EMPH_OFF
               << std::endl;
 
   try {

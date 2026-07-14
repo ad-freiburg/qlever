@@ -6,7 +6,7 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
 // Quick recap of how defining n-ary functions works in QLever.
@@ -110,4 +110,4 @@ SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::BoundExpression>(std::move(arg));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

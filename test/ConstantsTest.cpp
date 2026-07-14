@@ -9,6 +9,8 @@
 #include "util/GTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using namespace qlever;
+
 using namespace ad_utility;
 using namespace std::chrono_literals;
 

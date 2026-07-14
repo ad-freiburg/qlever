@@ -59,6 +59,7 @@
 #include "util/TypeTraits.h"
 
 using namespace std::string_literals;
+using namespace qlever;
 
 namespace ad_benchmark {
 

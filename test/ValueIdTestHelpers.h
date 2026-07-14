@@ -9,6 +9,8 @@
 #include "global/ValueId.h"
 #include "util/Random.h"
 
+namespace qlever::testing {
+
 // Enabling cheaper unit tests when building in Debug mode
 #ifdef QLEVER_RUN_EXPENSIVE_TESTS
 static constexpr size_t numElements = 10'000;
@@ -45,9 +47,7 @@ inline auto underflowingNBitGenerator =
 inline ValueId makeVocabId(uint64_t value) {
   return ValueId::makeFromVocabIndex(VocabIndex::make(value));
 }
-inline ValueId makeLocalVocabId(uint64_t value) {
-  return ad_utility::testing::LocalVocabId(value);
-}
+inline ValueId makeLocalVocabId(uint64_t value) { return LocalVocabId(value); }
 inline ValueId makeTextRecordId(uint64_t value) {
   return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
 }
@@ -126,5 +126,7 @@ inline auto makeRandomIds = []() {
   ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
+
+}  // namespace qlever::testing
 
 #endif  // QLEVER_VALUEIDTESTHELPERS_H

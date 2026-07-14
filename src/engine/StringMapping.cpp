@@ -9,6 +9,8 @@
 #include "index/ExportIds.h"
 #include "index/Index.h"
 
+using namespace qlever;
+
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
@@ -17,8 +19,7 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
   for (const auto& [oldId, newId] : stringMapping_) {
-    auto literalOrIri =
-        ql::exportIds::idToLiteralOrIri(index, oldId, dummy, true);
+    auto literalOrIri = exportIds::idToLiteralOrIri(index, oldId, dummy, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
     sortedStrings[newId] =
         std::move(literalOrIri.value()).toStringRepresentation();
@@ -60,7 +61,7 @@ Id StringMapping::remapId(Id id) {
   // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
   // are all zero and then performs a right shift. We have to shift the
   // `dinstinctIndex` left by the same amount to counter this effect.
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
+  return Id::makeFromLocalVocabIndex(reinterpret_cast<qlever::LocalVocabIndex>(
       distinctIndex << Id::numDatatypeBits));
 }
 

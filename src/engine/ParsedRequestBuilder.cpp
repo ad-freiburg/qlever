@@ -9,14 +9,16 @@
 #include "engine/HttpError.h"
 #include "util/Algorithm.h"
 
-using namespace ad_utility::url_parser::sparqlOperation;
+using namespace qlever;
+
+using namespace url_parser::sparqlOperation;
 
 // ____________________________________________________________________________
 ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
-  using namespace ad_utility::url_parser::sparqlOperation;
+  using namespace url_parser::sparqlOperation;
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
-  auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
+  auto parsedUrl = url_parser::parseRequestTarget(request.target());
   if (request.find(boost::beast::http::field::host) != request.end()) {
     host_ = request[boost::beast::http::field::host];
   }
@@ -52,8 +54,8 @@ void ParsedRequestBuilder::extractDatasetClauses() {
 // ____________________________________________________________________________
 bool ParsedRequestBuilder::parameterIsContainedExactlyOnce(
     std::string_view key) const {
-  return ad_utility::url_parser::getParameterCheckAtMostOnce(
-             parsedRequest_.parameters_, key)
+  return url_parser::getParameterCheckAtMostOnce(parsedRequest_.parameters_,
+                                                 key)
       .has_value();
 }
 
@@ -106,7 +108,7 @@ bool ParsedRequestBuilder::parametersContain(std::string_view param) const {
 }
 
 // ____________________________________________________________________________
-ad_utility::url_parser::ParsedRequest ParsedRequestBuilder::build() && {
+url_parser::ParsedRequest ParsedRequestBuilder::build() && {
   return std::move(parsedRequest_);
 }
 
@@ -126,7 +128,7 @@ void ParsedRequestBuilder::extractDatasetClauseIfOperationIs(
     const std::string& key, bool isNamed) {
   if (Operation* op = std::get_if<Operation>(&parsedRequest_.operation_)) {
     ad_utility::appendVector(op->datasetClauses_,
-                             ad_utility::url_parser::parseDatasetClausesFrom(
+                             url_parser::parseDatasetClausesFrom(
                                  parsedRequest_.parameters_, key, isNamed));
   }
 }
@@ -135,7 +137,7 @@ void ParsedRequestBuilder::extractDatasetClauseIfOperationIs(
 template <typename Operation>
 void ParsedRequestBuilder::extractOperationIfSpecified(
     std::string_view paramName) {
-  auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
+  auto operation = url_parser::getParameterCheckAtMostOnce(
       parsedRequest_.parameters_, paramName);
   if (operation.has_value()) {
     AD_CORRECTNESS_CHECK(
@@ -152,11 +154,11 @@ template void ParsedRequestBuilder::extractOperationIfSpecified<Update>(
 
 // ____________________________________________________________________________
 GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
-    const ad_utility::url_parser::ParamValueMap& params) {
+    const url_parser::ParamValueMap& params) {
   const std::optional<std::string> graphIri =
-      ad_utility::url_parser::checkParameter(params, "graph", std::nullopt);
+      url_parser::checkParameter(params, "graph", std::nullopt);
   const bool isDefault =
-      ad_utility::url_parser::checkParameter(params, "default", "").has_value();
+      url_parser::checkParameter(params, "default", "").has_value();
   if (graphIri.has_value() == isDefault) {
     throw std::runtime_error(
         R"(Exactly one of the query parameters "default" or "graph" must be set to identify the graph for the graph store protocol request.)");
@@ -171,8 +173,7 @@ GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
 
 // ____________________________________________________________________________
 std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
-    const RequestType& request,
-    const ad_utility::url_parser::ParamValueMap& params) {
+    const RequestType& request, const url_parser::ParamValueMap& params) {
   namespace http = boost::beast::http;
   std::optional<std::string> tokenFromAuthorizationHeader;
   std::optional<std::string> tokenFromParameter;
@@ -187,8 +188,8 @@ std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
     tokenFromAuthorizationHeader = std::string(authorization);
   }
   if (params.contains("access-token")) {
-    tokenFromParameter = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        params, "access-token");
+    tokenFromParameter =
+        url_parser::getParameterCheckAtMostOnce(params, "access-token");
   }
   // If both are specified, they must be equal. This way there is no hidden
   // precedence.

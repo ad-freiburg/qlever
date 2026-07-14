@@ -16,16 +16,17 @@
 #include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 namespace {
 
-using namespace qlever::constructExport;
+using namespace constructExport;
 using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::ResultOf;
-using Triples = ad_utility::sparql_types::Triples;
-
-auto iriV = ad_utility::testing::iriV;
+using Triples = sparql_types::Triples;
 
 static auto matchTriple(const std::string& s, const std::string& p,
                         const std::string& o) {
@@ -63,13 +64,13 @@ namespace qlever::constructExport {
 class ConstructTripleGeneratorTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ =
-      ad_utility::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
+      qlever::testing::getQec("<s> <p> <o> . <s> <q> \"hello\" .");
   const Index& index_ = qec_->getIndex();
 
-  Id idS_ = ad_utility::testing::makeGetId(index_)("<s>");
-  Id idP_ = ad_utility::testing::makeGetId(index_)("<p>");
-  Id idO_ = ad_utility::testing::makeGetId(index_)("<o>");
-  Id idQ_ = ad_utility::testing::makeGetId(index_)("<q>");
+  Id idS_ = qlever::testing::makeGetId(index_)("<s>");
+  Id idP_ = qlever::testing::makeGetId(index_)("<p>");
+  Id idO_ = qlever::testing::makeGetId(index_)("<o>");
+  Id idQ_ = qlever::testing::makeGetId(index_)("<q>");
 
   // Create a non-cancelled `CancellationHandle`.
   static ad_utility::SharedCancellationHandle makeHandle() {

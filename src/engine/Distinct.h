@@ -12,6 +12,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 class Distinct : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
@@ -100,4 +102,5 @@ class Distinct : public Operation {
   IdTable outOfPlaceDistinct(const IdTableView<0>& dynInput) const;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_DISTINCT_H

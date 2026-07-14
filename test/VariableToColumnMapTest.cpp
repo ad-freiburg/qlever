@@ -9,6 +9,8 @@
 #include "gtest/gtest.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+using namespace qlever;
+
 class VariableToColumnMapTest : public ::testing::TestWithParam<bool> {};
 
 // In the right input there are three columns (0, 3, 4) which are not

@@ -7,6 +7,8 @@
 
 #include "engine/GroupByImpl.h"
 
+namespace qlever {
+
 // Helper class to lazily compute the result of a group by operation. It makes
 // use of the hash map optimization to store the intermediate results of the
 // groups.
@@ -62,5 +64,7 @@ class LazyGroupBy {
 
   FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_LAZYGROUPBY_H

@@ -9,6 +9,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
 
 TEST(SparqlExpressionTypes, expressionResult) {
@@ -17,12 +18,12 @@ TEST(SparqlExpressionTypes, expressionResult) {
   ASSERT_NO_THROW(b = copyExpressionResult(a));
   ASSERT_EQ(a, b);
 
-  a = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
+  a = VectorWithMemoryLimit<Id>(qlever::testing::makeAllocator());
   a.emplace<Id>(Id::makeFromDouble(42.0));
   ASSERT_NO_THROW(b = copyExpressionResult(a));
   ASSERT_EQ(a, b);
 
-  auto c = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
+  auto c = VectorWithMemoryLimit<Id>(qlever::testing::makeAllocator());
   c.emplace_back(Id::makeFromDouble(42.0));
   ASSERT_EQ(c.size(), 1);
   copyExpressionResult(static_cast<ExpressionResult>(std::move(c)));
@@ -30,13 +31,13 @@ TEST(SparqlExpressionTypes, expressionResult) {
 }
 
 TEST(SparqlExpressionTypes, printIdOrString) {
-  using namespace ad_utility::triple_component;
+  using namespace triple_component;
   std::stringstream str;
 
   IdOrLocalVocabEntry idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "U:0");
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   idOrString = LocalVocabEntry::literalWithoutQuotes(
       "bimm", qec->getLocalVocabContext());
   // Clear the stringstream.

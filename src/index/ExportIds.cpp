@@ -20,11 +20,11 @@
 #include "index/EncodedIriManager.h"
 #include "util/Exception.h"
 
-namespace ql::exportIds {
+namespace qlever::exportIds {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Iri = ad_utility::triple_component::Iri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = triple_component::LiteralOrIri;
+using Iri = triple_component::Iri;
+using Literal = triple_component::Literal;
 
 // _____________________________________________________________________________
 std::optional<Literal> idToLiteralForEncodedValue(
@@ -32,8 +32,7 @@ std::optional<Literal> idToLiteralForEncodedValue(
   if (onlyReturnLiteralsWithXsdString) {
     return std::nullopt;
   }
-  auto optionalStringAndType =
-      ql::exportIds::idToStringAndTypeForEncodedValue(id);
+  auto optionalStringAndType = exportIds::idToStringAndTypeForEncodedValue(id);
   if (!optionalStringAndType) {
     return std::nullopt;
   }
@@ -117,31 +116,27 @@ std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
   // behavior. However, this is somewhat fragile and should be kept in mind if
   // this function is used in other contexts.
   auto [literal, type] =
-      ql::exportIds::idToStringAndTypeForEncodedValue(id).value_or(
+      exportIds::idToStringAndTypeForEncodedValue(id).value_or(
           std::make_pair(std::string{}, nullptr));
   if (type == nullptr) {
     return std::nullopt;
   }
-  auto lit =
-      ad_utility::triple_component::Literal::literalWithoutQuotes(literal);
-  lit.addDatatype(
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(type));
+  auto lit = triple_component::Literal::literalWithoutQuotes(literal);
+  lit.addDatatype(triple_component::Iri::fromIrirefWithoutBrackets(type));
   return LiteralOrIri{std::move(lit)};
 }
 
 // _____________________________________________________________________________
 LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index, Id id) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.indexToString(id.getWordVocabIndex()))};
+  return LiteralOrIri{triple_component::Literal::literalWithoutQuotes(
+      index.indexToString(id.getWordVocabIndex()))};
 };
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
     const IndexImpl& index, Id id) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.getTextExcerpt(id.getTextRecordIndex()))};
+  return LiteralOrIri{triple_component::Literal::literalWithoutQuotes(
+      index.getTextExcerpt(id.getTextRecordIndex()))};
 };
 
 // _____________________________________________________________________________
@@ -155,8 +150,7 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
     case VocabIndex:
     case LocalVocabIndex:
     case EncodedVal:
-      return ql::exportIds::getLiteralOrIriFromVocabIndex(index, id,
-                                                          localVocab);
+      return exportIds::getLiteralOrIriFromVocabIndex(index, id, localVocab);
     case TextRecordIndex:
       return getLiteralOrIriFromTextRecordIndex(index, id);
     default:
@@ -276,4 +270,4 @@ LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index) {
   return LiteralOrIri::fromStringRepresentation(mgr.toString(id));
 }
 
-}  // namespace ql::exportIds
+}  // namespace qlever::exportIds

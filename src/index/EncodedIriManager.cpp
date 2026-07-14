@@ -11,6 +11,8 @@
 
 #include "util/CtreHelpers.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 std::optional<std::string_view> detail::matchDigitsPrefix(
     std::string_view repr) {
@@ -22,3 +24,5 @@ std::optional<std::string_view> detail::matchDigitsPrefix(
   constexpr ctll::fixed_string digitsCaptureGroup = "digits";
   return match.template get<digitsCaptureGroup>().to_view();
 }
+
+}  // namespace qlever

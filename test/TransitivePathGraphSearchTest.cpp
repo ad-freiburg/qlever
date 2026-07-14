@@ -23,7 +23,9 @@
 #include "util/GTestHelpers.h"
 #include "util/Log.h"
 
-using namespace qlever::graphSearch;
+using namespace qlever;
+
+using namespace graphSearch;
 using namespace ::testing;
 
 // Test fixture which prepares TransitivePathGraphSearch testing.
@@ -33,7 +35,7 @@ class GraphSearchTest : public Test {
   using AdjacencyList = std::unordered_map<size_t, std::vector<size_t>>;
 
   const ad_utility::AllocatorWithLimit<Id> allocator_ =
-      ad_utility::testing::makeAllocator();
+      qlever::testing::makeAllocator();
   GraphSearchExecutionParams ep_{
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator_};
 
@@ -265,7 +267,7 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
 
   const ad_utility::AllocatorWithLimit<Id> allocator =
-      ad_utility::testing::makeAllocator();
+      qlever::testing::makeAllocator();
   GraphSearchExecutionParams ep(
       std::make_shared<ad_utility::CancellationHandle<>>(), allocator);
 

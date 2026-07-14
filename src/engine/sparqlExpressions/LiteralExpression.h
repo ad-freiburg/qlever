@@ -10,7 +10,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/TypeTraits.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
 /// An expression with a single value, for example a numeric (42.0) or boolean
@@ -79,7 +79,7 @@ class LiteralExpression : public SparqlExpression {
 
   // Variables and string constants add their values.
   ql::span<const Variable> getContainedVariablesNonRecursive() const override {
-    if constexpr (std::is_same_v<T, ::Variable>) {
+    if constexpr (std::is_same_v<T, Variable>) {
       return {&_value, 1};
     } else {
       return {};
@@ -88,7 +88,7 @@ class LiteralExpression : public SparqlExpression {
 
   // ___________________________________________________________________________
   std::vector<Variable> getUnaggregatedVariables() const override {
-    if constexpr (std::is_same_v<T, ::Variable>) {
+    if constexpr (std::is_same_v<T, Variable>) {
       return {_value};
     } else {
       return {};
@@ -97,7 +97,7 @@ class LiteralExpression : public SparqlExpression {
 
   // ___________________________________________________________________________
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    if constexpr (std::is_same_v<T, ::Variable>) {
+    if constexpr (std::is_same_v<T, Variable>) {
       if (!varColMap.contains(_value)) {
         return "Unbound Variable";
       }
@@ -123,13 +123,13 @@ class LiteralExpression : public SparqlExpression {
 
   // ___________________________________________________________________________
   bool isConstantExpression() const override {
-    return !std::is_same_v<T, ::Variable>;
+    return !std::is_same_v<T, Variable>;
   }
 
   // ___________________________________________________________________________
   bool isResultAlwaysDefined(
       const VariableToColumnMap& varColMap) const override {
-    if constexpr (std::is_same_v<T, ::Variable>) {
+    if constexpr (std::is_same_v<T, Variable>) {
       // For variables, check if they are in the map and always defined
       auto it = varColMap.find(_value);
       if (it == varColMap.end()) {
@@ -157,8 +157,8 @@ class LiteralExpression : public SparqlExpression {
 
  protected:
   // ___________________________________________________________________________
-  std::optional<::Variable> getVariableOrNullopt() const override {
-    if constexpr (std::is_same_v<T, ::Variable>) {
+  std::optional<Variable> getVariableOrNullopt() const override {
+    if constexpr (std::is_same_v<T, Variable>) {
       return _value;
     }
     return std::nullopt;
@@ -257,7 +257,7 @@ struct SingleUseExpression : public SparqlExpression {
 }  // namespace detail
 
 ///  The actual instantiations and aliases of LiteralExpressions.
-using VariableExpression = detail::LiteralExpression<::Variable>;
+using VariableExpression = detail::LiteralExpression<Variable>;
 using IriExpression = detail::LiteralExpression<TripleComponent::Iri>;
 using StringLiteralExpression =
     detail::LiteralExpression<TripleComponent::Literal>;
@@ -306,6 +306,6 @@ inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
 
 }  // namespace detail
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H

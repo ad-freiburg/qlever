@@ -10,8 +10,9 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
-using namespace ad_utility::triple_component;
+using namespace triple_component;
 
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, expectBlankNodeResultEquality) {

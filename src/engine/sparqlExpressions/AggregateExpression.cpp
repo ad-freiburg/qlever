@@ -10,7 +10,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 // Evaluate a `SingleExpressionResult` (that is, one of the possible
 // `ExpressionResult` variants). Used in the `AggregateExpression::evaluate`
@@ -195,4 +195,4 @@ INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
 INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
 INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);
 INSTANTIATE_AGG_EXP(MaxLambdaForAllTypes, ActualValueGetter);
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail

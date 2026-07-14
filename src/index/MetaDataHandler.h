@@ -18,6 +18,8 @@
 #include "index/CompressedRelation.h"
 #include "util/File.h"
 
+namespace qlever {
+
 // Container for the `CompressedRelationMetadata` objects (one per relation) of
 // a single permutation. The objects are kept in a `std::vector` that is sorted
 // by `col0Id_`, which allows for binary search by `col0Id_`. The metadata of a
@@ -65,5 +67,7 @@ class MetaDataWrapperDense {
  private:
   [[nodiscard]] auto lower_bound(Id col0Id) const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_METADATAHANDLER_H

@@ -23,8 +23,9 @@
 // _____________________________________________________________________________
 namespace {
 
+using namespace qlever;
 using namespace SpatialJoinPrefilterTestHelpers;
-using namespace ad_utility::detail::parallel_wkt_parser;
+using namespace qlever::detail::parallel_wkt_parser;
 
 // _____________________________________________________________________________
 TEST(SpatialJoinParser, AddValueIdToQueue) {
@@ -48,7 +49,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   sj::Sweeper sweeper{cfg, ".", sweeperPath};
 
   // Left side without prefilter box
-  std::optional<util::geo::DBox> prefilterBox = std::nullopt;
+  std::optional<::util::geo::DBox> prefilterBox = std::nullopt;
   WKTParser parser1{&sweeper, 5, true, prefilterBox, index};
   EXPECT_EQ(parser1.getParseCounter(), 0);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
@@ -58,16 +59,15 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   parser1.done();
   EXPECT_EQ(parser1.getParseCounter(), 3);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
-  checkPrefilterBox(ad_utility::detail::projectInt32WebMercToDoubleLatLng(
+  checkPrefilterBox(geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
                         parser1.getBoundingBox()),
                     boundingBoxUniAndLondon);
 
   // Right side with prefilter box
-  auto newYorkBox =
-      ad_utility::GeometryInfo::getBoundingBox(areaStatueOfLiberty);
+  auto newYorkBox = GeometryInfo::getBoundingBox(areaStatueOfLiberty);
   ASSERT_TRUE(newYorkBox.has_value());
-  std::optional<util::geo::DBox> newYorkUtilBox =
-      ad_utility::detail::boundingBoxToUtilBox(newYorkBox.value());
+  std::optional<::util::geo::DBox> newYorkUtilBox =
+      geometry_info_helpers::boundingBoxToUtilBox(newYorkBox.value());
 
   WKTParser parser2{&sweeper, 5, true, newYorkUtilBox, index};
   EXPECT_EQ(parser2.getParseCounter(), 0);
@@ -77,7 +77,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   parser2.addValueIdToQueue(idxLondon, 2, true, std::nullopt);
   parser2.addValueIdToQueue(idxNewYork, 3, true, std::nullopt);
   // Also test prefiltering using an explicitly provided bounding box.
-  auto uniGeoInfo = ad_utility::GeometryInfo::fromWktLiteral(areaUniFreiburg);
+  auto uniGeoInfo = GeometryInfo::fromWktLiteral(areaUniFreiburg);
   ASSERT_TRUE(uniGeoInfo.has_value());
   parser2.addValueIdToQueue(idxUni, 4, true,
                             uniGeoInfo.value().getBoundingBox());
@@ -86,7 +86,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   // New York is parsed, 2x Uni and 1x London get filtered out
   EXPECT_EQ(parser2.getParseCounter(), 1);
   EXPECT_EQ(parser2.getPrefilterCounter(), 4);
-  auto actualBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
+  auto actualBox = geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
       parser2.getBoundingBox());
   checkPrefilterBox(actualBox, newYorkUtilBox.value());
 
@@ -104,7 +104,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   // Uni and London get parsed, 25'000x New York gets filtered out
   EXPECT_EQ(parser3.getParseCounter(), 2);
   EXPECT_EQ(parser3.getPrefilterCounter(), 25'000);
-  auto actualBox2 = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
+  auto actualBox2 = geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
       parser3.getBoundingBox());
   checkPrefilterBox(actualBox2, boundingBoxUniAndLondon);
 
@@ -126,8 +126,7 @@ TEST(SpatialJoinParser, SpatialJoinTaskOperatorEq) {
   SpatialJoinParseJob job2{point, 7, true, "", std::nullopt};
   SpatialJoinParseJob job3{point, 5, false, "", std::nullopt};
   SpatialJoinParseJob job4{undef, 5, true, "", std::nullopt};
-  SpatialJoinParseJob job5{point, 5, false, "",
-                           ad_utility::BoundingBox{{1, 1}, {1, 1}}};
+  SpatialJoinParseJob job5{point, 5, false, "", BoundingBox{{1, 1}, {1, 1}}};
 
   EXPECT_EQ(job1, job1);
   EXPECT_EQ(job2, job2);

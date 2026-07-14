@@ -10,6 +10,8 @@
 #include "util/HashSet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {

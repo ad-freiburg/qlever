@@ -38,7 +38,7 @@
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
 // file should not be included in header files.
 
-namespace ad_utility::detail {
+namespace qlever::geometry_info_helpers {
 
 using namespace ::util::geo;
 using namespace geometryConverters;
@@ -51,29 +51,29 @@ using DAnyGeometry = AnyGeometry<CoordType>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
-    SameAsAny<T, Point<CoordType>, Line<CoordType>, Polygon<CoordType>>;
+    ad_utility::SameAsAny<T, Point<CoordType>, Line<CoordType>,
+                          Polygon<CoordType>>;
 
 template <typename T>
 CPP_concept WktCollectionType =
-    SameAsAny<T, MultiPoint<CoordType>, MultiLine<CoordType>,
-              MultiPolygon<CoordType>, Collection<CoordType>>;
+    ad_utility::SameAsAny<T, MultiPoint<CoordType>, MultiLine<CoordType>,
+                          MultiPolygon<CoordType>, Collection<CoordType>>;
 
 static_assert(!std::is_same_v<Line<CoordType>, MultiPoint<CoordType>>);
-static_assert(!isVector<Line<CoordType>>);
-static_assert(isVector<Collection<CoordType>>);
+static_assert(!ad_utility::isVector<Line<CoordType>>);
+static_assert(ad_utility::isVector<Collection<CoordType>>);
 
 // Removes the datatype and quotation marks from a given literal
 inline std::string removeDatatype(const std::string_view& wkt) {
-  auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
-      std::string{wkt});
+  auto lit =
+      triple_component::Literal::fromStringRepresentation(std::string{wkt});
   return std::string{asStringViewUnsafe(lit.getContent())};
 }
 
 // Adds quotation marks and the `geo:wktLiteral` datatype to a given string
 inline std::string addDatatype(const std::string_view wkt) {
-  auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(wkt);
-  auto dt = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-      GEO_WKT_LITERAL);
+  auto lit = triple_component::Literal::literalWithoutQuotes(wkt);
+  auto dt = triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
   lit.addDatatype(dt);
   return std::move(lit).toStringRepresentation();
 }
@@ -200,8 +200,8 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
   return getWKT(box);
 }
 
-// Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
-// required by `pb_util`.
+// Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box`
+// struct as required by `pb_util`.
 inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
   return {geoPointToUtilPoint(boundingBox.lowerLeft()),
           geoPointToUtilPoint(boundingBox.upperRight())};
@@ -211,7 +211,7 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
 // prefix.
 template <const std::string_view& suffix>
 constexpr std::string_view addSfPrefix() {
-  return constexprStrCat<SF_PREFIX, suffix>();
+  return ad_utility::constexprStrCat<SF_PREFIX, suffix>();
 }
 
 namespace detail::geoStrings {
@@ -287,7 +287,7 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
 CPP_template(typename Visitor, typename T)(
-    requires SimilarTo<
+    requires ad_utility::SimilarTo<
         T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
                                                        T&& geom) {
   using enum AnyGeometryMember;
@@ -425,9 +425,9 @@ struct MetricAreaVisitor {
   }
 
   // The remaining geometry types always return the area zero
-  CPP_template(typename T)(
-      requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
-                         Line<CoordType>, MultiLine<CoordType>>) double
+  CPP_template(typename T)(requires ad_utility::SameAsAny<
+                           T, Point<CoordType>, MultiPoint<CoordType>,
+                           Line<CoordType>, MultiLine<CoordType>>) double
   operator()(const T&) const {
     return 0.0;
   }
@@ -439,8 +439,8 @@ struct MetricAreaVisitor {
 
 static constexpr MetricAreaVisitor computeMetricArea;
 
-// Helper to convert an instance of the `GeoPointOrWkt` variant to `ParseResult`
-// containing a geometry for `pb_util`.
+// Helper to convert an instance of the `GeoPointOrWkt` variant to
+// `ParseResult` containing a geometry for `pb_util`.
 struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const GeoPoint& point) const {
     return {WKTType::POINT, geoPointToUtilPoint(point)};
@@ -481,8 +481,9 @@ struct UtilGeomToWktVisitor {
 
   // Visitor for each of the `pb_util` geometry types.
   CPP_template(typename T)(
-      requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
-  operator()(const T& geom) const {
+      requires ad_utility::SimilarToAnyTypeIn<T, ParsedWkt>)
+      std::optional<std::string>
+      operator()(const T& geom) const {
     return getWKT(geom);
   }
 
@@ -585,12 +586,13 @@ struct WebMercatorProjection {
 // mapping). Used for the `UtilGeomProjectionVisitor` below.
 template <typename T>
 CPP_concept IsProjectionFunction =
-    InvocableWithExactReturnType<T, DPoint, const DPoint&>;
+    ad_utility::InvocableWithExactReturnType<T, DPoint, const DPoint&>;
 static_assert(IsProjectionFunction<WebMercatorProjection>);
 
 // Helper for `UtilGeomProjectionVisitor`.
 template <typename T>
-CPP_concept VectorBasedGeometry = isVector<T> || SimilarTo<T, DLine>;
+CPP_concept VectorBasedGeometry =
+    ad_utility::isVector<T> || ad_utility::SimilarTo<T, DLine>;
 
 // Helper to translate the coordinates of a given geometry to another projection
 // (the projection is applied to each coordinate pair).
@@ -639,7 +641,7 @@ CPP_template(typename Projection)(
 
   // Handle values contained in `std::optional`.
   CPP_template_2(typename T)(
-      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
+      requires(!ad_utility::SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
   operator()(std::optional<T> opt) const {
     if (!opt.has_value()) {
       return std::nullopt;
@@ -661,8 +663,8 @@ static constexpr UtilGeomProjectionVisitor<WebMercatorProjection>
 
 // Helper for `MetricDistanceVisitor`.
 template <typename T, typename U>
-CPP_concept IsPairOfUtilGeoms =
-    SimilarToAnyTypeIn<T, ParsedWkt> && SimilarToAnyTypeIn<U, ParsedWkt>;
+CPP_concept IsPairOfUtilGeoms = ad_utility::SimilarToAnyTypeIn<T, ParsedWkt> &&
+                                ad_utility::SimilarToAnyTypeIn<U, ParsedWkt>;
 
 // Visitor to compute the distance in meters given a geometry that has been
 // converted to web mercator projection.
@@ -693,6 +695,5 @@ struct MetricDistanceVisitor {
 // to web mercator, e.g. using `projectWebMerc` above.
 constexpr MetricDistanceVisitor computeMetricDistance;
 
-}  // namespace ad_utility::detail
-
+}  // namespace qlever::geometry_info_helpers
 #endif  // QLEVER_SRC_RDFTYPES_GEOMETRYINFOHELPERSIMPL_H

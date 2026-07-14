@@ -21,16 +21,15 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
 
-namespace {
-auto iri = ad_utility::testing::iri;
-}
-
 // Check the basic methods of the `ExternalValues` operation.
 TEST(ExternalValues, basicMethods) {
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
   ValuesComponents values{
       {TC{1}, TC{2}, TC{3}}, {TC{5}, TC{2}, TC{3}}, {TC{7}, TC{42}, TC{3}}};
   ExternalValues externalValuesOp(
@@ -60,7 +59,7 @@ TEST(ExternalValues, basicMethods) {
 
 // _____________________________________________________________________________
 TEST(ExternalValues, isDeterministic) {
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
   ValuesComponents values{{TC{1}}, {TC{2}}};
   ExternalValues externalValuesOp(testQec, {{Variable{"?x"}}, values},
                                   "det-id");
@@ -69,7 +68,7 @@ TEST(ExternalValues, isDeterministic) {
 
 // Check that `knownEmptyResult` returns `false` even with empty values.
 TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
-  auto testQec = ad_utility::testing::getQec();
+  auto testQec = qlever::testing::getQec();
   ValuesComponents emptyValues{};
   ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, emptyValues}, "empty-id");
@@ -81,7 +80,7 @@ TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
 // Check that `computeResult` works correctly.
 TEST(ExternalValues, computeResult) {
   // `ExternalValues` only works with caching disabled.
-  auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQecOrig = qlever::testing::getQec("<x> <x> <x> .");
   auto testQecCopy = *testQecOrig;
   testQecCopy.setDisableCachingOnlyForTesting(true);
   auto* testQec = &testQecCopy;
@@ -93,8 +92,8 @@ TEST(ExternalValues, computeResult) {
 
   auto result = valuesOperation.getResult();
   const auto& table = result->idTableView();
-  Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
-  auto I = ad_utility::testing::IntId;
+  Id x = qlever::testing::makeGetId(testQec->getIndex())("<x>");
+  auto I = qlever::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
       LocalVocabEntry::fromIriref("<y>", testQec->getLocalVocabContext()));
   ASSERT_TRUE(l.has_value());
@@ -107,7 +106,7 @@ TEST(ExternalValues, computeResult) {
 // Test the `updateValues` method.
 TEST(ExternalValues, updateValues) {
   auto runTest = [](bool cachingDisabled) {
-    auto testQec = ad_utility::testing::getQec();
+    auto testQec = qlever::testing::getQec();
     auto qecCopy = *testQec;
     if (cachingDisabled) {
       qecCopy.setDisableCachingOnlyForTesting(true);
@@ -148,7 +147,7 @@ TEST(ExternalValues, updateValues) {
 
 // Test that `updateValues` fails with different variables.
 TEST(ExternalValues, updateValuesFailsWithDifferentVariables) {
-  auto testQec = ad_utility::testing::getQec();
+  auto testQec = qlever::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
   ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues},
@@ -164,7 +163,7 @@ TEST(ExternalValues, updateValuesFailsWithDifferentVariables) {
 
 // Test that `updateValues` fails with same variables but different order.
 TEST(ExternalValues, updateValuesFailsWithDifferentOrder) {
-  auto testQec = ad_utility::testing::getQec();
+  auto testQec = qlever::testing::getQec();
   ValuesComponents initialValues{{TC{1}, TC{2}}};
   ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, initialValues}, "order-test");
@@ -181,7 +180,7 @@ TEST(ExternalValues, updateValuesFailsWithDifferentOrder) {
 // Test `clone` functionality.
 TEST(ExternalValues, clone) {
   // `ExternalValues` only work with caching disabled.
-  auto testQecOrig = ad_utility::testing::getQec("<x> <x> <x> .");
+  auto testQecOrig = qlever::testing::getQec("<x> <x> <x> .");
   auto testQecCopy = *testQecOrig;
   testQecCopy.setDisableCachingOnlyForTesting(true);
   auto* testQec = &testQecCopy;
@@ -203,7 +202,7 @@ TEST(ExternalValues, clone) {
 
 // Test `getExternalValues` functionality.
 TEST(ExternalValues, getExternalValues) {
-  auto testQec = ad_utility::testing::getQec();
+  auto testQec = qlever::testing::getQec();
   ValuesComponents values{{TC{1}, TC{2}}};
   ExternalValues externalValuesOp(
       testQec, {{Variable{"?x"}, Variable{"?y"}}, values}, "collect-test");

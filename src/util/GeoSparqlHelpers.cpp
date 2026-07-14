@@ -21,9 +21,11 @@
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 
-namespace ad_utility {
+namespace qlever {
 
 namespace detail {
+
+using namespace geometry_info_helpers;
 
 static constexpr auto wktPointRegex = ctll::fixed_string(
     "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
@@ -76,4 +78,4 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
 
 }  // namespace detail
 
-}  // namespace ad_utility
+}  // namespace qlever

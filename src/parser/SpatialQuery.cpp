@@ -11,7 +11,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
@@ -315,4 +315,4 @@ SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
 }
 }  // namespace detail
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

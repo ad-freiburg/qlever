@@ -4,6 +4,8 @@
 
 #include "engine/GroupByHashMapOptimization.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 [[nodiscard]] ValueId AvgAggregationData::calculateResult(
     [[maybe_unused]] const LocalVocabContext& context,
@@ -53,7 +55,7 @@ template struct ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 
 // _____________________________________________________________________________
 void GroupConcatAggregationData::addValueImpl(
-    const std::optional<ad_utility::triple_component::Literal>& val) {
+    const std::optional<triple_component::Literal>& val) {
   if (first_) {
     first_ = false;
   } else {
@@ -72,7 +74,7 @@ void GroupConcatAggregationData::addValueImpl(
   if (undefined_) {
     return ValueId::makeUndefined();
   }
-  using namespace ad_utility::triple_component;
+  using namespace triple_component;
   auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(currentValue_), context));
@@ -104,3 +106,5 @@ void GroupConcatAggregationData::reset() {
   return sparqlExpression::detail::idOrLiteralOrIriToId(value_.value(),
                                                         localVocab);
 }
+
+}  // namespace qlever

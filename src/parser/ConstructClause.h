@@ -12,12 +12,12 @@
 #include "rdfTypes/Variable.h"
 #include "util/TransparentFunctors.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 struct ConstructClause : ClauseBase {
-  ad_utility::sparql_types::Triples triples_;
+  sparql_types::Triples triples_;
 
   ConstructClause() = default;
-  explicit ConstructClause(ad_utility::sparql_types::Triples triples)
+  explicit ConstructClause(sparql_types::Triples triples)
       : triples_(std::move(triples)) {}
 
   // Lazily yields all variables that appear in this `ConstructClause`.
@@ -28,6 +28,6 @@ struct ConstructClause : ClauseBase {
            ql::views::transform(ad_utility::get<Variable>);
   }
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H

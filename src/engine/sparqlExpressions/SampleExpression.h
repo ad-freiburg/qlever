@@ -8,7 +8,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 // The (SAMPLE(?x) AS ?sample) expression
 class SampleExpression : public SparqlExpression {
  public:
@@ -44,6 +44,6 @@ class SampleExpression : public SparqlExpression {
  private:
   Ptr _child;
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SAMPLEEXPRESSION_H

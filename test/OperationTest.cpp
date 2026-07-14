@@ -23,8 +23,9 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using namespace ::testing;
+using namespace qlever;
 using ad_utility::CacheStatus;
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
@@ -60,18 +61,20 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
   LimitOffsetClause l;
   {
     NeutralElementOperation n{getQec()};
-    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
+    EXPECT_THAT(n.getCacheKey(),
+                ::testing::Not(::testing::HasSubstr("LIMIT 20")));
     l._limit = 20;
     n.applyLimitOffset(l);
-    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
-    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
+    EXPECT_THAT(n.getCacheKey(), ::testing::HasSubstr("LIMIT 20"));
+    EXPECT_THAT(n.getCacheKey(),
+                ::testing::Not(::testing::HasSubstr("OFFSET 34")));
   }
 
   {
     NeutralElementOperation n{getQec()};
     l._offset = 34;
     n.applyLimitOffset(l);
-    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
+    EXPECT_THAT(n.getCacheKey(), ::testing::HasSubstr("OFFSET 34"));
   }
 }
 
@@ -177,7 +180,7 @@ TEST(OperationTest, getLazyResultIsCachedWhenPinned) {
 // _____________________________________________________________________________
 
 /// Fixture to work with a generic operation
-class OperationTestFixture : public testing::Test {
+class OperationTestFixture : public ::testing::Test {
  protected:
   std::vector<std::string> jsonHistory;
 
@@ -298,7 +301,7 @@ TEST(OperationTest, estimatesForCachedResults) {
   // read from the cache.
   auto makeQet = []() {
     auto idTable = makeIdTableFromVector({{3, 4}, {7, 8}, {9, 123}});
-    auto qet = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto qet = makeExecutionTree<ValuesForTesting>(
         getQec(), std::move(idTable),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false);
@@ -337,6 +340,8 @@ TEST(OperationTest, estimatesForCachedResults) {
     EXPECT_EQ(qet->getCostEstimate(), 210u);
   }
 }
+
+namespace qlever {
 
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
@@ -439,9 +444,9 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
   LocalVocab localVocab{};
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-      qec->getLocalVocabContext()});
+  localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{triple_component::Literal::literalWithoutQuotes("Test"),
+                      qec->getLocalVocabContext()});
   ValuesForTesting valuesForTesting{
       qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{}, std::move(localVocab)};
@@ -844,6 +849,8 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
   runTest(1_B, 10_B, true, 1_B);
 }
 
+}  // namespace qlever
+
 // _____________________________________________________________________________
 TEST(OperationTest, disableCachingForOperation) {
   auto qec = getQec();
@@ -913,7 +920,7 @@ TEST(OperationTest, disableCachingGlobally) {
 
 // _____________________________________________________________________________
 TEST(OperationTest, isDeterministicAlwaysTrueOperations) {
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   auto* qec = getQec();
 
   ValuesForTesting values{qec, IdTable{1, qec->getAllocator()},
@@ -930,14 +937,14 @@ TEST(OperationTest, isDeterministicAlwaysTrueOperations) {
 
 // _____________________________________________________________________________
 TEST(OperationTest, isDeterministicPropagatesFromChildren) {
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   using namespace sparqlExpression;
   auto* qec = getQec();
 
   // A BIND(RAND()) node is non-deterministic.
-  auto randBindTree = ad_utility::makeExecutionTree<Bind>(
+  auto randBindTree = makeExecutionTree<Bind>(
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, IdTable{1, qec->getAllocator()},
           std::vector<std::optional<Variable>>{Variable{"?x"}}),
       parsedQuery::Bind{
@@ -947,7 +954,7 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   EXPECT_FALSE(randBindTree->getRootOperation()->isDeterministic());
 
   // Wrapping it in a Sort still yields non-deterministic.
-  auto sortedTree = ad_utility::makeExecutionTree<Sort>(
-      qec, randBindTree, std::vector<ColumnIndex>{});
+  auto sortedTree =
+      makeExecutionTree<Sort>(qec, randBindTree, std::vector<ColumnIndex>{});
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }

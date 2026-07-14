@@ -11,6 +11,7 @@
 #include "global/IndexTypes.h"
 
 namespace textIndexScanTestHelpers {
+using namespace qlever;
 // NOTE: this function exploits a "lucky accident" that allows us to
 // obtain the textRecord using indexToString.
 // TODO: Implement a more elegant/stable version

@@ -18,7 +18,9 @@
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
-using namespace ad_utility::testing;
+using namespace qlever;
+
+using namespace qlever::testing;
 using namespace std::chrono_literals;
 using ad_utility::source_location;
 
@@ -463,7 +465,7 @@ TEST(IndexScan, namedGraphs) {
       TripleComponent::Iri::fromIriref("<graph2>")};
   auto scan = IndexScan{qec, Permutation::PSO, triple,
                         IndexScan::Graphs::Whitelist(graphs)};
-  using namespace testing;
+  using namespace ::testing;
   EXPECT_EQ(scan.graphsToFilter(), IndexScan::Graphs::Whitelist(graphs));
   // HashSet order is non-deterministic.
   EXPECT_THAT(scan.getCacheKey(),
@@ -565,7 +567,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
       makeTestIndex("getResultSizeOfScanWithDeltaTriples",
                     "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> ."));
   auto getId = makeGetId(*index);
-  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto g = specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto a = getId("<a>");
   auto b = getId("<b>");
   using V = Variable;
@@ -786,8 +788,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
-  auto qet =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  auto qet = makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::move(prefilterPairs));
@@ -819,7 +820,7 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
 TEST(IndexScan, checkEvaluationWithPrefiltering) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
-  auto I = ad_utility::testing::IntId;
+  auto I = qlever::testing::IntId;
   std::string kg =
       "<P1> <price_tag> 10 . <P2> <price_tag> 12 . <P3> <price_tag> "
       "18 . <P4> <price_tag> 22 . <P5> <price_tag> 25 . <P6> "
@@ -909,7 +910,7 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
 }
 
 class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
-                              public ad_utility::testing::LazyJoinTestHelper {
+                              public qlever::testing::LazyJoinTestHelper {
  protected:
   void SetUp() override {
     std::string kg =
@@ -978,9 +979,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
-    vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getLocalVocabContext()});
+    vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{triple_component::Literal::literalWithoutQuotes("Test"),
+                        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
@@ -1323,7 +1324,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
 
 INSTANTIATE_TEST_SUITE_P(IndexScanWithLazyJoinSuite, IndexScanWithLazyJoin,
                          ::testing::Bool(),
-                         [](const testing::TestParamInfo<bool>& info) {
+                         [](const ::testing::TestParamInfo<bool>& info) {
                            return info.param ? "RightSideFirst"
                                              : "LeftSideFirst";
                          });
@@ -1366,8 +1367,7 @@ TEST(IndexScan, clone) {
     using namespace filterHelper;
     SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
                               Tc{Variable{"?price"}}};
-    auto qet =
-        ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+    auto qet = makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
     ASSERT_TRUE(qet->getRootOperation()->canResultBeCached());
     auto clone = qet->clone();
     ASSERT_TRUE(clone);
@@ -1449,7 +1449,7 @@ TEST(IndexScanTest, StripColumns) {
   // Each triple will be in a separate block.
   config.blocksizePermutations = 8_B;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
-  auto qec = ad_utility::testing::getQec(config);
+  auto qec = qlever::testing::getQec(config);
 
   auto def = makeAlwaysDefinedColumn;
 
@@ -1781,7 +1781,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   using namespace ad_utility::memory_literals;
   config.blocksizePermutations = 8_B;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
-  auto qec = ad_utility::testing::getQec(config);
+  auto qec = qlever::testing::getQec(config);
 
   using namespace makeFilterExpression;
   using namespace filterHelper;
@@ -1790,7 +1790,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // permutation where subject is bound to ?x (first column)
 
   auto makeBaseScan = [&qec]() {
-    return ad_utility::makeExecutionTree<IndexScan>(
+    return makeExecutionTree<IndexScan>(
         qec, Permutation::SPO,
         SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
   };
@@ -1899,9 +1899,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
     LocalVocab vocab;
-    vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-        ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
-        qec_->getLocalVocabContext()});
+    vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{triple_component::Literal::literalWithoutQuotes("Test"),
+                        qec_->getLocalVocabContext()});
     return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>")}), LocalVocab{}},
                       P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),

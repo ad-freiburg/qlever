@@ -31,6 +31,8 @@
 #include "util/http/ResponseMiddleware.h"
 #endif
 
+namespace qlever {
+
 // Data container for prefixes
 class SparqlPrefix {
  public:
@@ -254,5 +256,7 @@ class ParsedQuery {
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

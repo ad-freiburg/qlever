@@ -18,7 +18,7 @@
 #include "util/ConstexprMap.h"
 #include "util/OverloadCallOperator.h"
 
-namespace prefilterExpressions {
+namespace qlever::prefilterExpressions {
 
 using LVE = LocalVocabEntry;
 
@@ -1056,4 +1056,4 @@ INSTANTIATE_MAKE_PREFILTER(CompOp::EQ);
 INSTANTIATE_MAKE_PREFILTER(CompOp::NE);
 
 }  //  namespace detail
-}  //  namespace prefilterExpressions
+}  //  namespace qlever::prefilterExpressions

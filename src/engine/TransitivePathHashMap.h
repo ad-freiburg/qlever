@@ -17,6 +17,8 @@
 #include "engine/idTable/IdTable.h"
 #include "util/AllocatorWithLimit.h"
 
+namespace qlever {
+
 // A set of edges of the implicit graph of a transitive path operation together
 // with the graph IRI of the source node of each edge. This is analogous to
 // `BinSearchMap` (see there for more details), but uses a map of maps (with
@@ -82,6 +84,6 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
       const TransitivePathSide& targetSide) const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
-
 #endif

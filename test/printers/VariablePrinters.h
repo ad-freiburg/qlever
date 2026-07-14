@@ -7,10 +7,12 @@
 
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
 // _____________________________________________________________
 inline void PrintTo(const Variable& var, std::ostream* os) {
   auto& s = *os;
   s << var.name();
 }
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_PRINTERS_VARIABLEPRINTERS_H

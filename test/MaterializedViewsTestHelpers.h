@@ -104,7 +104,7 @@ class MaterializedViewsTest : public ::testing::Test {
   // Helper that evaluates a query on the test index and returns its result as
   // an `IdTable` with the same column ordering as the columns in the `SELECT`
   // statement.
-  IdTable getQueryResultAsIdTable(std::string query) {
+  qlever::IdTable getQueryResultAsIdTable(std::string query) {
     auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
     auto qet = plannedQuery.sharedQueryExecutionTree();
     auto& parsed = plannedQuery.parsedQuery();
@@ -116,7 +116,7 @@ class MaterializedViewsTest : public ::testing::Test {
     }
     auto selectColOrdering =
         qet->selectedVariablesToColumnIndices(parsed.selectClause());
-    auto columns = ::ranges::to<std::vector<ColumnIndex>>(
+    auto columns = ::ranges::to<std::vector<qlever::ColumnIndex>>(
         ql::views::transform(selectColOrdering, [](const auto& colIdxAndType) {
           if (!colIdxAndType.has_value()) {
             throw std::runtime_error("Binds in SELECT clause not allowed.");
@@ -196,9 +196,10 @@ inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-inline void qpExpect(qlever::Qlever& qlv, const auto& query,
-                     ::testing::Matcher<const QueryExecutionTree&> matcher,
-                     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+inline void qpExpect(
+    qlever::Qlever& qlv, const auto& query,
+    ::testing::Matcher<const qlever::QueryExecutionTree&> matcher,
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
   EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
@@ -208,14 +209,16 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
 inline auto viewScan(
     std::string viewName, std::string a, std::string b, std::string c,
     std::optional<size_t> strippedSize = std::nullopt,
-    std::vector<std::pair<ColumnIndex, Variable>> additionalColumns = {}) {
-  return h::IndexScanFromStrings(std::move(a), std::move(b), std::move(c),
-                                 {Permutation::Enum::SPO}, std::monostate{},
-                                 additionalColumns | ql::views::values |
-                                     ::ranges::to<std::vector<Variable>>(),
-                                 additionalColumns | ql::views::keys |
-                                     ::ranges::to<std::vector<ColumnIndex>>(),
-                                 strippedSize, viewName);
+    std::vector<std::pair<qlever::ColumnIndex, qlever::Variable>>
+        additionalColumns = {}) {
+  return h::IndexScanFromStrings(
+      std::move(a), std::move(b), std::move(c),
+      {qlever::Permutation::Enum::SPO}, std::monostate{},
+      additionalColumns | ql::views::values |
+          ::ranges::to<std::vector<qlever::Variable>>(),
+      additionalColumns | ql::views::keys |
+          ::ranges::to<std::vector<qlever::ColumnIndex>>(),
+      strippedSize, viewName);
 };
 
 // _____________________________________________________________________________
@@ -228,11 +231,11 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
 
 // _____________________________________________________________________________
 inline void expectNotSuitableForRewrite(
-    const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
+    const qlever::Qlever& qlv, const qlever::MaterializedViewsManager& manager,
     const auto& viewName, const auto& query,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  qlever::materializedViewsQueryAnalysis::QueryPatternCache qpc;
   manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
   auto view = manager.getView(viewName);
   EXPECT_FALSE(qpc.analyzeView(view));

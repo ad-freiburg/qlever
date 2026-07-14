@@ -13,6 +13,8 @@
 
 #include "util/Serializer/FileSerializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
                                    uint64_t nextUnallocatedGraph)
@@ -20,8 +22,8 @@ GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,
       nextUnallocatedGraph_(nextUnallocatedGraph) {}
 
 // _____________________________________________________________________________
-ad_utility::triple_component::Iri GraphNameManager::allocateNewGraph() {
-  return ad_utility::triple_component::Iri::fromIriref(
+triple_component::Iri GraphNameManager::allocateNewGraph() {
+  return triple_component::Iri::fromIriref(
       absl::StrCat("<", prefixWithoutBraces_, nextUnallocatedGraph_++, ">"));
 }
 
@@ -71,3 +73,5 @@ void from_json(const nlohmann::json& j, GraphNameManager& namespaceManager) {
   namespaceManager.nextUnallocatedGraph_ =
       j.at("allocatedGraphs").get<uint64_t>();
 }
+
+}  // namespace qlever

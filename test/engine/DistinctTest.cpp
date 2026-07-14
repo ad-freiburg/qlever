@@ -10,7 +10,9 @@
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
 
-using ad_utility::testing::makeAllocator;
+using namespace qlever;
+using namespace qlever::testing;
+using qlever::testing::makeAllocator;
 using V = Variable;
 
 namespace {
@@ -27,9 +29,9 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 
 // _____________________________________________________________________________
 Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   return {qec,
-          ad_utility::makeExecutionTree<ValuesForTesting>(
+          makeExecutionTree<ValuesForTesting>(
               qec, std::vector<IdTable>{},
               std::vector<std::optional<Variable>>{Variable{"?x"}}),
           keepIndices};
@@ -39,14 +41,14 @@ Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices) {
 TEST(Distinct, CacheKey) {
   // The cache key has to change when the subtree changes or when the
   // `keepIndices` (the distinct variables) change.
-  auto qec = ad_utility::testing::getQec();
-  auto d = ad_utility::makeExecutionTree<Distinct>(
-      ad_utility::testing::getQec(),
-      ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+  auto qec = qlever::testing::getQec();
+  auto d = makeExecutionTree<Distinct>(
+      qlever::testing::getQec(),
+      makeExecutionTree<NeutralElementOperation>(qec),
       std::vector<ColumnIndex>{0, 1});
-  Distinct d2(ad_utility::testing::getQec(),
-              ad_utility::makeExecutionTree<NeutralElementOperation>(qec), {0});
-  Distinct d3(ad_utility::testing::getQec(), d, {0});
+  Distinct d2(qlever::testing::getQec(),
+              makeExecutionTree<NeutralElementOperation>(qec), {0});
+  Distinct d3(qlever::testing::getQec(), d, {0});
 
   EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
   EXPECT_NE(d->getCacheKey(), d3.getCacheKey());
@@ -69,7 +71,7 @@ TEST(Distinct, distinct) {
 // _____________________________________________________________________________
 TEST(Distinct, testChunkEdgeCases) {
   Distinct distinct = makeDistinct({0});
-  IdTable input{1, ad_utility::testing::makeAllocator()};
+  IdTable input{1, qlever::testing::makeAllocator()};
   IdTable::row_type row{1};
 
   {
@@ -133,10 +135,10 @@ TEST(Distinct, nonLazy) {
   IdTable input{makeIdTableFromVector(
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = makeExecutionTree<ValuesForTesting>(
       qec, std::move(input),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
@@ -169,10 +171,10 @@ TEST(Distinct, nonLazyWithLazyInputs) {
   idTables.push_back(makeIdTableFromVector(
       {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}));
 
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
@@ -199,10 +201,10 @@ TEST(Distinct, lazyWithLazyInputs) {
   idTables.push_back(makeIdTableFromVector(
       {{6, 7, 4, 6}, {2, 7, 4, 5}, {3, 7, 4, 4}, {1, 7, 4, 1}}));
 
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = makeExecutionTree<ValuesForTesting>(
       qec, std::move(idTables),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
@@ -227,9 +229,9 @@ TEST(Distinct, lazyWithLazyInputs) {
 
 // _____________________________________________________________________________
 TEST(Distinct, clone) {
-  auto qec = ad_utility::testing::getQec();
-  Distinct distinct{ad_utility::testing::getQec(),
-                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+  auto qec = qlever::testing::getQec();
+  Distinct distinct{qlever::testing::getQec(),
+                    makeExecutionTree<NeutralElementOperation>(qec),
                     std::vector<ColumnIndex>{0, 1}};
 
   auto clone = distinct.clone();

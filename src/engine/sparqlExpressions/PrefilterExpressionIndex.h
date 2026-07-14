@@ -31,7 +31,7 @@
 // PrefilterExpression if possible: logical-or, logical-and, logical-negate
 // (unary), relational-ops and strstarts.
 
-namespace prefilterExpressions {
+namespace qlever::prefilterExpressions {
 
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 using Vocab = RdfsVocabulary;
@@ -454,6 +454,5 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     bool mirrored, bool prefilterDateByYear = false);
 
 }  // namespace detail
-}  // namespace prefilterExpressions
-
+}  // namespace qlever::prefilterExpressions
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H

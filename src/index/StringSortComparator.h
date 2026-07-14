@@ -27,6 +27,8 @@
 #include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
 
+namespace qlever {
+
 /**
  * @brief This class wraps all calls to the ICU library that are required by
  * QLever It internally handles all conversion to and from UTF-8 and from c++ to
@@ -782,5 +784,7 @@ class TripleComponentComparator {
     }
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_STRINGSORTCOMPARATOR_H

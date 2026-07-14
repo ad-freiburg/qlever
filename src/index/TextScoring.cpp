@@ -7,6 +7,8 @@
 #include "index/Index.h"
 #include "util/Algorithm.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 static void logWordNotFound(const std::string& word,
                             size_t& wordNotFoundErrorMsgCount) {
@@ -174,3 +176,5 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
                  (k_ * alpha + static_cast<float>(tf));
   return tfStar * idf;
 }
+
+}  // namespace qlever

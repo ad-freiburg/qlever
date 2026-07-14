@@ -9,6 +9,8 @@
 #include "parser/UpdateTriples.h"
 #include "util/CompilerWarnings.h"
 
+using namespace qlever;
+
 using namespace updateClause;
 using V = Variable;
 
@@ -21,7 +23,7 @@ TEST(UpdateTriples, DefaultConstructor) {
 
 // _____________________________________________________________________________
 TEST(UpdateTriples, ConstructorsAndAssignments) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab l;
   auto iri =
       LocalVocabEntry::fromIriref("<hallo>", qec->getLocalVocabContext());

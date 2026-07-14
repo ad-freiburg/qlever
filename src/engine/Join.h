@@ -21,6 +21,8 @@
 // This Operation implements ordinary joins with a single join column. It is
 // implemented via the Pimpl idiom; for details see `JoinImpl.h`.
 
+namespace qlever {
+
 // Forward declaration of the impl class.
 class JoinImpl;
 class Join : public Operation {
@@ -67,4 +69,5 @@ class Join : public Operation {
       const parsedQuery::Bind& bind) const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_JOIN_H

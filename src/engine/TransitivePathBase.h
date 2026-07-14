@@ -16,6 +16,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
   // treeAndCol contains the QueryExecutionTree of this side and the column
@@ -381,6 +383,6 @@ class TransitivePathBase : public Operation {
   static size_t firstGraphOrPayloadColumnIndex() { return 2; }
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
-
 #endif

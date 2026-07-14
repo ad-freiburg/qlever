@@ -14,6 +14,8 @@
 
 namespace ad_utility::vocabulary {
 
+using qlever::PrefixCompressor;
+
 // A helper concept for the compression wrappers below.
 // A `BulkResultForDecoder` is a tuple of 3 elements, the first of which is an
 // implementation detail (e.g. a buffer that stores the data for the second

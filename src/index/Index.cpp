@@ -9,6 +9,8 @@
 #include "index/IndexImpl.h"
 #include "util/MemorySize/MemorySize.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 Index::Index(ad_utility::AllocatorWithLimit<Id> allocator)
     : pimpl_{std::make_unique<IndexImpl>(std::move(allocator))} {}
@@ -42,7 +44,7 @@ auto Index::getNonConstVocabForTesting() -> Vocab& {
 }
 
 // ____________________________________________________________________________
-ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
+BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
 }
 
@@ -293,3 +295,5 @@ GraphNameManager& Index::graphNameManager() {
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
 }
+
+}  // namespace qlever

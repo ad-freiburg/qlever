@@ -44,9 +44,10 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/json.h"
 
+namespace qlever {
+
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
-using ExternalSorter =
-    ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
+using ExternalSorter = CompressedExternalIdTableSorter<Comparator, I>;
 
 // The Order in which the permutations are created during the index building.
 using FirstPermutation = SortBySPO;
@@ -56,8 +57,7 @@ using ThirdPermutation = SortByPSO;
 
 // Return type of `IndexImpl::buildPartialVocabularies`.
 struct BuildPartialVocabulariesResult {
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+  using TripleVec = CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // The i-th entry is the actual number of triples of the i-th batch, which
   // belongs to the i-th partial vocabulary. It might be slightly different
   // from the specified `batchSize` because of internally added triples.
@@ -67,15 +67,14 @@ struct BuildPartialVocabulariesResult {
 
 // Data produced after parsing: vocabulary metadata and unsorted ID triples.
 struct IndexBuilderDataAsExternalVector {
-  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
+  vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   BuildPartialVocabulariesResult parsedTriples_;
 };
 
 // Store the "normal" triples sorted by the first permutation, together with
 // the additional "internal" triples, sorted by PSO.
 struct FirstPermutationSorterAndInternalTriplesAsPso {
-  using SorterPtr =
-      std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
+  using SorterPtr = std::unique_ptr<CompressedExternalIdTableSorterTypeErased>;
   SorterPtr firstPermutationSorter_;
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
       internalTriplesPso_;
@@ -83,17 +82,16 @@ struct FirstPermutationSorterAndInternalTriplesAsPso {
 // Vocabulary metadata and ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter {
   using SorterPtr = FirstPermutationSorterAndInternalTriplesAsPso;
-  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
+  vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   SorterPtr sorter_;
 };
 
 class IndexImpl {
  public:
-  using TextScoringMetric = qlever::TextScoringMetric;
-  using TripleVec =
-      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+  using TextScoringMetric = TextScoringMetric;
+  using TripleVec = CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, isEntity, Context Id, Word Id, Score
-  using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
+  using TextVec = CompressedExternalIdTableSorter<SortText, 5>;
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
@@ -189,11 +187,11 @@ class IndexImpl {
   bool doNotLoadPermutations_ = false;
 
   // The vocabulary type that is used (only relevant during index building).
-  ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
-      ad_utility::VocabularyType::Enum::OnDiskCompressed};
+  VocabularyType vocabularyTypeForIndexBuilding_{
+      VocabularyType::Enum::OnDiskCompressed};
 
   // BlankNodeManager, initialized during `readConfiguration`
-  std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
+  std::unique_ptr<BlankNodeManager> blankNodeManager_{nullptr};
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
@@ -235,7 +233,7 @@ class IndexImpl {
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
   void createFromFiles(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+      ad_utility::InputRangeTypeErased<InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -276,7 +274,7 @@ class IndexImpl {
     return allocator_;
   };
 
-  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+  BlankNodeManager* getBlankNodeManager() const;
 
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
@@ -293,8 +291,8 @@ class IndexImpl {
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
 
-  // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
-  void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
+  // Set the vocabulary type; see `VocabularyType` for details.
+  void setVocabularyTypeForIndexBuilding(VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
   }
@@ -554,8 +552,7 @@ class IndexImpl {
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<RdfParserBase> makeRdfParser(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
-      const;
+      ad_utility::InputRangeTypeErased<InputFileSpecification> files) const;
 
   template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
@@ -907,5 +904,7 @@ class IndexImpl {
   nlohmann::json recomputeStatistics(
       const LocatedTriplesSharedState& locatedTriplesSharedState) const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

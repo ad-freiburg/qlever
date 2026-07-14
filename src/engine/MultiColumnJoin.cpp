@@ -11,6 +11,9 @@
 #include "index/IdTableUtils.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using namespace qlever;
+using namespace joinHelpers;
+
 using std::endl;
 using std::string;
 
@@ -214,8 +217,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
     return;
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                   right.numColumns()};
 
   IdTableView<0> leftJoinColumns =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -226,9 +229,9 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto rightPermuted =
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_);
+  auto rowAdder =
+      AddCombinedRowToIdTable(joinColumns.size(), leftPermuted, rightPermuted,
+                              std::move(*result), cancellationHandle_);
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -251,17 +254,15 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {
-      return ad_utility::zipperJoinWithUndef(
-          leftJoinColumns, rightJoinColumns,
-          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
-          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
+      return zipperJoinWithUndef(leftJoinColumns, rightJoinColumns,
+                                 ql::ranges::lexicographical_compare, addRow,
+                                 ad_utility::noop, ad_utility::noop,
+                                 ad_utility::noop, checkCancellationLambda);
     } else {
-      return ad_utility::zipperJoinWithUndef(
-          leftJoinColumns, rightJoinColumns,
-          ql::ranges::lexicographical_compare, addRow,
-          ad_utility::findSmallerUndefRanges,
-          ad_utility::findSmallerUndefRanges, ad_utility::noop,
-          checkCancellationLambda);
+      return zipperJoinWithUndef(leftJoinColumns, rightJoinColumns,
+                                 ql::ranges::lexicographical_compare, addRow,
+                                 findSmallerUndefRanges, findSmallerUndefRanges,
+                                 ad_utility::noop, checkCancellationLambda);
     }
   }();
   *result = std::move(rowAdder).resultTable();
@@ -302,7 +303,7 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
   // can have a more efficient implementation.
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {
-    using namespace qlever::joinHelpers;
+    using namespace joinHelpers;
     return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);

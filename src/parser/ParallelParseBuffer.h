@@ -23,6 +23,8 @@ CPP_concept ParserGetBatch = CPP_requires_ref(ParserGetBatchRequires, Parser);
 
 }  // namespace ad_utility::detail
 
+namespace qlever {
+
 /**
  * A wrapper to make the different Parsers interfaces compatible with the
  * parallel pipeline
@@ -178,5 +180,7 @@ class ParallelParseBuffer {
     return {true, std::move(buf)};
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H

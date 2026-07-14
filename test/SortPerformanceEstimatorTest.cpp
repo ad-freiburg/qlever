@@ -13,6 +13,8 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 
+using namespace qlever;
+
 using namespace ad_utility::memory_literals;
 
 TEST(SortPerformanceEstimator, TestManyEstimates) {

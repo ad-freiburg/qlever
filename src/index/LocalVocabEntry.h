@@ -18,6 +18,8 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
+namespace qlever {
+
 class IndexImpl;
 using LocalVocabContext = IndexImpl;
 
@@ -27,10 +29,9 @@ using LocalVocabContext = IndexImpl;
 // used for efficient comparisons between entries in the local and global
 // vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
-class alignas(16) LocalVocabEntry
-    : public ad_utility::triple_component::LiteralOrIri {
+class alignas(16) LocalVocabEntry : public triple_component::LiteralOrIri {
  public:
-  using Base = ad_utility::triple_component::LiteralOrIri;
+  using Base = triple_component::LiteralOrIri;
 
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
@@ -101,9 +102,7 @@ class alignas(16) LocalVocabEntry
       NormalizedStringView view, const LocalVocabContext& ctx);
 
   // Slice to base class `LiteralOrIri`.
-  const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
-    return *this;
-  }
+  const triple_component::LiteralOrIri& asLiteralOrIri() const { return *this; }
 
   // Return the position in the vocabulary. If it is not already cached, then
   // the call to `positionInVocab()` first computes the position and then
@@ -147,5 +146,7 @@ class alignas(16) LocalVocabEntry
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

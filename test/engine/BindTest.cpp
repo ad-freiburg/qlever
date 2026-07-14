@@ -15,13 +15,15 @@
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
+using namespace qlever;
+using namespace qlever::testing;
 using Vars = std::vector<std::optional<Variable>>;
 
 namespace {
 Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(idTable), Vars{Variable{"?a"}});
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(qec, std::move(idTable),
+                                                        Vars{Variable{"?a"}});
   return {
       qec,
       std::move(valuesTree),
@@ -35,7 +37,7 @@ Bind makeBindForExpression(QueryExecutionContext* qec,
                            SparqlExpression::Ptr expression,
                            std::string descriptor) {
   // This is a dummy value. It is not accessed by any of the tests.
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   return {qec,
@@ -72,7 +74,7 @@ void expectBindYieldsIdTable(
 
 // _____________________________________________________________________________
 TEST(Bind, computeResult) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Bind bind =
       makeBindForIdTable(qec, makeIdTableFromVector({{1}, {2}, {3}, {4}}));
 
@@ -82,7 +84,7 @@ TEST(Bind, computeResult) {
 
 // _____________________________________________________________________________
 TEST(Bind, computeResultWithTableWithoutRows) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Bind bind = makeBindForIdTable(
       qec, IdTable{1, ad_utility::makeUnlimitedAllocator<Id>()});
 
@@ -93,8 +95,8 @@ TEST(Bind, computeResultWithTableWithoutRows) {
 // _____________________________________________________________________________
 TEST(Bind, computeResultWithTableWithoutColumns) {
   auto val = Id::makeFromInt(42);
-  auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{}, {}}), Vars{});
   Bind bind{
       qec,
@@ -112,11 +114,11 @@ TEST(
   auto val = Id::makeFromInt(42);
   IdTable::row_type row{1};
   row[0] = val;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.resize(Bind::CHUNK_SIZE + 1);
   ql::ranges::fill(table, row);
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, table.clone(), Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   Bind bind{
@@ -154,8 +156,8 @@ TEST(
 
 // _____________________________________________________________________________
 TEST(Bind, clone) {
-  auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
   Bind bind{
@@ -173,8 +175,8 @@ TEST(Bind, clone) {
 
 // _____________________________________________________________________________
 TEST(Bind, limitIsPropagated) {
-  auto* qec = ad_utility::testing::getQec();
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}, {2}}, &Id::makeFromInt),
       Vars{Variable{"?a"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
       std::nullopt, true);
@@ -199,10 +201,10 @@ TEST(Bind, limitIsPropagated) {
 }
 
 // _____________________________________________________________________________
-class BindUndefStatusTest : public testing::TestWithParam<bool> {};
+class BindUndefStatusTest : public ::testing::TestWithParam<bool> {};
 
 TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Variable inputVar{"?x"};
   Variable targetVar{"?y"};
 
@@ -213,7 +215,7 @@ TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
                            ? makeIdTableFromVector({{42}}, &Id::makeFromInt)
                            : makeIdTableFromVector({{Id::makeUndefined()}});
 
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesTree = makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), Vars{inputVar});
 
   // Create BIND(?x AS ?y).
@@ -239,15 +241,15 @@ TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
 }
 
 INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
-                         testing::Values(true, false),
-                         [](const testing::TestParamInfo<bool>& info) {
+                         ::testing::Values(true, false),
+                         [](const ::testing::TestParamInfo<bool>& info) {
                            return info.param ? "DefinedVariable"
                                              : "UndefinedVariable";
                          });
 
 // _____________________________________________________________________________
 TEST(Bind, isDeterministic) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto isDeterministic = [qec](SparqlExpression::Ptr expression,
                                std::string descriptor) {
     return makeBindForExpression(qec, std::move(expression),
@@ -274,7 +276,7 @@ TEST(Bind, isDeterministic) {
 // is handled separately (see
 // QueryPlannerTest.nondeterministicOperandNotDistributedOverUnion).
 TEST(Bind, cloneSucceedsForNondeterministicBind) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   Bind bind =
       makeBindForExpression(qec, makeUniqueBlankNodeExpression(), "BNODE()");
   EXPECT_FALSE(bind.isDeterministic());

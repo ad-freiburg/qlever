@@ -15,14 +15,12 @@
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace qlever;
+
 namespace {
 
 using ad_utility::source_location;
-using ad_utility::WktDist;
-using ad_utility::WktGeometricRelation;
-using ad_utility::WktLatitude;
-using ad_utility::WktLongitude;
-using ad_utility::detail::parseWktPoint;
+using qlever::detail::parseWktPoint;
 
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, ParseWktPoint) {
@@ -94,7 +92,7 @@ TEST(GeoSparqlHelpers, WktDist) {
   EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.68, 0.01);
   EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421676, 1);
   EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 262.02, 0.01);
-  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676, 1);
+  EXPECT_NEAR(WktMetricDist()(eiffeltower, frCathedral), 421676, 1);
 
   // Distance between WKT non-point literals.
   EXPECT_NEAR(

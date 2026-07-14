@@ -25,7 +25,7 @@ namespace qlever::constructExport {
 
 using ad_utility::InputRangeTypeErased;
 using CancellationHandle = ad_utility::SharedCancellationHandle;
-using Triples = ad_utility::sparql_types::Triples;
+using Triples = sparql_types::Triples;
 using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 using StringTriple = QueryExecutionTree::StringTriple;

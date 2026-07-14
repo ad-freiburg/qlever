@@ -24,6 +24,8 @@
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 class Permutation;
 
 struct NumAddedAndDeleted {
@@ -91,7 +93,7 @@ struct LocatedTriple {
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       ql::span<const IdTriple<0>> triples,
       ql::span<const CompressedBlockMetadata> blockMetadata,
-      const qlever::KeyOrder& keyOrder, bool insertOrDelete,
+      const KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
 
   QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(LocatedTriple, blockIndex_,
@@ -312,5 +314,7 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 //
 // 3. If the triple is larger than all triples in the permutation, the block
 // index is one after the largest block index.
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_LOCATEDTRIPLES_H

@@ -16,7 +16,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
-namespace SpatialJoinTestHelpers {
+namespace qlever::spatial_join_test_helpers {
 
 constexpr inline auto makePointLiteral = [](std::string_view c1,
                                             std::string_view c2) {
@@ -297,7 +297,7 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
   for (size_t i = 0; i < table->idTableView().numRows(); i++) {
     std::string line = "";
     for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
-      auto test = ql::exportIds::idToStringAndType(
+      auto test = exportIds::idToStringAndType(
           qec->getIndex(), table->idTableView().at(i, k), {});
       line += test.value().first;
       line += " ";
@@ -420,16 +420,16 @@ inline std::string createTrueDistanceDataset() {
 // defaults to higher values to make it possible to test large geometric
 // literals. `vocabType` can be set
 inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
-  ad_utility::testing::TestIndexConfig config{turtleKg};
-  std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
+  qlever::testing::TestIndexConfig config{turtleKg};
+  std::optional<VocabularyType> vocabType = std::nullopt;
   if (useGeoVocab) {
-    using enum ad_utility::VocabularyType::Enum;
-    vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
+    using enum VocabularyType::Enum;
+    vocabType = VocabularyType{OnDiskCompressedGeoSplit};
   }
   config.vocabularyType = vocabType;
   config.blocksizePermutations = 16_MB;
   config.parserBufferSize = 10_kB;
-  return ad_utility::testing::getQec(std::move(config));
+  return qlever::testing::getQec(std::move(config));
 }
 
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false,
@@ -462,7 +462,7 @@ inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
     QueryExecutionContext* qec, std::array<std::string, 3> triple) {
   TripleComponent subject{Variable{triple.at(0)}};
   TripleComponent object{Variable{triple.at(2)}};
-  return ad_utility::makeExecutionTree<IndexScan>(
+  return makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{
           subject, TripleComponent::Iri::fromIriref(triple.at(1)), object});
@@ -475,7 +475,7 @@ inline std::shared_ptr<QueryExecutionTree> buildJoin(
   auto varCol2 = tree2->getVariableColumns();
   size_t col1 = varCol1[joinVariable].columnIndex_;
   size_t col2 = varCol2[joinVariable].columnIndex_;
-  return ad_utility::makeExecutionTree<Join>(qec, tree1, tree2, col1, col2);
+  return makeExecutionTree<Join>(qec, tree1, tree2, col1, col2);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
@@ -514,7 +514,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
   }
   MaxDistanceConfig task{static_cast<double>(maxDist)};
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec.value(),
           SpatialJoinConfiguration{task, Variable{"?point1"},
                                    Variable{"?point2"}},
@@ -541,6 +541,5 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }
 
-}  // namespace SpatialJoinTestHelpers
-
+}  // namespace qlever::spatial_join_test_helpers
 #endif  // QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H

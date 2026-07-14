@@ -7,6 +7,8 @@
 
 #include "engine/Operation.h"
 
+namespace qlever {
+
 // Implement the case where an `OPTIONAL` clause is joined with the empty
 // pattern. Conceptually this is the same as an optional join with the neutral
 // element, but specialized and more efficient.
@@ -43,4 +45,5 @@ class NeutralOptional : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

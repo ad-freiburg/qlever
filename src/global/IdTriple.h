@@ -16,6 +16,8 @@
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 
+namespace qlever {
+
 template <size_t N = 0>
 struct IdTriple {
   // A triple has four components: subject, predicate, object, and graph.
@@ -81,7 +83,7 @@ struct IdTriple {
 
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
-  IdTriple<N> permute(const qlever::KeyOrder& keyOrder) const {
+  IdTriple<N> permute(const KeyOrder& keyOrder) const {
     return IdTriple{keyOrder.permuteTuple(ids()), payload()};
   }
 
@@ -94,5 +96,7 @@ struct IdTriple {
 
 // Assert that empty payloads don't make the struct larger
 static_assert(sizeof(IdTriple<0>) == IdTriple<0>::NumCols * sizeof(Id));
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_GLOBAL_IDTRIPLE_H

@@ -13,6 +13,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 class Filter : public Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
@@ -87,4 +89,5 @@ class Filter : public Operation {
       filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_FILTER_H

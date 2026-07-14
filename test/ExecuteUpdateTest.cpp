@@ -16,6 +16,9 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 namespace {
 using namespace deltaTriplesTestHelpers;
 
@@ -31,7 +34,7 @@ const EncodedIriManager* encodedIriManager() {
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
 using TripleComponentT =
-    std::variant<Id, ColumnIndex, ad_utility::triple_component::LiteralOrIri>;
+    std::variant<Id, ColumnIndex, triple_component::LiteralOrIri>;
 
 // A matcher that never matches and outputs the given message.
 MATCHER_P(AlwaysFalse, msg, "") {
@@ -50,7 +53,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         const auto sharedHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
-        ad_utility::BlankNodeManager bnm;
+        BlankNodeManager bnm;
         auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
@@ -67,22 +70,22 @@ TEST(ExecuteUpdate, executeUpdate) {
               }
             });
       };
-  ad_utility::testing::TestIndexConfig indexConfig{};
+  qlever::testing::TestIndexConfig indexConfig{};
   // Execute the given `update` and check that the delta triples are correct.
   auto expectExecuteUpdate =
       [&expectExecuteUpdateHelper, &indexConfig](
           const std::string& update,
-          const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
+          const ::testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
-        auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+        auto index = std::make_shared<Index>(qlever::testing::makeTestIndex(
             "ExecuteUpdate_executeUpdate", indexConfig));
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
         auto materializedViewsManager =
             std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
-                                  ad_utility::testing::makeAllocator(
+                                  qlever::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
                                   materializedViewsManager);
@@ -96,7 +99,7 @@ TEST(ExecuteUpdate, executeUpdate) {
   auto expectExecuteUpdateFails_ =
       [&expectExecuteUpdateHelper](
           std::shared_ptr<Index> index, const std::string& update,
-          const testing::Matcher<const std::string&>& messageMatcher,
+          const ::testing::Matcher<const std::string&>& messageMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
@@ -104,7 +107,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         auto materializedViewsManager =
             std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
-                                  ad_utility::testing::makeAllocator(
+                                  qlever::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
                                   materializedViewsManager);
@@ -115,12 +118,11 @@ TEST(ExecuteUpdate, executeUpdate) {
     auto expectExecuteUpdateFails =
         [&expectExecuteUpdateFails_](
             const std::string& update,
-            const testing::Matcher<const std::string&>& messageMatcher,
+            const ::testing::Matcher<const std::string&>& messageMatcher,
             source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-          auto index =
-              std::make_shared<Index>(ad_utility::testing::makeTestIndex(
-                  "ExecuteUpdate_executeUpdate",
-                  ad_utility::testing::TestIndexConfig()));
+          auto index = std::make_shared<Index>(qlever::testing::makeTestIndex(
+              "ExecuteUpdate_executeUpdate",
+              qlever::testing::TestIndexConfig()));
           expectExecuteUpdateFails_(index, update, messageMatcher,
                                     sourceLocation);
         };
@@ -141,7 +143,7 @@ TEST(ExecuteUpdate, executeUpdate) {
     expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8, 0, 1));
     expectExecuteUpdateFails(
         "SELECT * WHERE { ?s ?p ?o }",
-        testing::HasSubstr(
+        ::testing::HasSubstr(
             R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')"));
     expectExecuteUpdate(
         "INSERT DATA { <a> <b> <c> }; INSERT DATA { <d> <e> <f> }",
@@ -187,7 +189,7 @@ TEST(ExecuteUpdate, executeUpdate) {
         "<u> <is-a> <a> <s> ."
         "<u> <label> \"baz\"@en <s> ."
         "<u> <blub> <blah> <s> .";
-    indexConfig.indexType = qlever::Filetype::NQuad;
+    indexConfig.indexType = Filetype::NQuad;
     // That the DEFAULT graph is the union graph again causes some problems.
     expectExecuteUpdate("CLEAR SILENT GRAPH <q>", NumTriples(0, 3, 3, 0, 2));
     expectExecuteUpdate("CLEAR GRAPH <a>", NumTriples(0, 0, 0));
@@ -217,6 +219,7 @@ TEST(ExecuteUpdate, executeUpdate) {
   }
 }
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   // For each test suite the `qec` and the `defaultGraphId` have to be set
@@ -238,7 +241,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const std::vector<DatasetClause> datasets = {};
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
-    ad_utility::BlankNodeManager bnm;
+    BlankNodeManager bnm;
     auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
@@ -265,9 +268,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
               toDeleteMatchers,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
-        ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
+        ASSERT_THAT(toInsertMatchers,
+                    ::testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
-        ASSERT_THAT(graphUpdateQuads, testing::SizeIs(toInsertMatchers.size()));
+        ASSERT_THAT(graphUpdateQuads,
+                    ::testing::SizeIs(toInsertMatchers.size()));
         std::vector<Matcher<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                                       ExecuteUpdate::IdTriplesAndLocalVocab>>>
             transformedMatchers;
@@ -275,14 +280,14 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
             toInsertMatchers, toDeleteMatchers,
             std::back_inserter(transformedMatchers),
             [](auto insertMatcher, auto deleteMatcher) {
-              return testing::Pair(
+              return ::testing::Pair(
                   AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
                            insertMatcher),
                   AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
                            deleteMatcher));
             });
         EXPECT_THAT(graphUpdateQuads,
-                    testing::ElementsAreArray(transformedMatchers));
+                    ::testing::ElementsAreArray(transformedMatchers));
       };
 
   auto expectComputeGraphUpdateQuadsFails =
@@ -297,13 +302,13 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   {
     // These tests run on the default dataset defined in
     // `IndexTestHelpers::makeTestIndex`.
-    qec = ad_utility::testing::getQec(std::nullopt);
-    auto Id = ad_utility::testing::makeGetId(qec->getIndex());
+    qec = qlever::testing::getQec(std::nullopt);
+    auto Id = qlever::testing::makeGetId(qec->getIndex());
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     LocalVocab localVocab;
     auto LVI = [&localVocab, qec](std::string_view iri) {
-      return Id::makeFromLocalVocabIndex(
+      return qlever::Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
               LocalVocabEntry::fromIriref(iri, qec->getLocalVocabContext())));
     };
@@ -331,8 +336,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         {ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                            IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))})},
         {IsEmpty()});
-    auto allTriplesWith = [&Id,
-                           &IdTriple](std::optional<::Id> g = std::nullopt) {
+    auto allTriplesWith = [&Id, &IdTriple](std::optional<qlever::Id> g =
+                                               std::nullopt) {
       return std::vector{IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\""), g),
                          IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\""), g),
                          IdTriple(Id("<x>"), Id("<label>"), Id("\"A\""), g),
@@ -381,12 +386,12 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   }
   {
     // An Index with Quads/triples that are not in the default graph.
-    ad_utility::testing::TestIndexConfig config{
+    qlever::testing::TestIndexConfig config{
         "<a> <a> <a> <a> . <b> <b> <b> <b> . <c> <c> <c> <c> . <d> <d> <d> ."};
-    config.indexType = qlever::Filetype::NQuad;
-    qec = ad_utility::testing::getQec(std::move(config));
-    auto Id = ad_utility::testing::makeGetId(qec->getIndex());
-    auto QuadFrom = [&IdTriple](const ::Id& id) {
+    config.indexType = Filetype::NQuad;
+    qec = qlever::testing::getQec(std::move(config));
+    auto Id = qlever::testing::makeGetId(qec->getIndex());
+    auto QuadFrom = [&IdTriple](const qlever::Id& id) {
       return IdTriple(id, id, id, id);
     };
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
@@ -414,42 +419,41 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
   // <http://example.org/123> is an encoded IRI
-  ad_utility::testing::TestIndexConfig indexConfig{
+  qlever::testing::TestIndexConfig indexConfig{
       "<bar> <bar> \"foo\" . <http://example.org/123> <http://qlever.dev/1> "
       "\"baz\" ."};
   indexConfig.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
-  Index index = ad_utility::testing::makeTestIndex(
+  Index index = qlever::testing::makeTestIndex(
       "_ExecuteUppdateTest_transformTriplesTemplate", indexConfig);
   auto& encodedIriManager = index.encodedIriManager();
 
   // Helpers
   using namespace ::testing;
-  const auto Id = ad_utility::testing::makeGetId(index);
+  const auto Id = qlever::testing::makeGetId(index);
   using Graph = SparqlTripleSimpleWithGraph::Graph;
-  using LocalVocab = ad_utility::triple_component::LiteralOrIri;
+  using LocalVocab = triple_component::LiteralOrIri;
   auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
   auto Iri = [](const std::string& iri) {
-    return ad_utility::triple_component::Iri::fromIriref(iri);
+    return triple_component::Iri::fromIriref(iri);
   };
   auto Literal = [](const std::string& literal) {
-    return ad_utility::triple_component::Literal::fromStringRepresentation(
-        literal);
+    return triple_component::Literal::fromStringRepresentation(literal);
   };
   // Matchers
   using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
   auto TripleComponentMatcher = [&index](
-                                    const ::LocalVocab& localVocab,
+                                    const qlever::LocalVocab& localVocab,
                                     TripleComponentT component) -> MatcherType {
     return std::visit(
         ad_utility::OverloadCallOperator{
-            [](const ::Id& id) -> MatcherType {
-              return VariantWith<::Id>(Eq(id));
+            [](const qlever::Id& id) -> MatcherType {
+              return VariantWith<qlever::Id>(Eq(id));
             },
             [](const ColumnIndex& index) -> MatcherType {
               return VariantWith<ColumnIndex>(Eq(index));
             },
-            [&localVocab, &index](
-                const ad_utility::triple_component::LiteralOrIri& literalOrIri)
+            [&localVocab,
+             &index](const triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
                   LocalVocabEntry{literalOrIri, index});
@@ -458,9 +462,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                     absl::StrCat(literalOrIri.toStringRepresentation(),
                                  " not in local vocab"));
               }
-              const auto id = Id::makeFromLocalVocabIndex(lviOpt.value());
-              return VariantWith<::Id>(
-                  AD_PROPERTY(Id, getBits, Eq(id.getBits())));
+              const auto id =
+                  qlever::Id::makeFromLocalVocabIndex(lviOpt.value());
+              return VariantWith<qlever::Id>(
+                  AD_PROPERTY(qlever::Id, getBits, Eq(id.getBits())));
             }},
         component);
   };
@@ -621,7 +626,7 @@ TEST(ExecuteUpdate, sortAndRemoveDuplicates) {
                    source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     ExecuteUpdate::sortAndRemoveDuplicates(input);
-    EXPECT_THAT(input, testing::ElementsAreArray(expected));
+    EXPECT_THAT(input, ::testing::ElementsAreArray(expected));
   };
   auto IdTriple = [&](uint64_t s, uint64_t p, uint64_t o, uint64_t g = 0) {
     return ::IdTriple({V(s), V(p), V(o), V(g)});
@@ -643,7 +648,7 @@ TEST(ExecuteUpdate, setMinus) {
                    source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(ExecuteUpdate::setMinus(a, b),
-                testing::ElementsAreArray(expected));
+                ::testing::ElementsAreArray(expected));
   };
   auto IdTriple = [&](uint64_t s, uint64_t p, uint64_t o, uint64_t g = 0) {
     return ::IdTriple({V(s), V(p), V(o), V(g)});
@@ -656,3 +661,4 @@ TEST(ExecuteUpdate, setMinus) {
   expect({IdTriple(1, 2, 3)},
          {IdTriple(1, 2, 3), IdTriple(4, 5, 6), IdTriple(7, 8, 9)}, {});
 }
+}  // namespace qlever

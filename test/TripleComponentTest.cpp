@@ -14,8 +14,10 @@
 #include "rdfTypes/Literal.h"
 #include "util/IndexTestHelpers.h"
 
+namespace qlever {
+
 using namespace std::literals;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 namespace {
 auto I = IntId;
 auto D = DoubleId;
@@ -227,8 +229,8 @@ TEST(TripleComponent, toValueId) {
     auto lve = lv.getWord(id.getLocalVocabIndex());
     // Check that the constructed LVEs have the correct position in vocab set
     EXPECT_TRUE(lve.positionInVocabKnown_);
-    testing::Matcher<LocalVocabEntry::IdProxy> boundMatcher =
-        testing::Eq(LocalVocabEntry::IdProxy::make(
+    ::testing::Matcher<LocalVocabEntry::IdProxy> boundMatcher =
+        ::testing::Eq(LocalVocabEntry::IdProxy::make(
             Id::makeFromVocabIndex(VocabIndex::make(pos)).getBits()));
     EXPECT_THAT(lve.lowerBoundInVocab_, boundMatcher);
     EXPECT_THAT(lve.upperBoundInVocab_, boundMatcher);
@@ -251,7 +253,8 @@ TEST(TripleComponent, toValueIdOrBounds) {
     auto expectedId =
         getId(tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
                              : tc.getIri().toStringRepresentation());
-    EXPECT_THAT(idOrBounds, testing::VariantWith<Id>(testing::Eq(expectedId)));
+    EXPECT_THAT(idOrBounds,
+                ::testing::VariantWith<Id>(::testing::Eq(expectedId)));
   };
   using BoundsT = std::pair<VocabIndex, VocabIndex>;
   auto bounds = [](size_t lower, size_t upper) {
@@ -264,7 +267,8 @@ TEST(TripleComponent, toValueIdOrBounds) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
     // Check that toValueIdOrBounds returns the expected bounds
     auto idOrBounds = tc.toValueIdOrBounds(index);
-    EXPECT_THAT(idOrBounds, testing::VariantWith<BoundsT>(testing::Eq(bounds)));
+    EXPECT_THAT(idOrBounds,
+                ::testing::VariantWith<BoundsT>(::testing::Eq(bounds)));
     // Check that the bounds are the same as from LocalVocabEntry
     auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral(), index)
                               : LocalVocabEntry(tc.getIri(), index);
@@ -341,3 +345,5 @@ TEST(TripleComponent, toString) {
   EXPECT_THAT(false, match("false"));
   EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
 }
+
+}  // namespace qlever

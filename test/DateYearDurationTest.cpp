@@ -13,6 +13,8 @@
 #include "util/DateYearDuration.h"
 #include "util/Random.h"
 
+using namespace qlever;
+
 using ad_utility::source_location;
 
 namespace {
@@ -182,9 +184,9 @@ void testSorting(std::vector<Date> dates) {
 
 // This matcher is used to test the subtraction/addition operation of
 // `DateYearOrDuration`objects.
-testing::Matcher<std::optional<DateYearOrDuration>> expectDuration(
+::testing::Matcher<std::optional<DateYearOrDuration>> expectDuration(
     DateYearOrDuration expected) {
-  using namespace testing;
+  using namespace ::testing;
   return Optional(
       AllOf(AD_PROPERTY(DateYearOrDuration, isDayTimeDuration, IsTrue()),
             Eq(expected)));
@@ -625,7 +627,7 @@ TEST(Date, Subtraction) {
 
 // _____________________________________________________________________________
 TEST(Date, toEpochInt) {
-  using namespace testing;
+  using namespace ::testing;
   Date date = Date(1970, 1, 1, 0, 0, 0);
   auto result = date.toEpochInt();
   EXPECT_THAT(result, Optional(Eq(0)));
@@ -928,7 +930,7 @@ TEST(DateYearOrDuration, Subtraction) {
   }
   {
     // Test for `Date` - `DayTimeDuration` subtraction.
-    using namespace testing;
+    using namespace ::testing;
     DateYearOrDuration date =
         DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33));
     DateYearOrDuration duration = DateYearOrDuration(
@@ -1076,7 +1078,7 @@ TEST(DateYearOrDuration, Addition) {
   }
   {
     // Test for `Date` + `DayTimeDuration`.
-    using namespace testing;
+    using namespace ::testing;
     DateYearOrDuration date =
         DateYearOrDuration(Date(1989, 01, 23, 20, 10, 33));
     DateYearOrDuration duration = DateYearOrDuration(

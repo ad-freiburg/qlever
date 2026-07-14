@@ -10,28 +10,30 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/TripleSerializer.h"
 
+using namespace qlever;
+
 namespace {
-auto I = ad_utility::testing::IntId;
-auto V = ad_utility::testing::VocabId;
+auto I = qlever::testing::IntId;
+auto V = qlever::testing::VocabId;
 TEST(TripleSerializer, simpleExample) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
 
   ids.emplace_back(std::vector{I(3), I(4), I(7)});
   ids.emplace_back(std::vector{I(1), V(2), V(3)});
   std::string filename = "tripleSerializerTestSimpleExample.dat";
-  ad_utility::serializeIds(filename, localVocab, ids);
+  serializeIds(filename, localVocab, ids);
 
   auto [localVocabOut, idsOut] =
-      ad_utility::deserializeIds(filename, qec->getLocalVocabContext());
+      deserializeIds(filename, qec->getLocalVocabContext());
   EXPECT_EQ(idsOut, ids);
   EXPECT_EQ(localVocabOut.size(), localVocab.size());
 }
 
 // _____________________________________________________________________________
 TEST(TripleSerializer, localVocabIsRemapped) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
@@ -42,10 +44,10 @@ TEST(TripleSerializer, localVocabIsRemapped) {
 
   ids.emplace_back(std::vector{LV("Abc"), LV("def"), LV("ghi")});
   std::string filename = "tripleSerializerTestLocalVocabIsRemapped.dat";
-  ad_utility::serializeIds(filename, localVocab, ids);
+  serializeIds(filename, localVocab, ids);
 
   auto [localVocabOut, idsOut] =
-      ad_utility::deserializeIds(filename, qec->getLocalVocabContext());
+      deserializeIds(filename, qec->getLocalVocabContext());
   EXPECT_EQ(idsOut, ids);
   EXPECT_EQ(localVocabOut.size(), localVocab.size());
   EXPECT_THAT(localVocab.getAllWordsForTesting(),
@@ -58,7 +60,7 @@ TEST(TripleSerializer, localVocabIsRemapped) {
 }
 
 TEST(TripleSerializer, blankNodesRemapper) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab;
   std::vector<std::vector<Id>> ids;
 
@@ -69,10 +71,10 @@ TEST(TripleSerializer, blankNodesRemapper) {
 
   ids.emplace_back(std::vector{bn(), bn(), bn()});
   std::string filename = "tripleSerializerTestBlankNodesAreRemapped.dat";
-  ad_utility::serializeIds(filename, localVocab, ids);
+  serializeIds(filename, localVocab, ids);
 
   auto [localVocabOut, idsOut] =
-      ad_utility::deserializeIds(filename, qec->getLocalVocabContext());
+      deserializeIds(filename, qec->getLocalVocabContext());
   // Blank nodes are now preserved (not remapped).
   EXPECT_EQ(ids, idsOut);
 
@@ -100,7 +102,7 @@ TEST(TripleSerializer, blankNodesRemapper) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, headerFormatIsCorrect) {
   ad_utility::serialization::ByteBufferWriteSerializer serializer;
-  ad_utility::detail::writeHeader(serializer);
+  qlever::detail::writeHeader(serializer);
 
   EXPECT_THAT(serializer.data(),
               ::testing::ElementsAre('Q', 'L', 'E', 'V', 'E', 'R', '.', 'U',
@@ -114,43 +116,38 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 1,
          0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
-                 ad_utility::Exception);
+    EXPECT_THROW(qlever::detail::readHeader(serializer), ad_utility::Exception);
   }
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'e', 0,
          0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
-                 ad_utility::Exception);
+    EXPECT_THROW(qlever::detail::readHeader(serializer), ad_utility::Exception);
   }
   // Too short magic bytes
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', 'U', 'P', 'D', 'A', 'T', 'E', 0, 0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
-                 ad_utility::Exception);
+    EXPECT_THROW(qlever::detail::readHeader(serializer), ad_utility::Exception);
   }
   // Wrong version
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
          0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
-                 ad_utility::Exception);
+    EXPECT_THROW(qlever::detail::readHeader(serializer), ad_utility::Exception);
   }
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
          1}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
-                 ad_utility::Exception);
+    EXPECT_THROW(qlever::detail::readHeader(serializer), ad_utility::Exception);
   }
 }
 
 // _____________________________________________________________________________
 TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab, qec](std::string_view value) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
@@ -165,12 +162,12 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   ids.emplace_back(std::vector{LV("xyz"), LV("123"), LV("456")});
 
   ad_utility::serialization::ByteBufferWriteSerializer writer;
-  ad_utility::detail::serializeLocalVocab(writer, localVocab);
+  qlever::detail::serializeLocalVocab(writer, localVocab);
 
   ad_utility::serialization::ByteBufferReadSerializer reader{
       std::move(writer).data()};
 
-  auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
+  auto [localVocabOut, mapping] = qlever::detail::deserializeLocalVocab(
       reader, qec->getLocalVocabContext());
   auto fromMapping = [&]() {
     return ::ranges::to<std::vector>(
@@ -200,7 +197,7 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   using namespace ::testing;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto tmpFile = std::filesystem::temp_directory_path() / "fileNoPermissions";
   // Create empty file
   std::ofstream{tmpFile}.close();
@@ -217,7 +214,7 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   LocalVocab localVocab;
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ad_utility::deserializeIds(tmpFile, qec->getLocalVocabContext()),
+      deserializeIds(tmpFile, qec->getLocalVocabContext()),
       AllOf(HasSubstr(tmpFile.generic_string()),
             HasSubstr("cannot be opened for reading"),
             HasSubstr("(Permission denied)")),

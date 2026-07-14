@@ -9,7 +9,7 @@
 
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
-using ad_utility::JoinColumnMapping;
+using qlever::JoinColumnMapping;
 using namespace ::testing;
 
 // _____________________________________________________________________________

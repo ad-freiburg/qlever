@@ -16,6 +16,8 @@
 #include "util/Serializer/Serializer.h"
 #include "util/Serializer/TripleSerializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
     requires ad_utility::serialization::WriteSerializer<
@@ -69,16 +71,14 @@ CPP_template_def(typename Serializer)(
   }
 }
 
-namespace ad_utility::serialization {
-
 // Serialization for `NamedResultCache::Value`
 // This serializes the complete Value including the `LocalVocab` with proper ID
 // remapping.
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::SimilarTo<T, NamedResultCache::Value>)) {
-  if constexpr (WriteSerializer<S>) {
+  if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     // Serialize the LocalVocab first (required for ID remapping).
-    ad_utility::detail::serializeLocalVocab(serializer, arg.localVocab_);
+    detail::serializeLocalVocab(serializer, arg.localVocab_);
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs).
@@ -101,7 +101,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
           "currently cannot be serialized. Note that local vocab entries can "
           "also occur if SPARQL UPDATE operations have been performed on the "
           "index before creating the named cached result.");
-      ad_utility::detail::serializeIds(serializer, col);
+      detail::serializeIds(serializer, col);
     }
 
     // Serialize VariableToColumnMap manually (`Variable` is not
@@ -132,7 +132,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   } else {
     // Deserialize the LocalVocab and get the ID mapping.
     AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
-    auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
+    auto [localVocab, mapping] = detail::deserializeLocalVocab(
         serializer, *arg.contextForSerialization_);
 
     // Deserialize the IdTable with ID mapping applied.
@@ -144,7 +144,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
     for (auto&& col : idTable.getColumns()) {
-      ad_utility::detail::deserializeIds(serializer, mapping, col);
+      detail::deserializeIds(serializer, mapping, col);
     }
 
     // Deserialize VariableToColumnMap manually.
@@ -187,5 +187,5 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
 }
 
-}  // namespace ad_utility::serialization
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H

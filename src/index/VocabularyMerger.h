@@ -24,6 +24,8 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // Writes pairs of (partial ID, global ID) incrementally to a file.
 class IdMapWriter {
  private:
@@ -50,10 +52,9 @@ inline IdMap getIdMapFromFile(const std::string& filename) {
   return idMap;
 }
 
-using TripleVec =
-    ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
+using TripleVec = CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
-namespace ad_utility::vocabulary_merger {
+namespace vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
@@ -134,7 +135,7 @@ struct VocabularyMetaData {
     return res;
   }
 
-  // The mapping from the `qlever::specialIds` to their actual IDs.
+  // The mapping from the `specialIds` to their actual IDs.
   // This is created on the fly by the calls to `addWord`.
   const auto& specialIdMapping() const { return specialIdMapping_; }
   // The prefix range for the `@en@<predicate` style predicates.
@@ -164,8 +165,7 @@ struct VocabularyMetaData {
       std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
 
   ad_utility::HashMap<std::string, Id> specialIdMapping_;
-  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
-      &qlever::specialIds();
+  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ = &specialIds();
 };
 // _______________________________________________________________
 // Merge the partial vocabularies in the  binary files
@@ -287,7 +287,8 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
  */
 void writeMappedIdsToExtVec(
     const std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
-    const HashMap<Id, Id>& map, std::unique_ptr<TripleVec>* writePtr);
+    const ad_utility::HashMap<Id, Id>& map,
+    std::unique_ptr<TripleVec>* writePtr);
 
 /**
  * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
@@ -320,7 +321,9 @@ ItemVec vocabMapsToVector(const ItemMapArray& map);
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
-}  // namespace ad_utility::vocabulary_merger
+}  // namespace vocabulary_merger
+
+}  // namespace qlever
 
 #include "index/VocabularyMergerImpl.h"
 

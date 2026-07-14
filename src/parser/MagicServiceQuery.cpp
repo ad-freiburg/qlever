@@ -13,7 +13,7 @@
 #include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // ____________________________________________________________________________
 void MagicServiceQuery::addBasicPattern(const BasicGraphPattern& pattern) {
@@ -70,7 +70,7 @@ std::string_view MagicServiceQuery::extractParameterName(
   }
 
   // Get IRI without brackets
-  auto iriObj = ad_utility::triple_component::Iri::fromIriref(magicIRI);
+  auto iriObj = triple_component::Iri::fromIriref(magicIRI);
   auto iri = iriObj.getContent();
 
   // Remove prefix if applicable: this allows users to define the parameter
@@ -82,4 +82,4 @@ std::string_view MagicServiceQuery::extractParameterName(
   return asStringViewUnsafe(paramString);
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

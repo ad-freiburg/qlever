@@ -12,6 +12,8 @@
 #include "engine/SortedUnionImpl.h"
 #include "util/ChunkedForLoop.h"
 
+using namespace qlever;
+
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
 Union::Union(QueryExecutionContext* qec,
@@ -393,8 +395,8 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
-  return ad_utility::makeExecutionTree<Union>(
-      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
+  return makeExecutionTree<Union>(_executionContext, _subtrees.at(0),
+                                  _subtrees.at(1), sortColumns);
 }
 
 // _____________________________________________________________________________
@@ -463,6 +465,6 @@ Union::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   auto right =
       QueryExecutionTree::makeTreeWithStrippedColumns(rightChild(), variables);
 
-  return ad_utility::makeExecutionTree<Union>(
-      getExecutionContext(), std::move(left), std::move(right));
+  return makeExecutionTree<Union>(getExecutionContext(), std::move(left),
+                                  std::move(right));
 }

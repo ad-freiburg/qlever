@@ -19,7 +19,7 @@
 #include "util/Log.h"
 #include "util/StringUtils.h"
 
-namespace RdfEscaping {
+namespace qlever::RdfEscaping {
 using namespace std::string_literals;
 namespace detail {
 
@@ -381,4 +381,4 @@ NormalizedString normalizeLanguageTag(std::string_view input) {
   return toNormalizedString(input);
 }
 
-}  // namespace RdfEscaping
+}  // namespace qlever::RdfEscaping

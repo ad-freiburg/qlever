@@ -12,7 +12,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 // Class implementing a specialization of the REGEX function. This optimization
 // is possible if the regex is known in advance and is a simple prefix regex.
 class PrefixRegexExpression : public SparqlExpression {
@@ -89,6 +89,6 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
 // prefix search.
 SparqlExpression::Ptr makePrefixMatchExpression(
     SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix);
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_REGEXEXPRESSION_H

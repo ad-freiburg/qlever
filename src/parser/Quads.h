@@ -15,6 +15,8 @@
 #include "parser/UpdateTriples.h"
 #include "parser/data/Types.h"
 
+namespace qlever {
+
 // A class for the intermediate parsing results of `quads`. Provides utilities
 // for converting the quads into the required formats. The Quads/Triples can be
 // used as `vector<GraphPatternOperation>` (Query Body in `DELETE WHERE`) or
@@ -23,11 +25,10 @@
 struct Quads {
   // A single block of triples wrapped in a `GRAPH ... { ... }`. Corresponds to
   // the `quadsNotTriples` grammar rule.
-  using GraphBlock = std::tuple<ad_utility::sparql_types::VarOrIri,
-                                ad_utility::sparql_types::Triples>;
+  using GraphBlock = std::tuple<sparql_types::VarOrIri, sparql_types::Triples>;
 
   // Free triples are outside a `GRAPH ...` clause.
-  ad_utility::sparql_types::Triples freeTriples_{};
+  sparql_types::Triples freeTriples_{};
   // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
 
@@ -47,7 +48,7 @@ struct Quads {
     // Store the mapping from labelds to IDs.
     ad_utility::HashMap<std::string, Id> map_;
     // The (global) blank node manager used to obtain new unique blank node IDs.
-    ad_utility::BlankNodeManager* bnodeManager_;
+    BlankNodeManager* bnodeManager_;
 
     // Get an `Id` for the `label`. If the same `label` was previously passed to
     // the same `BlankNodeAdder`, this will result in the same `Id`.
@@ -64,3 +65,5 @@ struct Quads {
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;
 };
+
+}  // namespace qlever

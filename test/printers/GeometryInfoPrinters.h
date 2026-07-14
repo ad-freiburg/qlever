@@ -11,9 +11,10 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
-// Note that the printers must be defined inside the `ad_utility` or `testing`
-// namespace such that argument-dependent lookup can find them within `gtest`.
-namespace ad_utility {
+// Note that the printers must be defined inside the `qlever` namespace (where
+// the printed types live) such that argument-dependent lookup can find them
+// within `gtest`.
+namespace qlever {
 
 // _____________________________________________________________________________
 inline void PrintTo(const Centroid& centroid, std::ostream* os) {
@@ -89,6 +90,6 @@ inline void PrintTo(const GeoPointOrWkt& g, std::ostream* os) {
   s << ")";
 }
 
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_PRINTERS_GEOMETRYINFOPRINTERS_H

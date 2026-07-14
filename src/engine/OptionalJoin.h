@@ -9,6 +9,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // Forward declaration
 class IndexScan;
 class OptionalJoin : public Operation {
@@ -135,4 +137,5 @@ class OptionalJoin : public Operation {
       const std::vector<std::array<ColumnIndex, 2>>&);
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

@@ -13,6 +13,8 @@
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
 
+namespace qlever {
+
 class ExecuteUpdate {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -85,4 +87,5 @@ class ExecuteUpdate {
   FRIEND_TEST(ExecuteUpdate, setMinus);
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

@@ -15,6 +15,8 @@
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 
+namespace qlever {
+
 enum class PathSearchAlgorithm { ALL_PATHS };
 
 /**
@@ -289,4 +291,5 @@ class PathSearch : public Operation {
                           const pathSearch::BinSearchWrapper& binSearch) const;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_PATHSEARCH_H

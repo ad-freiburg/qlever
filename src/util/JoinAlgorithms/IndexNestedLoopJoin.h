@@ -18,7 +18,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
-namespace joinAlgorithms::indexNestedLoop {
+namespace qlever::joinAlgorithms::indexNestedLoop {
 
 namespace detail {
 // Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
@@ -147,7 +147,7 @@ struct Adder {
                         ql::views::drop(resultColIdx)) {
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
-          Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,
+          Id::makeUndefined(), joinHelpers::CHUNK_SIZE,
           [this]() { cancellationHandle_->throwIfCancelled(); });
     }
   }
@@ -166,7 +166,7 @@ class OptionalJoinRange
   Result::LazyResult rightTables_;
   Adder matchTracker_;
   size_t resultWidth_;
-  ad_utility::JoinColumnMapping joinColumnData_;
+  JoinColumnMapping joinColumnData_;
   ComputeMatches computeMatches_;
   bool lastProcessed_ = false;
 
@@ -176,8 +176,7 @@ class OptionalJoinRange
                     const LocalVocab& leftVocab,
                     const IdTableView<0>& leftTable,
                     Result::LazyResult rightTables, Adder matchTracker,
-                    size_t resultWidth,
-                    ad_utility::JoinColumnMapping joinColumnData,
+                    size_t resultWidth, JoinColumnMapping joinColumnData,
                     ComputeMatches computeMatches)
       : leftResult_{std::move(leftResult)},
         rightResult_{std::move(rightResult)},
@@ -383,8 +382,8 @@ class IndexNestedLoopJoin {
               static_cast<size_t>(JOIN_COLUMNS_PAR);
           const IdTableView<0>& leftTable = leftResult_->idTableView();
           size_t numColsLeft = leftTable.numColumns();
-          ad_utility::JoinColumnMapping joinColumnData{
-              joinColumns_, numColsLeft, numColsRight, keepJoinColumns};
+          JoinColumnMapping joinColumnData{joinColumns_, numColsLeft,
+                                           numColsRight, keepJoinColumns};
           auto leftTableView = detail::toStaticView<JOIN_COLUMNS>(
               leftTable, joinColumnData.jcsLeft());
           auto matchHelper =
@@ -443,6 +442,6 @@ class IndexNestedLoopJoin {
         });
   }
 };
-}  // namespace joinAlgorithms::indexNestedLoop
+}  // namespace qlever::joinAlgorithms::indexNestedLoop
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_INDEXNESTEDLOOPJOIN_H

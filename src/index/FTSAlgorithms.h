@@ -10,6 +10,8 @@
 
 #include "index/Index.h"
 
+namespace qlever {
+
 class FTSAlgorithms {
  public:
   // Filters all IdTable entries out where the WordIndex does not lay inside the
@@ -17,5 +19,7 @@ class FTSAlgorithms {
   static IdTable filterByRange(const IdRange<WordVocabIndex>& idRange,
                                const IdTable& idPreFilter);
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_FTSALGORITHMS_H

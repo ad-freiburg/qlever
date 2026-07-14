@@ -10,7 +10,7 @@
 #include "index/LocalVocab.h"
 #include "parser/SparqlTriple.h"
 
-namespace updateClause {
+namespace qlever::updateClause {
 // A class that combines a vector of triples with a `LocalVocab`. The local
 // vocab is currently only used to store blank node IDs, all IRIs and literals
 // are still encoded as strings in the triples.
@@ -35,6 +35,6 @@ struct UpdateTriples {
   // defined destructor.
   ~UpdateTriples() {}
 };
-}  // namespace updateClause
+}  // namespace qlever::updateClause
 
 #endif  // QLEVER_SRC_PARSER_UPDATETRIPLES_H

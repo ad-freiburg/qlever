@@ -33,6 +33,8 @@
 #include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
 
@@ -40,7 +42,7 @@ using TestWords = std::vector<LocalVocabEntry>;
 
 TestWords getTestCollectionOfWords(size_t size,
                                    const LocalVocabContext& context) {
-  using namespace ad_utility::triple_component;
+  using namespace triple_component;
   TestWords testCollectionOfWords;
   for (size_t i = 0; i < size; ++i) {
     testCollectionOfWords.push_back(LocalVocabEntry::literalWithoutQuotes(
@@ -51,13 +53,13 @@ TestWords getTestCollectionOfWords(size_t size,
 
 // _____________________________________________________________________________
 auto lit(std::string_view s) {
-  return ad_utility::triple_component::Literal::literalWithoutQuotes(s);
+  return triple_component::Literal::literalWithoutQuotes(s);
 }
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   // Test collection of words.
   TestWords testWords =
       getTestCollectionOfWords(1000, qec->getLocalVocabContext());
@@ -118,7 +120,7 @@ TEST(LocalVocab, constructionAndAccess) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
@@ -148,7 +150,7 @@ TEST(LocalVocab, clone) {
 
   // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
   // in the clone.
-  ad_utility::BlankNodeManager bnm;
+  BlankNodeManager bnm;
   LocalVocab v;
   auto id = v.getBlankNodeIndex(&bnm);
   LocalVocab vClone = v.clone();
@@ -160,10 +162,10 @@ TEST(LocalVocab, merge) {
   std::vector<LocalVocabIndex> indices;
   LocalVocab vocA;
   LocalVocab vocB;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   constexpr auto lit = [](std::string_view s) {
-    return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
+    return triple_component::LiteralOrIri::literalWithoutQuotes(s);
   };
   indices.push_back(vocA.getIndexAndAddIfNotContained(
       LocalVocabEntry{lit("oneA"), localVocabContext}));
@@ -189,7 +191,7 @@ TEST(LocalVocab, merge) {
   EXPECT_EQ(*indices[3], lit("twoB"));
 
   // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
-  ad_utility::BlankNodeManager bnm;
+  BlankNodeManager bnm;
   LocalVocab localVocabMerged2;
   BlankNodeIndex id;
   {
@@ -217,7 +219,7 @@ TEST(LocalVocab, merge) {
 TEST(LocalVocab, propagation) {
   // Query execution context (with small test index), see `IndexTestHelpers.h`.
   using ad_utility::AllocatorWithLimit;
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
 
   // Lambda that checks the contents of the local vocabulary after the specified
   // operation.
@@ -232,7 +234,7 @@ TEST(LocalVocab, propagation) {
     TestWords expectedWords;
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto toLitOrIri = [&localVocabContext](const auto& word) {
-      using namespace ad_utility::triple_component;
+      using namespace triple_component;
       if (ql::starts_with(word, '<')) {
         return LocalVocabEntry::fromIriref(word, localVocabContext);
       } else {
@@ -275,7 +277,7 @@ TEST(LocalVocab, propagation) {
   // literal "x", we would have to write TripleComponent{"\"x\""}. For the
   // purposes of this test, we just want something that's not yet in the index,
   // so "x" etc. is just fine (and also different from the "<x>" below).
-  auto iri = ad_utility::testing::iri;
+  auto iri = qlever::testing::iri;
   Values values1(
       testQec,
       {{Variable{"?x"}, Variable{"?y"}},
@@ -428,7 +430,7 @@ TEST(LocalVocab, propagation) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, getBlankNodeIndex) {
-  ad_utility::BlankNodeManager bnm(0);
+  BlankNodeManager bnm(0);
   LocalVocab v;
   BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
   BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
@@ -437,8 +439,8 @@ TEST(LocalVocab, getBlankNodeIndex) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
-  using ad_utility::triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::LiteralOrIri;
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
@@ -456,9 +458,9 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
-  using ad_utility::triple_component::LiteralOrIri;
   using ::testing::UnorderedElementsAre;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::LiteralOrIri;
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
@@ -486,8 +488,8 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
-  using ad_utility::triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::LiteralOrIri;
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
@@ -528,8 +530,8 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
-  using ad_utility::triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::LiteralOrIri;
+  auto* qec = qlever::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
@@ -571,7 +573,7 @@ TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_EmptyCase) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
-  ad_utility::BlankNodeManager bnm;
+  BlankNodeManager bnm;
   LocalVocab vocab;
 
   // Allocate some blank node IDs.
@@ -597,12 +599,11 @@ TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_EmptyIndices) {
-  ad_utility::BlankNodeManager bnm;
+  BlankNodeManager bnm;
   LocalVocab vocab;
 
   // Call with empty vector - should not crash and should do nothing.
-  std::vector<
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+  std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
       emptyIndices;
   EXPECT_NO_THROW(
       vocab.reserveBlankNodeBlocksFromExplicitIndices(emptyIndices, &bnm));
@@ -614,7 +615,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_EmptyIndices) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
-  ad_utility::BlankNodeManager bnm;
+  BlankNodeManager bnm;
 
   // Step 1: Create original vocab with blank nodes.
   LocalVocab originalVocab;
@@ -648,7 +649,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
-  ad_utility::BlankNodeManager bnm;
+  BlankNodeManager bnm;
   LocalVocab vocab;
 
   // Allocate a blank node, which creates the localBlankNodeManager_.
@@ -656,11 +657,10 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
 
   // Try to reserve blocks when localBlankNodeManager_ already exists.
   // This should violate the AD_CONTRACT_CHECK.
-  ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
+  BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry entry;
   entry.uuid_ = boost::uuids::random_generator()();
   entry.blockIndices_ = {1, 2, 3};
-  std::vector<
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
+  std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>
       indices{entry};
 
   AD_EXPECT_THROW_WITH_MESSAGE(

@@ -6,6 +6,8 @@
 
 #include <absl/strings/str_cat.h>
 
+using namespace qlever;
+
 // __________________________________________________________________________
 sparqlExpression::GroupConcatExpression::GroupConcatExpression(
     bool distinct, Ptr&& child, std::string separator)

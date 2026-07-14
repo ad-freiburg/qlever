@@ -17,6 +17,8 @@
 #include "global/Id.h"
 #include "util/Generator.h"
 
+namespace qlever {
+
 /**
  * @brief This represents a set of relations of a single entity.
  *        (e.g. a set of books that all have an author and a title).
@@ -29,12 +31,14 @@ struct Pattern : std::vector<Id> {
   static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
 };
 
+}  // namespace qlever
+
 // Hashing support for the `Pattern` class.
 template <>
-struct std::hash<Pattern> {
-  std::size_t operator()(const Pattern& p) const noexcept {
+struct std::hash<qlever::Pattern> {
+  std::size_t operator()(const qlever::Pattern& p) const noexcept {
     std::string_view s = std::string_view(
-        reinterpret_cast<const char*>(p.data()), sizeof(Id) * p.size());
+        reinterpret_cast<const char*>(p.data()), sizeof(qlever::Id) * p.size());
     return hash<std::string_view>()(s);
   }
 };

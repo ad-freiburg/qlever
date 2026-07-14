@@ -13,6 +13,8 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "util/ProgressBar.h"
 
+namespace qlever {
+
 // Set up the handling of small relations for the twin permutation.
 // `AddBlockOfSmallRelationsToSwitched` receives a block of small relations from
 // `writer1`, swaps columns 1 and 2, sorts the block by the resulting
@@ -94,7 +96,7 @@ struct CompressedRelationWriter::PermutationWriter {
   template <typename TypeIfPair, typename TypeIfSingle = std::monostate>
   using IfPair = std::conditional_t<WritePair, TypeIfPair, TypeIfSingle>;
 
-  qlever::KeyOrder permutation_;
+  KeyOrder permutation_;
   std::unique_ptr<CompressedRelationWriter> writer1_;
   IfPair<std::unique_ptr<CompressedRelationWriter>> writer2_;
 
@@ -118,7 +120,7 @@ struct CompressedRelationWriter::PermutationWriter {
   IdTable relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
-  using TwinRelationSorter = ad_utility::CompressedExternalIdTableSorter<
+  using TwinRelationSorter = CompressedExternalIdTableSorter<
       compressedRelationHelpers::ComparatorForConstCol0, 0>;
   IfPair<TwinRelationSorter> twinRelationSorter_;
 
@@ -134,7 +136,7 @@ struct CompressedRelationWriter::PermutationWriter {
       PermutationWriter(const std::string& basename,
                         WriterAndCallback writerAndCallback1,
                         WriterAndCallback writerAndCallback2,
-                        qlever::KeyOrder permutation,
+                        KeyOrder permutation,
                         PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
         writer1_{std::move(writerAndCallback1.writer_)},
@@ -162,7 +164,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // Constructor for a `PermutationWriter` which writes a single permutation.
   CPP_template(bool doWritePair = WritePair)(requires(!doWritePair))
       PermutationWriter(WriterAndCallback writerAndCallback1,
-                        qlever::KeyOrder permutation,
+                        KeyOrder permutation,
                         PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
         writer1_{std::move(writerAndCallback1.writer_)},
@@ -365,5 +367,7 @@ struct CompressedRelationWriter::PermutationWriter {
     }
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_

@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "util/HashSet.h"
+
+namespace qlever {
 // _____________________________________________________________________________
 IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
                                      const IdTable& idTablePreFilter) {
@@ -49,3 +51,5 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
                << idTableResult.numRows() << " elements.\n";
   return idTableResult;
 }
+
+}  // namespace qlever

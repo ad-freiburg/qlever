@@ -10,6 +10,8 @@
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
 
+namespace qlever {
+
 // TODO<joka921> We have a cyclic dependency between `Id.h` and
 // `VariableToColumnMap.h`.
 using ColumnIndex = uint64_t;
@@ -91,4 +93,5 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
     size_t leftResultWidth, bool keepJoinColumns = true);
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

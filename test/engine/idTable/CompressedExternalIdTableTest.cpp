@@ -15,6 +15,9 @@
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
 
@@ -25,7 +28,7 @@ static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
 auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
-  CopyableIdTable<0> result(ad_utility::testing::makeAllocator());
+  CopyableIdTable<0> result(qlever::testing::makeAllocator());
   for (const auto& blockStatic : generator) {
     auto block = blockStatic.clone().toDynamic();
     if (result.empty()) {
@@ -50,8 +53,8 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // for details).
 template <size_t NumStaticColumns>
 auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
-  CopyableIdTable<NumStaticColumns> result(
-      numColumns, ad_utility::testing::makeAllocator());
+  CopyableIdTable<NumStaticColumns> result(numColumns,
+                                           qlever::testing::makeAllocator());
   for (const auto& row : generator) {
     result.push_back(row);
   }
@@ -67,8 +70,8 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
                                     AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     std::string filename = "idTableCompressedWriter.compressedWriterTest.dat";
-    ad_utility::CompressedExternalIdTableWriter writer{
-        filename, 3, ad_utility::testing::makeAllocator(), memoryToUse};
+    CompressedExternalIdTableWriter writer{
+        filename, 3, qlever::testing::makeAllocator(), memoryToUse};
     std::vector<CopyableIdTable<0>> tables;
     tables.push_back(makeIdTableFromVector({{2, 4, 7}, {3, 6, 8}, {4, 3, 2}}));
     tables.push_back(
@@ -104,10 +107,10 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
-      writer{filename, numDynamicColumns, memoryToUse,
-             ad_utility::testing::makeAllocator(), 5_kB};
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns> writer{
+      filename, numDynamicColumns, memoryToUse,
+      qlever::testing::makeAllocator(), 5_kB};
 
   for (size_t i = 0; i < 2; ++i) {
     CopyableIdTable<NumStaticColumns> randomTable =
@@ -204,10 +207,10 @@ TEST(CompressedExternalIdTable, stillSortingOnDestruction) {
       [[maybe_unused]] volatile auto x = other.data_[0];
     }
   };
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SlowDummySorter, 0> sorter{
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  CompressedExternalIdTableSorter<SlowDummySorter, 0> sorter{
       "stillSortingOnDestruction.dat", NUM_COLS, 10_kB,
-      ad_utility::testing::makeAllocator()};
+      qlever::testing::makeAllocator()};
   // With 10 kB memory and NUM_COLS (4) columns, blocksize = 10000 / (4*8*2)
   // = 156 rows. Push enough to trigger exactly one `pushBlock`.
   auto table = createRandomlyFilledIdTable(200, NUM_COLS);
@@ -220,9 +223,9 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   std::string filename = "idTableCompressedSorter.memoryLimit.dat";
 
   // only 100 bytes of memory, not sufficient for merging
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
-      filename, NUM_COLS, 100_B, ad_utility::testing::makeAllocator()};
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+  CompressedExternalIdTableSorter<SortByOSP, 0> writer{
+      filename, NUM_COLS, 100_B, qlever::testing::makeAllocator()};
 
   CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
 
@@ -242,11 +245,11 @@ TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   // Create `CompressedExternalIdTable` with a block size of exactly 10 rows.
   size_t blockSize = 10;
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   size_t blockMemory = blockSize * NUM_COLS * sizeof(Id) * 2;
-  ad_utility::CompressedExternalIdTable<0> writer{
+  CompressedExternalIdTable<0> writer{
       filename, NUM_COLS, ad_utility::MemorySize::bytes(blockMemory),
-      ad_utility::testing::makeAllocator()};
+      qlever::testing::makeAllocator()};
 
   // Push exactly 10 rows. After the 10th row, one full block is written and
   // `currentBlock_` becomes empty. When `getRows()` is later called, it will
@@ -271,10 +274,10 @@ void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
   std::string filename = "idTableCompressedSorter.testExternalCompressor.dat";
   using namespace ad_utility::memory_literals;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTable<NumStaticColumns> writer{
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  CompressedExternalIdTable<NumStaticColumns> writer{
       filename, numDynamicColumns, memoryToUse,
-      ad_utility::testing::makeAllocator(), 5_kB};
+      qlever::testing::makeAllocator(), 5_kB};
 
   for (size_t i = 0; i < 2; ++i) {
     CopyableIdTable<NumStaticColumns> randomTable =
@@ -311,8 +314,8 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   std::string filename = "idTableCompressor.exceptionsWhenWritingTest.dat";
   using namespace ad_utility::memory_literals;
 
-  ad_utility::CompressedExternalIdTable<3> writer{
-      filename, 3, 10_B, ad_utility::testing::makeAllocator()};
+  CompressedExternalIdTable<3> writer{filename, 3, 10_B,
+                                      qlever::testing::makeAllocator()};
 
   CopyableIdTable<3> randomTable =
       createRandomlyFilledIdTable(1000, 3).toStatic<3>();
@@ -350,11 +353,11 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
 TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
   std::string filename = "idTableCompressor.wrongNumCols.dat";
   using namespace ad_utility::memory_literals;
-  auto alloc = ad_utility::testing::makeAllocator();
+  auto alloc = qlever::testing::makeAllocator();
 
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
+  CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
       filename, NUM_COLS, 10_B, alloc};
-  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+  CompressedExternalIdTableSorterTypeErased& erased = writer;
   IdTableStatic<0> t1{NUM_COLS, alloc};
   EXPECT_NO_THROW(erased.pushBlock(t1));
   EXPECT_NO_THROW(t1.setNumColumns(NUM_COLS + 1));
@@ -374,12 +377,12 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
 TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   std::string filename = gtestCurrentTestName();
   using namespace ad_utility::memory_literals;
-  auto alloc = ad_utility::testing::makeAllocator();
+  auto alloc = qlever::testing::makeAllocator();
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
+  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
       filename, NUM_COLS, 1_MB, alloc};
-  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+  CompressedExternalIdTableSorterTypeErased& erased = writer;
 
   // Create two blocks of random data.
   IdTable block1 = createRandomlyFilledIdTable(30, NUM_COLS);

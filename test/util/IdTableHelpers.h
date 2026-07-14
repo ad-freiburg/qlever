@@ -26,6 +26,8 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
+namespace qlever::testing {
+
 /*
  * Does what it says on the tin: Save an IdTable with the corresponding
  * join column.
@@ -72,11 +74,11 @@ inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
  * `transformation` to each of them. All rows of `content` must have the
  * same length.
  */
-template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+template <typename Transformation = decltype(VocabId)>
 IdTable makeIdTableFromVector(const VectorTable& content,
                               Transformation transformation = {}) {
   size_t numCols = content.empty() ? size_t{0} : content.at(0).size();
-  IdTable result{numCols, ad_utility::testing::makeAllocator()};
+  IdTable result{numCols, makeAllocator()};
   result.reserve(content.size());
   for (const auto& row : content) {
     AD_CONTRACT_CHECK(row.size() == result.numColumns());
@@ -98,7 +100,7 @@ inline std::vector<IdTable> createLazyIdTables(
     const std::vector<VectorTable>& blocks) {
   return ::ranges::to<std::vector>(
       blocks | ql::views::transform([](const auto& block) {
-        return makeIdTableFromVector(block, ad_utility::testing::IntId);
+        return makeIdTableFromVector(block, testing::IntId);
       }));
 }
 
@@ -107,7 +109,7 @@ inline std::vector<IdTable> createLazyIdTables(
 // particular, the matcher also deals with `IdTable` not being copyable, which
 // requires a workaround for GMock/GTest.
 struct MatchesIdTableFromVector {
-  template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+  template <typename Transformation = decltype(testing::VocabId)>
   auto operator()(const VectorTable& content, Transformation t = {}) const {
     return ::testing::Eq(
         CopyShield<IdTable>(makeIdTableFromVector(content, std::move(t))));
@@ -149,14 +151,20 @@ struct MatchesIdTable {
 };
 static constexpr MatchesIdTable matchesIdTable;
 
+}  // namespace qlever::testing
+
 // Allow comparing `IdTableView<N>` with `CopyShield<IdTable>` in gtest
-// matchers. The actual comparison clones the view into an `IdTable`.
+// matchers. The actual comparison clones the view into an `IdTable`. Note:
+// This operator must live at global scope (not inside `qlever::testing`) so
+// that it is found via ADL for `CopyShield`, which is also at global scope.
 template <int N>
-inline bool operator==(const IdTableView<N>& view,
-                       const CopyShield<IdTable>& shield) {
-  IdTable viewAsTable{view.clone()};
+inline bool operator==(const qlever::IdTableView<N>& view,
+                       const CopyShield<qlever::IdTable>& shield) {
+  qlever::IdTable viewAsTable{view.clone()};
   return shield == viewAsTable;
 }
+
+namespace qlever::testing {
 
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample
@@ -306,5 +314,7 @@ std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
 // Create an `IdTable` of the given size with width 1, filled with the given
 // value.
 IdTable createIdTableOfSizeWithValue(size_t size, Id value);
+
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

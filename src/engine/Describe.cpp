@@ -11,6 +11,8 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
@@ -161,7 +163,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // `?subject` column.
   using V = Variable;
   auto subjectVar = V{"?subject"};
-  auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
+  auto valuesOp = makeExecutionTree<ExplicitIdTableOperation>(
       getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
       VariableToColumnMap{
           {subjectVar,
@@ -170,16 +172,16 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+  auto indexScan = makeExecutionTree<IndexScan>(
       getExecutionContext(), Permutation::SPO, triple,
       activeGraphs.has_value()
           ? IndexScan::Graphs::Whitelist(std::move(activeGraphs).value())
           : IndexScan::Graphs::All());
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
-  auto join = ad_utility::makeExecutionTree<Join>(
-      getExecutionContext(), std::move(valuesOp), std::move(indexScan),
-      joinColValues, joinColScan);
+  auto join =
+      makeExecutionTree<Join>(getExecutionContext(), std::move(valuesOp),
+                              std::move(indexScan), joinColValues, joinColScan);
 
   // Compute the result of the `join` and select the columns `?subject`,
   // `?predicate`, `?object`.

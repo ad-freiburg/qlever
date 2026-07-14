@@ -7,6 +7,8 @@
 
 #include "engine/ExplicitIdTableOperation.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 ExplicitIdTableOperation::ExplicitIdTableOperation(
     QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,

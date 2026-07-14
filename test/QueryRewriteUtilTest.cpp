@@ -12,6 +12,7 @@
 
 namespace {
 
+using namespace qlever;
 using namespace queryRewriteUtilTestHelpers;
 
 // _____________________________________________________________________________
@@ -31,7 +32,7 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParameters) {
 
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
-  auto D = &ValueId::makeFromDouble;
+  auto D = &qlever::ValueId::makeFromDouble;
 
   auto [dExpr1, dExp1] = makeTwoArgumentDist();
   auto expr1 = leSprql(std::move(dExpr1), D(10));
@@ -60,7 +61,8 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
 
   // Non-numeric comparison is unsupported
   auto [dExpr6, dExp6] = makeMetricDist();
-  auto expr6 = ltSprql(std::move(dExpr6), ValueId::makeFromGeoPoint({1, 1}));
+  auto expr6 =
+      ltSprql(std::move(dExpr6), qlever::ValueId::makeFromGeoPoint({1, 1}));
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
 }
 
@@ -68,7 +70,7 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
 
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
-  auto D = &ValueId::makeFromDouble;
+  auto D = &qlever::ValueId::makeFromDouble;
 
   // Construct `FILTER(geof:metricDistance(?a, ?b) <= 10.0)`
   auto [distExpr, distCall] = makeMetricDist();

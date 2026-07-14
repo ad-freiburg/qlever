@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -58,3 +60,5 @@ void VocabularyInternalExternal::open(const std::string& filename) {
                  "of the external vocabulary): "
               << internalVocab_.size() << std::endl;
 }
+
+}  // namespace qlever

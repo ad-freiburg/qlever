@@ -41,25 +41,25 @@ inline std::string responseBodyToString(
 // and the state of the `Server` and `DeltaTriples` can be inspected after each
 // request.
 class ServerForTesting {
-  std::unique_ptr<Server> server_;
+  std::unique_ptr<qlever::Server> server_;
 
  public:
   explicit ServerForTesting(size_t numThreads, std::string accessToken,
                             const qlever::EngineConfig& config,
                             bool noAccessCheck = false)
-      : server_{std::make_unique<Server>(
+      : server_{std::make_unique<qlever::Server>(
             4321, numThreads, std::move(accessToken), config, noAccessCheck)} {}
 
   // Accessors for the `Server` and `DeltaTriples`.
-  Server& server() { return *server_; }
-  const Server& server() const { return *server_; }
+  qlever::Server& server() { return *server_; }
+  const qlever::Server& server() const { return *server_; }
 
   // Access the `DeltaTriplesManager` of the underlying `Server`, e.g. to
   // inspect the delta triples after an `INSERT DATA`/`DELETE DATA` update.
-  DeltaTriplesManager& deltaTriplesManager() {
+  qlever::DeltaTriplesManager& deltaTriplesManager() {
     return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
   }
-  const DeltaTriplesManager& deltaTriplesManager() const {
+  const qlever::DeltaTriplesManager& deltaTriplesManager() const {
     return server_->indexAndViewsSnapshot()->index_.deltaTriplesManager();
   }
 
@@ -75,7 +75,7 @@ class ServerForTesting {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, Server* server,
+        [](auto request, qlever::Server* server,
            auto& io) -> boost::asio::awaitable<ResT> {
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
           server->queryHub_ = queryHub;
@@ -121,7 +121,7 @@ inline qlever::EngineConfig getDefaultConfigWithName(std::string baseName) {
 
 // Helper function creating a simple config for testing.
 inline qlever::EngineConfig getDefaultConfig() {
-  auto qec = ad_utility::testing::getQec("<a> <b> <c>");
+  auto qec = qlever::testing::getQec("<a> <b> <c>");
   return getDefaultConfigWithName(qec->getIndex().getOnDiskBase());
 }
 

@@ -8,6 +8,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // This class implements the TextLimit operation. It limits the number of texts
 // that are returned for each unique entity combination. The texts are selected
 // based on the score columns.
@@ -74,4 +76,5 @@ class TextLimit : public Operation {
   }
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H

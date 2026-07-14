@@ -22,6 +22,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
 
+using namespace qlever;
+
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using ::testing::ElementsAre;
@@ -36,8 +38,8 @@ TEST(ExportIds, idToLiteralFunctionality) {
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
-  auto qec = ad_utility::testing::getQec(kg);
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec(kg);
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
   using enum Datatype;
 
   // Helper function that takes an ID and a vector of test cases and checks
@@ -48,7 +50,7 @@ TEST(ExportIds, idToLiteralFunctionality) {
           const std::vector<std::tuple<bool, std::optional<std::string>>>&
               cases) {
         for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
-          auto result = ql::exportIds::idToLiteral(
+          auto result = exportIds::idToLiteral(
               qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
           if (expected) {
             EXPECT_THAT(result,
@@ -89,11 +91,10 @@ TEST(ExportIds, idToLiteralFunctionality) {
           {getId("<s>"), {{false, "\"s\""}, {true, std::nullopt}}},
 
           // Case: datatype `Int`
-          {ad_utility::testing::IntId(1),
-           {{false, "\"1\""}, {true, std::nullopt}}},
+          {qlever::testing::IntId(1), {{false, "\"1\""}, {true, std::nullopt}}},
 
           // Case: Undefined ID
-          {ad_utility::testing::UndefId(),
+          {qlever::testing::UndefId(),
            {{false, std::nullopt}, {true, std::nullopt}}}};
 
   for (const auto& [id, cases] : testCases) {
@@ -108,12 +109,12 @@ TEST(ExportIds, idToLiteralOrIriFunctionality) {
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> . <s> <p> "
       "<http://example.com/> .";
-  auto qec = ad_utility::testing::getQec(kg);
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto qec = qlever::testing::getQec(kg);
+  auto getId = qlever::testing::makeGetId(qec->getIndex());
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = triple_component::LiteralOrIri;
+  using Literal = triple_component::Literal;
+  using Iri = triple_component::Iri;
 
   std::vector<std::pair<ValueId, std::optional<LiteralOrIri>>> expected{
       {getId("\"something\""),
@@ -132,20 +133,20 @@ TEST(ExportIds, idToLiteralOrIriFunctionality) {
       {ValueId::makeUndefined(), std::nullopt}};
   for (const auto& [valueId, expRes] : expected) {
     ASSERT_EQ(
-        ql::exportIds::idToLiteralOrIri(qec->getIndex(), valueId, LocalVocab{}),
+        exportIds::idToLiteralOrIri(qec->getIndex(), valueId, LocalVocab{}),
         expRes);
   }
 }
 
 // _____________________________________________________________________________
 TEST(ExportIds, getLiteralOrNullopt) {
-  using LiteralOrIri = ql::exportIds::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = exportIds::LiteralOrIri;
+  using Literal = triple_component::Literal;
+  using Iri = triple_component::Iri;
 
   auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
                                    std::optional<std::string> expectedRes) {
-    auto res = ql::exportIds::getLiteralOrNullopt(input);
+    auto res = exportIds::getLiteralOrNullopt(input);
     ASSERT_EQ(res.has_value(), expectedRes.has_value());
     if (res.has_value()) {
       ASSERT_EQ(expectedRes.value(), res.value().toStringRepresentation());
@@ -170,24 +171,22 @@ TEST(ExportIds, getLiteralOrNullopt) {
 TEST(ExportIds, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";
-  EXPECT_EQ(ql::exportIds::replaceAnglesByQuotes(input), expected);
+  EXPECT_EQ(exportIds::replaceAnglesByQuotes(input), expected);
   input = "s>";
-  EXPECT_THROW(ql::exportIds::replaceAnglesByQuotes(input),
-               ad_utility::Exception);
+  EXPECT_THROW(exportIds::replaceAnglesByQuotes(input), ad_utility::Exception);
   input = "<s";
-  EXPECT_THROW(ql::exportIds::replaceAnglesByQuotes(input),
-               ad_utility::Exception);
+  EXPECT_THROW(exportIds::replaceAnglesByQuotes(input), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
 TEST(ExportIds, blankNodeIrisAreProperlyFormatted) {
-  using ad_utility::triple_component::Iri;
+  using triple_component::Iri;
   std::string_view input = "_:test";
   EXPECT_THAT(
-      ql::exportIds::blankNodeIriToString(Iri::fromStringRepresentation(
+      exportIds::blankNodeIriToString(Iri::fromStringRepresentation(
           absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
       ::testing::Optional(::testing::Eq(input)));
-  EXPECT_EQ(ql::exportIds::blankNodeIriToString(
+  EXPECT_EQ(exportIds::blankNodeIriToString(
                 Iri::fromStringRepresentation("<some_iri>")),
             std::nullopt);
 }
@@ -198,7 +197,7 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   // IRIs
 
   // Create a test index config with the encoded IRI manager
-  using namespace ad_utility::testing;
+  using namespace qlever::testing;
   TestIndexConfig config;
   config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/",
                                                 "http://test.com/"};
@@ -216,7 +215,7 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
 
     // Test getLiteralOrIriFromVocabIndex with the encoded ID
-    auto result = ql::exportIds::getLiteralOrIriFromVocabIndex(
+    auto result = exportIds::getLiteralOrIriFromVocabIndex(
         qec->getIndex(), encodedId, emptyLocalVocab);
 
     // The result should be the original IRI
@@ -234,7 +233,7 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
     VocabIndex vocabIndex = VocabIndex::make(0);  // First vocab entry
     Id vocabId = Id::makeFromVocabIndex(vocabIndex);
 
-    auto vocabResult = ql::exportIds::getLiteralOrIriFromVocabIndex(
+    auto vocabResult = exportIds::getLiteralOrIriFromVocabIndex(
         qec->getIndex(), vocabId, emptyLocalVocab);
 
     // Should successfully return some IRI or literal from vocabulary
@@ -252,10 +251,10 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
       "<s> <q> \"hello\" . "
       "<s> <p> 42 . "
       "<s> <p> 3.14 .";
-  auto qec = ad_utility::testing::getQec(kg);
+  auto qec = qlever::testing::getQec(kg);
   const Index& index = qec->getIndex();
   LocalVocab localVocab{};
-  auto getId = ad_utility::testing::makeGetId(index);
+  auto getId = qlever::testing::makeGetId(index);
 
   // Collect a mix of VocabIndex IDs (IRIs, literal) and non-VocabIndex IDs
   // (integer, double, undefined).
@@ -273,13 +272,13 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
   // `idsToStringAndType` requires the input to be sorted by `ValueId`.
   ql::ranges::sort(ids);
 
-  auto batchResults = ql::exportIds::idsToStringAndType(
-      index, ql::span<const Id>{ids}, localVocab);
+  auto batchResults =
+      exportIds::idsToStringAndType(index, ql::span<const Id>{ids}, localVocab);
 
   ASSERT_EQ(batchResults.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(batchResults[i],
-              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+              exportIds::idToStringAndType(index, ids[i], localVocab))
         << "Mismatch at index " << i;
   }
 }
@@ -287,10 +286,10 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
 // _____________________________________________________________________________
 // Empty span returns an empty vector.
 TEST(ExportIds, idsToStringAndTypeEmptyInput) {
-  auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+  auto qec = qlever::testing::getQec("<s> <p> <o>");
   LocalVocab localVocab{};
-  auto result = ql::exportIds::idsToStringAndType(
-      qec->getIndex(), ql::span<const Id>{}, localVocab);
+  auto result = exportIds::idsToStringAndType(qec->getIndex(),
+                                              ql::span<const Id>{}, localVocab);
   EXPECT_TRUE(result.empty());
 }
 

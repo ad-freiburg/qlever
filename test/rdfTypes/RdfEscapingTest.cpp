@@ -7,7 +7,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "rdfTypes/RdfEscaping.h"
-using namespace RdfEscaping;
+using namespace qlever::RdfEscaping;
 
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, escapeForCsv) {

@@ -21,6 +21,8 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
 // the SplitVocabulary should be used. The underlying vocabularies except 0
@@ -283,8 +285,7 @@ class SplitVocabulary {
 
   // Retrieve GeometryInfo from an underlying vocabulary, if it is a
   // GeoVocabulary.
-  std::optional<ad_utility::GeometryInfo> getGeoInfo(
-      uint64_t indexWithMarker) const;
+  std::optional<GeometryInfo> getGeoInfo(uint64_t indexWithMarker) const;
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
@@ -328,5 +329,7 @@ using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
                     detail::splitVocabulary::GeoFilenameFunc,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

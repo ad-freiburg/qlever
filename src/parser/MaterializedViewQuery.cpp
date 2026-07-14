@@ -12,7 +12,7 @@
 #include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 static constexpr std::string_view prefixColumnParam = "column-";
 
@@ -61,8 +61,7 @@ void MaterializedViewQuery::addRequestedColumn(const Variable& column,
 }
 
 // _____________________________________________________________________________
-MaterializedViewQuery::MaterializedViewQuery(
-    const ad_utility::triple_component::Iri& iri) {
+MaterializedViewQuery::MaterializedViewQuery(const triple_component::Iri& iri) {
   viewName_ = extractParameterName(iri, MATERIALIZED_VIEW_IRI);
   if (viewName_.value().empty()) {
     throw MaterializedViewConfigException(absl::StrCat(
@@ -112,4 +111,4 @@ ad_utility::HashSet<Variable> MaterializedViewQuery::getVarsToKeep() const {
   return varsToKeep;
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

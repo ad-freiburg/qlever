@@ -14,6 +14,8 @@
 #include "index/IdTableUtils.h"
 #include "util/TransparentFunctors.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
 

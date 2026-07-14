@@ -13,23 +13,23 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
-using namespace ad_utility::testing;
+using namespace qlever::url_parser;
+using namespace qlever::url_parser::sparqlOperation;
+using namespace qlever::testing;
 
 namespace {
 auto ParsedRequestIs =
     [](const std::string& path, const std::optional<std::string>& accessToken,
        const ParamValueMap& parameters,
-       const Operation& operation) -> testing::Matcher<const ParsedRequest> {
-  return testing::AllOf(
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, path_, testing::Eq(path)),
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, accessToken_,
-               testing::Eq(accessToken)),
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, parameters_,
-               testing::ContainerEq(parameters)),
-      AD_FIELD(ad_utility::url_parser::ParsedRequest, operation_,
-               testing::Eq(operation)));
+       const Operation& operation) -> ::testing::Matcher<const ParsedRequest> {
+  return ::testing::AllOf(
+      AD_FIELD(qlever::url_parser::ParsedRequest, path_, ::testing::Eq(path)),
+      AD_FIELD(qlever::url_parser::ParsedRequest, accessToken_,
+               ::testing::Eq(accessToken)),
+      AD_FIELD(qlever::url_parser::ParsedRequest, parameters_,
+               ::testing::ContainerEq(parameters)),
+      AD_FIELD(qlever::url_parser::ParsedRequest, operation_,
+               ::testing::Eq(operation)));
 };
 
 const std::string URLENCODED_PLAIN = "application/x-www-form-urlencoded";
@@ -77,9 +77,10 @@ auto testAccessTokenCombinations =
       AD_EXPECT_THROW_WITH_MESSAGE(
           parse(makeRequest(method, pathWithAccessToken.buffer(),
                             headersWithDifferentAccessToken, body)),
-          testing::HasSubstr("Access token is specified both in the "
-                             "`Authorization` header and by the `access-token` "
-                             "parameter, but they are not the same"));
+          ::testing::HasSubstr(
+              "Access token is specified both in the "
+              "`Authorization` header and by the `access-token` "
+              "parameter, but they are not the same"));
     };
 auto testAccessTokenCombinationsUrlEncoded = [](auto parse,
                                                 const std::string& bodyBase,
@@ -121,13 +122,14 @@ auto testAccessTokenCombinationsUrlEncoded = [](auto parse,
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::post, "/", headersWithDifferentAccessToken,
                         bodyWithAccessToken)),
-      testing::HasSubstr("Access token is specified both in the "
-                         "`Authorization` header and by the `access-token` "
-                         "parameter, but they are not the same"));
+      ::testing::HasSubstr("Access token is specified both in the "
+                           "`Authorization` header and by the `access-token` "
+                           "parameter, but they are not the same"));
 };
 
 }  // namespace
 
+namespace qlever {
 // _____________________________________________________________________________________________
 TEST(SparqlProtocolTest, parseGET) {
   auto parse =
@@ -171,7 +173,7 @@ TEST(SparqlProtocolTest, parseGET) {
   // Update (not allowed)
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
-      testing::StrEq("SPARQL Update is not allowed as GET request."));
+      ::testing::StrEq("SPARQL Update is not allowed as GET request."));
   // Graph Store Operation
   EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
               ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
@@ -187,19 +189,19 @@ TEST(SparqlProtocolTest, parseGET) {
           GraphStoreOperation{DEFAULT{}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?default&default")),
-      testing::HasSubstr("Parameter \"default\" must be "
-                         "given exactly once. Is: 2"));
+      ::testing::HasSubstr("Parameter \"default\" must be "
+                           "given exactly once. Is: 2"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?graph=%3Cfoo%3E&graph=%3Cbar%3E")),
-      testing::HasSubstr("Parameter \"graph\" must be "
-                         "given exactly once. Is: 2"));
+      ::testing::HasSubstr("Parameter \"graph\" must be "
+                           "given exactly once. Is: 2"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?query=SELECT+%2A%20WHERE%20%7B%7D&graph=foo")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?query=SELECT+%2A%20WHERE%20%7B%7D&default")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)"));
 }
 
@@ -290,8 +292,8 @@ TEST(SparqlProtocolTest, parseUrlencodedPOST) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/?send=100", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
-      testing::StrEq("URL-encoded POST requests must not contain query "
-                     "parameters in the URL."));
+      ::testing::StrEq("URL-encoded POST requests must not contain query "
+                       "parameters in the URL."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
@@ -311,14 +313,14 @@ TEST(SparqlProtocolTest, parseUrlencodedPOST) {
   // Graph Store Protocol (not allowed)
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/", URLENCODED, "graph=foo")),
-      testing::HasSubstr(absl::StrCat("Unsupported Content type \"",
-                                      URLENCODED_PLAIN,
-                                      "\" for Graph Store protocol.")));
+      ::testing::HasSubstr(absl::StrCat("Unsupported Content type \"",
+                                        URLENCODED_PLAIN,
+                                        "\" for Graph Store protocol.")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/", URLENCODED, "default")),
-      testing::HasSubstr(absl::StrCat("Unsupported Content type \"",
-                                      URLENCODED_PLAIN,
-                                      "\" for Graph Store protocol.")));
+      ::testing::HasSubstr(absl::StrCat("Unsupported Content type \"",
+                                        URLENCODED_PLAIN,
+                                        "\" for Graph Store protocol.")));
 }
 
 // _____________________________________________________________________________________________
@@ -357,12 +359,12 @@ TEST(SparqlProtocolTest, parseQueryPOST) {
   // Graph Store Operation (not allowed)
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/?graph=foo", QUERY, "")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Unsupported Content type \"application/sparql-query\" for "
           "Graph Store protocol."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/?default", QUERY, "")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Unsupported Content type \"application/sparql-query\" for "
           "Graph Store protocol."));
 }
@@ -401,12 +403,12 @@ TEST(SparqlProtocolTest, parseUpdatePOST) {
   // Graph Store Protocol (not allowed)
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/?graph=foo", UPDATE, "")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Unsupported Content type \"application/sparql-update\" for "
           "Graph Store protocol."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/?default", UPDATE, "")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Unsupported Content type \"application/sparql-update\" for "
           "Graph Store protocol."));
 }
@@ -465,7 +467,7 @@ TEST(SparqlProtocolTest, parsePOST) {
       parse(makeRequest(
           http::verb::post, "/",
           {{http::field::content_type, {"unsupported/content-type"}}}, "")),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           R"(POST request with content type "unsupported/content-type" not supported (must be Query/Update with content type "application/x-www-form-urlencoded", "application/sparql-query" or "application/sparql-update" or a valid graph store protocol POST request)"));
 }
 
@@ -519,11 +521,13 @@ TEST(SparqlProtocolTest, parseHttpRequest) {
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
-      testing::StrEq("Request method \"PATCH\" not supported (GET, POST, TSOP, "
-                     "PUT and DELETE are supported; PATCH for graph "
-                     "store protocol is not yet supported)"));
-  AD_EXPECT_THROW_WITH_MESSAGE(parse(makeGetRequest(" ")),
-                               testing::StrEq("Failed to parse URL: \"/ \"."));
+      ::testing::StrEq(
+          "Request method \"PATCH\" not supported (GET, POST, TSOP, "
+          "PUT and DELETE are supported; PATCH for graph "
+          "store protocol is not yet supported)"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makeGetRequest(" ")),
+      ::testing::StrEq("Failed to parse URL: \"/ \"."));
 }
 
 // _____________________________________________________________________________________________
@@ -537,7 +541,7 @@ TEST(SparqlProtocolTest, parseGraphStoreProtocolIndirect) {
       SparqlProtocol::parseGraphStoreProtocolIndirect(
           makeGetRequest(absl::StrCat(
               "/", GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, "/foo.ttl"))),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)"));
 }
 
@@ -550,3 +554,4 @@ TEST(SparqlProtocolTest, parseGraphStoreProtocolDirect) {
                               GraphStoreOperation{iri(absl::StrCat(
                                   "<http://example.com", path, ">"))}));
 }
+}  // namespace qlever

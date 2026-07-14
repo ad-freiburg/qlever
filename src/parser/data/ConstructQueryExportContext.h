@@ -9,8 +9,12 @@
 #include "engine/VariableToColumnMap.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 // Forward declarations to avoid cyclic dependencies
 class Index;
+class LocalVocab;
+
 enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 
 // All the data that is needed to evaluate an element in a construct query.
@@ -23,5 +27,7 @@ struct ConstructQueryExportContext {
   const Index& _qecIndex;
   const size_t _rowOffset;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

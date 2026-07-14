@@ -4,6 +4,8 @@
 
 #include "engine/TextIndexScanForEntity.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, TextIndexScanForEntityConfiguration config)

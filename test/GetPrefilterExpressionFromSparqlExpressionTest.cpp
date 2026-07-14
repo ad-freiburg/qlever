@@ -6,12 +6,14 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "util/GTestHelpers.h"
 
-using ad_utility::testing::BlankNodeId;
-using ad_utility::testing::BoolId;
-using ad_utility::testing::DoubleId;
-using ad_utility::testing::IntId;
-using ad_utility::testing::UndefId;
-using ad_utility::testing::VocabId;
+using namespace qlever;
+
+using qlever::testing::BlankNodeId;
+using qlever::testing::BoolId;
+using qlever::testing::DoubleId;
+using qlever::testing::IntId;
+using qlever::testing::UndefId;
+using qlever::testing::VocabId;
 
 using namespace makeSparqlExpression;
 using namespace makeFilterExpression;
@@ -92,7 +94,7 @@ auto makeEvalAndEqualityCheck(const LocalVocabContext& context) {
 // getPrefilterExpressionForMetadata.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      testGetPrefilterExpressionDefault) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   evalAndEqualityCheck(
@@ -117,7 +119,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // PrefilterExpression.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExpressionFromSparqlRelational) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const TestDates dt{};
@@ -178,7 +180,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // corresponding PrefilterExpression values.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExpressionsToComplexSparqlExpressions) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const Variable varX = Variable{"?x"};
@@ -388,7 +390,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // For this test we expect that no PrefilterExpression is available.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getEmptyPrefilterFromSparqlRelational) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const Variable var = Variable{"?x"};
@@ -410,7 +412,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // empty PrefilterExpression vector.
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getEmptyPrefilterForMoreComplexSparqlExpressions) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const Variable varX = Variable{"?x"};
@@ -498,7 +500,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      testGetPrefixRegexExpressionFromSparqlExprssions) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto varX = Variable{"?x"};
@@ -531,7 +533,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExprForIsDatatypeExpr) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto varX = Variable{"?x"};
@@ -552,7 +554,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 // Test PrefilterExpression creation for SparqlExpression InExpression
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto varX = Variable{"?x"};
@@ -569,7 +571,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
 //______________________________________________________________________________
 // Test PrefilterExpression creation for the expression: `YEAR(?var) op INT`.
 TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto evalAndEqualityCheck =
       makeEvalAndEqualityCheck(qec->getLocalVocabContext());
   const auto var = Variable{"?x"};
@@ -668,7 +670,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      checkPropertiesForPrefilterConstruction) {
-  namespace pd = prefilterExpressions::detail;
+  namespace pd = qlever::prefilterExpressions::detail;
   const Variable varX = Variable{"?x"};
   const Variable varY = Variable{"?y"};
   const Variable varZ = Variable{"?z"};

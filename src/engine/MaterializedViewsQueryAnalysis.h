@@ -18,6 +18,8 @@
 #include "rdfTypes/Variable.h"
 #include "util/StringPairHashMap.h"
 
+namespace qlever {
+
 // Forward declarations to prevent cyclic dependencies.
 class MaterializedView;
 class IndexScan;
@@ -166,5 +168,5 @@ BindExpressionAndTargetCol extractBindExpressions(
     const ParsedQuery& parsed, const VariableToColumnMap& varToColMap);
 
 }  // namespace materializedViewsQueryAnalysis
-
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_

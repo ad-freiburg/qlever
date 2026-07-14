@@ -18,6 +18,8 @@
 #include "util/Iterators.h"
 #include "util/Views.h"
 
+namespace qlever {
+
 /**
  * @brief Represents a line in the words file.
  *
@@ -204,5 +206,7 @@ class DocsFileParser : public WordsAndDocsFileParser,
   using WordsAndDocsFileParser::WordsAndDocsFileParser;
   Storage get() override;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H

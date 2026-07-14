@@ -8,6 +8,8 @@
 #include "backports/three_way_comparison.h"
 #include "parser/TripleComponent.h"
 
+namespace qlever {
+
 // A named or default graph
 struct DatasetClause {
   TripleComponent::Iri dataset_;
@@ -16,5 +18,7 @@ struct DatasetClause {
   // For testing
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DatasetClause, dataset_, isNamed_)
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_DATASETCLAUSE_H

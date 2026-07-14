@@ -11,6 +11,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 class Minus : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -45,11 +47,11 @@ class Minus : public Operation {
   // Create a variant of functions that find undefined values in a range. In
   // case the selected operation (via `left`) might conceptually contain
   // undefined values all values are checked for undef values. If undef values
-  // are found an instance of `ad_utility::FindSmallerUndefRanges` will be
+  // are found an instance of `FindSmallerUndefRanges` will be
   // returned, otherwise the function will be replaced with `ad_utility::Noop`,
   // each wrapped in a `std::variant` respectively.
   // `auto` is used instead of
-  // `std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>` to
+  // `std::variant<ad_utility::Noop, FindSmallerUndefRanges>` to
   // avoid including expensive headers that are only relevant for the
   // implementation of this function.
   auto makeUndefRangesChecker(bool left, const IdTableView<0>& idTable) const;
@@ -127,4 +129,5 @@ class Minus : public Operation {
       const std::set<Variable>& variables) const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_MINUS_H

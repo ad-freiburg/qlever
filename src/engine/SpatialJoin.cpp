@@ -46,6 +46,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
+using namespace qlever;
+
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SpatialJoinConfiguration config,
@@ -623,7 +625,7 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
       [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
-        return ad_utility::makeExecutionTree<SpatialJoin>(
+        return makeExecutionTree<SpatialJoin>(
             _executionContext, config_, std::move(left), std::move(right));
       });
 }

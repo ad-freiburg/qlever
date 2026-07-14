@@ -34,21 +34,22 @@
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
-template <typename Operation>
-CPP_concept QueryOrUpdate =
-    ad_utility::SameAsAny<Operation,
-                          ad_utility::url_parser::sparqlOperation::Query,
-                          ad_utility::url_parser::sparqlOperation::Update>;
-
 // Forward declaration for testing.
 namespace serverTestHelpers {
 class ServerForTesting;
 }
 
+namespace qlever {
+
+template <typename Operation>
+CPP_concept QueryOrUpdate =
+    ad_utility::SameAsAny<Operation, url_parser::sparqlOperation::Query,
+                          url_parser::sparqlOperation::Update>;
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
-  using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
+  using SharedIndexAndView = std::shared_ptr<Qlever::IndexAndViews>;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
@@ -59,7 +60,7 @@ class Server {
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
-                  std::string accessToken, const qlever::EngineConfig& config,
+                  std::string accessToken, const EngineConfig& config,
                   bool noAccessCheck = false);
 
   virtual ~Server() = default;
@@ -77,7 +78,7 @@ class Server {
   json composeCacheStatsJson() const;
 
  private:
-  qlever::Qlever qlever_;
+  Qlever qlever_;
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
@@ -108,7 +109,7 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
-  using PlannedQuery = qlever::PlannedQuery;
+  using PlannedQuery = PlannedQuery;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -152,10 +153,9 @@ class Server {
   CPP_template(typename VisitorT, typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processOperation(
-          ad_utility::url_parser::sparqlOperation::Operation operation,
-          VisitorT visitor, const ad_utility::Timer& requestTimer,
-          const RequestT& request, ResponseT& send,
-          const std::optional<PlannedQuery>& plannedQuery);
+          url_parser::sparqlOperation::Operation operation, VisitorT visitor,
+          const ad_utility::Timer& requestTimer, const RequestT& request,
+          ResponseT& send, const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -169,8 +169,8 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
-          const ad_utility::url_parser::ParamValueMap& params,
-          ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+          const url_parser::ParamValueMap& params, ParsedQuery&& query,
+          const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
@@ -199,25 +199,24 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
       vector<ad_utility::MediaType> determineMediaTypes(
-          const ad_utility::url_parser::ParamValueMap& params,
-          const RequestT& request);
+          const url_parser::ParamValueMap& params, const RequestT& request);
   FRIEND_TEST(ServerTest, determineMediaType);
   // Determine whether the subtrees and the result should be pinned.
   static std::pair<bool, bool> determineResultPinning(
-      const ad_utility::url_parser::ParamValueMap& params);
+      const url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Prepare the execution of an operation.
   auto prepareOperation(SharedIndexAndView indexAndViews,
                         std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
-                        const ad_utility::url_parser::ParamValueMap& params,
+                        const url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk,
                         std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-      const ad_utility::url_parser::ParamValueMap& parameters);
+      const url_parser::ParamValueMap& parameters);
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored
@@ -336,8 +335,7 @@ class Server {
   // materialized view of this result to disk. This assumes that the access
   // token has already been checked.
   void writeMaterializedView(
-      const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const std::string& name, const url_parser::sparqlOperation::Query& query,
       const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       TimeLimit timeLimit);
@@ -349,8 +347,8 @@ class Server {
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
 
   // Getters for the `Qlever` instance, as well as its data members.
-  qlever::Qlever& qlever() { return qlever_; }
-  const qlever::Qlever& qlever() const { return qlever_; }
+  Qlever& qlever() { return qlever_; }
+  const Qlever& qlever() const { return qlever_; }
 
   QueryResultCache& cache() { return qlever().cache(); }
   const QueryResultCache& cache() const { return qlever().cache(); }
@@ -380,4 +378,5 @@ class Server {
   }
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

@@ -17,6 +17,8 @@
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 TEST(GraphNameManager, allocateNewGraph) {
   {
@@ -38,7 +40,7 @@ TEST(GraphNameManager, allocateNewGraph) {
 
 // _____________________________________________________________________________
 TEST(GraphNameManager, storeAndRestoreData) {
-  auto [tmpFile, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [tmpFile, cleanup] = qlever::testing::filenameForTesting();
 
   {
     auto allocatedGraphs = 13;
@@ -51,7 +53,7 @@ TEST(GraphNameManager, storeAndRestoreData) {
     ad_utility::serialization::FileReadSerializer serializer{tmpFile.c_str()};
     serializer >> nsm;
     EXPECT_THAT(nsm.prefixWithoutBraces_,
-                testing::StrEq("http://example.org/g/"));
+                ::testing::StrEq("http://example.org/g/"));
     EXPECT_EQ(nsm.nextUnallocatedGraph_.load(), 13);
   }
 }
@@ -74,8 +76,8 @@ TEST(GraphNameManager, json) {
 TEST(GraphNameManager, toString) {
   EXPECT_THAT(GraphNameManager("http://example.org/ns/", 42),
               InsertIntoStream(
-                  testing::StrEq("GraphNameManager(prefix=\"http://"
-                                 "example.org/ns/\", allocatedGraphs=42)")));
+                  ::testing::StrEq("GraphNameManager(prefix=\"http://"
+                                   "example.org/ns/\", allocatedGraphs=42)")));
 }
 
 // _____________________________________________________________________________
@@ -103,3 +105,5 @@ TEST(GraphNameManager, readFromDisk) {
     ad_utility::deleteFile("state_file");
   }
 }
+
+}  // namespace qlever

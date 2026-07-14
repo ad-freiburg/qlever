@@ -10,6 +10,8 @@
 #include "global/IndexTypes.h"
 #include "util/File.h"
 
+namespace qlever {
+
 class DocsDB {
  public:
   void init(const std::string& fileName);
@@ -19,5 +21,7 @@ class DocsDB {
   off_t _startOfOffsets;
   size_t _size = 0;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_DOCSDB_H

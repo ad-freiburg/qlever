@@ -13,6 +13,8 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
+
+using namespace qlever;
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -157,8 +159,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
 
   // Extract the join columns from both inputs to make the following code
   // easier.
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
-                                               right.numColumns()};
+  JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
+                                   right.numColumns()};
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
   IdTableView<0> joinColumnsRight =
@@ -207,7 +209,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // in the join columns.
     auto checkCancellationLambda = [this] { checkCancellation(); };
     auto runZipperJoin = [&](auto findUndef) {
-      [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+      [[maybe_unused]] auto numOutOfOrder = zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight,
           ql::ranges::lexicographical_compare, noopRowAdder, findUndef,
           findUndef, actionForNotExisting, checkCancellationLambda);
@@ -215,7 +217,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     if (isCheap) {
       runZipperJoin(ad_utility::noop);
     } else {
-      runZipperJoin(ad_utility::findSmallerUndefRanges);
+      runZipperJoin(findSmallerUndefRanges);
     }
   };
   ad_utility::callFixedSizeVi(numJoinColumns, runForNumJoinCols);
@@ -283,8 +285,8 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // downside that it might look confusing
     tree->getRootOperation()->setSelectedVariablesForSubquery(
         pq.getVisibleVariables());
-    subtree = ad_utility::makeExecutionTree<ExistsJoin>(
-        qec, std::move(subtree), std::move(tree), exists.variable());
+    subtree = makeExecutionTree<ExistsJoin>(qec, std::move(subtree),
+                                            std::move(tree), exists.variable());
   }
   return subtree;
 }
@@ -299,15 +301,14 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 
 // _____________________________________________________________________________
 bool ExistsJoin::rightIndexNestedLoopJoinIsPossible() const {
-  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
-                                                                 joinColumns_);
+  return joinHelpers::rightIndexNestedLoopJoinIsPossible(left_, right_,
+                                                         joinColumns_);
 }
 
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
   auto optionalResults =
-      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_,
-                                                                   right_);
+      joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(left_, right_);
   if (!optionalResults.has_value()) {
     return std::nullopt;
   }
@@ -333,7 +334,7 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
 
-  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+  auto leftRes = joinHelpers::computeResultSkipChild(
       std::dynamic_pointer_cast<Sort>(left_->getRootOperation()),
       requestLaziness);
   bool isLazy = !leftRes->isFullyMaterialized();
@@ -359,8 +360,7 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
 // _____________________________________________________________________________
 std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
     bool requestLaziness) {
-  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_,
-                                                        right_)) {
+  if (!joinHelpers::joinColumnsAreAlwaysDefined(joinColumns_, left_, right_)) {
     return std::nullopt;
   }
   if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
@@ -582,5 +582,5 @@ CPP_template_def(typename Range)(
                                  static_cast<bool>(tracker));
                            }),
       idTable.getColumn(idTable.numColumns() - 1).begin(),
-      qlever::joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
+      joinHelpers::CHUNK_SIZE, [this]() { checkCancellation(); });
 }

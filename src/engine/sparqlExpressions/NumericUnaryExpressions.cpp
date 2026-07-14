@@ -6,7 +6,7 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
 // _____________________________________________________________________________
@@ -246,4 +246,4 @@ SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child) {
   return std::make_unique<UnaryNegateExpression>(std::move(child));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

@@ -14,6 +14,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // An operation that takes a set of subresults that pairwise-disjoint sets of
 // bound variables and materializes the full Cartesian product of these
 // operations.
@@ -146,4 +148,5 @@ class CartesianProductJoin : public Operation {
       std::shared_ptr<const Result> lazyResult) const;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H

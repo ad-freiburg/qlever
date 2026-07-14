@@ -12,14 +12,15 @@
 namespace ad_utility {
 
 // _________________________________________________________
-triple_component::Iri convertLangtagToEntityUri(std::string_view tag) {
-  return triple_component::Iri::fromIriref(makeQleverInternalIri("@", tag));
+qlever::triple_component::Iri convertLangtagToEntityUri(std::string_view tag) {
+  return qlever::triple_component::Iri::fromIriref(
+      makeQleverInternalIri("@", tag));
 }
 
 // _________________________________________________________
-triple_component::Iri convertToLanguageTaggedPredicate(
-    const triple_component::Iri& pred, std::string_view langtag) {
-  return triple_component::Iri::fromIriref(absl::StrCat(
+qlever::triple_component::Iri convertToLanguageTaggedPredicate(
+    const qlever::triple_component::Iri& pred, std::string_view langtag) {
+  return qlever::triple_component::Iri::fromIriref(absl::StrCat(
       "@", langtag, "@<", asStringViewUnsafe(pred.getContent()), ">"));
 }
 

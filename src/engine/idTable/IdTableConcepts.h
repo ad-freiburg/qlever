@@ -11,7 +11,7 @@
 
 // Concepts related to `IdTable` wrappers that are being used for join
 // operations.
-namespace ad_utility::detail {
+namespace qlever::detail {
 
 namespace concepts {
 
@@ -50,6 +50,6 @@ void mergeVocabInto(const T& table, const LocalVocab*& currentVocab,
     targetVocab.mergeWith(table.getLocalVocab());
   }
 }
-}  // namespace ad_utility::detail
+}  // namespace qlever::detail
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLECONCEPTS_H

@@ -8,6 +8,8 @@
 #include "engine/Operation.h"
 #include "parser/GraphPatternOperation.h"
 
+namespace qlever {
+
 // Operation for DESCRIBE queries according to the Concise Bounded Description
 // (CBD) specification: https://www.w3.org/submissions/2005/SUBM-CBD-20050603 .
 //
@@ -80,4 +82,5 @@ class Describe : public Operation {
   IdTable getIdsToDescribe(const Result& result, LocalVocab& localVocab) const;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_DESCRIBE_H

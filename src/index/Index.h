@@ -23,6 +23,8 @@
 #include "util/CancellationHandle.h"
 #include "util/json.h"
 
+namespace qlever {
+
 // Forward declarations.
 class IdTable;
 class TextBlockMetaData;
@@ -73,8 +75,8 @@ class Index {
     std::vector<Score> scores_;
   };
 
-  using Filetype = qlever::Filetype;
-  using InputFileSpecification = qlever::InputFileSpecification;
+  using Filetype = Filetype;
+  using InputFileSpecification = InputFileSpecification;
 
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
@@ -113,7 +115,7 @@ class Index {
   using TextVocab = TextVocabulary;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
-  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+  BlankNodeManager* getBlankNodeManager() const;
 
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();
@@ -245,5 +247,7 @@ class Index {
   // Allow implicit conversions to `const IndexImpl&`.
   operator const IndexImpl&() const { return getImpl(); }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEX_H

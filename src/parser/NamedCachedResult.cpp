@@ -9,6 +9,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 
+using namespace qlever;
+
 namespace {
 // Helper function for the constructor that takes an IRI. check that the IRI has
 // the expected format and extract the query name.
@@ -23,7 +25,7 @@ std::string extractQueryNameFromIri(const TripleComponent::Iri& iri) {
   return std::string{view};
 }
 }  // namespace
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // _____________________________________________________________________________
 NamedCachedResult::NamedCachedResult(const TripleComponent::Iri& iri)
@@ -48,4 +50,4 @@ void NamedCachedResult::throwBecauseNotEmpty() {
   throw std::runtime_error{
       "The body of a named cache query request must be empty"};
 }
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

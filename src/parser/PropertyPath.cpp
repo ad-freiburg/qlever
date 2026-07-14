@@ -4,6 +4,8 @@
 
 #include "parser/PropertyPath.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 PropertyPath::MinMaxPath& PropertyPath::MinMaxPath::operator=(
     const MinMaxPath& other) {
@@ -20,12 +22,11 @@ bool PropertyPath::MinMaxPath::operator==(const MinMaxPath& other) const {
 
 // _____________________________________________________________________________
 PropertyPath::PropertyPath(
-    std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
-        path)
+    std::variant<triple_component::Iri, ModifiedPath, MinMaxPath> path)
     : path_{std::move(path)} {}
 
 // _____________________________________________________________________________
-PropertyPath PropertyPath::fromIri(ad_utility::triple_component::Iri iri) {
+PropertyPath PropertyPath::fromIri(triple_component::Iri iri) {
   return PropertyPath{std::move(iri)};
 }
 
@@ -100,7 +101,7 @@ void PropertyPath::ModifiedPath::writeToStream(std::ostream& out) const {
 // _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
   std::visit(ad_utility::OverloadCallOperator{
-                 [&out](const ad_utility::triple_component::Iri& iri) {
+                 [&out](const triple_component::Iri& iri) {
                    out << iri.toStringRepresentation();
                  },
                  [&out](const ModifiedPath& path) { path.writeToStream(out); },
@@ -120,14 +121,14 @@ std::string PropertyPath::asString() const {
 }
 
 // _____________________________________________________________________________
-const ad_utility::triple_component::Iri& PropertyPath::getIri() const {
+const triple_component::Iri& PropertyPath::getIri() const {
   AD_CONTRACT_CHECK(isIri());
-  return std::get<ad_utility::triple_component::Iri>(path_);
+  return std::get<triple_component::Iri>(path_);
 }
 
 // _____________________________________________________________________________
 bool PropertyPath::isIri() const {
-  return std::holds_alternative<ad_utility::triple_component::Iri>(path_);
+  return std::holds_alternative<triple_component::Iri>(path_);
 }
 
 // _____________________________________________________________________________
@@ -160,3 +161,5 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
   p.writeToStream(out);
   return out;
 }
+
+}  // namespace qlever

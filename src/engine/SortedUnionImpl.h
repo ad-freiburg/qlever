@@ -13,7 +13,7 @@
 #include "engine/idTable/IdTable.h"
 #include "index/LocalVocab.h"
 
-namespace sortedUnion {
+namespace qlever::sortedUnion {
 // Helper struct that has the same layout as `Result::IdTableVocabPair` but
 // doesn't own the data.
 struct Wrapper {
@@ -246,6 +246,5 @@ SortedUnionImpl(IterationData<Range1>, IterationData<Range2>, bool,
                 const ad_utility::AllocatorWithLimit<Id>&,
                 ql::span<const ColumnIndex, SPAN_SIZE>,
                 Func) -> SortedUnionImpl<SPAN_SIZE, Range1, Range2, Func>;
-}  // namespace sortedUnion
-
+}  // namespace qlever::sortedUnion
 #endif  // QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H

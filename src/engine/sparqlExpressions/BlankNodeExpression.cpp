@@ -11,7 +11,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 namespace detail {
 // If the char is allowed inside the blank node label. A little bit stricter
@@ -219,4 +219,4 @@ SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeUniqueBlankNodeExpression() {
   return std::make_unique<detail::BlankNodeExpression>();
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

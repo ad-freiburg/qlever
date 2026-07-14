@@ -17,12 +17,12 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
-using ad_utility::testing::DateId;
+using qlever::testing::DateId;
 
 constexpr auto DateParser = &DateYearOrDuration::parseXsdDate;
 
 namespace makeFilterExpression {
-using namespace prefilterExpressions;
+using namespace qlever::prefilterExpressions;
 
 // Make RelationalExpression
 template <typename RelExpr>
@@ -62,7 +62,7 @@ inline auto notPrefilterExpression =
 
 // Make PrefixRegexExpression
 inline auto makePrefixRegexExpression =
-    [](const TripleComponent::Literal& prefix, bool isNegated = false) {
+    [](const qlever::TripleComponent::Literal& prefix, bool isNegated = false) {
       return std::make_unique<PrefixRegexExpression>(prefix, isNegated);
     };
 
@@ -101,6 +101,8 @@ constexpr inline auto inExpr = isInExpression;
 constexpr inline auto prefixRegex = makePrefixRegexExpression;
 
 namespace filterHelper {
+using qlever::LocalVocabContext;
+using qlever::LocalVocabEntry;
 //______________________________________________________________________________
 // Create `LocalVocabEntry` / `LiteralOrIri`.
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
@@ -115,8 +117,9 @@ inline auto LVE = [](std::string litOrIri,
 // Construct a `PAIR` with the given `PrefilterExpression` and `Variable`
 // value.
 constexpr inline auto pr =
-    [](std::unique_ptr<prefilterExpressions::PrefilterExpression> expr,
-       const Variable& var) -> sparqlExpression::PrefilterExprVariablePair {
+    [](std::unique_ptr<qlever::prefilterExpressions::PrefilterExpression> expr,
+       const qlever::Variable& var)
+    -> qlever::sparqlExpression::PrefilterExprVariablePair {
   return {std::move(expr), var};
 };
 
@@ -126,13 +129,13 @@ constexpr inline auto pr =
 struct MakePrefilterVec {
   template <QL_CONCEPT_OR_TYPENAME(
       ql::concepts::convertible_to<
-          sparqlExpression::PrefilterExprVariablePair>)... Args>
+          qlever::sparqlExpression::PrefilterExprVariablePair>)... Args>
   constexpr auto operator()(Args&&... prefilterArgs) const {
-    std::vector<sparqlExpression::PrefilterExprVariablePair> prefilterVarPairs =
-        {};
+    std::vector<qlever::sparqlExpression::PrefilterExprVariablePair>
+        prefilterVarPairs = {};
     if constexpr (sizeof...(prefilterArgs) > 0) {
       (prefilterVarPairs.emplace_back(
-           std::forward<sparqlExpression::PrefilterExprVariablePair>(
+           std::forward<qlever::sparqlExpression::PrefilterExprVariablePair>(
                prefilterArgs)),
        ...);
     }
@@ -146,13 +149,14 @@ constexpr inline MakePrefilterVec makePrefilterVec;
 }  // namespace makeFilterExpression
 
 namespace makeSparqlExpression {
-using namespace sparqlExpression;
+using namespace qlever::sparqlExpression;
 
 namespace {
-using Literal = ad_utility::triple_component::Literal;
-using Iri = ad_utility::triple_component::Iri;
+using Literal = qlever::triple_component::Literal;
+using Iri = qlever::triple_component::Iri;
 using SparqlPtr = std::unique_ptr<SparqlExpression>;
-using VariantArgs = std::variant<Variable, ValueId, Iri, Literal, SparqlPtr>;
+using VariantArgs =
+    std::variant<qlever::Variable, qlever::ValueId, Iri, Literal, SparqlPtr>;
 
 //______________________________________________________________________________
 // If value `child` is not already a `SparqlExpression` pointer, try to create
@@ -161,9 +165,9 @@ using VariantArgs = std::variant<Variable, ValueId, Iri, Literal, SparqlPtr>;
 constexpr inline auto makeOptLiteralSparqlExpr =
     [](auto child) -> std::unique_ptr<SparqlExpression> {
   using T = std::decay_t<decltype(child)>;
-  if constexpr (std::is_same_v<T, ValueId>) {
+  if constexpr (std::is_same_v<T, qlever::ValueId>) {
     return std::make_unique<IdExpression>(child);
-  } else if constexpr (std::is_same_v<T, Variable>) {
+  } else if constexpr (std::is_same_v<T, qlever::Variable>) {
     return std::make_unique<VariableExpression>(child);
   } else if constexpr (std::is_same_v<T, Literal>) {
     return std::make_unique<StringLiteralExpression>(child);
@@ -209,7 +213,7 @@ std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
 //______________________________________________________________________________
 std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
     VariantArgs varExpr, VariantArgs litExpr) {
-  return sparqlExpression::makeRegexExpression(
+  return qlever::sparqlExpression::makeRegexExpression(
       std::visit(getExpr, std::move(varExpr)),
       std::visit(getExpr, std::move(litExpr)), nullptr);
 }
@@ -221,10 +225,10 @@ std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
 }
 
 //______________________________________________________________________________
-template <prefilterExpressions::IsDatatype Datatype>
+template <qlever::prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     VariantArgs child) {
-  using enum prefilterExpressions::IsDatatype;
+  using enum qlever::prefilterExpressions::IsDatatype;
   auto childExpr = std::visit(getExpr, std::move(child));
   if constexpr (Datatype == IRI) {
     return makeIsIriExpression(std::move(childExpr));
@@ -249,29 +253,29 @@ CPP_template(typename... Args)(
   (childrenSparql.push_back(
        std::visit(getExpr, VariantArgs{std::forward<Args>(argList)})),
    ...);
-  return std::make_unique<sparqlExpression::InExpression>(
+  return std::make_unique<qlever::sparqlExpression::InExpression>(
       std::visit(getExpr, std::move(first)), std::move(childrenSparql));
 }
 
 //______________________________________________________________________________
 // LESS THAN (`<`, `SparqlExpression`)
 constexpr inline auto ltSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::LessThanExpression>;
+    &makeRelationalSparqlExprImpl<qlever::sparqlExpression::LessThanExpression>;
 // LESS EQUAL (`<=`, `SparqlExpression`)
-constexpr inline auto leSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::LessEqualExpression>;
+constexpr inline auto leSprql = &makeRelationalSparqlExprImpl<
+    qlever::sparqlExpression::LessEqualExpression>;
 // EQUAL (`==`, `SparqlExpression`)
 constexpr inline auto eqSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::EqualExpression>;
+    &makeRelationalSparqlExprImpl<qlever::sparqlExpression::EqualExpression>;
 // NOT EQUAL (`!=`, `SparqlExpression`)
 constexpr inline auto neqSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::NotEqualExpression>;
+    &makeRelationalSparqlExprImpl<qlever::sparqlExpression::NotEqualExpression>;
 // GREATER EQUAL (`>=`, `SparqlExpression`)
-constexpr inline auto geSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::GreaterEqualExpression>;
+constexpr inline auto geSprql = &makeRelationalSparqlExprImpl<
+    qlever::sparqlExpression::GreaterEqualExpression>;
 // GREATER THAN (`>`, `SparqlExpression`)
-constexpr inline auto gtSprql =
-    &makeRelationalSparqlExprImpl<sparqlExpression::GreaterThanExpression>;
+constexpr inline auto gtSprql = &makeRelationalSparqlExprImpl<
+    qlever::sparqlExpression::GreaterThanExpression>;
 // AND (`&&`, `SparqlExpression`)
 constexpr inline auto andSprqlExpr = &makeAndExpression;
 // OR (`||`, `SparqlExpression`)
@@ -289,17 +293,17 @@ constexpr inline auto strSprql = &makeStrSparqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `isIri`
-constexpr inline auto isIriSprql =
-    &makeIsDatatypeStartsWithExpression<prefilterExpressions::IsDatatype::IRI>;
+constexpr inline auto isIriSprql = &makeIsDatatypeStartsWithExpression<
+    qlever::prefilterExpressions::IsDatatype::IRI>;
 // Create SparqlExpression `isLiteral`
 constexpr inline auto isLiteralSprql = &makeIsDatatypeStartsWithExpression<
-    prefilterExpressions::IsDatatype::LITERAL>;
+    qlever::prefilterExpressions::IsDatatype::LITERAL>;
 // Create SparqlExpression `isNumeric`
 constexpr inline auto isNumericSprql = &makeIsDatatypeStartsWithExpression<
-    prefilterExpressions::IsDatatype::NUMERIC>;
+    qlever::prefilterExpressions::IsDatatype::NUMERIC>;
 // Create SparqlExpression `isBlank`
 constexpr inline auto isBlankSprql = &makeIsDatatypeStartsWithExpression<
-    prefilterExpressions::IsDatatype::BLANK>;
+    qlever::prefilterExpressions::IsDatatype::BLANK>;
 // Create SparqlExpression `YEAR`.
 constexpr inline auto yearSprqlExpr = &makeYearSparqlExpression;
 

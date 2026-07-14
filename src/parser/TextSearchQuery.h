@@ -12,6 +12,8 @@
 #include "parser/MagicServiceQuery.h"
 #include "util/HashMap.h"
 
+namespace qlever {
+
 /**
  * @brief This struct holds all information given by a single configuration in
  *        the magic service query for text search. It holds information for both
@@ -247,5 +249,7 @@ struct TextSearchQuery : MagicServiceQuery {
 };
 
 }  // namespace parsedQuery
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TEXTSEARCHQUERY_H

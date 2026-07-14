@@ -18,7 +18,8 @@
 
 namespace {
 
-using namespace SpatialJoinTestHelpers;
+using namespace qlever;
+using namespace spatial_join_test_helpers;
 
 void serializeAndDeserializeCache(NamedResultCache& cache,
                                   QueryExecutionContext* qec) {
@@ -53,7 +54,7 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
 
   // Build a `QueryExecutionContext` and pin the query result of `?s <p> ?o`
   // together with an s2 index on `?o`.
-  auto qec = ad_utility::testing::getQec(kb);
+  auto qec = qlever::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
   [[maybe_unused]] auto pinResult = plan.getResult();
@@ -124,7 +125,7 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 
   // First, pin the linestrings as a named s2 index
   const std::string pinQuery = "SELECT * { ?s2 <asWKT> ?geo2 }";
-  auto qec = ad_utility::testing::getQec(kb);
+  auto qec = qlever::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
   const auto pinResultCacheKey = plan.getCacheKey();
@@ -153,8 +154,7 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   // The spatial join gets an index scan returning points as the left child and
   // no right child (it will construct a `ExplicitResult` itself).
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
-                                                 std::nullopt);
+      makeExecutionTree<SpatialJoin>(qec, config, leftChild, std::nullopt);
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
   const auto res = spatialJoin->computeResult(false);

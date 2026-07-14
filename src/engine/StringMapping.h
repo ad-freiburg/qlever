@@ -16,8 +16,10 @@
 #include "global/Id.h"
 #include "util/HashMap.h"
 
+namespace qlever {
 // Forward declaration
 class Index;
+}  // namespace qlever
 
 namespace qlever::binary_export {
 // A helper class for the efficient binary export, that collects the unique
@@ -36,7 +38,7 @@ class StringMapping {
  public:
   // Create a vector with `stringMapping_.size()` entries as follows: For each
   // of the unique `IDs` in the `stringMapping_` resolve the ID to a string via
-  // `ql::exportIds::idToLiteralOrIri`. the result will be stored at
+  // `exportIds::idToLiteralOrIri`. the result will be stored at
   // position `stringMapping_[ID]` in the result, so the vector will be sorted
   // by the order in which `remapId` was called for the IDs.
   // Calling `flush` also clears the `stringMapping_`, which means that the

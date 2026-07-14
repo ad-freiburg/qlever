@@ -17,9 +17,10 @@
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
+using namespace qlever;
 namespace {
 using Var = Variable;
-constexpr auto iri = ad_utility::testing::iri;
+constexpr auto iri = qlever::testing::iri;
 using queryPlannerTestHelpers::NamedTag;
 }  // namespace
 using ::testing::HasSubstr;
@@ -1026,7 +1027,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   // Requested query for right child pinned but without the cached geometry
   // index
   {
-    auto qec = ad_utility::testing::getQec(kb);
+    auto qec = qlever::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", std::nullopt};
     auto plan = h::parseAndPlan(pinned, qec);
     [[maybe_unused]] auto pinResult = plan.getResult();
@@ -1038,7 +1039,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
 
   // Requested query for right child correctly pinned
   {
-    auto qec = ad_utility::testing::getQec(kb);
+    auto qec = qlever::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
     [[maybe_unused]] auto pinResult = plan.getResult();
@@ -1081,7 +1082,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   // Query is pinned correctly with geometry index, but the user does not
   // request the correct column to be used
   {
-    auto qec = ad_utility::testing::getQec(kb);
+    auto qec = qlever::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
     [[maybe_unused]] auto pinResult = plan.getResult();
@@ -1694,7 +1695,7 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   // test if the SpatialJoin operation parses the maximum distance correctly
   auto testMaxDistance = [](std::string distanceIRI, long long distance,
                             bool shouldThrow) {
-    auto qec = ad_utility::testing::getQec();
+    auto qec = qlever::testing::getQec();
     TripleComponent subject{Variable{"?subject"}};
     TripleComponent object{Variable{"?object"}};
     if (shouldThrow) {
@@ -1707,8 +1708,8 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
               subject, iri(distanceIRI),
               object}}.toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-          ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
-                                                     std::nullopt);
+          makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
+                                         std::nullopt);
       std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
       SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
       ASSERT_TRUE(spatialJoin->getMaxDist().has_value());

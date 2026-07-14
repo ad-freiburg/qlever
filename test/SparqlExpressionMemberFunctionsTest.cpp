@@ -27,10 +27,12 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace sparqlExpression;
-using ad_utility::testing::iri;
+using qlever::testing::iri;
 
 }  // namespace
 
@@ -73,7 +75,7 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   // Test LiteralExpression with Literal and Iri (always defined)
   {
     auto literalExpr = std::make_unique<StringLiteralExpression>(
-        ad_utility::testing::tripleComponentLiteral("test"));
+        qlever::testing::tripleComponentLiteral("test"));
     EXPECT_TRUE(literalExpr->isResultAlwaysDefined(varColMap));
 
     auto iriExpr = std::make_unique<IriExpression>(iri("<http://example.org>"));
@@ -83,9 +85,8 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   // Test LiteralExpression with vector of IDs (currently always undefined
   // pessimistically).
   {
-    auto vecExpr =
-        std::make_unique<VectorIdExpression>(VectorWithMemoryLimit<ValueId>(
-            0U, ad_utility::testing::makeAllocator()));
+    auto vecExpr = std::make_unique<VectorIdExpression>(
+        VectorWithMemoryLimit<ValueId>(0U, qlever::testing::makeAllocator()));
     EXPECT_FALSE(vecExpr->isResultAlwaysDefined(varColMap));
   }
 

@@ -4,11 +4,11 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = triple_component::LiteralOrIri;
+using Literal = triple_component::Literal;
 
 // Date functions.
 // The input is `std::nullopt` if the argument to the expression is not a date.
@@ -191,4 +191,4 @@ SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child) {
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child) {
   return std::make_unique<SecondsExpression>(std::move(child));
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

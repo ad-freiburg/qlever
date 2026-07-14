@@ -26,11 +26,11 @@
 #include "parser/LiteralOrIri.h"
 #include "util/ValueIdentity.h"
 
-namespace ql::exportIds {
+namespace qlever::exportIds {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-using Iri = ad_utility::triple_component::Iri;
-using Literal = ad_utility::triple_component::Literal;
+using LiteralOrIri = triple_component::LiteralOrIri;
+using Iri = triple_component::Iri;
+using Literal = triple_component::Literal;
 
 // Convert the `id` to a `Literal`. Datatypes are always stripped, so for
 // literals (this includes IDs that directly store their value, like Doubles)
@@ -221,6 +221,6 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   return results;
 }
 
-}  // namespace ql::exportIds
+}  // namespace qlever::exportIds
 
 #endif  // QLEVER_SRC_INDEX_EXPORTIDS_H

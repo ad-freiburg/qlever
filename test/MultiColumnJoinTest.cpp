@@ -17,9 +17,11 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
-using ad_utility::testing::makeAllocator;
+using namespace qlever;
+using namespace qlever::testing;
+using qlever::testing::makeAllocator;
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 }
 
 TEST(EngineTest, multiColumnJoinTest) {
@@ -35,7 +37,7 @@ TEST(EngineTest, multiColumnJoinTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
@@ -85,7 +87,7 @@ TEST(EngineTest, multiColumnJoinTest) {
 
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   IdTable a = makeIdTableFromVector({{4, 1, 2}});
   MultiColumnJoin join{qec, idTableToExecutionTree(qec, a),
                        idTableToExecutionTree(qec, a)};
@@ -112,39 +114,39 @@ TEST(MultiColumnJoin, clone) {
 
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
-  using ad_utility::triple_component::Iri;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::Iri;
+  auto* qec = qlever::testing::getQec();
   // Not in graph no undef
-  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
   // Not in graph, potentially undef
-  auto values3 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values3 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto values4 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values4 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
   // In graph, no undef
-  auto index1 = ad_utility::makeExecutionTree<IndexScan>(
+  auto index1 = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Variable{"?c"}});
-  auto index2 = ad_utility::makeExecutionTree<IndexScan>(
+  auto index2 = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Variable{"?b"}});
   // In graph, potential undef
-  auto index3 = ad_utility::makeExecutionTree<NeutralOptional>(
-      qec, ad_utility::makeExecutionTree<IndexScan>(
+  auto index3 = makeExecutionTree<NeutralOptional>(
+      qec, makeExecutionTree<IndexScan>(
                qec, Permutation::PSO,
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?c"}}));
-  auto index4 = ad_utility::makeExecutionTree<NeutralOptional>(
-      qec, ad_utility::makeExecutionTree<IndexScan>(
+  auto index4 = makeExecutionTree<NeutralOptional>(
+      qec, makeExecutionTree<IndexScan>(
                qec, Permutation::PSO,
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?b"}}));

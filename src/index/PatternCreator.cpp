@@ -8,6 +8,8 @@
 
 #include "global/SpecialIds.h"
 
+namespace qlever {
+
 using PatternId = Pattern::PatternId;
 
 // _________________________________________________________________________
@@ -174,3 +176,5 @@ void PatternCreator::printStatistics(
               << patternStatistics.avgNumDistinctSubjectsPerPredicate_
               << std::endl;
 }
+
+}  // namespace qlever

@@ -8,6 +8,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "index/ScanSpecification.h"
 
+using namespace qlever;
+
 TEST(ScanSpecification, getters) {
   Id i = Id::makeFromInt(42);
   Id j = Id::makeFromInt(47);
@@ -58,7 +60,7 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
   EXPECT_ANY_THROW(STc(n, iTc, n));
   EXPECT_ANY_THROW(STc(iTc, n, iTc));
 
-  const auto& index = ad_utility::testing::getQec()->getIndex();
+  const auto& index = qlever::testing::getQec()->getIndex();
   auto toScanSpec = [&index](const STc& s) {
     return s.toScanSpecification(index.getImpl());
   };
@@ -95,7 +97,7 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
               ::testing::Not(matchScanSpec(S(n, n, n), 3)));
 
   // Test the resolution of vocab entries.
-  auto getId = ad_utility::testing::makeGetId(index);
+  auto getId = qlever::testing::makeGetId(index);
   auto x = getId("<x>");
   TripleComponent xIri = TripleComponent::Iri::fromIriref("<x>");
 

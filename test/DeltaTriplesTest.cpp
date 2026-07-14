@@ -24,8 +24,10 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
+namespace qlever {
 namespace {
 using namespace deltaTriplesTestHelpers;
+using namespace qlever::testing;
 
 constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
   static EncodedIriManager encodedIriManager_;
@@ -64,7 +66,7 @@ class DeltaTriplesTest : public ::testing::Test {
       "<anon> <x> _:blubb";
 
   // Query execution context with index for testing, see `IndexTestHelpers.h`.
-  QueryExecutionContext* testQec = ad_utility::testing::getQec(testTurtle);
+  QueryExecutionContext* testQec = getQec(testTurtle);
 
   // Make `TurtleTriple` from given Turtle input.
   std::vector<TurtleTriple> makeTurtleTriples(
@@ -86,7 +88,7 @@ class DeltaTriplesTest : public ::testing::Test {
       // The RdfStringParser returns temporary internal IDs for the default
       // graph. Detect this and overwrite with the Iri which gets looked up for
       // the correct ID.
-      if (triple.graphIri_ == qlever::specialIds().at(DEFAULT_GRAPH_IRI)) {
+      if (triple.graphIri_ == specialIds().at(DEFAULT_GRAPH_IRI)) {
         triple.graphIri_ = TripleComponent(
             TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI));
       }
@@ -162,7 +164,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   auto TriplesAreStr = [this, &index,
                         &localVocab](const std::vector<std::string>& triples) {
-    return testing::UnorderedElementsAreArray(
+    return ::testing::UnorderedElementsAreArray(
         makeIdTriples(index, localVocab, triples));
   };
   // A matcher that checks the state of a `DeltaTriples`:
@@ -177,7 +179,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                      const std::vector<std::string>& deleted,
                      const std::vector<std::string>& internalInserted,
                      const std::vector<std::string>& internalDeleted)
-      -> testing::Matcher<const DeltaTriples&> {
+      -> ::testing::Matcher<const DeltaTriples&> {
     using ::testing::AllOf;
     using TriplesNormal = DeltaTriples::TriplesSets<false>;
     using TriplesInternal = DeltaTriples::TriplesSets<true>;
@@ -274,7 +276,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
             cancellationHandle,
             makeIdTriples(index, localVocab,
                           {"<C> <prev> <B>", "<B> <prev> <A>"})),
-        testing::_);
+        ::testing::_);
   }
 #endif
 
@@ -411,7 +413,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                    std::vector<std::array<TripleComponent, 3>> deleted,
                    std::vector<std::array<TripleComponent, 3>> internalInserted,
                    std::vector<std::array<TripleComponent, 3>> internalDeleted)
-      -> testing::Matcher<const DeltaTriples&> {
+      -> ::testing::Matcher<const DeltaTriples&> {
     using ::testing::AllOf;
     using TriplesNormal = DeltaTriples::TriplesSets<false>;
     using TriplesInternal = DeltaTriples::TriplesSets<true>;
@@ -679,13 +681,13 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
   auto Snapshot = [](size_t index, size_t numTriples)
-      -> testing::Matcher<const LocatedTriplesSharedState> {
+      -> ::testing::Matcher<const LocatedTriplesSharedState> {
     auto m =
         AD_PROPERTY(LocatedTriplesPerBlock, numTriplesForTesting, numTriples);
-    return testing::Pointee(testing::AllOf(
-        AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
+    return ::testing::Pointee(::testing::AllOf(
+        AD_FIELD(LocatedTriplesState, index_, ::testing::Eq(index)),
         AD_FIELD(LocatedTriplesState, locatedTriplesPerBlock_,
-                 testing::ElementsAre(m, m, m, m, m, m))));
+                 ::testing::ElementsAre(m, m, m, m, m, m))));
   };
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();
@@ -835,7 +837,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   using namespace ::testing;
-  using ad_utility::triple_component::LiteralOrIri;
+  using triple_component::LiteralOrIri;
   auto tmpFile = std::filesystem::temp_directory_path() / "testDeltaTriples";
   // Make sure no file like this exists
   std::filesystem::remove(tmpFile);
@@ -921,7 +923,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, copyLocalVocab) {
   using namespace ::testing;
-  using ad_utility::triple_component::LiteralOrIri;
+  using triple_component::LiteralOrIri;
   const auto& localVocabContext = testQec->getLocalVocabContext();
   DeltaTriples deltaTriples{testQec->getIndex()};
 
@@ -956,8 +958,7 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
                   Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
                                       Eq(LANGUAGE_PREDICATE)))));
 
-  using OBE =
-      ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
+  using OBE = BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
   // Blank Nodes are assigned at random, so all we can check is that there is
   // exactly one block allocated.
   EXPECT_THAT(ownedBlocks, ElementsAre(AD_FIELD(OBE, blockIndices_,
@@ -967,7 +968,7 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   using namespace ::testing;
-  using ad_utility::triple_component::LiteralOrIri;
+  using triple_component::LiteralOrIri;
   const auto& index = testQec->getIndex();
   DeltaTriplesManager deltaTriplesManager(index);
 
@@ -1057,7 +1058,7 @@ TEST_F(DeltaTriplesTest, remapId) {
   auto I = &Id::makeFromInt;
   auto V = &makeVocabId;
   auto B = &makeBlankNodeId;
-  qlever::indexRebuilder::IndexRebuildMapping idMapping;
+  indexRebuilder::IndexRebuildMapping idMapping;
   Id entryId = makeLocalVocabId(10101010);
   auto remap = [&idMapping](Id id) {
     DeltaTriples::remapId(idMapping, id);
@@ -1086,13 +1087,13 @@ TEST_F(DeltaTriplesTest, remapId) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 namespace {
-qlever::indexRebuilder::IndexRebuildMapping simulateRebuild(
+indexRebuilder::IndexRebuildMapping simulateRebuild(
     const std::vector<LocalVocabIndex>& originalVocab,
     const std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
+        BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>&
         blankNodeBlocks,
     uint64_t minBlankNodeIndex) {
-  qlever::indexRebuilder::IndexRebuildMapping idMapping;
+  indexRebuilder::IndexRebuildMapping idMapping;
   Id firstNewEntry =
       Id::fromBits(originalVocab.at(0)->positionInVocab().upperBound_.get());
   Id secondNewEntry =
@@ -1126,7 +1127,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();
-  auto getId = ad_utility::testing::makeGetId(index);
+  auto getId = makeGetId(index);
   LocalVocab localVocab;
 
   Id x = getId("<x>");
@@ -1164,7 +1165,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
   // existing one suffices.
   DeltaTriples newDeltaTriples(testQec->getIndex());
   ad_utility::timer::TimeTracer tracer{"testAddFromSnapshotDiff"};
-  qlever::indexRebuilder::IndexRebuildMapping idMapping = simulateRebuild(
+  indexRebuilder::IndexRebuildMapping idMapping = simulateRebuild(
       originalVocab, blankNodeBlocks, index.getBlankNodeManager()->minIndex_);
 
   newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
@@ -1229,3 +1230,5 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
                              newGraph));
 }
 #endif
+
+}  // namespace qlever

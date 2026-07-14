@@ -23,7 +23,7 @@
 #include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
 
-namespace materializedViewsQueryAnalysis {
+namespace qlever::materializedViewsQueryAnalysis {
 
 // _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
@@ -473,4 +473,4 @@ BindExpressionAndTargetCol extractBindExpressions(
   return map;
 }
 
-}  // namespace materializedViewsQueryAnalysis
+}  // namespace qlever::materializedViewsQueryAnalysis

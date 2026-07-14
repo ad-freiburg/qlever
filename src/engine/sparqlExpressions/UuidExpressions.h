@@ -11,29 +11,27 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Random.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail::uuidExpression {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIri = triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(str))};
+  return LiteralOrIri{triple_component::Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(str))};
 };
 
 inline constexpr auto fromIri = [](std::string_view str) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Iri::fromStringRepresentation(
-          absl::StrCat("<urn:uuid:"sv, str, ">"sv))};
+  return LiteralOrIri{triple_component::Iri::fromStringRepresentation(
+      absl::StrCat("<urn:uuid:", str, ">"))};
 };
 
 inline constexpr auto litUuidKey = [](int64_t randId) {
-  return absl::StrCat("STRUUID "sv, randId);
+  return absl::StrCat("STRUUID ", randId);
 };
 
 inline constexpr auto iriUuidKey = [](int64_t randId) {
-  return absl::StrCat("UUID "sv, randId);
+  return absl::StrCat("UUID ", randId);
 };
 
 // With UuidExpressionImpl<fromIri, iriUuidKey>, the UUIDs are returned as an
@@ -94,6 +92,6 @@ using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
 using UuidExpression = detail::uuidExpression::UuidExpression;
 using StrUuidExpression = detail::uuidExpression::StrUuidExpression;
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H

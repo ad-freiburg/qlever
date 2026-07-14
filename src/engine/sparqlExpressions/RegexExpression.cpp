@@ -19,10 +19,9 @@
 
 using namespace std::literals;
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
-void ensureIsSimpleLiteral(
-    const ad_utility::triple_component::Literal& literal) {
+void ensureIsSimpleLiteral(const triple_component::Literal& literal) {
   if (literal.hasDatatype() || literal.hasLanguageTag()) {
     throw std::runtime_error{
         "The REGEX function only accepts simple literals (literals without a "
@@ -84,9 +83,9 @@ struct RegexImpl {
 using RegexExpression =
     string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
@@ -420,4 +419,4 @@ SparqlExpression::Ptr makePrefixMatchExpression(
       variableExpression->value());
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

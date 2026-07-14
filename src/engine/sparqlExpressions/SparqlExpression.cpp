@@ -7,7 +7,7 @@
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 std::vector<const Variable*> SparqlExpression::containedVariables() const {
@@ -87,7 +87,7 @@ SparqlExpression::getVariableForCount() const {
 }
 
 // _____________________________________________________________________________
-std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
+std::optional<Variable> SparqlExpression::getVariableOrNullopt() const {
   return std::nullopt;
 }
 
@@ -219,4 +219,4 @@ void SparqlExpression::getExistsExpressions(
     std::vector<SparqlExpression*>& result) {
   getExistsExpressionsImpl(*this, result);
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

@@ -15,14 +15,17 @@
 #include "parser/SparqlTriple.h"
 #include "util/GTestHelpers.h"
 
+using namespace qlever;
+
 namespace {
+
 using parsedQuery::ExternalValuesException;
 using parsedQuery::ExternalValuesQuery;
 using namespace ::testing;
 using V = Variable;
 
-auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iri = ad_utility::testing::iri;
+auto lit = qlever::testing::tripleComponentLiteral;
+auto iri = qlever::testing::iri;
 using ::testing::HasSubstr;
 
 // Helper to create a triple with an IRI predicate.

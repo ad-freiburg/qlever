@@ -26,6 +26,8 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 namespace detail {
 template <typename DataT>
 struct CompactStringVectorWriter;
@@ -303,5 +305,7 @@ static_assert(
 static_assert(
     std::is_nothrow_move_constructible_v<CompactStringVectorWriter<char>>);
 }  // namespace detail
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_UTIL_COMPACTSTRINGVECTOR_H

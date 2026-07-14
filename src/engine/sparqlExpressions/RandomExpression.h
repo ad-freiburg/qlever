@@ -10,7 +10,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Random.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 class RandomExpression : public SparqlExpression {
  private:
@@ -61,6 +61,6 @@ class RandomExpression : public SparqlExpression {
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RANDOMEXPRESSION_H

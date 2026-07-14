@@ -28,6 +28,9 @@
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 // Fixture that sets up a test index and a factory for producing mocks for the
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
@@ -35,7 +38,7 @@ class ServiceTest : public ::testing::Test {
   // Query execution context (with small test index) and allocator for testing,
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
-  QueryExecutionContext* testQec = ad_utility::testing::getQec();
+  QueryExecutionContext* testQec = qlever::testing::getQec();
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
   // is used by default by a `Service` operation (see the constructor in
@@ -67,22 +70,22 @@ class ServiceTest : public ::testing::Test {
     // `Service::computeResult`, but the host and port of the endpoint are
     // derived from the IRI, so url and post data are non-trivial.
     httpClientTestHelpers::RequestMatchers matchers{
-        .url_ = testing::Eq(expectedUrl),
-        .method_ = testing::Eq(boost::beast::http::verb::post),
+        .url_ = ::testing::Eq(expectedUrl),
+        .method_ = ::testing::Eq(boost::beast::http::verb::post),
         // Check that the whitespace-normalized POST data is the expected query.
         //
         // NOTE: a SERVICE clause specifies only the body of a SPARQL query,
         // from which `Service::computeResult` has to construct a full SPARQL
         // query by adding `SELECT ... WHERE`, so this checks something
         // non-trivial.
-        .postData_ = testing::ResultOf(
+        .postData_ = ::testing::ResultOf(
             [](std::string_view postData) {
               return std::regex_replace(std::string{postData},
                                         std::regex{"\\s+"}, " ");
             },
-            testing::Eq(expectedSparqlQuery)),
-        .contentType_ = testing::Eq("application/sparql-query"),
-        .accept_ = testing::Eq("application/sparql-results+json")};
+            ::testing::Eq(expectedSparqlQuery)),
+        .contentType_ = ::testing::Eq("application/sparql-query"),
+        .accept_ = ::testing::Eq("application/sparql-results+json")};
     return httpClientTestHelpers::getResultFunctionFactory(
         predefinedResult, contentType, status, matchers, mockException, loc);
   };
@@ -149,6 +152,7 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_TRUE(serviceOp.getChildren().empty());
 }
 
+namespace qlever {
 // Tests that `computeResult` behaves as expected.
 TEST_F(ServiceTest, computeResult) {
   // These tests are randomized, and there used to be an error that was found by
@@ -199,7 +203,7 @@ TEST_F(ServiceTest, computeResult) {
           auto result = service.computeResultOnlyForTesting(true);
 
           // compute resulting idTable
-          IdTable idTable{2, ad_utility::testing::makeAllocator()};
+          IdTable idTable{2, qlever::testing::makeAllocator()};
           std::vector<LocalVocab> localVocabs{};
           for (auto& pair : result.idTables()) {
             idTable.insertAtEnd(pair.idTable_);
@@ -375,7 +379,7 @@ TEST_F(ServiceTest, computeResult) {
     // and that `<bla>`, `<bli>`, `<blu>` were added to the (initially
     // empty) local vocabulary. On the way, obtain their IDs, which we then
     // need below.
-    auto getId = ad_utility::testing::makeGetId(testQec->getIndex());
+    auto getId = qlever::testing::makeGetId(testQec->getIndex());
     Id idX = getId("<x>");
     Id idY = getId("<y>");
     const auto& localVocab = result.localVocab();
@@ -404,7 +408,7 @@ TEST_F(ServiceTest, computeResult) {
     // Clause is passed, the Service Operation shall use the siblings result
     // to reduce its Query complexity by injecting them as Values Clause
 
-    auto iri = ad_utility::testing::iri;
+    auto iri = qlever::testing::iri;
     using TC = TripleComponent;
 
     auto sibling = std::make_shared<Values>(
@@ -482,7 +486,7 @@ TEST_F(ServiceTest, computeResult) {
 
 // _____________________________________________________________________________
 TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
-  auto iri = ad_utility::testing::iri;
+  auto iri = qlever::testing::iri;
   using TC = TripleComponent;
 
   auto sibling = std::make_shared<Values>(
@@ -528,6 +532,7 @@ TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
       Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
       "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST_F(ServiceTest, computeResultNoVariables) {
@@ -725,7 +730,7 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
 TEST_F(ServiceTest, idToValueForValuesClause) {
   auto idToVc = Service::idToValueForValuesClause;
   LocalVocab localVocab{};
-  auto index = ad_utility::testing::makeIndexWithTestSettings();
+  auto index = qlever::testing::makeIndexWithTestSettings();
 
   // blanknode -> nullopt
   EXPECT_EQ(idToVc(index, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0)),
@@ -751,6 +756,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
       absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
 }
 
+namespace qlever {
 // ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
   auto cleanup =
@@ -859,7 +865,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
     }
   };
 
-  auto iri = ad_utility::testing::iri;
+  auto iri = qlever::testing::iri;
   using TC = TripleComponent;
   auto siblingOperation = std::make_shared<MockValues>(
       testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
@@ -961,6 +967,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
            ->idTables()) {
   }
 }
+}  // namespace qlever
 
 // ____________________________________________________________________________
 TEST_F(ServiceTest, clone) {
@@ -1083,7 +1090,7 @@ TEST_F(ServiceTest, redirectsIntegration) {
   // Test with default setting for `maxRedirects`, which is 1.
   {
     httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
-                                                        testing::Eq(1)};
+                                                        ::testing::Eq(1)};
     Service service{testQec, parsedServiceClause,
                     httpClientTestHelpers::getResultFunctionFactory(
                         result, "application/sparql-results+json",
@@ -1096,7 +1103,7 @@ TEST_F(ServiceTest, redirectsIntegration) {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::serviceMaxRedirects_>(5);
     httpClientTestHelpers::RequestMatchers matchers{.maxRedirects_ =
-                                                        testing::Eq(5)};
+                                                        ::testing::Eq(5)};
     Service service{testQec, parsedServiceClause,
                     httpClientTestHelpers::getResultFunctionFactory(
                         result, "application/sparql-results+json",

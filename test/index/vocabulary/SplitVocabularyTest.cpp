@@ -11,6 +11,8 @@
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/VocabularyType.h"
 
+using namespace qlever;
+
 namespace splitVocabTestHelpers {
 
 using SGV =

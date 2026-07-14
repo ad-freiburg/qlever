@@ -10,6 +10,8 @@
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 WordsAndDocsFileParser::WordsAndDocsFileParser(
     const std::string& wordsOrDocsFile, const LocaleManager& localeManager)
@@ -59,3 +61,5 @@ ad_utility::InputRangeFromGet<DocsFileLine>::Storage DocsFileParser::get() {
   line.docContent_ = l.substr(i + 1);
   return line;
 }
+
+}  // namespace qlever

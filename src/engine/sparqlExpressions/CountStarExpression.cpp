@@ -11,7 +11,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "index/IdTableUtils.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // _____________________________________________________________________________
 CountStarExpression::CountStarExpression(bool distinct) : distinct_{distinct} {
@@ -83,4 +83,4 @@ std::string CountStarExpression::getCacheKey(
 SparqlExpression::Ptr makeCountStarExpression(bool distinct) {
   return std::make_unique<CountStarExpression>(distinct);
 }
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

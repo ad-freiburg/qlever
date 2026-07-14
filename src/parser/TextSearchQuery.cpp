@@ -10,6 +10,8 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os,
                          const TextIndexScanForEntityConfiguration& conf) {
@@ -71,7 +73,9 @@ std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
   return std::get<Variable>(entity);
 };
 
-namespace parsedQuery {
+}  // namespace qlever
+
+namespace qlever::parsedQuery {
 
 // ____________________________________________________________________________
 void TextSearchQuery::checkSubjectIsVariable(std::string_view predString,
@@ -314,4 +318,4 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
   return output;
 }
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery

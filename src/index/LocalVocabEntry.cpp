@@ -7,6 +7,8 @@
 #include "global/VocabIndex.h"
 #include "index/IndexImpl.h"
 
+namespace qlever {
+
 // ___________________________________________________________________________
 ql::strong_ordering LocalVocabEntry::compareThreeWay(
     const LocalVocabEntry& rhs) const {
@@ -78,3 +80,5 @@ LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
     NormalizedStringView view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
 }
+
+}  // namespace qlever

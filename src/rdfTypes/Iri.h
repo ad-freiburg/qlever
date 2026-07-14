@@ -22,7 +22,7 @@
 #include "util/Exception.h"
 #include "util/ParsedUri.h"
 
-namespace ad_utility::triple_component {
+namespace qlever::triple_component {
 
 // A class template to hold IRIs. When `isOwning = true` (the default), storage
 // is `std::string`. When `isOwning = false`, storage is `std::string_view` and
@@ -152,10 +152,10 @@ class Iri : public BasicIri<true> {
   // specification of RFC 3986. For absolute IRIs with a scheme (like
   // `<http://...>`), this is the same as `fromIriref`.
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const qlever::util::ParsedUri& baseUri);
+                                    const util::ParsedUri& baseUri);
 
   // Create an `Iri` object given from the given `ParsedUri` object.
-  static Iri fromUri(const qlever::util::ParsedUri& uri);
+  static Iri fromUri(const util::ParsedUri& uri);
 };
 
 // Non-owning IRI view type (stores a `std::string_view`).
@@ -177,6 +177,6 @@ class IriView : public BasicIri<false> {
   }
 };
 
-}  // namespace ad_utility::triple_component
+}  // namespace qlever::triple_component
 
 #endif  // QLEVER_SRC_PARSER_IRI_H

@@ -11,6 +11,8 @@
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
+namespace qlever {
+
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {
  public:
@@ -45,5 +47,7 @@ struct OrderClause {
   IsInternalSort isInternalSort = IsInternalSort::False;
   std::vector<OrderKey> orderKeys;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_ORDERKEY_H

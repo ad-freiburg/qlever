@@ -15,6 +15,8 @@
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
 
+namespace qlever {
+
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
 // service IRI, gets the result as JSON, parses it, and writes it into a result
 // table.
@@ -147,9 +149,9 @@ class Service : public Operation {
 
   // Throws an error message, providing the first 100 bytes of the result as
   // context.
-  [[noreturn]] void throwErrorWithContext(
-      std::string_view msg, std::string_view first100,
-      std::string_view last100 = ""sv) const;
+  [[noreturn]] void throwErrorWithContext(std::string_view msg,
+                                          std::string_view first100,
+                                          std::string_view last100 = "") const;
 
   // Throws if the IRI is forbidden by the IRI prefix whitelist.
   void throwIfIriNotWhitelisted();
@@ -177,7 +179,12 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
   FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
 };
+
+}  // namespace qlever
+
 #else
+
+namespace qlever {
 // In the C++17 mode, where the If we disable the `Service` operation isled,
 // wemputeSiblingResult` function, which does still provide a dummy for the
 // `preco completely disabn completely in the C++17 mode, hen we canthen we
@@ -186,6 +193,6 @@ struct Service {
   template <typename... Ts>
   static void precomputeSiblingResult(Ts&&...) {}
 };
+}  // namespace qlever
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-
 #endif  // QLEVER_SRC_ENGINE_SERVICE_H

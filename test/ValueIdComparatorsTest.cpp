@@ -12,8 +12,11 @@
 #include "global/ValueIdComparators.h"
 #include "util/Random.h"
 
+using namespace qlever;
+
 using namespace valueIdComparators;
-namespace valueIdComparators {
+using namespace qlever::testing;
+namespace qlever::valueIdComparators {
 inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   switch (c) {
     using enum Comparison;
@@ -38,14 +41,14 @@ inline std::ostream& operator<<(std::ostream& str, Comparison c) {
   }
   return str;
 }
-}  // namespace valueIdComparators
+}  // namespace qlever::valueIdComparators
 using ad_utility::source_location;
 
 struct ValueIdComparators : public ::testing::Test {
   ValueIdComparators() {
     // We need to initialize a (static). index, otherwise we can't compare
     // VocabIndex to LocalVocabIndex entries
-    ad_utility::testing::getQec();
+    getQec();
   }
 };
 
@@ -347,7 +350,7 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
 // _______________________________________________________________________
 TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
-  auto I = ad_utility::testing::IntId;
+  auto I = IntId;
   // Invalid value for the `Comparison` enum.
   ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
   ASSERT_ANY_THROW(

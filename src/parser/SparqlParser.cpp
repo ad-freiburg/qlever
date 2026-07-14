@@ -8,7 +8,9 @@
 
 using AntlrParser = SparqlAutomaticParser;
 
-using BnodeMgr = ad_utility::BlankNodeManager*;
+namespace qlever {
+
+using BnodeMgr = BlankNodeManager*;
 
 namespace {
 // _____________________________________________________________________________
@@ -45,7 +47,7 @@ auto parseOperation(BnodeMgr bnodeMgr,
 ParsedQuery SparqlParser::parseQuery(
     const EncodedIriManager* encodedIriManager, std::string query,
     const std::vector<DatasetClause>& datasets) {
-  ad_utility::BlankNodeManager bnodeMgr;
+  BlankNodeManager bnodeMgr;
   auto res = parseOperation(&bnodeMgr, encodedIriManager, &AntlrParser::query,
                             std::move(query), datasets);
   // Queries never contain blank nodes in the body since they are always turned
@@ -61,3 +63,5 @@ std::vector<ParsedQuery> SparqlParser::parseUpdate(
   return parseOperation(bnodeMgr, encodedIriManager, &AntlrParser::update,
                         std::move(update), datasets);
 }
+
+}  // namespace qlever

@@ -14,6 +14,8 @@
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using namespace qlever;
+
 using std::endl;
 using std::string;
 
@@ -132,9 +134,8 @@ auto Minus::makeUndefRangesChecker(bool left,
                                    &Id::isUndefined);
       });
   // Use expensive operation if one of the columns might contain undef.
-  using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;
-  return alwaysDefined ? RT{ad_utility::Noop{}}
-                       : RT{ad_utility::FindSmallerUndefRanges{}};
+  using RT = std::variant<ad_utility::Noop, FindSmallerUndefRanges>;
+  return alwaysDefined ? RT{ad_utility::Noop{}} : RT{FindSmallerUndefRanges{}};
 }
 
 // _____________________________________________________________________________
@@ -161,7 +162,7 @@ IdTable Minus::copyMatchingRows(
     ad_utility::chunkedCopy(
         ql::views::transform(nonMatchingIndices,
                              [&inputCol](size_t row) { return inputCol[row]; }),
-        outputCol.begin(), qlever::joinHelpers::CHUNK_SIZE,
+        outputCol.begin(), joinHelpers::CHUNK_SIZE,
         [this]() { checkCancellation(); });
   }
 
@@ -179,8 +180,8 @@ IdTable Minus::computeMinus(
     return IdTable{left.clone()};
   }
 
-  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                               right.numColumns()};
+  JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                   right.numColumns()};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -218,7 +219,7 @@ IdTable Minus::computeMinus(
       [this, &joinColumnsLeft, &joinColumnsRight,
        handleCompatibleRow = std::move(handleCompatibleRow)](
           auto findUndefLeft, auto findUndefRight) {
-        [[maybe_unused]] auto outOfOrder = ad_utility::zipperJoinWithUndef(
+        [[maybe_unused]] auto outOfOrder = zipperJoinWithUndef(
             joinColumnsLeft, joinColumnsRight,
             ql::ranges::lexicographical_compare, handleCompatibleRow,
             std::move(findUndefLeft), std::move(findUndefRight), {},
@@ -239,15 +240,14 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 
 // _____________________________________________________________________________
 bool Minus::rightIndexNestedLoopJoinIsPossible() const {
-  return qlever::joinHelpers::rightIndexNestedLoopJoinIsPossible(
-      _left, _right, _matchedColumns);
+  return joinHelpers::rightIndexNestedLoopJoinIsPossible(_left, _right,
+                                                         _matchedColumns);
 }
 
 // _____________________________________________________________________________
 std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   auto optionalResults =
-      qlever::joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(_left,
-                                                                   _right);
+      joinHelpers::tryGetResultsForLeftIndexNestedLoopJoin(_left, _right);
   if (!optionalResults.has_value()) {
     return std::nullopt;
   }
@@ -273,7 +273,7 @@ std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
     return std::nullopt;
   }
 
-  auto leftRes = qlever::joinHelpers::computeResultSkipChild(
+  auto leftRes = joinHelpers::computeResultSkipChild(
       std::dynamic_pointer_cast<Sort>(_left->getRootOperation()),
       requestLaziness);
   bool isLazy = !leftRes->isFullyMaterialized();
@@ -298,8 +298,8 @@ std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
 // _____________________________________________________________________________
 std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable(
     bool requestLaziness) {
-  if (!qlever::joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns, _left,
-                                                        _right)) {
+  if (!joinHelpers::joinColumnsAreAlwaysDefined(_matchedColumns, _left,
+                                                _right)) {
     return std::nullopt;
   }
   if (auto result = tryRightIndexNestedLoopJoinIfSuitable(requestLaziness)) {
@@ -337,17 +337,17 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
   auto action =
       [this, left = std::move(left), right = std::move(right),
        permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        ad_utility::MinusRowHandler rowAdder{
-            _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
-            cancellationHandle_, std::move(yieldTable)};
-        auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);
-        auto rightRange = qlever::joinHelpers::resultToView(
-            *right, {_matchedColumns.at(0).at(1)});
+        MinusRowHandler rowAdder{_matchedColumns.size(),
+                                 IdTable{getResultWidth(), allocator()},
+                                 cancellationHandle_, std::move(yieldTable)};
+        auto leftRange = joinHelpers::resultToView(*left, permutation);
+        auto rightRange =
+            joinHelpers::resultToView(*right, {_matchedColumns.at(0).at(1)});
         std::visit(
             [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
-              ad_utility::zipperJoinForBlocksWithPotentialUndef(
-                  leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-                  ad_utility::MinusJoinTag{});
+              zipperJoinForBlocksWithPotentialUndef(leftBlocks, rightBlocks,
+                                                    std::less{}, rowAdder, {},
+                                                    {}, MinusJoinTag{});
             },
             leftRange, rightRange);
         auto localVocab = std::move(rowAdder.localVocab());
@@ -356,12 +356,12 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
       };
 
   if (requestLaziness) {
-    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
+    return {joinHelpers::runLazyJoinAndConvertToGenerator(
                 std::move(action), std::move(permutation)),
             resultSortedOn()};
   } else {
     auto [idTable, localVocab] = action(ad_utility::noop);
-    qlever::joinHelpers::applyPermutation(idTable, permutation);
+    joinHelpers::applyPermutation(idTable, permutation);
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 }
@@ -394,6 +394,6 @@ Minus::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
         const auto& var = _left->getVariableAndInfoByColumnIndex(jcl[0]).first;
         return ad_utility::contains(variables, var);
       });
-  return ad_utility::makeExecutionTree<Minus>(
-      getExecutionContext(), std::move(left), std::move(right));
+  return makeExecutionTree<Minus>(getExecutionContext(), std::move(left),
+                                  std::move(right));
 }

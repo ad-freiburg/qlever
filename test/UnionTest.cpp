@@ -18,20 +18,23 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 namespace {
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
 }  // namespace
 
 // A simple test for computing a union.
 TEST(Union, computeUnion) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, left.clone(), Vars{Variable{"?x"}});
+  auto leftT = makeExecutionTree<ValuesForTesting>(qec, left.clone(),
+                                                   Vars{Variable{"?x"}});
 
   IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, right.clone(), Vars{Variable{"?u"}, Variable{"?x"}});
 
   Union u{qec, leftT, rightT};
@@ -47,7 +50,7 @@ TEST(Union, computeUnion) {
 // A test with large inputs to test the chunked writing that is caused by the
 // timeout checks.
 TEST(Union, computeUnionLarge) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   VectorTable leftInput, rightInput, expected;
   size_t numInputsL = 1'500'000u;
   size_t numInputsR = 5;
@@ -63,10 +66,10 @@ TEST(Union, computeUnionLarge) {
     rightInput.push_back(std::vector<IntOrId>{V(i + 425)});
     expected.push_back(std::vector<IntOrId>{U, V(i + 425)});
   }
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector(leftInput), Vars{Variable{"?x"}});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector(rightInput), Vars{Variable{"?u"}});
 
   Union u{qec, leftT, rightT};
@@ -81,12 +84,12 @@ TEST(Union, computeUnionLazy) {
   auto runTest = [](bool nonLazyChildren, bool invisibleSubtreeColumns,
                     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
     auto l = generateLocationTrace(loc);
-    auto* qec = ad_utility::testing::getQec();
+    auto* qec = qlever::testing::getQec();
     qec->getQueryTreeCache().clearAll();
     auto leftT = [&]() {
       if (!invisibleSubtreeColumns) {
         IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
-        return ad_utility::makeExecutionTree<ValuesForTesting>(
+        return makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}}, false,
             std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
             nonLazyChildren);
@@ -96,7 +99,7 @@ TEST(Union, computeUnionLazy) {
         // subquery. This case was previously buggy and triggered an assertion.
         IdTable left = makeIdTableFromVector(
             {{V(1), V(3)}, {V(2), V(27)}, {V(3), V(123)}});
-        auto tree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        auto tree = makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}, Variable{"?invisible"}},
             false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
             nonLazyChildren);
@@ -107,7 +110,7 @@ TEST(Union, computeUnionLazy) {
     }();
 
     IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
-    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto rightT = makeExecutionTree<ValuesForTesting>(
         qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
         std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
         nonLazyChildren);
@@ -141,12 +144,12 @@ TEST(Union, computeUnionLazy) {
 // _____________________________________________________________________________
 TEST(Union, ensurePermutationIsAppliedCorrectly) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 3, 4, 5}}),
       Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}, Var{"?e"}});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{6, 7, 8}}),
       Vars{Var{"?b"}, Var{"?a"}, Var{"?e"}});
 
@@ -187,9 +190,9 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
 
 // _____________________________________________________________________________
 TEST(Union, inputWithZeroColumns) {
-  auto* qec = ad_utility::testing::getQec();
-  auto leftT = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
-  auto rightT = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
+  auto* qec = qlever::testing::getQec();
+  auto leftT = makeExecutionTree<NeutralElementOperation>(qec);
+  auto rightT = makeExecutionTree<NeutralElementOperation>(qec);
 
   Union u{qec, std::move(leftT), std::move(rightT)};
 
@@ -224,11 +227,10 @@ TEST(Union, inputWithZeroColumns) {
 
 // _____________________________________________________________________________
 TEST(Union, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
-  Union unionOperation{
-      qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
-      ad_utility::makeExecutionTree<NeutralElementOperation>(qec)};
+  Union unionOperation{qec, makeExecutionTree<NeutralElementOperation>(qec),
+                       makeExecutionTree<NeutralElementOperation>(qec)};
 
   auto clone = unionOperation.clone();
   ASSERT_TRUE(clone);
@@ -239,13 +241,13 @@ TEST(Union, clone) {
 // _____________________________________________________________________________
 TEST(Union, cheapMergeIfOrderNotImportant) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2}}), Vars{Var{"?a"}, Var{"?b"}}, false,
       std::vector<ColumnIndex>{0, 1});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 0}, {2, 4}}), Vars{Var{"?a"}, Var{"?b"}},
       false, std::vector<ColumnIndex>{0, 1});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {}};
@@ -274,15 +276,15 @@ TEST(Union, cheapMergeIfOrderNotImportant) {
 // _____________________________________________________________________________
 TEST(Union, sortedMerge) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto U = Id::makeUndefined();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 4}}),
       Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}}, false,
       std::vector<ColumnIndex>{0, 1, 2});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{4, 1}, {8, 2}}), Vars{Var{"?c"}, Var{"?a"}},
       false, std::vector<ColumnIndex>{1, 0});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {0, 1, 2}};
@@ -312,13 +314,13 @@ TEST(Union, sortedMerge) {
 // _____________________________________________________________________________
 TEST(Union, sortedMergeWithOneSideNonLazy) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
@@ -349,13 +351,13 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
 // _____________________________________________________________________________
 TEST(Union, sortedMergeWithLocalVocab) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(LocalVocabEntry::fromStringRepresentation(
       "\"Test1\"", qec->getLocalVocabContext()));
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab1.clone());
 
@@ -367,7 +369,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
   tables.push_back(makeIdTableFromVector({{3}}));
   tables.push_back(makeIdTableFromVector({{5}}));
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, std::move(tables), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, vocab2.clone());
   {
@@ -410,14 +412,14 @@ TEST(Union, sortedMergeWithLocalVocab) {
 // _____________________________________________________________________________
 TEST(Union, cacheKeyDiffersForDifferentOrdering) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto U = Id::makeUndefined();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}}, false,
       std::vector<ColumnIndex>{0, 1});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 8}}), Vars{Var{"?a"}, Var{"?c"}}, false,
       std::vector<ColumnIndex>{0, 1});
   Union unionOperation1{qec, leftT, rightT, {0, 1, 2}};
@@ -447,7 +449,7 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
 // _____________________________________________________________________________
 TEST(Union, cacheKeyPreventsAmbiguity) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   // Construct the following two operations (for the check that follows):
   //
@@ -455,18 +457,18 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
   //
   // { VALUES ?a { 1 } } UNION { VALUES ?a { 1 } } INTERNAL SORT BY ?a
   //
-  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
 
-  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
-  auto sort = ad_utility::makeExecutionTree<Sort>(qec, values1->clone(),
-                                                  std::vector<ColumnIndex>{0});
+  auto sort = makeExecutionTree<Sort>(qec, values1->clone(),
+                                      std::vector<ColumnIndex>{0});
   Union operation1{qec, std::move(sort), values2};
-  Sort operation2{qec,
-                  ad_utility::makeExecutionTree<Union>(qec, std::move(values1),
-                                                       std::move(values2)),
-                  std::vector<ColumnIndex>{0}};
+  Sort operation2{
+      qec,
+      makeExecutionTree<Union>(qec, std::move(values1), std::move(values2)),
+      std::vector<ColumnIndex>{0}};
 
   // Check that the two cache keys are different (which was not the case before
   // #1933).
@@ -476,13 +478,13 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
 // _____________________________________________________________________________
 TEST(Union, cacheKeyStoresColumnMapping) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   {
-    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto leftT = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
 
-    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto rightT = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{2, 8}}), Vars{Var{"?a"}, Var{"?c"}});
 
     auto rightTHidden = rightT->clone();
@@ -496,13 +498,13 @@ TEST(Union, cacheKeyStoresColumnMapping) {
   }
 
   {
-    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto leftT = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
 
-    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto rightT = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{2, 8}}), Vars{Var{"?a"}, Var{"?b"}});
 
-    auto rightTSwapped = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto rightTSwapped = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{2, 8}}), Vars{Var{"?b"}, Var{"?a"}});
 
     Union unionOperation1{qec, leftT, std::move(rightT)};
@@ -517,14 +519,14 @@ TEST(Union, cacheKeyStoresColumnMapping) {
 // present in both children. This test checks that the trick works correctly.
 TEST(Union, testEfficientMerge) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto U = Id::makeUndefined();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2}}), Vars{Var{"?b"}}, false,
       std::vector<ColumnIndex>{0});
 
@@ -561,14 +563,14 @@ TEST(Union, testEfficientMerge) {
 // _____________________________________________________________________________
 TEST(Union, createSortedVariantWorksProperly) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto U = Id::makeUndefined();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 4}}),
       Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 4}, {2, 8}}), Vars{Var{"?a"}, Var{"?d"}});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {}};
   EXPECT_TRUE(unionOperation.resultSortedOn().empty());
@@ -619,7 +621,7 @@ TEST(Union, createSortedVariantWorksProperly) {
 TEST(Union, checkChunkSizeSplitsProperly) {
   using Var = Variable;
   using ::testing::Each;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   IdTable reference{1, qec->getAllocator()};
   reference.resize(Union::chunkSize + (Union::chunkSize / 2) + 1);
@@ -627,11 +629,11 @@ TEST(Union, checkChunkSizeSplitsProperly) {
   // Make sure we compute the expensive way
   reference.getColumn(0).back() = Id::makeFromInt(1337);
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, reference.clone(), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
+  auto leftT = makeExecutionTree<ValuesForTesting>(qec, reference.clone(),
+                                                   Vars{Var{"?a"}}, false,
+                                                   std::vector<ColumnIndex>{0});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, std::move(reference), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0});
 
@@ -669,15 +671,15 @@ TEST(Union, checkChunkSizeSplitsProperly) {
 // _____________________________________________________________________________
 TEST(Union, columnOriginatesFromGraphOrUndef) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
   IdTable reference{2, qec->getAllocator()};
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = makeExecutionTree<ValuesForTesting>(
       qec, reference.clone(), Vars{Var{"?a"}, Var{"?d"}}, false,
       std::vector<ColumnIndex>{0, 1});
 
-  auto index = ad_utility::makeExecutionTree<IndexScan>(
+  auto index = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
 
@@ -714,7 +716,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 // _____________________________________________________________________________
 TEST(Union, getCostEstimate) {
   using Var = Variable;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   IdTable oneColumn{1, qec->getAllocator()};
   oneColumn.resize(100);
   ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
@@ -723,15 +725,15 @@ TEST(Union, getCostEstimate) {
   ql::ranges::fill(twoColumns.getColumn(0), Id::makeUndefined());
   ql::ranges::fill(twoColumns.getColumn(1), Id::makeUndefined());
 
-  auto valuesA = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesA = makeExecutionTree<ValuesForTesting>(
       qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0});
 
-  auto valuesB = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesB = makeExecutionTree<ValuesForTesting>(
       qec, oneColumn.clone(), Vars{Var{"?b"}}, false,
       std::vector<ColumnIndex>{0});
 
-  auto valuesAb = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesAb = makeExecutionTree<ValuesForTesting>(
       qec, twoColumns.clone(), Vars{Var{"?a"}, Var{"?b"}}, false,
       std::vector<ColumnIndex>{0, 1});
 
@@ -762,7 +764,7 @@ TEST(Union, getCostEstimate) {
   oneColumn.resize(2);
   ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
 
-  auto valuesSmall = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesSmall = makeExecutionTree<ValuesForTesting>(
       qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0});
   Union unsortedUnionSmall{qec, valuesSmall->clone(), valuesSmall->clone()};

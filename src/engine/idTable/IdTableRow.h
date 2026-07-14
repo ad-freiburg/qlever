@@ -20,7 +20,7 @@
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
-namespace columnBasedIdTable {
+namespace qlever::columnBasedIdTable {
 
 // A simple tag enum to differentiate between "views" (non-owning data
 // structures) and "ordinary" data structures that own their storage (see
@@ -463,6 +463,5 @@ class RowReference
 #endif
 };
 
-}  // namespace columnBasedIdTable
-
+}  // namespace qlever::columnBasedIdTable
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

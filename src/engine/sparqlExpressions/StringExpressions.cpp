@@ -18,10 +18,10 @@
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail::string_expressions {
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIri = triple_component::LiteralOrIri;
 
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
@@ -30,9 +30,8 @@ struct ToLiteral {
   LiteralOrIri operator()(std::string_view normalizedContent,
                           const std::optional<std::variant<Iri, std::string>>&
                               descriptor = std::nullopt) const {
-    return LiteralOrIri{
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    return LiteralOrIri{triple_component::Literal::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
   }
 };
 static constexpr ToLiteral toLiteral{};
@@ -42,8 +41,8 @@ static constexpr ToLiteral toLiteral{};
 // literalSoFar to nextLiteral. If either is UNDEF, set literalSoFar to nullopt
 // to indicate an undefined result.
 void concatOrSetLiteral(
-    std::optional<ad_utility::triple_component::Literal>& literalSoFarOpt,
-    const std::optional<ad_utility::triple_component::Literal>& nextLiteral,
+    std::optional<triple_component::Literal>& literalSoFarOpt,
+    const std::optional<triple_component::Literal>& nextLiteral,
     const bool isFirstLiteral) {
   if (!nextLiteral.has_value() || !literalSoFarOpt.has_value()) {
     literalSoFarOpt = std::nullopt;  // UNDEF
@@ -117,7 +116,7 @@ const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
 struct ApplyBaseIfPresent {
   IdOrLiteralOrIri operator()(
       IdOrLocalVocabEntry iri,
-      const std::optional<qlever::util::ParsedUri>& base) const {
+      const std::optional<util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
@@ -146,7 +145,7 @@ using StrlenExpression = StringExpressionImpl<1, LiftStringFunction<Strlen>>;
 template <auto toLowerOrToUpper>
 struct UpperOrLowerCaseImpl {
   IdOrLiteralOrIri operator()(
-      std::optional<ad_utility::triple_component::Literal> input) const {
+      std::optional<triple_component::Literal> input) const {
     if (!input.has_value()) {
       return Id::makeUndefined();
     }
@@ -189,9 +188,8 @@ class SubstrImpl {
   };
 
  public:
-  IdOrLiteralOrIri operator()(
-      std::optional<ad_utility::triple_component::Literal> s,
-      NumericValue start, NumericValue length) const {
+  IdOrLiteralOrIri operator()(std::optional<triple_component::Literal> s,
+                              NumericValue start, NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
@@ -294,8 +292,8 @@ using ContainsExpression =
 template <bool isStrAfter>
 struct StrAfterOrBeforeImpl {
   IdOrLiteralOrIri operator()(
-      std::optional<ad_utility::triple_component::Literal> optLiteral,
-      std::optional<ad_utility::triple_component::Literal> optPattern) const {
+      std::optional<triple_component::Literal> optLiteral,
+      std::optional<triple_component::Literal> optPattern) const {
     if (!optPattern.has_value() || !optLiteral.has_value()) {
       return Id::makeUndefined();
     }
@@ -366,7 +364,7 @@ using MergeRegexPatternAndFlagsExpression =
 
 struct ReplaceImpl {
   IdOrLiteralOrIri operator()(
-      std::optional<ad_utility::triple_component::Literal> s,
+      std::optional<triple_component::Literal> s,
       const std::shared_ptr<RE2>& pattern,
       const std::optional<std::string>& replacement) const {
     if (!s.has_value() || !pattern || !replacement.has_value()) {
@@ -396,7 +394,7 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using Literal = ad_utility::triple_component::Literal;
+    using Literal = triple_component::Literal;
     using LiteralVec = VectorWithMemoryLimit<std::optional<Literal>>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
@@ -561,9 +559,8 @@ using LangMatches = StringExpressionImpl<2, LangMatching, StringValueGetter>;
 
 // STRING WITH LANGUAGE TAG
 struct StrLangTag {
-  IdOrLiteralOrIri operator()(
-      std::optional<ad_utility::triple_component::Literal> literal,
-      std::optional<std::string> langTag) const {
+  IdOrLiteralOrIri operator()(std::optional<triple_component::Literal> literal,
+                              std::optional<std::string> langTag) const {
     if (!literal.has_value() || !langTag.has_value() ||
         !literal.value().isPlain()) {
       return Id::makeUndefined();
@@ -580,9 +577,8 @@ using StrLangTagged = LiteralExpressionImpl<2, StrLangTag, StringValueGetter>;
 
 // STRING WITH DATATYPE IRI
 struct StrIriDtTag {
-  IdOrLiteralOrIri operator()(
-      std::optional<ad_utility::triple_component::Literal> literal,
-      OptIri inputIri) const {
+  IdOrLiteralOrIri operator()(std::optional<triple_component::Literal> literal,
+                              OptIri inputIri) const {
     if (!literal.has_value() || !inputIri.has_value() ||
         !literal.value().isPlain()) {
       return Id::makeUndefined();
@@ -724,4 +720,4 @@ Expr makeConvertToStringExpression(Expr child) {
   return std::make_unique<StrExpressionImpl>(std::move(child));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

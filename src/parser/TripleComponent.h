@@ -25,8 +25,6 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
-class IndexImpl;
-
 namespace ad_utility::detail {
 
 template <typename T, typename U>
@@ -38,6 +36,10 @@ CPP_concept MoveAssignableWith =
 
 }  // namespace ad_utility::detail
 
+namespace qlever {
+
+class IndexImpl;
+
 // A wrapper around a `std::variant` that can hold the different types that the
 // subject, predicate, or object of a triple can have in the Turtle Parser.
 // Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
@@ -45,8 +47,8 @@ CPP_concept MoveAssignableWith =
 // of any other type).
 class TripleComponent {
  public:
-  using Literal = ad_utility::triple_component::Literal;
-  using Iri = ad_utility::triple_component::Iri;
+  using Literal = triple_component::Literal;
+  using Iri = triple_component::Iri;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -264,5 +266,7 @@ class TripleComponent {
     }
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TRIPLECOMPONENT_H

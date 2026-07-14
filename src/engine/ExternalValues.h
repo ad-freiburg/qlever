@@ -12,6 +12,8 @@
 
 #include "engine/Values.h"
 
+namespace qlever {
+
 namespace parsedQuery {
 struct ExternalValuesQuery;
 }
@@ -79,4 +81,5 @@ class ExternalValues : private Values, virtual public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_EXTERNALVALUES_H

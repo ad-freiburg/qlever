@@ -35,6 +35,8 @@
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
+namespace qlever {
+
 namespace groupBy::detail {
 
 template <typename T>
@@ -1928,3 +1930,5 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   result.push_back(std::array{Id::makeFromInt(res)});
   return result;
 }
+
+}  // namespace qlever

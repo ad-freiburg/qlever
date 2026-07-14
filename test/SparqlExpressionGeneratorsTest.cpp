@@ -9,12 +9,14 @@
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+using namespace qlever;
+
 using namespace sparqlExpression::detail;
 
 // _____________________________________________________________________________
 TEST(SparqlExpressionGenerators, makeStringResultGetter) {
-  using ad_utility::triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::LiteralOrIri;
+  auto* qec = qlever::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
   LocalVocab localVocab{};
@@ -29,8 +31,8 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
 
 // _____________________________________________________________________________
 TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
-  using ad_utility::triple_component::LiteralOrIri;
-  auto* qec = ad_utility::testing::getQec();
+  using triple_component::LiteralOrIri;
+  auto* qec = qlever::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
   LocalVocab localVocab{};

@@ -17,6 +17,8 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
+using namespace qlever;
+
 using std::endl;
 
 // _____________________________________________________________________________

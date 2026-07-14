@@ -15,6 +15,8 @@
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it
 // stores both preprocessed and original forms of its input words. Preprocessing
@@ -25,7 +27,7 @@
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
-  using GeometryInfo = ad_utility::GeometryInfo;
+  using GeometryInfo = GeometryInfo;
 
   UnderlyingVocabulary literals_;
 
@@ -48,8 +50,7 @@ class GeoVocabulary {
   static constexpr GeometryInfoBuffer invalidGeoInfoBuffer = {};
 
   // Offset for the header of the geometry information file
-  static constexpr size_t geoInfoHeader =
-      sizeof(ad_utility::GEOMETRY_INFO_VERSION);
+  static constexpr size_t geoInfoHeader = sizeof(GEOMETRY_INFO_VERSION);
 
  public:
   GeoVocabulary() = default;
@@ -142,5 +143,7 @@ class GeoVocabulary {
         "Generic serialization is not implemented for GeoVocabulary.");
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H

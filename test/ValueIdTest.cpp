@@ -20,8 +20,11 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 struct ValueIdTest : public ::testing::Test {
-  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  QueryExecutionContext* qec_ = getQec();
 };
 
 TEST_F(ValueIdTest, makeFromDouble) {
@@ -314,8 +317,7 @@ TEST_F(ValueIdTest, Hashing) {
     ASSERT_EQ(ids, idsWithoutDuplicatesAsVector);
   }
   {
-    using namespace ad_utility::triple_component;
-    using namespace ad_utility::testing;
+    using namespace triple_component;
     const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
     LocalVocab lv1;
@@ -398,7 +400,6 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 
   // Create a test index config with the encoded IRI manager and call getQec
   // to set up the global index state
-  using namespace ad_utility::testing;
   TestIndexConfig config;
   config.encodedPrefixesWithoutAngleBrackets = prefixes;
   qec_ = getQec(config);
@@ -414,7 +415,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   EXPECT_EQ(encodedId.getDatatype(), Datatype::EncodedVal);
 
   // Create a LocalVocabEntry with the same IRI
-  auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
+  auto iri = triple_component::Iri::fromIriref(encodableIri);
   LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
   auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
@@ -429,7 +430,7 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
       << "Failed to encode IRI: " << encodableIri2;
 
   auto encodedId2 = *encodedIdOpt2;
-  auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
+  auto iri2 = triple_component::Iri::fromIriref(encodableIri2);
   LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
   auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 

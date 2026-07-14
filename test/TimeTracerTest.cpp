@@ -11,7 +11,7 @@
 #include "util/TimeTracer.h"
 
 using json = nlohmann::ordered_json;
-using namespace testing;
+using namespace ::testing;
 
 // Example tracer used in the tests below.
 auto makeTracer = []() {

@@ -23,6 +23,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #endif
 
+namespace qlever {
+
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
@@ -115,8 +117,6 @@ struct SortByColumns {
 // by index building, you must add a matching explicit instantiation in
 // `CompressedExternalIdTableSorterInstantiations.cpp`, otherwise the build will
 // fail at link time when `QLEVER_CHEAPER_COMPILATION` is set.
-namespace ad_utility {
-
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
                                                       3>;
 extern template class CompressedExternalIdTableSorter<
@@ -131,7 +131,8 @@ extern template class CompressedExternalIdTableSorter<
     SortByPSO, NumColumnsIndexBuilding + 2>;
 extern template class CompressedExternalIdTableSorter<SortText, 5>;
 
-}  // namespace ad_utility
 #endif  // QLEVER_CHEAPER_COMPILATION
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H

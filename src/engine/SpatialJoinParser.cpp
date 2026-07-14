@@ -8,7 +8,9 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
-namespace ad_utility::detail::parallel_wkt_parser {
+using namespace qlever;
+
+namespace qlever::detail::parallel_wkt_parser {
 
 // _____________________________________________________________________________
 WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
@@ -118,9 +120,9 @@ void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
   }
 }
 
-}  // namespace ad_utility::detail::parallel_wkt_parser
+}  // namespace qlever::detail::parallel_wkt_parser
 
 namespace sj {
 template class WKTParserBase<
-    ad_utility::detail::parallel_wkt_parser::SpatialJoinParseJob>;
+    qlever::detail::parallel_wkt_parser::SpatialJoinParseJob>;
 }

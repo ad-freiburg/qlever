@@ -13,6 +13,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/CompactStringVector.h"
 
+namespace qlever {
+
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
 // containing two columns, the first one filled with the ids of all predicates
@@ -108,4 +110,5 @@ class CountAvailablePredicates : public Operation {
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H

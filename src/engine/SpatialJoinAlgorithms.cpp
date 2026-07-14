@@ -40,6 +40,8 @@
 #include "util/GeoConverters.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace qlever;
+
 using namespace BoostGeometryNamespace;
 using namespace geometryConverters;
 
@@ -55,15 +57,15 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-    const std::optional<util::geo::DBox>& prefilterLatLngBox,
+    const std::optional<::util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex,
-    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
+    const std::optional<BoundingBox>& precomputedBoundingBox) {
   if (prefilterLatLngBox.has_value()) {
     auto hasNoIntersection =
-        [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
-          return !util::geo::intersects(
+        [&prefilterLatLngBox](const BoundingBox& geomBoundingBox) {
+          return !::util::geo::intersects(
               prefilterLatLngBox.value(),
-              ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
+              geometry_info_helpers::boundingBoxToUtilBox(geomBoundingBox));
         };
 
     // Use the `precomputedBoundingBox` for filtering if available.
@@ -91,15 +93,16 @@ bool SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
 SpatialJoinAlgorithms::LibSpatialJoinParseMetadata
 SpatialJoinAlgorithms::libspatialjoinParse(
     bool leftOrRightSide, LibSpatialJoinParseInput input, sj::Sweeper& sweeper,
-    size_t numThreads, std::optional<util::geo::I32Box> prefilterBox) const {
+    size_t numThreads, std::optional<::util::geo::I32Box> prefilterBox) const {
   const auto [idTable, column, boundingBoxes] = input;
 
   // Convert prefilter box to lat lng coordinates for comparing against geometry
   // info from vocabulary.
-  std::optional<util::geo::DBox> prefilterLatLngBox = std::nullopt;
+  std::optional<::util::geo::DBox> prefilterLatLngBox = std::nullopt;
   if (prefilterBox.has_value()) {
-    prefilterLatLngBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
-        prefilterBox.value());
+    prefilterLatLngBox =
+        geometry_info_helpers::projectInt32WebMercToDoubleLatLng(
+            prefilterBox.value());
   }
   bool usePrefiltering = prefilterLatLngBox.has_value() &&
                          (boundingBoxes.has_value() ||
@@ -109,7 +112,7 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   // retrieving bounding boxes from disk) is likely larger than its performance
   // gain. Therefore prefiltering is disabled in this case.
   if (usePrefiltering &&
-      util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox()) {
+      ::util::geo::area(prefilterLatLngBox.value()) > maxAreaPrefilterBox()) {
     usePrefiltering = false;
     spatialJoin_.value()->runtimeInfo().addDetail(
         "prefilter-disabled-by-bounding-box-area", true);
@@ -118,13 +121,13 @@ SpatialJoinAlgorithms::libspatialjoinParse(
   // If the input is smaller than one batch for every thread, reduce the number
   // of threads accordingly to avoid spawning threads that will never be used.
   static constexpr auto batchSize =
-      ad_utility::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
+      qlever::detail::parallel_wkt_parser::WKT_PARSER_BATCH_SIZE;
   static_assert(batchSize > 0);
   size_t requiredBatches = (idTable->size() + batchSize - 1ULL) / batchSize;
   numThreads = std::min(numThreads, requiredBatches);
 
   // Initialize the parser.
-  ad_utility::detail::parallel_wkt_parser::WKTParser parser(
+  qlever::detail::parallel_wkt_parser::WKTParser parser(
       &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
       qec_->getIndex());
 
@@ -151,8 +154,7 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::BoundingBox>
-SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
+std::optional<BoundingBox> SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
     const IdTableView<0>* idTable,
     const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
   if (!boundingBoxes.has_value()) {
@@ -164,8 +166,7 @@ SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
       idUpperRight.getDatatype() != Datatype::GeoPoint) {
     return std::nullopt;
   }
-  return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
-                                 idUpperRight.getGeoPoint()};
+  return BoundingBox{idLowerLeft.getGeoPoint(), idUpperRight.getGeoPoint()};
 }
 
 // ____________________________________________________________________________
@@ -192,9 +193,9 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     const IdTableView<0>& restable, size_t row, ColumnIndex col,
     const Index& index) {
-  using namespace util::geo;
+  using namespace ::util::geo;
   auto id = restable.at(row, col);
-  auto str = ql::exportIds::idToStringAndType(index, id, {});
+  auto str = exportIds::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
   }
@@ -246,10 +247,10 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
   // is needed, one could store it in an ID similar to GeoPoint (but with less
   // precision), and then the full geometry would only need to be read, when
   // the exact distance is wanted
-  std::string str(betweenQuotes(ql::exportIds::idToStringAndType(
-                                    qec_->getIndex(), idtable->at(row, col), {})
-                                    .value()
-                                    .first));
+  std::string str(betweenQuotes(
+      exportIds::idToStringAndType(qec_->getIndex(), idtable->at(row, col), {})
+          .value()
+          .first));
   AnyGeometry geometry;
   try {
     bg::read_wkt(str, geometry);
@@ -300,8 +301,8 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
   // use the already parsed geometries to calculate the distance
   if (useMidpointForAreas_ ||
       (geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value())) {
-    return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
-        convertPoint(geo1), convertPoint(geo2)));
+    return Id::makeFromDouble(
+        detail::wktDistImpl(convertPoint(geo1), convertPoint(geo2)));
   } else {
     // at least one area
     return Id::makeFromDouble(computeDist(getIndex(geo1), getIndex(geo2)));
@@ -667,7 +668,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   }
   if (maxDist.has_value()) {
     s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-        util::units::Meters(static_cast<float>(maxDist.value()))));
+        ::util::units::Meters(static_cast<float>(maxDist.value()))));
   }
 
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
@@ -715,7 +716,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   auto s2indexPtr = s2index.value().getIndex();
   auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
   s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-      util::units::Meters(static_cast<float>(maxDist.value()))));
+      ::util::units::Meters(static_cast<float>(maxDist.value()))));
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
   ad_utility::Timer timerS2{ad_utility::Timer::Stopped};

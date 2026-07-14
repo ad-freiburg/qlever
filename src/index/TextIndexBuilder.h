@@ -8,6 +8,8 @@
 
 #include "index/IndexImpl.h"
 
+namespace qlever {
+
 // This class contains all the code that is only required when building the
 // fulltext index
 class TextIndexBuilder : public IndexImpl {
@@ -83,6 +85,8 @@ class TextIndexBuilder : public IndexImpl {
   /// blockBoundaries_ member.
   void calculateBlockBoundaries();
 };
+
+}  // namespace qlever
 
 #endif
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXBUILDER_H

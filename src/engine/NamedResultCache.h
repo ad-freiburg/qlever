@@ -16,6 +16,8 @@
 #include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 
+namespace qlever {
+
 // Forward declarations
 class QueryExecutionContext;
 
@@ -114,4 +116,5 @@ class NamedResultCache {
                                                    context);
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

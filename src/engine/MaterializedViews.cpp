@@ -36,10 +36,11 @@
 #include "util/ProgressBar.h"
 #include "util/Views.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
-    std::string onDiskBase, std::string name,
-    const qlever::PlannedQuery& plannedQuery,
+    std::string onDiskBase, std::string name, const PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator)
     : onDiskBase_{std::move(onDiskBase)},
@@ -61,7 +62,7 @@ MaterializedViewWriter::MaterializedViewWriter(
 
 // _____________________________________________________________________________
 void MaterializedViewsManager::writeViewToDisk(
-    std::string name, const qlever::PlannedQuery& plannedQuery,
+    std::string name, const PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
   unloadViewIfLoaded(name);
@@ -255,7 +256,7 @@ IndexMetaData MaterializedViewWriter::writePermutation(
       numCols(), ad_utility::File{spoFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
 
-  qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
+  KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;
   auto spoCallback =
       [&spoMetaData](ql::span<const CompressedRelationMetadata> md) {

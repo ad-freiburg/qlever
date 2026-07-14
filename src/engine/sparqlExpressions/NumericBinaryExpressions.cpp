@@ -5,7 +5,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail {
 // Multiplication.
 using Multiply = MakeNumericExpression<std::multiplies<>>;
@@ -517,4 +517,4 @@ SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
   return std::make_unique<PowExpression>(std::move(child1), std::move(child2));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

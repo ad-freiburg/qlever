@@ -17,6 +17,8 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 void IndexMetaData::add(const CompressedRelationMetadata& addedValue) {
   totalElements_ += addedValue.getNofElements();
@@ -107,3 +109,5 @@ void IndexMetaData::calculateStatistics(size_t numDistinctCol0) {
 void IndexMetaData::exchangeMultiplicities(IndexMetaData& other) {
   data_.exchangeMultiplicities(other.data_);
 }
+
+}  // namespace qlever

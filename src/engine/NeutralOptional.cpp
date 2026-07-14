@@ -6,6 +6,8 @@
 
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 NeutralOptional::NeutralOptional(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> tree)

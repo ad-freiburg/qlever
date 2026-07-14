@@ -20,6 +20,8 @@
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 
+using namespace qlever;
+
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
 
@@ -289,7 +291,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   // Make a (cheap) copy of this `IndexScan`. The size estimates (last two
   // args) are computed next, so just set them to dummy values in this call.
-  auto copy = ad_utility::makeExecutionTree<IndexScan>(
+  auto copy = makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, std::move(scanSpecAndBlocks), true, varsToKeep_, false,
@@ -930,7 +932,7 @@ IndexScan::makeTreeWithStrippedColumns(
     }
   }
 
-  return ad_utility::makeExecutionTree<IndexScan>(
+  return makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
@@ -1023,7 +1025,7 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newVariables.value().insert(bind._target);
   }
 
-  return ad_utility::makeExecutionTree<IndexScan>(
+  return makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,

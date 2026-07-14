@@ -39,8 +39,7 @@ class AsyncFileBlockDriver {
   // `AsyncStatementBoundaryBlockSource`), and immediately start prefetching the
   // first block.
   AsyncFileBlockDriver(
-      const qlever::InputFileSpecification& spec,
-      ad_utility::MemorySize blocksize,
+      const InputFileSpecification& spec, ad_utility::MemorySize blocksize,
       AsyncStatementBoundaryBlockSource::EndPositionFinder findEndPosition,
       std::string description);
 

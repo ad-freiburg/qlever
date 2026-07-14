@@ -10,6 +10,8 @@
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
+namespace qlever {
+
 // Helper for parsing `HttpRequest` into `ParsedRequest`. The parsing has many
 // common patterns but the details are slightly different. This struct
 // stores the partially parsed `ParsedRequest` and methods for common
@@ -22,7 +24,7 @@ struct ParsedRequestBuilder {
   using RequestType =
       boost::beast::http::request<boost::beast::http::string_body>;
 
-  ad_utility::url_parser::ParsedRequest parsedRequest_;
+  url_parser::ParsedRequest parsedRequest_;
 
   // Graph Store Protocol direct graph identification needs the host to be able
   // to determine the graph IRI.
@@ -65,7 +67,7 @@ struct ParsedRequestBuilder {
       std::string_view contentType) const;
 
   // Move the `ParsedRequest` out when parsing is finished.
-  ad_utility::url_parser::ParsedRequest build() &&;
+  url_parser::ParsedRequest build() &&;
 
  private:
   // Adds a dataset clause to the operation if it is of the given type. The
@@ -82,14 +84,15 @@ struct ParsedRequestBuilder {
   // (`Indirect Graph Identification`). See
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
   static GraphOrDefault extractTargetGraph(
-      const ad_utility::url_parser::ParamValueMap& params);
+      const url_parser::ParamValueMap& params);
 
   // Determine the access token from the parameters and the requests
   // Authorization header.
   static std::optional<std::string> determineAccessToken(
-      const RequestType& request,
-      const ad_utility::url_parser::ParamValueMap& params);
+      const RequestType& request, const url_parser::ParamValueMap& params);
 };
+
+}  // namespace qlever
 
 #endif
 #endif  // QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H

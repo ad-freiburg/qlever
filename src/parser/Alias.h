@@ -10,6 +10,8 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 struct Alias {
   sparqlExpression::SparqlExpressionPimpl _expression;
   Variable _target;
@@ -21,5 +23,7 @@ struct Alias {
            _target == other._target;
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_ALIAS_H

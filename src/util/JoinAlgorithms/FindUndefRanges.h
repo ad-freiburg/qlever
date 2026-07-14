@@ -13,7 +13,7 @@
 #include "util/Generator.h"
 #include "util/Views.h"
 
-namespace ad_utility {
+namespace qlever {
 // The following functions `findSmallerUndefRanges...` have the following in
 // common: For a single `row` of IDs find all the iterators in the sorted range
 // `[begin, end)` that are lexicographically smaller than `row`, are compatible
@@ -218,6 +218,6 @@ struct FindSmallerUndefRanges {
   }
 };
 constexpr FindSmallerUndefRanges findSmallerUndefRanges;
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H

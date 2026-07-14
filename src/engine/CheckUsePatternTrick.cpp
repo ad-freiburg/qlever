@@ -8,7 +8,9 @@
 #include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
 
-namespace checkUsePatternTrick {
+namespace qlever::checkUsePatternTrick {
+namespace p = parsedQuery;
+
 // __________________________________________________________________________
 bool isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
@@ -19,21 +21,18 @@ bool isVariableContainedInGraphPattern(
           })) {
     return true;
   }
-  auto check = [&](const parsedQuery::GraphPatternOperation& op) {
+  auto check = [&](const p::GraphPatternOperation& op) {
     return isVariableContainedInGraphPatternOperation(variable, op,
                                                       tripleToIgnore);
   };
   return ql::ranges::any_of(graphPattern._graphPatterns, check);
 }
 
-namespace p = parsedQuery;
-
 // __________________________________________________________________________
 bool isVariableContainedInGraphPatternOperation(
-    const Variable& variable,
-    const parsedQuery::GraphPatternOperation& operation,
+    const Variable& variable, const p::GraphPatternOperation& operation,
     const SparqlTriple* tripleToIgnore) {
-  auto check = [&](const parsedQuery::GraphPattern& pattern) {
+  auto check = [&](const p::GraphPattern& pattern) {
     return isVariableContainedInGraphPattern(variable, pattern, tripleToIgnore);
   };
   return operation.visit([&](auto&& arg) -> bool {
@@ -287,4 +286,4 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
                                       patternTrickData.predicateVariable_};
   return patternTrickTuple;
 }
-}  // namespace checkUsePatternTrick
+}  // namespace qlever::checkUsePatternTrick

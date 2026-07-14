@@ -23,7 +23,11 @@
 #include "util/IndexTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
-using namespace ad_utility::testing;
+using namespace qlever;
+
+namespace qlever {
+
+using namespace qlever::testing;
 using namespace std::string_literals;
 
 using ::testing::UnorderedElementsAre;
@@ -47,7 +51,7 @@ auto makeQecWithOrWithoutCompression(std::string kg, bool useCompression) {
   return getQec(std::move(config));
 }
 using ad_utility::source_location;
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto lit = qlever::testing::tripleComponentLiteral;
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
@@ -450,10 +454,10 @@ TEST(IndexTest, emptyTextIndex) {
       "<a:> <a:> \"\" .",
   };
   for (auto input : inputs) {
-    ad_utility::testing::TestIndexConfig config;
+    qlever::testing::TestIndexConfig config;
     config.turtleInput = std::move(input);
     config.createTextIndex = true;
-    auto* qec = ad_utility::testing::getQec(std::move(config));
+    auto* qec = qlever::testing::getQec(std::move(config));
     // Building an empty text index must succeed, and scanning it for any word
     // must yield no postings.
     IdTable result =
@@ -516,8 +520,7 @@ TEST(IndexTest, processTriple) {
 TEST(IndexTest, ZeroCopyVocabularyBlob) {
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   auto& vocab = index.getNonConstVocabForTesting();
-  vocab.resetToType(ad_utility::VocabularyType{
-      ad_utility::VocabularyType::Enum::InMemoryUncompressed});
+  vocab.resetToType(VocabularyType{VocabularyType::Enum::InMemoryUncompressed});
   ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
   auto filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
@@ -637,10 +640,10 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  using enum qlever::Filetype;
-  std::vector<qlever::InputFileSpecification> singleFileSpec = {
+  using enum Filetype;
+  std::vector<InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
-  std::vector<qlever::InputFileSpecification> twoFilesSpec = {
+  std::vector<InputFileSpecification> twoFilesSpec = {
       {"firstFile.ttl", Turtle, std::nullopt},
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
@@ -649,10 +652,10 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   // that the assertion is only active when `LOGLEVEL >= INFO`. At
   // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
   // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
-  // `testing::_` (match anything) in that case.
+  // `::testing::_` (match anything) in that case.
   auto onlyAtInfoOrAbove = [](auto matcher) {
     if constexpr (LOGLEVEL < INFO) {
-      return testing::_;
+      return ::testing::_;
     } else {
       return matcher;
     }
@@ -663,10 +666,10 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   // normal behavior.
   {
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+    EXPECT_THAT(::testing::internal::GetCapturedStdout(),
                 AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
                       HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
@@ -674,9 +677,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   {
     twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+    EXPECT_THAT(::testing::internal::GetCapturedStdout(),
                 AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
                       Not(HasSubstr("deprecated"))));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
@@ -688,10 +691,10 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   for (auto parallelParsing : {true, false}) {
     singleFileSpec.at(0).parseInParallel_ = parallelParsing;
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = true;
-    testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+    EXPECT_THAT(::testing::internal::GetCapturedStdout(),
                 AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
                       Not(HasSubstr("deprecated"))));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
@@ -701,9 +704,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallel_ = false;
     twoFilesSpec.at(0).parseInParallelSetExplicitly_ = true;
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
-    testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+    EXPECT_THAT(::testing::internal::GetCapturedStdout(),
                 AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
                       Not(HasSubstr("deprecated"))));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
@@ -715,9 +718,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   // stream and forbidden for multiple input streams.
   {
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+    EXPECT_THAT(::testing::internal::GetCapturedStdout(),
                 AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
                       HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
@@ -964,8 +967,8 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.
-  stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
-  stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["git-hash"] = *version::gitShortHashWithoutLinking.wlock();
+  stats["index-format-version"] = indexFormatVersion;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
@@ -979,11 +982,13 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   TestIndexConfig c{absl::StrCat("<a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
                                  "1> . <a> <b> <c> <", QLEVER_NEW_GRAPH_PREFIX,
                                  "2> . <a> <b> <c> <http://example.org/1> .")};
-  c.indexType = qlever::Filetype::NQuad;
+  c.indexType = Filetype::NQuad;
   c.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   auto qec = getQec(c);
   const auto graphManager = qec->getIndex().graphNameManager();
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
-              testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+              ::testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
 }
+
+}  // namespace qlever

@@ -8,6 +8,8 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
+namespace qlever {
+
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
 /// stricter level can be all equal on a weaker level. The
@@ -130,5 +132,7 @@ class UnicodeVocabulary {
     // Note: _comparator is not serialized as it's stateless or reconstructed.
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H

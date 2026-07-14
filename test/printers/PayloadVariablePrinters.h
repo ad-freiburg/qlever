@@ -8,6 +8,8 @@
 #include "./VariablePrinters.h"
 #include "parser/PayloadVariables.h"
 
+namespace qlever {
+
 // _____________________________________________________________
 inline void PrintTo(const PayloadVariables& pv, std::ostream* os) {
   auto& s = *os;
@@ -20,5 +22,7 @@ inline void PrintTo(const PayloadVariables& pv, std::ostream* os) {
     }
   }
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_PRINTERS_PAYLOADVARIABLEPRINTERS_H

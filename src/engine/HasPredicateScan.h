@@ -15,6 +15,8 @@
 #include "parser/ParsedQuery.h"
 #include "util/CompactStringVector.h"
 
+namespace qlever {
+
 class HasPredicateScan : public Operation {
  public:
   enum class ScanType {
@@ -129,4 +131,5 @@ class HasPredicateScan : public Operation {
       QueryExecutionContext* qec, TripleComponent subject, Variable object);
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

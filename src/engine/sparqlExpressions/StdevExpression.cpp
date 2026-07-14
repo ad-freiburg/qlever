@@ -8,7 +8,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 // _____________________________________________________________________________
 ExpressionResult DeviationExpression::evaluate(
@@ -81,4 +81,4 @@ ExpressionResult DeviationExpression::evaluate(
   return std::visit(impl, std::move(childRes));
 };
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail

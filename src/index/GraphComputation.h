@@ -19,6 +19,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "util/Exception.h"
 
+namespace qlever {
+
 // Helper function to compute the distinct graphs contained in a block. Returns
 // `nullopt` if there are more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`
 // distinct graphs, otherwise returns the distinct graphs as a vector. The
@@ -78,5 +80,7 @@ inline std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
   // different graphs.
   return {!hasOnlyOneGraph(graphs) && hasDuplicates(), std::move(graphs)};
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_GRAPHCOMPUTATION_H

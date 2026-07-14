@@ -26,7 +26,9 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
-// Forward declarations
+namespace qlever {
+
+// Forward declaration.
 class IdTable;
 
 class LocatedTriplesPerBlock;
@@ -372,7 +374,7 @@ class CompressedRelationWriter {
   static PermutationSingleResult createPermutation(
       WriterAndCallback writerAndCallback,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
 
  private:
   // Internal helper for `PermutationWriter<true>` (that is, in pair mode).
@@ -410,7 +412,7 @@ class CompressedRelationWriter {
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
@@ -531,8 +533,6 @@ class CompressedRelationWriter {
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfThreads);
 };
-
-using namespace std::string_view_literals;
 
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
@@ -970,5 +970,7 @@ class CompressedRelationReader {
  * that the given permutation has.
  * 2. Then add assertions that we only get valid column indices specified.
  */
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATION_H

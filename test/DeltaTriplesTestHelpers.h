@@ -19,15 +19,16 @@
 #include "util/GTestHelpers.h"
 
 namespace deltaTriplesTestHelpers {
+using namespace qlever;
 
 // A matcher that applies `InnerMatcher` to all `LocatedTriplesPerBlock` of a
 // `DeltaTriples`.
 inline auto InAllPermutations =
-    [](testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
-    -> testing::Matcher<const DeltaTriples&> {
-  return testing::AllOfArray(ad_utility::transform(
+    [](::testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
+    -> ::testing::Matcher<const DeltaTriples&> {
+  return ::testing::AllOfArray(ad_utility::transform(
       Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {
-        return testing::ResultOf(
+        return ::testing::ResultOf(
             absl::StrCat(".getLocatedTriplesPerBlock(",
                          Permutation::toString(perm), ")"),
             [perm](const DeltaTriples& deltaTriples) {
@@ -39,10 +40,10 @@ inline auto InAllPermutations =
 // A matcher that checks `numTriples()` for all `LocatedTriplesPerBlock` of a
 // `DeltaTriples`.
 inline auto NumTriplesInAllPermutations =
-    [](size_t expectedNumTriples) -> testing::Matcher<const DeltaTriples&> {
+    [](size_t expectedNumTriples) -> ::testing::Matcher<const DeltaTriples&> {
   return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock,
                                        numTriplesForTesting,
-                                       testing::Eq(expectedNumTriples)));
+                                       ::testing::Eq(expectedNumTriples)));
 };
 // A matcher that checks `numInserted()`, `numDeleted()` and the derived
 // `getCounts()` of a `DeltaTriples` and `numTriples()` for all
@@ -50,16 +51,16 @@ inline auto NumTriplesInAllPermutations =
 inline auto NumTriples =
     [](int64_t inserted, int64_t deleted, size_t inAllPermutations,
        int64_t internalInserted = 0,
-       int64_t internalDeleted = 0) -> testing::Matcher<const DeltaTriples&> {
-  return testing::AllOf(
-      AD_PROPERTY(DeltaTriples, numInserted, testing::Eq(inserted)),
-      AD_PROPERTY(DeltaTriples, numDeleted, testing::Eq(deleted)),
+       int64_t internalDeleted = 0) -> ::testing::Matcher<const DeltaTriples&> {
+  return ::testing::AllOf(
+      AD_PROPERTY(DeltaTriples, numInserted, ::testing::Eq(inserted)),
+      AD_PROPERTY(DeltaTriples, numDeleted, ::testing::Eq(deleted)),
       AD_PROPERTY(DeltaTriples, numInternalInserted,
-                  testing::Eq(internalInserted)),
+                  ::testing::Eq(internalInserted)),
       AD_PROPERTY(DeltaTriples, numInternalDeleted,
-                  testing::Eq(internalDeleted)),
+                  ::testing::Eq(internalDeleted)),
       AD_PROPERTY(DeltaTriples, getCounts,
-                  testing::Eq(DeltaTriplesCount{inserted, deleted})),
+                  ::testing::Eq(DeltaTriplesCount{inserted, deleted})),
       NumTriplesInAllPermutations(inAllPermutations));
 };
 

@@ -15,6 +15,8 @@
 #include "util/Iterators.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
 // then binary search for a string can be performed.
@@ -126,5 +128,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

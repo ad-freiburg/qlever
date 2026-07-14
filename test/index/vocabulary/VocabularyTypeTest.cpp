@@ -10,8 +10,8 @@
 using namespace ad_utility;
 // Simple tests for the glorified enum `VocabularyType`.
 TEST(VocabularyType, allTests) {
-  using E = VocabularyType::Enum;
-  using T = VocabularyType;
+  using E = qlever::VocabularyType::Enum;
+  using T = qlever::VocabularyType;
   T t{};
   EXPECT_EQ(t.value(), E::InMemoryUncompressed);
   for (auto e : T::all()) {
@@ -42,9 +42,9 @@ TEST(VocabularyType, random) {
   ad_utility::HashMap<size_t, size_t> counts;
   size_t numSamples = 100'000;
   for (size_t i = 0; i < numSamples; ++i) {
-    counts[static_cast<size_t>(VocabularyType::random().value())]++;
+    counts[static_cast<size_t>(qlever::VocabularyType::random().value())]++;
   }
   for (const auto& [_, count] : counts) {
-    EXPECT_GE(count, numSamples / VocabularyType::all().size() / 3);
+    EXPECT_GE(count, numSamples / qlever::VocabularyType::all().size() / 3);
   }
 }

@@ -23,6 +23,8 @@
 #include "util/Random.h"
 #include "util/TypeIdentity.h"
 
+using namespace qlever;
+
 namespace ad_benchmark {
 using namespace sparqlExpression;
 using namespace ad_utility::use_type_identity;
@@ -89,7 +91,7 @@ auto generateRandomLocalVocabAndIndicesVec =
         for (size_t j = 0; j < m; j++) {
           str += alphanum.at(gen());
         }
-        using namespace ad_utility::triple_component;
+        using namespace triple_component;
         indices.push_back(localVocab.getIndexAndAddIfNotContained(
             LocalVocabEntry::literalWithoutQuotes(str, context)));
       }
@@ -270,7 +272,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // SELECT (AGGREGATE(?b) AS ?x) WHERE {
     //   VALUES ...
     // } GROUP BY ?a
-    GroupBy groupBy{ad_utility::testing::getQec(),
+    GroupBy groupBy{qlever::testing::getQec(),
                     {Variable{"?a"}},
                     {std::move(alias1)},
                     std::move(subtree)};
@@ -326,7 +328,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // SELECT (AGGREGATE1(?b) AS ?x) (AGGREGATE2(?b) AS ?y) WHERE {
     //   VALUES ...
     // } GROUP BY ?a
-    GroupBy groupBy{ad_utility::testing::getQec(),
+    GroupBy groupBy{qlever::testing::getQec(),
                     {Variable{"?a"}},
                     {std::move(alias1), std::move(alias2)},
                     std::move(subtree)};
@@ -364,7 +366,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     group.metadata().addKeyValuePair("Operation", opString.str());
 
     // Create `ValuesForTesting` object
-    auto qec = ad_utility::testing::getQec();
+    auto qec = qlever::testing::getQec();
     IdTable table{qec->getAllocator()};
     table.setNumColumns(2);
     table.resize(numInputRows);
@@ -422,7 +424,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     if (sorted) {
       sortedColumns = {0};
     }
-    auto valueTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto valueTree = makeExecutionTree<ValuesForTesting>(
         qec, std::move(table), variables, false, sortedColumns,
         std::move(localVocab));
 

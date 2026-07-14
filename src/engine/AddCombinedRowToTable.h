@@ -24,12 +24,12 @@
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
-namespace ad_utility {
+namespace qlever {
 
 // This class handles the efficient writing of the results of a JOIN operation
-// to a column-based `IdTable`. The underlying assumption is that in both inputs
-// the join columns are the first columns. On each call to `addRow`, we only
-// store the indices of the matching rows. When a certain buffer size
+// to a column-based `IdTable`. The underlying assumption is that in
+// both inputs the join columns are the first columns. On each call to `addRow`,
+// we only store the indices of the matching rows. When a certain buffer size
 // (configurable, default value 100'000) is reached, the results are actually
 // written to the table.
 class AddCombinedRowToIdTable {
@@ -288,8 +288,8 @@ class AddCombinedRowToIdTable {
                                            optionalIndexBuffer_.size() ||
                          result.numColumns() == 0);
     // Sometimes the left input and right input are not valid anymore, because
-    // the `IdTable`s they point to have already been destroyed. This case is
-    // okay, as long as there was a manual call to `flush` (after which
+    // the `IdTable`s they point to have already been destroyed. This
+    // case is okay, as long as there was a manual call to `flush` (after which
     // `nextIndex_ == 0`) before the inputs went out of scope. However, the call
     // to `resultTable()` will still unconditionally flush. The following check
     // makes this behavior defined.
@@ -407,8 +407,8 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
     std::invoke(blockwiseCallback_, result, mergedVocab_);
-    // The current `IdTable`s might still be active, so we have to merge the
-    // local vocabs again if all other sets were moved-out.
+    // The current `IdTable`s might still be active, so we have to merge
+    // the local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
       mergedVocab_ = LocalVocab{};
@@ -418,8 +418,8 @@ class AddCombinedRowToIdTable {
       // be done here as we know that we have at most two local vocabs.
       auto rangeOfNonNullVocabs = [&]() {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-        return currentVocabs_ | ql::views::filter(toBool) |
-               ql::views::transform(dereference);
+        return currentVocabs_ | ql::views::filter(ad_utility::toBool) |
+               ql::views::transform(ad_utility::dereference);
 #else
         absl::InlinedVector<std::reference_wrapper<const LocalVocab>, 2>
             tmpVocabs;
@@ -452,6 +452,6 @@ class AddCombinedRowToIdTable {
             numJoinColumns_ * static_cast<size_t>(!keepJoinColumns_));
   }
 };
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H

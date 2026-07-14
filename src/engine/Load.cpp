@@ -10,6 +10,8 @@
 #include "global/RuntimeParameters.h"
 #include "util/http/HttpUtils.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
            SendRequestType getResultFunction)

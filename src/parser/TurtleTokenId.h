@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_PARSER_TURTLETOKENID_H
 #define QLEVER_SRC_PARSER_TURTLETOKENID_H
 
+namespace qlever {
+
 /// One entry for each Token in the Turtle Grammar. Used to create a unified
 /// Interface to the two different Tokenizers
 enum class TurtleTokenId : int {
@@ -38,5 +40,7 @@ enum class TurtleTokenId : int {
   Anon,
   Comment
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_TURTLETOKENID_H

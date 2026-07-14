@@ -13,39 +13,42 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
                         const ColumnIndex& textRecordColumn,
                         const std::vector<ColumnIndex>& entityColumns,
                         const std::vector<ColumnIndex>& scoreColumns) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(i));
   }
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      ad_utility::testing::getQec(), std::move(input), vars);
+  auto subtree = makeExecutionTree<ValuesForTesting>(qlever::testing::getQec(),
+                                                     std::move(input), vars);
   return TextLimit{
       qec,           n,           std::move(subtree), textRecordColumn,
       entityColumns, scoreColumns};
 }
 
 CartesianProductJoin makeJoin(IdTable input1, IdTable input2) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   size_t j = 0;
   std::vector<std::shared_ptr<QueryExecutionTree>> valueOperations;
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < input1.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(j++));
   }
-  valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  valueOperations.push_back(makeExecutionTree<ValuesForTesting>(
       qec, std::move(input1), std::move(vars)));
 
   vars.clear();
   for (size_t i = 0; i < input2.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(j++));
   }
-  valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+  valueOperations.push_back(makeExecutionTree<ValuesForTesting>(
       qec, std::move(input2), std::move(vars)));
 
   return CartesianProductJoin{qec, std::move(valueOperations)};
@@ -465,7 +468,7 @@ TEST(TextLimit, BasicMemberFunctions) {
 
   inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   TextLimit textLimit2 = makeTextLimit(
-      IdTable(3, ad_utility::testing::makeAllocator()), 5, 0, {1}, {2});
+      IdTable(3, qlever::testing::makeAllocator()), 5, 0, {1}, {2});
   ASSERT_TRUE(textLimit2.knownEmptyResult());
 }
 

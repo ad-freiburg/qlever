@@ -9,6 +9,8 @@
 #include "util/Random.h"
 #include "util/TransparentFunctors.h"
 
+using namespace qlever;
+
 namespace {
 // Get `num` random indices in the range `[min, max]`. Additionally, add the min
 // and the max to the result explicitly, to automaticlaly test corner cases.0
@@ -183,10 +185,10 @@ TEST(EncodedIriManager, getIndexOfPrefix) {
     for (const auto& [i, fixedPrefix] :
          ranges::views::enumerate(AlwaysOnPrefixes::value)) {
       EXPECT_THAT(manager.getIndexOfPrefix(fixedPrefix),
-                  testing::Optional(testing::Eq(i)));
+                  ::testing::Optional(::testing::Eq(i)));
     }
     EXPECT_THAT(manager.getIndexOfPrefix("http://example.org"),
-                testing::Eq(std::nullopt));
+                ::testing::Eq(std::nullopt));
   }
   {
     std::vector<std::string> customPrefixes = {"http://qlever.dev"};
@@ -200,10 +202,10 @@ TEST(EncodedIriManager, getIndexOfPrefix) {
     ql::ranges::sort(allPrefixes);
     for (const auto& [i, prefix] : ranges::views::enumerate(allPrefixes)) {
       EXPECT_THAT(manager.getIndexOfPrefix(prefix),
-                  testing::Optional(testing::Eq(i)));
+                  ::testing::Optional(::testing::Eq(i)));
     }
     EXPECT_THAT(manager.getIndexOfPrefix("http://example.org"),
-                testing::Eq(std::nullopt));
+                ::testing::Eq(std::nullopt));
   }
 }
 
@@ -240,7 +242,7 @@ TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
   // Adding a hardcoded prefix a second time in the constructor is an error.
   AD_EXPECT_THROW_WITH_MESSAGE(
       Manager({std::string{TestHardcodedPrefixes::value.at(0)}}),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "!ad_utility::contains(prefixesWithoutAngleBrackets, prefix)"));
 }
 

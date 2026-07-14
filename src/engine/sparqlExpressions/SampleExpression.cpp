@@ -8,8 +8,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
-using namespace sparqlExpression;
-using namespace sparqlExpression::detail;
+using namespace qlever::sparqlExpression;
+using namespace qlever::sparqlExpression::detail;
 
 // ____________________________________________________________________________
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
@@ -24,7 +24,7 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     } else if constexpr (isVectorResult<T>) {
       AD_CORRECTNESS_CHECK(!childResult.empty());
       return childResult[0];
-    } else if constexpr (std::is_same_v<T, ::Variable>) {
+    } else if constexpr (std::is_same_v<T, qlever::Variable>) {
       // TODO<joka921> Can't this be a simpler function (getIdAt)
       AD_CORRECTNESS_CHECK(context->_endIndex > context->_beginIndex);
       ql::span<const ValueId> idOfFirstAsVector = detail::getIdsFromVariable(

@@ -16,6 +16,9 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 namespace {
 
 using ad_utility::source_location;
@@ -153,7 +156,7 @@ compressedRelationTestWriteCompressedRelations(
   AD_CORRECTNESS_CHECK(numColumns >= 4);
   auto generator =
       [&](size_t sorterBlockSize) -> cppcoro::generator<IdTableStatic<0>> {
-    IdTableStatic<0> buffer{numColumns, ad_utility::testing::makeAllocator()};
+    IdTableStatic<0> buffer{numColumns, qlever::testing::makeAllocator()};
     for (const auto& input : inputs) {
       for (const auto& arr : input.col1And2_) {
         std::vector row{V(input.col0_)};
@@ -182,7 +185,7 @@ compressedRelationTestWriteCompressedRelations(
 
   auto res = CompressedRelationWriter::createPermutation(
       std::move(wc1), ad_utility::InputRangeTypeErased{generator(5)},
-      qlever::KeyOrder{0, 1, 2, 3}, {});
+      KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
   ad_utility::serialization::ByteBufferWriteSerializer w;
@@ -278,7 +281,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   addGraphColumnIfNecessary(inputs);
   auto [inputsWithoutLocated, locatedTriplesInput] =
       makeLocatedTriplesFromPartOfInput(locatedTriplesProbability, inputs);
-  DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
+  DeltaTriples deltaTriples{qlever::testing::getQec()->getIndex()};
   auto [filename, cleanup] = testFilenameWithCleanup();
   auto [blocksOriginal, metaData, readerPtr] =
       writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
@@ -962,7 +965,7 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 
 TEST(CompressedRelationReader, getResultSizeImpl) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
-  auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");
+  auto index = qlever::testing::makeTestIndex("getResultSizeImpl", "");
   DeltaTriplesManager& deltaTriplesManager = index.deltaTriplesManager();
   deltaTriplesManager.modify<void>([](DeltaTriples& dt) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -988,11 +991,11 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
         perm.permutation());
     auto [actual_lower, actual_upper] = reader.getSizeEstimateForScan(
         ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
-    EXPECT_THAT(actual_lower, testing::Eq(lower));
-    EXPECT_THAT(actual_upper, testing::Eq(upper));
+    EXPECT_THAT(actual_lower, ::testing::Eq(lower));
+    EXPECT_THAT(actual_upper, ::testing::Eq(upper));
     auto actual_exact = reader.getResultSizeOfScan(
         ScanSpecAndBlocks{scanSpec, augmentedBlocks}, ltpb);
-    EXPECT_THAT(actual_exact, testing::Eq(exact));
+    EXPECT_THAT(actual_exact, ::testing::Eq(exact));
   };
   // The Scans request all triples of the one and only block.
   for (auto perm : Permutation::ALL) {
@@ -1024,14 +1027,14 @@ using FLT =
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
-  ad_utility::testing::TestIndexConfig testIndexConfig;
-  testIndexConfig.indexType = qlever::Filetype::NQuad;
+  qlever::testing::TestIndexConfig testIndexConfig;
+  testIndexConfig.indexType = Filetype::NQuad;
   testIndexConfig.turtleInput =
       "<a> <a> <a> <g1> . <a> <a> <d> <g2> . <a> <a> <h> <g3> ."
       "<a> <a> <b> <g1> . <a> <a> <e> <g2> . <a> <a> <i> <g3> ."
       "<a> <b> <c> <g1> . <a> <b> <f> <g2> . <a> <b> <j> <g3> ."
       "<a> <b> <d> <g1> . <a> <b> <g> <g2> . <a> <b> <k> <g3> .";
-  auto index = ad_utility::testing::makeTestIndex(
+  auto index = qlever::testing::makeTestIndex(
       "getFirstAndLastTripleIgnoringGraph", std::move(testIndexConfig));
   auto currentSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
@@ -1041,7 +1044,7 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
 
   auto getId = [&index](std::string_view iri) {
-    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
+    return TripleComponent{triple_component::Iri::fromIriref(iri)}
         .toValueId(index)
         .value();
   };
@@ -1100,15 +1103,15 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
 TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  ad_utility::testing::TestIndexConfig testIndexConfig;
+  qlever::testing::TestIndexConfig testIndexConfig;
   testIndexConfig.usePatterns = true;
-  testIndexConfig.indexType = qlever::Filetype::NQuad;
+  testIndexConfig.indexType = Filetype::NQuad;
   testIndexConfig.turtleInput =
       "<a> <a> <a> <g1> . <a> <a> <d> <g2> . <a> <a> <h> <g3> ."
       "<a> <a> <b> <g1> . <a> <a> <e> <g2> . <a> <a> <i> <g3> ."
       "<a> <b> <c> <g1> . <a> <b> <f> <g2> . <a> <b> <j> <g3> ."
       "<a> <b> <d> <g1> . <a> <b> <g> <g2> . <a> <b> <k> <g3> .";
-  auto index = ad_utility::testing::makeTestIndex(
+  auto index = qlever::testing::makeTestIndex(
       "ensureDummyBlockWith6ColumnsDoesntCauseIssues",
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
@@ -1157,7 +1160,7 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
 TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
   // Regression test for an issue introduced in
   // https://github.com/ad-freiburg/qlever/pull/2632
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   auto& index = qec->getIndex();
   auto sharedLocatedTriplesSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
@@ -1333,6 +1336,7 @@ std::pair<size_t, size_t> getThreadCountAndTaskSize(
 }
 }  // namespace ad_utility
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
   auto threads = std::thread::hardware_concurrency();
@@ -1371,6 +1375,7 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
   }
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST(ScanSpecAndBlocks, removePrefix) {

@@ -12,6 +12,8 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 // For `AVG`, add value to sum if it is numeric, otherwise
 // set error flag.
@@ -161,8 +163,7 @@ struct GroupConcatAggregationData {
   }
 
   // Actual implementation of `addValue`, but without template parameters.
-  void addValueImpl(
-      const std::optional<ad_utility::triple_component::Literal>& value);
+  void addValueImpl(const std::optional<triple_component::Literal>& value);
 
   [[nodiscard]] ValueId calculateResult(const LocalVocabContext& context,
                                         LocalVocab* localVocab) const;
@@ -191,5 +192,7 @@ struct SampleAggregationData {
 
   void reset() { *this = SampleAggregationData{}; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H

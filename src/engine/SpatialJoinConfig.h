@@ -19,6 +19,8 @@
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
 // class declaration of the spatial join operation.
@@ -110,5 +112,7 @@ struct SpatialJoinConfiguration {
 // not the case. 1 divided by this constant is the damping factor for the
 // estimated number of results.
 static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H

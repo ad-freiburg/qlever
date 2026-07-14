@@ -12,6 +12,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
+namespace qlever {
+
 // The implementation of the SPARQL `ORDER BY` operation.
 //
 // Note: This class sorts its input in the way that is expected by an end user
@@ -91,4 +93,5 @@ class OrderBy : public Operation {
   }
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_ORDERBY_H

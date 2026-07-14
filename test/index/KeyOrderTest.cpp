@@ -8,7 +8,7 @@
 #include "index/KeyOrder.h"
 
 using namespace qlever;
-using namespace testing;
+using namespace ::testing;
 // _____________________________________________________________________________
 TEST(KeyOrder, Constructor) {
   AD_EXPECT_THROW_WITH_MESSAGE(KeyOrder(0, 1, 2, 4), HasSubstr("out of range"));

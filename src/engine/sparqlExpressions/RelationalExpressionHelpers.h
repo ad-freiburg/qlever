@@ -10,7 +10,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 using valueIdComparators::Comparison;
 // For `T == VectorWithMemoryLimit<U>`, `ValueType<T>` is `U`. For any other
 // type `T`, `ValueType<T>` is `T`.
@@ -119,8 +119,7 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // collation level.
 // TODO<joka921> Make the collation level configurable.
 inline std::pair<ValueId, ValueId> getRangeFromVocab(
-    const ad_utility::triple_component::LiteralOrIri& s,
-    const EvaluationContext* context) {
+    const triple_component::LiteralOrIri& s, const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
   const ValueId lower =
@@ -214,6 +213,6 @@ inline const auto compareIdsOrStrings =
     }
   }
 };
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H

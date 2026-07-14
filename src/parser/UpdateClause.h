@@ -12,7 +12,7 @@
 #include "parser/data/Types.h"
 #include "rdfTypes/Iri.h"
 
-namespace updateClause {
+namespace qlever::updateClause {
 // A Graph Update is an Update operation that inserts or deletes some triples.
 // These triples can contain variables that are bound the result of the
 // ParsedQueries GraphPattern. All Updates are realised with it.
@@ -25,15 +25,15 @@ struct GraphUpdate {
   GraphUpdate(Triples toInsert, Triples toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
-}  // namespace updateClause
+}  // namespace qlever::updateClause
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 struct UpdateClause : ClauseBase {
   updateClause::GraphUpdate op_;
 
   UpdateClause() = default;
   explicit UpdateClause(updateClause::GraphUpdate op) : op_{std::move(op)} {}
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_UPDATECLAUSE_H

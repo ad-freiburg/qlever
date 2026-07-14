@@ -18,6 +18,11 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 
+using namespace qlever::testing;
+using qlever::ColumnIndex;
+using qlever::IdTable;
+using qlever::ValuesForTesting;
+
 /*
  * @brief Join two IdTables using the given join function and return
  * the result.
@@ -39,7 +44,7 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
   int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
                                    tableB.idTable.numColumns() - 1)};
   IdTable result{static_cast<size_t>(resultWidth),
-                 ad_utility::testing::makeAllocator()};
+                 qlever::testing::makeAllocator()};
 
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.
@@ -61,8 +66,9 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
 inline auto makeHashJoinLambda() {
   return ad_utility::ApplyAsValueIdentity{
       [](auto /*valueIdentityA*/, auto /*valueIdentityB*/,
-         auto /*valueIdentityC*/,
-         auto&&... args) { return JoinImpl::hashJoin(AD_FWD(args)...); }};
+         auto /*valueIdentityC*/, auto&&... args) {
+        return qlever::JoinImpl::hashJoin(AD_FWD(args)...);
+      }};
 }
 
 /*
@@ -72,20 +78,21 @@ inline auto makeHashJoinLambda() {
 inline auto makeJoinLambda() {
   return ad_utility::ApplyAsValueIdentity{
       [](auto /*valueIdentityA*/, auto /*valueIdentityB*/,
-         auto /*valueIdentityC*/, const IdTable& a, ColumnIndex jc1,
-         const IdTable& b, ColumnIndex jc2, IdTable* result) {
-        std::vector<std::optional<Variable>> leftVariables{{Variable{"?x"}}};
+         auto /*valueIdentityC*/, const IdTable& a, qlever::ColumnIndex jc1,
+         const IdTable& b, qlever::ColumnIndex jc2, IdTable* result) {
+        std::vector<std::optional<qlever::Variable>> leftVariables{
+            {qlever::Variable{"?x"}}};
         leftVariables.resize(a.numColumns());
-        std::vector<std::optional<Variable>> rightVariables{{Variable{"?x"}}};
+        std::vector<std::optional<qlever::Variable>> rightVariables{
+            {qlever::Variable{"?x"}}};
         rightVariables.resize(b.numColumns());
-        auto* qec = ad_utility::testing::getQec();
-        auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        auto* qec = qlever::testing::getQec();
+        auto leftTree = qlever::makeExecutionTree<ValuesForTesting>(
             qec, a.clone(), std::move(leftVariables), false, std::vector{jc1});
-        auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        auto rightTree = qlever::makeExecutionTree<ValuesForTesting>(
             qec, b.clone(), std::move(rightVariables), false, std::vector{jc2});
-        JoinImpl join{qec, leftTree, rightTree, jc1, jc2, true, false};
+        qlever::JoinImpl join{qec, leftTree, rightTree, jc1, jc2, true, false};
         return join.join(a.asStaticView<0>(), b.asStaticView<0>(), result);
       }};
 }
-
 #endif  // QLEVER_TEST_UTIL_JOINHELPERS_H

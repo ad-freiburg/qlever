@@ -7,9 +7,11 @@
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Iri.h"
 
+using namespace qlever;
+
 using namespace sparqlParserTestHelpers;
 namespace {
-auto iri = ad_utility::testing::iri;
+auto iri = qlever::testing::iri;
 
 // _____________________________________________________________________________
 TEST(SparqlParser, Update) {
@@ -20,8 +22,8 @@ TEST(SparqlParser, Update) {
                                        ad_utility::source_location l =
                                            AD_CURRENT_SOURCE_LOC()) {
     expectUpdate_(query,
-                  testing::ElementsAre(
-                      testing::AllOf(expected, m::pq::OriginalString(query))),
+                  ::testing::ElementsAre(
+                      ::testing::AllOf(expected, m::pq::OriginalString(query))),
                   l);
   };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
@@ -97,7 +99,7 @@ TEST(SparqlParser, Update) {
                                m::GraphPattern()));
   expectUpdateFails(
       "INSERT DATA { GRAPH ?f { } }",
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Invalid SPARQL query: Variables (?f) are not allowed here."));
   expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
@@ -160,15 +162,16 @@ TEST(SparqlParser, Update) {
           AllOf(fooInsertMatcher,
                 m::pq::OriginalString(
                     "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
-  expectUpdate_("", testing::IsEmpty());
-  expectUpdate_(" ", testing::IsEmpty());
-  expectUpdate_("PREFIX ex: <http://example.org>", testing::IsEmpty());
+  expectUpdate_("", ::testing::IsEmpty());
+  expectUpdate_(" ", ::testing::IsEmpty());
+  expectUpdate_("PREFIX ex: <http://example.org>", ::testing::IsEmpty());
   expectUpdate_("INSERT DATA { <a> <b> <c> }; PREFIX ex: <http://example.org>",
-                testing::ElementsAre(insertMatcher));
-  expectUpdate_("### Some comment \n \n #someMoreComments", testing::IsEmpty());
+                ::testing::ElementsAre(insertMatcher));
+  expectUpdate_("### Some comment \n \n #someMoreComments",
+                ::testing::IsEmpty());
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> };### Some comment \n \n #someMoreComments",
-      testing::ElementsAre(insertMatcher));
+      ::testing::ElementsAre(insertMatcher));
 }
 
 // _____________________________________________________________________________
@@ -176,8 +179,8 @@ TEST(SparqlParser, Create) {
   auto expectCreate = ExpectCompleteParse<&Parser::create>{defaultPrefixMap};
   auto expectCreateFails = ExpectParseFails<&Parser::create>{defaultPrefixMap};
 
-  expectCreate("CREATE GRAPH <foo>", testing::IsEmpty());
-  expectCreate("CREATE SILENT GRAPH <foo>", testing::IsEmpty());
+  expectCreate("CREATE GRAPH <foo>", ::testing::IsEmpty());
+  expectCreate("CREATE SILENT GRAPH <foo>", ::testing::IsEmpty());
   expectCreateFails("CREATE <foo>");
   expectCreateFails("CREATE ?foo");
 }
@@ -195,7 +198,7 @@ TEST(SparqlParser, Add) {
   expectAdd("ADD SILENT GRAPH <foo> TO <bar>", addMatcher);
   expectAdd("ADD <foo> to DEFAULT",
             ElementsAre(m::AddAll(Iri("<foo>"), Iri(DEFAULT_GRAPH_IRI))));
-  expectAdd("ADD GRAPH <foo> to GRAPH <foo>", testing::IsEmpty());
+  expectAdd("ADD GRAPH <foo> to GRAPH <foo>", ::testing::IsEmpty());
   expectAddFails("ADD ALL TO NAMED");
 }
 
@@ -234,8 +237,8 @@ TEST(SparqlParser, Move) {
   auto Iri = TripleComponent::Iri::fromIriref;
 
   // Moving a graph onto itself changes nothing
-  expectMove("MOVE SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
-  expectMove("MOVE GRAPH <foo> TO <foo>", testing::IsEmpty());
+  expectMove("MOVE SILENT DEFAULT TO DEFAULT", ::testing::IsEmpty());
+  expectMove("MOVE GRAPH <foo> TO <foo>", ::testing::IsEmpty());
   expectMove("MOVE GRAPH <foo> TO DEFAULT",
              ElementsAre(m::Clear(Iri(DEFAULT_GRAPH_IRI)),
                          m::AddAll(Iri("<foo>"), Iri(DEFAULT_GRAPH_IRI)),
@@ -249,8 +252,8 @@ TEST(SparqlParser, Copy) {
   auto Iri = TripleComponent::Iri::fromIriref;
 
   // Copying a graph onto itself changes nothing
-  expectCopy("COPY SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
-  expectCopy("COPY GRAPH <foo> TO <foo>", testing::IsEmpty());
+  expectCopy("COPY SILENT DEFAULT TO DEFAULT", ::testing::IsEmpty());
+  expectCopy("COPY GRAPH <foo> TO <foo>", ::testing::IsEmpty());
   expectCopy("COPY DEFAULT TO GRAPH <foo>",
              ElementsAre(m::Clear(Iri("<foo>")),
                          m::AddAll(Iri(DEFAULT_GRAPH_IRI), Iri("<foo>"))));
@@ -293,8 +296,8 @@ MATCHER(SpNotEqual,
 }
 
 // Assert that a triple component stores an ID with datatype `BlankNodeIndex`.
-auto isBlank = []() -> testing::Matcher<const TripleComponent&> {
-  using namespace testing;
+auto isBlank = []() -> ::testing::Matcher<const TripleComponent&> {
+  using namespace ::testing;
   return AD_PROPERTY(TripleComponent, getVariant,
                      VariantWith<Id>(AD_PROPERTY(
                          Id, getDatatype, Eq(Datatype::BlankNodeIndex))));
@@ -303,15 +306,16 @@ auto isBlank = []() -> testing::Matcher<const TripleComponent&> {
 // Assert that the subject and the object of a triple are blank nodes.
 // Note: The SPARQL grammar forbids predicates that are blank.
 auto bnodeTriple =
-    []() -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
-  using namespace testing;
+    []() -> ::testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+  using namespace ::testing;
   using Tr = SparqlTripleSimpleWithGraph;
   return AllOf(AD_FIELD(Tr, s_, isBlank()), AD_FIELD(Tr, o_, isBlank()),
                Not(AD_FIELD(Tr, p_, isBlank())));
 };
 
-// Assert that for all triples in a `vector<SparqlTripleSimpleWithGraph>` the
-// subject is the same, and is an ID with datatype `BlankNodeIndex`.
+// Assert that for all triples in a
+// `vector<SparqlTripleSimpleWithGraph>` the subject is the same, and is
+// an ID with datatype `BlankNodeIndex`.
 MATCHER(allSubjectsTheSameAndBlank,
         "check that the subjects of the triples all are the same blank node") {
   for (const auto& triple : arg) {
@@ -326,9 +330,9 @@ MATCHER(allSubjectsTheSameAndBlank,
   return true;
 }
 
-// Assert that for all triples in a `vector<SparqlTripleSimpleWithGraph>` the
-// subjects are pairwise disjoint but all are IDs with datatype
-// `BlankNodeIndex`.
+// Assert that for all triples in a
+// `vector<SparqlTripleSimpleWithGraph>` the subjects are pairwise
+// disjoint but all are IDs with datatype `BlankNodeIndex`.
 MATCHER(allSubjectsDifferentAndBlank,
         "check that the subjects of the triples all are different blank node") {
   ad_utility::HashSet<Id> ids;
@@ -356,7 +360,7 @@ TEST(SparqlParser, BlankNodesInUpdate) {
     return tr.triples_;
   };
 
-  using namespace testing;
+  using namespace ::testing;
   // Match update triples with a single triple where the subject and object are
   // the same blank node.
   auto matchBpB = []() -> Matcher<const updateClause::UpdateTriples&> {

@@ -8,6 +8,8 @@
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
+using namespace qlever;
+
 using namespace std::chrono_literals;
 
 // _____________________________________________________________________________

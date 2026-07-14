@@ -18,6 +18,8 @@
 #include "util/Log.h"
 #include "util/Timer.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 std::string Result::asDebugString() const {
   std::ostringstream os;

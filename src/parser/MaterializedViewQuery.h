@@ -16,7 +16,7 @@ class MaterializedViewConfigException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // A `MagicServiceQuery` for performing a custom `IndexScan` on a
 // `MaterializedView`. Using the `SERVICE` version of this query, the user may
@@ -53,7 +53,7 @@ struct MaterializedViewQuery : MagicServiceQuery {
   // This constructor takes an IRI consisting of the magic service IRI for
   // materialized views with the view name as a suffix. If this is used, add the
   // requested columns one-by-one using `addParameter`.
-  explicit MaterializedViewQuery(const ad_utility::triple_component::Iri& iri);
+  explicit MaterializedViewQuery(const triple_component::Iri& iri);
 
   // Alternative: Initialize using magic predicate. No calls to `addParameter`
   // are necessary in this case.
@@ -80,6 +80,6 @@ struct MaterializedViewQuery : MagicServiceQuery {
                           const TripleComponent& object);
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_MATERIALIZEDVIEWQUERY_H

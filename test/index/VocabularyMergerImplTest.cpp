@@ -19,7 +19,8 @@
 #include "util/Serializer/SerializeString.h"
 
 namespace {
-using ad_utility::vocabulary_merger::writePartialVocabularyToFile;
+using qlever::ItemVec;
+using qlever::vocabulary_merger::writePartialVocabularyToFile;
 
 // Helper to conveniently create an entry for `ItemVec`.
 ItemVec::value_type makeEntry(std::string_view word, bool isExternalized,

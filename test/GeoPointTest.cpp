@@ -13,6 +13,8 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/HashSet.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TEST(GeoPoint, GeoPoint) {
   GeoPoint g = GeoPoint(70.5, 130.2);
@@ -27,12 +29,12 @@ TEST(GeoPoint, GeoPoint) {
   ASSERT_THROW(GeoPoint(0, 185.0), CoordinateOutOfRangeException);
   ASSERT_THROW(GeoPoint(90.1, 180.0), CoordinateOutOfRangeException);
   ASSERT_THROW(GeoPoint(90.1, 180.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate, 20.0),
+  ASSERT_THROW(GeoPoint(qlever::detail::invalidCoordinate, 20.0),
                CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(20.0, ad_utility::detail::invalidCoordinate),
+  ASSERT_THROW(GeoPoint(20.0, qlever::detail::invalidCoordinate),
                CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate,
-                        ad_utility::detail::invalidCoordinate),
+  ASSERT_THROW(GeoPoint(qlever::detail::invalidCoordinate,
+                        qlever::detail::invalidCoordinate),
                CoordinateOutOfRangeException);
   AD_EXPECT_THROW_WITH_MESSAGE(GeoPoint(100, 200),
                                ::testing::ContainsRegex("out of range"));
@@ -128,9 +130,7 @@ TEST(GeoPoint, parseFromLiteral) {
                                            double lng = 0.0, double lat = 0.0) {
     std::string content = absl::StrCat(
         "\"", input, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-    auto value =
-        ad_utility::triple_component::Literal::fromStringRepresentation(
-            content);
+    auto value = triple_component::Literal::fromStringRepresentation(content);
     auto g = GeoPoint::parseFromLiteral(value);
     ASSERT_EQ(g.has_value(), hasVal);
     if (g.has_value()) {
@@ -161,15 +161,13 @@ TEST(GeoPoint, parseFromLiteral) {
   testParseFromLiteral("", false);
 
   // Literals of different type
+  ASSERT_FALSE(GeoPoint::parseFromLiteral(
+                   triple_component::Literal::fromStringRepresentation(
+                       "\"123\"^^xsd:integer"))
+                   .has_value());
   ASSERT_FALSE(
       GeoPoint::parseFromLiteral(
-          ad_utility::triple_component::Literal::fromStringRepresentation(
-              "\"123\"^^xsd:integer"))
-          .has_value());
-  ASSERT_FALSE(
-      GeoPoint::parseFromLiteral(
-          ad_utility::triple_component::Literal::fromStringRepresentation(
-              "\"hi\"@en"))
+          triple_component::Literal::fromStringRepresentation("\"hi\"@en"))
           .has_value());
 }
 

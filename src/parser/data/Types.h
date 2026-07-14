@@ -14,7 +14,7 @@
 #include "parser/PropertyPath.h"
 #include "parser/data/GraphTerm.h"
 
-namespace ad_utility::sparql_types {
+namespace qlever::sparql_types {
 // In the following, `Path` stands for `property path` (which can also be a
 // single predicate). More precisely, in a type that has `Path` in its name, all
 // the stored predicates can be property paths. This is in accordance with the
@@ -28,7 +28,7 @@ using ObjectsAndTriples = std::pair<Objects, Triples>;
 using SubjectOrObjectAndTriples = std::pair<GraphTerm, Triples>;
 
 using VarOrPath = std::variant<Variable, PropertyPath>;
-using VarOrIri = std::variant<Variable, ad_utility::triple_component::Iri>;
+using VarOrIri = std::variant<Variable, triple_component::Iri>;
 using PathObjectPair = std::pair<VarOrPath, GraphTerm>;
 using PathObjectPairs = std::vector<PathObjectPair>;
 struct TripleWithPropertyPath {
@@ -47,6 +47,6 @@ using ObjectsAndPathTriples =
     std::pair<Objects, std::vector<TripleWithPropertyPath>>;
 
 using VarOrAlias = std::variant<Variable, Alias>;
-}  // namespace ad_utility::sparql_types
+}  // namespace qlever::sparql_types
 
 #endif  // QLEVER_SRC_PARSER_DATA_TYPES_H

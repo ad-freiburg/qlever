@@ -15,8 +15,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
-using qlever::TextScoringMetric;
-namespace ad_utility::testing {
+namespace qlever::testing {
 
 // ______________________________________________________________
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
@@ -221,8 +220,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
     index.addHasWordTriples() = c.addHasWordTriples;
-    qlever::InputFileSpecification spec{inputFilename, c.indexType,
-                                        std::nullopt};
+    InputFileSpecification spec{inputFilename, c.indexType, std::nullopt};
     // randomly choose one of the vocabulary implementations
     index.getImpl().setVocabularyTypeForIndexBuilding(
         c.vocabularyType.has_value() ? c.vocabularyType.value()
@@ -354,7 +352,8 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            index_, cache_.get(),
+            makeAllocator(ad_utility::MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
             materializedViewsManager_);
   };
@@ -418,4 +417,4 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
     return id.value();
   };
 }
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing

@@ -9,6 +9,8 @@
 #include "util/MmapVector.h"
 #include "util/StringUtils.h"
 
+namespace qlever {
+
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
@@ -84,3 +86,5 @@ void VocabularyOnDisk::open(const std::string& filename) {
   AD_CORRECTNESS_CHECK(numOffsets > 0);
   size_ = numOffsets - 1;
 }
+
+}  // namespace qlever

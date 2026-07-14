@@ -21,6 +21,8 @@
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
+namespace qlever {
+
 using std::string;
 using std::vector;
 
@@ -344,8 +346,8 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     for (const auto& langTag : langTags) {
       operations.push_back({std::vector{SparqlTriple{
           variable,
-          PropertyPath::fromIri(ad_utility::triple_component::Iri::fromIriref(
-              LANGUAGE_PREDICATE)),
+          PropertyPath::fromIri(
+              triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
           ad_utility::convertLangtagToEntityUri(langTag)}}});
     }
 
@@ -563,3 +565,5 @@ void ParsedQuery::addWarningOrThrow(std::string warning) {
     addWarning(std::move(warning));
   }
 }
+
+}  // namespace qlever

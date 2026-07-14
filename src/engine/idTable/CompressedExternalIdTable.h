@@ -24,7 +24,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
-namespace ad_utility {
+namespace qlever {
 
 namespace compressedExternalIdTable::detail {
 template <typename B, typename R>
@@ -51,6 +51,11 @@ static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
 // of the single tables.
 class CompressedExternalIdTableWriter {
  private:
+  // Alias to avoid having to qualify `ad_utility::InputRangeTypeErased`
+  // throughout this class.
+  template <typename T>
+  using InputRangeTypeErased = ad_utility::InputRangeTypeErased<T>;
+
   // Metadata for a compressed block of bytes. A block is a contiguous part of a
   // column of an `IdTable`.
   struct CompressedBlockMetadata {
@@ -109,7 +114,7 @@ class CompressedExternalIdTableWriter {
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return blocksPerColumn_.size(); }
-  const MemorySize& blockSizeUncompressed() const {
+  const ad_utility::MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
 
@@ -223,7 +228,7 @@ class CompressedExternalIdTableWriter {
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
     using namespace ad_utility;
-    return InputRangeTypeErased{CallbackOnEndView(
+    return InputRangeTypeErased<IdTableStatic<NumCols>>{CallbackOnEndView(
         bufferedAsyncView(std::move(readBlocks), 1), callback)};
   }
 
@@ -290,16 +295,17 @@ class CompressedExternalIdTableWriter {
   }
 
  public:
-  // Read all blocks as a single `InputRangeTypeErased<IdTableStatic<N>>` via
-  // one background thread. This creates a constant number of threads regardless
-  // of the number of stored blocks. Columns are decompressed sequentially
-  // within a block; the single background thread already provides concurrency
-  // with the consumer.
+  // Read all blocks as a single
+  // `ad_utility::InputRangeTypeErased<IdTableStatic<N>>` via one background
+  // thread. This creates a constant number of threads regardless of the number
+  // of stored blocks. Columns are decompressed sequentially within a block; the
+  // single background thread already provides concurrency with the consumer.
   template <size_t N = 0>
   InputRangeTypeErased<IdTableStatic<N>> getBlockStream() {
     file_.wlock()->flush();
     size_t totalBlocks =
         blocksPerColumn_.empty() ? 0 : blocksPerColumn_.at(0).size();
+    using namespace ad_utility;
     CachingTransformInputRange readBlocks{
         ql::views::iota(size_t{0}, totalBlocks), [this](size_t blockIdx) {
           return this->template readBlockSequential<N>(blockIdx);
@@ -307,7 +313,7 @@ class CompressedExternalIdTableWriter {
     ++numActiveGenerators_;
     auto callback = [this]() noexcept { --numActiveGenerators_; };
     // Queue size 2 keeps the producer one block ahead of the consumer.
-    return ad_utility::streams::runStreamAsync(
+    return streams::runStreamAsync(
         CallbackOnEndView{std::move(readBlocks), std::move(callback)}, 2);
   }
 };
@@ -619,6 +625,7 @@ class CompressedExternalIdTableSorter
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
+  using MemorySize = ad_utility::MemorySize;
   [[no_unique_address]] Comparator comparator_{};
   // Track if we are currently in the merging phase.
   std::atomic<bool> mergeIsActive_ = false;
@@ -698,14 +705,14 @@ class CompressedExternalIdTableSorter
     // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
     // buffered by the async stream.
     using namespace ad_utility;
-    return InputRangeTypeErased{
-        CallbackOnEndView{ad_utility::streams::runStreamAsync(
-                              sortedBlocks<N>(blocksize),
-                              std::max(1, numBufferedOutputBlocks_ - 2)),
-                          [&, this]() noexcept {
-                            this->isFirstIteration_ = false;
-                            mergeIsActive_.store(false);
-                          }}};
+    return ad_utility::InputRangeTypeErased{ad_utility::CallbackOnEndView{
+        ad_utility::streams::runStreamAsync(
+            sortedBlocks<N>(blocksize),
+            std::max(1, numBufferedOutputBlocks_ - 2)),
+        [&, this]() noexcept {
+          this->isFirstIteration_ = false;
+          mergeIsActive_.store(false);
+        }}};
   }
 
   // The implementation of the type-erased interface. Push a complete block at
@@ -822,17 +829,19 @@ class CompressedExternalIdTableSorter
       if (block.numRows() <= blocksizeOutput) {
         using namespace ad_utility;
         return block.empty()
-                   ? InputRangeTypeErased{ql::views::empty<IdTableStatic<N>>}
-                   : InputRangeTypeErased{
-                         lazySingleValueRange([this]() -> IdTableStatic<N> {
-                           if (this->moveResultOnMerge_) {
-                             return std::move(this->currentBlock_)
-                                 .template toStatic<N>();
-                           } else {
-                             return this->currentBlock_.clone()
-                                 .template toStatic<N>();
-                           }
-                         })};
+                   ? ad_utility::InputRangeTypeErased{ql::views::empty<
+                         IdTableStatic<N>>}
+                   : ad_utility::InputRangeTypeErased{
+                         ad_utility::lazySingleValueRange(
+                             [this]() -> IdTableStatic<N> {
+                               if (this->moveResultOnMerge_) {
+                                 return std::move(this->currentBlock_)
+                                     .template toStatic<N>();
+                               } else {
+                                 return this->currentBlock_.clone()
+                                     .template toStatic<N>();
+                               }
+                             })};
       }
       namespace rv = ::ranges::views;
       auto chunked =
@@ -867,12 +876,13 @@ class CompressedExternalIdTableSorter
       return std::move(table).template toStatic<N>();
     };
     using namespace ad_utility;
-    return InputRangeTypeErased{CachingTransformInputRange{
-        SortState<decltype(rowGenerators), decltype(directComp)>{
-            this->writer_.numColumns(), this->writer_.allocator(),
-            std::move(directComp), std::move(rowGenerators), blockSizeOutput,
-            this},
-        toStatic}};
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::CachingTransformInputRange{
+            SortState<decltype(rowGenerators), decltype(directComp)>{
+                this->writer_.numColumns(), this->writer_.allocator(),
+                std::move(directComp), std::move(rowGenerators),
+                blockSizeOutput, this},
+            toStatic}};
   }
 
   // _____________________________________________________________
@@ -926,6 +936,6 @@ class CompressedExternalIdTableSorter
     }
   };
 };
-}  // namespace ad_utility
+}  // namespace qlever
 
 #endif  // QLEVER_COMPRESSEDEXTERNALIDTABLE_H

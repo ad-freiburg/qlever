@@ -6,7 +6,12 @@
 #include "parser/data/SparqlFilter.h"
 
 #include <absl/strings/str_cat.h>
+
+namespace qlever {
+
 // _____________________________________________________________________________
 std::string SparqlFilter::asString() const {
   return absl::StrCat("FILTER(", expression_.getDescriptor(), ")");
 }
+
+}  // namespace qlever

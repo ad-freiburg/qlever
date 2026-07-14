@@ -7,7 +7,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 
 // Create a `SparqlExpression` representing the term `BNODE(?x)`.
 SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child);
@@ -15,6 +15,6 @@ SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child);
 // Create a `SparqlExpression` representing the term `BNODE()`. You need to make
 // sure that the passed label is unique across all other calls to `BNODE()`.
 SparqlExpression::Ptr makeUniqueBlankNodeExpression();
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BLANKNODEEXPRESSION_H_

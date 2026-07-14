@@ -5,6 +5,8 @@
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 
+namespace qlever {
+
 // Explicit template instantiations
 using namespace detail::splitVocabulary;
 template class SplitVocabulary<
@@ -14,3 +16,5 @@ template class SplitVocabulary<
 template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
                                VocabularyInMemory,
                                GeoVocabulary<VocabularyInMemory>>;
+
+}  // namespace qlever

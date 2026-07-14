@@ -15,18 +15,20 @@
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
+using namespace qlever;
+using namespace qlever::testing;
 using ad_utility::source_location;
 
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
 OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
   std::vector<std::optional<Variable>> vars;
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      ad_utility::testing::getQec(), std::move(input), vars);
+  auto subtree = makeExecutionTree<ValuesForTesting>(qlever::testing::getQec(),
+                                                     std::move(input), vars);
   return OrderBy{qec, std::move(subtree), sortColumns};
 }
 
@@ -40,7 +42,7 @@ void testOrderBy(IdTable input, const IdTable& expected,
                  std::vector<bool> isDescending,
                  source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   AD_CONTRACT_CHECK(input.numColumns() == isDescending.size());
   AD_CONTRACT_CHECK(input.numColumns() == expected.numColumns());
@@ -121,7 +123,7 @@ TEST(OrderBy, computeOrderByFloatWithNan) {
 
 // _____________________________________________________________________________
 TEST(OrderBy, twoColumnsIntAndFloat) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   using Vec = std::vector<std::pair<int64_t, double>>;
   Vec intsAndFloats{{-3, 1.0}, {0, 7.0}, {-3, 0.5}, {0, -2.8}};
   Vec intsAndFloatsExpectedAllAscending{
@@ -181,9 +183,9 @@ TEST(OrderBy, computeOrderByThreeColumns) {
 }
 
 TEST(OrderBy, mixedDatatypes) {
-  auto I = ad_utility::testing::IntId;
-  auto V = ad_utility::testing::VocabId;
-  auto D = ad_utility::testing::DoubleId;
+  auto I = qlever::testing::IntId;
+  auto V = qlever::testing::VocabId;
+  auto D = qlever::testing::DoubleId;
   auto U = Id::makeUndefined();
 
   VectorTable input{{I(13)}, {I(-7)}, {U}, {I(0)}, {D(12.3)}, {U},
@@ -261,7 +263,7 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
 
 // _____________________________________________________________________________
 TEST(OrderBy, clone) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   IdTable permutedInput{2, qec->getAllocator()};
 
   OrderBy orderBy =

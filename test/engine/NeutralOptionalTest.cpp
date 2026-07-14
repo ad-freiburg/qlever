@@ -11,10 +11,13 @@
 #include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 // _____________________________________________________________________________
 TEST(NeutralOptional, getChildren) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, child};
@@ -23,8 +26,8 @@ TEST(NeutralOptional, getChildren) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getCacheKey) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, child};
@@ -35,8 +38,8 @@ TEST(NeutralOptional, getCacheKey) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getDescriptor) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
@@ -45,8 +48,8 @@ TEST(NeutralOptional, getDescriptor) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getResultWidth) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{5, qec->getAllocator()},
       std::vector<std::optional<Variable>>(5, std::nullopt));
   NeutralOptional no{qec, std::move(child)};
@@ -55,9 +58,9 @@ TEST(NeutralOptional, getResultWidth) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getCostEstimate) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
@@ -66,7 +69,7 @@ TEST(NeutralOptional, getCostEstimate) {
   {
     IdTable idTable{0, qec->getAllocator()};
     idTable.resize(42);
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
     EXPECT_EQ(no.getCostEstimate(), 42 * 2);
@@ -75,16 +78,16 @@ TEST(NeutralOptional, getCostEstimate) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getSizeEstimate) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
     EXPECT_EQ(no.getSizeEstimate(), 1);
   }
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
@@ -94,7 +97,7 @@ TEST(NeutralOptional, getSizeEstimate) {
   {
     IdTable idTable{0, qec->getAllocator()};
     idTable.resize(42);
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
     no.applyLimitOffset({40, 1});
@@ -103,7 +106,7 @@ TEST(NeutralOptional, getSizeEstimate) {
   {
     IdTable idTable{0, qec->getAllocator()};
     idTable.resize(42);
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
     EXPECT_EQ(no.getSizeEstimate(), 42);
@@ -112,8 +115,8 @@ TEST(NeutralOptional, getSizeEstimate) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getMultiplicity) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{3, qec->getAllocator()},
       std::vector<std::optional<Variable>>(3, std::nullopt));
   NeutralOptional no{qec, child};
@@ -124,8 +127,8 @@ TEST(NeutralOptional, getMultiplicity) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, knownEmptyResult) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
@@ -134,8 +137,8 @@ TEST(NeutralOptional, knownEmptyResult) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, handlesLimit) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
@@ -144,8 +147,8 @@ TEST(NeutralOptional, handlesLimit) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, clone) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
@@ -157,8 +160,8 @@ TEST(NeutralOptional, clone) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getResultSortedOn) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{3, qec->getAllocator()},
       std::vector<std::optional<Variable>>(3, std::nullopt), false,
       std::vector<ColumnIndex>{1, 0, 2});
@@ -169,8 +172,8 @@ TEST(NeutralOptional, getResultSortedOn) {
 // _____________________________________________________________________________
 TEST(NeutralOptional, getExternallyVisibleVariableColumns) {
   using namespace ::testing;
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{2, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
   NeutralOptional no{qec, std::move(child)};
@@ -186,9 +189,9 @@ TEST(NeutralOptional, getExternallyVisibleVariableColumns) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
@@ -201,7 +204,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
   }
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
@@ -213,7 +216,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
     EXPECT_EQ(idTables.begin(), idTables.end());
   }
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
@@ -226,7 +229,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
   }
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
@@ -241,8 +244,8 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
-  auto* qec = ad_utility::testing::getQec();
-  auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto* qec = qlever::testing::getQec();
+  auto child = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()},
       std::vector<std::optional<Variable>>{std::nullopt});
   NeutralOptional no{qec, child};
@@ -277,14 +280,14 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab{};
   localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::fromStringRepresentation("\"Test\"",
                                                 qec->getLocalVocabContext()));
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1}, {2}, {3}}),
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
@@ -314,7 +317,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   }
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1}, {2}, {3}}),
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
@@ -331,7 +334,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   }
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1}, {2}, {3}}),
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
@@ -354,7 +357,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   }
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1}, {2}, {3}}),
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
@@ -371,7 +374,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   }
 
   {
-    auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto child = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{1}, {2}, {3}}),
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());

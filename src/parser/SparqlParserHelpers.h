@@ -13,7 +13,7 @@
 #include "sparqlParser/SparqlQleverVisitor.h"
 #include "util/BlankNodeManager.h"
 
-namespace sparqlParserHelpers {
+namespace qlever::sparqlParserHelpers {
 // The actual `ParserAndVisitor` class that can be used to fully parse SPARQL
 // using the automatically generated parser + the manually written
 // `SparqlQLeverVisitor`.
@@ -27,19 +27,19 @@ struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
 
  public:
   ParserAndVisitor(
-      ad_utility::BlankNodeManager* blankNodeManager,
+      BlankNodeManager* blankNodeManager,
       const EncodedIriManager* encodedIriManager, std::string input,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
-      ad_utility::BlankNodeManager* blankNodeManager,
+      BlankNodeManager* blankNodeManager,
       const EncodedIriManager* encodedIriManager, std::string input,
       SparqlQleverVisitor::PrefixMap prefixes,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
 };
-}  // namespace sparqlParserHelpers
+}  // namespace qlever::sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

@@ -13,14 +13,15 @@
 #include "engine/StripColumns.h"
 #include "engine/Union.h"
 
-using namespace ad_utility::testing;
+using namespace qlever::testing;
+using namespace qlever;
 
 // _____________________________________________________________________________
 TEST(QueryExecutionTree, getVariableColumn) {
   auto qec = getQec();
   auto x = Variable{"?x"};
   auto y = Variable{"?y"};
-  auto qet = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3}}),
       std::vector<std::optional<Variable>>{x});
   EXPECT_EQ(qet->getVariableColumn(x), 0u);
@@ -33,16 +34,16 @@ TEST(QueryExecutionTree, getVariableColumn) {
 TEST(QueryExecutionTree, sortedUnionSpecialCase) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightT = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}}), Vars{Var{"?a"}});
 
   auto sortedTree = QueryExecutionTree::createSortedTree(
-      ad_utility::makeExecutionTree<Union>(qec, leftT, rightT), {0});
+      makeExecutionTree<Union>(qec, leftT, rightT), {0});
 
   // Ensure no `Sort` is added on top
   EXPECT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
@@ -59,7 +60,7 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
   using SC = std::vector<ColumnIndex>;
   auto* qec = getQec();
 
-  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1, 2}}), vars, false, SC{0, 1, 2});
 
   EXPECT_EQ(QueryExecutionTree::createSortedTreeAnyPermutation(values, {0, 1}),
@@ -80,7 +81,7 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
   }
 
   {
-    auto valuesNotSorted = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto valuesNotSorted = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{0, 1, 2}}), vars);
     auto sortedTree = QueryExecutionTree::createSortedTreeAnyPermutation(
         valuesNotSorted, {0, 1});
@@ -102,14 +103,14 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
   LimitOffsetClause limitOffset{2, 3};
 
   // `IndexScan` natively supports stripping columns.
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+  auto indexScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
   indexScan->applyLimitOffset(limitOffset);
 
   // `ValuesForTesting` doesn't support stripping columns natively.
-  auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesForTesting = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1, 2}}),
       Vars{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
   valuesForTesting->applyLimitOffset(limitOffset);
@@ -140,7 +141,7 @@ TEST(QueryExecutionTree, strippingColumnsIsNoOpWhenAllVariablesAreKept) {
   Vars vars{std::nullopt, std::nullopt, std::nullopt};
   auto* qec = getQec();
 
-  auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesForTesting = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       Vars{Variable{"?x1"}, Variable{"?x2"}});
 
@@ -153,7 +154,7 @@ TEST(QueryExecutionTree, strippingColumnsIsNoOpWhenAllVariablesAreKept) {
                 {Variable{"?x1"}, Variable{"?x2"}, Variable{"?x3"}}),
             valuesForTesting);
 
-  auto valuesForTestingNoVars = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto valuesForTestingNoVars = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{}}), Vars{});
 
   EXPECT_EQ(QueryExecutionTree::makeTreeWithStrippedColumns(
@@ -173,13 +174,13 @@ TEST(QueryExecutionTree,
 
   LimitOffsetClause limitOffset{2, 3};
 
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+  auto indexScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
                          TC{Variable{"?o"}}});
 
-  auto sort = ad_utility::makeExecutionTree<Sort>(qec, indexScan,
-                                                  std::vector<ColumnIndex>{0});
+  auto sort =
+      makeExecutionTree<Sort>(qec, indexScan, std::vector<ColumnIndex>{0});
 
   sort->applyLimitOffset(limitOffset);
   EXPECT_TRUE(

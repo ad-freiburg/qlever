@@ -37,6 +37,10 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+
+using qlever::EncodedIriManager;
+using qlever::SparqlParser;
+using qlever::SparqlTriple;
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/AllocatorWithLimit.h"
@@ -45,10 +49,12 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
+using namespace qlever;
+
 namespace {
 
 using namespace materializedViewsTestHelpers;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using V = Variable;
 
 }  // namespace
@@ -498,6 +504,7 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 }
 
 // _____________________________________________________________________________
+namespace qlever {
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   MaterializedViewsManager manager{testIndexBase_};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
@@ -530,7 +537,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   using Triple = SparqlTripleSimple;
   using V = Variable;
   auto iri = [](const std::string& ref) {
-    return ad_utility::triple_component::Iri::fromIriref(ref);
+    return triple_component::Iri::fromIriref(ref);
   };
 
   const V placeholderP{"?_ql_materialized_view_p"};
@@ -767,7 +774,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     EXPECT_ANY_THROW(testPermutation.setMaterializedView(view));
   }
 }
+}  // namespace qlever
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
 #ifdef __EMSCRIPTEN__
@@ -777,7 +786,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   // Config for the plain `Server` instances constructed below.
-  qlever::EngineConfig config;
+  EngineConfig config;
   config.baseName_ = testIndexBase_;
 
   // Write a new materialized view using the `writeMaterializedView` method of
@@ -786,7 +795,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     // Initialize but do not start a `Server` instance on our test index.
     Server server{4321, 1, "accessToken", config};
 
-    ad_utility::url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
+    url_parser::sparqlOperation::Query query{simpleWriteQuery_, {}};
     ad_utility::Timer requestTimer{ad_utility::Timer::InitialStatus::Started};
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
@@ -935,6 +944,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
         ::testing::HasSubstr("The name for the view may not be empty"));
   }
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTestLarge, LazyScan) {
@@ -950,11 +960,11 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 
   // Run a simple query and consume its result lazily.
   {
-    ViewQuery query{SparqlTriple{Variable{"?s"},
-                                 ad_utility::triple_component::Iri::fromIriref(
-                                     "<https://qlever.cs.uni-freiburg.de/"
-                                     "materializedView/testView1-o>"),
-                                 Variable{"?o"}}};
+    ViewQuery query{SparqlTriple{
+        Variable{"?s"},
+        triple_component::Iri::fromIriref("<https://qlever.cs.uni-freiburg.de/"
+                                          "materializedView/testView1-o>"),
+        Variable{"?o"}}};
     auto scan =
         manager.makeIndexScan(&writePlan.queryExecutionContext(), query);
     auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
@@ -1253,7 +1263,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       }
     )");
     // `StripColumns` with a single column.
-    auto stripCols = ad_utility::makeExecutionTree<StripColumns>(
+    auto stripCols = makeExecutionTree<StripColumns>(
         &plannedQuery.queryExecutionContext(),
         std::make_shared<QueryExecutionTree>(plannedQuery.queryExecutionTree()),
         varsToKeep);
@@ -1279,7 +1289,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      .getRootOperation()
                      ->makeTreeWithBindColumn(bind)
                      .has_value());
-    auto stripCols = ad_utility::makeExecutionTree<StripColumns>(
+    auto stripCols = makeExecutionTree<StripColumns>(
         &plannedQuery.queryExecutionContext(),
         std::make_shared<QueryExecutionTree>(plannedQuery.queryExecutionTree()),
         varsToKeep);
@@ -1511,9 +1521,9 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, std::string{geoTtl});
   auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
+  EngineConfig config;
   config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
+  Qlever qlv{config};
 
   // Write geometries view with bounding boxes.
   qlv.writeMaterializedView(viewName, std::string{geoBoundingBoxesViewQuery});
@@ -1626,9 +1636,9 @@ TEST_P(MaterializedViewsChainRewriteTest, simpleChain) {
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, chainTtl);
   auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
-  qlever::EngineConfig config;
+  EngineConfig config;
   config.baseName_ = onDiskBase;
-  qlever::Qlever qlv{config};
+  Qlever qlv{config};
 
   // Without the materialized view, a regular join is executed.
   h::expect(std::string{simpleChain},

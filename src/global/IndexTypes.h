@@ -9,6 +9,8 @@
 #include "global/VocabIndex.h"
 #include "index/LocalVocabEntry.h"
 
+namespace qlever {
+
 // Typedefs for several kinds of typed indices that are used across QLever.
 
 // Note the `VocabIndex` is declared in a separate header `VocabIndex` to break
@@ -22,5 +24,7 @@ inline constexpr ad_utility::IndexTag blankNodeIndexTag = "BlankNodeIndex";
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, blankNodeIndexTag>;
 inline constexpr ad_utility::IndexTag documentIndexTag = "DocumentIndex";
 using DocumentIndex = ad_utility::TypedIndex<uint64_t, documentIndexTag>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_GLOBAL_INDEXTYPES_H

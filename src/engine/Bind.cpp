@@ -16,6 +16,8 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)
@@ -193,7 +195,7 @@ IdTable Bind::computeExpressionBind(
 
   auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
-    constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
+    constexpr static bool isVariable = std::is_same_v<T, Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
     if constexpr (isVariable) {

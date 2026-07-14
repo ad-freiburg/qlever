@@ -15,7 +15,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "parser/TripleComponent.h"
 
-namespace ad_utility::testing {
+namespace qlever::testing {
 
 // Helper class providing common functionality for testing lazy joins with
 // IndexScans. This is used by both IndexScanTest and OptionalJoinTest.
@@ -66,6 +66,6 @@ class LazyJoinTestHelper {
   }
 };
 
-}  // namespace ad_utility::testing
+}  // namespace qlever::testing
 
 #endif  // QLEVER_TEST_ENGINE_LAZYJOINTESTHELPERS_H

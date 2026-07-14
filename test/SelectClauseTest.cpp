@@ -8,6 +8,8 @@
 #include "gtest/gtest.h"
 #include "parser/SelectClause.h"
 
+using namespace qlever;
+
 using parsedQuery::SelectClause;
 
 using namespace ::testing;

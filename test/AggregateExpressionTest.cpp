@@ -21,8 +21,10 @@
 #include "global/ValueId.h"
 #include "gtest/gtest.h"
 
+using namespace qlever;
+
 using namespace sparqlExpression;
-using namespace ad_utility::testing;
+using namespace qlever::testing;
 using ad_utility::source_location;
 
 namespace {
@@ -32,7 +34,7 @@ auto U = Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
   return IdOrLiteralOrIri{
-      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s))};
+      triple_component::LiteralOrIri(tripleComponentLiteral(s))};
 };
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace

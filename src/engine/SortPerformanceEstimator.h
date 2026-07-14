@@ -11,6 +11,8 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Timer.h"
 
+namespace qlever {
+
 /// Estimates the time it takes to sort an IdTable with a given number of rows
 /// and columns;
 class SortPerformanceEstimator {
@@ -79,4 +81,5 @@ class SortPerformanceEstimator {
   bool _estimatesWereCalculated = false;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SORTPERFORMANCEESTIMATOR_H

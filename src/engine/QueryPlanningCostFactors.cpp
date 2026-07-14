@@ -13,6 +13,8 @@
 #include "util/Log.h"
 #include "util/StringUtils.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   // Set default values

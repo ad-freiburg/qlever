@@ -26,6 +26,8 @@
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 template <bool isInternal>
 const LocatedTriplesPerBlock&
@@ -233,8 +235,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   // Initialize on first use.
   if (languagePredicate_.isUndefined()) {
     languagePredicate_ =
-        TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
+        TripleComponent{triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
             .toValueId(index_, localVocab_);
   }
   ad_utility::HashSet<Id> addedObjects;
@@ -242,7 +243,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     const auto& ids = triple.ids();
     Id objectId = ids.at(2);
     auto optionalLiteralOrIri =
-        ql::exportIds::idToLiteralOrIri(index_, objectId, localVocab_, true);
+        exportIds::idToLiteralOrIri(index_, objectId, localVocab_, true);
     if (!optionalLiteralOrIri.has_value() ||
         !optionalLiteralOrIri.value().isLiteral() ||
         !optionalLiteralOrIri.value().hasLanguageTag()) {
@@ -250,7 +251,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     const auto& predicate =
         predicateCache_.getOrCompute(ids.at(1).getBits(), [this](Id::T bits) {
-          auto optionalPredicate = ql::exportIds::idToLiteralOrIri(
+          auto optionalPredicate = exportIds::idToLiteralOrIri(
               index_, Id::fromBits(bits), localVocab_, true);
           AD_CORRECTNESS_CHECK(optionalPredicate.has_value());
           AD_CORRECTNESS_CHECK(optionalPredicate.value().isIri());
@@ -588,8 +589,7 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedState() const {
 // _____________________________________________________________________________
 std::tuple<
     LocatedTriplesSharedState, std::vector<LocalVocabIndex>,
-    std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+    std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
 DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
   return deltaTriples_.withReadLock([this](const DeltaTriples& deltaTriples) {
     auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
@@ -659,10 +659,9 @@ void DeltaTriples::writeToDisk() const {
   };
   std::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
-  ad_utility::serializeIds(
-      tempPath, localVocab_,
-      std::array{toRange(triplesSetsNormal_.triplesDeleted_),
-                 toRange(triplesSetsNormal_.triplesInserted_)});
+  serializeIds(tempPath, localVocab_,
+               std::array{toRange(triplesSetsNormal_.triplesDeleted_),
+                          toRange(triplesSetsNormal_.triplesInserted_)});
   std::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
@@ -673,7 +672,7 @@ void DeltaTriples::readFromDisk() {
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] =
-      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
+      deserializeIds(filenameForPersisting_.value(), index_);
   if (idRanges.empty()) {
     return;
   }
@@ -723,8 +722,7 @@ void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
 // _____________________________________________________________________________
 std::pair<
     std::vector<LocalVocabIndex>,
-    std::vector<
-        ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
+    std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>
 DeltaTriples::copyLocalVocab() const {
   AD_CORRECTNESS_CHECK(localVocab_.otherSets().empty(),
                        "This function only copies from the primary word set.");
@@ -740,7 +738,7 @@ DeltaTriples::copyLocalVocab() const {
 // _____________________________________________________________________________
 void DeltaTriples::addFromSnapshotDiff(
     const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
-    const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
+    const indexRebuilder::IndexRebuildMapping& idMapping,
     CancellationHandle cancellationHandle,
     ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("computeLocatedTriplesDiff");
@@ -766,12 +764,12 @@ void DeltaTriples::addFromSnapshotDiff(
 
 // _____________________________________________________________________________
 AD_ALWAYS_INLINE void DeltaTriples::remapId(
-    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
+    const indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
                minBlankNodeIndex] = idMapping;
   auto type = id.getDatatype();
   if (type == Datatype::VocabIndex) {
-    id = qlever::indexRebuilder::remapVocabId(id, insertionPositions);
+    id = indexRebuilder::remapVocabId(id, insertionPositions);
   } else if (type == Datatype::LocalVocabIndex) {
     auto it = localVocabMapping.find(id.getBits());
     // If we have a mapping, this means that the new index used this to make a
@@ -782,8 +780,8 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
       id = it->second;
     }
   } else if (type == Datatype::BlankNodeIndex) {
-    auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
-        id, blankNodeBlocks, minBlankNodeIndex);
+    auto value = indexRebuilder::tryRemapBlankNodeId(id, blankNodeBlocks,
+                                                     minBlankNodeIndex);
     // If we have a mapping for the given blank node index, this means that the
     // block was remapped by the index rebuild. We might potentially map blank
     // node indices that were added after the mapping was created, but still
@@ -842,3 +840,5 @@ DeltaTriples::LocatedTriplesDiff DeltaTriples::computeLocatedTriplesDiff(
                             std::move(internalInsertions),
                             std::move(internalDeletions)};
 }
+
+}  // namespace qlever

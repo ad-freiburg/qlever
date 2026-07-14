@@ -26,12 +26,12 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
-namespace sparqlExpression::detail {
+namespace qlever::sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
 inline ql::span<const ValueId> getIdsFromVariable(
-    const ::Variable& variable, const EvaluationContext* context,
+    const Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
@@ -52,7 +52,7 @@ inline ql::span<const ValueId> getIdsFromVariable(
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
 inline ql::span<const ValueId> getIdsFromVariable(
-    const ::Variable& variable, const EvaluationContext* context) {
+    const Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
 }
@@ -78,9 +78,9 @@ CPP_template(typename T, typename Transformation = ql::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<Transformation, T>)
     cppcoro::generator<const std::decay_t<std::invoke_result_t<
-        Transformation, T>>> resultGeneratorImpl(T constant, size_t numItems,
-                                                 Transformation transformation =
-                                                     {}) {
+        Transformation, T> > > resultGeneratorImpl(T constant, size_t numItems,
+                                                   Transformation
+                                                       transformation = {}) {
   auto transformed = transformation(constant);
   for (size_t i = 0; i < numItems; ++i) {
     co_yield transformed;
@@ -137,7 +137,7 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
 // Use faster coroutine-based implementation.
 template <typename Transformation = ql::identity>
 inline cppcoro::generator<
-    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+    const std::decay_t<std::invoke_result_t<Transformation, Id> > >
 resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
                     Transformation transformation = {}) {
   size_t i = 0;
@@ -192,7 +192,7 @@ CPP_template(typename Input, typename Transformation = ql::identity)(
         Input>) auto makeGenerator(Input&& input, size_t numItems,
                                    const EvaluationContext* context,
                                    Transformation transformation = {}) {
-  if constexpr (ad_utility::isSimilar<::Variable, Input>) {
+  if constexpr (ad_utility::isSimilar<Variable, Input>) {
     return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems,
                            transformation);
   } else {
@@ -247,7 +247,7 @@ inline auto applyFunction = [](auto function, size_t numItems,
                                auto... generators)
     -> cppcoro::generator<std::invoke_result_t<
         decltype(function),
-        ql::ranges::range_value_t<decltype(generators)>...>> {
+        ql::ranges::range_value_t<decltype(generators)>...> > {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 
@@ -313,7 +313,7 @@ inline auto makeStringResultGetter(LocalVocab* localVocab) {
 Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
                         LocalVocab* localVocab);
 
-}  // namespace sparqlExpression::detail
+}  // namespace qlever::sparqlExpression::detail
 
 // If `QLEVER_CHEAPER_COMPILATION` is set the inline definition of
 // `idOrLiteralOrIriToId` lives in a separate .cpp (to avoid instantiating the

@@ -21,6 +21,8 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "rdfTypes/GeometryInfo.h"
 
+using namespace qlever;
+
 namespace {
 using namespace sparqlParserHelpers;
 using namespace sparqlParserTestHelpers;
@@ -28,9 +30,9 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
-auto iri = ad_utility::testing::iri;
+auto iri = qlever::testing::iri;
 
-auto lit = ad_utility::testing::tripleComponentLiteral;
+auto lit = qlever::testing::tripleComponentLiteral;
 
 // ___________________________________________________________________________
 TEST(SparqlParser, primaryExpression) {
@@ -60,12 +62,12 @@ TEST(SparqlParser, builtInCall) {
       "iRI(?x)",
       matchNaryWithChildrenMatchers(
           &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
-          matchLiteralExpression(ad_utility::triple_component::Iri{})));
+          matchLiteralExpression(triple_component::Iri{})));
   expectBuiltInCall(
       "uRI(?x)",
       matchNaryWithChildrenMatchers(
           &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
-          matchLiteralExpression(ad_utility::triple_component::Iri{})));
+          matchLiteralExpression(triple_component::Iri{})));
   // Repeat the tests with a BASE IRI.
   expectBuiltInCall(
       "IRI(?x)",
@@ -191,7 +193,7 @@ TEST(SparqlParser, builtInCall) {
   const auto& blankNodeExpression = makeUniqueBlankNodeExpression();
   const auto& reference = *blankNodeExpression;
   expectBuiltInCall(
-      "bnode()", testing::Pointee(::testing::ResultOf(
+      "bnode()", ::testing::Pointee(::testing::ResultOf(
                      [](const SparqlExpression& expr) -> const std::type_info& {
                        return typeid(expr);
                      },
@@ -361,7 +363,7 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
                      matchUnary(&makeNumGeometriesExpression));
 
-  using enum ad_utility::BoundingCoordinate;
+  using enum BoundingCoordinate;
   expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
                      matchUnary(&makeBoundingCoordinateExpression<MIN_X>));
   expectFunctionCall(absl::StrCat(geof, "minY>(?x)"),
@@ -386,8 +388,8 @@ TEST(SparqlParser, FunctionCall) {
           &makeDistWithUnitExpression,
           variableExpressionMatcher(Variable{"?a"}),
           variableExpressionMatcher(Variable{"?b"}),
-          matchLiteralExpression<ad_utility::triple_component::Iri>(
-              ad_utility::triple_component::Iri::fromIriref(
+          matchLiteralExpression<triple_component::Iri>(
+              triple_component::Iri::fromIriref(
                   "<http://qudt.org/vocab/unit/M>"))));
 
   // geof:distance with xsd:anyURI literal as unit in third argument
@@ -400,8 +402,8 @@ TEST(SparqlParser, FunctionCall) {
           &makeDistWithUnitExpression,
           variableExpressionMatcher(Variable{"?a"}),
           variableExpressionMatcher(Variable{"?b"}),
-          matchLiteralExpression<ad_utility::triple_component::Literal>(
-              ad_utility::triple_component::Literal::fromStringRepresentation(
+          matchLiteralExpression<triple_component::Literal>(
+              triple_component::Literal::fromStringRepresentation(
                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
                   "XMLSchema#anyURI>"))));
 
@@ -639,7 +641,7 @@ template <typename AggregateExpr>
   using enum SparqlExpression::AggregateStatus;
   auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
   return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
-                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
+                       WhenDynamicCastTo<const AggregateExpr&>(::testing::_)));
 }
 }  // namespace aggregateTestHelpers
 

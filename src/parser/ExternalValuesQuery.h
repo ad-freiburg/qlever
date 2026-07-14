@@ -12,9 +12,11 @@
 
 #include "parser/MagicServiceQuery.h"
 
+namespace qlever {
 class SparqlTriple;
+}  // namespace qlever
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 class ExternalValuesException : public std::runtime_error {
   // Constructors have to be explicitly inherited.
   using std::runtime_error::runtime_error;
@@ -58,6 +60,6 @@ struct ExternalValuesQuery : MagicServiceQuery {
   static std::string extractName(const std::string& serviceIri);
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_EXTERNALVALUESQUERY_H

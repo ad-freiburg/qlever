@@ -12,6 +12,8 @@
 #include "index/LocalVocab.h"
 #include "parser/TripleComponent.h"
 
+namespace qlever {
+
 // Forward declaration
 class IndexImpl;
 class Index;
@@ -25,7 +27,7 @@ class Index;
 class ScanSpecification {
  public:
   using T = std::optional<Id>;
-  using GraphFilter = qlever::index::GraphFilter<Id>;
+  using GraphFilter = index::GraphFilter<Id>;
 
  private:
   T col0Id_;
@@ -85,7 +87,7 @@ class ScanSpecification {
 class ScanSpecificationAsTripleComponent {
  public:
   using T = std::optional<TripleComponent>;
-  using GraphFilter = qlever::index::GraphFilter<TripleComponent>;
+  using GraphFilter = index::GraphFilter<TripleComponent>;
 
  private:
   T col0_;
@@ -111,5 +113,7 @@ class ScanSpecificationAsTripleComponent {
   // Getter for testing.
   const GraphFilter& graphFilter() const { return graphFilter_; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_SCANSPECIFICATION_H

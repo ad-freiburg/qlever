@@ -32,6 +32,8 @@
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
 //
@@ -185,7 +187,7 @@ struct alignas(256) ItemMapManager {
       : map_(alloc), minId_(minId), comparator_(cmp) {
     // Precompute the mapping from the `specialIds` to their normal IDs in the
     // vocabulary. This makes resolving such IRIs much cheaper.
-    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
+    for (const auto& [specialIri, specialId] : specialIds()) {
       auto iriref = TripleComponent::Iri::fromIriref(specialIri);
       auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
       specialIdMapping_[specialId] = getId(key);
@@ -346,9 +348,8 @@ auto getIdMapLambdas(
         // Add the internal triple `<object> ql:langtag <@language>`.
         result.push_back(IdTriple{
             spoIds[2],
-            map.getId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    LANGUAGE_PREDICATE)}),
+            map.getId(TripleComponent{
+                triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}),
             langTagId, tripleGraphId});
       }
 
@@ -362,12 +363,11 @@ auto getIdMapLambdas(
       // eventually be refactored, so that this code duplication is avoided.
       if (!lt.wordFrequencies_.empty()) {
         auto hasWordPredId = map.getId(TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+            triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
         for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
           // Add the internal triple `<literal> ql:has-word "word"`.
           auto wordId = map.getId(TripleComponent{
-              ad_utility::triple_component::Literal::literalWithoutQuotes(
-                  word)});
+              triple_component::Literal::literalWithoutQuotes(word)});
           result.push_back(
               IdTriple{spoIds[2], hasWordPredId, wordId,
                        Id::makeFromInt(static_cast<int64_t>(termFrequency))});
@@ -389,5 +389,7 @@ auto getIdMapLambdas(
   return ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
       itemMapLamdaCreator);
 }
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

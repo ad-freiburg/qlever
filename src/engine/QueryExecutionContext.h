@@ -23,6 +23,8 @@
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
+namespace qlever {
+
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
 class CacheValue {
@@ -270,4 +272,5 @@ class QueryExecutionContext
       std::chrono::steady_clock::time_point::min();
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

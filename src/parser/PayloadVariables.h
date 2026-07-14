@@ -9,6 +9,8 @@
 
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 namespace detail {
 // Represents the selection of all variables as payload
 struct PayloadAllVariables : std::monostate {
@@ -56,5 +58,7 @@ class PayloadVariables {
   std::variant<detail::PayloadAllVariables, std::vector<Variable>> variables_ =
       std::vector<Variable>{};
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_PAYLOADVARIABLES_H

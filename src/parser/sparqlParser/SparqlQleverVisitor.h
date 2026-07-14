@@ -24,6 +24,8 @@
 #define EOF std::char_traits<char>::eof()
 #include "util/BlankNodeManager.h"
 
+namespace qlever {
+
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
  * a `ParsedQuery`.
@@ -31,24 +33,21 @@
 class SparqlQleverVisitor {
  public:
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
-  using Objects = ad_utility::sparql_types::Objects;
-  using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
-  using VarOrIri = ad_utility::sparql_types::VarOrIri;
-  using Iri = ad_utility::triple_component::Iri;
-  using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
-  using PathObjectPairsAndTriples =
-      ad_utility::sparql_types::PathObjectPairsAndTriples;
-  using TripleWithPropertyPath =
-      ad_utility::sparql_types::TripleWithPropertyPath;
-  using Triples = ad_utility::sparql_types::Triples;
-  using SubjectOrObjectAndTriples =
-      ad_utility::sparql_types::SubjectOrObjectAndTriples;
+  using Objects = sparql_types::Objects;
+  using PredicateObjectPairs = sparql_types::PredicateObjectPairs;
+  using VarOrIri = sparql_types::VarOrIri;
+  using Iri = triple_component::Iri;
+  using PathObjectPairs = sparql_types::PathObjectPairs;
+  using PathObjectPairsAndTriples = sparql_types::PathObjectPairsAndTriples;
+  using TripleWithPropertyPath = sparql_types::TripleWithPropertyPath;
+  using Triples = sparql_types::Triples;
+  using SubjectOrObjectAndTriples = sparql_types::SubjectOrObjectAndTriples;
   using SubjectOrObjectAndPathTriples =
-      ad_utility::sparql_types::SubjectOrObjectAndPathTriples;
-  using ObjectsAndTriples = ad_utility::sparql_types::ObjectsAndTriples;
-  using ObjectsAndPathTriples = ad_utility::sparql_types::ObjectsAndPathTriples;
+      sparql_types::SubjectOrObjectAndPathTriples;
+  using ObjectsAndTriples = sparql_types::ObjectsAndTriples;
+  using ObjectsAndPathTriples = sparql_types::ObjectsAndPathTriples;
   using PredicateObjectPairsAndTriples =
-      ad_utility::sparql_types::PredicateObjectPairsAndTriples;
+      sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
       std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
@@ -73,7 +72,7 @@ class SparqlQleverVisitor {
 
   // The blank node manager is needed to handle blank nodes in the templates of
   // UPDATE requests.
-  ad_utility::BlankNodeManager* blankNodeManager_;
+  BlankNodeManager* blankNodeManager_;
 
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
@@ -105,7 +104,7 @@ class SparqlQleverVisitor {
   PrefixMap prefixMap_{};
 
   // The `BASE` IRI of the query if any.
-  std::optional<qlever::util::ParsedUri> baseIri_{};
+  std::optional<util::ParsedUri> baseIri_{};
 
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no
@@ -160,7 +159,7 @@ class SparqlQleverVisitor {
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      ad_utility::BlankNodeManager* bnodeManager,
+      BlankNodeManager* bnodeManager,
       const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
@@ -184,7 +183,7 @@ class SparqlQleverVisitor {
   }
 
   void setBaseIriForTesting(std::string_view uri) {
-    baseIri_ = qlever::util::ParsedUri{uri};
+    baseIri_ = util::ParsedUri{uri};
   }
 
   // ___________________________________________________________________________
@@ -407,8 +406,7 @@ class SparqlQleverVisitor {
 
   PathObjectPairsAndTriples visit(Parser::TupleWithPathContext* ctx);
 
-  ad_utility::sparql_types::VarOrPath visit(
-      Parser::VerbPathOrSimpleContext* ctx);
+  sparql_types::VarOrPath visit(Parser::VerbPathOrSimpleContext* ctx);
 
   ObjectsAndPathTriples visit(Parser::ObjectListPathContext* ctx);
 
@@ -701,7 +699,7 @@ class SparqlQleverVisitor {
   // into internal variables so they are interpreted correctly by the query
   // planner.
   parsedQuery::BasicGraphPattern toGraphPattern(
-      const ad_utility::sparql_types::Triples& triples) const;
+      const sparql_types::Triples& triples) const;
 
   // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
   // `datasetsAreFixed_` controls whether the datasets can be modified from
@@ -732,4 +730,5 @@ class SparqlQleverVisitor {
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H

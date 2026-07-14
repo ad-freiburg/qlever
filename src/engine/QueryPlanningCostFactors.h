@@ -9,6 +9,8 @@
 
 #include "util/HashMap.h"
 
+namespace qlever {
+
 // Simple container for cost factors.
 // Comes with default values, that can be set and read from a file
 class QueryPlanningCostFactors {
@@ -20,5 +22,7 @@ class QueryPlanningCostFactors {
  private:
   ad_utility::HashMap<std::string, double> _factors;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNINGCOSTFACTORS_H

@@ -10,9 +10,11 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
+using namespace qlever;
+using namespace qlever::testing;
+
 namespace {
 using namespace sparqlExpression;
-namespace tc = ad_utility::triple_component;
 
 // _____________________________________________________________________________
 void expectIdsAreConcatenatedTo(
@@ -48,8 +50,8 @@ void expectIdsAreConcatenatedTo(
 // _____________________________________________________________________________
 void expectLiteralsAreConcatenatedTo(
     QueryExecutionContext* qec, bool distinct,
-    const std::vector<tc::Literal>& literals,
-    const ad_utility::triple_component::Literal& literal,
+    const std::vector<triple_component::Literal>& literals,
+    const triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   LocalVocab localVocab;
   IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
@@ -66,13 +68,13 @@ void expectLiteralsAreConcatenatedTo(
 }
 
 auto lit = [](std::string s) {
-  return tc::Literal::fromStringRepresentation(std::move(s));
+  return triple_component::Literal::fromStringRepresentation(std::move(s));
 };
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, basicConcatenation) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   expectLiteralsAreConcatenatedTo(qec, false, {}, lit("\"\""));
   expectLiteralsAreConcatenatedTo(qec, true, {}, lit("\"\""));
   expectLiteralsAreConcatenatedTo(qec, false, {lit("\"\"")}, lit("\"\""));
@@ -98,7 +100,7 @@ TEST(GroupConcatExpression, basicConcatenation) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocab localVocab;
   expectIdsAreConcatenatedTo(qec, false,
                              makeIdTableFromVector({{Id::makeUndefined()}}),
@@ -118,7 +120,7 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
 
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithLanguageTags) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   expectLiteralsAreConcatenatedTo(qec, false, {lit("\"a\"@en")}, lit("\"a\""));
   expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en")}, lit("\"a\""));
   expectLiteralsAreConcatenatedTo(qec, true, {lit("\"a\"@en"), lit("\"a\"@en")},

@@ -18,7 +18,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 
 // Visits the various types of graph patterns to extract how often a variable
 // appears.
@@ -89,6 +89,6 @@ struct VariableCounter {
   void operator()(const ExternalValuesQuery& op);
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_VARIABLECOUNTER_H

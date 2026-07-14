@@ -11,6 +11,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using namespace qlever;
 using namespace sparqlExpression;
 TEST(RandomExpression, evaluate) {
   TestContext testContext{};
@@ -86,7 +87,7 @@ TEST(RandomExpression, isResultAlwaysDefined) {
   EXPECT_TRUE(RandomExpression{}.isResultAlwaysDefined({}));
 }
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIri = triple_component::LiteralOrIri;
 // The tests for UUID expressions follow almost exactly the pattern
 // of the above defined test for RandomExpression.
 TEST(UuidExpression, simpleMemberFunctionStrUuid) {

@@ -28,7 +28,7 @@
 #include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 
-namespace ad_utility {
+namespace qlever {
 /*
  * Manager class owned by an `Index` to manage currently available indices for
  * blank nodes to be added during runtime. The intention is to use the same
@@ -62,7 +62,7 @@ class BlankNodeManager {
   // threadsafe.
   struct State {
     // Random generator for block indices.
-    SlowRandomIntGenerator<uint64_t> randBlockIndex_;
+    ad_utility::SlowRandomIntGenerator<uint64_t> randBlockIndex_;
 
     // A random generator for UUIDs.
     boost::uuids::random_generator uuidGenerator_;
@@ -70,7 +70,7 @@ class BlankNodeManager {
     // Hash set the stores the indices of all the blank node blocks that are
     // currently reserved by any of the `LocalBlankNodeManager` that are
     // currently alive.
-    HashSet<uint64_t> usedBlocksSet_;
+    ad_utility::HashSet<uint64_t> usedBlocksSet_;
 
     // Each set of blocks that is currently managed by a `LocalBlankNodeManager`
     // is assigned a UUID. This map keeps track of the currently active sets,
@@ -87,13 +87,13 @@ class BlankNodeManager {
 
     // Constructor, all members except for the block index generator can be
     // default-constructed.
-    explicit State(SlowRandomIntGenerator<uint64_t> randBlockIndex)
+    explicit State(ad_utility::SlowRandomIntGenerator<uint64_t> randBlockIndex)
         : randBlockIndex_{std::move(randBlockIndex)} {}
   };
 
   // The actual state variable, wrapped in a `Synchronized` to enforce
   // threadsafe access.
-  Synchronized<State> state_;
+  ad_utility::Synchronized<State> state_;
   using WriteLock = decltype(state_.wlock());
 
   // A block of blank node indices.
@@ -272,6 +272,5 @@ class BlankNodeManager {
   friend class BlankNodeManagerTestFixture;
 };
 
-}  // namespace ad_utility
-
+}  // namespace qlever
 #endif  // QLEVER_SRC_UTIL_BLANKNODEMANAGER_H

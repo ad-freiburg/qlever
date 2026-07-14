@@ -11,11 +11,15 @@
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
 
+namespace qlever {
+
 struct SolutionModifiers {
   std::vector<GroupKey> groupByVariables_;
   std::vector<SparqlFilter> havingClauses_;
   OrderClause orderBy_;
   LimitOffsetClause limitOffset_{};
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_SOLUTIONMODIFIERS_H

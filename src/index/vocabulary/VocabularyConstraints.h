@@ -11,13 +11,12 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // This header contains type constraints used to ensure that the correct
 // semantics of complex vocabulary types, like the `SplitVocabulary`, are
 // preserved if new vocabulary implementations or new instantiations of the
 // nested vocabulary types are added to QLever.
-
-// Forward declaration for concepts below.
-class PolymorphicVocabulary;
 
 // Only the `SplitVocabulary` currently needs a special handling for
 // `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
@@ -67,5 +66,7 @@ CPP_concept NeverProvidesGeometryInfo =
 template <typename... Ts>
 CPP_concept AllNeverProvideGeometryInfo =
     (... && NeverProvidesGeometryInfo<Ts>);
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYCONSTRAINTS_H

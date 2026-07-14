@@ -26,20 +26,26 @@
 #include "util/HashSet.h"
 #include "util/Log.h"
 
-// Forward declaration of `IdTable`
+// Forward declaration of `IdTable`.
+namespace qlever {
 class IdTable;
+}
+
+namespace qlever {
+
+// Forward declaration for reference to owning `MaterializedView`.
+class MaterializedView;
+
 // Forward declaration of `LocatedTriplesPerBlock`
 class LocatedTriplesPerBlock;
 struct LocatedTriplesState;
 class DeltaTriples;
-// Forward declaration for reference to owning `MaterializedView`.
-class MaterializedView;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
 class Permutation {
  public:
-  using KeyOrder = qlever::KeyOrder;
+  using KeyOrder = KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
@@ -308,5 +314,7 @@ class Permutation {
   // may be undefined.
   ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns_;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

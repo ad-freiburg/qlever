@@ -10,6 +10,8 @@
 #include "engine/Operation.h"
 #include "parser/TextSearchQuery.h"
 
+namespace qlever {
+
 // This operation retrieves all text records and their corresponding
 // entities from the fulltext index that contain a certain word or prefix.
 // The entities are saved to the entityVar_. If the operation is called on a
@@ -87,4 +89,5 @@ class TextIndexScanForEntity : public Operation {
   void setVariableToColumnMap();
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H

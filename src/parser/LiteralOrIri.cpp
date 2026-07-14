@@ -15,7 +15,7 @@
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 
-namespace ad_utility::triple_component {
+namespace qlever::triple_component {
 
 // __________________________________________
 template <bool isOwning>
@@ -134,4 +134,4 @@ LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
   return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix)};
 }
 
-}  // namespace ad_utility::triple_component
+}  // namespace qlever::triple_component

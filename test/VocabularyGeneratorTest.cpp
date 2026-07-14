@@ -25,7 +25,9 @@
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
 
-using namespace ad_utility::vocabulary_merger;
+using namespace qlever;
+
+using namespace vocabulary_merger;
 namespace {
 // equality operator used in this test
 bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
@@ -42,7 +44,7 @@ bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
   return true;
 }
 
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 }  // namespace
 
 // Test fixture that sets up the binary files for partial vocabulary and

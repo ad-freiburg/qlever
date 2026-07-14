@@ -15,7 +15,7 @@
 #include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
 
-namespace ad_utility {
+namespace qlever {
 // The implementations of the join algorithms (merge/zipper join, galloping
 // join) in `JoinAlgorithms.h` assume that their inputs only consist of the join
 // columns. They also write a result where the join columns come first, then the
@@ -128,19 +128,19 @@ struct GetColsFromTable {
   }
 };
 
-// A class that stores a complete `IdTable`, but when being treated as a range
-// via the `begin/end/operator[]` functions, then it only gives `const` access
-// to the first `numCols`(via the `GetColsFromTable` struct above). This is very
-// useful for the lazy join implementations (currently used in `Join.cpp` and
-// `OptionalJoin.cpp`), where we need very efficient access to the join column
-// for comparing rows, but also need to store the complete table to be able to
-// write the other columns of a matching row to the result. This class is
-// templated so we can use it for `IdTable` as well as for `IdTableView`.
-// Note: The current implementation always copies the columns when they are
-// accessed (as a `std::array<Id, numCols>`. The reason is, that we want
-// something with a constant size that can be iterated via a runtime for-loop.
-// `std::array` can't store references, and `std::tuple<Id&...>` can't be
-// iterated.
+// A class that stores a complete `IdTable`, but when being treated as a
+// range via the `begin/end/operator[]` functions, then it only gives `const`
+// access to the first `numCols`(via the `GetColsFromTable` struct above). This
+// is very useful for the lazy join implementations (currently used in
+// `Join.cpp` and `OptionalJoin.cpp`), where we need very efficient access to
+// the join column for comparing rows, but also need to store the complete table
+// to be able to write the other columns of a matching row to the result. This
+// class is templated so we can use it for `IdTable` as well as for
+// `IdTableView`. Note: The current implementation always copies the columns
+// when they are accessed (as a `std::array<Id, numCols>`. The reason is, that
+// we want something with a constant size that can be iterated via a runtime
+// for-loop. `std::array` can't store references, and `std::tuple<Id&...>` can't
+// be iterated.
 // TODO<joka921> Implement an iterable tuple of the same types, but actually,
 // for only two or three columns the full arrays (which can be optimized by the
 // compiler) shouldn't be too bad..
@@ -187,8 +187,8 @@ struct IdTableAndFirstCols {
 
   // This interface is required in `Join.cpp` by the `AddCombinedRowToTable`
   // class. Calling this function yields the same type, no matter if `Table` is
-  // `IdTable` or `IdTableView`. In addition, it refers to the full underlying
-  // table, not only to the first `numColumns` tables.
+  // `IdTable` or `IdTableView`. In addition, it refers to the full
+  // underlying table, not only to the first `numColumns` tables.
   template <size_t I = 0>
   IdTableView<I> asStaticView() const {
     return table_.template asStaticView<I>();
@@ -239,8 +239,8 @@ struct IdTableAndFirstCols<1, Table> {
 
   // This interface is required in `Join.cpp` by the `AddCombinedRowToTable`
   // class. Calling this function yields the same type, no matter if `Table` is
-  // `IdTable` or `IdTableView`. In addition, it refers to the full underlying
-  // table, not only to the first `numColumns` tables.
+  // `IdTable` or `IdTableView`. In addition, it refers to the full
+  // underlying table, not only to the first `numColumns` tables.
   template <size_t I = 0>
   IdTableView<I> asStaticView() const {
     return table_.template asStaticView<I>();
@@ -257,6 +257,5 @@ IdTableAndFirstCols<NumCols, std::decay_t<Table>> makeIdTableAndFirstCols(
   return {AD_FWD(table), std::move(localVocab)};
 }
 
-}  // namespace ad_utility
-
+}  // namespace qlever
 #endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_JOINCOLUMNMAPPING_H

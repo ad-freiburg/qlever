@@ -22,12 +22,14 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
+namespace qlever {
+
 // A vocabulary that can at runtime choose between different vocabulary
 // implementations. The only restriction is, that a vocabulary can only be read
 // from disk with the same implementation that it was written to.
 class PolymorphicVocabulary {
  public:
-  using VocabularyType = ad_utility::VocabularyType;
+  using VocabularyType = VocabularyType;
 
  private:
   // Type aliases for all the currently supported vocabularies. To add another
@@ -126,9 +128,9 @@ class PolymorphicVocabulary {
 
   // Retrieve `GeometryInfo` from an underlying vocabulary, if it is a
   // `GeoVocabulary`.
-  std::optional<ad_utility::GeometryInfo> getGeoInfo(uint64_t index) const {
+  std::optional<GeometryInfo> getGeoInfo(uint64_t index) const {
     return std::visit(
-        [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
+        [&](const auto& vocab) -> std::optional<GeometryInfo> {
           using T = std::decay_t<decltype(vocab)>;
           // For more details, please see the definition of these concepts
           // in `VocabularyConstraints.h`.
@@ -174,5 +176,7 @@ class PolymorphicVocabulary {
     std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H

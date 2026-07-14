@@ -18,6 +18,8 @@
 #include "util/MmapVector.h"
 #include "util/Serializer/FileSerializer.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 auto MetaDataWrapperDense::lower_bound(Id col0Id) const {
   return ql::ranges::lower_bound(vec_, col0Id, {},
@@ -80,3 +82,5 @@ void MetaDataWrapperDense::exchangeMultiplicities(MetaDataWrapperDense& other) {
     md2.multiplicityCol2_ = md1.multiplicityCol1_;
   }
 }
+
+}  // namespace qlever

@@ -27,8 +27,9 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 
-using ad_utility::testing::makeAllocator;
-using namespace ad_utility::testing;
+using qlever::testing::makeAllocator;
+using namespace qlever::testing;
+using namespace qlever;
 namespace {
 auto V = VocabId;
 constexpr auto U = Id::makeUndefined();
@@ -36,7 +37,7 @@ using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   {
     IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
                    makeAllocator()};
@@ -68,9 +69,9 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
       rightSorted.push_back(right);
       ++idx;
     }
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = makeExecutionTree<ValuesForTesting>(
         qec, inputA.clone(), varsLeft, false, std::move(leftSorted));
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = makeExecutionTree<ValuesForTesting>(
         qec, inputB.clone(), varsRight, false, std::move(rightSorted));
     OptionalJoin opt{qec, left, right};
 
@@ -85,15 +86,15 @@ void testLazyOptionalJoin(
     const std::vector<IdTable>& expectedResult, bool singleVar = false,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
       singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
                 : std::vector<std::optional<Variable>>{Variable{"?x"},
                                                        Variable{"?y"}},
       false, std::vector<ColumnIndex>{0});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto right = makeExecutionTree<ValuesForTesting>(
       qec, std::move(rightTables),
       singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
                 : std::vector<std::optional<Variable>>{Variable{"?x"},
@@ -409,7 +410,7 @@ TEST(OptionalJoin, gallopingJoin) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -444,12 +445,12 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   for (bool forceFullyMaterialized : {false, true}) {
     OptionalJoin optionalJoin{
         qec,
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, a.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                  Variable{"?b"}},
             false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, b.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                  Variable{"?a"}, std::nullopt},
@@ -471,7 +472,7 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -502,12 +503,12 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
 
   OptionalJoin optionalJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(a),
           std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                Variable{"?b"}},
           false, std::vector<ColumnIndex>{1, 2}, std::move(leftVocab)),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(rightTables),
           std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                Variable{"?a"}, std::nullopt},
@@ -543,7 +544,7 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, clone) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto a = makeIdTableFromVector({{0}});
   auto left = idTableToExecutionTree(qec, a);
   auto right = idTableToExecutionTree(qec, a);
@@ -637,7 +638,7 @@ TEST(OptionalJoin, lazyOptionalJoinWithUndefLeftInSeparateTable) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto expected = makeIdTableFromVector({{U, V(10), V(20)},
                                          {V(1), V(11), V(20)},
@@ -650,12 +651,12 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
     std::vector<IdTable> rightTables;
     rightTables.push_back(makeIdTableFromVector({{U, V(20)}, {V(2), V(22)}}));
 
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = makeExecutionTree<ValuesForTesting>(
         qec,
         makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::vector<ColumnIndex>{0});
@@ -681,11 +682,11 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
     leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
     leftTables.push_back(makeIdTableFromVector({{2, 12}, {3, 13}}));
 
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = makeExecutionTree<ValuesForTesting>(
         qec, std::move(leftTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false, std::vector<ColumnIndex>{0});
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U, V(20)}, {V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
@@ -710,19 +711,19 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
   std::vector<IdTable> expected;
-  expected.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(1)));
-  expected.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(2)));
+  expected.push_back(createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE,
+                                                  Id::makeFromInt(1)));
+  expected.push_back(createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE,
+                                                  Id::makeFromInt(2)));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(
       makeIdTableFromVector({{Id::makeFromInt(1)}, {Id::makeFromInt(2)}}));
   std::vector<IdTable> rightTables;
-  rightTables.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(1)));
-  rightTables.push_back(createIdTableOfSizeWithValue(
-      qlever::joinHelpers::CHUNK_SIZE, Id::makeFromInt(2)));
+  rightTables.push_back(createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE,
+                                                     Id::makeFromInt(1)));
+  rightTables.push_back(createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE,
+                                                     Id::makeFromInt(2)));
 
   testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
                        std::move(expected), true);
@@ -730,24 +731,24 @@ TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
-  using ad_utility::triple_component::Iri;
+  using triple_component::Iri;
   auto* qec = getQec();
-  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
-  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto index1 = ad_utility::makeExecutionTree<IndexScan>(
+  auto index1 = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Variable{"?c"}});
-  auto index2 = ad_utility::makeExecutionTree<IndexScan>(
+  auto index2 = makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Variable{"?b"}});
-  auto index3 = ad_utility::makeExecutionTree<NeutralOptional>(
-      qec, ad_utility::makeExecutionTree<IndexScan>(
+  auto index3 = makeExecutionTree<NeutralOptional>(
+      qec, makeExecutionTree<IndexScan>(
                qec, Permutation::PSO,
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?c"}}));
@@ -784,16 +785,16 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, limitOffsetIsPropagated) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
   auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
 
   std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
 
   {
-    auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputTable.clone(), vars);
-    auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputTable.clone(), vars);
+    auto subtree1 =
+        makeExecutionTree<ValuesForTesting>(qec, inputTable.clone(), vars);
+    auto subtree2 =
+        makeExecutionTree<ValuesForTesting>(qec, inputTable.clone(), vars);
 
     OptionalJoin optionalJoin{qec, subtree1, subtree2};
     optionalJoin.applyLimitOffset({2, 1});
@@ -815,10 +816,10 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
 
   // Only an offset should be no-op.
   {
-    auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputTable.clone(), vars);
-    auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputTable.clone(), vars);
+    auto subtree1 =
+        makeExecutionTree<ValuesForTesting>(qec, inputTable.clone(), vars);
+    auto subtree2 =
+        makeExecutionTree<ValuesForTesting>(qec, inputTable.clone(), vars);
 
     OptionalJoin optionalJoin{qec, subtree1, subtree2};
     optionalJoin.applyLimitOffset({std::nullopt, 1337});
@@ -842,10 +843,10 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
 
   // Test correct overflow handling when the offset is very large.
   {
-    auto subtree1 = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, inputTable.clone(), vars);
-    auto subtree2 = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(inputTable), vars);
+    auto subtree1 =
+        makeExecutionTree<ValuesForTesting>(qec, inputTable.clone(), vars);
+    auto subtree2 =
+        makeExecutionTree<ValuesForTesting>(qec, std::move(inputTable), vars);
 
     OptionalJoin optionalJoin{qec, subtree1, subtree2};
     optionalJoin.applyLimitOffset({1, std::numeric_limits<uint64_t>::max()});
@@ -868,9 +869,8 @@ TEST(OptionalJoin, limitOffsetIsPropagated) {
   }
 }
 // Test fixture for testing optionalJoinWithIndexScan with prefiltering.
-class OptionalJoinWithIndexScan
-    : public ::testing::TestWithParam<bool>,
-      public ad_utility::testing::LazyJoinTestHelper {
+class OptionalJoinWithIndexScan : public ::testing::TestWithParam<bool>,
+                                  public qlever::testing::LazyJoinTestHelper {
  protected:
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.
@@ -889,14 +889,13 @@ class OptionalJoinWithIndexScan
     using Tc = TripleComponent;
     using Var = Variable;
     SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<p>"), Tc{Var{"?y"}}};
-    return ad_utility::makeExecutionTree<IndexScan>(qec_, Permutation::PSO,
-                                                    xpy);
+    return makeExecutionTree<IndexScan>(qec_, Permutation::PSO, xpy);
   }
 
   // Create a ValuesForTesting instance for the left side (single column).
   std::shared_ptr<QueryExecutionTree> makeLeftSide(
       IdTable table, std::vector<ColumnIndex> sortedColumns = {0}) const {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
+    return makeExecutionTree<ValuesForTesting>(
         qec_, std::move(table),
         std::vector<std::optional<Variable>>{Variable{"?x"}}, false,
         std::move(sortedColumns));
@@ -905,7 +904,7 @@ class OptionalJoinWithIndexScan
   // Create a ValuesForTesting instance for the left side (two columns).
   std::shared_ptr<QueryExecutionTree> makeLeftSide2Col(
       IdTable table, std::vector<ColumnIndex> sortedColumns = {0, 1}) const {
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
+    return makeExecutionTree<ValuesForTesting>(
         qec_, std::move(table),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::move(sortedColumns));
@@ -1074,7 +1073,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
   leftTable.push_back({s1, o1});  // matches 1 row
   leftTable.push_back({s3, U});   // matches 1 row.
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeExecutionTree<ValuesForTesting>(
       qec2, std::move(leftTable),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{0, 1});
@@ -1082,8 +1081,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
   // Right side: IndexScan with two output columns.
   SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
                             TripleComponent{Variable{"?y"}}};
-  auto right =
-      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+  auto right = makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
 
   OptionalJoin optJoin{qec2, left, right};
   qec2->getQueryTreeCache().clearAll();
@@ -1139,7 +1137,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   auto l3 = Id::makeFromLocalVocabIndex(v3.getIndexAndAddIfNotContained(i(3)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, o2, l3}}), std::move(v3));
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeExecutionTree<ValuesForTesting>(
       qec2, std::move(tAndV),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
                                            Variable{"?payload"}},
@@ -1148,8 +1146,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   // Right side: IndexScan with two output columns.
   SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
                             TripleComponent{Variable{"?y"}}};
-  auto right =
-      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+  auto right = makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
 
   OptionalJoin optJoin{qec2, left, right};
   qec2->getQueryTreeCache().clearAll();
@@ -1201,15 +1198,14 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   leftTable.push_back({s1, o3});  // doesn't match, but is added as undefined.
   leftTable.push_back({s2, U});
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeExecutionTree<ValuesForTesting>(
       qec2, std::move(leftTable),
       std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
       false, std::vector<ColumnIndex>{0, 1});
 
   SparqlTripleSimple triple{TripleComponent{Variable{"?x"}}, iri("<p>"),
                             TripleComponent{Variable{"?y"}}};
-  auto right =
-      ad_utility::makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
+  auto right = makeExecutionTree<IndexScan>(qec2, Permutation::PSO, triple);
 
   OptionalJoin optJoin{qec2, left, right};
   qec2->getQueryTreeCache().clearAll();

@@ -26,6 +26,13 @@
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
+// Forward declaration of s2 classes
+class S2Polyline;
+class S2Point;
+class S2LatLng;
+
+namespace qlever {
+
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
@@ -72,7 +79,7 @@ struct ClosestPointVisitor : public boost::static_visitor<double> {
     bg::closest_points(geo1, geo2, seg);
     GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
     GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
-    return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
+    return detail::wktDistImpl(closestPoint1, closestPoint2);
 #endif
   }
 };
@@ -87,11 +94,6 @@ struct RtreeEntry {
 using Value = std::pair<Box, RtreeEntry>;
 
 }  // namespace BoostGeometryNamespace
-
-// Forward declaration of s2 classes
-class S2Polyline;
-class S2Point;
-class S2LatLng;
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
@@ -187,7 +189,7 @@ class SpatialJoinAlgorithms {
   };
   struct LibSpatialJoinParseMetadata {
     // Aggregated bounding box of all parsed geometries
-    util::geo::I32Box aggBoundingBox_;
+    ::util::geo::I32Box aggBoundingBox_;
     // Number of geometries that were actually parsed excluding prefiltered ones
     size_t numGeomsParsed_;
     // Number of geometries dropped by prefilter
@@ -199,7 +201,7 @@ class SpatialJoinAlgorithms {
   LibSpatialJoinParseMetadata libspatialjoinParse(
       bool leftOrRightSide, LibSpatialJoinParseInput input,
       sj::Sweeper& sweeper, size_t numThreads,
-      std::optional<util::geo::I32Box> prefilterBox) const;
+      std::optional<::util::geo::I32Box> prefilterBox) const;
 
   // Helper for `libspatialjoinParse` to check the bounding box (only if
   // available from a `GeoVocabulary`) of a given vocabulary entry against the
@@ -209,13 +211,13 @@ class SpatialJoinAlgorithms {
   // `GeometryInfo` will be used. Then this should only be applied if the index
   // is known to be built on a `GeoVocabulary`.
   static bool prefilterGeoByBoundingBox(
-      const std::optional<util::geo::DBox>& prefilterLatLngBox,
+      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
       const Index& index, VocabIndex vocabIndex,
-      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
+      const std::optional<BoundingBox>& precomputedBoundingBox);
 
   // Helper for `libspatialjoinParse` to get the bounding box from an
   // `IdTable` if available.
-  static std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
+  static std::optional<BoundingBox> getBoundingBoxFromIdTable(
       const IdTableView<0>* idTable,
       const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 
@@ -333,5 +335,7 @@ class SpatialJoinAlgorithms {
   // if the user has cancelled their query.
   static constexpr size_t wktParserChunkSizeForCancellationCheck = 10'000;
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H

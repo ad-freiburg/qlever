@@ -10,10 +10,10 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 
-namespace sparqlExpression {
+namespace qlever::sparqlExpression {
 namespace detail::langImpl {
 
-using Lit = ad_utility::triple_component::Literal;
+using Lit = triple_component::Literal;
 using OptValue = std::optional<std::string>;
 
 //______________________________________________________________________________
@@ -57,4 +57,4 @@ SparqlExpression::Ptr makeLangExpression(SparqlExpression::Ptr child) {
   return std::make_unique<detail::langImpl::LangExpression>(std::move(child));
 }
 
-}  // namespace sparqlExpression
+}  // namespace qlever::sparqlExpression

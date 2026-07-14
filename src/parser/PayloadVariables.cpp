@@ -8,6 +8,8 @@
 
 #include "util/Exception.h"
 
+namespace qlever {
+
 // ____________________________________________________________________________
 PayloadVariables::PayloadVariables(std::vector<Variable> variables)
     : variables_{std::move(variables)} {};
@@ -76,3 +78,5 @@ const std::vector<Variable>& PayloadVariables::getVariables() const {
 
   return std::visit(getVarVisitor, variables_);
 };
+
+}  // namespace qlever

@@ -8,9 +8,12 @@
 
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
-class SparqlTriple;
 
-namespace parsedQuery {
+namespace qlever {
+class SparqlTriple;
+}  // namespace qlever
+
+namespace qlever::parsedQuery {
 
 struct BasicGraphPattern;
 
@@ -91,6 +94,6 @@ struct MagicServiceQuery {
                                         const std::string_view& magicIRI) const;
 };
 
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_MAGICSERVICEQUERY_H

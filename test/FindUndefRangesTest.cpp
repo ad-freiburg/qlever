@@ -12,11 +12,12 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace ad_utility;
+using namespace qlever;
 using ad_utility::source_location;
 
 namespace {
 const Id U = Id::makeUndefined();
-auto V = ad_utility::testing::VocabId;
+auto V = qlever::testing::VocabId;
 template <size_t I>
 using Arr = std::array<Id, I>;
 }  // namespace

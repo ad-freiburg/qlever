@@ -23,7 +23,7 @@ DISABLE_ARRAY_BOUNDS_WARNINGS
 #include "index/ExternalSortFunctors.h"
 GCC_REENABLE_WARNINGS
 
-namespace ad_utility {
+namespace qlever {
 
 template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
 template class CompressedExternalIdTableSorter<SortByOSP,
@@ -38,4 +38,4 @@ template class CompressedExternalIdTableSorter<SortByPSO,
                                                NumColumnsIndexBuilding + 2>;
 template class CompressedExternalIdTableSorter<SortText, 5>;
 
-}  // namespace ad_utility
+}  // namespace qlever

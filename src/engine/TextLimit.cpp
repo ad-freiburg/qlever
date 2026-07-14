@@ -4,6 +4,8 @@
 
 #include "engine/TextLimit.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,

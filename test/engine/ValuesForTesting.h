@@ -12,6 +12,8 @@
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
+namespace qlever {
+
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another
 // operation.
@@ -268,5 +270,7 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   bool knownEmptyResult() override { return false; }
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H

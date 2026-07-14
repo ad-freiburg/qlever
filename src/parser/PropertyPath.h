@@ -17,6 +17,8 @@
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 
+namespace qlever {
+
 // Class representing property paths. This includes simple IRIs as a baseline,
 // alternative paths, sequence paths, inverse paths, negated paths, and paths
 // with minimum and maximum lengths.
@@ -82,13 +84,11 @@ class PropertyPath {
   };
 
   // The main content of this object.
-  std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
-      path_;
+  std::variant<triple_component::Iri, ModifiedPath, MinMaxPath> path_;
 
   // Private constructor that initializes the path with a variant type.
   explicit PropertyPath(
-      std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
-          path);
+      std::variant<triple_component::Iri, ModifiedPath, MinMaxPath> path);
 
  public:
   // Default copy and move constructors and assignment operators.
@@ -98,7 +98,7 @@ class PropertyPath {
   PropertyPath& operator=(const PropertyPath&) = default;
 
   // Create a basic PropertyPath from a basic IRI.
-  static PropertyPath fromIri(ad_utility::triple_component::Iri iri);
+  static PropertyPath fromIri(triple_component::Iri iri);
 
   // Create a PropertyPath with a minimum and maximum length.
   static PropertyPath makeWithLength(PropertyPath child, size_t min,
@@ -128,7 +128,7 @@ class PropertyPath {
 
   // Acquire the IRI of the path if it is a basic path. If the path is not a
   // basic path, this function will throw an assertion error.
-  const ad_utility::triple_component::Iri& getIri() const;
+  const triple_component::Iri& getIri() const;
 
   // Check if the path is a basic path with an IRI. Return true if it is, false
   // otherwise.
@@ -151,7 +151,7 @@ class PropertyPath {
   CPP_template(typename T, typename IriFunc, typename ModifiedPathFunc,
                typename MinMaxPathFunc)(
       requires ad_utility::InvocableWithConvertibleReturnType<
-          IriFunc, T, const ad_utility::triple_component::Iri&>
+          IriFunc, T, const triple_component::Iri&>
           CPP_and ad_utility::InvocableWithConvertibleReturnType<
               ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
               CPP_and ad_utility::InvocableWithConvertibleReturnType<
@@ -174,5 +174,7 @@ class PropertyPath {
 
 // Allow the `PropertyPath` to be printed to an output stream.
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

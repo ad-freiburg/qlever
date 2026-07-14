@@ -12,6 +12,8 @@
 #include "util/CompactStringVector.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+using namespace qlever;
+
 namespace {
 
 // _____________________________________________________________________________

@@ -15,13 +15,12 @@
 template <auto ParameterPtr, typename Value>
 [[nodiscard]] auto setRuntimeParameterForTest(Value&& value) {
   auto originalValue =
-      std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
-  std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
+      std::invoke(ParameterPtr, *qlever::globalRuntimeParameters.rlock()).get();
+  std::invoke(ParameterPtr, *qlever::globalRuntimeParameters.wlock())
       .set(AD_FWD(value));
   return absl::Cleanup{[originalValue = std::move(originalValue)]() {
-    std::invoke(ParameterPtr, *globalRuntimeParameters.wlock())
+    std::invoke(ParameterPtr, *qlever::globalRuntimeParameters.wlock())
         .set(std::move(originalValue));
   }};
 }
-
 #endif  // QLEVER_TEST_UTIL_RUNTIMEPARAMETERSTESTHELPERS_H

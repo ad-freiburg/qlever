@@ -15,6 +15,8 @@
 
 #include "engine/Operation.h"
 
+namespace qlever {
+
 // An Operation that returns the result of its only child operation when being
 // evaluated, with only a subset of the child's variables.
 class StripColumns : public Operation {
@@ -66,4 +68,5 @@ class StripColumns : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
+}  // namespace qlever
 #endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H

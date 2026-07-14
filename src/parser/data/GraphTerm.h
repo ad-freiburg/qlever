@@ -19,14 +19,16 @@
 #include "rdfTypes/Iri.h"
 #include "util/VisitMixin.h"
 
-using GraphTermBase = std::variant<Literal, BlankNode,
-                                   ad_utility::triple_component::Iri, Variable>;
+namespace qlever {
+
+using GraphTermBase =
+    std::variant<Literal, BlankNode, triple_component::Iri, Variable>;
 
 class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {
  public:
   using GraphTermBase::GraphTermBase;
-  using Iri = ad_utility::triple_component::Iri;
+  using Iri = triple_component::Iri;
 
   // ___________________________________________________________________________
   std::string toSparql() const {
@@ -60,5 +62,7 @@ class GraphTerm : public GraphTermBase,
     });
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_GRAPHTERM_H

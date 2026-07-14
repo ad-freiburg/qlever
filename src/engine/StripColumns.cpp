@@ -13,6 +13,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPatternOperation.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 StripColumns::StripColumns(QueryExecutionContext* ctx,
                            std::shared_ptr<QueryExecutionTree> child,
@@ -100,8 +102,8 @@ StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   std::set<Variable> keepVars{view.begin(), view.end()};
   keepVars.insert(bind._target);
 
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(*newChild), keepVars);
+  return makeExecutionTree<StripColumns>(getExecutionContext(),
+                                         std::move(*newChild), keepVars);
 }
 
 // _____________________________________________________________________________

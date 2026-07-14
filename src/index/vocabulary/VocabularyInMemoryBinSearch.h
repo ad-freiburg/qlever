@@ -17,6 +17,8 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
+namespace qlever {
+
 // A vocabulary that stores all words in memory. The vocabulary supports
 // "holes", meaning that the indices of the contained words don't have to be
 // contiguous (but ascending). All accesses are implemented using binary search.
@@ -98,5 +100,7 @@ class VocabularyInMemoryBinSearch
         "VocabularyInMemoryBinSearch.");
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

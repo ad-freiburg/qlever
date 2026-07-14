@@ -18,6 +18,8 @@
 #include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 
+using namespace qlever;
+
 using std::string;
 
 using parsedQuery::SelectClause;
@@ -195,9 +197,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return std::move(sortedQet).value();
   }
 
-  return ad_utility::makeExecutionTree<Sort>(
-      rootOperation->getExecutionContext(), std::move(qet), sortColumns,
-      explicitSort);
+  return makeExecutionTree<Sort>(rootOperation->getExecutionContext(),
+                                 std::move(qet), sortColumns, explicitSort);
 }
 
 // _____________________________________________________________________________
@@ -218,8 +219,8 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {
-    return ad_utility::makeExecutionTree<StripColumns>(
-        rootOperation->getExecutionContext(), std::move(qet), variablesToKeep);
+    return makeExecutionTree<StripColumns>(rootOperation->getExecutionContext(),
+                                           std::move(qet), variablesToKeep);
   }
 
   auto& resultTree = optTree.value();

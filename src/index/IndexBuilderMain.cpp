@@ -23,6 +23,8 @@
 #include "util/ReadableNumberFacet.h"
 #include "util/json.h"
 
+using namespace qlever;
+
 using std::string;
 
 namespace po = boost::program_options;
@@ -50,15 +52,15 @@ static constexpr auto checkNumParameterValues =
     };
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
-// corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
+// corresponding `Filetype` value. If no filetyp is given, try to deduce
 // the type from the filename.
-qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
-                             std::string_view filename) {
-  auto impl = [](std::string_view s) -> std::optional<qlever::Filetype> {
+Filetype getFiletype(std::optional<std::string_view> filetype,
+                     std::string_view filename) {
+  auto impl = [](std::string_view s) -> std::optional<Filetype> {
     if (s == "ttl" || s == "nt") {
-      return qlever::Filetype::Turtle;
+      return Filetype::Turtle;
     } else if (s == "nq") {
-      return qlever::Filetype::NQuad;
+      return Filetype::NQuad;
     } else {
       return std::nullopt;
     }
@@ -120,7 +122,7 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   check(defaultGraphs, "--default-graph, -g");
   check(parseParallel, "--parallel-parsing, p");
 
-  std::vector<qlever::InputFileSpecification> fileSpecs;
+  std::vector<InputFileSpecification> fileSpecs;
   for (size_t i = 0; i < inputFile.size(); ++i) {
     auto type = getParameterValue<std::optional<std::string_view>>(
         i, filetype, std::nullopt);
@@ -146,9 +148,9 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
 
 // Helper to convert the JSON given for writing materialized views to a proper
 // `WriteMaterializedViews` vector.
-qlever::IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
+IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
     std::string_view materializedViewsJson) {
-  qlever::IndexBuilderConfig::WriteMaterializedViews views;
+  IndexBuilderConfig::WriteMaterializedViews views;
   if (!materializedViewsJson.empty()) {
     AD_LOG_DEBUG << "Parsing materialized views configuration ..." << std::endl;
     try {
@@ -178,7 +180,7 @@ qlever::IndexBuilderConfig::WriteMaterializedViews parseMaterializedViewsJson(
 int main(int argc, char** argv) {
   // Copy the git hash and datetime of compilation (which require relinking)
   // to make them accessible to other parts of the code
-  qlever::version::copyVersionInfo();
+  version::copyVersionInfo();
   setlocale(LC_CTYPE, "");
 
   std::locale loc;
@@ -186,7 +188,7 @@ int main(int argc, char** argv) {
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
 
-  qlever::IndexBuilderConfig config;
+  IndexBuilderConfig config;
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -266,7 +268,7 @@ int main(int argc, char** argv) {
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
-      ad_utility::VocabularyType::getListOfSupportedValues());
+      VocabularyType::getListOfSupportedValues());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",
@@ -302,8 +304,7 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     if (optionsMap.count("version")) {
-      std::cout << argv[0] << " " << qlever::version::ProjectVersion
-                << std::endl;
+      std::cout << argv[0] << " " << version::ProjectVersion << std::endl;
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
@@ -313,10 +314,10 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  AD_LOG_INFO << EMPH_ON << "QLever index builder "
-              << qlever::version::ProjectVersion << ", compiled on "
-              << qlever::version::DatetimeOfCompilation << " using git hash "
-              << qlever::version::GitShortHash << EMPH_OFF << std::endl;
+  AD_LOG_INFO << EMPH_ON << "QLever index builder " << version::ProjectVersion
+              << ", compiled on " << version::DatetimeOfCompilation
+              << " using git hash " << version::GitShortHash << EMPH_OFF
+              << std::endl;
 
   try {
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
@@ -328,7 +329,7 @@ int main(int argc, char** argv) {
     // default (which is optimized for `rebuild-index`, where six permutations
     // are written simultaneously).
     setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
-    qlever::Qlever::buildIndex(config);
+    Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
                     "exception: "

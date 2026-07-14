@@ -41,10 +41,12 @@
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace qlever;
+
 namespace {  // anonymous namespace to avoid linker problems
 
-using namespace ad_utility::testing;
-using namespace SpatialJoinTestHelpers;
+using namespace qlever::testing;
+using namespace spatial_join_test_helpers;
 
 namespace childrenTesting {
 
@@ -77,7 +79,7 @@ void testAddChild(bool addLeftChildFirst) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
@@ -135,7 +137,7 @@ TEST(SpatialJoin, isConstructed) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
@@ -170,7 +172,7 @@ TEST(SpatialJoin, getChildren) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    point1.getVariable(), point2.getVariable()},
@@ -254,7 +256,7 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
       std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?a"},
                                    Variable{"?b"}, std::nullopt, pv, alg,
@@ -322,7 +324,7 @@ class SpatialJoinVarColParamTest
       dist = Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
+        makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
                                      Variable{"?point2"}, dist, pv, alg,
@@ -394,20 +396,20 @@ class SpatialJoinVarColParamTest
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
           std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
                   .value()
                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
                   .value()
                   .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
                   .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
@@ -468,7 +470,7 @@ class SpatialJoinVarColParamTest
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+              exportIds::idToStringAndType(qec->getIndex(), valueId, {})
                   .value();
           if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
@@ -677,19 +679,19 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinVarColParamTest,
 // accessed columns by `QueryExecutionTree::getVariableColumns` which *only
 // includes externally visible columns*. This led to an out-of-bounds error.
 TEST(SpatialJoinVarColTest, ChildResultWidth) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = getQec();
 
   // Both these children have some hidden columns.
-  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}),
       std::vector<std::optional<Variable>>{V{"?a"}, std::nullopt, V{"?b"}},
       false);
-  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto qet2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 3}}),
       std::vector<std::optional<Variable>>{std::nullopt, V{"?c"}, V{"?d"}},
       true);
 
-  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+  auto spatialJoin = makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
           MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?c"}, std::nullopt,
@@ -763,7 +765,7 @@ class SpatialJoinKnownEmptyTest
     auto rightChild = getChild(qec, rightSideEmptyChild);
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
+        makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
                                      Variable{"?point2"}},
@@ -822,7 +824,7 @@ TEST(SpatialJoin, resultSortedOn) {
   auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{10000000},
                                    Variable{"?point1"}, Variable{"?point2"}},
@@ -851,7 +853,7 @@ TEST(SpatialJoin, getDescriptor) {
   TripleComponent object{Variable{"?object"}};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec,
           SpatialJoinConfiguration{MaxDistanceConfig{1000},
                                    subject.getVariable(), object.getVariable()},
@@ -871,7 +873,7 @@ TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
   // The `SpatialJoin`'s descriptor should contain a readable representation of
   // the join type
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           getQec(),
           SpatialJoinConfiguration{
               LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
@@ -897,7 +899,7 @@ TEST(SpatialJoin, getCacheKeyImpl) {
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(
+      makeExecutionTree<SpatialJoin>(
           qec, SpatialJoinConfiguration{MaxDistanceConfig{1000}, subj, obj},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
@@ -1067,7 +1069,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     // result table of rightChild is identical to leftChild, see above
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
+        makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
             std::nullopt, std::nullopt);
@@ -1183,7 +1185,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-          ad_utility::makeExecutionTree<SpatialJoin>(
+          makeExecutionTree<SpatialJoin>(
               qec,
               SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
                                        Variable{"?distanceForTesting"}},
@@ -1276,16 +1278,15 @@ using namespace ::testing;
 //   FILTER geof:sfContains(?a, ?b)
 // }
 TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = getQec();
 
   // Build the valid and invalid literals.
   LocalVocab localVocab;
   auto wktLiteralIri =
-      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-          GEO_WKT_LITERAL);
+      triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
   auto wktId = [&](std::string_view wkt) {
-    auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
-        wkt, wktLiteralIri);
+    auto literal =
+        triple_component::Literal::literalWithoutQuotes(wkt, wktLiteralIri);
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
   };
@@ -1295,21 +1296,21 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
 
   // `?a`: a single, valid point.
-  auto leftChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftChild = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{pointLeft}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, localVocab.clone());
 
   // `?b`: two literals that are not valid WKT geometries, plus one valid
   // point (which does not lie within `?a`, so no row of `?b` matches).
-  auto rightChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightChild = makeExecutionTree<ValuesForTesting>(
       qec,
       makeIdTableFromVector(
           {{invalidLiteralA}, {invalidLiteralB}, {validLiteral}}),
       std::vector<std::optional<Variable>>{Variable{"?b"}}, false,
       std::vector<ColumnIndex>{}, localVocab.clone());
 
-  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+  auto spatialJoinOperation = makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
           MaxDistanceConfig{0}, Variable{"?a"}, Variable{"?b"}, std::nullopt,

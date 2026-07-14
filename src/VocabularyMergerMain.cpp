@@ -7,6 +7,10 @@
 
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
+#include "rdfTypes/RdfEscaping.h"
+
+using qlever::TripleComponentComparator;
+using qlever::VocabularyOnDisk;
 
 // ____________________________________________________________________________________________________
 int main(int argc, char** argv) {
@@ -23,13 +27,13 @@ int main(int argc, char** argv) {
   auto wordCallback = [&file, &count](
                           const auto& word,
                           [[maybe_unused]] bool isExternalDummy = true) {
-    file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+    file << qlever::RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     return count++;
   };
 
   VocabularyOnDisk vocab;
   TripleComponentComparator comparator;
-  ad_utility::vocabulary_merger::mergeVocabulary(
+  qlever::vocabulary_merger::mergeVocabulary(
       basename, numFiles,
       [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
                     bool bIsExternal) {

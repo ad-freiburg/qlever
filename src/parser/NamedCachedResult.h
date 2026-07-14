@@ -10,7 +10,7 @@
 
 #include "parser/MagicServiceQuery.h"
 
-namespace parsedQuery {
+namespace qlever::parsedQuery {
 // A magic SERVICE for queries that are pinned with an explicit query name.
 class NamedCachedResult : public MagicServiceQuery {
   std::string identifier_;
@@ -36,6 +36,6 @@ class NamedCachedResult : public MagicServiceQuery {
  private:
   [[noreturn]] static void throwBecauseNotEmpty();
 };
-}  // namespace parsedQuery
+}  // namespace qlever::parsedQuery
 
 #endif  // QLEVER_SRC_PARSER_NAMED_CACHED_QUERY_H

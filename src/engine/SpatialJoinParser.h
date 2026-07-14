@@ -13,7 +13,7 @@
 #include "global/ValueId.h"
 #include "index/Index.h"
 
-namespace ad_utility::detail::parallel_wkt_parser {
+namespace qlever::detail::parallel_wkt_parser {
 
 // The number of geometries per batch passed to a thread.
 constexpr inline size_t WKT_PARSER_BATCH_SIZE = 10'000;
@@ -81,6 +81,6 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   const Index& _index;
 };
 
-}  // namespace ad_utility::detail::parallel_wkt_parser
+}  // namespace qlever::detail::parallel_wkt_parser
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_

@@ -17,6 +17,8 @@
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
 
+namespace qlever {
+
 namespace textIndexReadWrite::detail {
 
 // This function contains the actual frequency compressed list reading and does
@@ -128,8 +130,7 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
 IdTable readContextListHelper(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ContextListMetaData& contextList, bool isWordCl,
-    const ad_utility::File& textIndexFile,
-    qlever::TextScoringMetric textScoringMetric);
+    const ad_utility::File& textIndexFile, TextScoringMetric textScoringMetric);
 
 }  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
@@ -193,14 +194,14 @@ std::vector<T> readZstdComprList(size_t nofElements, off_t from,
 IdTable readWordCl(const TextBlockMetaData& tbmd,
                    const ad_utility::AllocatorWithLimit<Id>& allocator,
                    const ad_utility::File& textIndexFile,
-                   qlever::TextScoringMetric textScoringMetric);
+                   TextScoringMetric textScoringMetric);
 
 // Reads the given textblock and returns all entities with their contextId,
 // entityId and score. Internally uses readContextListHelper.
 IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
                          const ad_utility::AllocatorWithLimit<Id>& allocator,
                          const ad_utility::File& textIndexFile,
-                         qlever::TextScoringMetric textScoringMetric);
+                         TextScoringMetric textScoringMetric);
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its
@@ -424,5 +425,7 @@ class GapEncode {
 template <typename View>
 GapEncode(View&& view)
     -> GapEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H

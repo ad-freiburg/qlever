@@ -11,13 +11,14 @@
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
 
-using namespace parsedQuery;
+using namespace qlever;
+using namespace qlever::parsedQuery;
+using namespace qlever::sparql_types;
 
 namespace {
 
 // Helper function to create a simple SparqlTriple for testing
 SparqlTriple createTestTriple() {
-  using namespace ad_utility::sparql_types;
   TripleComponent subject{Variable{"?s"}};
   VarOrPath predicate = Variable{"?p"};
   TripleComponent object{Variable{"?o"}};
@@ -97,7 +98,7 @@ TEST_F(NamedCachedResultTest, SequenceOfOperations) {
   // addGraph should always fail regardless of state.
   auto errorMatcher = ::testing::HasSubstr("must be empty");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      query_->addGraph(GraphPatternOperation(parsedQuery::BasicGraphPattern())),
+      query_->addGraph(GraphPatternOperation(BasicGraphPattern())),
       errorMatcher);
   // addParameter should always fail regardless of state
   SparqlTriple testTriple = createTestTriple();

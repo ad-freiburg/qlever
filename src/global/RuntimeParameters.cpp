@@ -11,6 +11,8 @@
 #include "backports/algorithm.h"
 #include "util/Algorithm.h"
 
+namespace qlever {
+
 // _____________________________________________________________________________
 RuntimeParameters::RuntimeParameters() {
   // Here all of the newly defined parameters have to be added.
@@ -111,3 +113,5 @@ std::vector<std::string> RuntimeParameters::getKeys() const {
       ::ranges::to<std::vector>(runtimeMap_ | ql::views::keys);
   return keys;
 }
+
+}  // namespace qlever

@@ -13,7 +13,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 
-using ad_utility::GeometryInfo;
+namespace qlever {
 
 // ____________________________________________________________________________
 template <typename V>
@@ -23,15 +23,15 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
 
   // Read header of `geoInfoFile_` to determine version
-  std::decay_t<decltype(ad_utility::GEOMETRY_INFO_VERSION)> versionOfFile = 0;
+  std::decay_t<decltype(GEOMETRY_INFO_VERSION)> versionOfFile = 0;
   geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
 
   // Check version of geo info file
-  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
+  if (versionOfFile != GEOMETRY_INFO_VERSION) {
     throw std::runtime_error(absl::StrCat(
         "The geometry info version of ", getGeoInfoFilename(filename), " is ",
         versionOfFile, ", which is incompatible with version ",
-        ad_utility::GEOMETRY_INFO_VERSION,
+        GEOMETRY_INFO_VERSION,
         " as required by this version of QLever. Please rebuild your index."));
   }
 };
@@ -50,7 +50,7 @@ GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"} {
   // Initialize geo info file with header
-  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+  geoInfoFile_.write(&GEOMETRY_INFO_VERSION, geoInfoHeader);
 };
 
 // ____________________________________________________________________________
@@ -135,3 +135,5 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
 // Explicit template instantiations
 template class GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 template class GeoVocabulary<VocabularyInMemory>;
+
+}  // namespace qlever

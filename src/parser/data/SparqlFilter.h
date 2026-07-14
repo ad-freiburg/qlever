@@ -10,6 +10,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
+namespace qlever {
+
 class SparqlFilter {
  public:
   [[nodiscard]] std::string asString() const;
@@ -21,5 +23,7 @@ class SparqlFilter {
     return expression_.getDescriptor() == other.expression_.getDescriptor();
   }
 };
+
+}  // namespace qlever
 
 #endif  // QLEVER_SRC_PARSER_DATA_SPARQLFILTER_H

@@ -16,7 +16,7 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+using enum qlever::SpatialJoinType;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various carefully selected literals. It
@@ -192,7 +192,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
 
   {
     auto cleanUp = setRuntimeParameterForTest<
-        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
+        &qlever::RuntimeParameters::spatialJoinPrefilterMaxSize_>(2'500);
 
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
@@ -212,13 +212,13 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
   }
 
   // Update runtime parameter for second test
-  double bbSize = util::geo::area(boundingBoxVeryLarge);
+  double bbSize = ::util::geo::area(boundingBoxVeryLarge);
   EXPECT_GT(bbSize, 2'500);
   EXPECT_LT(bbSize, 10'000);
 
   {
     auto cleanUp = setRuntimeParameterForTest<
-        &RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
+        &qlever::RuntimeParameters::spatialJoinPrefilterMaxSize_>(10'000);
 
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.
@@ -290,12 +290,12 @@ class SpatialJoinPrefilterGeoByBoundingBoxTest
     : public ::testing::TestWithParam<PrefilterTestMode> {
  protected:
   // Get the bounding box, if precomputation is the current test mode.
-  std::optional<ad_utility::BoundingBox> getPrecomputedBoundingBox(
+  std::optional<qlever::BoundingBox> getPrecomputedBoundingBox(
       std::string_view wkt) {
     if (GetParam() != PrefilterTestMode::PRECOMPUTED) {
       return std::nullopt;
     }
-    return ad_utility::GeometryInfo::getBoundingBox(wkt);
+    return qlever::GeometryInfo::getBoundingBox(wkt);
   };
 };
 

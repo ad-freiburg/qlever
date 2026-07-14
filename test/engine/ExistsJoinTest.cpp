@@ -15,7 +15,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
-using namespace ad_utility::testing;
+using namespace qlever;
+using namespace qlever::testing;
 
 namespace {
 auto V = VocabId;
@@ -66,8 +67,8 @@ void testExistsFromIdTable(
         vars.push_back(nonJoinCol());
       }
     }
-    return ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, input.clone(), vars, false, std::move(sortedCols));
+    return makeExecutionTree<ValuesForTesting>(qec, input.clone(), vars, false,
+                                               std::move(sortedCols));
   };
 
   // Compute the `ExistsJoin` and check the result.
@@ -100,15 +101,15 @@ void testExistsJoin(
     const std::vector<IdTable>& expectedResult, bool singleVar = false,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
   auto g = generateLocationTrace(location);
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
       singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
                 : std::vector<std::optional<Variable>>{Variable{"?x"},
                                                        Variable{"?y"}},
       false, std::vector<ColumnIndex>{0});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto right = makeExecutionTree<ValuesForTesting>(
       qec, std::move(rightTables),
       singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
                 : std::vector<std::optional<Variable>>{Variable{"?x"},
@@ -155,7 +156,7 @@ void testExistsJoin(
 }  // namespace
 
 TEST(ExistsJoin, computeResult) {
-  auto alloc = ad_utility::testing::makeAllocator();
+  auto alloc = qlever::testing::makeAllocator();
   // Single join column.
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
              {true, false, true}, 1);
@@ -195,7 +196,7 @@ TEST(ExistsJoin, computeResult) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -226,12 +227,12 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
     qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{
         qec,
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, a.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                  Variable{"?b"}},
             false, std::vector<ColumnIndex>{1, 2}, leftVocab.clone()),
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, b.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                  Variable{"?a"}, std::nullopt},
@@ -252,7 +253,7 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
   LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
@@ -287,12 +288,12 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
     qec->getQueryTreeCache().clearAll();
     ExistsJoin existsJoin{
         qec,
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, a.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?b"},
                                                  Variable{"?a"}, std::nullopt},
             false, std::vector<ColumnIndex>{}, leftVocab.clone()),
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, b.clone(),
             std::vector<std::optional<Variable>>{std::nullopt, Variable{"?a"},
                                                  Variable{"?b"}},
@@ -324,14 +325,14 @@ TEST(ExistsJoin, rightIndexNestedLoopJoinOptimizationisSkippedWhenRightLarger) {
 
   IdTable right = makeIdTableFromVector({{1}, {2}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(left),
           std::vector<std::optional<Variable>>{Variable{"?a"}}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(right),
           std::vector<std::optional<Variable>>{Variable{"?a"}}),
       Variable{"?result"}};
@@ -350,14 +351,14 @@ TEST(ExistsJoin,
 
   IdTable right = makeIdTableFromVector({{U}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(left),
           std::vector<std::optional<Variable>>{Variable{"?a"}}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(right),
           std::vector<std::optional<Variable>>{Variable{"?a"}}),
       Variable{"?result"}};
@@ -375,15 +376,15 @@ TEST(ExistsJoin, leftIndexNestedLoopJoinOptimizationisSkippedWhenLeftLarger) {
 
   IdTable right = makeIdTableFromVector({{1}});
 
-  auto* qec = ad_utility::testing::getQec();
+  auto* qec = qlever::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(left),
           std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
           std::vector<ColumnIndex>{0}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, std::move(right),
           std::vector<std::optional<Variable>>{Variable{"?a"}}),
       Variable{"?result"}};
@@ -400,10 +401,10 @@ TEST(ExistsJoin, clone) {
   auto* qec = getQec();
   ExistsJoin existsJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
       Variable{"?z"}};
@@ -420,10 +421,10 @@ TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsTrueCase) {
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{2, 4}}),
           std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}}),
       Variable{"?z"}};
@@ -446,10 +447,10 @@ TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
   qec->getQueryTreeCache().clearAll();
   ExistsJoin existsJoin{
       qec,
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}}),
-      ad_utility::makeExecutionTree<ValuesForTesting>(
+      makeExecutionTree<ValuesForTesting>(
           qec, IdTable{2, qec->getAllocator()},
           std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}}),
       Variable{"?z"}};
@@ -469,11 +470,11 @@ TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, originalTreesAreNotOverwrittenWhenJoinColumnsEmpty) {
   auto* qec = getQec();
-  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto leftTree = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{2, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto rightTree = makeExecutionTree<ValuesForTesting>(
       qec, IdTable{2, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}});
 
@@ -597,7 +598,7 @@ TEST(ExistsJoin, lazyExistsJoinSkipsEmptyTablesOnTheRight) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   {
     auto expected =
@@ -605,11 +606,11 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
     std::vector<IdTable> rightTables;
     rightTables.push_back(makeIdTableFromVector({{2, 22}}));
 
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U, V(10)}, {1, 11}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::vector<ColumnIndex>{0});
@@ -637,11 +638,11 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
     leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
     leftTables.push_back(makeIdTableFromVector({{2, 12}, {3, 13}}));
 
-    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto left = makeExecutionTree<ValuesForTesting>(
         qec, std::move(leftTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
         false, std::vector<ColumnIndex>{0});
-    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+    auto right = makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
         false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
@@ -668,7 +669,7 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, lazyExistsJoinWithJoinColumnAtNonZeroIndex) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec = qlever::testing::getQec();
 
   auto expected =
       makeIdTableFromVector({{10, U, T}, {11, 1, F}, {12, 2, T}, {13, 3, F}});
@@ -678,11 +679,11 @@ TEST(ExistsJoin, lazyExistsJoinWithJoinColumnAtNonZeroIndex) {
   std::vector<IdTable> rightTables;
   rightTables.push_back(makeIdTableFromVector({{22, 2}}));
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto left = makeExecutionTree<ValuesForTesting>(
       qec, std::move(leftTables),
       std::vector<std::optional<Variable>>{Variable{"?y"}, Variable{"?x"}},
       false, std::vector<ColumnIndex>{1});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto right = makeExecutionTree<ValuesForTesting>(
       qec, std::move(rightTables),
       std::vector<std::optional<Variable>>{Variable{"?z"}, Variable{"?x"}},
       false, std::vector<ColumnIndex>{1});
@@ -713,10 +714,10 @@ TEST(ExistsJoin, lazyExistsJoinExceedingChunkSize) {
     std::vector<IdTable> leftTables;
     leftTables.push_back(makeIdTableFromVector({{1}, {2}, {3}}, I));
     std::vector<IdTable> rightTables;
-    rightTables.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(1)));
-    rightTables.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(2)));
+    rightTables.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(1)));
+    rightTables.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(2)));
 
     testExistsJoin(std::move(leftTables), std::move(rightTables),
                    std::move(expected), true);
@@ -729,23 +730,23 @@ TEST(ExistsJoin, lazyExistsJoinExceedingChunkSize) {
     };
 
     std::vector<IdTable> expected;
-    expected.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(1)));
+    expected.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(1)));
     addColumnFilledWith(true, expected.back());
-    expected.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(2)));
+    expected.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(2)));
     addColumnFilledWith(false, expected.back());
-    expected.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(3)));
+    expected.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(3)));
     addColumnFilledWith(true, expected.back());
 
     std::vector<IdTable> leftTables;
-    leftTables.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(1)));
-    leftTables.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(2)));
-    leftTables.push_back(createIdTableOfSizeWithValue(
-        qlever::joinHelpers::CHUNK_SIZE + 1, I(3)));
+    leftTables.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(1)));
+    leftTables.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(2)));
+    leftTables.push_back(
+        createIdTableOfSizeWithValue(joinHelpers::CHUNK_SIZE + 1, I(3)));
     std::vector<IdTable> rightTables;
     rightTables.push_back(makeIdTableFromVector({{1}, {3}}, I));
 
@@ -780,15 +781,15 @@ TEST(ExistsJoin, repeatingMatchesDontProduceDuplicates) {
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
-  using ad_utility::triple_component::Iri;
+  using triple_component::Iri;
   auto* qec = getQec();
-  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values1 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
-  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
-  auto index = ad_utility::makeExecutionTree<IndexScan>(
+  auto index = makeExecutionTree<IndexScan>(
       qec, Permutation::POS,
       SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                          Iri::fromIriref("<c>")});
@@ -829,11 +830,12 @@ TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
       ad_utility::Exception);
 }
 
+namespace qlever {
 // _____________________________________________________________________________
 TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   auto* qec = getQec();
 
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
@@ -860,12 +862,13 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   EXPECT_THAT(existsJoin.joinColumns_,
               ::testing::ElementsAre(std::array<ColumnIndex, 2>{0, 0}));
 }
+}  // namespace qlever
 
 // _____________________________________________________________________________
 TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
   auto* qec = getQec();
 
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto subtree = makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
@@ -915,15 +918,15 @@ TEST(ExistsJoin, resultSortedOn) {
 
   auto getSortOrder = [&smaller](const IdTable& reference,
                                  std::vector<ColumnIndex> sortOrder) {
-    auto* qec = ad_utility::testing::getQec();
+    auto* qec = qlever::testing::getQec();
     ExistsJoin existsJoin{
         qec,
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, reference.clone(),
             std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"},
                                                  std::nullopt},
             false, std::move(sortOrder)),
-        ad_utility::makeExecutionTree<ValuesForTesting>(
+        makeExecutionTree<ValuesForTesting>(
             qec, smaller.clone(),
             std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"},
                                                  std::nullopt}),

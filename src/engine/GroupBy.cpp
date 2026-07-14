@@ -6,6 +6,8 @@
 
 #include "engine/GroupByImpl.h"
 
+using namespace qlever;
+
 // _____________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec,
                  std::unique_ptr<GroupByImpl>&& impl)
