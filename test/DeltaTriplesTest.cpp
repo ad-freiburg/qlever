@@ -1057,15 +1057,32 @@ TEST_F(DeltaTriplesTest, remapId) {
   auto I = &Id::makeFromInt;
   auto V = &makeVocabId;
   auto B = &makeBlankNodeId;
+  const IndexImpl& index = testQec->getIndex().getImpl();
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
-  Id entryId = makeLocalVocabId(10101010);
-  auto remap = [&idMapping](Id id) {
-    DeltaTriples::remapId(idMapping, id);
+  LocalVocab localVocab;
+
+  LocalVocabEntry sourceEntry =
+      LocalVocabEntry::fromStringRepresentation("<entry>", index);
+  Id entryId = Id::makeFromLocalVocabIndex(&sourceEntry);
+
+  auto remap = [&idMapping, &localVocab, &index](Id id) {
+    DeltaTriples::remapId(idMapping, id, localVocab, index);
     return id;
   };
 
   EXPECT_EQ(remap(I(69)), I(69));
-  EXPECT_EQ(remap(entryId), entryId);
+
+  // Without a mapping, a local vocab id is re-anchored: it now points into
+  // `localVocab` (so the id itself changes), but the referenced word is
+  // unchanged.
+  Id reAnchored = remap(entryId);
+  EXPECT_NE(reAnchored.getBits(), entryId.getBits());
+  EXPECT_EQ(localVocab.size(), 1);
+  ASSERT_EQ(reAnchored.getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(reAnchored.getLocalVocabIndex()->asLiteralOrIri(),
+            entryId.getLocalVocabIndex()->asLiteralOrIri());
+
+  // With a mapping, the id is replaced by the mapped id.
   idMapping.localVocabMapping_.emplace(entryId.getBits(), I(42));
   EXPECT_EQ(remap(entryId), I(42));
 

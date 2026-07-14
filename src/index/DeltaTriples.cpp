@@ -746,18 +746,7 @@ void DeltaTriples::addFromSnapshotDiff(
   tracer.beginTrace("computeLocatedTriplesDiff");
   auto difference = computeLocatedTriplesDiff(oldState, newState);
   difference.remapIds([this, &idMapping](Id& id) {
-    remapId(idMapping, id);
-    // Ids that remain of type `LocalVocabIndex` (words first seen by updates
-    // after the rebuild snapshot was taken) still point to entries that are
-    // anchored to the OLD index; in particular, their lazily cached position
-    // refers to the old vocabulary. Insert a *re-anchored* copy (anchored to
-    // the new index, with an empty position cache) into our local vocab and
-    // rewrite the id, so that no entry of the new index references the old
-    // index, which is destroyed after the swap.
-    if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      id = Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
-          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index_}));
-    }
+    remapId(idMapping, id, localVocab_, index_);
   });
   tracer.endTrace("computeLocatedTriplesDiff");
   tracer.beginTrace("insertDiffedTriples");
@@ -786,7 +775,8 @@ void DeltaTriples::addFromSnapshotDiff(
 
 // _____________________________________________________________________________
 AD_ALWAYS_INLINE void DeltaTriples::remapId(
-    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
+    LocalVocab& localVocab, const IndexImpl& index) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
                minBlankNodeIndex] = idMapping;
   auto type = id.getDatatype();
@@ -795,11 +785,19 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
   } else if (type == Datatype::LocalVocabIndex) {
     auto it = localVocabMapping.find(id.getBits());
     // If we have a mapping, this means that the new index used this to make a
-    // vocab index out of it and we have to do the same. If we don't have a
-    // mapping it remains a local vocab index; a re-anchored copy of its entry
-    // is then added to the delta triples vocabulary in `addFromSnapshotDiff`.
+    // vocab index out of it and we have to do the same.
     if (it != localVocabMapping.end()) {
       id = it->second;
+    } else {
+      // Without a mapping the id remains of type `LocalVocabIndex` (a word
+      // first seen by updates after the rebuild snapshot was taken). It still
+      // points to an entry that is anchored to the OLD index; in particular,
+      // its lazily cached position refers to the old vocabulary. Insert a
+      // *re-anchored* copy (anchored to the new index, with an empty position
+      // cache) into the local vocab and rewrite the id, so that no entry of the
+      // new index references the old index, which is destroyed after the swap.
+      id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index}));
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
