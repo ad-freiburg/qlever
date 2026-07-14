@@ -35,14 +35,17 @@ COPY GitVersion.cmake /qlever/
 # `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
 # `-march=native`.
 # `-fuse-ld=mold` uses the `mold` linker, which is faster and much more
-# memory-efficient than the default linker (this helps to avoid OOM-like
-# crashes on our ARM64 CI). `CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`
+# memory-efficient than the default linker. `CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`
 # defers GoogleTest test discovery from build time to test time, which avoids
-# running all test binaries in parallel right after building (another source of
-# excessive memory usage on the ARM64 CI).
+# running all test binaries while building/linking other tests. Both these
+# changes aim to mitigate crashes in the CI for ARM64 docker builds, which we
+# suspect to be caused by the OOM-killer.
+# `-Wno-psabi` silences very frequent notes in the ARM build that inform us that
+# QLever might not be ABI-compatible on ARM with software compiled on a compiler
+# older than GCC10.
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST -DCMAKE_CXX_FLAGS="-Wno-psabi" -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
