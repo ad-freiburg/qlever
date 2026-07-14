@@ -922,12 +922,15 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   using LeftBlocks = typename LeftSide::CurrentBlocks;
   using RightBlocks = typename RightSide::CurrentBlocks;
 
-// We can't define aliases for these concepts, so we use macros instead.
+// We can't define aliases for these concepts, so we use macros instead. They
+// expand to a type constraint on a template parameter in C++20 and to a plain
+// `typename` under the C++17 backports, so they can be used as
+// `template <Side S> ... f(S& side)`.
 #if defined(Side) || defined(Blocks)
 #error Side or Blocks are already defined
 #endif
-#define Side QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
-#define Blocks QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
+#define Side QL_CONCEPT_OR_TYPENAME(SameAsAny<LeftSide, RightSide>)
+#define Blocks QL_CONCEPT_OR_TYPENAME(SameAsAny<LeftBlocks, RightBlocks>)
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -946,7 +949,7 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
   ProjectedEl getCurrentEl() {
-    auto getFirst = [](const Side& side) -> ProjectedEl {
+    auto getFirst = [](const auto& side) -> ProjectedEl {
       return side.projection_(side.currentBlocks_.front().back());
     };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
@@ -960,11 +963,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // blocks that contain elements <= `currentEl` have been added, and `false` if
   // the function returned because `FETCH_BLOCKS` blocks were added without
   // fulfilling the condition.
-  CPP_template_2(typename S)(
-      requires SameAsAny<
-          S, LeftSide, RightSide>) bool fillEqualToCurrentEl(S& side,
-                                                             const ProjectedEl&
-                                                                 currentEl) {
+  template <Side S>
+  bool fillEqualToCurrentEl(S& side, const ProjectedEl& currentEl) {
     auto& it = side.it_;
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < FETCH_BLOCKS;
@@ -1012,12 +1012,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // `rightSide_.currentBlocks`) s.t. only elements `> lastProcessedElement`
   // remain. This effectively removes all blocks completely, except maybe the
   // last one.
-  CPP_template_2(typename B)(
-      requires SameAsAny<
-          B, LeftBlocks,
-          RightBlocks>) void removeEqualToCurrentEl(B& blocks,
-                                                    const ProjectedEl&
-                                                        lastProcessedElement) {
+  template <Blocks B>
+  void removeEqualToCurrentEl(B& blocks,
+                              const ProjectedEl& lastProcessedElement) {
     // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
     if (blocks.size() > 1 && !blocks.front().empty()) {
@@ -1041,11 +1038,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // * A reference to the first full block
   // * The currently active subrange of that block
   // * An iterator pointing to the first element ` >= currentEl` in the block.
-  CPP_template_2(typename B)(
-      requires SameAsAny<
-          B, LeftBlocks,
-          RightBlocks>) auto getFirstBlock(const B& currentBlocks,
-                                           const ProjectedEl& currentEl) {
+  template <Blocks B>
+  auto getFirstBlock(const B& currentBlocks, const ProjectedEl& currentEl) {
     AD_CORRECTNESS_CHECK(!currentBlocks.empty());
     const auto& first = currentBlocks.at(0);
     // TODO<joka921> ql::ranges::lower_bound doesn't work here.
@@ -1057,9 +1051,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   }
 
   // Check if a side contains undefined values.
-  CPP_template_2(typename S)(
-      requires SameAsAny<S, LeftSide,
-                         RightSide>) static bool hasUndef(const S& side) {
+  template <Side S>
+  static bool hasUndef(const S& side) {
     if constexpr (potentiallyHasUndef) {
       return !side.undefBlocks_.empty();
     }
@@ -1111,11 +1104,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // `currentEl`. Effectively, these subranges cover all the blocks completely
   // except maybe the last one, which might contain elements `> currentEl` at
   // the end.
-  CPP_template_2(typename B)(
-      requires SameAsAny<
-          B, LeftBlocks,
-          RightBlocks>) auto getEqualToCurrentEl(const B& blocks,
-                                                 const ProjectedEl& currentEl) {
+  template <Blocks B>
+  auto getEqualToCurrentEl(const B& blocks, const ProjectedEl& currentEl) {
     auto result = blocks;
     if (result.empty()) {
       return result;
@@ -1278,9 +1268,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 
   // If the `targetBuffer` is empty, read the next nonempty block from `[it,
   // end)` if there is one.
-  CPP_template_2(typename S)(
-      requires SameAsAny<S, LeftSide,
-                         RightSide>) void fillWithAtLeastOne(S& side) {
+  template <Side S>
+  void fillWithAtLeastOne(S& side) {
     auto& targetBuffer = side.currentBlocks_;
     auto& it = side.it_;
     const auto& end = side.end_;
@@ -1353,8 +1342,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
     auto equalToCurrentElRight =
         getEqualToCurrentEl(currentBlocksRight, currentEl);
 
-    auto getNextBlocks = [this, &currentEl, &blockStatus](Blocks& target,
-                                                          Side& side) {
+    auto getNextBlocks = [this, &currentEl, &blockStatus](auto& target,
+                                                          auto& side) {
       // Explicit this to avoid false positive warning in clang.
       this->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
       bool allBlocksWereFilled = fillEqualToCurrentEl(side, currentEl);
@@ -1435,12 +1424,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // Consume all remaining blocks from one side and add the Cartesian product of
   // those blocks with the undef blocks from the other side.
   // `reverse` is used to determine if the left or right side is consumed.
-  CPP_template_2(bool reversed, typename S, typename B)(
-      requires SameAsAny<S, LeftSide, RightSide> CPP_and_2
-          SameAsAny<B, LeftBlocks,
-                    RightBlocks>) void consumeRemainingBlocks(S& side,
-                                                              const B&
-                                                                  undefBlocks) {
+  template <bool reversed, Side S, Blocks B>
+  void consumeRemainingBlocks(S& side, const B& undefBlocks) {
     while (side.it_ != side.end_) {
       const auto& lBlock = *side.it_;
       for (const auto& rBlock : undefBlocks) {
@@ -1486,9 +1471,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // `side.undefBlocks_` and skipped for subsequent processing. The first block
   // containing defined values is split and the defined part is stored in
   // `side.currentBlocks_`.
-  CPP_template_2(typename S)(
-      requires SameAsAny<S, LeftSide,
-                         RightSide>) void findFirstBlockWithoutUndef(S& side) {
+  template <Side S>
+  void findFirstBlockWithoutUndef(S& side) {
     // The reference of `it` is there on purpose.
     for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
