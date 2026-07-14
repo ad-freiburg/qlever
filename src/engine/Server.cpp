@@ -68,11 +68,11 @@ Server::Server(
 
   metrics_ = std::make_unique<ServerMetrics>(
       [this]() -> int64_t {
-        return this->indexAndViewsSnapshot()
-            ->index_.deltaTriplesManager()
-            .getCurrentLocatedTriplesSharedState()
-            ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
-            .numTriplesForTesting();
+        auto [ins, del] = this->indexAndViewsSnapshot()
+                              ->index_.deltaTriplesManager()
+                              .getCurrentLocatedTriplesSharedState()
+                              ->counts_.value();
+        return ins + del;
       },
       [this]() -> int64_t { return allocator().amountMemoryLeft().getBytes(); },
       [this]() -> int64_t {

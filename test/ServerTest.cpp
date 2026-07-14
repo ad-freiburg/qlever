@@ -553,7 +553,6 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_started_total";
   std::string_view QleverSparqlOperationRunning =
       "qlever_sparql_operation_running";
-  std::string_view QleverHttpErrorsTotal = "qlever_http_errors_total";
   std::string_view QleverSparqlOperationErrorsTotal =
       "qlever_sparql_operation_errors_total";
   ExpectMetricsChange(
