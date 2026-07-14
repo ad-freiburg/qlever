@@ -64,7 +64,6 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
                               const std::vector<InsertionInfo>& insertInfo) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
   LocalVocabMapping localVocabMapping;
-  using IndexAndWord = std::pair<VocabIndex, std::string_view>;
   auto writeWordFromVocab = [&vocab,
                              &vocabWriter](const IndexAndWord& indexAndWord) {
     const auto& [_, word] = indexAndWord;
@@ -80,26 +79,17 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
       };
   ad_utility::OverloadCallOperator writer{std::move(writeWordFromVocab),
                                           std::move(writeWordFromLocalVocab)};
-  // All words of the original vocabulary, paired with their index. The words
-  // are read in batches via `scanAll`, which is much faster than looking up
-  // each word individually via `operator[]`.
-  auto vocabWords =
-      ::ranges::views::zip(::ranges::views::iota(uint64_t{0}),
-                           ad_utility::OwningView{vocab.scanAll()}) |
-      ::ranges::views::transform([](const auto& indexAndWord) -> IndexAndWord {
-        return {VocabIndex::make(indexAndWord.first), indexAndWord.second};
-      });
   ql::ranges::merge(
-      vocabWords, insertInfo, ad_utility::IteratorForAssigmentOperator{writer},
-      {},
+      vocab.scanAll(), insertInfo,
+      ad_utility::IteratorForAssigmentOperator{writer}, {},
       // The tags ensure that the local vocab entries are sorted before all the
       // original vocab entries, even if they share the same vocab index as
       // insertion position.
       [tag = 1](const IndexAndWord& indexAndWord) {
-        return std::tie(indexAndWord.first, tag);
+        return std::tie(indexAndWord.index_, tag);
       },
       [tag = 0](const InsertionInfo& info) {
-        return std::tie(info.insertionPosition_, tag);
+        return std::tie(info.insertionPosition_.get(), tag);
       });
   return localVocabMapping;
 }

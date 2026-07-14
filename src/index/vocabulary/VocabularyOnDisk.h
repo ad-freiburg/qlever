@@ -74,10 +74,11 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   std::string operator[](uint64_t idx) const;
 
   // Efficient iteration over all words in the vocabulary, in order, yielded as
-  // single `string_view`s. Internally the words are read in batches, each
-  // produced by two large sequential reads (offsets and word data). This is
-  // much faster than looking up the words one at a time via `operator[]`,
-  // which performs two small `pread`s and allocates a string per word.
+  // `IndexAndWord`s (the word as a `string_view` together with its index).
+  // Internally the words are read in batches, each produced by two large
+  // sequential reads (offsets and word data). This is much faster than looking
+  // up the words one at a time via `operator[]`, which performs two small
+  // `pread`s and allocates a string per word.
   VocabularyScanRange scanAll() const;
 
   // Get the number of words in the vocabulary.

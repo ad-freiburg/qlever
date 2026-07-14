@@ -71,6 +71,9 @@ class GeoVocabulary {
   decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
 
   // ___________________________________________________________________________
+  auto scanAll() const { return literals_.scanAll(); }
+
+  // ___________________________________________________________________________
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 
   // ___________________________________________________________________________

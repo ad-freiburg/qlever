@@ -51,13 +51,17 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   EXPECT_EQ(vocab.isGeoInfoAvailable(),
             vocabType == VocabularyType::Enum::OnDiskCompressedGeoSplit);
 
-  // `scanAll` must enumerate all words in order, for every vocabulary type
-  // (implementations without a specialized `scanAll` use a generic fallback).
-  std::vector<std::string> scanned;
-  for (std::string_view word : vocab.scanAll()) {
-    scanned.emplace_back(word);
+  // `scanAll` must enumerate all words in order together with their index, for
+  // every vocabulary type (implementations without a specialized `scanAll` use
+  // a generic fallback). Here all words are in the main vocabulary, so the
+  // indices are simply `0, 1, 2`.
+  std::vector<std::pair<uint64_t, std::string>> scanned;
+  for (const IndexAndWord& indexAndWord : vocab.scanAll()) {
+    scanned.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
   }
-  EXPECT_THAT(scanned, ::testing::ElementsAre("alpha", "beta", "gamma"));
+  EXPECT_THAT(scanned, ::testing::ElementsAre(std::pair{uint64_t{0}, "alpha"},
+                                              std::pair{uint64_t{1}, "beta"},
+                                              std::pair{uint64_t{2}, "gamma"}));
 }
 }  // namespace
 

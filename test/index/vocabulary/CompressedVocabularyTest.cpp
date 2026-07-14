@@ -190,9 +190,10 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
   // Abandon a scan early; the destructor has to clean up properly.
   {
     auto range = vocab.scanAll();
-    auto word = range.get();
-    ASSERT_TRUE(word.has_value());
-    EXPECT_EQ(word.value(), words.at(0));
+    auto indexAndWord = range.get();
+    ASSERT_TRUE(indexAndWord.has_value());
+    EXPECT_EQ(indexAndWord.value().index_, 0);
+    EXPECT_EQ(indexAndWord.value().word_, words.at(0));
   }
 }
 

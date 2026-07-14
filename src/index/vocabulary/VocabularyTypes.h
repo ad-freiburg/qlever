@@ -104,10 +104,21 @@ struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
 struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
+// A single entry yielded by a vocabulary's `scanAll`: a word together with its
+// index in the vocabulary. For most vocabularies the indices are simply
+// `0, 1, 2, ...`, but e.g. a `SplitVocabulary` yields the (non-contiguous)
+// marker-encoded indices that its `operator[]` expects.
+struct IndexAndWord {
+  uint64_t index_;
+  std::string_view word_;
+
+  // Comparison (mostly for tests).
+  bool operator==(const IndexAndWord&) const = default;
+};
+
 // The result type of every vocabulary's `scanAll`: a type-erased input range
-// that yields all words of the vocabulary in order, one `std::string_view` at
-// a time.
-using VocabularyScanRange = ad_utility::InputRangeTypeErased<std::string_view>;
+// that yields all words of the vocabulary in order, together with their index.
+using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 
 namespace ad_utility::vocabulary {
 
@@ -126,17 +137,18 @@ template <typename Vocab>
 auto scanAllViaOperatorBracket(const Vocab* vocab) {
   return InputRangeFromGetCallable{
       [vocab, nextIdx = uint64_t{0},
-       buffer = std::string{}]() mutable -> std::optional<std::string_view> {
+       buffer = std::string{}]() mutable -> std::optional<IndexAndWord> {
         if (nextIdx >= vocab->size()) {
           return std::nullopt;
         }
-        decltype(auto) word = (*vocab)[nextIdx++];
+        uint64_t index = nextIdx++;
+        decltype(auto) word = (*vocab)[index];
         if constexpr (std::is_same_v<std::decay_t<decltype(word)>,
                                      std::string_view>) {
-          return word;
+          return IndexAndWord{index, word};
         } else {
           buffer = std::move(word);
-          return std::string_view{buffer};
+          return IndexAndWord{index, std::string_view{buffer}};
         }
       }};
 }

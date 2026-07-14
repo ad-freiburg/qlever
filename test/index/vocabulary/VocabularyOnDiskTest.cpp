@@ -160,6 +160,14 @@ TEST(VocabularyOnDisk, ScanAll) {
 
   using ::testing::ElementsAreArray;
   EXPECT_THAT(scanAllToVector(vocabulary.scanAll()), ElementsAreArray(words));
+
+  // The indices are contiguous (`0, 1, 2, ...`), also across batch boundaries.
+  auto indexAndWords = scanAllToIndexAndWordVector(vocabulary.scanAll());
+  ASSERT_EQ(indexAndWords.size(), words.size());
+  for (size_t i = 0; i < words.size(); ++i) {
+    EXPECT_EQ(indexAndWords[i].first, i);
+    EXPECT_EQ(indexAndWords[i].second, words[i]);
+  }
 }
 
 // _____________________________________________________________________________

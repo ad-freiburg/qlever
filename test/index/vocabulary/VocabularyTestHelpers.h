@@ -269,11 +269,26 @@ auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
 }
 
-// Collect all words that the given `scanAll` result yields into a vector.
-inline std::vector<std::string> scanAllToVector(VocabularyScanRange range) {
+// Collect all words that the given `scanAll` result yields into a vector. This
+// is a template because the different vocabularies return different (concrete
+// or type-erased `VocabularyScanRange`) range types from `scanAll`.
+template <typename Range>
+std::vector<std::string> scanAllToVector(Range&& range) {
   std::vector<std::string> result;
-  for (std::string_view word : range) {
-    result.emplace_back(word);
+  for (const IndexAndWord& indexAndWord : range) {
+    result.emplace_back(indexAndWord.word_);
+  }
+  return result;
+}
+
+// Collect all `{index, word}` pairs that the given `scanAll` result yields into
+// a vector.
+template <typename Range>
+std::vector<std::pair<uint64_t, std::string>> scanAllToIndexAndWordVector(
+    Range&& range) {
+  std::vector<std::pair<uint64_t, std::string>> result;
+  for (const IndexAndWord& indexAndWord : range) {
+    result.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
   }
   return result;
 }

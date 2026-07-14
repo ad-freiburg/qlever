@@ -59,20 +59,20 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
-  // words in batches) and decompresses each word. The decompressed word is kept
-  // in a buffer so that a `string_view` to it can be yielded.
+  // words in batches) and decompress each word. The decompressed word is kept
+  // in a buffer so that a `string_view` to it can be yielded. The index needed
+  // for choosing the decoder is taken directly from the underlying range.
   auto scanAll() const {
     return ad_utility::InputRangeFromGetCallable{
         [this, underlying = underlyingVocabulary_.scanAll(),
-         wordIdx = uint64_t{0},
-         buffer = std::string{}]() mutable -> std::optional<std::string_view> {
-          std::optional<std::string_view> compressed = underlying.get();
+         buffer = std::string{}]() mutable -> std::optional<IndexAndWord> {
+          std::optional<IndexAndWord> compressed = underlying.get();
           if (!compressed.has_value()) {
             return std::nullopt;
           }
-          buffer = compressionWrapper_.decompress(compressed.value(),
-                                                  getDecoderIdx(wordIdx++));
-          return std::string_view{buffer};
+          const auto& [index, word] = compressed.value();
+          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
+          return IndexAndWord{index, std::string_view{buffer}};
         }};
   }
 

@@ -41,31 +41,34 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
   // offsets and the concatenated word data are read with a single large
   // sequential read each (instead of two small `pread`s per word as in
   // `operator[]`). The individual words are then yielded as `string_view`s
-  // into the batch's `data` buffer.
-  auto getWord = [this, nextIdx = uint64_t{0}, data = std::string{},
-                  offsets = std::vector<uint64_t>{}, posInBatch = size_t{0}](
-                     ) mutable -> std::optional<std::string_view> {
+  // into the batch's `data` buffer, together with their (contiguous) index.
+  auto getWord = [this, batchStart = uint64_t{0}, data = std::string{},
+                  offsets = std::vector<uint64_t>{},
+                  posInBatch =
+                      size_t{0}]() mutable -> std::optional<IndexAndWord> {
     if (posInBatch + 1 >= offsets.size()) {
       // The current batch is exhausted (or we haven't read any batch yet).
-      if (nextIdx >= size()) {
+      batchStart += posInBatch;
+      if (batchStart >= size()) {
         return std::nullopt;
       }
       // Read the offsets of the next `numWords` words plus the end offset of
       // the last one, then the word data itself, each in a single read.
       size_t numWords = std::min<size_t>(
-          ad_utility::vocabulary::scanAllBatchSize, size() - nextIdx);
+          ad_utility::vocabulary::scanAllBatchSize, size() - batchStart);
       offsets.resize(numWords + 1);
       offsetsFile_.read(offsets.data(), (numWords + 1) * sizeof(uint64_t),
-                        static_cast<off_t>(nextIdx * sizeof(uint64_t)));
+                        static_cast<off_t>(batchStart * sizeof(uint64_t)));
       data.resize(offsets[numWords] - offsets[0]);
       file_.read(data.data(), data.size(), static_cast<off_t>(offsets[0]));
-      nextIdx += numWords;
       posInBatch = 0;
     }
     size_t begin = offsets[posInBatch] - offsets[0];
     size_t end = offsets[posInBatch + 1] - offsets[0];
+    uint64_t index = batchStart + posInBatch;
     ++posInBatch;
-    return std::string_view{data.data() + begin, end - begin};
+    return IndexAndWord{index,
+                        std::string_view{data.data() + begin, end - begin}};
   };
   return VocabularyScanRange{
       ad_utility::InputRangeFromGetCallable{std::move(getWord)}};

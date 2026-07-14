@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <variant>
 
@@ -166,9 +167,39 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
-  // Default fallback iteration over all words.
+  // Iterate over all words of all underlying vocabularies, one after the other.
+  // The generic `scanAllViaOperatorBracket` fallback cannot be used here,
+  // because it would feed plain indices `[0, size())` into the marker-aware
+  // `operator[]`. Instead we concatenate the `scanAll` ranges of the individual
+  // underlying vocabularies.
   auto scanAll() const {
-    return ad_utility::vocabulary::scanAllViaOperatorBracket(this);
+    return ad_utility::InputRangeFromGetCallable{
+        [this, marker = uint8_t{0},
+         current = std::optional<VocabularyScanRange>{}]() mutable
+        -> std::optional<IndexAndWord> {
+          while (true) {
+            if (!current.has_value()) {
+              if (marker >= numberOfVocabs) {
+                return std::nullopt;
+              }
+              current = std::visit(
+                  [](const auto& vocab) {
+                    return VocabularyScanRange{vocab.scanAll()};
+                  },
+                  underlying_[marker]);
+            }
+            if (std::optional<IndexAndWord> next = current->get();
+                next.has_value()) {
+              // Re-encode the sub-vocabulary-local index into the global,
+              // marker-encoded index that `operator[]` expects.
+              return IndexAndWord{addMarker(next->index_, marker), next->word_};
+            }
+            // The current underlying vocabulary is exhausted, continue with the
+            // next one.
+            current.reset();
+            ++marker;
+          }
+        }};
   }
 
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
