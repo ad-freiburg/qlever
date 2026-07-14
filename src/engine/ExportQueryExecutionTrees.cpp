@@ -86,7 +86,8 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
   };
 
   // Return the result in the requested format.
-  using enum ad_utility::MediaType;
+  constexpr auto sparqlJson = ad_utility::MediaType::sparqlJson,
+                 sparqlXml = ad_utility::MediaType::sparqlXml;
   switch (mediaType) {
     case sparqlXml:
       STREAMABLE_YIELD(getXmlResult());
@@ -454,7 +455,11 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  using enum ad_utility::MediaType;
+  constexpr auto octetStream = ad_utility::MediaType::octetStream,
+                 csv = ad_utility::MediaType::csv,
+                 tsv = ad_utility::MediaType::tsv,
+                 turtle = ad_utility::MediaType::turtle,
+                 qleverJson = ad_utility::MediaType::qleverJson;
   static constexpr std::array supportedFormats{octetStream, csv, tsv, turtle,
                                                qleverJson};
   static_assert(ad_utility::contains(supportedFormats, format));
@@ -762,7 +767,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  using enum MediaType;
+  constexpr auto octetStream = MediaType::octetStream, csv = MediaType::csv,
+                 tsv = MediaType::tsv, sparqlXml = MediaType::sparqlXml,
+                 sparqlJson = MediaType::sparqlJson,
+                 qleverJson = MediaType::qleverJson, turtle = MediaType::turtle,
+                 binaryQleverExport = MediaType::binaryQleverExport;
   static constexpr std::array supportedFormats{
       octetStream, csv,        tsv,    sparqlXml,
       sparqlJson,  qleverJson, turtle, binaryQleverExport};
@@ -882,7 +891,12 @@ ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  using enum MediaType;
+  constexpr auto csv = MediaType::csv, tsv = MediaType::tsv,
+                 octetStream = MediaType::octetStream,
+                 turtle = MediaType::turtle, sparqlXml = MediaType::sparqlXml,
+                 sparqlJson = MediaType::sparqlJson,
+                 qleverJson = MediaType::qleverJson,
+                 binaryQleverExport = MediaType::binaryQleverExport;
 
   static constexpr std::array supportedTypes{
       csv,       tsv,        octetStream, turtle,

@@ -992,7 +992,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   using V = Variable;
   using PV = PayloadVariables;
   auto scan = h::IndexScanFromStrings;
-  using enum SpatialJoinAlgorithm;
+  constexpr auto S2_POINT_POLYLINE = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
 
   std::string kb =
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
@@ -1413,7 +1413,15 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  using enum SpatialJoinType;
+  constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS,
+                 CONTAINS = SpatialJoinType::CONTAINS,
+                 COVERS = SpatialJoinType::COVERS,
+                 CROSSES = SpatialJoinType::CROSSES,
+                 TOUCHES = SpatialJoinType::TOUCHES,
+                 EQUALS = SpatialJoinType::EQUALS,
+                 OVERLAPS = SpatialJoinType::OVERLAPS,
+                 WITHIN = SpatialJoinType::WITHIN,
+                 WITHIN_DIST = SpatialJoinType::WITHIN_DIST;
 
   std::vector<std::pair<std::string, SpatialJoinType>>
       geofFunctionNameAndSJType{

@@ -146,6 +146,6 @@ TEST(SetOfIntervals, toBitVector) {
   auto expanded = SetOfIntervals::toBitVector(a, 200);
   ASSERT_EQ(200ul, expanded.size());
   for (size_t i = 0; i < expanded.size(); ++i) {
-    ASSERT_EQ(elements.contains(i), expanded[i]);
+    ASSERT_EQ(elements.find(i) != elements.end(), expanded[i]);
   }
 }

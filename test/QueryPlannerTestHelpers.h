@@ -356,6 +356,10 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
 inline auto CartesianProductJoin =
     MatchTypeAndUnorderedChildren<::CartesianProductJoin>;
 
+// `TransitivePathBase` is excluded under the reduced C++17 feature set (see
+// `engine/TransitivePathBase.h`), so the following matchers, which depend on
+// it, are excluded as well.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
   return AllOf(AD_FIELD(TransitivePathSide, value_, Eq(side.value_)),
                AD_FIELD(TransitivePathSide, subCol_, Eq(side.subCol_)),
@@ -380,6 +384,7 @@ struct TransitivePath {
   }
 };
 constexpr inline TransitivePath transitivePath;
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
   auto sourceMatcher =
@@ -603,9 +608,9 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
         plan._idsOfIncludedFilters |= 1ull << i;
         plan.containsFilterSubstitute_ = true;
 
-        plans.emplace_back(filterExpression, plan);
+        plans.push_back({filterExpression, plan});
       } else {
-        plans.emplace_back(filterExpression, std::nullopt);
+        plans.push_back({filterExpression, std::nullopt});
       }
     }
     return plans;

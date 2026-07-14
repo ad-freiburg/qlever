@@ -18,7 +18,19 @@ using ad_utility::source_location;
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, KmToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 FEET = UnitOfMeasurement::FEET,
+                 YARDS = UnitOfMeasurement::YARDS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto kmToUnit = kilometerToUnit;
   const double error = 0.0001;
 
@@ -60,7 +72,19 @@ TEST(GeoSparqlHelpers, KmToUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, UnitToKm) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 FEET = UnitOfMeasurement::FEET,
+                 YARDS = UnitOfMeasurement::YARDS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto toKm = valueInUnitToKilometer;
   const double error = 0.0001;
 
@@ -102,7 +126,19 @@ TEST(GeoSparqlHelpers, UnitToKm) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, SqMeterToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 FEET = UnitOfMeasurement::FEET,
+                 YARDS = UnitOfMeasurement::YARDS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto m2ToUnit = squareMeterToUnit;
   const double error = 0.0001;
 
@@ -145,7 +181,19 @@ TEST(GeoSparqlHelpers, SqMeterToUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IsLengthUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 FEET = UnitOfMeasurement::FEET,
+                 YARDS = UnitOfMeasurement::YARDS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN;
 
   EXPECT_TRUE(isLengthUnit(METERS));
   EXPECT_TRUE(isLengthUnit(KILOMETERS));
@@ -167,7 +215,19 @@ TEST(GeoSparqlHelpers, IsLengthUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IsAreaUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 FEET = UnitOfMeasurement::FEET,
+                 YARDS = UnitOfMeasurement::YARDS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN;
 
   EXPECT_TRUE(isAreaUnit(SQUARE_METERS));
   EXPECT_TRUE(isAreaUnit(SQUARE_KILOMETERS));
@@ -189,7 +249,19 @@ TEST(GeoSparqlHelpers, IsAreaUnit) {
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, IriToUnit) {
   using namespace ad_utility::detail;
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 FEET = UnitOfMeasurement::FEET,
+                 YARDS = UnitOfMeasurement::YARDS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN;
   auto iriToUnit = iriToUnitOfMeasurement;
 
   EXPECT_EQ(iriToUnit(""), UNKNOWN);

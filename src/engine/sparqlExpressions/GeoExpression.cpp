@@ -255,7 +255,14 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
   // Check against all possible geo relation types
   std::optional<GeoFunctionCall> res;
-  using enum SpatialJoinType;
+  constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS,
+                 CONTAINS = SpatialJoinType::CONTAINS,
+                 COVERS = SpatialJoinType::COVERS,
+                 CROSSES = SpatialJoinType::CROSSES,
+                 TOUCHES = SpatialJoinType::TOUCHES,
+                 EQUALS = SpatialJoinType::EQUALS,
+                 OVERLAPS = SpatialJoinType::OVERLAPS,
+                 WITHIN = SpatialJoinType::WITHIN;
 
   // TODO<C++26 reflection> get all values of `SpatialJoinType` enum
   if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {

@@ -13,6 +13,7 @@
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Iterators.h"
+#include "util/LambdaHelpers.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {
   auto it = begin;
@@ -72,15 +73,17 @@ TEST(RandomAccessIterator, DummyRandomAccessContainer) {
     [[nodiscard]] auto size() const { return 43; }
   };
 
-  auto getFromTestContainer = [](const TestRandomAccessContainer& container,
-                                 uint64_t i) { return container.get(i); };
+  auto getFromTestContainer = ad_utility::makeAssignableLambda(
+      [](const TestRandomAccessContainer& container, uint64_t i) {
+        return container.get(i);
+      });
 
   using Iterator =
       ad_utility::IteratorForAccessOperator<TestRandomAccessContainer,
                                             decltype(getFromTestContainer)>;
   TestRandomAccessContainer d;
-  Iterator begin = Iterator{&d, 0};
-  Iterator end = Iterator{&d, 43};
+  Iterator begin = Iterator{&d, 0, getFromTestContainer};
+  Iterator end = Iterator{&d, 43, getFromTestContainer};
   testIterator(d, begin, end);
 }
 

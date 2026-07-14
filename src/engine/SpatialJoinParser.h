@@ -35,6 +35,10 @@ inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
 }
+inline bool operator!=(const SpatialJoinParseJob& a,
+                       const SpatialJoinParseJob& b) {
+  return !(a == b);
+}
 
 // Custom parallel WKT parser, which receives only `ValueId`s instead of
 // literals and fetches the corresponding bounding boxes and literals from the

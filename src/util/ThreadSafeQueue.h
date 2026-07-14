@@ -36,6 +36,21 @@ class ThreadSafeQueue {
   bool finish_ = false;
   size_t maxSize_;
 
+  // Functor for `finish()` below. A named (rather than local lambda) type is
+  // used here because GCC fails to emit a definition for a `concepts`-library
+  // helper function when it is instantiated with a lambda type that is local
+  // to an inline member function, under `-std=gnu++17`.
+  struct FinishAction {
+    ThreadSafeQueue* self_;
+    void operator()() const {
+      std::unique_lock lock{self_->mutex_};
+      self_->finish_ = true;
+      lock.unlock();
+      self_->pushNotification_.notify_all();
+      self_->popNotification_.notify_all();
+    }
+  };
+
  public:
   using value_type = T;
   explicit ThreadSafeQueue(size_t maxSize) : maxSize_{maxSize} {}
@@ -101,13 +116,7 @@ class ThreadSafeQueue {
     // never appear in practice and are almost impossible to recover from,
     // so we terminate the program in the unlikely case.
     ad_utility::terminateIfThrows(
-        [this] {
-          std::unique_lock lock{mutex_};
-          finish_ = true;
-          lock.unlock();
-          pushNotification_.notify_all();
-          popNotification_.notify_all();
-        },
+        FinishAction{this},
         "Locking or unlocking a mutex in a threadsafe queue failed.");
   }
 
@@ -156,6 +165,21 @@ class OrderedThreadSafeQueue {
   ThreadSafeQueue<T> queue_;
   size_t nextIndex_ = 0;
   bool finish_ = false;
+
+  // Functor for `finish()` below. A named (rather than local lambda) type is
+  // used here because GCC fails to emit a definition for a `concepts`-library
+  // helper function when it is instantiated with a lambda type that is local
+  // to an inline member function, under `-std=gnu++17`.
+  struct FinishAction {
+    OrderedThreadSafeQueue* self_;
+    void operator()() const {
+      self_->queue_.finish();
+      std::unique_lock lock{self_->mutex_};
+      self_->finish_ = true;
+      lock.unlock();
+      self_->cv_.notify_all();
+    }
+  };
 
  public:
   using value_type = T;
@@ -209,13 +233,7 @@ class OrderedThreadSafeQueue {
     // the implementation ever change, make sure that it is still
     // `noexcept`.
     ad_utility::terminateIfThrows(
-        [this] {
-          queue_.finish();
-          std::unique_lock lock{mutex_};
-          finish_ = true;
-          lock.unlock();
-          cv_.notify_all();
-        },
+        FinishAction{this},
         "Locking or unlocking a mutex in an OrderedThreadsafeQueue "
         "failed.");
   }

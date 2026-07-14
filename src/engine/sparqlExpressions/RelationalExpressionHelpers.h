@@ -73,7 +73,8 @@ CPP_concept AreComparable =
 // cascade possible.
 template <Comparison Comp, typename Dummy = int, typename A, typename B>
 bool applyComparison(const A& a, const B& b) {
-  using enum Comparison;
+  constexpr auto LT = Comparison::LT, LE = Comparison::LE, EQ = Comparison::EQ,
+                 NE = Comparison::NE, GE = Comparison::GE, GT = Comparison::GT;
   if constexpr (Comp == LT) {
     return a < b;
   } else if constexpr (Comp == LE) {

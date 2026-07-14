@@ -236,10 +236,12 @@ class CopyShield {
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(T)
 
-  CPP_member auto operator==(const T& other) const
-      -> CPP_ret(bool)(requires ql::concepts::equality_comparable<T>) {
-    return *pointer_ == other;
-  }
+  bool operator==(const T& other) const { return *pointer_ == other; }
+  // Unlike C++20, C++17 doesn't consider the reversed argument order
+  // (`b == a`) as a candidate for `a == b`, so the `T == CopyShield<T>`
+  // direction has to be provided explicitly, in addition to the member
+  // `operator==` above for the `CopyShield<T> == T` direction.
+  friend bool operator==(const T& a, const CopyShield& b) { return b == a; }
 
   friend std::ostream& operator<<(std::ostream& os, const CopyShield& s) {
     os << *s.pointer_;

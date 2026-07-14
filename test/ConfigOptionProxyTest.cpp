@@ -6,8 +6,6 @@
 
 #include <gtest/gtest.h>
 
-#include <concepts>
-
 #include "../test/util/ConfigOptionHelpers.h"
 #include "../test/util/GTestHelpers.h"
 #include "backports/type_traits.h"
@@ -38,7 +36,7 @@ struct DoTest {
     T varForConfigOption;
     auto opt = OptionType("testOption", "", &varForConfigOption);
     ASSERT_EQ(&opt, &ProxyType<T>(opt).getConfigOption());
-    static_assert(std::same_as<T, typename ProxyType<T>::value_type>);
+    static_assert(ql::concepts::same_as<T, typename ProxyType<T>::value_type>);
 
     // Is there an exception, if we give a config option of the wrong type?
     doForTypeInConfigOptionValueType(TestWrongType<T>{opt});

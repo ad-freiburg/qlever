@@ -14,15 +14,24 @@
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
+// The `<coroutine>` header does not exist in GCC 8's libstdc++, so it (and
+// the Boost.Asio macros that enable coroutine support) must not be included
+// under `QLEVER_CPP_17`. This is safe because the parts of the codebase that
+// need actual coroutine support (in particular the `server` library) are
+// already excluded from the C++17 reduced feature set.
+#ifndef QLEVER_CPP_17
 #include <coroutine>
+#endif
 #include <utility>
 
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
+#ifndef QLEVER_CPP_17
 #ifndef BOOST_ASIO_HAS_CO_AWAIT
 #define BOOST_ASIO_HAS_CO_AWAIT
 #endif
 #ifndef BOOST_ASIO_HAS_STD_COROUTINE
 #define BOOST_ASIO_HAS_STD_COROUTINE
+#endif
 #endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.

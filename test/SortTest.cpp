@@ -439,7 +439,7 @@ TEST(Sort, limitOffsetIsPropagated) {
   sort.applyLimitOffset({2, 1});
 
   EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-            LimitOffsetClause(2, 1));
+            (LimitOffsetClause{2, 1}));
   // We expect that the original subtree is unchanged.
   EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
 }
@@ -460,7 +460,7 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
 
   sort->applyLimitOffset({2, 1});
 
-  EXPECT_EQ(sort->getLimitOffset(), LimitOffsetClause(2, 1));
+  EXPECT_EQ(sort->getLimitOffset(), (LimitOffsetClause{2, 1}));
   EXPECT_TRUE(sort->getChildren()
                   .at(0)
                   ->getRootOperation()

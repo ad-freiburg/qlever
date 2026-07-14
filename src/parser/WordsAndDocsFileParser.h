@@ -121,6 +121,17 @@ struct LiteralsTokenizationDelimiter {
   }
 };
 
+// Functor for `tokenizeAndNormalizeText` below. A named (rather than local
+// lambda) type is used here because GCC 11 fails to emit a definition for
+// `ranges::indirected<Fn>`'s constructor when `Fn` is a lambda type local to
+// an inline function, under `-std=gnu++17`.
+struct LowercaseUtf8Getter {
+  const LocaleManager& localeManager_;
+  std::string operator()(std::string_view str) const {
+    return localeManager_.getLowercaseUtf8(str);
+  }
+};
+
 /**
  * @brief A function that can be used to tokenize and normalize a given text.
  * @warning Both params are const refs where the original objects have to be
@@ -137,9 +148,7 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
   std::vector<std::string_view> split{
       absl::StrSplit(text, LiteralsTokenizationDelimiter{}, absl::SkipEmpty{})};
   return ql::views::transform(ad_utility::OwningView{std::move(split)},
-                              [&localeManager](const auto& str) {
-                                return localeManager.getLowercaseUtf8(str);
-                              });
+                              LowercaseUtf8Getter{localeManager});
 }
 /**
  * @brief This class is the parent class of WordsFileParser and DocsFileParser

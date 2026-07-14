@@ -678,7 +678,8 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using ad_utility::MemorySize;
   using V = Variable;
   using I = TripleComponent::Iri;
-  using enum Permutation::Enum;
+  constexpr auto PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 SPO = Permutation::Enum::SPO;
   auto qec = getQecWithoutPatterns();
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");
@@ -1206,23 +1207,35 @@ TEST_P(IndexScanWithLazyJoin,
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](auto* self) -> Result::Generator {
+  auto makeJoinSide = [](auto* self) {
     using P = Result::IdTableVocabPair;
-    P p1{IdTable{1, makeAllocator()}, LocalVocab{}};
-    co_yield p1;
-    P p2{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
-    co_yield p2;
-    P p3{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
-    co_yield p3;
-    P p4{IdTable{1, makeAllocator()}, LocalVocab{}};
-    co_yield p4;
-    P p5{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
-    co_yield p5;
-    P p6{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-         LocalVocab{}};
-    co_yield p6;
-    P p7{IdTable{1, makeAllocator()}, LocalVocab{}};
-    co_yield p7;
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::InputRangeFromGetCallable{
+            [self, i = 0]() mutable -> std::optional<P> {
+              switch (i++) {
+                case 0:
+                  return P{IdTable{1, makeAllocator()}, LocalVocab{}};
+                case 1:
+                  return P{makeIdTableFromVector({{Id::makeUndefined()}}),
+                           LocalVocab{}};
+                case 2:
+                  return P{makeIdTableFromVector({{Id::makeUndefined()}}),
+                           LocalVocab{}};
+                case 3:
+                  return P{IdTable{1, makeAllocator()}, LocalVocab{}};
+                case 4:
+                  return P{self->makeIdTable({iri("<a>"), iri("<c>")}),
+                           LocalVocab{}};
+                case 5:
+                  return P{
+                      self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+                      LocalVocab{}};
+                case 6:
+                  return P{IdTable{1, makeAllocator()}, LocalVocab{}};
+                default:
+                  return std::nullopt;
+              }
+            }}};
   };
 
   auto [_, scanResults] =
@@ -1258,10 +1271,18 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = []() -> Result::Generator {
+  auto makeJoinSide = []() {
     using P = Result::IdTableVocabPair;
-    P p1{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
-    co_yield p1;
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::InputRangeFromGetCallable{
+            [yielded = false]() mutable -> std::optional<P> {
+              if (yielded) {
+                return std::nullopt;
+              }
+              yielded = true;
+              return P{makeIdTableFromVector({{Id::makeUndefined()}}),
+                       LocalVocab{}};
+            }}};
   };
 
   auto [_, scanResults] =
@@ -1289,10 +1310,17 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
 TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = []() -> Result::Generator {
+  auto makeJoinSide = []() {
     using P = Result::IdTableVocabPair;
-    P p{IdTable{1, makeAllocator()}, LocalVocab{}};
-    co_yield p;
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::InputRangeFromGetCallable{
+            [yielded = false]() mutable -> std::optional<P> {
+              if (yielded) {
+                return std::nullopt;
+              }
+              yielded = true;
+              return P{IdTable{1, makeAllocator()}, LocalVocab{}};
+            }}};
   };
 
   auto [_, scanResults] =
@@ -1313,7 +1341,13 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
 TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
   IndexScan scan = makeScan();
 
-  auto makeJoinSide = []() -> Result::Generator { co_return; };
+  auto makeJoinSide = []() {
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::InputRangeFromGetCallable{
+            []() -> std::optional<Result::IdTableVocabPair> {
+              return std::nullopt;
+            }}};
+  };
 
   auto [_, scanResults] =
       consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
@@ -1335,11 +1369,15 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
   SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
   IndexScan scan{qec, Permutation::PSO, xpy};
 
-  auto makeJoinSide = []() -> Result::Generator {
-    ADD_FAILURE()
-        << "The generator should not be consumed when the IndexScan is empty."
-        << std::endl;
-    co_return;
+  auto makeJoinSide = []() {
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::InputRangeFromGetCallable{
+            []() -> std::optional<Result::IdTableVocabPair> {
+              ADD_FAILURE() << "The generator should not be consumed when "
+                               "the IndexScan is empty."
+                            << std::endl;
+              return std::nullopt;
+            }}};
   };
 
   auto [leftGenerator, rightGenerator] =

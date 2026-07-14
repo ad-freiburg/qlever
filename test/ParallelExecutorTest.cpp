@@ -18,7 +18,13 @@ TEST(ParallelExecutor, noTasks) { ad_utility::runTasksInParallel({}); }
 TEST(ParallelExecutor, singleTask) {
   bool executed = false;
   std::vector<std::packaged_task<void()>> tasks;
-  tasks.push_back(std::packaged_task{[&executed]() { executed = true; }});
+  // The template argument of `std::packaged_task` has to be specified
+  // explicitly here (rather than relying on class template argument
+  // deduction from the lambda), because GCC 8's libstdc++ predates the
+  // defect report (LWG3070) that added a deduction guide for
+  // `std::packaged_task`.
+  tasks.push_back(
+      std::packaged_task<void()>{[&executed]() { executed = true; }});
   ad_utility::runTasksInParallel(std::move(tasks));
   EXPECT_TRUE(executed);
 }
@@ -30,8 +36,8 @@ TEST(ParallelExecutor, multipleTasks) {
   ql::ranges::fill(executed, false);
   std::vector<std::packaged_task<void()>> tasks;
   for (size_t i = 0; i < NUM_TASKS; ++i) {
-    tasks.push_back(
-        std::packaged_task{[&executed, i]() { executed.at(i) = true; }});
+    tasks.push_back(std::packaged_task<void()>{
+        [&executed, i]() { executed.at(i) = true; }});
   }
   ad_utility::runTasksInParallel(std::move(tasks));
   for (size_t i = 0; i < NUM_TASKS; ++i) {
@@ -46,7 +52,7 @@ TEST(ParallelExecutor, multipleTaskWithOneException) {
   ql::ranges::fill(executed, false);
   std::vector<std::packaged_task<void()>> tasks;
   for (size_t i = 0; i < NUM_TASKS; ++i) {
-    tasks.push_back(std::packaged_task{[&executed, i]() {
+    tasks.push_back(std::packaged_task<void()>{[&executed, i]() {
       executed.at(i) = true;
       if (i == 5) {
         throw std::runtime_error("Error");
@@ -67,7 +73,7 @@ TEST(ParallelExecutor, multipleTaskWithOnlyExceptions) {
   ql::ranges::fill(executed, false);
   std::vector<std::packaged_task<void()>> tasks;
   for (size_t i = 0; i < NUM_TASKS; ++i) {
-    tasks.push_back(std::packaged_task{[&executed, i]() {
+    tasks.push_back(std::packaged_task<void()>{[&executed, i]() {
       executed.at(i) = true;
       throw std::runtime_error(absl::StrCat("Error ", i));
     }});

@@ -18,6 +18,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Iterators.h"
 #include "util/ParseableDuration.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
@@ -33,6 +34,62 @@ auto parseQuery(std::string query,
                 const std::vector<DatasetClause>& datasets = {}) {
   static EncodedIriManager evM;
   return SparqlParser::parseQuery(&evM, std::move(query), datasets);
+}
+
+// Collect the chunks produced by one of the streamable export functions (e.g.
+// `ExportQueryExecutionTrees::computeResult`) into a single string.
+// `callExport` is a callable that takes the `streamableYielder` argument and
+// invokes the actual export function, forwarding that argument as its last
+// argument. In C++20 mode the export function returns a `stream_generator` that
+// is iterated here; in C++17 mode it returns `void` and pushes its output into
+// a `StringBatcher` whose callback appends to the result.
+template <typename CallExport>
+std::string collectStreamableResult(CallExport&& callExport) {
+  std::string result;
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  ad_utility::streams::StringBatcher<> batcher{
+      [&result](std::string_view chunk) { result += chunk; }};
+  callExport(std::ref(batcher));
+#else
+  for (const auto& chunk : callExport(STREAMABLE_YIELDER_TYPE{})) {
+    result += chunk;
+  }
+#endif
+  return result;
+}
+
+// Build a `Result::Generator` that yields the elements produced by repeatedly
+// calling `getNext` until it returns `std::nullopt`. Use this instead of
+// spelling out a coroutine, so that the tests also compile in C++17 mode, where
+// `Result::Generator` is an `ad_utility::InputRangeTypeErased` rather than a
+// coroutine type. The generation is lazy: `getNext` is not invoked before the
+// resulting generator is iterated for the first time.
+template <typename GetNext>
+Result::Generator makeTableGenerator(GetNext getNext) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  return ad_utility::InputRangeTypeErased{
+      ad_utility::InputRangeFromGetCallable{std::move(getNext)}};
+#else
+  return [](GetNext getNext) -> Result::Generator {
+    while (std::optional<Result::IdTableVocabPair> next = getNext()) {
+      co_yield next.value();
+    }
+  }(std::move(getNext));
+#endif
+}
+
+// Overload of `makeTableGenerator` that yields the given `pairs` one after the
+// other.
+Result::Generator makeTableGenerator(
+    std::vector<Result::IdTableVocabPair> pairs) {
+  return makeTableGenerator(
+      [pairs = std::move(pairs),
+       i = size_t{0}]() mutable -> std::optional<Result::IdTableVocabPair> {
+        if (i >= pairs.size()) {
+          return std::nullopt;
+        }
+        return std::move(pairs[i++]);
+      });
 }
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -54,14 +111,11 @@ std::string runQueryStreamableResult(
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
-  auto strGenerator = ExportQueryExecutionTrees::computeResult(
-      pq, qet, mediaType, timer, std::move(cancellationHandle));
-
-  std::string result;
-  for (const auto& block : strGenerator) {
-    result += block;
-  }
-  return result;
+  return collectStreamableResult([&](auto streamableYielder) {
+    return ExportQueryExecutionTrees::computeResult(
+        pq, qet, mediaType, timer, std::move(cancellationHandle),
+        streamableYielder);
+  });
 }
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -83,11 +137,11 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
-  std::string resStr;
-  for (auto c : ExportQueryExecutionTrees::computeResult(
-           pq, qet, mediaType, timer, std::move(cancellationHandle))) {
-    resStr += c;
-  }
+  std::string resStr = collectStreamableResult([&](auto streamableYielder) {
+    return ExportQueryExecutionTrees::computeResult(
+        pq, qet, mediaType, timer, std::move(cancellationHandle),
+        streamableYielder);
+  });
   return nlohmann::json::parse(resStr);
 }
 
@@ -146,7 +200,11 @@ void runSelectQueryTestCase(
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
-  using enum ad_utility::MediaType;
+  constexpr auto tsv = ad_utility::MediaType::tsv,
+                 csv = ad_utility::MediaType::csv,
+                 qleverJson = ad_utility::MediaType::qleverJson,
+                 sparqlJson = ad_utility::MediaType::sparqlJson,
+                 sparqlXml = ad_utility::MediaType::sparqlXml;
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, tsv, useTextIndex),
       testCase.resultTsv);
@@ -190,7 +248,10 @@ void runConstructQueryTestCase(
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
-  using enum ad_utility::MediaType;
+  constexpr auto tsv = ad_utility::MediaType::tsv,
+                 csv = ad_utility::MediaType::csv,
+                 qleverJson = ad_utility::MediaType::qleverJson,
+                 turtle = ad_utility::MediaType::turtle;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
@@ -221,7 +282,13 @@ void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "runAskQueryTestCase");
-  using enum ad_utility::MediaType;
+  constexpr auto tsv = ad_utility::MediaType::tsv,
+                 csv = ad_utility::MediaType::csv,
+                 octetStream = ad_utility::MediaType::octetStream,
+                 turtle = ad_utility::MediaType::turtle,
+                 qleverJson = ad_utility::MediaType::qleverJson,
+                 sparqlJson = ad_utility::MediaType::sparqlJson,
+                 sparqlXml = ad_utility::MediaType::sparqlXml;
   // TODO<joka921> match the exception
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
@@ -1339,6 +1406,9 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// The text index is not available in C++17 mode (building it throws at
+// runtime), so this test can only run in C++20 mode.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, TextIndex) {
   std::string kg = "<s> <p> \"alpha beta\". <s2> <p2> \"alphax betax\". ";
@@ -1364,6 +1434,7 @@ TEST(ExportQueryExecutionTrees, TextIndex) {
                                         expectedXml};
   runSelectQueryTestCase(testCaseTextIndex, true);
 }
+#endif
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, MultipleVariables) {
@@ -1578,7 +1649,13 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
   runAskQueryTestCase(askResultFalse(false));
 }
 
-using enum ad_utility::MediaType;
+constexpr auto turtle = ad_utility::MediaType::turtle,
+               sparqlXml = ad_utility::MediaType::sparqlXml,
+               tsv = ad_utility::MediaType::tsv,
+               csv = ad_utility::MediaType::csv,
+               octetStream = ad_utility::MediaType::octetStream,
+               sparqlJson = ad_utility::MediaType::sparqlJson,
+               qleverJson = ad_utility::MediaType::qleverJson;
 
 // ____________________________________________________________________________
 class StreamableMediaTypesFixture
@@ -1600,8 +1677,12 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   EXPECT_ANY_THROW(([&]() {
-    [[maybe_unused]] auto generator = ExportQueryExecutionTrees::computeResult(
-        pq, qet, GetParam(), timer, std::move(cancellationHandle));
+    [[maybe_unused]] auto result =
+        collectStreamableResult([&](auto streamableYielder) {
+          return ExportQueryExecutionTrees::computeResult(
+              pq, qet, GetParam(), timer, std::move(cancellationHandle),
+              streamableYielder);
+        });
   }()));
 }
 
@@ -1630,12 +1711,10 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
 TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
   IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
-  auto tableGenerator = [](IdTable idTableA,
-                           IdTable idTableB) -> Result::Generator {
-    co_yield {std::move(idTableA), LocalVocab{}};
-
-    co_yield {std::move(idTableB), LocalVocab{}};
-  }(idTable1.clone(), idTable2.clone());
+  std::vector<Result::IdTableVocabPair> pairs;
+  pairs.emplace_back(idTable1.clone(), LocalVocab{});
+  pairs.emplace_back(idTable2.clone(), LocalVocab{});
+  auto tableGenerator = makeTableGenerator(std::move(pairs));
 
   Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
@@ -1646,11 +1725,9 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
-  auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
-    co_yield pair1;
-  }();
+  std::vector<Result::IdTableVocabPair> pairs;
+  pairs.emplace_back(makeIdTableFromVector({{1}, {2}, {3}}), LocalVocab{});
+  auto tableGenerator = makeTableGenerator(std::move(pairs));
 
   Result result{std::move(tableGenerator), {}};
   uint64_t resultSizeTotal = 0;
@@ -1666,15 +1743,10 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
-  auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
-    co_yield pair1;
-
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
-    co_yield pair2;
-  }();
+  std::vector<Result::IdTableVocabPair> pairs;
+  pairs.emplace_back(makeIdTableFromVector({{1}, {2}, {3}}), LocalVocab{});
+  pairs.emplace_back(makeIdTableFromVector({{4}, {5}}), LocalVocab{});
+  auto tableGenerator = makeTableGenerator(std::move(pairs));
 
   Result result{std::move(tableGenerator), {}};
   uint64_t resultSizeTotal = 0;
@@ -1692,15 +1764,10 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
-  auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
-    co_yield pair1;
-
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
-    co_yield pair2;
-  }();
+  std::vector<Result::IdTableVocabPair> pairs;
+  pairs.emplace_back(makeIdTableFromVector({{1}, {2}, {3}}), LocalVocab{});
+  pairs.emplace_back(makeIdTableFromVector({{4}, {5}}), LocalVocab{});
+  auto tableGenerator = makeTableGenerator(std::move(pairs));
 
   Result result{std::move(tableGenerator), {}};
   uint64_t resultSizeTotal = 0;
@@ -1717,15 +1784,10 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
-  auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
-    co_yield pair1;
-
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
-    co_yield pair2;
-  }();
+  std::vector<Result::IdTableVocabPair> pairs;
+  pairs.emplace_back(makeIdTableFromVector({{1}, {2}, {3}}), LocalVocab{});
+  pairs.emplace_back(makeIdTableFromVector({{4}, {5}}), LocalVocab{});
+  auto tableGenerator = makeTableGenerator(std::move(pairs));
 
   Result result{std::move(tableGenerator), {}};
   uint64_t resultSizeTotal = 0;
@@ -1743,19 +1805,11 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
-  auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
-    co_yield pair1;
-
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
-    co_yield pair2;
-
-    Result::IdTableVocabPair pair3{makeIdTableFromVector({{6}, {7}, {8}, {9}}),
-                                   LocalVocab{}};
-    co_yield pair3;
-  }();
+  std::vector<Result::IdTableVocabPair> pairs;
+  pairs.emplace_back(makeIdTableFromVector({{1}, {2}, {3}}), LocalVocab{});
+  pairs.emplace_back(makeIdTableFromVector({{4}, {5}}), LocalVocab{});
+  pairs.emplace_back(makeIdTableFromVector({{6}, {7}, {8}, {9}}), LocalVocab{});
+  auto tableGenerator = makeTableGenerator(std::move(pairs));
 
   Result result{std::move(tableGenerator), {}};
   uint64_t resultSizeTotal = 0;
@@ -1774,12 +1828,13 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   {
-    auto throwingGenerator = []() -> Result::Generator {
-      std::string message = "Generator was started, but should not have been";
-      ADD_FAILURE() << message << std::endl;
-      throw std::runtime_error(message);
-      co_return;
-    }();
+    auto throwingGenerator =
+        makeTableGenerator([]() -> std::optional<Result::IdTableVocabPair> {
+          std::string message =
+              "Generator was started, but should not have been";
+          ADD_FAILURE() << message << std::endl;
+          throw std::runtime_error(message);
+        });
 
     Result result{std::move(throwingGenerator), {}};
     uint64_t resultSizeTotal = 0;
@@ -1789,17 +1844,18 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   }
 
   {
-    auto throwAfterYieldGenerator = []() -> Result::Generator {
-      Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
-                                     LocalVocab{}};
-      co_yield pair1;
-
-      std::string message =
-          "Generator was called a second time, but should not "
-          "have been";
-      ADD_FAILURE() << message << std::endl;
-      throw std::runtime_error(message);
-    }();
+    auto throwAfterYieldGenerator = makeTableGenerator(
+        [i = 0]() mutable -> std::optional<Result::IdTableVocabPair> {
+          if (i++ == 0) {
+            return Result::IdTableVocabPair{makeIdTableFromVector({{1}}),
+                                            LocalVocab{}};
+          }
+          std::string message =
+              "Generator was called a second time, but should not "
+              "have been";
+          ADD_FAILURE() << message << std::endl;
+          throw std::runtime_error(message);
+        });
 
     Result result{std::move(throwAfterYieldGenerator), {}};
     uint64_t resultSizeTotal = 0;
@@ -1832,13 +1888,12 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   // Verify this is accounted for for time calculation.
   std::this_thread::sleep_for(1ms);
 
-  auto jsonStream = ExportQueryExecutionTrees::computeResultAsQLeverJSON(
-      pq, qet, pq._limitOffset, timer, std::move(cancellationHandle));
-
-  std::string aggregateString{};
-  for (std::string_view chunk : jsonStream) {
-    aggregateString += chunk;
-  }
+  std::string aggregateString =
+      collectStreamableResult([&](auto streamableYielder) {
+        return ExportQueryExecutionTrees::computeResultAsQLeverJSON(
+            pq, qet, pq._limitOffset, timer, std::move(cancellationHandle),
+            streamableYielder);
+      });
   nlohmann::json json = nlohmann::json::parse(aggregateString);
   auto originalRuntimeInfo = qet.getRootOperation()->runtimeInfo();
 
@@ -1866,6 +1921,10 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       toChrono(timingInformation["computeResult"].get<std::string_view>()));
 }
 
+// This test exercises `convertStreamGeneratorForChunkedTransfer` and the
+// coroutine-based `stream_generator`, both of which are only available in C++20
+// mode (see `ExportQueryExecutionTrees.h` and `util/stream_generator.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   using S = ad_utility::streams::stream_generator;
@@ -1915,6 +1974,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
 }
+#endif
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
@@ -1971,12 +2031,11 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
   auto cancellationHandle2 =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  std::string result;
-  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, qet, ad_utility::MediaType::sparqlXml, timer,
-           std::move(cancellationHandle2))) {
-    result += chunk;
-  }
+  std::string result = collectStreamableResult([&](auto streamableYielder) {
+    return ExportQueryExecutionTrees::computeResult(
+        parsedQuery, qet, ad_utility::MediaType::sparqlXml, timer,
+        std::move(cancellationHandle2), streamableYielder);
+  });
 
   // Verify that the original IRI strings appear in the output
   EXPECT_THAT(result, HasSubstr("http://example.org/123"));
@@ -1989,12 +2048,11 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   ad_utility::Timer tsvTimer{ad_utility::Timer::Started};
   auto cancellationHandle3 =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  std::string tsvResult;
-  for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, qet, ad_utility::MediaType::tsv, tsvTimer,
-           std::move(cancellationHandle3))) {
-    tsvResult += chunk;
-  }
+  std::string tsvResult = collectStreamableResult([&](auto streamableYielder) {
+    return ExportQueryExecutionTrees::computeResult(
+        parsedQuery, qet, ad_utility::MediaType::tsv, tsvTimer,
+        std::move(cancellationHandle3), streamableYielder);
+  });
   EXPECT_THAT(tsvResult, HasSubstr("http://example.org/123"));
   EXPECT_THAT(tsvResult, HasSubstr("http://example.org/predicate456"));
   EXPECT_THAT(tsvResult, HasSubstr("http://example.org/789"));

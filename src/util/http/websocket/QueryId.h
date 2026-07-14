@@ -60,7 +60,9 @@ class QueryId {
 enum class QueryStatus { OK, FAILED, CANCELLED, TIMEOUT };
 
 inline std::string_view toString(QueryStatus s) noexcept {
-  using enum QueryStatus;
+  constexpr auto CANCELLED = QueryStatus::CANCELLED,
+                 FAILED = QueryStatus::FAILED, OK = QueryStatus::OK,
+                 TIMEOUT = QueryStatus::TIMEOUT;
   switch (s) {
     case OK:
       return "ok";

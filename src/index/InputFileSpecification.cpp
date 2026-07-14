@@ -13,7 +13,9 @@ namespace qlever {
 
 // _____________________________________________________________________________
 std::optional<Filetype> filetypeFromMediaType(ad_utility::MediaType mediaType) {
-  using enum ad_utility::MediaType;
+  constexpr auto turtle = ad_utility::MediaType::turtle,
+                 ntriples = ad_utility::MediaType::ntriples,
+                 nquads = ad_utility::MediaType::nquads;
   switch (mediaType) {
     case turtle:
     case ntriples:

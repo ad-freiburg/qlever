@@ -8,6 +8,8 @@
 
 #include <algorithm>
 
+#include "backports/concepts.h"
+#include "backports/functional.h"
 #include "backports/iterator.h"
 #include "util/CompactStringVector.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -29,7 +31,16 @@ auto vectorsEqual = [](const auto& compactVector, const auto& compareVector) {
     using value_type =
         typename std::decay_t<decltype(compareVector)>::value_type;
     value_type a = [&]() {
-      return value_type(compactVector[i].begin(), compactVector[i].end());
+      const auto& element = compactVector[i];
+      // The two-iterator `string_view`/`span` constructor is C++20-only, so use
+      // the pointer plus size constructor when the `value_type` supports it,
+      // and fall back to the two-iterator constructor for `string`/`vector`.
+      if constexpr (std::is_constructible_v<value_type,
+                                            decltype(element.data()), size_t>) {
+        return value_type(element.data(), element.size());
+      } else {
+        return value_type(element.begin(), element.end());
+      }
     }();
     iterablesEqual(a, compareVector[i]);
   }
@@ -127,7 +138,7 @@ TYPED_TEST(CompactVectorOfStringsFixture, Iterator) {
 // _____________________________________________________________________________
 TEST(CompactVectorOfStrings, IteratorCategory) {
   using It = CompactVectorOfStrings<char>::Iterator;
-  static_assert(std::random_access_iterator<It>);
+  static_assert(ql::concepts::random_access_iterator<It>);
 }
 
 // _____________________________________________________________________________
@@ -337,15 +348,16 @@ TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
 
   CompactVector original;
   // Try with empty vector.
-  auto copy0 = original.cloneAndRemap(std::identity{});
+  auto copy0 = original.cloneAndRemap(ql::identity{});
   EXPECT_TRUE(ql::ranges::equal(original, copy0, ql::ranges::equal));
 
   original.build(input);
 
-  auto copy1 = original.cloneAndRemap(std::identity{});
+  auto copy1 = original.cloneAndRemap(ql::identity{});
   EXPECT_TRUE(ql::ranges::equal(original, copy1, ql::ranges::equal));
 
-  auto mappingFunction = [](auto x) -> TestFixture::Type { return x + 1; };
+  auto mappingFunction = [](auto x) ->
+      typename TestFixture::Type { return x + 1; };
 
   auto copy2 = original.cloneAndRemap(mappingFunction);
 

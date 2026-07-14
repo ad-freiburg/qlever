@@ -189,6 +189,18 @@ class SparqlExpression {
   // child of this expression is deterministic.
   bool areChildrenDeterministic() const;
 };
+
+#ifdef QLEVER_CPP_17
+// Print a `SparqlExpression::Ptr` for debugging purposes (e.g. inside GTest
+// matcher failure messages for `childrenForTesting()`). This is found via
+// ADL and is needed because the C++17 backport of `ql::span` (`ranges::span`
+// from `range-v3`) provides its own unconstrained `operator<<` that tries to
+// stream each element of the span directly.
+inline std::ostream& operator<<(std::ostream& os,
+                                const SparqlExpression::Ptr& expr) {
+  return os << (expr ? expr->descriptor() : "nullptr");
+}
+#endif
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSION_H

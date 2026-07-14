@@ -80,16 +80,16 @@ TEST(OperationTest, limitAndOffsetAreStacked) {
   NeutralElementOperation n{getQec()};
 
   n.applyLimitOffset({std::nullopt, 1});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(std::nullopt, 1));
+  EXPECT_EQ(n.getLimitOffset(), (LimitOffsetClause{std::nullopt, 1}));
 
   n.applyLimitOffset({20, 2});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
+  EXPECT_EQ(n.getLimitOffset(), (LimitOffsetClause{20, 3}));
 
   n.applyLimitOffset({std::nullopt, 4});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
+  EXPECT_EQ(n.getLimitOffset(), (LimitOffsetClause{16, 7}));
 
   n.applyLimitOffset({6, 7});
-  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
+  EXPECT_EQ(n.getLimitOffset(), (LimitOffsetClause{6, 14}));
 }
 
 // ________________________________________________
@@ -533,12 +533,13 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       &namedCache,
       materializedViewsManager,
       [&](std::string) { signaledUpdate = true; }};
-  CustomGeneratorOperation operation{&context, []() -> Result::Generator {
-                                       throw CancellationException{
-                                           CancellationState::MANUAL,
-                                           "Operation was cancelled"};
-                                       co_return;
-                                     }()};
+  CustomGeneratorOperation operation{
+      &context,
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<Result::IdTableVocabPair> {
+            throw CancellationException{CancellationState::MANUAL,
+                                        "Operation was cancelled"};
+          }}}};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -573,19 +574,19 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
-      &context, [](const IdTable& idTable) -> Result::Generator {
-        std::this_thread::sleep_for(50ms);
-        co_yield {idTable.clone(), LocalVocab{}};
-        // This one should not trigger because it's below the 50ms threshold
-        std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
-        std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
-        // This one should not trigger directly, but trigger because it's the
-        // last one
-        std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
-      }(idTable)};
+      &context,
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          [&idTable,
+           i = 0]() mutable -> std::optional<Result::IdTableVocabPair> {
+            // The first sleep is 50ms; the remaining sleeps (below the 50ms
+            // threshold) are 30ms each. There are 4 elements in total.
+            if (i >= 4) {
+              return std::nullopt;
+            }
+            std::this_thread::sleep_for(i == 0 ? 50ms : 30ms);
+            ++i;
+            return Result::IdTableVocabPair{idTable.clone(), LocalVocab{}};
+          }}}};
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -623,10 +624,16 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       materializedViewsManager,
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
-      &context, [](const IdTable& idTable) -> Result::Generator {
-        co_yield {idTable.clone(), LocalVocab{}};
-        co_yield {idTable.clone(), LocalVocab{}};
-      }(idTable)};
+      &context,
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          [&idTable,
+           i = 0]() mutable -> std::optional<Result::IdTableVocabPair> {
+            if (i >= 2) {
+              return std::nullopt;
+            }
+            ++i;
+            return Result::IdTableVocabPair{idTable.clone(), LocalVocab{}};
+          }}}};
 
   {
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};

@@ -187,7 +187,7 @@ TEST(Bind, limitIsPropagated) {
 
   bind.applyLimitOffset({1, 1});
   EXPECT_EQ(bind.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-            LimitOffsetClause(1, 1));
+            (LimitOffsetClause{1, 1}));
   // We expect that the original subtree is unchanged.
   EXPECT_TRUE(
       valuesTree->getRootOperation()->getLimitOffset().isUnconstrained());
@@ -224,7 +224,10 @@ TEST_P(BindUndefStatusTest, undefStatusForAlwaysDefinedVariable) {
   // Check that the variable to column map has the correct undef status.
   auto varColMap = bind.getExternallyVisibleVariableColumns();
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+                     ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined,
+                 PossiblyUndefined =
+                     ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   auto expectedStatus = isDefined ? AlwaysDefined : PossiblyUndefined;
 
   // Check the input variable ?x.

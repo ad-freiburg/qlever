@@ -822,7 +822,8 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
   using namespace std::chrono_literals;
-  using enum RuntimeInformation::SendPriority;
+  constexpr auto IfDue = RuntimeInformation::SendPriority::IfDue,
+                 Always = RuntimeInformation::SendPriority::Always;
 
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),

@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 #include <unicode/unistr.h>
 
-#include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -18,7 +17,7 @@
 #include "global/Constants.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/StringUtils.h"
 #include "util/StringUtilsImpl.h"
 
@@ -136,12 +135,18 @@ TEST(StringUtils, listToString) {
   // Test, that uses an actual `ql::ranges::input_range`. That is, a range who
   // doesn't know it's own size and can only be iterated once.
 
-  // Returns the content of a given vector, element by element.
-  auto goThroughVectorGenerator = [](const auto& vec)
-      -> cppcoro::generator<typename std::decay_t<decltype(vec)>::value_type> {
-    for (auto entry : vec) {
-      co_yield entry;
-    }
+  // Returns the content of a given vector, element by element, as an actual
+  // (single-pass) `ql::ranges::input_range`.
+  auto goThroughVectorGenerator = [](const auto& vec) {
+    using T = typename std::decay_t<decltype(vec)>::value_type;
+    return ad_utility::InputRangeTypeErased{
+        ad_utility::InputRangeFromGetCallable{
+            [&vec, it = vec.begin()]() mutable -> std::optional<T> {
+              if (it == vec.end()) {
+                return std::nullopt;
+              }
+              return *(it++);
+            }}};
   };
 
   doTestForAllOverloads("", goThroughVectorGenerator(emptyVector),
@@ -320,9 +325,9 @@ TEST(StringUtils, insertThousandSeparator) {
           const char separatorSymbol{absl::StrCat(separatorSymbolNum).front()};
           (ad_utility::ApplyAsValueIdentity{[&doNotExceptionTest,
                                              &separatorSymbol](auto c) {
-             ASSERT_ANY_THROW(doNotExceptionTest(vi<c>, ' '));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<c.value>, ' '));
              ASSERT_ANY_THROW(doNotExceptionTest(vi<'.'>, separatorSymbol));
-             ASSERT_ANY_THROW(doNotExceptionTest(vi<c>, separatorSymbol));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<c.value>, separatorSymbol));
            }}.template operator()<floatingPointSignifiers.value>(),
            ...);
         }

@@ -46,8 +46,31 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 
 // ______________________________________________________________________________________________________
 const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
+  constexpr auto TurtlePrefix = TurtleTokenId::TurtlePrefix,
+                 SparqlPrefix = TurtleTokenId::SparqlPrefix,
+                 TurtleBase = TurtleTokenId::TurtleBase,
+                 SparqlBase = TurtleTokenId::SparqlBase,
+                 Dot = TurtleTokenId::Dot, Comma = TurtleTokenId::Comma,
+                 Semicolon = TurtleTokenId::Semicolon,
+                 OpenSquared = TurtleTokenId::OpenSquared,
+                 CloseSquared = TurtleTokenId::CloseSquared,
+                 OpenRound = TurtleTokenId::OpenRound,
+                 CloseRound = TurtleTokenId::CloseRound, A = TurtleTokenId::A,
+                 DoubleCircumflex = TurtleTokenId::DoubleCircumflex,
+                 True = TurtleTokenId::True, False = TurtleTokenId::False,
+                 Langtag = TurtleTokenId::Langtag,
+                 Decimal = TurtleTokenId::Decimal,
+                 Exponent = TurtleTokenId::Exponent,
+                 Double = TurtleTokenId::Double, Iriref = TurtleTokenId::Iriref,
+                 IrirefRelaxed = TurtleTokenId::IrirefRelaxed,
+                 PnameNS = TurtleTokenId::PnameNS,
+                 PnameLN = TurtleTokenId::PnameLN,
+                 PnLocal = TurtleTokenId::PnLocal,
+                 BlankNodeLabel = TurtleTokenId::BlankNodeLabel,
+                 WsMultiple = TurtleTokenId::WsMultiple,
+                 Anon = TurtleTokenId::Anon, Comment = TurtleTokenId::Comment,
+                 Integer = TurtleTokenId::Integer;
   switch (reg) {
-    using enum TurtleTokenId;
     case TurtlePrefix:
       return _tokens.TurtlePrefix;
     case SparqlPrefix:

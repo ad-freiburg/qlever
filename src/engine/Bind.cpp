@@ -91,7 +91,10 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
   // The new variable is always appended at the end.
   auto columnIndex = getResultWidth() - 1;
   // Determine whether the added column might contain UNDEF values.
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+                     ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined,
+                 PossiblyUndefined =
+                     ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
   auto statusOfNewColumn = _bind._expression.isResultAlwaysDefined(res)
                                ? AlwaysDefined
                                : PossiblyUndefined;

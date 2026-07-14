@@ -58,7 +58,9 @@ enum struct Datatype {
 // from different  RDF sources are merged. Same goes for `EncodedVal` which
 // depends on the (configurable!) prefixes for the encoding.
 constexpr bool isDatatypeTrivial(Datatype datatype) {
-  using enum Datatype;
+  constexpr auto Undefined = Datatype::Undefined, Bool = Datatype::Bool,
+                 Int = Datatype::Int, Double = Datatype::Double,
+                 Date = Datatype::Date, GeoPoint = Datatype::GeoPoint;
   constexpr std::array trivialDatatypes{Undefined, Bool, Int,
                                         Double,    Date, GeoPoint};
   return ad_utility::contains(trivialDatatypes, datatype);
@@ -186,7 +188,9 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto compareThreeWay(const ValueId& other) const {
-    using enum Datatype;
+    constexpr auto VocabIndex = Datatype::VocabIndex,
+                   LocalVocabIndex = Datatype::LocalVocabIndex,
+                   EncodedVal = Datatype::EncodedVal;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
     if (type != LocalVocabIndex && otherType != LocalVocabIndex) {

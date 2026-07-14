@@ -538,7 +538,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       // configuration option.
       auto isPointerToConfigurationOption =
           [&allConfigOptions](const nlohmann::json::json_pointer& ptr) {
-            return allConfigOptions.contains(ptr.to_string());
+            return allConfigOptions.find(ptr.to_string()) !=
+                   allConfigOptions.end();
           };
 
       /*

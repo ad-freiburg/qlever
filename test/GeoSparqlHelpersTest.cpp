@@ -79,7 +79,9 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
 
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktDist) {
-  using enum UnitOfMeasurement;
+  constexpr auto METERS = UnitOfMeasurement::METERS,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 MILES = UnitOfMeasurement::MILES;
   GeoPoint eiffeltower{48.8585, 2.2945};
   GeoPoint frCathedral{47.9957, 7.8529};
 
@@ -135,7 +137,14 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  constexpr auto INTERSECTS = SpatialJoinType::INTERSECTS,
+                 CONTAINS = SpatialJoinType::CONTAINS,
+                 COVERS = SpatialJoinType::COVERS,
+                 CROSSES = SpatialJoinType::CROSSES,
+                 TOUCHES = SpatialJoinType::TOUCHES,
+                 EQUALS = SpatialJoinType::EQUALS,
+                 OVERLAPS = SpatialJoinType::OVERLAPS,
+                 WITHIN = SpatialJoinType::WITHIN;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();

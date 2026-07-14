@@ -8,7 +8,6 @@
 #include <array>
 #include <ctre.hpp>
 #include <random>
-#include <ranges>
 #include <unordered_set>
 
 #include "../test/util/RandomTestHelpers.h"
@@ -28,9 +27,11 @@ numbers for the same seed.
 @param randomNumberGeneratorFactory An invocable object, that should return a
 random number generator, using the given seed.
 */
-CPP_template(typename T)(requires std::invocable<T, RandomSeed>) void testSeed(
-    T randomNumberGeneratorFactory,
-    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+CPP_template(typename T)(
+    requires ql::concepts::invocable<
+        T, RandomSeed>) void testSeed(T randomNumberGeneratorFactory,
+                                      ad_utility::source_location l =
+                                          AD_CURRENT_SOURCE_LOC()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testSeed")};
 
@@ -104,7 +105,7 @@ should be `RangeNumberType rangeMin, RangeNumberType rangeMax, Seed seed`.
 @param ranges The ranges, that should be used.
 */
 CPP_template(typename RangeNumberType, typename GeneratorFactory)(
-    requires std::invocable<
+    requires ql::concepts::invocable<
         GeneratorFactory, RangeNumberType, RangeNumberType,
         RandomSeed>) void testSeedWithRange(GeneratorFactory
                                                 randomNumberGeneratorFactory,
@@ -134,8 +135,8 @@ of the range.
 @param ranges The ranges, for which should be tested for.
 */
 CPP_template(typename Generator, typename RangeNumberType)(
-    requires std::constructible_from<Generator, RangeNumberType,
-                                     RangeNumberType>&&
+    requires ql::concepts::constructible_from<Generator, RangeNumberType,
+                                              RangeNumberType>&&
         ql::concepts::invocable<Generator>&& ad_utility::isSimilar<
             std::invoke_result_t<Generator>,
             RangeNumberType>) void testRange(const std::
@@ -271,15 +272,22 @@ TEST(RandomShuffleTest, Seed) {
       });
 }
 
+namespace {
+// Pattern for checking that a UUID is properly formatted. This has to be a
+// variable with linkage (not function-local), because a `const auto&`
+// non-type template parameter can only bind to an object with static
+// storage duration and linkage, not to a function-local variable (unlike
+// in C++20, which allows literal-class-type template arguments directly).
+constexpr auto uuidPattern = ctll::fixed_string{
+    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{"
+    "3}-[0-9a-fA-F]{12}$"};
+}  // namespace
+
 TEST(UuidGeneratorTest, StrUuidGeneratorTest) {
   // Test few times that the returned UUID str is not
   // "00000000-0000-0000-0000-000000000000" (nil-UUID)
   // and that none of the str-UUIDS is rquivalent to the already
   // created ones.
-  // Pattern for checking that UUID is properly formatted
-  static constexpr auto uuidPattern = ctll::fixed_string{
-      "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{"
-      "3}-[0-9a-fA-F]{12}$"};
   boost::uuids::string_generator getUuid;
   UuidGenerator gen = UuidGenerator();
   std::unordered_set<std::string> setUuids;

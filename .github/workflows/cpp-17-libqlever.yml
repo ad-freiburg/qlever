@@ -27,10 +27,29 @@ jobs:
       matrix:
         include:
           - compiler-version: 11
+            build-target: "LibQLeverExample"
+            warnings: ""
             use-keep-going: false
             use-ignore-errors: false
             additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON"
           - compiler-version: 8
+            # Build every target (not just `LibQLeverExample`): the
+            # `REDUCED_FEATURE_SET_FOR_CPP17` guards added throughout the
+            # CMakeLists.txt files (around the `http`/`server` libraries, the
+            # tests that depend on them, and the handful of tests that
+            # directly exercise `cppcoro::generator`-based coroutine
+            # machinery) mean that only C++17-compatible targets are defined
+            # at all in this configuration, so building everything is both
+            # possible and the point: it is how the unit test suite itself
+            # gets built and, below, run under real C++17.
+            build-target: ""
+            # Real gcc-8 (unlike the gcc-11 + `-fconcepts` combination used for
+            # the other matrix entry) does not accept attributes it does not
+            # know about (e.g. `[[no_unique_address]]`, which is C++20-only)
+            # silently; without `-Wno-attributes` the build log fills up with
+            # thousands of "unknown attribute ignored" warnings across nearly
+            # every translation unit, making it unusable.
+            warnings: "-Wno-attributes"
             expensive-tests: true
             use-keep-going: true
             use-ignore-errors: true
@@ -38,7 +57,6 @@ jobs:
 
 
     env:
-      warnings:   ""
       build-type: Release
       expensive-tests: true
       compiler: gcc
@@ -101,11 +119,23 @@ jobs:
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}} -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold"
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}} -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold"
 
       - name: Build
-        # Build your program with the given configuration
+        # Build your program with the given configuration. For the gcc-11
+        # entry, `matrix.build-target` names a single target
+        # (`LibQLeverExample`); for the gcc-8 entry it is empty, so this
+        # builds the default `all` target, i.e. every target that is defined
+        # at all under `REDUCED_FEATURE_SET_FOR_CPP17` -- which, thanks to the
+        # `if (NOT REDUCED_FEATURE_SET_FOR_CPP17)` guards around the
+        # non-conforming executables in the various `CMakeLists.txt` files, is
+        # exactly the set of C++17-compatible ones (including the unit test
+        # suite).
         run: |
+          TARGET=""
+          if [[ -n "${{ matrix.build-target }}" ]]; then
+            TARGET="--target ${{ matrix.build-target }}"
+          fi
           KEEP_GOING=""
           if [[ "${{ matrix.use-keep-going }}" == "true" ]]; then
             KEEP_GOING="-k"
@@ -115,7 +145,7 @@ jobs:
           IGNORE_ERRORS="-i"
           fi
           set -o pipefail # the `tee` will never fail, but the `build` command might. We want to fail if the build fails.
-          cmake --build ${{github.workspace}}/build --target LibQLeverExample --config ${{env.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
+          cmake --build ${{github.workspace}}/build $TARGET --config ${{env.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc) 2>&1 | tee /tmp/build.log
         id: build
 
       - name: Run gcc8 log analyzer on gcc8 builds
@@ -123,10 +153,20 @@ jobs:
         run: |
           python ${{ github.workspace }}/misc/gcc8_logs_analyzer.py /tmp/build.log --on-github
         id: gcc8_log_analyzer
+
       - name: Test
         id: runTest
-        if: (matrix.compiler-version == 11)
-        working-directory: ${{github.workspace}}/build/test
+        working-directory: ${{github.workspace}}/build
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j $(nproc) . -L QleverTest
+        # The gcc-11 entry only builds `LibQLeverExample` above, so scope it to
+        # the one test target that exercises the public libqlever API
+        # (`QleverTest`, see `test/libqlever/CMakeLists.txt`). The gcc-8 entry
+        # builds and therefore runs the whole (C++17-compatible) unit test
+        # suite.
+        run: |
+          LABEL=""
+          if [[ "${{ matrix.compiler-version }}" == "11" ]]; then
+            LABEL="-L QleverTest"
+          fi
+          env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j $(nproc) . $LABEL

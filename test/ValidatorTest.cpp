@@ -21,6 +21,12 @@
 
 namespace ad_utility {
 
+// The following two tests use lambda-expressions in unevaluated contexts
+// (e.g. `decltype([]{...})`) to generate distinct closure types for
+// exhaustively testing the `ValidatorFunction`/`ExceptionValidatorFunction`
+// concepts. This is a C++20-only language feature (P0315), so these tests are
+// excluded under the reduced C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(ValidatorConceptTest, ValidatorConcept) {
   // Lambda function types for easier test creation.
   using SingleIntValidatorFunction = decltype([](const int&) { return true; });
@@ -244,6 +250,7 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
       int&, int&&, const int&&>(
       validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 /*
 @brief Does the test for the constructors.
@@ -411,8 +418,8 @@ TEST(ConfigOptionValidatorManagerTest, ExceptionValidatorConstructor) {
              std::same_as<ConstConfigOptionProxy<bool>>) auto... args) {
         return ConfigOptionValidatorManager(
             [errorMessage =
-                 std::move(errorMessage)](const std::same_as<bool> auto... b)
-                -> std::optional<ErrorMessage> {
+                 std::move(errorMessage)](const QL_CONCEPT_OR_NOTHING(
+                std::same_as<bool>) auto... b) -> std::optional<ErrorMessage> {
               if ((b && ...)) {
                 return std::nullopt;
               } else {

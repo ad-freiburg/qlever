@@ -12,9 +12,11 @@ CPP_concept Something = (... && (sizeof(T) <= 4));
 
 // A templated class with a variety of members.
 CPP_template(typename T)(requires(Something<T>)) struct C {
-  // A constructor that takes an int only exists for certain `T`
-  explicit constexpr CPP_ctor(C)([[maybe_unused]] int i)(
-      requires Something<T>) {}
+  // A constructor that takes an int only exists for certain `T`. Note that
+  // `[[maybe_unused]]` cannot be used on `i` here, because the
+  // attribute's `[[...]]` tokens confuse the `CPP_ctor` macro's internal
+  // `noexcept`-detection probe.
+  explicit constexpr CPP_ctor(C)(int i)(requires Something<T>) { (void)i; }
 
   // A member function that is templated and constrained on an independent
   // type `F`.

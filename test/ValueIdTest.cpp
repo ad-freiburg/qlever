@@ -52,8 +52,8 @@ TEST_F(ValueIdTest, makeFromDouble) {
     auto nonRepresentable = nonRepresentableDoubleGenerator();
     // The random number generator includes the edge cases which would make the
     // tests fail.
-    if (nonRepresentable != ValueId::minPositiveDouble &&
-        nonRepresentable != -ValueId::minPositiveDouble) {
+    if (nonRepresentable != minPositiveDouble &&
+        nonRepresentable != -minPositiveDouble) {
       testNonRepresentableSubnormal(nonRepresentable);
     }
   }
@@ -80,8 +80,8 @@ TEST_F(ValueIdTest, makeFromDouble) {
     ASSERT_NE(d / 2, 0.0);
     ASSERT_EQ(ValueId::makeFromDouble(d / 2).getDouble(), 0.0);
   };
-  testSmallestNumber(ValueId::minPositiveDouble);
-  testSmallestNumber(-ValueId::minPositiveDouble);
+  testSmallestNumber(minPositiveDouble);
+  testSmallestNumber(-minPositiveDouble);
 }
 
 TEST_F(ValueIdTest, makeFromInt) {

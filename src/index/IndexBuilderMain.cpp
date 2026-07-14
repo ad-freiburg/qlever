@@ -137,9 +137,9 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
     if (filename == "-") {
       filename = "/dev/stdin";
     }
-    fileSpecs.emplace_back(filename, getFiletype(type, filename),
-                           std::move(defaultGraph), parseInParallel,
-                           parseInParallelSetExplicitly);
+    fileSpecs.push_back(qlever::InputFileSpecification{
+        filename, getFiletype(type, filename), std::move(defaultGraph),
+        parseInParallel, parseInParallelSetExplicitly});
   }
   return fileSpecs;
 };

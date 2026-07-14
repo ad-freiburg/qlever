@@ -267,7 +267,6 @@ class GraphStoreProtocol {
           const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
-    using enum boost::beast::http::verb;
     std::string_view method = rawRequest.method_string();
     if (method == "GET") {
       return {transformGet(operation.graph_, &index.encodedIriManager())};

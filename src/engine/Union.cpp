@@ -142,18 +142,21 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
   // `ql::ranges::for_each` takes the lambda by value and creates a new
   // variable at every invocation.
   size_t nextColumnIndex = 0;
-  auto addVariableColumnIfNotExists =
-      [&mightContainUndef, &variableColumns,
-       &nextColumnIndex](const VarAndTypeInfo& varAndIndex) {
-        const auto& variable = varAndIndex.first;
-        if (!variableColumns.contains(variable)) {
-          using enum ColumnIndexAndTypeInfo::UndefStatus;
-          variableColumns[variable] = ColumnIndexAndTypeInfo{
-              nextColumnIndex,
-              mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};
-          nextColumnIndex++;
-        }
-      };
+  auto addVariableColumnIfNotExists = [&mightContainUndef, &variableColumns,
+                                       &nextColumnIndex](
+                                          const VarAndTypeInfo& varAndIndex) {
+    const auto& variable = varAndIndex.first;
+    if (!variableColumns.contains(variable)) {
+      constexpr auto AlwaysDefined =
+                         ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined,
+                     PossiblyUndefined =
+                         ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+      variableColumns[variable] = ColumnIndexAndTypeInfo{
+          nextColumnIndex,
+          mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};
+      nextColumnIndex++;
+    }
+  };
 
   auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
                                     const auto& subtree) {

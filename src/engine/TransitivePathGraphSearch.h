@@ -103,7 +103,7 @@ Set depthFirstSearch(const GraphSearchProblem<T>& gsp,
     Id node = stack.back();
     stack.pop_back();
 
-    if (marks.contains(node)) {
+    if (marks.find(node) != marks.end()) {
       continue;
     }
 

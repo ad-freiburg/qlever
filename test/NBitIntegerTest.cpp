@@ -6,7 +6,6 @@
 
 #include <iostream>
 
-#include "util/Generator.h"
 #include "util/NBitInteger.h"
 #include "util/ValueIdentity.h"
 
@@ -54,7 +53,7 @@ auto testMinMax = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
 }};
 
 template <size_t N>
-cppcoro::generator<int64_t> valuesNearLimits() {
+std::vector<int64_t> valuesNearLimits() {
   using I = ad_utility::NBitInteger<N>;
   constexpr static auto min = I::min();
   constexpr static auto max = I::max();
@@ -69,12 +68,14 @@ cppcoro::generator<int64_t> valuesNearLimits() {
   constexpr static auto aBitMoreThanMax =
       globalMax - max > numElements ? max + numElements : globalMax;
 
+  std::vector<int64_t> result;
   for (auto i = aBitLessThanMin; i < aBitMoreThanMin; ++i) {
-    co_yield i;
+    result.push_back(i);
   }
   for (auto i = aBitLessThanMax; i < aBitMoreThanMax; ++i) {
-    co_yield i;
+    result.push_back(i);
   }
+  return result;
 }
 
 auto testUnaryFunctionNearLimits = ad_utility::ApplyAsValueIdentity{
@@ -111,7 +112,7 @@ auto testTranslationNearLimits =
 // The behavior of this operation is well-defined because unsigned integer
 // overflow is defined and signed-unsigned conversions are defined (signed
 // integers are 2s complement).
-template <size_t N, auto f, auto wouldOverflow>
+template <size_t N, auto& f, auto wouldOverflow>
 auto testTwoNumbers = [](int64_t a, int64_t b) {
   using I = ad_utility::NBitInteger<N>;
   auto aU = static_cast<uint64_t>(a);
@@ -171,20 +172,27 @@ bool multiplicationWouldOverflow(int64_t a, int64_t b) {
   return b == -1 ? false : a > min / b;
 }
 
+// Named objects for the functors below, because a non-type template
+// parameter of class type (e.g. `std::plus<>{}` passed by value) is
+// C++20-only; a reference non-type template parameter bound to a named,
+// static-storage-duration object works in C++17 as well.
+static constexpr std::plus<> plusOp{};
+static constexpr std::minus<> minusOp{};
+static constexpr std::multiplies<> multipliesOp{};
+
 template <size_t N>
 void addition(int64_t a, int64_t b) {
-  return testTwoNumbers<N, std::plus<>{}, &additionWouldOverflow>(a, b);
+  return testTwoNumbers<N, plusOp, &additionWouldOverflow>(a, b);
 }
 
 template <size_t N>
 void subtraction(int64_t a, int64_t b) {
-  return testTwoNumbers<N, std::minus<>{}, &subtractionWouldOverflow>(a, b);
+  return testTwoNumbers<N, minusOp, &subtractionWouldOverflow>(a, b);
 }
 
 template <size_t N>
 void multiplication(int64_t a, int64_t b) {
-  return testTwoNumbers<N, std::multiplies<>{}, &multiplicationWouldOverflow>(
-      a, b);
+  return testTwoNumbers<N, multipliesOp, &multiplicationWouldOverflow>(a, b);
 }
 
 auto testNumeric = ad_utility::ApplyAsValueIdentity{
@@ -222,20 +230,22 @@ void testAllN(F function, Args... args) {
 
 // A generator that yields 100 values near int64_t::min(), 100 values near 0,
 // 100 values near int64_t::max();
-auto valuesNearCornercasesInt64 = []() -> cppcoro::generator<int64_t> {
+auto valuesNearCornercasesInt64 = []() -> std::vector<int64_t> {
+  std::vector<int64_t> result;
   int64_t max = std::numeric_limits<int64_t>::max();
   for (auto i = max - numElements; i < max; ++i) {
-    co_yield i + 1;
+    result.push_back(i + 1);
   }
 
   for (auto i = -numElements; i < numElements; ++i) {
-    co_yield i;
+    result.push_back(i);
   }
 
   int64_t min = std::numeric_limits<int64_t>::min();
   for (auto i = min; i <= min + numElements; ++i) {
-    co_yield i;
+    result.push_back(i);
   }
+  return result;
 };
 
 TEST(NBitInteger, AllTests) {

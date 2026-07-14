@@ -194,7 +194,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       special 1 bit data type for it's entry references, instead of a bool. So
       an `auto` would land the recursive call right back in this else case.
       */
-      using VectorEntryType = T::value_type;
+      using VectorEntryType = typename T::value_type;
 
       std::ostringstream stream;
       stream << "[";

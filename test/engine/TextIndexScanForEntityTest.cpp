@@ -31,6 +31,10 @@ auto qecWithTextIndex = []() {
   return getQec(std::move(config));
 };
 
+// The tests below all build a text index via `qecWithTextIndex()`, which is
+// not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(TextIndexScanForEntity, ShortPrefixWord) {
   auto qec = qecWithTextIndex();
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
@@ -69,7 +73,8 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   ASSERT_EQ("\"the test on friday was really hard\"",
             h::getEntityFromResultTable(qec, result, 2));
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+      ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?entityVar2"}, {1, AlwaysDefined}},
@@ -89,7 +94,8 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(result.idTableView().numColumns(), 2);
   ASSERT_EQ(result.idTableView().size(), 1);
 
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+      ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   VariableToColumnMap expectedVariables = {
       {Variable{"?text3"}, {0, AlwaysDefined}},
       {Variable{
@@ -182,6 +188,7 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
                             "test"};
   ASSERT_TRUE(!s3.knownEmptyResult());
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(TextIndexScanForEntity, clone) {

@@ -31,25 +31,41 @@ std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
       }
       copy /= 2;
     }
-    result.push_back([](auto split, IdTable clone) -> Result::Generator {
-      IdTable subSplit{clone.numColumns(),
-                       ad_utility::makeUnlimitedAllocator<IdTable>()};
-      size_t splitIndex = 0;
-      for (size_t i = 0; i < clone.size(); ++i) {
-        subSplit.push_back(clone[i]);
-        if (splitIndex < split.size() && split[splitIndex] == i) {
-          IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
-          co_yield pair;
-          // Move back if not moved out to reuse buffer.
-          subSplit = std::move(pair.idTable_);
-          subSplit.clear();
-          ++splitIndex;
-        }
-      }
-      if (subSplit.size() > 0) {
-        co_yield {std::move(subSplit), LocalVocab{}};
-      }
-    }(std::move(reverseIndex), idTable.clone()));
+    result.push_back(
+        ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+            [split = std::move(reverseIndex), clone = idTable.clone(),
+             splitIndex = static_cast<size_t>(0), i = static_cast<size_t>(0),
+             subSplit = std::optional<IdTable>{},
+             finalYielded =
+                 false]() mutable -> std::optional<IdTableVocabPair> {
+              // Reproduce the original coroutine's yield sequence: accumulate
+              // rows of `clone` into `subSplit` and yield whenever the current
+              // row index matches the next entry in `split`, then yield any
+              // remaining rows once at the end.
+              if (!subSplit.has_value()) {
+                subSplit.emplace(clone.numColumns(),
+                                 ad_utility::makeUnlimitedAllocator<IdTable>());
+              }
+              while (i < clone.size()) {
+                subSplit->push_back(clone[i]);
+                bool atBoundary =
+                    splitIndex < split.size() && split[splitIndex] == i;
+                ++i;
+                if (atBoundary) {
+                  ++splitIndex;
+                  IdTableVocabPair pair{std::move(*subSplit), LocalVocab{}};
+                  subSplit.emplace(
+                      clone.numColumns(),
+                      ad_utility::makeUnlimitedAllocator<IdTable>());
+                  return pair;
+                }
+              }
+              if (!finalYielded && subSplit->size() > 0) {
+                finalYielded = true;
+                return IdTableVocabPair{std::move(*subSplit), LocalVocab{}};
+              }
+              return std::nullopt;
+            }}});
   }
 
   return result;
@@ -63,7 +79,10 @@ void consumeGenerator(Result::LazyResult generator) {
 }  // namespace
 
 TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
-  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<IdTableVocabPair> { return std::nullopt; }}},
+      {}};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
@@ -82,7 +101,10 @@ TEST(Result, idTableViewReturnsViewOfMaterializedTable) {
 
 // _____________________________________________________________________________
 TEST(Result, idTableViewThrowsWhenActuallyLazy) {
-  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<IdTableVocabPair> { return std::nullopt; }}},
+      {}};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
@@ -100,14 +122,20 @@ TEST(Result, cloneIdTableReturnsCopy) {
 
 // _____________________________________________________________________________
 TEST(Result, cloneIdTableThrowsWhenActuallyLazy) {
-  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<IdTableVocabPair> { return std::nullopt; }}},
+      {}};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.cloneIdTable(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
 TEST(Result, verifyIdTableThrowsOnSecondAccess) {
-  const Result result{[]() -> Result::Generator { co_return; }(), {}};
+  const Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<IdTableVocabPair> { return std::nullopt; }}},
+      {}};
   // First access should work
   for ([[maybe_unused]] IdTableVocabPair& _ : result.idTables()) {
     ADD_FAILURE() << "Generator is empty";
@@ -213,18 +241,30 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   Result result{
-      [](auto* qec, auto& t1, auto& t2, auto& t3) -> Result::Generator {
-        std::this_thread::sleep_for(1ms);
-        LocalVocab localVocab{};
-        localVocab.getIndexAndAddIfNotContained(
-            LocalVocabEntry::literalWithoutQuotes("Test",
-                                                  qec->getLocalVocabContext()));
-        co_yield {t1.clone(), std::move(localVocab)};
-        std::this_thread::sleep_for(3ms);
-        co_yield {t2.clone(), LocalVocab{}};
-        std::this_thread::sleep_for(5ms);
-        co_yield {t3.clone(), LocalVocab{}};
-      }(queryExecutionContext, idTable1, idTable2, idTable3),
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          [qec = queryExecutionContext, &idTable1, &idTable2, &idTable3,
+           i = 0]() mutable -> std::optional<IdTableVocabPair> {
+            if (i == 0) {
+              std::this_thread::sleep_for(1ms);
+              LocalVocab localVocab{};
+              localVocab.getIndexAndAddIfNotContained(
+                  LocalVocabEntry::literalWithoutQuotes(
+                      "Test", qec->getLocalVocabContext()));
+              ++i;
+              return IdTableVocabPair{idTable1.clone(), std::move(localVocab)};
+            }
+            if (i == 1) {
+              std::this_thread::sleep_for(3ms);
+              ++i;
+              return IdTableVocabPair{idTable2.clone(), LocalVocab{}};
+            }
+            if (i == 2) {
+              std::this_thread::sleep_for(5ms);
+              ++i;
+              return IdTableVocabPair{idTable3.clone(), LocalVocab{}};
+            }
+            return std::nullopt;
+          }}},
       {}};
   uint32_t callCounter = 0;
   bool finishedConsuming = false;
@@ -261,10 +301,10 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
   Result result{
-      []() -> Result::Generator {
-        throw std::runtime_error{"verifyRunOnNewChunkCallsFinishOnError"};
-        co_return;
-      }(),
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<IdTableVocabPair> {
+            throw std::runtime_error{"verifyRunOnNewChunkCallsFinishOnError"};
+          }}},
       {}};
   uint32_t callCounterGenerator = 0;
   uint32_t callCounterFinished = 0;
@@ -288,13 +328,14 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
-  Result result{[]() -> Result::Generator {
-                  throw ad_utility::CancellationException{
-                      ad_utility::CancellationState::MANUAL,
-                      "verifyRunOnNewChunkCallsFinishOnCancellation"};
-                  co_return;
-                }(),
-                {}};
+  Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          []() -> std::optional<IdTableVocabPair> {
+            throw ad_utility::CancellationException{
+                ad_utility::CancellationState::MANUAL,
+                "verifyRunOnNewChunkCallsFinishOnCancellation"};
+          }}},
+      {}};
   uint32_t callCounterGenerator = 0;
   uint32_t callCounterFinished = 0;
 
@@ -322,10 +363,17 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
   uint32_t callCounterFinished = 0;
 
   {
-    Result result{[](IdTable idTable) -> Result::Generator {
-                    co_yield {std::move(idTable), LocalVocab{}};
-                  }(makeIdTableFromVector({{}})),
-                  {}};
+    Result result{
+        ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+            [idTable = makeIdTableFromVector({{}}),
+             yielded = false]() mutable -> std::optional<IdTableVocabPair> {
+              if (yielded) {
+                return std::nullopt;
+              }
+              yielded = true;
+              return IdTableVocabPair{std::move(idTable), LocalVocab{}};
+            }}},
+        {}};
 
     result.runOnNewChunkComputed(
         [&](const IdTableVocabPair&, std::chrono::microseconds) {
@@ -397,16 +445,26 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
 // _____________________________________________________________________________
 TEST(Result, cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimit) {
   bool flag = false;
-  Result result{[](bool& innerFlag) -> Result::Generator {
-                  co_yield {IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(
-                                           ad_utility::MemorySize::bytes(0))},
-                            LocalVocab{}};
-                  IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
-                  idTable.push_back({Id::makeFromBool(true)});
-                  co_yield {std::move(idTable), LocalVocab{}};
-                  innerFlag = true;
-                }(flag),
-                {0}};
+  Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          [&flag, i = 0]() mutable -> std::optional<IdTableVocabPair> {
+            if (i == 0) {
+              ++i;
+              return IdTableVocabPair{
+                  IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(
+                                 ad_utility::MemorySize::bytes(0))},
+                  LocalVocab{}};
+            }
+            if (i == 1) {
+              ++i;
+              IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+              idTable.push_back({Id::makeFromBool(true)});
+              return IdTableVocabPair{std::move(idTable), LocalVocab{}};
+            }
+            flag = true;
+            return std::nullopt;
+          }}},
+      {0}};
   result.cacheDuringConsumption(
       [](const std::optional<IdTableVocabPair>&, const IdTableVocabPair&) {
         return true;
@@ -421,15 +479,22 @@ TEST(
     Result,
     cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimitOnInitialClone) {
   bool flag = false;
-  Result result{[](bool& innerFlag) -> Result::Generator {
-                  IdTable idTable{
-                      1, ad_utility::makeAllocatorWithLimit<Id>(
-                             ad_utility::MemorySize::bytes(1) * sizeof(Id))};
-                  idTable.push_back({Id::makeFromBool(true)});
-                  co_yield {std::move(idTable), LocalVocab{}};
-                  innerFlag = true;
-                }(flag),
-                {0}};
+  Result result{
+      ad_utility::InputRangeTypeErased{ad_utility::InputRangeFromGetCallable{
+          [&flag,
+           yielded = false]() mutable -> std::optional<IdTableVocabPair> {
+            if (yielded) {
+              flag = true;
+              return std::nullopt;
+            }
+            yielded = true;
+            IdTable idTable{1,
+                            ad_utility::makeAllocatorWithLimit<Id>(
+                                ad_utility::MemorySize::bytes(1) * sizeof(Id))};
+            idTable.push_back({Id::makeFromBool(true)});
+            return IdTableVocabPair{std::move(idTable), LocalVocab{}};
+          }}},
+      {0}};
   result.cacheDuringConsumption(
       [](const std::optional<IdTableVocabPair>&, const IdTableVocabPair&) {
         return true;

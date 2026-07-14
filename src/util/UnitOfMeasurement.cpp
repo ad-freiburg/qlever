@@ -13,7 +13,11 @@ namespace ad_utility::detail {
 // ____________________________________________________________________________
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit) {
-  using enum UnitOfMeasurement;
+  constexpr auto FEET = UnitOfMeasurement::FEET,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 METERS = UnitOfMeasurement::METERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 YARDS = UnitOfMeasurement::YARDS;
   auto multiplicator = [&unit]() {
     if (!unit.has_value()) {
       return 1.0;
@@ -46,7 +50,13 @@ double valueInUnitToKilometer(double valueInUnit,
 // ____________________________________________________________________________
 double squareMeterToUnit(double squareMeters,
                          std::optional<UnitOfMeasurement> unit) {
-  using enum UnitOfMeasurement;
+  constexpr auto ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS;
   auto multiplicator = [&unit]() {
     if (!unit.has_value()) {
       return 1.0;
@@ -78,7 +88,19 @@ double squareMeterToUnit(double squareMeters,
 
 // ____________________________________________________________________________
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
-  using enum UnitOfMeasurement;
+  constexpr auto ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 FEET = UnitOfMeasurement::FEET,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 METERS = UnitOfMeasurement::METERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS,
+                 UNKNOWN = UnitOfMeasurement::UNKNOWN,
+                 YARDS = UnitOfMeasurement::YARDS;
   static const std::unordered_map<std::string_view, UnitOfMeasurement> iriMap{
       {UNIT_METER_IRI, METERS},
       {UNIT_KILOMETER_IRI, KILOMETERS},
@@ -102,14 +124,24 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
 
 // ____________________________________________________________________________
 bool isLengthUnit(UnitOfMeasurement unit) {
-  using enum UnitOfMeasurement;
+  constexpr auto FEET = UnitOfMeasurement::FEET,
+                 KILOMETERS = UnitOfMeasurement::KILOMETERS,
+                 METERS = UnitOfMeasurement::METERS,
+                 MILES = UnitOfMeasurement::MILES,
+                 YARDS = UnitOfMeasurement::YARDS;
   return unit == METERS || unit == KILOMETERS || unit == MILES ||
          unit == FEET || unit == YARDS;
 }
 
 // ____________________________________________________________________________
 bool isAreaUnit(UnitOfMeasurement unit) {
-  using enum UnitOfMeasurement;
+  constexpr auto ACRE = UnitOfMeasurement::ACRE, ARE = UnitOfMeasurement::ARE,
+                 HECTARE = UnitOfMeasurement::HECTARE,
+                 SQUARE_FEET = UnitOfMeasurement::SQUARE_FEET,
+                 SQUARE_KILOMETERS = UnitOfMeasurement::SQUARE_KILOMETERS,
+                 SQUARE_METERS = UnitOfMeasurement::SQUARE_METERS,
+                 SQUARE_MILES = UnitOfMeasurement::SQUARE_MILES,
+                 SQUARE_YARDS = UnitOfMeasurement::SQUARE_YARDS;
   return unit == SQUARE_METERS || unit == SQUARE_KILOMETERS ||
          unit == SQUARE_MILES || unit == SQUARE_FEET || unit == SQUARE_YARDS ||
          unit == ACRE || unit == ARE || unit == HECTARE;

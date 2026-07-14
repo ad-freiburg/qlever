@@ -223,7 +223,6 @@ TEST(QueryPlanner, testBFSLeaveOut) {
 
 TEST(QueryPlanner, indexScanZeroVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
   h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z>}",
@@ -237,7 +236,7 @@ TEST(QueryPlanner, indexScanZeroVariables) {
 
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO;
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
@@ -255,7 +254,7 @@ TEST(QueryPlanner, indexScanOneVariable) {
 
 TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO;
 
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -266,7 +265,6 @@ TEST(QueryPlanner, indexScanTwoVariables) {
 
 TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x \n "
@@ -308,7 +306,7 @@ TEST(QueryPlanner, joinOfFullScans) {
 
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
-  using enum ::OrderBy::AscOrDesc;
+  constexpr auto Asc = OrderBy::AscOrDesc::Asc;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
@@ -372,7 +370,9 @@ TEST(QueryPlanner, testFilterAfterJoin) {
 
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
-  using enum Permutation::Enum;
+  constexpr auto SPO = Permutation::Enum::SPO, PSO = Permutation::Enum::PSO,
+                 SOP = Permutation::Enum::SOP, OSP = Permutation::Enum::OSP,
+                 POS = Permutation::Enum::POS;
 
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -636,7 +636,8 @@ TEST(QueryPlanner, testSimpleOptional) {
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, SOP = Permutation::Enum::SOP,
+                 PSO = Permutation::Enum::PSO;
 
   auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
@@ -648,7 +649,8 @@ TEST(QueryPlanner, SimpleTripleOneVariable) {
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO,
+                 SOP = Permutation::Enum::SOP, SPO = Permutation::Enum::SPO;
 
   // In the following tests we need the query planner to be aware that the index
   // contains the entities `<s> <p> <o>` that are used below, otherwise it will
@@ -688,7 +690,9 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {
-  using enum Permutation::Enum;
+  constexpr auto SPO = Permutation::Enum::SPO, SOP = Permutation::Enum::SOP,
+                 PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 OSP = Permutation::Enum::OSP, OPS = Permutation::Enum::OPS;
 
   // Fixed predicate.
   // Don't care about the sorting.
@@ -747,6 +751,10 @@ std::string internalVar(int i) {
 }
 }  // namespace
 
+// The `TransitivePath*` tests below reference `TransitivePathSide` and the
+// `h::transitivePath` matcher, which are excluded under the reduced C++17
+// feature set (see the `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(QueryPlanner, TransitivePathUnbound) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
@@ -815,6 +823,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
           scan(internalVar(0), "<p>", internalVar(1), {Permutation::POS})),
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 TEST(QueryPlanner, PathSearchSingleTarget) {
   auto scan = h::IndexScanFromStrings;
@@ -1657,6 +1666,11 @@ auto getQecWithTextIndex = []() {
 };
 }  // namespace
 
+// The `Text*` tests below plan queries over the text index, which is not
+// available under the reduced C++17 feature set (see the runtime throw "The
+// text index is not available in C++17 mode" in
+// `test/util/IndexTestHelpers.cpp`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForWord) {
   auto qec = getQecWithTextIndex();
@@ -2290,6 +2304,7 @@ TEST(QueryPlanner, TextLimit) {
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 TEST(QueryPlanner, NonDistinctVariablesInTriple) {
   auto eq = [](std::string_view l, std::string_view r) {
@@ -2523,7 +2538,7 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, WarningsOnUnboundVariables) {
-  using enum ::OrderBy::AscOrDesc;
+  constexpr auto Asc = OrderBy::AscOrDesc::Asc;
   // Unbound variable in ORDER BY.
   h::expect(
       "SELECT * {} ORDER BY ?x",
@@ -2753,6 +2768,9 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
                               h::IndexScanFromStrings("?s2", "?p2", "?o2")));
 }
 
+// `TransitivePathSide`/`h::transitivePath` are excluded under the reduced C++17
+// feature set (see the `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnion) {
   auto* qec = ad_utility::testing::getQec();
@@ -2856,6 +2874,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
                                 h::IndexScanFromStrings("?x", "<P31>", "?o")))),
       qec, {4, 16, 64'000'000});
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionDoesntExplode) {
@@ -2876,6 +2895,10 @@ SELECT * {
   h::expect(std::move(query), h::_);
 }
 
+// This test plans a query with a transitive property path, which relies on
+// `TransitivePathBase` and is therefore excluded under the reduced C++17
+// feature set (see the `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
   using namespace ::testing;
@@ -2900,6 +2923,7 @@ TEST(QueryPlanner, ensureRegularJoinIsUsedIfTransitivePathIsAlreadyBound) {
                        operation->getChildren().at(1)->getRootOperation());
           })));
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
@@ -2918,6 +2942,9 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
       std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
 }
 
+// `TransitivePathSide`/`h::transitivePath` are excluded under the reduced C++17
+// feature set (see the `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
@@ -2987,6 +3014,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
                                "?_QLever_internal_variable_qp_18")))))),
       qec, {4, 16, 64'000'000});
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, postQueryValuesClause) {
@@ -3056,6 +3084,10 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
             hasLimit({2})));
 }
 
+// The `PropertyPath*` tests below reference `TransitivePathSide` and the
+// `h::transitivePath` matcher, which are excluded under the reduced C++17
+// feature set (see the `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(QueryPlanner,
      PropertyPathWithGraphVariableNoSpecialHandlingWhenJoiningOnGraph) {
@@ -3298,6 +3330,7 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
               "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, negatedPaths) {
@@ -3340,6 +3373,10 @@ TEST(QueryPlanner, negatedPaths) {
                              "?c", "?_QLever_internal_variable_qp_1", "?a"))));
 }
 
+// The tests below reference `TransitivePathSide` and the `h::transitivePath`
+// matcher, which are excluded under the reduced C++17 feature set (see the
+// `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(QueryPlanner, transitivePathWithoutVariables) {
   TransitivePathSide left{std::nullopt, 1, 1, 0};
@@ -3537,6 +3574,7 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
                                   "?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, correctFiltersHandling) {
@@ -3606,6 +3644,11 @@ TEST(QueryPlanner, correctFiltersHandling) {
                   "42", Variable{"?unrelated"})));
 }
 
+// The two tests below reference `TransitivePathSide` and the
+// `h::transitivePath` matcher, which are excluded under the reduced C++17
+// feature set (see the
+// `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithJoinOptimization) {
   TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
@@ -3749,6 +3792,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                     h::IndexScanFromStrings("?g", "<b>", "?g2")),
             qec);
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, filtersWithUnboundVariables) {
@@ -3797,6 +3841,10 @@ TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
                         scan("?a", "<equal-to>", "?b")));
 }
 
+// One of the queries below uses a transitive property path, which relies on
+// `TransitivePathBase` and is therefore excluded under the reduced C++17
+// feature set (see the `#ifndef` guard in `TransitivePathBase.h`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // Regression test for GitHub issue #2194
 TEST(QueryPlanner, RegressionTest2194) {
   // Test that the three queries reported in
@@ -3856,6 +3904,7 @@ LIMIT 1
   h::expect(q1, ::testing::_);
   h::expect(q2, ::testing::_);
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Test that subqueries strip columns correctly and that stripped variables
 // are not even stored as `stripped`.

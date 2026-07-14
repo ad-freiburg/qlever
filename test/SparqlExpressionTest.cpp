@@ -5,6 +5,7 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/functional/bind_front.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -112,11 +113,22 @@ AllocatorWithLimit<Id> alloc = ad_utility::testing::makeAllocator();
 // can be converted to a `string_view`. All those types can be used as input to
 // the test helper functions below and are converted to `ExpressionResult`s by
 // the test machinery.
+// Detect whether `T` is a `std::vector` whose `value_type` is a constant
+// result. This has to be a separate trait (instead of an inline
+// `ad_utility::isVector<T> && isConstantResult<typename T::value_type>`)
+// because under the C++17 backports a `CPP_concept` expands to a plain
+// `constexpr bool` that does not short-circuit, so `typename T::value_type`
+// would be instantiated even for non-vector `T`.
+template <typename T, typename = void>
+struct IsVectorOfConstantResult : std::false_type {};
 template <typename T>
-concept VectorOrExpressionResult =
-    SingleExpressionResult<T> ||
-    (ad_utility::isVector<T> && isConstantResult<typename T::value_type>) ||
-    std::convertible_to<T, std::string_view>;
+struct IsVectorOfConstantResult<T, std::enable_if_t<ad_utility::isVector<T>>>
+    : std::bool_constant<isConstantResult<typename T::value_type>> {};
+
+template <typename T>
+CPP_concept VectorOrExpressionResult =
+    SingleExpressionResult<T> || IsVectorOfConstantResult<T>::value ||
+    ql::concepts::convertible_to<T, std::string_view>;
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
@@ -157,8 +169,8 @@ CPP_template(typename T)(
 // Return a matcher that matches a result of an expression that is not a vector.
 // If it is an ID (possibly contained in the `IdOrLocalVocabEntry` variant),
 // then the `matchId` matcher from above is used, else we test for equality.
-template <typename T>
-requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
+CPP_template(typename T)(requires(
+    !isVectorResult<T>)) auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLocalVocabEntry>) {
@@ -195,8 +207,15 @@ auto sparqlExpressionResultMatcher = [](const auto& expected) {
 // A generic function that can copy all kinds of `SingleExpressionResult`s. Note
 // that we have disabled the implicit copying of vector results, but for testing
 // this is very useful.
+// Detection trait for whether `x.clone()` is well-formed (replacement for the
+// C++20 `requires`-expression in the `clone` lambda below).
+template <typename T, typename = void>
+struct HasClone : std::false_type {};
+template <typename T>
+struct HasClone<T, std::void_t<decltype(std::declval<const T&>().clone())>>
+    : std::true_type {};
 auto clone = [](const auto& x) {
-  if constexpr (requires { x.clone(); }) {
+  if constexpr (HasClone<std::decay_t<decltype(x)>>::value) {
     return x.clone();
   } else {
     return x;
@@ -259,13 +278,15 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
 
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
-auto testNaryExpression = [](auto&& makeExpression,
-                             VectorOrExpressionResult auto const& expected,
-                             VectorOrExpressionResult auto const&... operands) {
-  return testNaryExpressionImpl(makeExpression,
-                                toExpressionResult(clone(expected)),
-                                toExpressionResult(clone(operands))...);
-};
+auto testNaryExpression =
+    [](auto&& makeExpression,
+       QL_CONCEPT_OR_NOTHING(VectorOrExpressionResult) auto const& expected,
+       QL_CONCEPT_OR_NOTHING(
+           VectorOrExpressionResult) auto const&... operands) {
+      return testNaryExpressionImpl(makeExpression,
+                                    toExpressionResult(clone(expected)),
+                                    toExpressionResult(clone(operands))...);
+    };
 
 // Assert that the given commutative binary expression has the `expected` result
 // in both orders of the operands `op1` and `op2`.
@@ -285,33 +306,48 @@ auto testBinaryExpressionCommutative =
 // This allows us to get the info about the actual point of the test failure via
 // the `source_location`. TODO<joka921> Rewrite all the tests to use this
 // facility.
-template <auto makeFunction>
+//
+// NOTE: The `makeFunction` is stored as a runtime member (instead of a non-type
+// template parameter) because it is sometimes a class-type object (e.g. a
+// lambda or a `VariadicExpressionFactory`), which cannot be used as a non-type
+// template parameter under C++17. Use `makeTestNaryExpressionVec` (below) to
+// construct instances with the type of `MakeFunction` deduced.
+template <typename MakeFunction>
 struct TestNaryExpressionVec {
-  template <VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>
+  MakeFunction makeFunction_;
+  template <QL_CONCEPT_OR_TYPENAME(VectorOrExpressionResult) Exp,
+            QL_CONCEPT_OR_TYPENAME(VectorOrExpressionResult)... Ops>
   void operator()(Exp expected, std::tuple<Ops...> ops,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
     std::apply(
         [&](auto&... args) {
-          testNaryExpression(makeFunction, expected, args...);
+          testNaryExpression(makeFunction_, expected, args...);
         },
         ops);
   }
 };
+template <typename MakeFunction>
+TestNaryExpressionVec<MakeFunction> makeTestNaryExpressionVec(
+    MakeFunction makeFunction) {
+  return TestNaryExpressionVec<MakeFunction>{std::move(makeFunction)};
+}
 
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
 auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
 auto testMultiply = testBinaryExpressionCommutative<&makeMultiplyExpression>;
-auto testMinus = std::bind_front(testNaryExpression, &makeSubtractExpression);
-auto testDivide = std::bind_front(testNaryExpression, &makeDivideExpression);
+auto testMinus = absl::bind_front(testNaryExpression, &makeSubtractExpression);
+auto testDivide = absl::bind_front(testNaryExpression, &makeDivideExpression);
 
 // _____________________________________________________________________________________
 TEST(SparqlExpression, logicalOperators) {
   // Test `AndExpression` and `OrExpression`.
-  constexpr auto t = B(true);
-  constexpr auto f = B(false);
+  // NOTE: `B`'s `operator()` is not `constexpr` (see `IdTestHelpers.h`), so `t`
+  // and `f` cannot be `constexpr` under the C++17 backports.
+  const auto t = B(true);
+  const auto f = B(false);
   V<Id> b{{f, t, t, f}, alloc};
   V<Id> d{{D(1.0), D(2.0), D(std::numeric_limits<double>::quiet_NaN()), D(0.0)},
           alloc};
@@ -542,7 +578,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
 
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Test for `DateTime` - `DateTime`.
   V<Id> minus2000{{createDat("-P32954DT13H48M37S", false),
                    createDat("P3553DT1H1M59S", false),
@@ -608,12 +644,13 @@ TEST(SparqlExpression, arithmeticOperators) {
 // Test that the unary expression that is specified by the `makeFunction` yields
 // the `expected` result when being given the `operand`.
 template <auto makeFunction>
-auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
-                              VectorOrExpressionResult auto const& expected,
-                              source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
-  testNaryExpression(makeFunction, expected, operand);
-};
+auto testUnaryExpression =
+    [](QL_CONCEPT_OR_NOTHING(VectorOrExpressionResult) auto const& operand,
+       QL_CONCEPT_OR_NOTHING(VectorOrExpressionResult) auto const& expected,
+       source_location l = AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(l);
+      testNaryExpression(makeFunction, expected, operand);
+    };
 
 TEST(SparqlExpression, dateOperators) {
   // Test `YearExpression`, `MonthExpression`, `DayExpression`,
@@ -722,15 +759,30 @@ TEST(SparqlExpression, dateOperators) {
   checkHours(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMinutes(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
   checkSeconds(Ids{Id::makeFromDouble(120.0123)}, Ids{Id::makeUndefined()});
+  // `ToEpochExpression` is not available in the reduced C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   checkEpoch(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
+#else
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      checkEpoch(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()}),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+#endif
   auto testYear = testUnaryExpression<&makeYearExpression>;
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLocalVocabEntryVec{lit("noDate")}, Ids{U});
 
-  // Test epoch for invalid dates.
+  // Test epoch for invalid dates. `ToEpochExpression` is not available in the
+  // reduced C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   checkEpoch(Ids{Id::makeFromDate(D::parseXsdDate("1970-02-30"))},
              Ids{Id::makeUndefined()});
+#else
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      checkEpoch(Ids{Id::makeFromDate(D::parseXsdDate("1970-02-30"))},
+                 Ids{Id::makeUndefined()}),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+#endif
 
   // test makeTimezoneStrExpression / makeTimezoneExpression
   auto positive = DayTimeDuration::Type::Positive;
@@ -784,11 +836,14 @@ TEST(SparqlExpression, dateOperators) {
 namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = TestNaryExpressionVec<&makeIriOrUriExpression>{};
-auto makeStrlenWithStr = [](auto arg) {
+auto checkIriOrUri = makeTestNaryExpressionVec(&makeIriOrUriExpression);
+// NOTE: This is a free function (not a lambda) so that its address can be used
+// as a non-type template parameter for `testUnaryExpression`, which is not
+// possible for a class-type (lambda) object under C++17.
+inline SparqlExpression::Ptr makeStrlenWithStr(SparqlExpression::Ptr arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
-};
-auto checkStrlenWithStrChild = testUnaryExpression<makeStrlenWithStr>;
+}
+auto checkStrlenWithStrChild = testUnaryExpression<&makeStrlenWithStr>;
 }  // namespace
 TEST(SparqlExpression, stringOperators) {
   // Test `StrlenExpression` and `StrExpression`.
@@ -937,14 +992,15 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
 
 // _____________________________________________________________________________________
 auto checkStrStarts =
-    std::bind_front(testNaryExpression, &makeStrStartsExpression);
-auto checkStrEnds = std::bind_front(testNaryExpression, &makeStrEndsExpression);
+    absl::bind_front(testNaryExpression, &makeStrStartsExpression);
+auto checkStrEnds =
+    absl::bind_front(testNaryExpression, &makeStrEndsExpression);
 auto checkContains =
-    std::bind_front(testNaryExpression, &makeContainsExpression);
+    absl::bind_front(testNaryExpression, &makeContainsExpression);
 auto checkStrAfter =
-    std::bind_front(testNaryExpression, &makeStrAfterExpression);
+    absl::bind_front(testNaryExpression, &makeStrAfterExpression);
 auto checkStrBefore =
-    std::bind_front(testNaryExpression, &makeStrBeforeExpression);
+    absl::bind_front(testNaryExpression, &makeStrBeforeExpression);
 TEST(SparqlExpression, binaryStringOperations) {
   // Test STRSTARTS, STRENDS, CONTAINS, STRBEFORE, and STRAFTER.
   auto F = Id::makeFromBool(false);
@@ -1014,7 +1070,7 @@ TEST(SparqlExpression, binaryStringOperations) {
 
 // ______________________________________________________________________________
 static auto checkSubstr =
-    std::bind_front(testNaryExpression, makeSubstrExpression);
+    absl::bind_front(testNaryExpression, makeSubstrExpression);
 TEST(SparqlExpression, substr) {
   auto strs = [](const std::vector<std::variant<Id, std::string>>& input) {
     VectorWithMemoryLimit<IdOrLocalVocabEntry> result(alloc);
@@ -1090,7 +1146,7 @@ TEST(SparqlExpression, substr) {
 TEST(SparqlExpression, strIriDtTagged) {
   auto U = Id::makeUndefined();
   auto checkStrIriTag =
-      std::bind_front(testNaryExpression, &makeStrIriDtExpression);
+      absl::bind_front(testNaryExpression, &makeStrIriDtExpression);
   Id geoPoint = Id::makeFromGeoPoint(GeoPoint{0, 0});
   Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2026-02-16"));
 
@@ -1146,7 +1202,7 @@ TEST(SparqlExpression, strIriDtTagged) {
 TEST(SparqlExpression, strLangTagged) {
   auto U = Id::makeUndefined();
   auto checkStrTag =
-      std::bind_front(testNaryExpression, &makeStrLangTagExpression);
+      absl::bind_front(testNaryExpression, &makeStrLangTagExpression);
   checkStrTag(IdOrLocalVocabEntryVec{lit("chat", "@en")},
               IdOrLocalVocabEntryVec{lit("chat")},
               IdOrLocalVocabEntryVec{lit("en")});
@@ -1252,7 +1308,7 @@ TEST(SparqlExpression, customNumericFunctions) {
   testUnaryExpression<makeTanExpression>(
       std::vector<Id>{I(0), D(1), D(2), D(-1)},
       std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
-  auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
+  auto checkPow = absl::bind_front(testNaryExpression, &makePowExpression);
   checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
            IdOrLocalVocabEntryVec{I(0), D(5), I(0), lit("abc")});
 }
@@ -1551,7 +1607,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
-  auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
+  auto checkDist = absl::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
   auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
   auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
@@ -1616,7 +1672,10 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              sfGeoType("Polygon"), U});
 
   // Bounding coordinate expressions
-  using enum ad_utility::BoundingCoordinate;
+  constexpr auto MIN_X = ad_utility::BoundingCoordinate::MIN_X,
+                 MIN_Y = ad_utility::BoundingCoordinate::MIN_Y,
+                 MAX_X = ad_utility::BoundingCoordinate::MAX_X,
+                 MAX_Y = ad_utility::BoundingCoordinate::MAX_Y;
   auto checkMinX =
       testUnaryExpression<&makeBoundingCoordinateExpression<MIN_X>>;
   auto checkMinY =
@@ -1664,7 +1723,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
     return len.value().length();
   };
 
-  auto checkLength = std::bind_front(testNaryExpression, &makeLengthExpression);
+  auto checkLength =
+      absl::bind_front(testNaryExpression, &makeLengthExpression);
   auto checkMetricLength = testUnaryExpression<&makeMetricLengthExpression>;
   const auto kilometer = lit("http://qudt.org/vocab/unit/KiloM",
                              "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
@@ -1708,7 +1768,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   };
 
   // Geometry area functions
-  auto checkArea = std::bind_front(testNaryExpression, &makeAreaExpression);
+  auto checkArea = absl::bind_front(testNaryExpression, &makeAreaExpression);
   auto checkMetricArea = testUnaryExpression<&makeMetricAreaExpression>;
   const auto squareKilometer =
       lit("http://qudt.org/vocab/unit/KiloM2",
@@ -1725,7 +1785,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                                     D(expectedArea(polygon)), D(0.0), U});
 
   auto checkGeometryN =
-      std::bind_front(testNaryExpression, &makeGeometryNExpression);
+      absl::bind_front(testNaryExpression, &makeGeometryNExpression);
   // Non-geometry types
   checkGeometryN(IdOrLocalVocabEntryVec{U, U, U, U},
                  Ids{D(5), I(3), B(true), U}, Ids{I(1), U, D(5), I(2)});
@@ -1766,7 +1826,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
-      std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
+      absl::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
 
   const IdOrLocalVocabEntryVec geometries{
       // 1. Undefined input geometry.
@@ -1820,8 +1880,9 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, ifAndCoalesce) {
-  auto checkIf = TestNaryExpressionVec<&makeIfExpression>{};
-  auto checkCoalesce = TestNaryExpressionVec<makeCoalesceExpressionVariadic>{};
+  auto checkIf = makeTestNaryExpressionVec(&makeIfExpression);
+  auto checkCoalesce =
+      makeTestNaryExpressionVec(makeCoalesceExpressionVariadic);
 
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
@@ -1870,7 +1931,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, concatExpression) {
-  auto checkConcat = TestNaryExpressionVec<makeConcatExpressionVariadic>{};
+  auto checkConcat = makeTestNaryExpressionVec(makeConcatExpressionVariadic);
 
   const auto T = Id::makeFromBool(true);
 
@@ -1983,8 +2044,9 @@ TEST(SparqlExpression, ReplaceExpression) {
     return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
                                  nullptr);
   };
-  auto checkReplace = TestNaryExpressionVec<makeReplaceExpressionThreeArgs>{};
-  auto checkReplaceWithFlags = TestNaryExpressionVec<&makeReplaceExpression>{};
+  auto checkReplace = makeTestNaryExpressionVec(makeReplaceExpressionThreeArgs);
+  auto checkReplaceWithFlags =
+      makeTestNaryExpressionVec(&makeReplaceExpression);
   // A simple replace( no regexes involved).
   checkReplace(
       idOrLitOrStringVec({"null", "Eins", "zwEi", "drEi", U, U}),
@@ -2154,6 +2216,9 @@ TEST(SparqlExpression, groupedVariableIsConstantOutsideOfAggregate) {
   }
 }
 
+// `EncodeForUri` (`makeEncodeForUriExpression`) is not available in the reduced
+// C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // ______________________________________________________________________________
 TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
@@ -2177,6 +2242,7 @@ TEST(SparqlExpression, encodeForUri) {
   checkEncodeForUri(testContext().notInVocabC, IoS{U});
   checkEncodeForUri(U, IoS{U});
 }
+#endif
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
@@ -2193,7 +2259,11 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   using namespace sparqlExpression;
   IdExpression idExpr(ValueId::makeFromInt(42));
 
-  using enum SparqlExpression::AggregateStatus;
+  constexpr auto NoAggregate = SparqlExpression::AggregateStatus::NoAggregate,
+                 DistinctAggregate =
+                     SparqlExpression::AggregateStatus::DistinctAggregate,
+                 NonDistinctAggregate =
+                     SparqlExpression::AggregateStatus::NonDistinctAggregate;
 
   ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
   ASSERT_FALSE(idExpr.isInsideAggregate());
@@ -2209,7 +2279,11 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   // If `hasChild` is `true`, then the aggregate is expected to have at least
   // one child. This is the case for all aggregates except the
   // `CountStarExpression`.
-  auto match = [](bool distinct, bool hasChild = true) {
+  // Capture `DistinctAggregate`/`NonDistinctAggregate` explicitly: even
+  // though they are `constexpr` and their use below does not odr-use them,
+  // GCC 8 (unlike later GCC versions) requires them to be captured anyway.
+  auto match = [DistinctAggregate, NonDistinctAggregate](bool distinct,
+                                                         bool hasChild = true) {
     auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
     auto distinctMatcher =
         AD_PROPERTY(SparqlExpression, isAggregate, aggStatus);
@@ -2412,11 +2486,21 @@ auto makeTypeErasedOrAlwaysTrue =
     makeTypeErasedExpression<BinaryOrForTypeErasure,
                              sparqlExpression::detail::AlwaysTrueValueGetter>;
 
+// Free-function wrapper around `makeTypeErasedOrExpression` so that its address
+// can be used as a non-type template parameter for
+// `testBinaryExpressionCommutative`, which is not possible for the class-type
+// (lambda) object `makeTypeErasedOrExpression` under C++17.
+inline SparqlExpression::Ptr makeTypeErasedOrExpressionFn(
+    SparqlExpression::Ptr c1, SparqlExpression::Ptr c2) {
+  return makeTypeErasedOrExpression(std::move(c1), std::move(c2));
+}
+
 // Test the functionality + interface of simple type erased expressions.
 TEST(NaryExpressionTypeErased, basicTests) {
   auto makeOr = makeTypeErasedOrExpression;
   auto makeAnd = makeTypeErasedAndExpression;
-  auto testOrTe = testBinaryExpressionCommutative<makeTypeErasedOrExpression>;
+  auto testOrTe =
+      testBinaryExpressionCommutative<&makeTypeErasedOrExpressionFn>;
   // Note: as we use the `IsValidValueGetter` (for simplicity, as it returns a
   // plain `bool`), the only inputs that are counted as `false` are `UNDEF` and
   // `NaN`.

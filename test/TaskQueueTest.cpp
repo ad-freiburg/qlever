@@ -19,7 +19,7 @@
 using namespace std::chrono_literals;
 
 TEST(TaskQueue, SimpleSum) {
-  std::atomic<int> result;
+  std::atomic<int> result{0};
   ad_utility::TaskQueue q{10, 5};
   for (size_t i = 0; i <= 1000; ++i) {
     q.push([&result, i] { result += i; });
@@ -29,7 +29,7 @@ TEST(TaskQueue, SimpleSum) {
 }
 
 TEST(TaskQueue, SimpleSumWithDestructor) {
-  std::atomic<int> result;
+  std::atomic<int> result{0};
   {
     ad_utility::TaskQueue q{10, 5};
     for (size_t i = 0; i <= 1000; ++i) {
@@ -40,7 +40,7 @@ TEST(TaskQueue, SimpleSumWithDestructor) {
 }
 
 TEST(TaskQueue, SimpleSumWithWait) {
-  std::atomic<int> result;
+  std::atomic<int> result{0};
   ad_utility::TaskQueue q{10, 5};
   for (size_t i = 0; i <= 1000; ++i) {
     q.push([&result, i] {

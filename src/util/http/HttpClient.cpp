@@ -233,7 +233,10 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     // Check if the response is a redirect (301, 302, 307, 308), we don't modify
     // the request type to GET for status codes 301 and 302, which would be the
     // behavior of browsers.
-    using enum http::status;
+    constexpr auto found = http::status::found,
+                   moved_permanently = http::status::moved_permanently,
+                   permanent_redirect = http::status::permanent_redirect,
+                   temporary_redirect = http::status::temporary_redirect;
     bool isRedirect =
         ad_utility::contains(std::array{moved_permanently, found,
                                         temporary_redirect, permanent_redirect},

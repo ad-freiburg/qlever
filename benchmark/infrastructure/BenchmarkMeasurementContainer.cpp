@@ -13,7 +13,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
-#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -23,6 +22,7 @@
 
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
+#include "backports/algorithm.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -84,7 +84,7 @@ ResultGroup::operator std::string() const {
     }
 
     const std::string& list = ad_utility::lazyStrJoin(
-        std::views::transform(
+        ql::views::transform(
             vec,
             [](const auto& pointer) -> decltype(auto) { return (*pointer); }),
         "\n\n");
@@ -283,7 +283,7 @@ ResultTable::operator std::string() const {
   std::vector<size_t> columnMaxStringWidth(numColumns(), 0);
   for (size_t column = 0; column < numColumns(); column++) {
     // How long is the string representation of a column entry in a wanted row?
-    auto stringWidthOfRow = std::views::transform(
+    auto stringWidthOfRow = ql::views::transform(
         entries_, [&column, &entryToString](const std::vector<EntryType>& row) {
           return entryToString(row.at(column)).length();
         });
@@ -307,7 +307,7 @@ ResultTable::operator std::string() const {
   // Printing the table.
   ad_utility::lazyStrJoin(
       &stream,
-      std::views::transform(
+      ql::views::transform(
           wholeTable,
           [&createRowString, &columnMaxStringWidth](const auto& ptr) {
             return createRowString(*ptr, columnMaxStringWidth);

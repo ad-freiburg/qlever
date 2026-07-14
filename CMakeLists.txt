@@ -639,10 +639,14 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
-    add_executable(qlever-server src/ServerMain.cpp)
-    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
-    if (USE_PRECOMPILED_HEADERS)
-        target_precompile_headers(qlever-server REUSE_FROM engine)
+    # `qlever-server` links the `server` CMake target, which is excluded
+    # under `REDUCED_FEATURE_SET_FOR_CPP17`.
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        add_executable(qlever-server src/ServerMain.cpp)
+        qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+        if (USE_PRECOMPILED_HEADERS)
+            target_precompile_headers(qlever-server REUSE_FROM engine)
+        endif()
     endif()
 endif()
 
@@ -658,9 +662,14 @@ qlever_target_link_libraries(PrintIndexVersionMain util)
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS
         qlever-index
-        qlever-server
         RUNTIME DESTINATION bin
     )
+    if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+        install(TARGETS
+            qlever-server
+            RUNTIME DESTINATION bin
+        )
+    endif()
 endif()
 
 ###############################################################

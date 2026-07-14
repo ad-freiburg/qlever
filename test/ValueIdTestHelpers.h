@@ -16,14 +16,24 @@ static constexpr size_t numElements = 10'000;
 static constexpr size_t numElements = 10;
 #endif
 
+// `ValueId::minPositiveDouble` is only available as a compile-time constant
+// outside the C++17 reduced feature set (see the comment in `ValueId.h`), but
+// the tests below only need its runtime value.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+inline constexpr double minPositiveDouble = ValueId::minPositiveDouble;
+#else
+inline const double minPositiveDouble =
+    absl::bit_cast<double>(uint64_t{1} << ValueId::numDatatypeBits);
+#endif
+
 inline auto positiveRepresentableDoubleGenerator =
-    ad_utility::RandomDoubleGenerator(ValueId::minPositiveDouble,
+    ad_utility::RandomDoubleGenerator(minPositiveDouble,
                                       std::numeric_limits<double>::max());
 inline auto negativeRepresentableDoubleGenerator =
     ad_utility::RandomDoubleGenerator(-std::numeric_limits<double>::max(),
-                                      -ValueId::minPositiveDouble);
-inline auto nonRepresentableDoubleGenerator = ad_utility::RandomDoubleGenerator(
-    -ValueId::minPositiveDouble, ValueId::minPositiveDouble);
+                                      -minPositiveDouble);
+inline auto nonRepresentableDoubleGenerator =
+    ad_utility::RandomDoubleGenerator(-minPositiveDouble, minPositiveDouble);
 inline auto indexGenerator =
     ad_utility::SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
 inline auto invalidIndexGenerator =

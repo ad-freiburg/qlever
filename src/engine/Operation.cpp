@@ -218,7 +218,9 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
         },
         [this](Result::GeneratorState state) {
           runtimeInfo().status_ = [state]() {
-            using enum Result::GeneratorState;
+            constexpr auto FINISHED = Result::GeneratorState::FINISHED,
+                           CANCELLED = Result::GeneratorState::CANCELLED,
+                           FAILED = Result::GeneratorState::FAILED;
             switch (state) {
               case FINISHED:
                 return RuntimeInformation::lazilyMaterializedCompleted;

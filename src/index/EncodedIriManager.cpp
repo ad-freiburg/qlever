@@ -11,14 +11,22 @@
 
 #include "util/CtreHelpers.h"
 
+namespace {
+// Patterns for `detail::matchDigitsPrefix` below. These have to be variables
+// with linkage (not function-local), because a `const auto&` non-type
+// template parameter can only bind to an object with static storage
+// duration and linkage, not to a function-local variable (unlike in C++20,
+// which allows literal-class-type template arguments directly).
+constexpr auto digitsPrefixRegex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
+constexpr ctll::fixed_string digitsCaptureGroup = "digits";
+}  // namespace
+
 // ____________________________________________________________________________
 std::optional<std::string_view> detail::matchDigitsPrefix(
     std::string_view repr) {
-  static constexpr auto regex = ctll::fixed_string{"(?<digits>[0-9]+)>"};
-  auto match = ctre::match<regex>(repr);
+  auto match = ctre::match<digitsPrefixRegex>(repr);
   if (!match) {
     return std::nullopt;
   }
-  constexpr ctll::fixed_string digitsCaptureGroup = "digits";
   return match.template get<digitsCaptureGroup>().to_view();
 }

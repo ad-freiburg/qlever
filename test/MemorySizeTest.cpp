@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cfloat>
 #include <cstdint>
-#include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <vector>

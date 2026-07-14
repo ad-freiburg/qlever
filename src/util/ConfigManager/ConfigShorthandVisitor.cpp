@@ -44,7 +44,8 @@ nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitAssignments(
         visitAssignment(assignment);
 
     // The same key twice isn't allowed.
-    if (contextAsJson.contains(interpretedAssignment.first)) {
+    if (contextAsJson.find(interpretedAssignment.first) !=
+        contextAsJson.end()) {
       throw ConfigShortHandVisitorKeyCollisionException(
           interpretedAssignment.first);
     }

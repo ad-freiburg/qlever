@@ -69,7 +69,12 @@ TEST(ExceptionHandling, ignoreExceptionIfThrows) {
 }
 
 namespace {
-template <auto throwingFunction>
+// Use a reference non-type template parameter (`auto&`) instead of a by-value
+// one, because passing a class-type value (here a lambda) by value as a
+// template argument is only possible since C++20 (P1907). The referenced
+// lambdas have static storage duration, so binding the reference works in
+// C++17 too.
+template <auto& throwingFunction>
 struct S {
   ad_utility::ThrowInDestructorIfSafe t_;
   ~S() noexcept(false) { t_(throwingFunction); }
@@ -77,18 +82,24 @@ struct S {
 
 // This function should as part of the `S` destructor invoke the
 // `innerThrowingFunction` and therefore throw the exception.
-template <auto innerThrowingFunction>
+template <auto& innerThrowingFunction>
 void throwInnerException() {
   S<innerThrowingFunction> s;
 };
 
 // This function should ignore the function thrown by the
 // `innerThrowingFunction` and only propagate the `system_error` to the outside.
-template <auto innerThrowingFunction>
+template <auto& innerThrowingFunction>
 [[noreturn]] void ignoreInnerException() {
   S<innerThrowingFunction> s;
   throw std::system_error{std::error_code{}};
 };
+
+// These are used as reference non-type template arguments for
+// `throwInnerException`/`ignoreInnerException` above, so they must be
+// variables with linkage, not function-local variables.
+constexpr auto throwException = []() { throw std::runtime_error{"haha"}; };
+constexpr auto throwInt = []() { throw 42; };
 }  // namespace
 
 // _____________________________________________________________________________
@@ -238,10 +249,6 @@ TEST(ExceptionCollector, rethrowClearsException) {
 TEST(ExceptionHandling, throwIfSafe) {
   using namespace ad_utility;
   ThrowInDestructorIfSafe t;
-  static constexpr auto throwException = []() {
-    throw std::runtime_error{"haha"};
-  };
-  static constexpr auto throwInt = []() { throw 42; };
   EXPECT_THROW(throwInnerException<throwException>(), std::runtime_error);
   EXPECT_THROW(throwInnerException<throwInt>(), int);
   EXPECT_THROW((ignoreInnerException<throwException>()), std::system_error);

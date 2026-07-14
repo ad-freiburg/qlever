@@ -439,7 +439,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<p::SelectClause>(pq._clause);
+    auto sc = std::get<p::SelectClause>(pq._clause);
     ASSERT_EQ(true, sc.reduced_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -518,10 +518,10 @@ TEST(ParserTest, testParse) {
 
     // -- SubQuery
     auto subQueryGroup =
-        get<p::GroupGraphPattern>(pq._rootGraphPattern._graphPatterns[1]);
+        std::get<p::GroupGraphPattern>(pq._rootGraphPattern._graphPatterns[1]);
     auto parsed_sub_query =
-        get<p::Subquery>(subQueryGroup._child._graphPatterns[0]);
-    const auto& c_subquery = get<p::BasicGraphPattern>(
+        std::get<p::Subquery>(subQueryGroup._child._graphPatterns[0]);
+    const auto& c_subquery = std::get<p::BasicGraphPattern>(
         parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
     ASSERT_EQ(2u, c_subquery._triples.size());
     ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
@@ -595,10 +595,10 @@ TEST(ParserTest, testParse) {
 
     // -- SubQuery (level 1)
     auto subQueryGroup =
-        get<p::GroupGraphPattern>(pq._rootGraphPattern._graphPatterns[1]);
+        std::get<p::GroupGraphPattern>(pq._rootGraphPattern._graphPatterns[1]);
     auto parsed_sub_query =
-        get<p::Subquery>(subQueryGroup._child._graphPatterns[0]);
-    const auto& c_subquery = get<p::BasicGraphPattern>(
+        std::get<p::Subquery>(subQueryGroup._child._graphPatterns[0]);
+    const auto& c_subquery = std::get<p::BasicGraphPattern>(
         parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
     ASSERT_EQ(1u, c_subquery._triples.size());
     ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
@@ -622,11 +622,11 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 2)
-    auto subsubQueryGroup = get<p::GroupGraphPattern>(
+    auto subsubQueryGroup = std::get<p::GroupGraphPattern>(
         parsed_sub_query.get()._rootGraphPattern._graphPatterns[1]);
     auto aux_parsed_sub_sub_query =
-        get<p::Subquery>(subsubQueryGroup._child._graphPatterns[0]).get();
-    const auto& c_sub_subquery = get<p::BasicGraphPattern>(
+        std::get<p::Subquery>(subsubQueryGroup._child._graphPatterns[0]).get();
+    const auto& c_sub_subquery = std::get<p::BasicGraphPattern>(
         aux_parsed_sub_sub_query._rootGraphPattern._graphPatterns[0]);
     ASSERT_EQ(1u, c_sub_subquery._triples.size());
     ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
@@ -1032,8 +1032,8 @@ TEST(ParserTest, Bind) {
   ASSERT_TRUE(pq.hasSelectClause());
   ASSERT_EQ(pq.children().size(), 1);
   p::GraphPatternOperation child = pq.children()[0];
-  ASSERT_TRUE(holds_alternative<p::Bind>(child));
-  p::Bind bind = get<p::Bind>(child);
+  ASSERT_TRUE(std::holds_alternative<p::Bind>(child));
+  p::Bind bind = std::get<p::Bind>(child);
   ASSERT_EQ(bind._target, Var{"?a"});
   ASSERT_EQ(bind._expression.getDescriptor(), "10 - 5");
 }
@@ -1044,7 +1044,7 @@ TEST(ParserTest, Order) {
     ParsedQuery pq = parseQuery("SELECT ?x ?y WHERE { ?x <test/myrel> ?y }");
     ASSERT_TRUE(pq._orderBy.empty());
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<p::BasicGraphPattern>(
+    ASSERT_TRUE(std::holds_alternative<p::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
@@ -1053,7 +1053,7 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?x"}, false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<p::BasicGraphPattern>(
+    ASSERT_TRUE(std::holds_alternative<p::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
@@ -1062,7 +1062,7 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?y"}, false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<p::BasicGraphPattern>(
+    ASSERT_TRUE(std::holds_alternative<p::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
@@ -1071,7 +1071,7 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?x"}, true));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<p::BasicGraphPattern>(
+    ASSERT_TRUE(std::holds_alternative<p::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
@@ -1080,7 +1080,7 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey(Var{"?x"}, false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<p::BasicGraphPattern>(
+    ASSERT_TRUE(std::holds_alternative<p::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));
   }
   {
@@ -1095,8 +1095,8 @@ TEST(ParserTest, Order) {
         "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY (?x - ?y)");
     ASSERT_EQ(pq._orderBy.size(), 1);
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<p::Bind>(variant));
-    auto helperBind = get<p::Bind>(variant);
+    ASSERT_TRUE(std::holds_alternative<p::Bind>(variant));
+    auto helperBind = std::get<p::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "(?x - ?y)");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
   }
@@ -1137,8 +1137,8 @@ TEST(ParserTest, Group) {
     ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x - ?y) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<p::Bind>(variant));
-    auto helperBind = get<p::Bind>(variant);
+    ASSERT_TRUE(std::holds_alternative<p::Bind>(variant));
+    auto helperBind = std::get<p::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("?x - ?y"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
@@ -1156,8 +1156,8 @@ TEST(ParserTest, Group) {
     ParsedQuery pq = parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY COUNT(?x) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<p::Bind>(variant));
-    auto helperBind = get<p::Bind>(variant);
+    ASSERT_TRUE(std::holds_alternative<p::Bind>(variant));
+    auto helperBind = std::get<p::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
@@ -1168,8 +1168,8 @@ TEST(ParserTest, Group) {
         "<http://www.opengis.net/def/function/geosparql/"
         "latitude>(?y) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
-    ASSERT_TRUE(holds_alternative<p::Bind>(variant));
-    auto helperBind = get<p::Bind>(variant);
+    ASSERT_TRUE(std::holds_alternative<p::Bind>(variant));
+    auto helperBind = std::get<p::Bind>(variant);
     ASSERT_THAT(
         helperBind,
         m::BindExpression(
@@ -1651,10 +1651,11 @@ TEST(ParserTest, variablesInMinusAreHidden) {
       m::SelectQuery(
           m::VariablesSelect({"?a"}, false, false),
           m::GraphPattern(
-              m::InlineData({Variable{"?a"}}, {{TripleComponent{1}}}),
-              m::Minus(m::GraphPattern(m::InlineData(
-                  {Variable{"?a"}, Variable{"?b"}},
-                  {{TripleComponent{2}, TripleComponent{2}}}))))));
+              m::InlineData({Variable{"?a"}}, {{TripleComponent{int64_t{1}}}}),
+              m::Minus(m::GraphPattern(
+                  m::InlineData({Variable{"?a"}, Variable{"?b"}},
+                                {{TripleComponent{int64_t{2}},
+                                  TripleComponent{int64_t{2}}}}))))));
 }
 
 // _____________________________________________________________________________

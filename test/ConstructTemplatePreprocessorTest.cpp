@@ -34,7 +34,8 @@ namespace {
 
 using namespace std::string_literals;
 using ::testing::Optional;
-using enum PositionInTriple;
+constexpr auto SUBJECT = PositionInTriple::SUBJECT,
+               OBJECT = PositionInTriple::OBJECT;
 using namespace qlever::constructExport;
 using Triples = ad_utility::sparql_types::Triples;
 using ::testing::ElementsAre;

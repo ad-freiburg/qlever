@@ -38,6 +38,11 @@ if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine http)
 endif()
 
-add_library(server Server.cpp)
-qlever_target_link_libraries(server engine util index parser global http
-SortPerformanceEstimator qlever)
+# `Server.cpp` requires the `http` library and coroutine-based streaming
+# infrastructure, both of which are excluded under
+# `REDUCED_FEATURE_SET_FOR_CPP17`.
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    add_library(server Server.cpp)
+    qlever_target_link_libraries(server engine util index parser global http
+    SortPerformanceEstimator qlever)
+endif ()

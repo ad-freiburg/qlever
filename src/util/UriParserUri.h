@@ -132,6 +132,9 @@ class UriParserUri {
            rangeEqual(a.fragment, b.fragment) &&
            a.absolutePath == b.absolutePath;
   }
+  // Unlike C++20, C++17 doesn't rewrite `a != b` as `!(a == b)`, so this has
+  // to be provided explicitly.
+  bool operator!=(const UriParserUri& other) const { return !(*this == other); }
 
   // Convert a `UriTextRangeA` to a regular `std::string_view`.
   static std::string_view toStringView(const UriTextRangeA& range) {

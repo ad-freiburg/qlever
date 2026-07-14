@@ -321,7 +321,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     NeutralOptional no{qec, child};
     no.applyLimitOffset({std::nullopt, 1});
     EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-              LimitOffsetClause(std::nullopt, 1));
+              (LimitOffsetClause{std::nullopt, 1}));
     EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
@@ -338,7 +338,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     NeutralOptional no{qec, child};
     no.applyLimitOffset({std::nullopt, 1});
     EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-              LimitOffsetClause(std::nullopt, 1));
+              (LimitOffsetClause{std::nullopt, 1}));
     EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
@@ -361,7 +361,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     NeutralOptional no{qec, child};
     no.applyLimitOffset({2});
     EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-              LimitOffsetClause(2));
+              LimitOffsetClause{2});
     EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
@@ -378,7 +378,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     NeutralOptional no{qec, child};
     no.applyLimitOffset({2});
     EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
-              LimitOffsetClause(2));
+              LimitOffsetClause{2});
     EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);

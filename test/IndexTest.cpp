@@ -337,7 +337,7 @@ TEST(IndexTest, indexIdAndGitHash) {
 
 TEST(IndexTest, scanTest) {
   auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
-    using enum Permutation::Enum;
+    constexpr auto PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS;
     {
       std::string kb =
           "<a>  <b>  <c>  . \n"
@@ -444,6 +444,10 @@ TEST(IndexTest, emptyIndex) {
 }
 
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+//
+// The text index is not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`), so this test is excluded there.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(IndexTest, emptyTextIndex) {
   std::array<std::string, 2> inputs = {
       "<a:> <a:> <a:> .",
@@ -461,6 +465,7 @@ TEST(IndexTest, emptyTextIndex) {
     EXPECT_EQ(result.size(), 0);
   }
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedTripleComponent` that matches `content` and the bool
@@ -615,7 +620,9 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
 }
 
 TEST(IndexTest, getPermutation) {
-  using enum Permutation::Enum;
+  constexpr auto PSO = Permutation::Enum::PSO, POS = Permutation::Enum::POS,
+                 SPO = Permutation::Enum::SPO, SOP = Permutation::Enum::SOP,
+                 OPS = Permutation::Enum::OPS, OSP = Permutation::Enum::OSP;
   const IndexImpl& index = getQec()->getIndex().getImpl();
   EXPECT_EQ(&index.PSO(), &index.getPermutation(PSO));
   EXPECT_EQ(&index.POS(), &index.getPermutation(POS));
@@ -637,7 +644,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  using enum qlever::Filetype;
+  constexpr auto Turtle = qlever::Filetype::Turtle;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
   std::vector<qlever::InputFileSpecification> twoFilesSpec = {
@@ -795,21 +802,21 @@ TEST(IndexImpl, recomputeStatistics) {
       indexImpl.SPOForTesting() = Permutation{
           Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
       // Zero out original values.
-      indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
-      indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);
+      indexImpl.configurationJson_["num-subjects"] = NNAI{0, 0};
+      indexImpl.configurationJson_["num-objects"] = NNAI{0, 0};
     }
 
     auto newStats = indexImpl.recomputeStatistics(
         index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
-    EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
-    EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
+    EXPECT_EQ(newStats["num-triples"], (NNAI{6, 7}));
+    EXPECT_EQ(newStats["num-predicates"], (NNAI{2, 4}));
     if (loadAllPermutations) {
-      EXPECT_EQ(newStats["num-subjects"], NNAI(4, 0));
-      EXPECT_EQ(newStats["num-objects"], NNAI(5, 0));
+      EXPECT_EQ(newStats["num-subjects"], (NNAI{4, 0}));
+      EXPECT_EQ(newStats["num-objects"], (NNAI{5, 0}));
     } else {
-      EXPECT_EQ(newStats["num-subjects"], NNAI(0, 0));
-      EXPECT_EQ(newStats["num-objects"], NNAI(0, 0));
+      EXPECT_EQ(newStats["num-subjects"], (NNAI{0, 0}));
+      EXPECT_EQ(newStats["num-objects"], (NNAI{0, 0}));
     }
   }
 }

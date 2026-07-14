@@ -154,7 +154,9 @@ auto getQecWithTextIndex(
 }
 
 TEST(TextIndexScanForWord, TextScoringMetric) {
-  using enum TextScoringMetric;
+  constexpr auto EXPLICIT = TextScoringMetric::EXPLICIT,
+                 TFIDF = TextScoringMetric::TFIDF,
+                 BM25 = TextScoringMetric::BM25;
   using namespace qlever;
   ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
   ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");
@@ -171,6 +173,10 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
       std::runtime_error);
 }
 
+// The tests below all build a text index via `getQecWithTextIndex()`, which
+// is not available under the reduced C++17 feature set (see
+// `test/util/IndexTestHelpers.cpp`).
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 TEST(TextIndexScanForWord, WordScanPrefix) {
   auto qec = getQecWithTextIndex();
 
@@ -186,7 +192,8 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   s2.getExternallyVisibleVariableColumns();
 
   // Test if all columns are there and correct
-  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  constexpr auto AlwaysDefined =
+      ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
@@ -477,6 +484,7 @@ TEST(TextIndexScanForWord, KnownEmpty) {
   TextIndexScanForWord s5{qec, Variable{"?text1"}, "testing"};
   ASSERT_TRUE(!s5.knownEmptyResult());
 }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // _____________________________________________________________________________
 TEST(TextIndexScanForWord, clone) {

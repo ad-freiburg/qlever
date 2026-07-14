@@ -99,6 +99,9 @@ class PrefilterExpression {
   virtual ~PrefilterExpression() = default;
 
   virtual bool operator==(const PrefilterExpression& other) const = 0;
+  bool operator!=(const PrefilterExpression& other) const {
+    return !(*this == other);
+  }
 
   // Create a copy of this `PrefilterExpression`.
   virtual std::unique_ptr<PrefilterExpression> clone() const = 0;

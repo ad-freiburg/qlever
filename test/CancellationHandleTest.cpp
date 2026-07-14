@@ -15,8 +15,17 @@
 
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
-using enum ad_utility::CancellationState;
-using enum ad_utility::detail::CancellationMode;
+constexpr auto NOT_CANCELLED = ad_utility::CancellationState::NOT_CANCELLED,
+               WAITING_FOR_CHECK =
+                   ad_utility::CancellationState::WAITING_FOR_CHECK,
+               CHECK_WINDOW_MISSED =
+                   ad_utility::CancellationState::CHECK_WINDOW_MISSED,
+               MANUAL = ad_utility::CancellationState::MANUAL,
+               TIMEOUT = ad_utility::CancellationState::TIMEOUT;
+constexpr auto ENABLED = ad_utility::detail::CancellationMode::ENABLED,
+               NO_WATCH_DOG =
+                   ad_utility::detail::CancellationMode::NO_WATCH_DOG,
+               DISABLED = ad_utility::detail::CancellationMode::DISABLED;
 using ::testing::AllOf;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;

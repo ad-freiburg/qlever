@@ -143,7 +143,9 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
 
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO,
+                 SOP = Permutation::Enum::SOP, SPO = Permutation::Enum::SPO,
+                 OPS = Permutation::Enum::OPS, OSP = Permutation::Enum::OSP;
   switch (permutation) {
     case POS:
       return {1, 2, 0, 3};
@@ -163,7 +165,9 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 
 // _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
-  using enum Permutation::Enum;
+  constexpr auto POS = Permutation::Enum::POS, PSO = Permutation::Enum::PSO,
+                 SOP = Permutation::Enum::SOP, SPO = Permutation::Enum::SPO,
+                 OPS = Permutation::Enum::OPS, OSP = Permutation::Enum::OSP;
   switch (permutation) {
     case POS:
       return "POS";

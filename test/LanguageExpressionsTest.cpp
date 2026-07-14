@@ -156,7 +156,7 @@ auto getLangMatchesExpression =
 };
 
 // ____________________________________________________________________________
-template <auto GetExpr, typename T>
+template <auto& GetExpr, typename T>
 auto testLanguageExpressions =
     [](TestContext& context, const std::vector<T>& expected,
        const std::string& variable, const auto&... args) {

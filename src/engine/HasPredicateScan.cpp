@@ -15,7 +15,10 @@
 
 // Assert that the `type` is a valid value for the `ScanType` enum.
 static void checkType(HasPredicateScan::ScanType type) {
-  using enum HasPredicateScan::ScanType;
+  constexpr auto FREE_S = HasPredicateScan::ScanType::FREE_S,
+                 FREE_O = HasPredicateScan::ScanType::FREE_O,
+                 FULL_SCAN = HasPredicateScan::ScanType::FULL_SCAN,
+                 SUBQUERY_S = HasPredicateScan::ScanType::SUBQUERY_S;
   static constexpr std::array supportedTypes{FREE_O, FREE_S, SUBQUERY_S,
                                              FULL_SCAN};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, type));
@@ -57,7 +60,9 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
 // constructor of `HasPredicateScan` and determines the corresponding
 // `ScanType`.
 static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
-  using enum HasPredicateScan::ScanType;
+  constexpr auto FREE_S = HasPredicateScan::ScanType::FREE_S,
+                 FREE_O = HasPredicateScan::ScanType::FREE_O,
+                 FULL_SCAN = HasPredicateScan::ScanType::FULL_SCAN;
   AD_CONTRACT_CHECK(triple.getSimplePredicate() == HAS_PREDICATE_PREDICATE);
   if (triple.s_.isVariable() && triple.o_.isVariable()) {
     if (triple.s_ == triple.o_) {

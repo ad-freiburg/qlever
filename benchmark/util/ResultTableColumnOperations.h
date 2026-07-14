@@ -71,9 +71,8 @@ CPP_variadic_template(typename ColumnReturnType,
   // We can simply pass this to `generateColumnWithColumnInput`.
   generateColumnWithColumnInput(
       table,
-      [](const ColumnInputTypes::ColumnType&... values) -> ColumnReturnType {
-        return (values + ...);
-      },
+      [](const typename ColumnInputTypes::ColumnType&... values)
+          -> ColumnReturnType { return (values + ...); },
       columnToPutResultIn, columnsToSumUp...);
 }
 

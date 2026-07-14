@@ -256,8 +256,15 @@ class TurtleParser : public RdfParserBase {
                         TripleComponent defaultGraphIri)
       : RdfParserBase{encodedIriManager},
         defaultGraphIri_{std::move(defaultGraphIri)} {}
-  TurtleParser(TurtleParser&& rhs) noexcept = default;
-  TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
+  // No explicit `noexcept` here (unlike most other move operations in this
+  // codebase): the base class `RdfParserBase` has a user-declared destructor
+  // and therefore no implicitly-declared move constructor, so the compiler
+  // falls back to `RdfParserBase`'s copy constructor for the base subobject.
+  // Whether that fallback is deemed `noexcept` differs between compiler
+  // versions, so an explicit `noexcept` here would risk this move
+  // constructor/assignment being implicitly deleted on some compilers.
+  TurtleParser(TurtleParser&& rhs) = default;
+  TurtleParser& operator=(TurtleParser&& rhs) = default;
 
  protected:
   // clear all the parser's state to the initial values.

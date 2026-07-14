@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "../engine/ValuesForTesting.h"
+#include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -115,7 +116,12 @@ IdTable createRandomlyFilledIdTable(
   std::vector<size_t> sortedJoinColumnNumbers =
       ad_utility::transform(joinColumnNumberView, ql::identity{});
   ql::ranges::sort(sortedJoinColumnNumbers);
-  AD_CONTRACT_CHECK(std::ranges::unique(sortedJoinColumnNumbers).empty());
+  // NOTE: `ql::ranges::unique` currently doesn't work because its interface
+  // differs between the C++17 and C++20 implementations (see the comment in
+  // `backports/algorithm.h`), so `::ranges::unique` (the range-v3 library,
+  // which is always available) is used directly instead.
+  AD_CONTRACT_CHECK(::ranges::unique(sortedJoinColumnNumbers) ==
+                    sortedJoinColumnNumbers.end());
 
   // Are all the functions for generating join column entries not nullptr?
   AD_CONTRACT_CHECK(ql::ranges::all_of(

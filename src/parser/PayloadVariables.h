@@ -51,6 +51,11 @@ class PayloadVariables {
   bool operator==(const PayloadVariables& other) const {
     return variables_ == other.variables_;
   };
+  // Unlike C++20, C++17 doesn't rewrite `a != b` as `!(a == b)`, so this has
+  // to be provided explicitly.
+  bool operator!=(const PayloadVariables& other) const {
+    return !(*this == other);
+  };
 
  private:
   std::variant<detail::PayloadAllVariables, std::vector<Variable>> variables_ =
