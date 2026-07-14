@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "CompilationInfo.h"
-#include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"

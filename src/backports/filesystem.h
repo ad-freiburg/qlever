@@ -14,9 +14,9 @@
 // `std::filesystem`. By default (in C++20 mode) it is a simple alias for
 // `std::filesystem`. If `QLEVER_CPP_17` is defined (the C++17 backports mode
 // that also uses `range-v3`), it aliases `boost::filesystem` instead, because
-// the compilers targeted in that mode (e.g. GCC 8) don't provide a usable
-// `std::filesystem`. Note that the backported version requires linking against
-// `Boost::filesystem`.
+// some toolchains targeted in that mode (e.g. QCC 8 used in QNX) don't provide
+// a usable `std::filesystem`. Note that the backported version requires linking
+// against `Boost::filesystem`.
 //
 // The APIs of `std::filesystem` and `boost::filesystem` are almost identical
 // for the subset of functionality used by QLever. The one notable difference is

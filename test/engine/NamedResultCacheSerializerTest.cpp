@@ -9,7 +9,6 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "backports/filesystem.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"

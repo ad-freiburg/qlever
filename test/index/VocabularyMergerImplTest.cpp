@@ -13,7 +13,6 @@
 
 #include <string>
 
-#include "backports/filesystem.h"
 #include "index/VocabularyMergerImpl.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
