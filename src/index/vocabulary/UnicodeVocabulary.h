@@ -31,11 +31,8 @@ class UnicodeVocabulary {
 
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
 
-  // Efficient iteration over all words, see `VocabularyOnDisk::scanAll` and
-  // `VocabularyScanRange`.
-  VocabularyScanRange scanAll() const {
-    return _underlyingVocabulary.scanAll();
-  }
+  // Delegate to `scanAll` of the underlying vocabulary.
+  auto scanAll() const { return _underlyingVocabulary.scanAll(); }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 

@@ -123,11 +123,8 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
-  // Efficient iteration over all words of the vocabulary, in order, yielded as
-  // single `string_view`s, see `VocabularyOnDisk::scanAll`. Each yielded
-  // `string_view` is only valid until the iterator is advanced. The vocabulary
-  // must stay alive while the range is used.
-  VocabularyScanRange scanAll() const { return vocabulary_.scanAll(); }
+  // Delegate to `scanAll` of the underlying vocabulary.
+  auto scanAll() const { return vocabulary_.scanAll(); }
 
   // Get an Id from the vocabulary for some full word (not prefix of a word).
   // Return a boolean value that signals if the word was found. If the word was

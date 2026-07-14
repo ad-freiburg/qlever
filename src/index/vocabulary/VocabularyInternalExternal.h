@@ -49,11 +49,8 @@ class VocabularyInternalExternal {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 
-  // Efficient iteration over all words, see `VocabularyOnDisk::scanAll`. The
-  // external vocabulary contains all the words (the internal vocabulary is
-  // only a cache that speeds up single-word lookups and binary searches), so
-  // we simply forward to it.
-  VocabularyScanRange scanAll() const { return externalVocab_.scanAll(); }
+  // Delegate to `scanAll` of the underlying vocabulary.
+  auto scanAll() const { return externalVocab_.scanAll(); }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the

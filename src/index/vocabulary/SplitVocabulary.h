@@ -166,14 +166,8 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
-  // Iteration over all words, see `VocabularyOnDisk::scanAll`. Uses the generic
-  // `operator[]`-based fallback with plain indices `[0, size())`, which has
-  // exactly the semantics of a plain loop over `operator[]`.
-  // NOTE: Like such a plain loop, this only enumerates the words of the main
-  // (first) underlying vocabulary correctly; indices of the other underlying
-  // vocabularies carry marker bits. This is consistent with all other current
-  // full-scan code paths over a `SplitVocabulary`.
-  VocabularyScanRange scanAll() const {
+  // Default fallback iteration over all words.
+  auto scanAll() const {
     return ad_utility::vocabulary::scanAllViaOperatorBracket(this);
   }
 

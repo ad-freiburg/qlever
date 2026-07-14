@@ -58,12 +58,11 @@ CPP_template(typename UnderlyingVocabulary,
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
-  // Efficient iteration over all words, see `VocabularyOnDisk::scanAll`. Wraps
-  // the underlying vocabulary's `scanAll` (which reads the compressed words in
-  // batches) and decompresses each word. The decompressed word is kept in a
-  // buffer so that a `string_view` to it can be yielded.
-  VocabularyScanRange scanAll() const {
-    return VocabularyScanRange{ad_utility::InputRangeFromGetCallable{
+  // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
+  // words in batches) and decompresses each word. The decompressed word is kept
+  // in a buffer so that a `string_view` to it can be yielded.
+  auto scanAll() const {
+    return ad_utility::InputRangeFromGetCallable{
         [this, underlying = underlyingVocabulary_.scanAll(),
          wordIdx = uint64_t{0},
          buffer = std::string{}]() mutable -> std::optional<std::string_view> {
@@ -74,7 +73,7 @@ CPP_template(typename UnderlyingVocabulary,
           buffer = compressionWrapper_.decompress(compressed.value(),
                                                   getDecoderIdx(wordIdx++));
           return std::string_view{buffer};
-        }}};
+        }};
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }

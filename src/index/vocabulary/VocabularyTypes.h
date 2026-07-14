@@ -106,37 +106,39 @@ struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
 // The result type of every vocabulary's `scanAll`: a type-erased input range
 // that yields all words of the vocabulary in order, one `std::string_view` at
-// a time. Type erasure lets `PolymorphicVocabulary::scanAll` unify the
-// different concrete ranges of its underlying vocabularies. Each yielded
-// `std::string_view` is only valid until the range is advanced, and the
-// vocabulary that produced the range must stay alive (and unchanged) while the
-// range is used.
+// a time.
 using VocabularyScanRange = ad_utility::InputRangeTypeErased<std::string_view>;
 
 namespace ad_utility::vocabulary {
 
-// The (fixed) number of words that the batched `scanAll` implementations read
-// per underlying access. Reading in batches instead of word by word is what
-// makes `scanAll` much faster than a plain loop over `operator[]`.
-inline constexpr size_t scanAllBatchSize = 1024;
+// The number of words that the batched `scanAll` implementations read per
+// underlying access. Reading in batches instead of word by word is what makes
+// `scanAll` much faster than a plain loop over `operator[]`.
+constexpr size_t scanAllBatchSize = 1024;
 
 // Generic fallback implementation of `scanAll` for vocabularies without a
 // specialized (batched) one: simply enumerate the words `[0, size())` via the
-// ordinary single-word `operator[]`. The current word is kept in a buffer so
-// that a `std::string_view` to it can be yielded (this also works when
-// `operator[]` returns an owning `std::string`). The `vocab` must stay alive
-// while the returned range is used.
+// ordinary single-word `operator[]`. If `operator[]` already yields a
+// `std::string_view` (into the vocabulary's own storage, which outlives the
+// range), it is forwarded without copying; otherwise (an owning `std::string`)
+// the word is kept alive in a buffer.
 template <typename Vocab>
-VocabularyScanRange scanAllViaOperatorBracket(const Vocab* vocab) {
-  return VocabularyScanRange{ad_utility::InputRangeFromGetCallable{
-      [vocab, nextIdx = uint64_t{0}, buffer = std::string{}]() mutable
-          -> std::optional<std::string_view> {
+auto scanAllViaOperatorBracket(const Vocab* vocab) {
+  return InputRangeFromGetCallable{
+      [vocab, nextIdx = uint64_t{0},
+       buffer = std::string{}]() mutable -> std::optional<std::string_view> {
         if (nextIdx >= vocab->size()) {
           return std::nullopt;
         }
-        buffer = (*vocab)[nextIdx++];
-        return std::string_view{buffer};
-      }}};
+        decltype(auto) word = (*vocab)[nextIdx++];
+        if constexpr (std::is_same_v<std::decay_t<decltype(word)>,
+                                     std::string_view>) {
+          return word;
+        } else {
+          buffer = std::move(word);
+          return std::string_view{buffer};
+        }
+      }};
 }
 
 }  // namespace ad_utility::vocabulary

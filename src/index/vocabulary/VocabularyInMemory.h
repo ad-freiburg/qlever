@@ -66,10 +66,8 @@ class VocabularyInMemory
   // Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
-  // Iteration over all words, see `VocabularyOnDisk::scanAll`. All words
-  // already reside in memory, so the generic `operator[]`-based fallback is
-  // already efficient.
-  VocabularyScanRange scanAll() const {
+  // Default fallback iteration over all words.
+  auto scanAll() const {
     return ad_utility::vocabulary::scanAllViaOperatorBracket(this);
   }
 

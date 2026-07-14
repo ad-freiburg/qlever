@@ -77,8 +77,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // single `string_view`s. Internally the words are read in batches, each
   // produced by two large sequential reads (offsets and word data). This is
   // much faster than looking up the words one at a time via `operator[]`,
-  // which performs two small `pread`s and allocates a string per word. The
-  // vocabulary must stay alive while the returned range is used.
+  // which performs two small `pread`s and allocates a string per word.
   VocabularyScanRange scanAll() const;
 
   // Get the number of words in the vocabulary.
