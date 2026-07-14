@@ -860,7 +860,7 @@ ExportQueryExecutionTrees::computeResult(
   compensateForLimitOffsetClause(limit, qet);
 
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
-    if constexpr (format == qleverJson) {
+    if constexpr (format.value == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, limit, requestTimer,
                                        std::move(cancellationHandle),
                                        streamableYielder);
