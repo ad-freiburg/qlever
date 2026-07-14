@@ -520,7 +520,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
   EXPECT_THAT(result.value(), Bnode("_:g", "_gen"));
 }
 
-// Returns the resolved deduplication `ValueId` of the constant at position
+// Return the resolved deduplication `ValueId` of the constant at position
 // `pos` of the preprocessed triple at index `tripleIdx`.
 ValueId dedupIdAt(const PreprocessedConstructTemplate& result, size_t tripleIdx,
                   size_t pos) {

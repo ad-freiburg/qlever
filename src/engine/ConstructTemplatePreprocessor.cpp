@@ -59,17 +59,17 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
   // (e.g. `"1"^^xsd:integer` → encoded integer, not a vocab string), which
   // `parseTripleObject` resolves the same way the index does at build time,
   // keeping the dedup key consistent.
-  if (role == PositionInTriple::OBJECT) {
-    TripleComponent parsedObject =
-        // TODO: Use only a single `Literal` class in all of QLever.
-        RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-            literal.toSparql());
-    ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
-    return PrecomputedConstant{
-        std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
-        dedupId};
+  if (role != PositionInTriple::OBJECT) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  TripleComponent parsedObject =
+      // TODO: Use only a single `Literal` class in all of QLever.
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+          literal.toSparql());
+  ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
+  return PrecomputedConstant{
+      std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
+      dedupId};
 }
 
 // _____________________________________________________________________________

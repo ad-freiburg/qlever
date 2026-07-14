@@ -98,20 +98,19 @@ struct EvaluatedTriple {
   EvaluatedTerm object_;
 };
 
-// Result of preprocessing all CONSTRUCT template triples. Contains the
-// preprocessed triples and the unique variable column indices (indices into the
-// `IdTable` that the variables in the construct template correspond to).
+// Result of preprocessing all CONSTRUCT template triples.
+// `preprocessedTriples_` hols the (non-ground) template triples in template
+// order. `tripleContainsBlankNode_` is parallel to it: its i-th element
+// describes `preprocessedTriples_[i]`. In contrast, `uniqueVariableColumns_`
+// is a single flat set (not per-triple).
 struct PreprocessedConstructTemplate {
+  // The (non-ground) template triples, in template order.
   std::vector<PreprocessedTriple> preprocessedTriples_;
-  // The dedupicated set of `IdTable` column indices that appear in the template
-  // triples, in order of first encounter.
+  // Deduplicated `IdTable` column indices across all template triples, in order
+  // of first encounter.
   std::vector<size_t> uniqueVariableColumns_;
-  // index i contains the variables (identified by their column index in the
-  // `IdTable`) that are contained in template triple at index i.
   std::vector<std::vector<size_t>> variableColumnsPerTriple_;
-  // For each template triple at index i, this flag is true if the triple
-  // contains at least one blank node term (either a user-defined blank-node
-  // term like `_:a` or an anonymous blank node `[]`).
+  // Per triple i: whether `preprocessedTriples_[i]` contains a blank-node term.
   std::vector<bool> tripleContainsBlankNode_;
   // Ground (fully constant) template triples, pre-instantiated once at
   // preprocessing time.
