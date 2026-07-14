@@ -30,7 +30,10 @@ bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
     return true;
   }
 
-  std::string prefix = base.filename().string();
+  // Use `ql::pathFilename` (not `base.filename()`) so that a trailing separator
+  // yields an empty prefix (matching any file in `dir`) for both `std` and
+  // `boost` filesystem; see the comment on `ql::pathFilename`.
+  std::string prefix = ql::pathFilename(base).string();
   return ql::ranges::any_of(
       ql::directoryRange(dir), [&prefix](const auto& entry) {
         std::string name = entry.path().filename().string();

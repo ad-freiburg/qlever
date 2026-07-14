@@ -521,7 +521,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     sweeperTmpPath = ".";
   }
 
-  std::string baseName = basePath.filename().string();
+  std::string baseName = ql::pathFilename(basePath).string();
 
   // The prefix added before each spatialjoin file.
   //

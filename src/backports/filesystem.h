@@ -90,6 +90,21 @@ class DirectoryRange {
 inline DirectoryRange directoryRange(filesystem::path directory) {
   return DirectoryRange{std::move(directory)};
 }
+
+// Return the filename component of `path`, with `std::filesystem` semantics
+// even in the C++17 backports mode. A path with a trailing directory separator
+// has no filename component: `std::filesystem::path::filename()` returns an
+// empty path for such a path, whereas `boost::filesystem::path::filename()`
+// returns ".". Normalize to the `std::filesystem` behavior so that callers
+// behave identically for both backends.
+inline filesystem::path pathFilename(const filesystem::path& path) {
+  const auto& native = path.native();
+  if (!native.empty() &&
+      native.back() == filesystem::path::preferred_separator) {
+    return {};
+  }
+  return path.filename();
+}
 }  // namespace ql
 
 #endif  // QLEVER_SRC_BACKPORTS_FILESYSTEM_H
