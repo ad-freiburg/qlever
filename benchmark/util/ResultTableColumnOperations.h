@@ -31,9 +31,9 @@ CPP_template(typename Type)(
 // clang-format off
 CPP_variadic_template(typename ColumnReturnType, typename Generator,
                       typename... ColumnInputTypes)
-  (requires(sizeof...(ColumnInputTypes) > 0) CPP_and
-       ad_utility::InvocableWithSimilarReturnType<
-           Generator, ColumnReturnType, const ColumnInputTypes&...>)
+  (requires(sizeof...(ColumnInputTypes) > 0 &&
+            ad_utility::InvocableWithSimilarReturnType<
+                Generator, ColumnReturnType, const ColumnInputTypes&...>))
     // clang-format on
     void generateColumnWithColumnInput(
         ResultTable* const table, Generator&& generator,
