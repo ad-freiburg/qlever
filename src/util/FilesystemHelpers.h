@@ -10,8 +10,9 @@
 #ifndef QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
 #define QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
 
+#include <absl/functional/function_ref.h>
+
 #include <cstddef>
-#include <functional>
 #include <string>
 
 #include "backports/filesystem.h"
@@ -33,7 +34,7 @@ bool doesDirectoryContainFileWithBasename(const std::string& path);
 // is returned.
 size_t deleteFilesInDirectory(
     const ql::filesystem::path& directory,
-    const std::function<bool(const ql::filesystem::path&)>& shouldDelete);
+    absl::FunctionRef<bool(const ql::filesystem::path&)> shouldDelete);
 
 // Return `true` if the directory from `path1` is a subdirectory of the
 // directory from `path2`; otherwise return `false`.

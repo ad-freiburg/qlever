@@ -4,9 +4,14 @@
 
 #include "IndexTestHelpers.h"
 
+#include <absl/strings/str_cat.h>
+
+#include <array>
+
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -171,15 +176,15 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // permutations are not present, because they would actually be present from
   // the previous index build.
   namespace fs = ql::filesystem;
+  static constexpr std::array<std::string_view, 6> suffixes{
+      VOCAB_SUFFIX,       ".index",          ".internal.index",
+      CONFIGURATION_FILE, ".update-triples", ".allocated-graphs-state"};
   qlever::util::deleteFilesInDirectory(
       fs::current_path(), [&indexBasename](const auto& path) {
         std::string name = path.filename().string();
-        return ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
-               ql::starts_with(name, indexBasename + ".index") ||
-               ql::starts_with(name, indexBasename + ".internal.index") ||
-               ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
-               ql::starts_with(name, indexBasename + ".update-triples") ||
-               ql::starts_with(name, indexBasename + ".allocated-graphs-state");
+        return ql::ranges::any_of(suffixes, [&](std::string_view suffix) {
+          return ql::starts_with(name, absl::StrCat(indexBasename, suffix));
+        });
       });
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
