@@ -474,7 +474,7 @@ TEST(ServerTest, metricsEndpoint) {
                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto request = makeGetRequest("/metrics");
-    if (accessToken) {
+    if (accessToken.has_value()) {
       request.set(http::field::authorization, "Bearer " + accessToken.value());
     }
     auto response = server.process(request);
@@ -495,12 +495,13 @@ TEST(ServerTest, metricsEndpoint) {
         http::verb::post, "/",
         {{http::field::content_type, "application/sparql-update"},
          {http::field::authorization, "Bearer accessToken"}},
-        update);
+        std::move(update));
   };
   auto QueryRequest = [](std::string query) {
     return makeRequest(
         http::verb::post, "/",
-        {{http::field::content_type, "application/sparql-query"}}, query);
+        {{http::field::content_type, "application/sparql-query"}},
+        std::move(query));
   };
   using Label = std::pair<std::string_view, std::string_view>;
   auto MetricIs = [](std::string_view metric, std::string_view value,
@@ -547,48 +548,46 @@ TEST(ServerTest, metricsEndpoint) {
   Label Update{"operation", "update"};
   Label Query{"operation", "query"};
   Label SyntaxError{"type", "syntax"};
-  std::string qlever_delta_triples = "qlever_delta_triples";
-  std::string qlever_sparql_operation_started_total =
+  std::string_view QleverDeltaTriples = "qlever_delta_triples";
+  std::string_view QleverSparqlOperationStartedTotal =
       "qlever_sparql_operation_started_total";
-  std::string qlever_sparql_operation_running =
+  std::string_view QleverSparqlOperationRunning =
       "qlever_sparql_operation_running";
-  std::string qlever_http_errors_total = "qlever_http_errors_total";
-  std::string qlever_sparql_operation_errors_total =
+  std::string_view QleverHttpErrorsTotal = "qlever_http_errors_total";
+  std::string_view QleverSparqlOperationErrorsTotal =
       "qlever_sparql_operation_errors_total";
   ExpectMetricsChange(
-      testing::AllOf(IsZero(qlever_delta_triples),
-                     IsZero(qlever_sparql_operation_started_total, Update),
-                     IsZero(qlever_sparql_operation_started_total, Query),
-                     IsZero(qlever_sparql_operation_running, Update),
-                     IsZero(qlever_sparql_operation_running, Query)),
+      testing::AllOf(IsZero(QleverDeltaTriples),
+                     IsZero(QleverSparqlOperationStartedTotal, Update),
+                     IsZero(QleverSparqlOperationStartedTotal, Query),
+                     IsZero(QleverSparqlOperationRunning, Update),
+                     IsZero(QleverSparqlOperationRunning, Query)),
       UpdateRequest("INSERT DATA { <a> <b> <c> . <d> <e> <f> }"),
-      testing::AllOf(
-          MetricIs(qlever_delta_triples, "2"),
-          MetricIs(qlever_sparql_operation_started_total, "1", Update),
-          IsZero(qlever_sparql_operation_started_total, Query),
-          IsZero(qlever_sparql_operation_running, Update),
-          IsZero(qlever_sparql_operation_running, Query)));
+      testing::AllOf(MetricIs(QleverDeltaTriples, "2"),
+                     MetricIs(QleverSparqlOperationStartedTotal, "1", Update),
+                     IsZero(QleverSparqlOperationStartedTotal, Query),
+                     IsZero(QleverSparqlOperationRunning, Update),
+                     IsZero(QleverSparqlOperationRunning, Query)));
   ExpectMetricsChange(
-      testing::AllOf(IsZero(qlever_delta_triples),
-                     IsZero(qlever_sparql_operation_started_total, Update),
-                     IsZero(qlever_sparql_operation_started_total, Query),
-                     IsZero(qlever_sparql_operation_running, Update),
-                     IsZero(qlever_sparql_operation_running, Query)),
+      testing::AllOf(IsZero(QleverDeltaTriples),
+                     IsZero(QleverSparqlOperationStartedTotal, Update),
+                     IsZero(QleverSparqlOperationStartedTotal, Query),
+                     IsZero(QleverSparqlOperationRunning, Update),
+                     IsZero(QleverSparqlOperationRunning, Query)),
       QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
-      testing::AllOf(
-          MetricIs(qlever_delta_triples, "0"),
-          IsZero(qlever_sparql_operation_started_total, Update),
-          MetricIs(qlever_sparql_operation_started_total, "1", Query),
-          IsZero(qlever_sparql_operation_running, Update),
-          IsZero(qlever_sparql_operation_running, Query)));
+      testing::AllOf(MetricIs(QleverDeltaTriples, "0"),
+                     IsZero(QleverSparqlOperationStartedTotal, Update),
+                     MetricIs(QleverSparqlOperationStartedTotal, "1", Query),
+                     IsZero(QleverSparqlOperationRunning, Update),
+                     IsZero(QleverSparqlOperationRunning, Query)));
   ExpectMetricsChange(
-      IsZero(qlever_sparql_operation_errors_total, SyntaxError),
+      IsZero(QleverSparqlOperationErrorsTotal, SyntaxError),
       QueryRequest("Foo"),
-      MetricIs(qlever_sparql_operation_errors_total, "1", SyntaxError));
+      MetricIs(QleverSparqlOperationErrorsTotal, "1", SyntaxError));
   ExpectMetricsChange(
-      IsZero(qlever_sparql_operation_errors_total, SyntaxError),
+      IsZero(QleverSparqlOperationErrorsTotal, SyntaxError),
       UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
-      MetricIs(qlever_sparql_operation_errors_total, "1", SyntaxError));
+      MetricIs(QleverSparqlOperationErrorsTotal, "1", SyntaxError));
 }
 
 // _____________________________________________________________________________
