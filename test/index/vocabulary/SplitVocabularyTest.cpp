@@ -3,7 +3,6 @@
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <variant>
 
@@ -16,7 +15,6 @@ namespace splitVocabTestHelpers {
 
 using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
-using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 
 [[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
   return ql::starts_with(s, "\"a");

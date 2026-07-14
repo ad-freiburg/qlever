@@ -5,7 +5,6 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
