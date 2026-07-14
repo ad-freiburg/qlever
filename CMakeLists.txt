@@ -134,8 +134,14 @@ option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t i
 if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} OR (CMAKE_CXX_STANDARD LESS 20))
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+    # In the C++17 backports mode, `ql::filesystem` (see `backports/filesystem.h`)
+    # aliases `boost::filesystem` instead of `std::filesystem`, so we then need
+    # `Boost::filesystem` as a dependency. Without the backports we use
+    # `std::filesystem` and must not depend on `boost::filesystem` at all.
+    set(QLEVER_CPP_17_BACKPORTS_ENABLED ON)
 else ()
     add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
+    set(QLEVER_CPP_17_BACKPORTS_ENABLED OFF)
 endif ()
 
 ###############################################################################
@@ -278,12 +284,21 @@ endif ()
 ######################################
 # BOOST
 ######################################
+# `Boost::filesystem` is only needed in the C++17 backports mode, where
+# `ql::filesystem` aliases `boost::filesystem` (see `backports/filesystem.h`).
+# Without the backports we use `std::filesystem` and must not depend on
+# `boost::filesystem`, so only request the component when the backports are on.
+if (QLEVER_CPP_17_BACKPORTS_ENABLED)
+  set(QLEVER_BOOST_FILESYSTEM_COMPONENT filesystem)
+else()
+  set(QLEVER_BOOST_FILESYSTEM_COMPONENT "")
+endif()
 if (REDUCED_FEATURE_SET_FOR_CPP17)
   # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
   # which is only available in Boost versions >= 1.81
-  find_package(Boost 1.71 COMPONENTS iostreams program_options container filesystem REQUIRED CONFIG)
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container ${QLEVER_BOOST_FILESYSTEM_COMPONENT} REQUIRED CONFIG)
 else()
-  find_package(Boost 1.81 COMPONENTS iostreams program_options url container filesystem REQUIRED CONFIG)
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container ${QLEVER_BOOST_FILESYSTEM_COMPONENT} REQUIRED CONFIG)
 endif()
 include_directories(${Boost_INCLUDE_DIR})
 
@@ -301,9 +316,17 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
+    # Only link `Boost::filesystem` in the C++17 backports mode (see the `BOOST`
+    # section above); without the backports `ql::filesystem` is `std::filesystem`
+    # and `boost::filesystem` must not be a dependency.
+    if (QLEVER_CPP_17_BACKPORTS_ENABLED)
+        set(QLEVER_BOOST_FILESYSTEM_LIB Boost::filesystem)
+    else()
+        set(QLEVER_BOOST_FILESYSTEM_LIB "")
+    endif()
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container Boost::filesystem uriparser)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
