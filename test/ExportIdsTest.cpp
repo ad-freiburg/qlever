@@ -311,74 +311,97 @@ TEST(ExportIds, idsToStringAndTypeEmptyInput) {
   EXPECT_TRUE(result.empty());
 }
 
-// _____________________________________________________________________________
-template <bool RemoveQuotesAndAngleBrackets = false,
-          bool returnOnlyLiterals = false,
-          typename EscapeFunction = ql::identity>
-void expectResolveVocabMatchesOracle(const Index& index, ql::span<const Id> ids,
-                                     ql::span<const size_t> positions,
-                                     const EscapeFunction& escape) {
-  SCOPED_TRACE(absl::StrCat(
-      "removeQuotesAndAngleBrackets=", RemoveQuotesAndAngleBrackets,
-      " returnOnlyLiterals=", returnOnlyLiterals));
-  std::vector<std::optional<std::pair<std::string, const char*>>> results(
-      ids.size());
+using ResolveResult =
+    std::vector<std::optional<std::pair<std::string, const char*>>>;
 
-  ql::exportIds::resolveVocabIndexIds<RemoveQuotesAndAngleBrackets,
-                                      returnOnlyLiterals, EscapeFunction>(
-      index, ids, positions, results, escape);
-  std::set<size_t> resolved(positions.begin(), positions.end());
-  LocalVocab emptyLocalVocab{};
-  for (size_t i = 0; i < ids.size(); ++i) {
-    if (resolved.count(i) != 0) {
-      // The batched result must equal the non-batched per-ID path.
-      auto expected =
-          ql::exportIds::idToStringAndType<RemoveQuotesAndAngleBrackets,
-                                           returnOnlyLiterals>(
-              index, ids[i], emptyLocalVocab, escape);
-      EXPECT_EQ(results[i], expected);
-    } else {
-      EXPECT_EQ(results[i], std::nullopt);
-    }
-  }
+// A shared empty `LocalVocab` for the vocab oracle (whose lookup takes no
+// `LocalVocab`, so the per-ID oracle is fed an empty one).
+inline const LocalVocab& emptyLocalVocab() {
+  static const LocalVocab empty{};
+  return empty;
 }
 
-// _____________________________________________________________________________
-// Mirror of `expectResolveVocabMatchesOracle` for `resolveNonVocabIndexIds`:
-// resolve the (non-`VocabIndex`) IDs at `positions` and check that every
-// resolved slot matches the per-ID `idToStringAndType` path, while every other
-// slot is left untouched (`std::nullopt`).
-template <bool RemoveQuotesAndAngleBrackets = false,
-          bool returnOnlyLiterals = false,
-          typename EscapeFunction = ql::identity>
-void expectResolveNonVocabMatchesOracle(const Index& index,
-                                        ql::span<const Id> ids,
-                                        const LocalVocab& localVocab,
-                                        ql::span<const size_t> positions,
-                                        const EscapeFunction& escape) {
-  SCOPED_TRACE(absl::StrCat(
-      "removeQuotesAndAngleBrackets=", RemoveQuotesAndAngleBrackets,
-      " returnOnlyLiterals=", returnOnlyLiterals));
-  std::vector<std::optional<std::pair<std::string, const char*>>> results(
-      ids.size());
+// The only thing that differs between the two oracles: the batched lookup under
+// test. Each policy fills `results` for the entries at `positions`.
+struct VocabResolver {
+  template <bool RemoveQuotesAndAngleBrackets, bool returnOnlyLiterals,
+            typename EscapeFunction>
+  static void resolve(const Index& index, ql::span<const Id> ids,
+                      [[maybe_unused]] const LocalVocab& localVocab,
+                      ql::span<const size_t> positions, ResolveResult& results,
+                      const EscapeFunction& escape) {
+    ql::exportIds::resolveVocabIndexIds<RemoveQuotesAndAngleBrackets,
+                                        returnOnlyLiterals, EscapeFunction>(
+        index, ids, positions, results, escape);
+  }
+};
+struct NonVocabResolver {
+  template <bool RemoveQuotesAndAngleBrackets, bool returnOnlyLiterals,
+            typename EscapeFunction>
+  static void resolve(const Index& index, ql::span<const Id> ids,
+                      [[maybe_unused]] const LocalVocab& localVocab,
+                      ql::span<const size_t> positions, ResolveResult& results,
+                      const EscapeFunction& escape) {
+    ql::exportIds::resolveNonVocabIndexIds<RemoveQuotesAndAngleBrackets,
+                                           returnOnlyLiterals, EscapeFunction>(
+        index, ids, localVocab, positions, results, escape);
+  }
+};
 
-  ql::exportIds::resolveNonVocabIndexIds<RemoveQuotesAndAngleBrackets,
-                                         returnOnlyLiterals, EscapeFunction>(
-      index, ids, localVocab, positions, results, escape);
-  std::set<size_t> resolved(positions.begin(), positions.end());
-  for (size_t i = 0; i < ids.size(); ++i) {
-    if (resolved.count(i) != 0) {
-      // The result must equal the per-ID path (which itself may be
-      // `std::nullopt`, e.g. for `Undefined` or a filtered-out non-literal).
-      auto expected =
-          ql::exportIds::idToStringAndType<RemoveQuotesAndAngleBrackets,
-                                           returnOnlyLiterals>(
-              index, ids[i], localVocab, escape);
-      EXPECT_EQ(results[i], expected);
-    } else {
-      EXPECT_EQ(results[i], std::nullopt);
+// Oracle test helper: holds the shared data; `Resolver` selects the batched
+// lookup under test. Verifies the batched lookup against the trusted per-ID
+// `idToStringAndType` path for every requested position, leaving all other
+// slots as `std::nullopt`.
+template <typename Resolver, typename EscapeFunction = ql::identity>
+struct ResolveOracle {
+  const Index& index;
+  ql::span<const Id> ids;
+  EscapeFunction escape;
+  const LocalVocab& localVocab = emptyLocalVocab();
+
+  template <bool RemoveQuotesAndAngleBrackets, bool returnOnlyLiterals>
+  void checkOne(ql::span<const size_t> positions) const {
+    SCOPED_TRACE(absl::StrCat(
+        "removeQuotesAndAngleBrackets=", RemoveQuotesAndAngleBrackets,
+        " returnOnlyLiterals=", returnOnlyLiterals));
+    ResolveResult results(ids.size());
+    Resolver::template resolve<RemoveQuotesAndAngleBrackets,
+                               returnOnlyLiterals>(index, ids, localVocab,
+                                                   positions, results, escape);
+    std::set<size_t> resolved(positions.begin(), positions.end());
+    for (size_t i = 0; i < ids.size(); ++i) {
+      if (resolved.count(i) != 0) {
+        auto expected =
+            ql::exportIds::idToStringAndType<RemoveQuotesAndAngleBrackets,
+                                             returnOnlyLiterals>(
+                index, ids[i], localVocab, escape);
+        EXPECT_EQ(results[i], expected);
+      } else {
+        EXPECT_EQ(results[i], std::nullopt);
+      }
     }
   }
+  // Run the check for all four combinations of the two template flags.
+  void checkAllFlagCombinations(ql::span<const size_t> positions) const {
+    checkOne<false, false>(positions);
+    checkOne<true, false>(positions);
+    checkOne<false, true>(positions);
+    checkOne<true, true>(positions);
+  }
+};
+
+// Small factories to hide complexity at the call sites.
+template <typename EscapeFunction>
+auto makeVocabOracle(const Index& index, ql::span<const Id> ids,
+                     const EscapeFunction& escape) {
+  return ResolveOracle<VocabResolver, EscapeFunction>{index, ids, escape};
+}
+template <typename EscapeFunction>
+auto makeNonVocabOracle(const Index& index, ql::span<const Id> ids,
+                        const LocalVocab& localVocab,
+                        const EscapeFunction& escape) {
+  return ResolveOracle<NonVocabResolver, EscapeFunction>{index, ids, escape,
+                                                         localVocab};
 }
 
 // _____________________________________________________________________________
@@ -555,15 +578,9 @@ TEST(ExportIds, resolveVocabIndexIds) {
   std::vector<Id> ids{getId("<s>"), getId("<p>"), getId("<o>"),
                       getId("\"hello\""), getId("\"world\"@en")};
 
+  auto oracle = makeVocabOracle(index, ids, escapeWithMarker);
   auto check = [&](const std::vector<size_t>& positions) {
-    expectResolveVocabMatchesOracle<false, false>(index, ids, positions,
-                                                  escapeWithMarker);
-    expectResolveVocabMatchesOracle<true, false>(index, ids, positions,
-                                                 escapeWithMarker);
-    expectResolveVocabMatchesOracle<false, true>(index, ids, positions,
-                                                 escapeWithMarker);
-    expectResolveVocabMatchesOracle<true, true>(index, ids, positions,
-                                                escapeWithMarker);
+    oracle.checkAllFlagCombinations(positions);
   };
 
   // Empty positions: early return, every slot stays `std::nullopt`.
@@ -601,15 +618,9 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
       localVocabId,
   };
 
+  auto oracle = makeNonVocabOracle(index, ids, localVocab, escapeWithMarker);
   auto check = [&](const std::vector<size_t>& positions) {
-    expectResolveNonVocabMatchesOracle<false, false>(
-        index, ids, localVocab, positions, escapeWithMarker);
-    expectResolveNonVocabMatchesOracle<true, false>(
-        index, ids, localVocab, positions, escapeWithMarker);
-    expectResolveNonVocabMatchesOracle<false, true>(
-        index, ids, localVocab, positions, escapeWithMarker);
-    expectResolveNonVocabMatchesOracle<true, true>(index, ids, localVocab,
-                                                   positions, escapeWithMarker);
+    oracle.checkAllFlagCombinations(positions);
   };
 
   // Empty positions: nothing is resolved.
