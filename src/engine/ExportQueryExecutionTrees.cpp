@@ -765,7 +765,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  using enum MediaType;
+  using enum ad_utility::MediaType;
   // The mediatypes for which this function template may be instantiated.
   static_assert(ad_utility::contains(staticallySupportedMediaTypes, format));
 
@@ -860,7 +860,7 @@ ExportQueryExecutionTrees::computeResult(
   compensateForLimitOffsetClause(limit, qet);
 
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
-    if constexpr (format.value == MediaType::qleverJson) {
+    if constexpr (format.value == ad_utility::MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, limit, requestTimer,
                                        std::move(cancellationHandle),
                                        streamableYielder);

@@ -32,7 +32,6 @@
 class ExportQueryExecutionTrees {
  public:
   using enum ad_utility::MediaType;
-  using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
@@ -70,7 +69,7 @@ class ExportQueryExecutionTrees {
 #endif
   static ComputeResultReturnType computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      MediaType mediaType, const ad_utility::Timer& requestTimer,
+      ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Convert a `stream_generator` to an "ordinary" `InputRange<string>` that
@@ -148,7 +147,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
-  template <MediaType format>
+  template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
@@ -156,7 +155,7 @@ class ExportQueryExecutionTrees {
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Generate the result of a SELECT query as a CSV or TSV or binary stream.
-  template <MediaType format>
+  template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
