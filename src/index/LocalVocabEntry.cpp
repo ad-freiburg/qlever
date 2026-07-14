@@ -12,7 +12,7 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
     const LocalVocabEntry& rhs) const {
   AD_EXPENSIVE_CHECK(
       context_ == rhs.context_,
-      "Contexts of LocalVocabEntries has to be identical. If this is not the "
+      "Contexts of LocalVocabEntries have to be identical. If this is not the "
       "case this means that stale entries associated with an old index are "
       "falsely carried over somewhere.");
   int i = context_->getVocab().getCaseComparator().compare(

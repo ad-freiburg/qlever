@@ -342,6 +342,8 @@ addLinkAndDiscoverTest(RegexExpressionTest parser sparqlExpressions index engine
 
 addLinkAndDiscoverTest(LocalVocabTest engine)
 
+addLinkAndDiscoverTest(LocalVocabEntryTest index)
+
 addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(ServiceTest engine)
