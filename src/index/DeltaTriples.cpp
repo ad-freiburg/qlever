@@ -480,10 +480,9 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
   return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
-      LocatedTriplesState{locatedTriples_->locatedTriplesPerBlock_,
-                          locatedTriples_->internalLocatedTriplesPerBlock_,
-                          localVocab_.getLifetimeExtender(),
-                          locatedTriples_->index_, getCounts()})};
+      locatedTriples_->locatedTriplesPerBlock_,
+      locatedTriples_->internalLocatedTriplesPerBlock_,
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_, getCounts())};
 }
 
 // ____________________________________________________________________________
@@ -547,7 +546,6 @@ ReturnType DeltaTriplesManager::modify(
         tracer.endTrace("metadataUpdateForSnapshot");
       }
     };
-    deltaTriples.getCounts();
 
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {

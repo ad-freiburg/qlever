@@ -545,48 +545,48 @@ TEST(ServerTest, metricsEndpoint) {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
     expectRequiresAccessToken(server);
   }
-  Label Update{"operation", "update"};
-  Label Query{"operation", "query"};
-  Label SyntaxError{"type", "syntax"};
-  std::string_view QleverDeltaTriples = "qlever_delta_triples";
-  std::string_view QleverSparqlOperationStartedTotal =
+  Label update{"operation", "update"};
+  Label query{"operation", "query"};
+  Label syntaxError{"type", "syntax"};
+  std::string_view qleverDeltaTriples = "qlever_delta_triples";
+  std::string_view qleverSparqlOperationStartedTotal =
       "qlever_sparql_operation_started_total";
-  std::string_view QleverSparqlOperationRunning =
+  std::string_view qleverSparqlOperationRunning =
       "qlever_sparql_operation_running";
-  std::string_view QleverSparqlOperationErrorsTotal =
+  std::string_view qleverSparqlOperationErrorsTotal =
       "qlever_sparql_operation_errors_total";
   ExpectMetricsChange(
-      testing::AllOf(IsZero(QleverDeltaTriples),
-                     IsZero(QleverSparqlOperationStartedTotal, Update),
-                     IsZero(QleverSparqlOperationStartedTotal, Query),
-                     IsZero(QleverSparqlOperationRunning, Update),
-                     IsZero(QleverSparqlOperationRunning, Query)),
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverSparqlOperationStartedTotal, update),
+                     IsZero(qleverSparqlOperationStartedTotal, query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)),
       UpdateRequest("INSERT DATA { <a> <b> <c> . <d> <e> <f> }"),
-      testing::AllOf(MetricIs(QleverDeltaTriples, "2"),
-                     MetricIs(QleverSparqlOperationStartedTotal, "1", Update),
-                     IsZero(QleverSparqlOperationStartedTotal, Query),
-                     IsZero(QleverSparqlOperationRunning, Update),
-                     IsZero(QleverSparqlOperationRunning, Query)));
+      testing::AllOf(MetricIs(qleverDeltaTriples, "2"),
+                     MetricIs(qleverSparqlOperationStartedTotal, "1", update),
+                     IsZero(qleverSparqlOperationStartedTotal, query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)));
   ExpectMetricsChange(
-      testing::AllOf(IsZero(QleverDeltaTriples),
-                     IsZero(QleverSparqlOperationStartedTotal, Update),
-                     IsZero(QleverSparqlOperationStartedTotal, Query),
-                     IsZero(QleverSparqlOperationRunning, Update),
-                     IsZero(QleverSparqlOperationRunning, Query)),
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverSparqlOperationStartedTotal, update),
+                     IsZero(qleverSparqlOperationStartedTotal, query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)),
       QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
-      testing::AllOf(MetricIs(QleverDeltaTriples, "0"),
-                     IsZero(QleverSparqlOperationStartedTotal, Update),
-                     MetricIs(QleverSparqlOperationStartedTotal, "1", Query),
-                     IsZero(QleverSparqlOperationRunning, Update),
-                     IsZero(QleverSparqlOperationRunning, Query)));
+      testing::AllOf(MetricIs(qleverDeltaTriples, "0"),
+                     IsZero(qleverSparqlOperationStartedTotal, update),
+                     MetricIs(qleverSparqlOperationStartedTotal, "1", query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)));
   ExpectMetricsChange(
-      IsZero(QleverSparqlOperationErrorsTotal, SyntaxError),
+      IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       QueryRequest("Foo"),
-      MetricIs(QleverSparqlOperationErrorsTotal, "1", SyntaxError));
+      MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
   ExpectMetricsChange(
-      IsZero(QleverSparqlOperationErrorsTotal, SyntaxError),
+      IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
-      MetricIs(QleverSparqlOperationErrorsTotal, "1", SyntaxError));
+      MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
 }
 
 // _____________________________________________________________________________
