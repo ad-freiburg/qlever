@@ -860,14 +860,7 @@ ExportQueryExecutionTrees::computeResult(
   compensateForLimitOffsetClause(limit, qet);
 
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-    if constexpr (format == binaryQleverExport) {
-      AD_THROW(
-          "binaryQleverExport is not yet implemented in the C++17 "
-          "reduced feature set");
-    } else
-#endif
-        if constexpr (format == qleverJson) {
+    if constexpr (format == qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, limit, requestTimer,
                                        std::move(cancellationHandle),
                                        streamableYielder);

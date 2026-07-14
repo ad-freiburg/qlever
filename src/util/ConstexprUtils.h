@@ -375,7 +375,7 @@ constexpr decltype(auto) constexprSwitchFromArrayImpl(
 
 template <const auto& arr, typename Func, typename Value>
 constexpr decltype(auto) constexprSwitchFromArray(Func&& f, const Value& v) {
-  return constexprSwitchFromArrayImpl<arr>(
+  return detail::constexprSwitchFromArrayImpl<arr>(
       std::forward<Func>(f), v, std::make_index_sequence<arr.size()>{});
 }
 
