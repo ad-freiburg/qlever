@@ -435,7 +435,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
-  newStats["date-of-index-build"] = dateOfIndexBuild;
+  newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
   auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
 

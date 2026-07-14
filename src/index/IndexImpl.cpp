@@ -395,7 +395,7 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
-  configurationJson_["date-of-index-build"] = absl::FormatTime(
+  configurationJson_[DATE_OF_INDEX_BUILD_KEY] = absl::FormatTime(
       DATE_OF_INDEX_BUILD_FORMAT, absl::Now(), absl::UTCTimeZone());
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
@@ -1253,18 +1253,19 @@ void IndexImpl::writeConfiguration() const {
 
 // ____________________________________________________________________________
 std::string IndexImpl::dateOfIndexBuild() const {
-  if (configurationJson_.contains("date-of-index-build")) {
-    return configurationJson_["date-of-index-build"].get<std::string>();
+  if (configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY)) {
+    return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
   }
   // For indexes that were built before the build date was recorded in the
-  // configuration, fall back to the modification time of the configuration
+  // configuration, fall back to the last write time of the configuration
   // file (it is written at the end of the index build).
-  struct stat fileStat;
-  AD_CONTRACT_CHECK(
-      stat((onDiskBase_ + CONFIGURATION_FILE).c_str(), &fileStat) == 0);
+  auto time =
+      std::filesystem::last_write_time(onDiskBase_ + CONFIGURATION_FILE);
+  // `last_write_time` returns a time point on the `file_clock`, but
+  // `absl::FromChrono` expects one on the `system_clock`, so convert first.
+  auto systemTime = std::chrono::clock_cast<std::chrono::system_clock>(time);
   return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
-                          absl::FromTimeT(fileStat.st_mtime),
-                          absl::UTCTimeZone());
+                          absl::FromChrono(systemTime), absl::UTCTimeZone());
 }
 
 // ___________________________________________________________________________

@@ -722,6 +722,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, recomputeStatistics);
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
+  FRIEND_TEST(IndexImpl, dateOfIndexBuild);
 
   bool isLiteral(std::string_view object) const;
 

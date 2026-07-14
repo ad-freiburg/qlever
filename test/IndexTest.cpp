@@ -5,10 +5,13 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 
 #include "./util/GTestHelpers.h"
@@ -972,6 +975,40 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuild) {
+  auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records the build date under
+  // `DATE_OF_INDEX_BUILD_KEY` in its configuration, and `dateOfIndexBuild()`
+  // returns exactly that value.
+  ASSERT_TRUE(indexImpl.configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY));
+  auto storedDate =
+      indexImpl.configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  EXPECT_EQ(indexImpl.dateOfIndexBuild(), storedDate);
+
+  // The stored value is a valid UTC timestamp in the expected format.
+  absl::Time parsed;
+  std::string error;
+  EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, storedDate,
+                              absl::UTCTimeZone(), &parsed, &error))
+      << error;
+
+  // For indexes that were built before the build date was recorded in the
+  // configuration, `dateOfIndexBuild()` falls back to the last modification
+  // time of the configuration file.
+  indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  auto fileTime = std::filesystem::last_write_time(
+      indexImpl.getOnDiskBase() + std::string{CONFIGURATION_FILE});
+  auto systemTime =
+      std::chrono::clock_cast<std::chrono::system_clock>(fileTime);
+  auto expectedFallback =
+      absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
+                       absl::FromChrono(systemTime), absl::UTCTimeZone());
+  EXPECT_EQ(indexImpl.dateOfIndexBuild(), expectedFallback);
 }
 
 // _____________________________________________________________________________
