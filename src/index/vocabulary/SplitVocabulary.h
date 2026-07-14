@@ -110,11 +110,11 @@ class SplitVocabulary {
   template <size_t... Is>
   auto scanAllImpl(std::index_sequence<Is...>) const {
     return ::ranges::views::concat(
-        (std::visit(
+        (ad_utility::OwningView{std::visit(
              [](const auto& vocab) {
                return VocabularyScanRange{vocab.scanAll()};
              },
-             underlying_[Is]) |
+             underlying_[Is])} |
          ql::views::transform([](const IndexAndWord& indexAndWord) {
            return IndexAndWord{addMarker(indexAndWord.index_, Is),
                                indexAndWord.word_};
