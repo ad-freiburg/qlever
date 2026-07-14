@@ -9,9 +9,11 @@
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
@@ -21,6 +23,7 @@
 #include "util/HashSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
@@ -102,6 +105,22 @@ class SplitVocabulary {
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
+  // Implementation of `scanAll`, written separately because in C++17, lambdas
+  // can't have explicit template parameters.
+  template <size_t... Is>
+  auto scanAllImpl(std::index_sequence<Is...>) const {
+    return ::ranges::views::concat(
+        (std::visit(
+             [](const auto& vocab) {
+               return VocabularyScanRange{vocab.scanAll()};
+             },
+             underlying_[Is]) |
+         ql::views::transform([](const IndexAndWord& indexAndWord) {
+           return IndexAndWord{addMarker(indexAndWord.index_, Is),
+                               indexAndWord.word_};
+         }))...);
+  }
+
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
   // that contains the marker and vocabIndex. The result is guaranteed to be
@@ -167,39 +186,10 @@ class SplitVocabulary {
         underlying_[marker]);
   }
 
-  // Iterate over all words of all underlying vocabularies, one after the other.
-  // The generic `scanAllViaOperatorBracket` fallback cannot be used here,
-  // because it would feed plain indices `[0, size())` into the marker-aware
-  // `operator[]`. Instead we concatenate the `scanAll` ranges of the individual
-  // underlying vocabularies.
+  // Iterate over all words of all underlying vocabularies, one after the other,
+  // together with their global (marker-encoded) index.
   auto scanAll() const {
-    return ad_utility::InputRangeFromGetCallable{
-        [this, marker = uint8_t{0},
-         current = std::optional<VocabularyScanRange>{}]() mutable
-        -> std::optional<IndexAndWord> {
-          while (true) {
-            if (!current.has_value()) {
-              if (marker >= numberOfVocabs) {
-                return std::nullopt;
-              }
-              current = std::visit(
-                  [](const auto& vocab) {
-                    return VocabularyScanRange{vocab.scanAll()};
-                  },
-                  underlying_[marker]);
-            }
-            if (std::optional<IndexAndWord> next = current->get();
-                next.has_value()) {
-              // Re-encode the sub-vocabulary-local index into the global,
-              // marker-encoded index that `operator[]` expects.
-              return IndexAndWord{addMarker(next->index_, marker), next->word_};
-            }
-            // The current underlying vocabulary is exhausted, continue with the
-            // next one.
-            current.reset();
-            ++marker;
-          }
-        }};
+    return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
