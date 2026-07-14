@@ -35,8 +35,12 @@ COPY GitVersion.cmake /qlever/
 # `-DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE` prevents fsst from compiling with
 # `-march=native`.
 ARG RUN_TESTS=true
+# Link-time optimization is off by default (it slows down the build). The CI
+# enables it via `--build-arg ENABLE_LTO=true` only for the image published from
+# `master`, so released images are optimized while PR builds stay fast.
+ARG ENABLE_LTO=false
 WORKDIR /qlever/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DENABLE_LTO=${ENABLE_LTO} -GNinja ..
 RUN if [ "$RUN_TESTS" = "true" ]; then \
       cmake --build . && ctest --rerun-failed --output-on-failure; \
     else \
