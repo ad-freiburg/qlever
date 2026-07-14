@@ -6,73 +6,86 @@ on:
     types:
       - completed
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   upload:
-    continue-on-error: true
     env:
       SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_NEW_SERVER_URL }}
       API_KEY: ${{ secrets.SPARQL_CONFORMANCE_NEW_TOKEN }}
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: 'Download artifact'
-        uses: actions/github-script@v7
+      - name: Download conformance report
+        uses: actions/download-artifact@v5
         with:
-          script: |
-            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-               owner: context.repo.owner,
-               repo: context.repo.repo,
-               run_id: ${{github.event.workflow_run.id }},
-            });
-            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
-              return artifact.name == "conformance-report"
-            })[0];
-            var download = await github.rest.actions.downloadArtifact({
-               owner: context.repo.owner,
-               repo: context.repo.repo,
-               artifact_id: matchArtifact.id,
-               archive_format: 'zip',
-            });
-            var fs = require('fs');
-            fs.writeFileSync('${{github.workspace}}/conformance-report.zip', Buffer.from(download.data));
-      - name: Unzip conformance report
-        run: unzip conformance-report.zip
-      - name: Read conformance report metadata
-        run: |
-          echo "run_title=$(cat run_title)"                             >> $GITHUB_ENV
-          echo "github_event=$(cat event)"                              >> $GITHUB_ENV
-          echo "pr_number=$(cat pr)"                                    >> $GITHUB_ENV
-          echo "original_github_ref=$(cat github_ref)"                 >> $GITHUB_ENV
-          echo "commit_sha=$(cat sha)"                                  >> $GITHUB_ENV
-          echo "original_github_repository=$(cat github_repository)"   >> $GITHUB_ENV
-          echo "head_ref=$(cat head_ref)"                              >> $GITHUB_ENV
+          name: conformance-report
+          path: conformance-report
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
       - name: "Submit data to new server"
         run: |
-          if [[ "${{ env.original_github_ref }}" == refs/tags/* ]]; then
-            REF_KIND="tag"
-          else
-            REF_KIND="branch"
+          if [[ -z "$SERVER_URL" || -z "$API_KEY" ]]; then
+            echo "The conformance upload URL and API key secrets must both be configured."
+            exit 1
           fi
 
-          response=$(curl -L -s -o temp_response.txt -w "%{http_code}" \
-            -H "x-api-key: $API_KEY" \
-            -H "x-repo-full-name: ${{ env.original_github_repository }}" \
-            -H "x-commit-sha: ${{ env.commit_sha }}" \
-            -H "x-engine-name: qlever" \
-            -H "x-ref-name: ${{ env.original_github_ref }}" \
-            -H "x-ref-kind: $REF_KIND" \
-            -H "x-pr-number: ${{ env.pr_number }}" \
-            -H "x-head-ref: ${{ env.head_ref }}" \
-            -H "x-run-title: ${{ env.run_title }}" \
-            -H "x-workflow-run-id: ${{ github.event.workflow_run.id }}" \
-            -H "x-upload-source: ci" \
-            -F "file=@${{ env.commit_sha }}.json.bz2" \
-            "$SERVER_URL/api/upload")
+          metadata_dir="$GITHUB_WORKSPACE/conformance-report"
+          IFS= read -r run_title < "$metadata_dir/run_title"
+          IFS= read -r pr_number < "$metadata_dir/pr"
+          IFS= read -r commit_sha < "$metadata_dir/sha"
+          IFS= read -r repo_full_name < "$metadata_dir/github_repository"
+          IFS= read -r ref_name < "$metadata_dir/ref_name"
+          IFS= read -r head_ref < "$metadata_dir/head_ref"
+          IFS= read -r ref_kind < "$metadata_dir/ref_kind"
+          IFS= read -r engine_version < "$metadata_dir/engine_version"
+
+          result_file="$metadata_dir/$commit_sha.json.bz2"
+          test -s "$result_file"
+
+          upload_url="${SERVER_URL%/}/api/upload"
+          artifact_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
+          curl_args=(
+            --location
+            --silent
+            --show-error
+            --fail-with-body
+            --output temp_response.txt
+            --write-out "%{http_code}"
+            --header "x-api-key: $API_KEY"
+            --header "x-repo-full-name: $repo_full_name"
+            --header "x-commit-sha: $commit_sha"
+            --header "x-engine-name: qlever"
+            --header "x-engine-version: $engine_version"
+            --header "x-ref-name: $ref_name"
+            --header "x-ref-kind: $ref_kind"
+            --header "x-run-title: $run_title"
+            --header "x-workflow-run-id: ${{ github.event.workflow_run.id }}"
+            --header "x-artifact-url: $artifact_url"
+            --header "x-upload-source: ci"
+            --form "file=@$result_file"
+          )
+
+          if [[ -n "$pr_number" ]]; then
+            curl_args+=(--header "x-pr-number: $pr_number")
+          fi
+          if [[ -n "$head_ref" ]]; then
+            curl_args+=(--header "x-head-ref: $head_ref")
+          fi
+
+          : > temp_response.txt
+          set +e
+          response=$(curl "${curl_args[@]}" "$upload_url")
+          curl_status=$?
+          set -e
 
           echo "Server response:"
           cat temp_response.txt
           echo "HTTP Status: $response"
-          if [ "$response" -gt 200 ]; then
-            echo "Server did not respond with status 200. Failing the workflow."
+          if [[ "$curl_status" -ne 0 || "$response" != "200" ]]; then
+            echo "Upload failed (curl status $curl_status, HTTP status $response)."
             exit 1
           fi

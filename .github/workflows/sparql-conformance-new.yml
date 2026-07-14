@@ -13,12 +13,12 @@ concurrency:
 
 jobs:
   build:
-    continue-on-error: true
     env:
       compiler: clang
       compiler-version: 16
       build-type: Release
       cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
+      REPORT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
@@ -38,13 +38,13 @@ jobs:
           path: sparql-conformance
           fetch-depth: 1
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: "pip"
-          cache-dependency-path: sparql-conformance/requirements.txt
-      - name: Install python dependencies
-        run: pip install -r ./sparql-conformance/requirements.txt
+          cache-dependency-path: sparql-conformance/pyproject.toml
+      - name: Install sparql-conformance
+        run: python -m pip install ./sparql-conformance
       - name: Install dependencies
         uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
       - name: Install compiler
@@ -58,54 +58,47 @@ jobs:
         run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
       - name: Build qlever binaries
         run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-index qlever-server --config ${{env.build-type}} -- -j $(nproc)
+      - name: Save workflow information
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF_KIND: ${{ github.ref_type }}
+          RUN_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.merge_group.head_sha || github.sha }}
+        run: |
+          mkdir -p conformance-report
+          printf '%s\n' "$EVENT_NAME" > conformance-report/event
+          printf '%s\n' "$PR_NUMBER" > conformance-report/pr
+          printf '%s\n' "$REPOSITORY" > conformance-report/github_repository
+          printf '%s\n' "$REPORT_SHA" > conformance-report/sha
+          printf '%s\n' "$REF_NAME" > conformance-report/ref_name
+          printf '%s\n' "$HEAD_REF" > conformance-report/head_ref
+          printf '%s\n' "$REF_KIND" > conformance-report/ref_kind
+          printf '%s\n' "${RUN_TITLE%%$'\n'*}" > conformance-report/run_title
+          git -C "$GITHUB_WORKSPACE/qlever-code" describe --tags --always > conformance-report/engine_version
       - name: Execute test suite
         working-directory: ${{ github.workspace }}/sparql-conformance
         run: |
-          python3 main.py \
-            --name ${{ github.sha }} \
-            --engine ./src/engines/qlever-binaries-manager.py \
+          sparql-conformance \
+            --name "$REPORT_SHA" \
+            --results-dir "$GITHUB_WORKSPACE/conformance-report" \
+            --engine ./src/sparql_conformance/engines/qlever-binaries-manager.py \
             --binaries-directory ${{ github.workspace }}/qlever-code/build/ \
             --port 7001 \
             --graph-store /http-graph-store \
             --sparql11-dir ${{ github.workspace }}/sparql-test-suite/sparql/sparql11/ \
             --sparql10-dir ${{ github.workspace }}/sparql-test-suite/sparql/sparql10/ \
+            --report line \
+            --exclude entailment \
             --type-alias '[["http://www.w3.org/2001/XMLSchema#int", "http://www.w3.org/2001/XMLSchema#integer"], ["http://www.w3.org/2001/XMLSchema#float", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#float"], ["http://www.w3.org/2001/XMLSchema#string", null]]'
-      - name: Save workflow information
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
-        run: |
-          mkdir -p conformance-report
-          echo ${{ github.event_name }} > ./conformance-report/event
-          echo ${{ github.event.number }} > ./conformance-report/pr
-          echo ${{ github.repository }} > ./conformance-report/github_repository
-          echo ${GITHUB_REF} > ./conformance-report/github_ref
-          echo "$HEAD_REF" > ./conformance-report/head_ref
-          # Write the first line only (subject line of commit msg / PR title)
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "$PR_TITLE" | head -1 > ./conformance-report/run_title
-          else
-            echo "$COMMIT_MSG" | head -1 > ./conformance-report/run_title
-          fi
-      - name: Save SHA and conformance report if it is a master commit.
-        if: github.event_name == 'push'
-        run: |
-          echo ${{github.sha}} > ./conformance-report/sha
-          mv ./sparql-conformance/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.sha }}.json.bz2
-      - name: Save SHA and conformance report if it is a PR.
-        if: github.event_name == 'pull_request'
-        run: |
-          echo ${{github.event.pull_request.head.sha}} > ./conformance-report/sha
-          mv ./sparql-conformance/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.event.pull_request.head.sha }}.json.bz2
-      - name: Save SHA and conformance report if it is a merge_group run.
-        if: github.event_name == 'merge_group'
-        run: |
-          echo ${{github.sha}} > ./conformance-report/sha
-          mv ./sparql-conformance/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.sha }}.json.bz2
+      - name: Verify conformance report
+        run: test -s "conformance-report/$REPORT_SHA.json.bz2"
       - name: Upload conformance report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: conformance-report
           path: conformance-report/
+          if-no-files-found: error
