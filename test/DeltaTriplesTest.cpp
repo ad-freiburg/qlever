@@ -747,7 +747,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
   // Make sure no artifacts from previous crashed runs exists.
   ql::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
-  deltaTriples.setPersists(tmpFile);
+  deltaTriples.setPersists(tmpFile.string());
   // Write "empty" file
   EXPECT_NO_THROW(deltaTriples.writeToDisk());
 
@@ -819,7 +819,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
 
   std::array<char, expectedContent.size()> actualContent{};
 
-  std::ifstream tmpFileStream{tmpFile, std::ios::binary};
+  std::ifstream tmpFileStream{tmpFile.string(), std::ios::binary};
   tmpFileStream.read(actualContent.data(), actualContent.size());
   EXPECT_TRUE(tmpFileStream.good());
   EXPECT_EQ(tmpFileStream.peek(), std::char_traits<char>::eof());
@@ -848,7 +848,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   const auto& localVocabContext = testQec->getLocalVocabContext();
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
-    deltaTriples.setPersists(tmpFile);
+    deltaTriples.setPersists(tmpFile.string());
     deltaTriples.readFromDisk();
 
     auto cancellationHandle =
@@ -870,7 +870,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   }
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
-    deltaTriples.setPersists(tmpFile);
+    deltaTriples.setPersists(tmpFile.string());
     deltaTriples.readFromDisk();
 
     EXPECT_EQ(deltaTriples.numDeleted(), 1);

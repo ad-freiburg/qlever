@@ -33,7 +33,7 @@ inline auto filenameForTesting() {
 // component (e.g. a background writer thread that has already drained
 // and closed the stream).
 inline std::vector<std::string> readLines(const ql::filesystem::path& path) {
-  std::ifstream in{path};
+  std::ifstream in{path.string()};
   std::vector<std::string> lines;
   std::string line;
   while (std::getline(in, line)) {

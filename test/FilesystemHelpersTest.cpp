@@ -38,7 +38,7 @@ class TempDir {
   }
 
   ~TempDir() {
-    std::error_code ec;
+    ql::error_code ec;
     fs::remove_all(path_, ec);
     if (ec) {
       AD_LOG_WARN << "Could not remove temporary directory " << path_ << ": "
@@ -57,7 +57,7 @@ class TempDir {
 
 // Convenience helper to create an empty file at the given path.
 void touch(const fs::path& p) {
-  std::ofstream out{p};
+  std::ofstream out{p.string()};
   ASSERT_TRUE(out.good()) << "Could not create file: " << p;
 }
 

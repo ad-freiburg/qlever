@@ -204,7 +204,7 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   auto* qec = ad_utility::testing::getQec();
   auto tmpFile = ql::filesystem::temp_directory_path() / "fileNoPermissions";
   // Create empty file
-  std::ofstream{tmpFile}.close();
+  std::ofstream{tmpFile.string()}.close();
   absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   // Remove all permissions to make read fail
   ql::filesystem::permissions(tmpFile, ql::filesystem_perms_none);

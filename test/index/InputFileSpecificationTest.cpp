@@ -73,7 +73,7 @@ TEST(InputFileSpecification, FiletypeFromMediaType) {
 TEST(InputFileSpecification, MakeAsyncBlockSourceFileBased) {
   ql::filesystem::path tmpFile =
       ql::filesystem::temp_directory_path() / "qlever_ifs_test.ttl";
-  std::ofstream{tmpFile} << "<s> <p> <o> .\n";
+  std::ofstream{tmpFile.string()} << "<s> <p> <o> .\n";
 
   boost::asio::thread_pool pool{1};
   InputFileSpecification spec{tmpFile.string(), Filetype::Turtle, std::nullopt};

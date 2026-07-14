@@ -115,7 +115,7 @@ auto makeTemporaryDirectory(std::string_view name) {
 
   // Remove all files in directory when done.
   absl::Cleanup cleanup{[directory]() {
-    std::error_code ec;
+    ql::error_code ec;
     ql::filesystem::remove_all(directory, ec);
     if (ec) {
       AD_LOG(ERROR) << "Could not remove temporary directory " << directory

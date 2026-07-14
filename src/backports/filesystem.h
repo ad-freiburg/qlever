@@ -27,8 +27,10 @@
 
 #ifdef QLEVER_CPP_17
 #include <boost/filesystem.hpp>
+#include <boost/system/error_code.hpp>
 #else
 #include <filesystem>
+#include <system_error>
 #endif
 
 #include <utility>
@@ -38,6 +40,16 @@ namespace ql {
 namespace filesystem = ::boost::filesystem;
 #else
 namespace filesystem = ::std::filesystem;
+#endif
+
+// A drop-in replacement for `std::error_code`. The `error_code`-taking
+// overloads of `boost::filesystem` expect a `boost::system::error_code`, not a
+// `std::error_code`, so in the C++17 backports mode we alias the former. Both
+// types provide the `operator bool` and `message()` members that QLever uses.
+#ifdef QLEVER_CPP_17
+using error_code = ::boost::system::error_code;
+#else
+using error_code = ::std::error_code;
 #endif
 
 // The `perms` value that represents "no permissions", spelled `perms::none` in
