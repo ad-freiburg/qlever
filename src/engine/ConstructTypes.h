@@ -54,10 +54,9 @@ using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 // shared across all rows, avoiding per-row heap allocation.
 struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
-  // The `ValueId` for this constant, used as its component of the full-triple
-  // deduplication key (`global` mode). Resolved once at preprocessing time by
-  // `ConstructTemplatePreprocessor` (see `resolveConstantDedupId`).
-  // Set to default undefined value here.
+  // The `ValueId` for this constant, used for the CONSTRUCT result
+  // deduplication. It is set to the correct value by
+  // `ConstructTemplatePreprocessor::resolveConstantDedupId`
   ValueId dedupId_ = ValueId::makeUndefined();
 };
 
