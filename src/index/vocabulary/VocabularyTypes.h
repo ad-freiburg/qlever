@@ -111,9 +111,6 @@ struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 struct IndexAndWord {
   uint64_t index_;
   std::string_view word_;
-
-  // Comparison (mostly for tests).
-  bool operator==(const IndexAndWord&) const = default;
 };
 
 // The result type of every vocabulary's `scanAll`: a type-erased input range
