@@ -208,6 +208,7 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   // Remove all permissions to make read fail
   std::filesystem::permissions(tmpFile, std::filesystem::perms::none);
 
+  // direct path::c_str() is wchar_t* on Windows; string().c_str() is char*
   if (FILE* handle = fopen(tmpFile.string().c_str(), "r")) {
     fclose(handle);
     // This can happen in docker environments.
