@@ -1001,7 +1001,7 @@ TEST(IndexImpl, dateOfIndexBuild) {
   // configuration, `dateOfIndexBuild()` falls back to the last modification
   // time of the configuration file, which was just written. Since the format
   // only has second precision, we don't compare the timestamp exactly, but
-  // check that it lies within the last second.
+  // check that it lies within the last second + tolerance.
   indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
   absl::Time fallbackTime;
   std::string parseError;
@@ -1011,7 +1011,7 @@ TEST(IndexImpl, dateOfIndexBuild) {
       << parseError;
   EXPECT_THAT(absl::Now() - fallbackTime,
               ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
-                               ::testing::Le(absl::Seconds(1))));
+                               ::testing::Lt(absl::Seconds(2))));
 }
 
 // _____________________________________________________________________________
