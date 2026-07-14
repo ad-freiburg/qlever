@@ -25,6 +25,7 @@
 #include "engine/JoinHelpers.h"
 #include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
+#include "engine/idTable/IdColumnAlgorithms.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
@@ -370,10 +371,22 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
 
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
-        return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
-            ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
-
+        // Fast path: perform the join on the datatype bytes and plain
+        // payload words of the split column storage, which is much faster
+        // than comparing materialized IDs (`LocalVocabIndex` IDs are handled
+        // gracefully inside).
+        columnBasedIdTable::zipperJoinIdColumns(
+            joinColumnL, joinColumnR,
+            [&rowAdder](size_t leftIndex, size_t rightIndex) {
+              rowAdder.addRow(leftIndex, rightIndex);
+            },
+            [&rowAdder](size_t beginLeft, size_t endLeft, size_t beginRight,
+                        size_t endRight) {
+              rowAdder.addRows(ql::views::iota(beginLeft, endLeft),
+                               ql::views::iota(beginRight, endRight));
+            },
+            ad_utility::noop, cancellationCallback);
+        return size_t{0};
       } else {
         return ad_utility::zipperJoinWithUndef(
             joinColumnL, joinColumnR, ql::ranges::less{}, addRow,

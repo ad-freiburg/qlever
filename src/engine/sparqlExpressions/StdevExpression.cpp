@@ -35,7 +35,7 @@ ExpressionResult DeviationExpression::evaluate(
     VectorWithMemoryLimit<double> childResults{context->_allocator};
 
     // Collect values as doubles
-    for (auto& inp : generator) {
+    for (auto&& inp : generator) {
       const auto& n = detail::NumericValueGetter{}(std::move(inp), context);
       auto v = std::visit(numValVisitor, n);
       if (v.has_value()) {

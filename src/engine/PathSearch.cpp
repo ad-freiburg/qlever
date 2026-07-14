@@ -295,21 +295,29 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 };
 
 // _____________________________________________________________________________
-std::pair<ql::span<const Id>, ql::span<const Id>>
-PathSearch::handleSearchSides() const {
-  ql::span<const Id> sourceIds;
-  ql::span<const Id> targetIds;
+std::pair<std::vector<Id>, std::vector<Id>> PathSearch::handleSearchSides()
+    const {
+  std::vector<Id> sourceIds;
+  std::vector<Id> targetIds;
+
+  // Helper to materialize a column of an `IdTable` into a vector.
+  auto toVector = [](auto&& column) {
+    return std::vector<Id>(column.begin(), column.end());
+  };
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
-    sourceIds = resultTable->idTableView().getColumn(sourceCol_.value());
-    targetIds = resultTable->idTableView().getColumn(targetCol_.value());
-    return {sourceIds, targetIds};
+    sourceIds =
+        toVector(resultTable->idTableView().getColumn(sourceCol_.value()));
+    targetIds =
+        toVector(resultTable->idTableView().getColumn(targetCol_.value()));
+    return {std::move(sourceIds), std::move(targetIds)};
   }
 
   if (sourceTree_.has_value()) {
-    sourceIds = sourceTree_.value()->getResult()->idTableView().getColumn(
-        sourceCol_.value());
+    sourceIds =
+        toVector(sourceTree_.value()->getResult()->idTableView().getColumn(
+            sourceCol_.value()));
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
   } else {
@@ -317,8 +325,9 @@ PathSearch::handleSearchSides() const {
   }
 
   if (targetTree_.has_value()) {
-    targetIds = targetTree_.value()->getResult()->idTableView().getColumn(
-        targetCol_.value());
+    targetIds =
+        toVector(targetTree_.value()->getResult()->idTableView().getColumn(
+            targetCol_.value()));
   } else if (config_.targetIsVariable()) {
     targetIds = {};
   } else {
@@ -330,18 +339,19 @@ PathSearch::handleSearchSides() const {
 
 // _____________________________________________________________________________
 PathsLimited PathSearch::findPaths(
-    const Id& source, const std::unordered_set<uint64_t>& targets,
+    const Id& source, const std::unordered_set<Id::BitRepresentation>& targets,
     const BinSearchWrapper& binSearch,
     std::optional<uint64_t> numPathsPerTarget) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
+  using BitRep = Id::BitRepresentation;
   std::unordered_map<
-      uint64_t, uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
-      ad_utility::AllocatorWithLimit<std::pair<const uint64_t, uint64_t>>>
+      BitRep, uint64_t, std::hash<BitRep>, std::equal_to<BitRep>,
+      ad_utility::AllocatorWithLimit<std::pair<const BitRep, uint64_t>>>
       numPathsPerNode{allocator()};
   PathsLimited result{allocator()};
-  std::unordered_set<uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
-                     ad_utility::AllocatorWithLimit<uint64_t>>
+  std::unordered_set<BitRep, std::hash<BitRep>, std::equal_to<BitRep>,
+                     ad_utility::AllocatorWithLimit<BitRep>>
       visited{allocator()};
 
   visited.insert(source.getBits());
@@ -395,7 +405,7 @@ PathsLimited PathSearch::allPaths(
   Path path{EdgesLimited(allocator())};
 
   if (cartesian || sources.size() != targets.size()) {
-    std::unordered_set<uint64_t> targetSet;
+    std::unordered_set<Id::BitRepresentation> targetSet;
     for (auto target : targets) {
       targetSet.insert(target.getBits());
     }

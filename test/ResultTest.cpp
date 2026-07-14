@@ -95,7 +95,7 @@ TEST(Result, cloneIdTableReturnsCopy) {
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Verify it is a deep copy, not a reference to the same data.
-  EXPECT_NE(&cloned(0, 0), &result.idTableView()(0, 0));
+  EXPECT_NE(cloned(0, 0).payloadPtr(), result.idTableView()(0, 0).payloadPtr());
 }
 
 // _____________________________________________________________________________
@@ -701,7 +701,8 @@ TEST(Result, viewBackedResultIsFullyMaterialized) {
   Result result{view, {}, LocalVocab{}};
   EXPECT_TRUE(result.isFullyMaterialized());
   // The returned view must alias the original data, not a copy.
-  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(0, 0));
+  EXPECT_EQ(result.idTableView()(0, 0).payloadPtr(),
+            idTable(0, 0).payloadPtr());
   EXPECT_EQ(result.idTableView(), idTable);
 }
 
@@ -713,7 +714,7 @@ TEST(Result, viewBackedResultCloneIdTable) {
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Must be a deep copy, not an alias into the original data.
-  EXPECT_NE(&cloned(0, 0), &idTable(0, 0));
+  EXPECT_NE(cloned(0, 0).payloadPtr(), idTable(0, 0).payloadPtr());
 }
 
 // _____________________________________________________________________________
@@ -737,13 +738,14 @@ TEST(Result, viewBackedApplyLimitOffset) {
                                            const IdTableView<0>& innerTable) {
     EXPECT_EQ(innerTable, comparisonTable);
     // The sub-view must alias the original data at offset 2 (no copy).
-    EXPECT_EQ(&innerTable(0, 0), &idTable(2, 0));
+    EXPECT_EQ(innerTable(0, 0).payloadPtr(), idTable(2, 0).payloadPtr());
     ++callCounter;
   });
   EXPECT_EQ(callCounter, 1);
   EXPECT_EQ(result.idTableView(), comparisonTable);
   // After the limit/offset the result view still aliases the original data.
-  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(2, 0));
+  EXPECT_EQ(result.idTableView()(0, 0).payloadPtr(),
+            idTable(2, 0).payloadPtr());
 }
 
 // _____________________________________________________________________________

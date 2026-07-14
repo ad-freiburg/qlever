@@ -299,45 +299,60 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
     result.resize(oldSize + nextIndex_);
 
-    // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
-    // If exactly one of them is UNDEF, return the other one, else return any of
-    // them (they are equal anyway).
-    auto getJoinValue = [](const ValueId a, const ValueId b) {
-      // NOTE: For localVocabIndices we might have different pointers that
-      // compare equal because they point to the same word. Therefore we cannot
-      // use a simple bitwise operation to handle the "one of them is UNDEF"
-      // case as we previously did.
-      if (a.isUndefined()) {
-        return b;
-      }
-      return a;
+    // The following lambdas operate directly on the payload and datatype
+    // arrays of the split column storage, which is considerably faster than
+    // materializing single `Id`s. Note: The check for UNDEF can be performed
+    // bitwise here, because the undefined `Id` has a unique bit
+    // representation (datatype byte and payload both zero).
+    static_assert(static_cast<uint8_t>(Datatype::Undefined) == 0);
+    auto isUndef = [](uint64_t payload, uint8_t type) {
+      return static_cast<size_t>((type == 0) & (payload == 0));
     };
 
     // A lambda that writes the join column with the given `colIdx` to the
     // `nextResultColIdx`-th column of the result.
-    auto writeJoinColumn = [&result, &getJoinValue, oldSize, this](
+    // Precondition (from the join): the left and the right value compare
+    // equal, or at least one of them is UNDEF. If the left one is UNDEF we
+    // take the right one, else the left one. (When both are defined they
+    // compare equal, but e.g. for local vocab entries the bit representations
+    // may still differ, so we have to consistently pick one side.)
+    auto writeJoinColumn = [&result, &isUndef, oldSize, this](
                                size_t colIdx, size_t resultColIdx) {
-      const auto& colLeft = inputLeft().getColumn(colIdx);
-      const auto& colRight = inputRight().getColumn(colIdx);
+      auto colLeft = inputLeft().getColumn(colIdx);
+      auto colRight = inputRight().getColumn(colIdx);
+      auto leftPayloads = colLeft.payloadSpan();
+      auto leftTypes = colLeft.datatypeSpan();
+      auto rightPayloads = colRight.payloadSpan();
+      auto rightTypes = colRight.datatypeSpan();
       // TODO<joka921> Implement prefetching.
       decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+      auto resultPayloads = resultCol.payloadSpan();
+      auto resultTypes = resultCol.datatypeSpan();
+      size_t numUndef = 0;
 
       // Write the matching rows.
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId =
-            getJoinValue(colLeft[sourceIndices[0]], colRight[sourceIndices[1]]);
-        numUndef += static_cast<size_t>(resultId.isUndefined());
-        resultCol[oldSize + targetIndex] = resultId;
+        uint64_t payload = leftPayloads[sourceIndices[0]];
+        uint8_t type = leftTypes[sourceIndices[0]];
+        if (isUndef(payload, type)) {
+          payload = rightPayloads[sourceIndices[1]];
+          type = rightTypes[sourceIndices[1]];
+          numUndef += isUndef(payload, type);
+        }
+        resultPayloads[oldSize + targetIndex] = payload;
+        resultTypes[oldSize + targetIndex] = type;
       }
 
       // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        Id id = colLeft[sourceIndex];
-        resultCol[oldSize + targetIndex] = id;
-        numUndef += static_cast<size_t>(id.isUndefined());
+        uint64_t payload = leftPayloads[sourceIndex];
+        uint8_t type = leftTypes[sourceIndex];
+        numUndef += isUndef(payload, type);
+        resultPayloads[oldSize + targetIndex] = payload;
+        resultTypes[oldSize + targetIndex] = type;
       }
+      numUndefinedPerColumn_.at(resultColIdx) += numUndef;
     };
 
     // A lambda that writes the non-join-column `colIdx` to the
@@ -347,39 +362,46 @@ class AddCombinedRowToIdTable {
     // previous one. I have tried to unify them but this lead to template-heavy
     // code that was very hard to read for humans.
     auto writeNonJoinColumn = ad_utility::ApplyAsValueIdentity{
-        [&result, oldSize, this](auto isColFromLeft, size_t colIdx,
-                                 size_t resultColIdx) {
+        [&result, &isUndef, oldSize, this](auto isColFromLeft, size_t colIdx,
+                                           size_t resultColIdx) {
           decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
                                              : inputRight().getColumn(colIdx);
+          auto payloads = col.payloadSpan();
+          auto types = col.datatypeSpan();
           // TODO<joka921> Implement prefetching.
           decltype(auto) resultCol = result.getColumn(resultColIdx);
-          size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+          auto resultPayloads = resultCol.payloadSpan();
+          auto resultTypes = resultCol.datatypeSpan();
+          size_t numUndef = 0;
 
           // Write the matching rows.
           static constexpr size_t idx = isColFromLeft ? 0 : 1;
           for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-            auto resultId = col[sourceIndices[idx]];
-            numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
-            resultCol[oldSize + targetIndex] = resultId;
+            uint64_t payload = payloads[sourceIndices[idx]];
+            uint8_t type = types[sourceIndices[idx]];
+            numUndef += isUndef(payload, type);
+            resultPayloads[oldSize + targetIndex] = payload;
+            resultTypes[oldSize + targetIndex] = type;
           }
 
           // Write the optional rows. For the right input those are always
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
-              // Note: `if constexpr` doesn't work here for QCC 8.3 for some
-              // reason which has yet to be analyzed.
-              if QL_CONSTEXPR (isColFromLeft) {
-                return col[sourceIndex];
-              } else {
-                (void)col;
-                (void)sourceIndex;
-                return Id::makeUndefined();
-              }
-            }();
-            resultCol[oldSize + targetIndex] = id;
-            numUndef += static_cast<size_t>(id.isUndefined());
+            uint64_t payload = 0;
+            uint8_t type = 0;
+            // Note: `if constexpr` doesn't work here for QCC 8.3 for some
+            // reason which has yet to be analyzed.
+            if QL_CONSTEXPR (isColFromLeft) {
+              payload = payloads[sourceIndex];
+              type = types[sourceIndex];
+            } else {
+              (void)sourceIndex;
+            }
+            numUndef += isUndef(payload, type);
+            resultPayloads[oldSize + targetIndex] = payload;
+            resultTypes[oldSize + targetIndex] = type;
           }
+          numUndefinedPerColumn_.at(resultColIdx) += numUndef;
         }};
 
     size_t nextResultColIdx = 0;

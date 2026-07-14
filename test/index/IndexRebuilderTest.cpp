@@ -362,7 +362,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
     return Id::makeFromLocalVocabIndex(entry);
   });
 
-  ad_utility::HashMap<Id::T, Id> localVocabMapping{
+  ad_utility::HashMap<Id::BitRepresentation, Id> localVocabMapping{
       {Id::makeFromLocalVocabIndex(vocabEntries.at(0)).getBits(),
        Id::makeFromVocabIndex(VocabIndex::make(1))},
       {Id::makeFromLocalVocabIndex(vocabEntries.at(1)).getBits(),
@@ -475,7 +475,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  ad_utility::HashMap<Id::T, Id> localVocabMapping;
+  ad_utility::HashMap<Id::BitRepresentation, Id> localVocabMapping;
   std::vector<VocabIndex> insertionPositions;
   std::vector<uint64_t> blankNodeBlocks;
   auto task = createPermutationWriterTask(

@@ -77,26 +77,26 @@ TEST(Vocabulary, SplitGeoVocab) {
   ASSERT_EQ(SGV::getMarkerForWord("\"\"^^<http://example.com>"), 0);
 
   // Add marker bit
-  ASSERT_EQ(SGV::addMarker(0, 1), (1ULL << 59));
-  ASSERT_EQ(SGV::addMarker(25, 1), (1ULL << 59) | 25);
+  ASSERT_EQ(SGV::addMarker(0, 1), (1ULL << 63));
+  ASSERT_EQ(SGV::addMarker(25, 1), (1ULL << 63) | 25);
 
   // Get vocab index
   ASSERT_EQ(SGV::getVocabIndex(0), 0);
   ASSERT_EQ(SGV::getVocabIndex(1), 1);
-  ASSERT_EQ(SGV::getVocabIndex(1ULL << 59), 0);
-  ASSERT_EQ(SGV::getVocabIndex((1ULL << 59) | 25), 25);
+  ASSERT_EQ(SGV::getVocabIndex(1ULL << 63), 0);
+  ASSERT_EQ(SGV::getVocabIndex((1ULL << 63) | 25), 25);
 
   // Vocab index is out of range
-  EXPECT_ANY_THROW(SGV::addMarker((1ULL << 60) | 42, 5));
-  EXPECT_ANY_THROW(SGV::addMarker(1ULL << 59, 5));
+  EXPECT_ANY_THROW(SGV::addMarker((1ULL << 63) | 42, 5));
+  EXPECT_ANY_THROW(SGV::addMarker(1ULL << 63, 5));
 
   // Check marker bit
-  ASSERT_TRUE(SGV::isSpecialVocabIndex((1ULL << 59) | 42));
-  ASSERT_TRUE(SGV::isSpecialVocabIndex(1ULL << 59));
+  ASSERT_TRUE(SGV::isSpecialVocabIndex((1ULL << 63) | 42));
+  ASSERT_TRUE(SGV::isSpecialVocabIndex(1ULL << 63));
   ASSERT_FALSE(SGV::isSpecialVocabIndex(0));
   ASSERT_FALSE(SGV::isSpecialVocabIndex(42));
-  ASSERT_FALSE(SGV::isSpecialVocabIndex((1ULL << 59) - 1));
-  ASSERT_FALSE(SGV::isSpecialVocabIndex(1ULL << 58));
+  ASSERT_FALSE(SGV::isSpecialVocabIndex((1ULL << 63) - 1));
+  ASSERT_FALSE(SGV::isSpecialVocabIndex(1ULL << 62));
 
   // Geometry info
   ASSERT_TRUE(SGV::isGeoInfoAvailable());
@@ -112,26 +112,26 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
 
   ASSERT_EQ(sv.numberOfVocabs, 2);
   ASSERT_EQ(sv.markerBitMaskSize, 1);
-  ASSERT_EQ(sv.markerBitMask, 1ULL << 59);
-  ASSERT_EQ(sv.markerShift, 59);
-  ASSERT_EQ(sv.vocabIndexBitMask, (1ULL << 59) - 1);
+  ASSERT_EQ(sv.markerBitMask, 1ULL << 63);
+  ASSERT_EQ(sv.markerShift, 63);
+  ASSERT_EQ(sv.vocabIndexBitMask, (1ULL << 63) - 1);
 
   ASSERT_EQ(sv.addMarker(42, 0), 42);
-  ASSERT_EQ(sv.addMarker(42, 1), (1ULL << 59) | 42);
-  ASSERT_ANY_THROW(sv.addMarker(1ULL << 60, 1));
+  ASSERT_EQ(sv.addMarker(42, 1), (1ULL << 63) | 42);
+  ASSERT_ANY_THROW(sv.addMarker(1ULL << 63, 1));
   ASSERT_ANY_THROW(sv.addMarker(5, 2));
 
-  ASSERT_EQ(sv.getMarker((1ULL << 59) | 42), 1);
+  ASSERT_EQ(sv.getMarker((1ULL << 63) | 42), 1);
   ASSERT_EQ(sv.getMarker(42), 0);
 
-  ASSERT_EQ(sv.getVocabIndex((1ULL << 59) | 42), 42);
-  ASSERT_EQ(sv.getVocabIndex(1ULL << 59), 0);
+  ASSERT_EQ(sv.getVocabIndex((1ULL << 63) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex(1ULL << 63), 0);
   ASSERT_EQ(sv.getVocabIndex(0), 0);
-  ASSERT_EQ(sv.getVocabIndex((1ULL << 59) - 1), (1ULL << 59) - 1);
+  ASSERT_EQ(sv.getVocabIndex((1ULL << 63) - 1), (1ULL << 63) - 1);
   ASSERT_EQ(sv.getVocabIndex(42), 42);
 
-  ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << 59) | 42));
-  ASSERT_TRUE(sv.isSpecialVocabIndex(1ULL << 59));
+  ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << 63) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex(1ULL << 63));
   ASSERT_FALSE(sv.isSpecialVocabIndex(42));
   ASSERT_FALSE(sv.isSpecialVocabIndex(0));
 
@@ -150,7 +150,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   sv.readFromFile("twoSplitVocab.dat");
   ASSERT_EQ(sv.size(), 4);
   ASSERT_EQ(sv[1], "\"xyz\"");
-  ASSERT_EQ(sv[(1ULL << 59) | 1], "\"axyz\"");
+  ASSERT_EQ(sv[(1ULL << 63) | 1], "\"axyz\"");
 
   // Test access to and content of underlying vocabs
   std::visit(
@@ -209,8 +209,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   // `GeoVocabulary`
   ASSERT_FALSE(sv.getGeoInfo(0).has_value());
   ASSERT_FALSE(sv.getGeoInfo(1).has_value());
-  ASSERT_FALSE(sv.getGeoInfo(1ULL << 59).has_value());
-  ASSERT_FALSE(sv.getGeoInfo((1ULL << 59) | 1).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1ULL << 63).has_value());
+  ASSERT_FALSE(sv.getGeoInfo((1ULL << 63) | 1).has_value());
 
   sv.close();
 }
@@ -225,31 +225,31 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 
   ASSERT_EQ(sv.numberOfVocabs, 3);
   ASSERT_EQ(sv.markerBitMaskSize, 2);
-  ASSERT_EQ(sv.markerBitMask, 3ULL << 58);
-  ASSERT_EQ(sv.markerShift, 58);
-  ASSERT_EQ(sv.vocabIndexBitMask, (1ULL << 58) - 1);
+  ASSERT_EQ(sv.markerBitMask, 3ULL << 62);
+  ASSERT_EQ(sv.markerShift, 62);
+  ASSERT_EQ(sv.vocabIndexBitMask, (1ULL << 62) - 1);
 
   ASSERT_EQ(sv.addMarker(42, 0), 42);
-  ASSERT_EQ(sv.addMarker(42, 1), (1ULL << 58) | 42);
-  ASSERT_EQ(sv.addMarker(42, 2), (2ULL << 58) | 42);
-  ASSERT_ANY_THROW(sv.addMarker(1ULL << 60, 1));
+  ASSERT_EQ(sv.addMarker(42, 1), (1ULL << 62) | 42);
+  ASSERT_EQ(sv.addMarker(42, 2), (2ULL << 62) | 42);
+  ASSERT_ANY_THROW(sv.addMarker(1ULL << 62, 1));
   ASSERT_ANY_THROW(sv.addMarker(5, 3));
 
-  ASSERT_EQ(sv.getMarker((1ULL << 58) | 42), 1);
-  ASSERT_EQ(sv.getMarker((2ULL << 58) | 42), 2);
+  ASSERT_EQ(sv.getMarker((1ULL << 62) | 42), 1);
+  ASSERT_EQ(sv.getMarker((2ULL << 62) | 42), 2);
   ASSERT_EQ(sv.getMarker(42), 0);
 
-  ASSERT_EQ(sv.getVocabIndex((1ULL << 58) | 42), 42);
-  ASSERT_EQ(sv.getVocabIndex((2ULL << 58) | 42), 42);
-  ASSERT_EQ(sv.getVocabIndex(1ULL << 58), 0);
-  ASSERT_EQ(sv.getVocabIndex(2ULL << 58), 0);
+  ASSERT_EQ(sv.getVocabIndex((1ULL << 62) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex((2ULL << 62) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex(1ULL << 62), 0);
+  ASSERT_EQ(sv.getVocabIndex(2ULL << 62), 0);
   ASSERT_EQ(sv.getVocabIndex(0), 0);
-  ASSERT_EQ(sv.getVocabIndex((1ULL << 58) - 1), (1ULL << 58) - 1);
+  ASSERT_EQ(sv.getVocabIndex((1ULL << 62) - 1), (1ULL << 62) - 1);
   ASSERT_EQ(sv.getVocabIndex(42), 42);
 
-  ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << 58) | 42));
-  ASSERT_TRUE(sv.isSpecialVocabIndex((2ULL << 58) | 42));
-  ASSERT_TRUE(sv.isSpecialVocabIndex(1ULL << 58));
+  ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << 62) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex((2ULL << 62) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex(1ULL << 62));
   ASSERT_FALSE(sv.isSpecialVocabIndex(42));
   ASSERT_FALSE(sv.isSpecialVocabIndex(0));
 
@@ -271,9 +271,9 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   sv.readFromFile("threeSplitVocab.dat");
   ASSERT_EQ(sv.size(), 6);
   ASSERT_EQ(sv[2], "\"axyz\"");
-  ASSERT_EQ(sv[2ULL << 58], "\"xyz\"^^<blabliblu>");
-  ASSERT_EQ(sv[(2ULL << 58) | 1], "\"zzz\"^^<blabliblu>");
-  ASSERT_EQ(sv[1ULL << 58], "\"xyz\"^^<http://example.com>");
+  ASSERT_EQ(sv[2ULL << 62], "\"xyz\"^^<blabliblu>");
+  ASSERT_EQ(sv[(2ULL << 62) | 1], "\"zzz\"^^<blabliblu>");
+  ASSERT_EQ(sv[1ULL << 62], "\"xyz\"^^<http://example.com>");
 }
 
 // _____________________________________________________________________________
@@ -303,13 +303,13 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
 
   // Out of range indices
   EXPECT_ANY_THROW(v[VocabIndex::make(42)]);
-  EXPECT_ANY_THROW(v[VocabIndex::make((1ULL << 59) | 42)]);
+  EXPECT_ANY_THROW(v[VocabIndex::make((1ULL << 63) | 42)]);
 
-  auto idx = VocabIndex::make(1ULL << 59);
+  auto idx = VocabIndex::make(1ULL << 63);
   ASSERT_EQ(v[idx],
             "\"LINESTRING(1 2, 3 4)\""
             "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  idx = VocabIndex::make(static_cast<uint64_t>(1) << 59 | 1);
+  idx = VocabIndex::make(static_cast<uint64_t>(1) << 63 | 1);
   ASSERT_EQ(v[idx],
             "\"POLYGON((1 2, 3 4))\""
             "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
@@ -332,14 +332,14 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
       (*wordCallback)("\"LINESTRING(1 2, 3 4)\""
                       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
                       true),
-      (1ULL << 59));
+      (1ULL << 63));
   ASSERT_EQ((*wordCallback)("\"ba\"", true), 2);
   ASSERT_EQ((*wordCallback)("\"car\"@en", true), 3);
   ASSERT_EQ(
       (*wordCallback)("\"POLYGON((1 2, 3 4))\""
                       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
                       true),
-      (1ULL << 59) | 1);
+      (1ULL << 63) | 1);
 
   wordCallback->finish();
 
@@ -364,8 +364,8 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
       vocabulary.getId("\"LINESTRING(1 2, 3 4)\""
                        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
                        &idx));
-  ASSERT_EQ(idx.get(), 1ULL << 59);
-  ASSERT_EQ(vocabulary[VocabIndex::make(1ULL << 59)],
+  ASSERT_EQ(idx.get(), 1ULL << 63);
+  ASSERT_EQ(vocabulary[VocabIndex::make(1ULL << 63)],
             "\"LINESTRING(1 2, 3 4)\""
             "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
@@ -373,8 +373,8 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
       vocabulary.getId("\"POLYGON((1 2, 3 4))\""
                        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
                        &idx));
-  ASSERT_EQ(idx.get(), (1ULL << 59) | 1);
-  ASSERT_EQ(vocabulary[VocabIndex::make((1ULL << 59) | 1)],
+  ASSERT_EQ(idx.get(), (1ULL << 63) | 1);
+  ASSERT_EQ(vocabulary[VocabIndex::make((1ULL << 63) | 1)],
             "\"POLYGON((1 2, 3 4))\""
             "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
@@ -401,22 +401,22 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   auto [l4, u4] = vocabulary.getPositionOfWord(
       "\"POLYGON((0 0, 3 4))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(l4, VocabIndex::make((1ULL << 59) | 1));
-  ASSERT_EQ(u4, VocabIndex::make((1ULL << 59) | 1));
+  ASSERT_EQ(l4, VocabIndex::make((1ULL << 63) | 1));
+  ASSERT_EQ(u4, VocabIndex::make((1ULL << 63) | 1));
 
   //  - Non-existing split word, at the end
   auto [l5, u5] = vocabulary.getPositionOfWord(
       "\"POLYGON((9 9, 9 9))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(l5, VocabIndex::make((1ULL << 59) | 2));
-  ASSERT_EQ(u5, VocabIndex::make((1ULL << 59) | 2));
+  ASSERT_EQ(l5, VocabIndex::make((1ULL << 63) | 2));
+  ASSERT_EQ(u5, VocabIndex::make((1ULL << 63) | 2));
 
   //  - Existing split word
   auto [l6, u6] = vocabulary.getPositionOfWord(
       "\"POLYGON((1 2, 3 4))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(l6, VocabIndex::make((1ULL << 59) | 1));
-  ASSERT_EQ(u6, VocabIndex::make((1ULL << 59) | 2));
+  ASSERT_EQ(l6, VocabIndex::make((1ULL << 63) | 1));
+  ASSERT_EQ(u6, VocabIndex::make((1ULL << 63) | 2));
 
   //  - Non-existing prefix of an existing split word
   auto [l7, u7] = vocabulary.getPositionOfWord("\"POLYGON((1 2, 3 4))");

@@ -180,30 +180,32 @@ class RowReferenceImpl {
         : table_{table}, row_{row} {}
 
    protected:
-    // The actual implementation of operator[].
+    // The actual implementation of operator[]. Note: The returned
+    // "reference" is either a plain reference or a proxy object (e.g.
+    // `IdRef` for the storage-efficient split `Id` columns), depending on
+    // the underlying table, so the return type is deduced.
     CPP_template(typename SelfType)(
         requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
-            CPP_and CPP_NOT(
-                isConst)) static T& operatorBracketImpl(SelfType& self,
-                                                        size_t i) {
+            CPP_and CPP_NOT(isConst)) static decltype(auto)
+        operatorBracketImpl(SelfType& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
     template <typename Self>
-    static const T& operatorBracketImpl(const Self& self, size_t i) {
+    static decltype(auto) operatorBracketImpl(const Self& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    CPP_template_2(typename = void)(requires(!isConst)) T& operator[](
-        size_t i) && {
+    CPP_template_2(typename = void)(requires(!isConst)) decltype(auto)
+    operator[](size_t i) && {
       return operatorBracketImpl(*this, i);
     }
-    const T& operator[](size_t i) const& {
+    decltype(auto) operator[](size_t i) const& {
       return operatorBracketImpl(*this, i);
     }
-    const T& operator[](size_t i) const&& {
+    decltype(auto) operator[](size_t i) const&& {
       return operatorBracketImpl(*this, i);
     }
 
@@ -216,14 +218,17 @@ class RowReferenceImpl {
                                                                 colIdx);
       }
     };
+    // Note: The `value_type` is explicitly set to `T`, because the entries
+    // of the row are proxy references when the underlying table stores split
+    // `Id` columns.
     using iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::False>;
+        ad_utility::IsConst::False, T>;
     using const_iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::True>;
+        ad_utility::IsConst::True, T>;
     // Non-const iterators allow non-const access and are therefore only allowed
     // on rvalues.
     iterator begin() && { return {this, 0}; };
@@ -248,8 +253,12 @@ class RowReferenceImpl {
     // value or by reference).
     CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
+      // Note: The unqualified call with the `using`-declaration also finds
+      // the `swap` functions of proxy references (e.g. `IdRef`) via argument
+      // dependent lookup.
+      using std::swap;
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
 
@@ -391,10 +400,11 @@ class RowReference
   using Base::Base;
 
   // Access to the `i`-th column of this row.
-  CPP_template_2(typename = void)(requires(!isConst)) T& operator[](size_t i) {
+  CPP_template_2(typename = void)(requires(!isConst)) decltype(auto) operator[](
+      size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
-  const T& operator[](size_t i) const {
+  decltype(auto) operator[](size_t i) const {
     return Base::operatorBracketImpl(base(), i);
   }
 

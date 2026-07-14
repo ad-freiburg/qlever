@@ -25,86 +25,55 @@ struct ValueIdTest : public ::testing::Test {
 };
 
 TEST_F(ValueIdTest, makeFromDouble) {
+  // The payload of a `ValueId` is a full 64-bit word, so every double
+  // (including subnormals) is representable exactly.
   auto testRepresentableDouble = [](double d) {
     auto id = ValueId::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
-    // We lose `numDatatypeBits` bits of precision, so `ASSERT_DOUBLE_EQ` would
-    // fail.
-    ASSERT_FLOAT_EQ(id.getDouble(), d);
-    // This check expresses the precision more exactly
-    if (id.getDouble() != d) {
-      // The if is needed for the case of += infinity.
-      ASSERT_NEAR(
-          id.getDouble(), d,
-          std::abs(d / (uint64_t{1} << (52 - ValueId::numDatatypeBits))));
-    }
+    ASSERT_EQ(absl::bit_cast<uint64_t>(id.getDouble()),
+              absl::bit_cast<uint64_t>(d));
   };
 
-  auto testNonRepresentableSubnormal = [](double d) {
-    auto id = ValueId::makeFromDouble(d);
-    ASSERT_EQ(id.getDatatype(), Datatype::Double);
-    // Subnormal numbers with a too small fraction are rounded to zero.
-    ASSERT_EQ(id.getDouble(), 0.0);
-  };
   for (size_t i = 0; i < 10'000; ++i) {
     testRepresentableDouble(positiveRepresentableDoubleGenerator());
     testRepresentableDouble(negativeRepresentableDoubleGenerator());
-    auto nonRepresentable = nonRepresentableDoubleGenerator();
-    // The random number generator includes the edge cases which would make the
-    // tests fail.
-    if (nonRepresentable != ValueId::minPositiveDouble &&
-        nonRepresentable != -ValueId::minPositiveDouble) {
-      testNonRepresentableSubnormal(nonRepresentable);
-    }
   }
 
   testRepresentableDouble(std::numeric_limits<double>::infinity());
   testRepresentableDouble(-std::numeric_limits<double>::infinity());
+  testRepresentableDouble(std::numeric_limits<double>::denorm_min());
+  testRepresentableDouble(-std::numeric_limits<double>::denorm_min());
 
   // Test positive and negative 0.
   ASSERT_NE(absl::bit_cast<uint64_t>(0.0), absl::bit_cast<uint64_t>(-0.0));
   ASSERT_EQ(0.0, -0.0);
   testRepresentableDouble(0.0);
   testRepresentableDouble(-0.0);
-  testNonRepresentableSubnormal(0.0);
-  testNonRepresentableSubnormal(0.0);
 
   auto quietNan = std::numeric_limits<double>::quiet_NaN();
   auto signalingNan = std::numeric_limits<double>::signaling_NaN();
   ASSERT_TRUE(std::isnan(ValueId::makeFromDouble(quietNan).getDouble()));
   ASSERT_TRUE(std::isnan(ValueId::makeFromDouble(signalingNan).getDouble()));
-
-  // Test that the value of `minPositiveDouble` is correct.
-  auto testSmallestNumber = [](double d) {
-    ASSERT_EQ(ValueId::makeFromDouble(d).getDouble(), d);
-    ASSERT_NE(d / 2, 0.0);
-    ASSERT_EQ(ValueId::makeFromDouble(d / 2).getDouble(), 0.0);
-  };
-  testSmallestNumber(ValueId::minPositiveDouble);
-  testSmallestNumber(-ValueId::minPositiveDouble);
 }
 
 TEST_F(ValueIdTest, makeFromInt) {
+  // The payload of a `ValueId` is a full 64-bit word, so the whole range of
+  // `int64_t` is representable and no overflow is possible.
   for (size_t i = 0; i < 10'000; ++i) {
     auto value = nonOverflowingNBitGenerator();
     auto id = ValueId::makeFromInt(value);
     ASSERT_EQ(id.getDatatype(), Datatype::Int);
     ASSERT_EQ(id.getInt(), value);
   }
-
-  auto testOverflow = [](auto generator) {
-    using I = ValueId::IntegerType;
-    for (size_t i = 0; i < 10'000; ++i) {
-      auto value = generator();
-      auto id = ValueId::makeFromInt(value);
-      ASSERT_EQ(id.getDatatype(), Datatype::Int);
-      ASSERT_EQ(id.getInt(), I::fromNBit(I::toNBit(value)));
-      ASSERT_NE(id.getInt(), value);
-    }
+  auto testSingle = [](int64_t value) {
+    auto id = ValueId::makeFromInt(value);
+    ASSERT_EQ(id.getDatatype(), Datatype::Int);
+    ASSERT_EQ(id.getInt(), value);
   };
-
-  testOverflow(overflowingNBitGenerator);
-  testOverflow(underflowingNBitGenerator);
+  testSingle(std::numeric_limits<int64_t>::max());
+  testSingle(std::numeric_limits<int64_t>::min());
+  testSingle(0);
+  testSingle(-1);
 }
 
 // _____________________________________________________________________________
@@ -121,38 +90,37 @@ TEST_F(ValueIdTest, makeFromBool) {
 }
 
 TEST_F(ValueIdTest, Indices) {
-  auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
+  auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type,
+                           auto& generator, uint64_t maxValue) {
     auto testSingle = [&](auto value) {
       auto id = makeId(value);
       ASSERT_EQ(id.getDatatype(), type);
-      ASSERT_EQ(std::invoke(getFromId, id), value);
+      ASSERT_EQ(static_cast<uint64_t>(std::invoke(getFromId, id)), value);
     };
     for (size_t idx = 0; idx < 10'000; ++idx) {
-      testSingle(indexGenerator());
+      testSingle(generator() % (maxValue - 1));
     }
     testSingle(0);
-    testSingle(ValueId::maxIndex);
-
-    if (type != Datatype::LocalVocabIndex) {
-      for (size_t idx = 0; idx < 10'000; ++idx) {
-        auto value = invalidIndexGenerator();
-        ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            makeId(value), ::testing::ContainsRegex("is bigger than"));
-      }
-    }
+    testSingle(maxValue);
   };
 
+  // The full range of `uint64_t` is valid for indices.
   testRandomIds(&makeTextRecordId, &getTextRecordIndex,
-                Datatype::TextRecordIndex);
-  testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
+                Datatype::TextRecordIndex, indexGenerator, ValueId::maxIndex);
+  testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex,
+                indexGenerator, ValueId::maxIndex);
 
+  // Note: For the `LocalVocabIndex` the roundtrip goes through the decimal
+  // string representation and `std::atoll`, so only values that fit into an
+  // `int64_t` can be tested this way.
   auto localVocabWordToInt = [](const auto& input) {
     return std::atoll(getLocalVocabIndex(input).c_str());
   };
   testRandomIds(&makeLocalVocabId, localVocabWordToInt,
-                Datatype::LocalVocabIndex);
-  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
+                Datatype::LocalVocabIndex, indexGenerator,
+                uint64_t{std::numeric_limits<int64_t>::max()});
+  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex,
+                indexGenerator, ValueId::maxIndex);
 }
 
 TEST_F(ValueIdTest, Undefined) {
@@ -354,9 +322,8 @@ TEST_F(ValueIdTest, toDebugString) {
   // Values with type undefined can usually only have one value (all data bits
   // zero). Sometimes ValueIds with type undefined but non-zero data bits are
   // used. The following test tests one of these internal ValueIds.
-  ValueId customUndefined = ValueId::fromBits(
-      ValueId::IntegerType::fromNBit(100) |
-      (static_cast<ValueId::T>(Datatype::Undefined) << ValueId::numDataBits));
+  ValueId customUndefined =
+      ValueId::fromBits({static_cast<uint8_t>(Datatype::Undefined), 100});
   test(customUndefined, "U:100");
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
   test(ValueId::makeFromBool(false), "B:false");

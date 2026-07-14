@@ -36,4 +36,10 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
+    # Standalone microbenchmark binary (with its own `main`, deliberately not
+    # using the benchmark infrastructure, s.t. single kernels can be isolated
+    # for `perf`).
+    add_executable(IdKernelBenchmarks IdKernelBenchmarks.cpp)
+    qlever_target_link_libraries(IdKernelBenchmarks engine testUtil gtest gmock)
+
 endif()

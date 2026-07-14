@@ -13,6 +13,7 @@
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
+#include "global/ValueIdBitRepresentation.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
@@ -35,7 +36,7 @@ class alignas(16) LocalVocabEntry
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
   static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
-  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
+  using IdProxy = ad_utility::TypedIndex<ValueIdBitRepresentation, proxyTag>;
 
   FRIEND_TEST(TripleComponent, toValueId);
 

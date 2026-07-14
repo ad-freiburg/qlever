@@ -149,8 +149,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   ql::ranges::for_each(
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
-       upperBound =
-           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
+       upperBound = limitOffset.upperBound(idTable.numRows())](auto column) {
         ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.

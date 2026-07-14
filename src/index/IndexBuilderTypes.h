@@ -84,12 +84,12 @@ class PartialVocabIndexWithExternalFlag {
  public:
   PartialVocabIndexWithExternalFlag(uint64_t id, bool isExternal)
       : encodedId_{(uint64_t(isExternal) << 63) | id} {
-    // The top four bits of any partial-vocab id must be zero: in the final
-    // `Id` they are occupied by the datatype tag (see `ValueId::numDataBits`).
-    // This guard catches future regressions that funnel a tagged value or an
-    // underflowed counter through here, which would otherwise silently
-    // collide with the `isExternal` bit and corrupt the vocabulary mapping.
-    AD_EXPENSIVE_CHECK(id < (uint64_t{1} << ValueId::numDataBits));
+    // The topmost bit of any partial-vocab id must be zero, because it is
+    // occupied by the `isExternal` flag. This guard catches future regressions
+    // that funnel a tagged value or an underflowed counter through here, which
+    // would otherwise silently collide with the `isExternal` bit and corrupt
+    // the vocabulary mapping.
+    AD_EXPENSIVE_CHECK(id < (uint64_t{1} << 63));
   }
 
   PartialVocabIndexWithExternalFlag() = default;

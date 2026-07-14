@@ -127,7 +127,7 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
            auto begOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
            row[numDefinedColumns - 1] =
-               Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
+               Id::fromBits(row[numDefinedColumns - 1].getBits().incremented());
            auto endOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
            resultMightBeUnsorted = true;

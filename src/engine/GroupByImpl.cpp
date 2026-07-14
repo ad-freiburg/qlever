@@ -9,6 +9,8 @@
 
 #include <absl/strings/str_join.h>
 
+#include <cstring>
+
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
@@ -434,7 +436,7 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  auto resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
@@ -673,6 +675,48 @@ size_t GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
                                           const IdTableView<COLS>& idTable,
                                           GroupBlock& currentGroupBlock) const {
   size_t blockStart = 0;
+
+  // Fast path for a single group column that contains no `LocalVocabIndex`
+  // IDs (those don't compare bitwise): find the group boundaries directly on
+  // the datatype bytes and payload words of the split column storage.
+  if (currentGroupBlock.size() == 1) {
+    auto column = idTable.getColumn(currentGroupBlock.at(0).first);
+    auto types = column.datatypeSpan();
+    auto payloads = column.payloadSpan();
+    if (std::memchr(types.data(), static_cast<int>(Datatype::LocalVocabIndex),
+                    types.size()) == nullptr) {
+      auto& currentValue = currentGroupBlock.at(0).second;
+      size_t pos = 0;
+      // Skip the prefix that still belongs to the current group. Note: The
+      // value in `currentGroupBlock` can stem from a previous table (in the
+      // lazy case) and can therefore be of type `LocalVocabIndex`, so this
+      // prefix has to be compared with the semantic `Id` comparison.
+      while (pos < idTable.size() && Id{column[pos]} == currentValue) {
+        ++pos;
+      }
+      if (pos < idTable.size()) {
+        // A boundary at `pos == 0` correctly reports an empty first block
+        // (exactly like the generic loop below).
+        onBlockChange(blockStart, pos);
+        blockStart = pos;
+        currentValue = column[pos];
+        // All further rows can be compared bitwise against their
+        // predecessor.
+        for (++pos; pos < idTable.size(); ++pos) {
+          if ((pos & ((size_t{1} << 16) - 1)) == 0) {
+            checkCancellation();
+          }
+          if (payloads[pos] != payloads[pos - 1] ||
+              types[pos] != types[pos - 1]) {
+            onBlockChange(blockStart, pos);
+            blockStart = pos;
+            currentValue = column[pos];
+          }
+        }
+      }
+      return blockStart;
+    }
+  }
 
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
@@ -1451,7 +1495,7 @@ GroupByImpl::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
+    const ArrayOrVector<columnBasedIdTable::ConstIdColumnSpan>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1817,8 +1861,8 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
       auto currentBlockSize = evaluationContext.size();
 
       // Perform HashMap lookup once for all groups in current block
-      using U = typename HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+      using U = typename HashMapAggregationData<NUM_GROUP_COLUMNS>::
+          template ArrayOrVector<columnBasedIdTable::ConstIdColumnSpan>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

@@ -102,7 +102,8 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 template <typename Allocator>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+    columnBasedIdTable::ConstIdColumnSpan input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);

@@ -24,6 +24,10 @@
  *        that a set of entities has (e.g. for autocompletion of relations
  *        while writing a query).
  */
+// TODO<joka921> The pattern stores materialized 16-byte `Id`s (7 padding
+// bytes each). In the future this should probably be rewritten to an
+// efficient format that stores first all payloads and then all datatype
+// bytes.
 struct Pattern : std::vector<Id> {
   using PatternId = int32_t;
   static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();

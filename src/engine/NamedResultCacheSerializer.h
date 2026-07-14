@@ -95,7 +95,8 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
       // allow local vocab entries here.
       AD_CORRECTNESS_CHECK(
-          ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+          ql::ranges::find(col, Datatype::LocalVocabIndex,
+                           [](const Id& id) { return id.getDatatype(); }) ==
               col.end(),
           "Named result cache entries that contain local vocab entries "
           "currently cannot be serialized. Note that local vocab entries can "

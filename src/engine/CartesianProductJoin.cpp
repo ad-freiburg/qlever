@@ -106,10 +106,10 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
-                                             ql::span<const Id> inputColumn,
-                                             size_t groupSize,
-                                             size_t offset) const {
+void CartesianProductJoin::writeResultColumn(
+    columnBasedIdTable::MutableIdColumnSpan targetColumn,
+    columnBasedIdTable::ConstIdColumnSpan inputColumn, size_t groupSize,
+    size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
   // the `targetColumn`, repeat until the `targetColumn` is completely filled.
   size_t numRowsWritten = 0;

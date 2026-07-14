@@ -5,6 +5,7 @@
 #include "index/IdTableUtils.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/IdColumnAlgorithms.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
@@ -23,6 +24,14 @@ void IdTableUtils::sort(IdTable& idTable,
   // TODO<joka921> Also experiment with sorting algorithms that take the
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
+    // Fast path: If the key column contains no `LocalVocabIndex` IDs (which
+    // don't compare bitwise), sort a (payload, rowIndex) permutation
+    // (partitioned by datatype) and apply it to the columns. This is much
+    // faster than the comparison sort on the row proxies, which has to touch
+    // all payload and datatype buffers of the table for every swap.
+    if (columnBasedIdTable::trySortBySingleKeyColumn(idTable, sortCols[0])) {
+      return;
+    }
     ad_utility::callFixedSizeVi(width, [&idTable, col = sortCols[0]](auto I) {
       IdTableUtils::sort<I>(&idTable, col);
     });

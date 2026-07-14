@@ -85,9 +85,7 @@ class SplitVocabulary {
   static constexpr uint64_t markerBitMaskSize = ad_utility::bitMaskSizeForValue(
       numberOfVocabs - 1);  // Range of marker: [0..numberOfVocabs-1]
   static constexpr uint64_t markerBitMask =
-      ad_utility::bitMaskForHigherBits(ValueId::numDatatypeBits +
-                                       markerBitMaskSize) &
-      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+      ad_utility::bitMaskForHigherBits(markerBitMaskSize);
   static constexpr uint64_t markerShift =
       ValueId::numDataBits - markerBitMaskSize;
   static constexpr uint64_t vocabIndexBitMask =
@@ -103,8 +101,7 @@ class SplitVocabulary {
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
-  // that contains the marker and vocabIndex. The result is guaranteed to be
-  // zero in all ValueId datatype bits.
+  // that contains the marker (in the topmost bits) and the vocabIndex.
   static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);

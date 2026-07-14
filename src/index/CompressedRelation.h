@@ -52,7 +52,15 @@ struct DecompressedBlockAndMetadata {
 
 // After compression the columns have different sizes, so we cannot use an
 // `IdTable`.
-using CompressedBlock = std::vector<std::vector<char>>;
+// The compressed data of a single column of a block: the concatenation of
+// the compressed payload words and the compressed datatype bytes, together
+// with the size of the compressed payload part (which is needed to split the
+// two parts when decompressing).
+struct CompressedColumn {
+  std::vector<char> data_;
+  size_t compressedSizePayloads_;
+};
+using CompressedBlock = std::vector<CompressedColumn>;
 
 // The metadata of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetadataNoBlockIndex {
@@ -60,9 +68,14 @@ struct CompressedBlockMetadataNoBlockIndex {
   // stored separately (but adjacently).
   struct OffsetAndCompressedSize {
     off_t offsetInFile_;
+    // The total compressed size of the column (compressed payload words
+    // directly followed by the compressed datatype bytes).
     size_t compressedSize_;
+    // The compressed size of only the payload part.
+    size_t compressedSizePayloads_;
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(OffsetAndCompressedSize,
-                                                offsetInFile_, compressedSize_)
+                                                offsetInFile_, compressedSize_,
+                                                compressedSizePayloads_)
   };
 
   using GraphInfo = std::optional<std::vector<Id>>;
@@ -89,6 +102,10 @@ struct CompressedBlockMetadataNoBlockIndex {
   // example, for Wikidata, we have only around 50K blocks with block size 8M
   // and around 5M blocks with block size 80K; even the latter takes only half
   // a GB in total.
+  // TODO<joka921> The `PermutedTriple` stores materialized 16-byte `Id`s
+  // (7 padding bytes each). In the future this should probably be rewritten
+  // to an efficient format that stores first the four payloads and then the
+  // four datatype bytes.
   struct PermutedTriple {
     Id col0Id_;
     Id col1Id_;
@@ -203,6 +220,7 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
   serializer | arg.offsetInFile_;
   serializer | arg.compressedSize_;
+  serializer | arg.compressedSizePayloads_;
 }
 
 // Serialization of the block metadata.
@@ -448,7 +466,7 @@ class CompressedRelationWriter {
   size_t blocksize() const {
     return std::max(
         size_t{1},
-        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
+        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(uint64_t)});
   }
 
  private:
@@ -468,10 +486,12 @@ class CompressedRelationWriter {
   // data of the written block. Then clear `smallRelationsBuffer_`.
   void writeBufferedRelationsToSingleBlock();
 
-  // Compress the `column` and write it to the `outfile_`. Return the offset and
-  // size of the compressed column in the `outfile_`.
+  // Compress the `column` (the payload part and the datatype part are
+  // compressed separately and stored adjacently) and write it to the
+  // `outfile_`. Return the offset and sizes of the compressed column in the
+  // `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      ql::span<const Id> column);
+      columnBasedIdTable::ConstIdColumnSpan column);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -746,7 +766,7 @@ class CompressedRelationReader {
     size_t numHandledBlocks{0};
   };
   static GetBlocksForJoinResult getBlocksForJoin(
-      ql::span<const Id> joinColumn,
+      columnBasedIdTable::ConstIdColumnSpan joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an
@@ -895,11 +915,11 @@ class CompressedRelationReader {
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
-  // store the result at the `iterator`. For the `numRowsToRead` argument, see
+  // store the result in the `column`. For the `numRowsToRead` argument, see
   // the documentation of `decompressBlock`.
-  template <typename Iterator>
-  static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+  static void decompressColumn(const CompressedColumn& compressedColumn,
+                               size_t numRowsToRead,
+                               columnBasedIdTable::MutableIdColumnSpan column);
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

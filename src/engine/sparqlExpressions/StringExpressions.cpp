@@ -485,7 +485,7 @@ class ConcatExpression : public detail::VariadicExpression {
         auto& resultAsVec = std::get<LiteralVec>(result);
         // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
-        for (auto& el : gen) {
+        for (auto&& el : gen) {
           auto literal = valueGetter(std::move(el), ctx);
           concatOrSetLiteral(resultAsVec[i], literal, isFirstLiteral);
           ctx->cancellationHandle_->throwIfCancelled();

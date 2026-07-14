@@ -121,7 +121,9 @@ struct GetColsFromTable {
       return ::ranges::views::zip(table.getColumn(I)...) |
              ::ranges::views::transform([](auto&& tuple) {
                return std::apply(
-                   [](auto&... refs) { return std::array{refs...}; },
+                   [](auto&&... refs) {
+                     return std::array<Id, sizeof...(refs)>{AD_FWD(refs)...};
+                   },
                    AD_FWD(tuple));
              });
     }(std::make_index_sequence<numCols>());
@@ -198,7 +200,8 @@ struct IdTableAndFirstCols {
 };
 
 // Specialization of `IdTableAndFirstCol` for only a single column where we
-// don't need to copy into an `array`, but directly return single `Id&`.
+// don't need to copy into an `array`, but directly return single (proxy)
+// references to `Id`s.
 
 // Note: this changes the interface (in particular the single rows can't be
 // iterated over), but currently this is used by the `Join` class, which expects
@@ -231,9 +234,9 @@ struct IdTableAndFirstCols<1, Table> {
 
   bool empty() const { return col().empty(); }
 
-  const Id& operator[](size_t idx) const { return col()[idx]; }
-  const Id& front() const { return col().front(); }
-  const Id& back() const { return col().back(); }
+  decltype(auto) operator[](size_t idx) const { return col()[idx]; }
+  decltype(auto) front() const { return col().front(); }
+  decltype(auto) back() const { return col().back(); }
 
   size_t size() const { return col().size(); }
 

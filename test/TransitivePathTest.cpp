@@ -1957,8 +1957,9 @@ namespace {
 // _____________________________________________________________________________
 HashMapWrapper::MapOfMaps columnsToMap(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    ql::span<const Id> startCol, ql::span<const Id> targetCol,
-    ql::span<const Id> graphCol) {
+    columnBasedIdTable::ConstIdColumnSpan startCol,
+    columnBasedIdTable::ConstIdColumnSpan targetCol,
+    columnBasedIdTable::ConstIdColumnSpan graphCol) {
   HashMapWrapper::MapOfMaps edgesWithGraph{allocator};
   for (size_t i = 0; i < startCol.size(); i++) {
     auto it1 = edgesWithGraph.try_emplace(graphCol[i], allocator).first;
@@ -1971,7 +1972,8 @@ HashMapWrapper::MapOfMaps columnsToMap(
 // _____________________________________________________________________________
 HashMapWrapper::Map columnsToMap(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    ql::span<const Id> startCol, ql::span<const Id> targetCol) {
+    columnBasedIdTable::ConstIdColumnSpan startCol,
+    columnBasedIdTable::ConstIdColumnSpan targetCol) {
   HashMapWrapper::Map edges{allocator};
 
   for (size_t i = 0; i < startCol.size(); i++) {

@@ -17,6 +17,10 @@
 #include "index/KeyOrder.h"
 
 template <size_t N = 0>
+// TODO<joka921> The triple stores materialized 16-byte `Id`s (7 padding
+// bytes each). In the future this should probably be rewritten to an
+// efficient format that stores first the four payloads and then the four
+// datatype bytes.
 struct IdTriple {
   // A triple has four components: subject, predicate, object, and graph.
   //

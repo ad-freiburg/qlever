@@ -208,7 +208,7 @@ class LiteralExpression : public SparqlExpression {
           "A non-grouped variable outside of an aggregate should have been "
           "rejected by the parser");
       const auto& table = context->_inputTable;
-      auto constantValue = table.at(context->_beginIndex, column.value());
+      Id constantValue = table.at(context->_beginIndex, column.value());
       AD_EXPENSIVE_CHECK((
           std::all_of(table.begin() + context->_beginIndex,
                       table.begin() + context->_endIndex, [&](const auto& row) {

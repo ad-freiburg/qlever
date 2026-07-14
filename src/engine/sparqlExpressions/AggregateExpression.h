@@ -46,7 +46,7 @@ inline auto getUniqueElements = [](const EvaluationContext* context,
   return ad_utility::ForceInputView(
       ad_utility::OwningView(std::move(operandGenerator)) |
       ::ranges::views::filter(
-          [set = std::move(uniqueHashSet)](auto& operand) mutable {
+          [set = std::move(uniqueHashSet)](const auto& operand) mutable {
             return set.insert(operand).second;
           }));
 };

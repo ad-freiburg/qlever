@@ -386,7 +386,7 @@ class CartesianProductJoinLazyTest
     join.getExecutionContext()->getQueryTreeCache().clearAll();
     Result result = join.computeResultOnlyForTesting(true);
     ASSERT_FALSE(result.isFullyMaterialized());
-    std::vector<std::unordered_map<uint64_t, size_t>> counter{
+    std::vector<std::unordered_map<Id::BitRepresentation, size_t>> counter{
         occurenceCounts.size()};
     size_t elementCounter = 0;
     for (auto& [idTable, localVocab] : result.idTables()) {

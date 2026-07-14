@@ -208,14 +208,23 @@ CPP_template_def(int WIDTH,
 
       using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
       ValueGetter valueGetter{};
+      // First collect the indices of all matching rows and then copy them to
+      // the result in one go. This is much faster than copying the matching
+      // rows one at a time, because the copy can be performed column by
+      // column.
+      std::vector<size_t> matchingIndices;
       for (auto&& resultValue : resultGenerator) {
         if (valueGetter(resultValue, &evaluationContext) ==
             ValueGetter::Result::True) {
-          resultTable.push_back(input[i]);
+          matchingIndices.push_back(i);
         }
-        checkCancellation();
         ++i;
+        if ((i & ((size_t{1} << 16) - 1)) == 0) {
+          checkCancellation();
+        }
       }
+      checkCancellation();
+      resultTable.insertSubsetAtEnd(input, matchingIndices);
     }
   };
   std::visit(computeResult, std::move(expressionResult));
