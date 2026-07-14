@@ -36,60 +36,90 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   return result;
 }
 
-// The maximum number of words that the batched `scanAll` implementation reads
-// per underlying access.
-constexpr size_t BATCH_SIZE = 100'000;
+// The maximum number of words whose offsets the batched `scanAll` reads per
+// underlying access. `BATCH_SIZE` words are chosen to comfortably fit within
+// `UPPER_LIMIT` for regular datasets, so that usually the whole chunk's word
+// data can be read in a single read.
+constexpr size_t BATCH_SIZE = 10'000;
 
 // Limit how many bytes of word data are read into memory at once. If an
 // individual word is larger than this limit, we have no choice but to surpass
 // it anyways.
 constexpr ad_utility::MemorySize UPPER_LIMIT = 10_MB;
 
+namespace {
+// Given the `offsets` of a chunk of words and a starting position `first`
+// within that chunk (with `total` words in the chunk), return how many words
+// starting at `first` can be read into a single data buffer without their
+// combined size exceeding `UPPER_LIMIT` -- but always at least one word, even
+// if that single word is larger than `UPPER_LIMIT` (a word must not be split).
+size_t numWordsWithinLimit(const std::vector<uint64_t>& offsets, size_t first,
+                           size_t total) {
+  // Common case: all remaining words of the chunk fit. Checking this first
+  // (i.e. looking at the end right away) avoids a search in the expected case
+  // where `BATCH_SIZE` words comfortably fit within `UPPER_LIMIT`.
+  if (offsets[total] - offsets[first] <= UPPER_LIMIT.getBytes()) {
+    return total - first;
+  }
+  // Otherwise binary-search for the largest prefix that fits. `offsets` is
+  // ascending, so the number of words that fit is the number of offsets in
+  // `[first, total]` that are `<= offsets[first] + UPPER_LIMIT`, minus one.
+  uint64_t threshold = offsets[first] + UPPER_LIMIT.getBytes();
+  auto begin = offsets.begin() + first;
+  auto it = std::upper_bound(begin, offsets.begin() + total + 1, threshold);
+  size_t numFit = static_cast<size_t>(it - begin) - 1;
+  return std::max<size_t>(numFit, 1);
+}
+}  // namespace
+
 // _____________________________________________________________________________
 VocabularyScanRange VocabularyOnDisk::scanAll() const {
-  // The words are read in batches: for each batch, the offsets and the
-  // concatenated word data are read with a single large sequential read each
-  // (instead of two small `pread`s per word as in `operator[]`). A batch holds
-  // at most `BATCH_SIZE` words and at most `UPPER_LIMIT` bytes of word data
-  // (but always at least one word). The individual words are then yielded as
-  // `string_view`s into the batch's `data` buffer, together with their
-  // (contiguous) index.
-  auto getWord = [this, batchStart = uint64_t{0}, data = std::string{},
-                  offsets = std::vector<uint64_t>{},
-                  posInBatch =
-                      size_t{0}]() mutable -> std::optional<IndexAndWord> {
-    if (posInBatch + 1 >= offsets.size()) {
-      // The current batch is exhausted (or we haven't read any batch yet).
-      batchStart += posInBatch;
-      if (batchStart >= size()) {
-        return std::nullopt;
+  // The words are read in two nested levels of batching, each level using a
+  // single large sequential read (instead of two small `pread`s per word as in
+  // `operator[]`):
+  //  1. The offsets are read in chunks of up to `BATCH_SIZE` words and kept in
+  //     memory for the whole chunk (they are small: 8 bytes per word).
+  //  2. Within a chunk, the (much larger) word data is read in sub-batches
+  //  whose
+  //     size is capped at `UPPER_LIMIT` bytes (but always at least one word).
+  //     This uses the offsets already in memory, so they are never read twice.
+  // Each word is yielded as a `string_view` into the current data buffer,
+  // together with its (contiguous) index.
+  auto getWord =
+      [this, chunkStart = uint64_t{0}, offsets = std::vector<uint64_t>{},
+       data = std::string{}, dataFirst = size_t{0}, numInData = size_t{0},
+       posInData = size_t{0}]() mutable -> std::optional<IndexAndWord> {
+    while (posInData >= numInData) {
+      // All words whose data is currently in memory have been yielded. Advance
+      // to the next sub-batch of word data, reading the next offset chunk first
+      // if the current one is fully consumed.
+      dataFirst += numInData;
+      size_t numWordsInChunk = offsets.empty() ? 0 : offsets.size() - 1;
+      if (dataFirst >= numWordsInChunk) {
+        chunkStart += numWordsInChunk;
+        if (chunkStart >= size()) {
+          return std::nullopt;
+        }
+        numWordsInChunk = std::min<size_t>(BATCH_SIZE, size() - chunkStart);
+        offsets.resize(numWordsInChunk + 1);
+        offsetsFile_.read(offsets.data(),
+                          (numWordsInChunk + 1) * sizeof(uint64_t),
+                          static_cast<off_t>(chunkStart * sizeof(uint64_t)));
+        dataFirst = 0;
       }
-      // Read the offsets of the next `numWords` words plus the end offset of
-      // the last one in a single read.
-      size_t numWords = std::min<size_t>(BATCH_SIZE, size() - batchStart);
-      offsets.resize(numWords + 1);
-      offsetsFile_.read(offsets.data(), (numWords + 1) * sizeof(uint64_t),
-                        static_cast<off_t>(batchStart * sizeof(uint64_t)));
-      // Shrink the batch so that the word data (`data`) stays within
-      // `UPPER_LIMIT`. We always keep at least one word, even if that single
-      // word is larger than `UPPER_LIMIT` (a word must not be split across
-      // batches).
-      size_t numWordsInBatch = 1;
-      while (numWordsInBatch < numWords &&
-             offsets[numWordsInBatch + 1] - offsets[0] <=
-                 UPPER_LIMIT.getBytes()) {
-        ++numWordsInBatch;
-      }
-      offsets.resize(numWordsInBatch + 1);
-      // Read the word data of the (possibly shrunk) batch in a single read.
-      data.resize(offsets[numWordsInBatch] - offsets[0]);
-      file_.read(data.data(), data.size(), static_cast<off_t>(offsets[0]));
-      posInBatch = 0;
+      // Read the word data for as many words (starting at `dataFirst`) as fit
+      // within `UPPER_LIMIT`, in a single read.
+      numInData = numWordsWithinLimit(offsets, dataFirst, numWordsInChunk);
+      data.resize(offsets[dataFirst + numInData] - offsets[dataFirst]);
+      file_.read(data.data(), data.size(),
+                 static_cast<off_t>(offsets[dataFirst]));
+      posInData = 0;
     }
-    size_t begin = offsets[posInBatch] - offsets[0];
-    size_t end = offsets[posInBatch + 1] - offsets[0];
-    uint64_t index = batchStart + posInBatch;
-    ++posInBatch;
+    size_t idxInChunk = dataFirst + posInData;
+    size_t begin = offsets[idxInChunk] - offsets[dataFirst];
+    size_t end = offsets[idxInChunk + 1] - offsets[dataFirst];
+    uint64_t index = chunkStart + idxInChunk;
+    ++posInData;
     return IndexAndWord{index,
                         std::string_view{data.data() + begin, end - begin}};
   };
