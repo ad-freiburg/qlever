@@ -19,6 +19,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
@@ -30,20 +31,21 @@
 // consumption of large JSON exports and to make this interface even simpler.
 class ExportQueryExecutionTrees {
  public:
+  using enum ad_utility::MediaType;
   using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
 
   static constexpr std::array supportedMediaTypesForConstructQueries{
-      MediaType::turtle, MediaType::csv, MediaType::tsv, MediaType::ntriples};
+      turtle, csv, tsv, ntriples};
   static constexpr std::array supportedMediaTypesForAskQueries{
-      MediaType::qleverJson, MediaType::sparqlJson, MediaType::sparqlXml
-
-  };
+      qleverJson, sparqlJson, sparqlXml};
   static constexpr std::array supportedMediaTypesForSelectQueries{
-      MediaType::octetStream, MediaType::csv, MediaType::tsv,
-      MediaType::sparqlXml, MediaType::sparqlJson};
+      octetStream, csv, tsv, sparqlXml, sparqlJson};
+  static constexpr std::array staticallySupportedMediaTypes{
+      csv,        tsv,        octetStream,       turtle, ntriples, sparqlXml,
+      sparqlJson, qleverJson, binaryQleverExport};
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously

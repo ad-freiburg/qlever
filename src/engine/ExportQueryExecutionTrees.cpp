@@ -463,12 +463,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum ad_utility::MediaType;
   // The mediatypes for which this function template may be instantiated.
-  static constexpr std::array staticallySupportedFormats{
-      octetStream, csv, tsv, turtle, ntriples, qleverJson};
-  static_assert(ad_utility::contains(staticallySupportedFormats, format));
+  static_assert(ad_utility::contains(staticallySupportedMediaTypes, format));
 
-  AD_CONTRACT_CHECK(ad_utility::contains(
-      ExportQueryExecutionTrees::supportedMediaTypesForSelectQueries, format));
+  AD_CONTRACT_CHECK(
+      ad_utility::contains(supportedMediaTypesForSelectQueries, format));
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -480,7 +478,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
   // special case : binary export of IdTable
-  if constexpr (format == MediaType::octetStream) {
+  if constexpr (format == octetStream) {
     ql::erase(selectedColumnIndices, std::nullopt);
     uint64_t resultSize = 0;
     for (const auto& [pair, range] :
@@ -498,21 +496,20 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     STREAMABLE_RETURN;
   }
 
-  static constexpr char separator = format == MediaType::tsv ? '\t' : ',';
+  static constexpr char separator = format == tsv ? '\t' : ',';
   // Print header line
   std::vector<std::string> variables =
       selectClause.getSelectedVariablesAsStrings();
   // In the CSV format, the variables don't include the question mark.
-  if (format == MediaType::csv) {
+  if (format == csv) {
     ql::ranges::for_each(variables,
                          [](std::string& var) { var = var.substr(1); });
   }
   STREAMABLE_YIELD(absl::StrJoin(variables, std::string_view{&separator, 1}));
   STREAMABLE_YIELD('\n');
 
-  constexpr auto& escapeFunction = format == MediaType::tsv
-                                       ? RdfEscaping::escapeForTsv
-                                       : RdfEscaping::escapeForCsv;
+  constexpr auto& escapeFunction =
+      format == tsv ? RdfEscaping::escapeForTsv : RdfEscaping::escapeForCsv;
   uint64_t resultSize = 0;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -522,7 +519,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable()(i, val.columnIndex_);
           auto optionalStringAndType =
-              ql::exportIds::idToStringAndType<format == MediaType::csv>(
+              ql::exportIds::idToStringAndType<format == csv>(
                   qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
@@ -770,10 +767,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum MediaType;
   // The mediatypes for which this function template may be instantiated.
-  static constexpr std::array staticallySupportedFormats{
-      octetStream, csv,    tsv,      sparqlXml,         sparqlJson,
-      qleverJson,  turtle, ntriples, binaryQleverExport};
-  static_assert(ad_utility::contains(staticallySupportedFormats, format));
+  static_assert(ad_utility::contains(staticallySupportedMediaTypes, format));
 
   if constexpr (!ad_utility::contains(supportedMediaTypesForConstructQueries,
                                       format)) {
@@ -788,8 +782,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   // `constructTriples.size()` triples. We do not account for triples that are
   // filtered out because one of the components is UNDEF (it would require
   // materializing the whole result).
-  auto rowIndices = ExportQueryExecutionTrees::getRowIndices(
-      limitAndOffset, *result, resultSize, constructTriples.size());
+  auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
+                                  constructTriples.size());
 
   auto triples = qlever::constructExport::ConstructTripleGenerator::
       generateFormattedTriples(constructTriples, qet.getVariableColumns(),
@@ -866,7 +860,14 @@ ExportQueryExecutionTrees::computeResult(
   compensateForLimitOffsetClause(limit, qet);
 
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
-    if constexpr (format == MediaType::qleverJson) {
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    if constexpr (format == binaryQleverExport) {
+      AD_THROW(
+          "binaryQleverExport is not yet implemented in the C++17 "
+          "reduced feature set");
+    } else
+#endif
+        if constexpr (format == qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, limit, requestTimer,
                                        std::move(cancellationHandle),
                                        streamableYielder);
@@ -887,18 +888,13 @@ ExportQueryExecutionTrees::computeResult(
     }
   }};
 
-  using enum MediaType;
-
-  static constexpr std::array supportedTypes{
-      csv,        tsv,        octetStream,       turtle, ntriples, sparqlXml,
-      sparqlJson, qleverJson, binaryQleverExport};
-  AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
+  AD_CORRECTNESS_CHECK(
+      ad_utility::contains(staticallySupportedMediaTypes, mediaType));
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto inner =
-      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, ntriples,
-                                  sparqlXml, sparqlJson, qleverJson,
-                                  binaryQleverExport>{}(compute, mediaType);
+      ad_utility::constexprSwitchFromArray<staticallySupportedMediaTypes>(
+          compute, mediaType);
 
   return [](auto range) -> cppcoro::generator<std::string> {
     for (auto&& item : range) {
@@ -907,9 +903,8 @@ ExportQueryExecutionTrees::computeResult(
   }(convertStreamGeneratorForChunkedTransfer(std::move(inner)));
 
 #else
-  ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, ntriples,
-                              sparqlXml, sparqlJson, qleverJson>{}(compute,
-                                                                   mediaType);
+  ad_utility::constexprSwitchFromArray<staticallySupportedMediaTypes>(
+      compute, mediaType);
 #endif
 }
 

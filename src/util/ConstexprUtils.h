@@ -365,6 +365,20 @@ constexpr void forEachValueInValueSequence(std::integer_sequence<T, values...>,
   (lambda.template operator()<values>(), ...);
 }
 
+namespace detail {
+template <const auto& arr, typename Func, typename Value, std::size_t... Is>
+constexpr decltype(auto) constexprSwitchFromArrayImpl(
+    Func&& f, const Value& v, std::index_sequence<Is...>) {
+  return ConstexprSwitch<arr[Is]...>{}(std::forward<Func>(f), v);
+}
+}  // namespace detail
+
+template <const auto& arr, typename Func, typename Value>
+constexpr decltype(auto) constexprSwitchFromArray(Func&& f, const Value& v) {
+  return constexprSwitchFromArrayImpl<arr>(
+      std::forward<Func>(f), v, std::make_index_sequence<arr.size()>{});
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
