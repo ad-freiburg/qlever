@@ -10,6 +10,7 @@
 #include "util/MmapVector.h"
 #include "util/StringUtils.h"
 
+using namespace ad_utility::memory_literals;
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
@@ -35,13 +36,24 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   return result;
 }
 
+// The maximum number of words that the batched `scanAll` implementation reads
+// per underlying access.
+constexpr size_t BATCH_SIZE = 100'000;
+
+// Limit how many bytes of word data are read into memory at once. If an
+// individual word is larger than this limit, we have no choice but to surpass
+// it anyways.
+constexpr ad_utility::MemorySize UPPER_LIMIT = 10_MB;
+
 // _____________________________________________________________________________
 VocabularyScanRange VocabularyOnDisk::scanAll() const {
-  // The words are read in batches of `scanAllBatchSize`: for each batch, the
-  // offsets and the concatenated word data are read with a single large
-  // sequential read each (instead of two small `pread`s per word as in
-  // `operator[]`). The individual words are then yielded as `string_view`s
-  // into the batch's `data` buffer, together with their (contiguous) index.
+  // The words are read in batches: for each batch, the offsets and the
+  // concatenated word data are read with a single large sequential read each
+  // (instead of two small `pread`s per word as in `operator[]`). A batch holds
+  // at most `BATCH_SIZE` words and at most `UPPER_LIMIT` bytes of word data
+  // (but always at least one word). The individual words are then yielded as
+  // `string_view`s into the batch's `data` buffer, together with their
+  // (contiguous) index.
   auto getWord = [this, batchStart = uint64_t{0}, data = std::string{},
                   offsets = std::vector<uint64_t>{},
                   posInBatch =
@@ -53,13 +65,24 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
         return std::nullopt;
       }
       // Read the offsets of the next `numWords` words plus the end offset of
-      // the last one, then the word data itself, each in a single read.
-      size_t numWords = std::min<size_t>(
-          ad_utility::vocabulary::scanAllBatchSize, size() - batchStart);
+      // the last one in a single read.
+      size_t numWords = std::min<size_t>(BATCH_SIZE, size() - batchStart);
       offsets.resize(numWords + 1);
       offsetsFile_.read(offsets.data(), (numWords + 1) * sizeof(uint64_t),
                         static_cast<off_t>(batchStart * sizeof(uint64_t)));
-      data.resize(offsets[numWords] - offsets[0]);
+      // Shrink the batch so that the word data (`data`) stays within
+      // `UPPER_LIMIT`. We always keep at least one word, even if that single
+      // word is larger than `UPPER_LIMIT` (a word must not be split across
+      // batches).
+      size_t numWordsInBatch = 1;
+      while (numWordsInBatch < numWords &&
+             offsets[numWordsInBatch + 1] - offsets[0] <=
+                 UPPER_LIMIT.getBytes()) {
+        ++numWordsInBatch;
+      }
+      offsets.resize(numWordsInBatch + 1);
+      // Read the word data of the (possibly shrunk) batch in a single read.
+      data.resize(offsets[numWordsInBatch] - offsets[0]);
       file_.read(data.data(), data.size(), static_cast<off_t>(offsets[0]));
       posInBatch = 0;
     }

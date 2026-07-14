@@ -122,11 +122,6 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 
 namespace ad_utility::vocabulary {
 
-// The number of words that the batched `scanAll` implementations read per
-// underlying access. Reading in batches instead of word by word is what makes
-// `scanAll` much faster than a plain loop over `operator[]`.
-constexpr size_t scanAllBatchSize = 1024;
-
 // Generic fallback implementation of `scanAll` for vocabularies without a
 // specialized (batched) one: simply enumerate the words `[0, size())` via the
 // ordinary single-word `operator[]`. If `operator[]` already yields a
