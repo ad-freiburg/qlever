@@ -1300,6 +1300,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
     }
   }
   ASSERT_NE(carried, nullptr);
+  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getImpl());
   EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(),
             "\"zzz-reanchor\"");
 
