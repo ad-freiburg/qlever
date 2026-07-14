@@ -985,12 +985,12 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     const ParsedQuery& parsedQuery) {
   if (!candidates.empty()) {
     using enum ad_utility::MediaType;
-    static constexpr std::array askTypes{sparqlXml, sparqlJson, qleverJson};
-    static constexpr std::array selectTypes{
-        octetStream,       csv, tsv, qleverJson, sparqlXml, sparqlJson,
-        binaryQleverExport};
-    static constexpr std::array constructTypes{csv, tsv, qleverJson, turtle,
-                                               ntriples};
+    static constexpr auto askTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForAskQueries;
+    static constexpr auto selectTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForSelectQueries;
+    static constexpr auto constructTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForConstructQueries;
 
     ql::span<const MediaType> supported;
     if (parsedQuery.hasAskClause()) {
