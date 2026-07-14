@@ -16,25 +16,36 @@ namespace detail::uuidExpression {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-inline constexpr auto fromLiteral = [](std::string_view str) {
+// These are plain functions (rather than `inline constexpr` lambdas) because
+// they are used below as reference non-type template arguments
+// (`UuidExpressionImpl`'s `FuncConv`/`FuncKey`). Whether an `inline
+// constexpr` variable of (unique, per-translation-unit) closure type is
+// correctly merged into a single address across translation units is subject
+// to compiler bugs -- in particular, GCC 8 does not always merge such
+// variables correctly, which causes two translation units that both
+// instantiate `UuidExpressionImpl<fromLiteral, litUuidKey>` (say) to end up
+// with two distinct, `dynamic_cast`-incompatible types. Plain functions do
+// not have this problem, since a function's identity/address has always been
+// well-defined and consistently merged across translation units.
+inline LiteralOrIri fromLiteral(std::string_view str) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(str))};
-};
+}
 
-inline constexpr auto fromIri = [](std::string_view str) {
+inline LiteralOrIri fromIri(std::string_view str) {
   return LiteralOrIri{
       ad_utility::triple_component::Iri::fromStringRepresentation(
           absl::StrCat("<urn:uuid:"sv, str, ">"sv))};
-};
+}
 
-inline constexpr auto litUuidKey = [](int64_t randId) {
+inline std::string litUuidKey(int64_t randId) {
   return absl::StrCat("STRUUID "sv, randId);
-};
+}
 
-inline constexpr auto iriUuidKey = [](int64_t randId) {
+inline std::string iriUuidKey(int64_t randId) {
   return absl::StrCat("UUID "sv, randId);
-};
+}
 
 // With UuidExpressionImpl<fromIri, iriUuidKey>, the UUIDs are returned as an
 // Iri object: <urn:uuid:b9302fb5-642e-4d3b-af19-29a8f6d894c9> (example). With

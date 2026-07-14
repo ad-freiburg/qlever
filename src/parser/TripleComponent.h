@@ -95,6 +95,24 @@ class TripleComponent {
   }
 
 #ifdef QLEVER_CPP_17
+  /// Construct from a `const char*` (as produced by string literals) by
+  /// delegating to the `string_view` constructor above. This constructor is
+  /// only needed in C++17 mode: without it, a `const char*` argument is an
+  /// exact match for the general perfect-forwarding constructor below,
+  /// which therefore wins over the `string_view` overload above (which
+  /// needs a user-defined conversion from `const char*`). Inside that
+  /// perfect-forwarding constructor, `std::variant`'s converting
+  /// constructor, before the fix for LWG3204 (P0608) that some standard
+  /// library implementations (for example GCC 8's libstdc++) do not yet
+  /// have, prefers the standard pointer-to-`bool` conversion over the
+  /// user-defined conversion to `std::string`, so a `const char*` would
+  /// silently construct a `bool` instead of a string. Adding this
+  /// exact-match overload for `const char*` avoids the perfect-forwarding
+  /// constructor being chosen for this case at all.
+  TripleComponent(const char* sv) : TripleComponent(std::string_view{sv}) {}
+#endif
+
+#ifdef QLEVER_CPP_17
   /// Construct from any integral type other than `bool` and `int64_t` by
   /// converting it to `int64_t` first. This constructor is only needed in
   /// C++17 mode: the converting constructor of `std::variant`, before the
@@ -129,6 +147,19 @@ class TripleComponent {
     checkThatStringIsValid();
     return *this;
   }
+
+#ifdef QLEVER_CPP_17
+  /// Assign from a `const char*` (as produced by string literals) by
+  /// delegating to the `string_view` overload above. Needed for the same
+  /// reason as the `const char*` constructor above (see there for details):
+  /// without it, the generic `operator=(T&&)` above would be chosen for a
+  /// `const char*` argument, and `std::variant`'s assignment operator, under
+  /// the same pre-LWG3204 standard library implementations, would silently
+  /// assign a `bool` instead of a `std::string`.
+  TripleComponent& operator=(const char* value) {
+    return *this = std::string_view{value};
+  }
+#endif
 
   /// Defaulted copy and move assignment.
   TripleComponent& operator=(const TripleComponent&) = default;

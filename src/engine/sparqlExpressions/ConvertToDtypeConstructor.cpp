@@ -48,9 +48,17 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
     auto strEnd = str.data() + str.size();
     auto strStart = str.data();
     T resT{};
+    // Compare `conv.ec` (a `std::errc`) against `std::errc{}` rather than
+    // against `std::error_code{}`: the latter compares equal only if the two
+    // objects have both the same value and the same error category, and
+    // whether the `errc`-to-`error_code` conversion's `generic_category()`
+    // is considered equal to `error_code{}`'s default `system_category()`
+    // for the "no error" value is a libstdc++-version-dependent
+    // implementation detail (in particular, this comparison is `false` on
+    // GCC 8's libstdc++, silently discarding successfully parsed numbers).
     if constexpr (std::is_same_v<T, int64_t>) {
       auto conv = std::from_chars(strStart, strEnd, resT);
-      if (conv.ec == std::error_code{} && conv.ptr == strEnd) {
+      if (conv.ec == std::errc{} && conv.ptr == strEnd) {
         return Id::makeFromInt(resT);
       }
     } else {
@@ -58,7 +66,7 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
                                    AllowExponentialNotation
                                        ? absl::chars_format::general
                                        : absl::chars_format::fixed);
-      if (conv.ec == std::error_code{} && conv.ptr == strEnd) {
+      if (conv.ec == std::errc{} && conv.ptr == strEnd) {
         return Id::makeFromDouble(resT);
       }
     }
