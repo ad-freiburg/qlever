@@ -930,7 +930,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
       auto trunc = [divisor](size_t num) {
-        return std::max(std::min(num, 1ul), num / divisor);
+        return std::max<size_t>(std::min<size_t>(num, 1), num / divisor);
       };
       inserted += trunc(ins);
       deleted += trunc(del);
@@ -1453,7 +1453,7 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
 
 // _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
-    Id col0Id, size_t numDistinctC1, IdTableView<0> relation) {
+    Id col0Id, size_t numDistinctC1, const IdTable& relation) {
   AD_CORRECTNESS_CHECK(!relation.empty());
   size_t numRows = relation.numRows();
   // Make sure that the blocks don't become too large: If the previously
@@ -1561,8 +1561,9 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
         ql::ranges::find_if(
             block,
             [&lastRowFromPrevious](const auto& row) {
-              return tieFirstThreeColumns(lastRowFromPrevious) !=
-                     tieFirstThreeColumns(row);
+              return pickFirstThreeColumnsOfIdsWithoutLocalVocab(
+                         lastRowFromPrevious) !=
+                     pickFirstThreeColumnsOfIdsWithoutLocalVocab(row);
             }) -
         block.begin();
 

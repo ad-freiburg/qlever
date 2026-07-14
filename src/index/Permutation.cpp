@@ -51,12 +51,8 @@ void Permutation::loadFromDisk(
         absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), false);
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
-  if constexpr (MetaData::isMmapBased_) {
-    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
-                ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-  }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
-  auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
+  auto filename = absl::StrCat(onDiskBase, ".index", fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");
@@ -67,7 +63,8 @@ void Permutation::loadFromDisk(
              "message was: " +
              e.what());
   }
-  meta_.readFromFile(&file);
+  ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
+  meta_.readFromFile(file, metaFile);
   // Materialized views never use graph post-processing, while normal and
   // internal permutations always use it.
   bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
@@ -187,8 +184,9 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     Id col0Id, const LocatedTriplesState& locatedTriplesState) const {
-  if (meta_.col0IdExists(col0Id)) {
-    return meta_.getMetaData(col0Id);
+  auto optionalMetadata = meta_.getMetaDataIfPresent(col0Id);
+  if (optionalMetadata.has_value()) {
+    return optionalMetadata.value();
   }
   return reader().getMetadataForSmallRelation(
       getScanSpecAndBlocks(

@@ -1,146 +1,69 @@
-// Copyright 2018 - 2023, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+//  Copyright 2018 - 2026 The QLever Authors, in particular:
+//
+//  2018 - 2023 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//  2018 - 2023 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//  2026        Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+//  UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_METADATAHANDLER_H
 #define QLEVER_SRC_INDEX_METADATAHANDLER_H
 
-#include <string>
+#include <optional>
+#include <vector>
 
-#include "global/Id.h"
-#include "util/Exception.h"
-#include "util/Serializer/Serializer.h"
+#include "index/CompressedRelation.h"
+#include "util/File.h"
 
-// Wrapper class for access to `CompressedRelationMetadata` objects (one per
-// relation) stored in a vector. Specifically, our index uses this with `M =
-// MmapVector<CompressedRelationMetadata>>`; see `index/IndexMetaData.h` at the
-// bottom.
-//
-// TODO: We needed this at some point because we used to have two implementation
-// of `IndexMetaData`, one using mmaps and one using hash maps, and we wanted to
-// have a common interface for both. We no longer use the hash map
-// implementation and so the wrapper class (and the complexity that goes along
-// with it) is probably no longer needed.
-template <class M>
+// Container for the `CompressedRelationMetadata` objects (one per relation) of
+// a single permutation. The objects are kept in a `std::vector` that is sorted
+// by `col0Id_`, which allows for binary search by `col0Id_`. The metadata of a
+// permutation is small enough to be held completely in RAM. It is stored in a
+// separate file next to the permutation (see `META_FILE_SUFFIX`) via
+// `readFromFile` and `writeToFile`. For backwards compatibility, that file uses
+// the exact same on-disk layout that `ad_utility::MmapVector` uses: the array
+// of metadata objects, followed by an `ad_utility::MmapVectorMetaData` trailer
+// at the very end of the file.
 class MetaDataWrapperDense {
  private:
-  // A vector of metadata objects.
-  M _vec;
+  // The metadata objects, sorted by `col0Id_`.
+  std::vector<CompressedRelationMetadata> vec_;
 
  public:
-  // An iterator with an additional method `getId()` that gives the relation ID
-  // of the current metadata object.
-  template <typename BaseIterator>
-  struct AddGetIdIterator : BaseIterator {
-    using BaseIterator::BaseIterator;
-    AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
-    [[nodiscard]] Id getId() const { return getIdFromElement(*(*this)); }
-    static Id getIdFromElement(const typename BaseIterator::value_type& v) {
-      return v.col0Id_;
-    }
-    static auto getNumRowsFromElement(
-        const typename BaseIterator::value_type& v) {
-      return v.numRows_;
-    }
-  };
-
-  using Iterator = AddGetIdIterator<typename M::iterator>;
-  using ConstIterator = AddGetIdIterator<typename M::const_iterator>;
-
-  // The underlying array is sorted, so all iterators are ordered iterators
-  using ConstOrderedIterator = ConstIterator;
-
-  // The type of the stored metadata objects.
-  using value_type = typename M::value_type;
-
-  // _________________________________________________________
   MetaDataWrapperDense() = default;
+  MetaDataWrapperDense(MetaDataWrapperDense&&) = default;
+  MetaDataWrapperDense& operator=(MetaDataWrapperDense&&) = default;
 
-  // ________________________________________________________
-  MetaDataWrapperDense(MetaDataWrapperDense<M>&& other) = default;
+  // Read the metadata from `file`. The number of elements is taken from the
+  // `MmapVectorMetaData` trailer at the end of the file, the elements
+  // themselves are stored at the beginning of the file.
+  void readFromFile(ad_utility::File& file);
 
-  // ______________________________________________________________
-  MetaDataWrapperDense& operator=(MetaDataWrapperDense<M>&& other) = default;
-
-  // Templated setup version
-  // Arguments are passed through to template argument M.
-  // TODO<joka921>: enable_if  for better error messages
-  template <typename... Args>
-  void setup(Args... args) {
-    _vec = M(args...);
-  }
-
-  // The serialization is a noop because all the data always stays on disk.
-  // The initialization is done via `setup`.
-  AD_SERIALIZE_FRIEND_FUNCTION(MetaDataWrapperDense) {
-    (void)serializer;
-    (void)arg;
-  }
+  // Write the metadata to `file`.
+  void writeToFile(ad_utility::File& file) const;
 
   // ___________________________________________________________
-  size_t size() const { return _vec.size(); }
+  [[nodiscard]] size_t size() const { return vec_.size(); }
 
-  // __________________________________________________________________
-  ConstIterator cbegin() const { return _vec.begin(); }
+  // Add a metadata object. The objects have to be added in strictly ascending
+  // order of their `col0Id_`, so that `vec_` stays sorted.
+  void add(const CompressedRelationMetadata& value);
 
-  // __________________________________________________________________
-  ConstIterator begin() const { return _vec.begin(); }
+  // Return the metadata for the given `col0Id`, or `std::nullopt` if there is
+  // no metadata for it.
+  [[nodiscard]] std::optional<CompressedRelationMetadata> getIfPresent(
+      Id col0Id) const;
 
-  // __________________________________________________________________
-  Iterator begin() { return _vec.begin(); }
-
-  // __________________________________________________________________________
-  ConstOrderedIterator ordered_begin() const { return begin(); }
-
-  // __________________________________________________________________________
-  ConstIterator cend() const { return _vec.end(); }
-
-  // __________________________________________________________________________
-  ConstIterator end() const { return _vec.end(); }
-
-  // __________________________________________________________________________
-  Iterator end() { return _vec.end(); }
-
-  // __________________________________________________________________________
-  ConstOrderedIterator ordered_end() const { return end(); }
-
-  // ____________________________________________________________
-  void set(Id id, const value_type& value) {
-    // Check that the `Id`s are added in strictly ascending order.
-    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
-    _vec.push_back(value);
-  }
-
-  // __________________________________________________________
-  const value_type& getAsserted(Id id) const {
-    auto it = lower_bound(id);
-    AD_CONTRACT_CHECK(it != _vec.end() && it->col0Id_ == id);
-    return *it;
-  }
-
-  // ________________________________________________________
-  size_t count(Id id) const {
-    auto it = lower_bound(id);
-    return it != _vec.end() && it->col0Id_ == id;
-  }
-
-  // ___________________________________________________________
-  std::string getFilename() const { return _vec.getFilename(); }
+  // Exchange the multiplicities of the last column with those of `other` (see
+  // `IndexMetaData::exchangeMultiplicities`). Both wrappers must contain the
+  // same `col0Id`s in the same order.
+  void exchangeMultiplicities(MetaDataWrapperDense& other);
 
  private:
-  ConstIterator lower_bound(Id id) const {
-    auto cmp = [](const auto& metaData, Id id) {
-      return metaData.col0Id_ < id;
-    };
-    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
-  }
-  Iterator lower_bound(Id id) {
-    auto cmp = [](const auto& metaData, Id id) {
-      return metaData.col0Id_ < id;
-    };
-    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
-  }
+  [[nodiscard]] auto lower_bound(Id col0Id) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_METADATAHANDLER_H
