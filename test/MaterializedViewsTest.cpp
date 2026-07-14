@@ -769,6 +769,96 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewIdsAndCentralList) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+
+  // Helper to read the `id` field of a view's metadata JSON file.
+  auto readViewId = [&](const std::string& name) {
+    nlohmann::json viewInfo;
+    ad_utility::makeIfstream(
+        absl::StrCat(testIndexBase_, ".view.", name, ".viewinfo.json")) >>
+        viewInfo;
+    return viewInfo.at("id").get<MaterializedViewId>();
+  };
+
+  // Helper to read the central views list file.
+  const std::string viewsListFilename =
+      absl::StrCat(testIndexBase_, ".views.json");
+  auto readViewsList = [&]() {
+    nlohmann::json viewsList;
+    ad_utility::makeIfstream(viewsListFilename) >> viewsList;
+    return viewsList;
+  };
+
+  // Writing views assigns ascending IDs, starting from zero, stored both in the
+  // central views list and in the views' own metadata files.
+  manager.writeViewToDisk("testView1", plan);
+  manager.writeViewToDisk("testView2", plan);
+  EXPECT_EQ(readViewId("testView1"), 0u);
+  EXPECT_EQ(readViewId("testView2"), 1u);
+  EXPECT_TRUE(std::filesystem::exists(viewsListFilename));
+  {
+    auto viewsList = readViewsList();
+    EXPECT_EQ(viewsList.at("testView1").get<MaterializedViewId>(), 0u);
+    EXPECT_EQ(viewsList.at("testView2").get<MaterializedViewId>(), 1u);
+  }
+
+  // A loaded view exposes its own ID (read from its metadata).
+  EXPECT_THAT(manager.getView("testView1")->id(), ::testing::Optional(0u));
+
+  // Overwriting a view keeps its existing ID.
+  manager.writeViewToDisk("testView1", plan);
+  EXPECT_EQ(readViewId("testView1"), 0u);
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewIdsCorruptedFiles) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  const std::string viewsListFilename =
+      absl::StrCat(testIndexBase_, ".views.json");
+
+  auto writeViewsList = [&](const std::string& content) {
+    ad_utility::makeOfstream(viewsListFilename) << content;
+  };
+
+  // Central views list: not a JSON object (array instead).
+  writeViewsList("[1, 2, 3]");
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.writeViewToDisk("testView1", plan),
+                               ::testing::HasSubstr("expected a JSON object"));
+
+  // Central views list: ID is a string, not an unsigned integer.
+  writeViewsList(R"({"testView1": "notAnId"})");
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.writeViewToDisk("testView1", plan),
+                               ::testing::HasSubstr("not an unsigned integer"));
+
+  // Central views list: ID exceeds MATERIALIZED_VIEW_MAX_ID.
+  writeViewsList(
+      absl::StrCat(R"({"testView1": )", MATERIALIZED_VIEW_MAX_ID + 1, "}"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk("testView1", plan),
+      ::testing::HasSubstr("exceeds the maximum allowed ID"));
+
+  // Remove the corrupted list so the next write succeeds.
+  std::filesystem::remove(viewsListFilename);
+  manager.writeViewToDisk("testView1", plan);
+
+  // viewinfo.json: ID exceeds MATERIALIZED_VIEW_MAX_ID.
+  {
+    const std::string viewinfoFilename =
+        absl::StrCat(testIndexBase_, ".view.testView1.viewinfo.json");
+    nlohmann::json viewInfo;
+    ad_utility::makeIfstream(viewinfoFilename) >> viewInfo;
+    viewInfo["id"] = MATERIALIZED_VIEW_MAX_ID + 1;
+    ad_utility::makeOfstream(viewinfoFilename) << viewInfo.dump();
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.loadView("testView1"),
+      ::testing::HasSubstr("exceeds the maximum allowed ID"));
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, serverIntegration) {
 #ifdef __EMSCRIPTEN__
   GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
