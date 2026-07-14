@@ -395,8 +395,8 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
-  configurationJson_[DATE_OF_INDEX_BUILD_KEY] = absl::FormatTime(
-      DATE_OF_INDEX_BUILD_FORMAT, absl::Now(), absl::UTCTimeZone());
+  configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
+      formatIndexBuildTime(absl::Now());
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1261,11 +1261,20 @@ std::string IndexImpl::dateOfIndexBuild() const {
   // file (it is written at the end of the index build).
   auto time =
       std::filesystem::last_write_time(onDiskBase_ + CONFIGURATION_FILE);
-  // `last_write_time` returns a time point on the `file_clock`, but
-  // `absl::FromChrono` expects one on the `system_clock`, so convert first.
-  auto systemTime = std::chrono::clock_cast<std::chrono::system_clock>(time);
-  return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
-                          absl::FromChrono(systemTime), absl::UTCTimeZone());
+  // `last_write_time` returns a time point on the `file_clock`. We cannot
+  // convert it via `std::chrono::clock_cast` that is not available in C++17
+  // and not implemented by the libc++.
+  auto systemTime =
+      std::chrono::system_clock::now() +
+      std::chrono::duration_cast<std::chrono::system_clock::duration>(
+          time - std::filesystem::file_time_type::clock::now());
+  return formatIndexBuildTime(absl::FromChrono(systemTime));
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
+  return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
+                          absl::UTCTimeZone());
 }
 
 // ___________________________________________________________________________

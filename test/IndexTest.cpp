@@ -999,16 +999,19 @@ TEST(IndexImpl, dateOfIndexBuild) {
 
   // For indexes that were built before the build date was recorded in the
   // configuration, `dateOfIndexBuild()` falls back to the last modification
-  // time of the configuration file.
+  // time of the configuration file, which was just written. Since the format
+  // only has second precision, we don't compare the timestamp exactly, but
+  // check that it lies within the last second.
   indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
-  auto fileTime = std::filesystem::last_write_time(
-      indexImpl.getOnDiskBase() + std::string{CONFIGURATION_FILE});
-  auto systemTime =
-      std::chrono::clock_cast<std::chrono::system_clock>(fileTime);
-  auto expectedFallback =
-      absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::FromChrono(systemTime),
-                       absl::UTCTimeZone());
-  EXPECT_EQ(indexImpl.dateOfIndexBuild(), expectedFallback);
+  absl::Time fallbackTime;
+  std::string parseError;
+  ASSERT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
+                              indexImpl.dateOfIndexBuild(), absl::UTCTimeZone(),
+                              &fallbackTime, &parseError))
+      << parseError;
+  EXPECT_THAT(absl::Now() - fallbackTime,
+              ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
+                               ::testing::Le(absl::Seconds(1))));
 }
 
 // _____________________________________________________________________________

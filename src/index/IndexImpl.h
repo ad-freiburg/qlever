@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
 
 #include <memory>
@@ -489,6 +490,10 @@ class IndexImpl {
   // configuration file is used instead (which approximates the END of the
   // build).
   std::string dateOfIndexBuild() const;
+
+  // Format the given time as a UTC timestamp string in the
+  // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
+  static std::string formatIndexBuildTime(absl::Time time);
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
