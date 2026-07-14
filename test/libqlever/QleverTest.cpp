@@ -90,6 +90,16 @@ TEST(LibQlever, buildIndexAndRunQuery) {
 
     // Test that the requested materialized view exists.
     EXPECT_NO_THROW(engine.loadMaterializedView("demoView"));
+
+    // A non-positive `geoIndexSimplificationInMeters_` is rejected.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        engine.queryAndPinResultWithName(
+            QueryExecutionContext::PinResultWithName{"pin3", std::nullopt,
+                                                     -1.0},
+            query),
+        ::testing::HasSubstr(
+            "`geoIndexSimplificationInMeters_` must be a positive "
+            "floating-point number of meters."));
   }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

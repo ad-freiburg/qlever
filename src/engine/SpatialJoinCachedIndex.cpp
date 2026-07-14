@@ -10,6 +10,7 @@
 #include <s2/s2shapeutil_coding.h>
 
 #include "engine/SpatialJoinAlgorithms.h"
+#include "util/GeoConverters.h"
 
 // An instance of this type erased class holds the actual data for each
 // `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
@@ -23,19 +24,25 @@ class SpatialJoinCachedIndexImpl {
   using ShapeIndexToRow = SpatialJoinCachedIndex::ShapeIndexToRow;
 
   // Construct the index, and return the mapping from shape indices to rows.
+  // If `simplificationErrorInMeters` has a value, polyline geometries are
+  // simplified before indexing; `std::nullopt` skips simplification.
   ShapeIndexToRow populate(ColumnIndex col, const IdTableView<0>& restable,
-                           const Index& index) {
+                           const Index& index,
+                           std::optional<double> simplificationErrorInMeters) {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
-    // Populate the index from the given `IdTable`
     for (size_t row = 0; row < restable.size(); row++) {
       auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
-      if (p.has_value()) {
-        auto shapeIndex =
-            s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
-                std::make_unique<S2Polyline>(std::move(p.value()))));
-        shapeIndexToRow[shapeIndex] = row;
+      if (!p.has_value()) {
+        continue;
       }
+      if (simplificationErrorInMeters.has_value()) {
+        p = geometryConverters::simplifyPolyline(
+            p.value(), simplificationErrorInMeters.value());
+      }
+      auto shapeIndex = s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
+          std::make_unique<S2Polyline>(std::move(p.value()))));
+      shapeIndexToRow[shapeIndex] = row;
     }
     // By default, the S2 indices are constructed lazily on the first query,
     // which then is slow. The following call avoids this.
@@ -45,13 +52,13 @@ class SpatialJoinCachedIndexImpl {
 };
 
 // ____________________________________________________________________________
-SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
-                                               ColumnIndex col,
-                                               const IdTableView<0>& restable,
-                                               const Index& index)
+SpatialJoinCachedIndex::SpatialJoinCachedIndex(
+    Variable geometryColumn, ColumnIndex col, const IdTableView<0>& restable,
+    const Index& index, std::optional<double> simplificationErrorInMeters)
     : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {
-  shapeIndexToRow_ = pimpl_->populate(col, restable, index);
+  shapeIndexToRow_ =
+      pimpl_->populate(col, restable, index, simplificationErrorInMeters);
 }
 
 // ____________________________________________________________________________

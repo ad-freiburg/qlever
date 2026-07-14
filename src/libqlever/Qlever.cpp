@@ -186,6 +186,12 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 // _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
+  if (options.geoIndexSimplificationInMeters_.has_value() &&
+      options.geoIndexSimplificationInMeters_.value() <= 0.0) {
+    throw std::runtime_error(
+        "`geoIndexSimplificationInMeters_` must be a positive "
+        "floating-point number of meters.");
+  }
   auto plannedQuery = parseAndPlanQuery(std::move(query));
   plannedQuery.queryExecutionContext().pinResultWithName() = std::move(options);
   [[maybe_unused]] auto result = this->query(plannedQuery);
