@@ -82,7 +82,7 @@ class BatchManager final : public BatchManagerBase {
       "ReadPolicy::BatchHandle must match BatchManagerBase::BatchHandle.");
 
  public:
-  using BatchHandle = typename ReadPolicy::BatchHandle;
+  using BatchHandle = typename BatchManagerBase::BatchHandle;
 
   explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
 
