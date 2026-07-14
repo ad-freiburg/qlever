@@ -239,14 +239,7 @@ class ConcurrentCache {
   void tryInsertIfNotPresent(bool pinned, const Key& key,
                              std::shared_ptr<Value> value) {
     auto lockPtr = _cacheAndInProgressMap.wlock();
-    auto& cache = lockPtr->_cache;
-    if (pinned) {
-      if (!cache.containsAndMakePinnedIfExists(key)) {
-        cache.insertPinned(key, std::move(value));
-      }
-    } else if (!cache.contains(key)) {
-      cache.insert(key, std::move(value));
-    }
+    insertIfNotPresent(lockPtr->_cache, pinned, key, std::move(value));
   }
 
   /// Clear the cache (but not the pinned entries)
@@ -356,23 +349,31 @@ class ConcurrentCache {
     auto lockPtr = _cacheAndInProgressMap.wlock();
     AD_CONTRACT_CHECK(lockPtr->_inProgress.contains(key));
     bool pinned = lockPtr->_inProgress[key].first;
-    auto& cache = lockPtr->_cache;
-    //
     // NOTE: The key might already be present in the cache: If the computation
     // of this key is canceled after it has deregistered the key from
     // `_inProgress`, then a thread that was waiting for that computation
     // recomputes the result itself and inserts it (see `computeOnceImpl`),
     // all before the canceled computation propagates its exception and dies.
     // A thread that starts a fresh computation of the same key in that window
-    // ends up here with the key already inserted.
+    // ends up here with the key already inserted. Hence the
+    // `insertIfNotPresent` instead of an unconditional insert.
+    insertIfNotPresent(lockPtr->_cache, pinned, key,
+                       std::move(computationResult));
+    lockPtr->_inProgress.erase(key);
+  }
+
+  // Insert `value` under `key` into `cache` if the key is not already present.
+  // Assume that the caller holds the lock on the cache. If `pinned` is true and
+  // the key already exists, pin the existing entry.
+  static void insertIfNotPresent(Cache& cache, bool pinned, const Key& key,
+                                 std::shared_ptr<Value> value) {
     if (pinned) {
       if (!cache.containsAndMakePinnedIfExists(key)) {
-        cache.insertPinned(key, std::move(computationResult));
+        cache.insertPinned(key, std::move(value));
       }
     } else if (!cache.contains(key)) {
-      cache.insert(key, std::move(computationResult));
+      cache.insert(key, std::move(value));
     }
-    lockPtr->_inProgress.erase(key);
   }
 
  private:
