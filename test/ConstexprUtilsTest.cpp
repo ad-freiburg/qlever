@@ -240,9 +240,8 @@ struct PushToVector {
 struct PushToVectorWithTI {
   std::vector<std::string>* typeToStringVector;
 
-  template <typename TT>
-  void operator()(TT t) const {
-    using T = typename decltype(t)::type;
+  template <typename T>
+  void operator()(use_type_identity::TI<T>) const {
     if constexpr (ad_utility::isSimilar<T, int>) {
       typeToStringVector->emplace_back("int");
     } else if constexpr (ad_utility::isSimilar<T, bool>) {
