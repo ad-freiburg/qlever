@@ -1243,35 +1243,33 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   ad_utility::timer::TimeTracer tracer{"testReanchor"};
 
-  // NOTE: The literals in the new index are essential for this test: they
-  // sort before the carried word "zzz-reanchor", so its position in the NEW
-  // vocabulary differs numerically from its position in the OLD vocabulary
-  // (which contains no literals). Otherwise, the position assertion below
-  // would hold by coincidence even for a plain (not re-anchored) copy.
+  std::string prefix = gtestCurrentTestName();
+
   Index newIndex = makeTestIndex(
-      "reanchorNewIndex", "<a> <b> \"aaa\" . <a> <b> \"mmm\" . <a> <b> <c> .");
+      prefix + "-new", "<a> <b> \"aaa\" . <a> <b> \"mmm\" . <a> <b> <c> .");
   DeltaTriples newDeltaTriples(newIndex);
 
   {
-    Index oldIndex = makeTestIndex("reanchorOldIndex", "<x> <y> <z> .");
+    Index oldIndex = makeTestIndex(prefix + "-old", "<x> <y> <z> .");
     DeltaTriples oldDeltaTriples(oldIndex);
     LocalVocab localVocab;
 
     // The snapshot is taken BEFORE the update, so the rebuild mapping is
     // empty and the word below is carried over as a local vocab entry.
     auto originalSnapshot = oldDeltaTriples.getLocatedTriplesSharedStateCopy();
-    oldDeltaTriples.insertTriples(cancellationHandle,
-                                  makeIdTriples(oldIndex.getImpl(), localVocab,
-                                                {"<x> <y> \"zzz-reanchor\""}));
+    oldDeltaTriples.insertTriples(
+        cancellationHandle,
+        makeIdTriples(oldIndex.getImpl(), localVocab, {"<x> <y> \"zzz\""}));
     auto newSnapshot = oldDeltaTriples.getLocatedTriplesSharedStateCopy();
 
     // Force the entries to compute and cache their position in the OLD
-    // vocabulary (this happens whenever they are used in comparisons before
-    // the swap).
+    // vocabulary, such that we can check that the cached value is properly
+    // cleared.
     auto [entries, blocks] = oldDeltaTriples.copyLocalVocab();
     for (const auto& entry : entries) {
-      entry->positionInVocab();
+      (void)entry->positionInVocab();
     }
+    EXPECT_THAT(entries, ::testing::Not(::testing::IsEmpty()));
 
     qlever::indexRebuilder::IndexRebuildMapping emptyMapping{};
     newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
@@ -1280,29 +1278,12 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   }  // The old index is destroyed here, just like after a real index swap.
 
   // Find the carried local vocab entry among the located triples.
-  const LocalVocabEntry* carried = nullptr;
-  auto locatedTriples =
-      newDeltaTriples.getLocatedTriplesForPermutation(Permutation::SPO);
-  for (size_t block = 0; block < 1000; ++block) {
-    auto updates = locatedTriples.getUpdatesIfPresent(block);
-    if (!updates.has_value()) {
-      continue;
-    }
-    for (const auto& locatedTriple : updates.value().getSortedView()) {
-      for (const Id& id : locatedTriple.triple_.ids()) {
-        if (id.getDatatype() == Datatype::LocalVocabIndex) {
-          carried = id.getLocalVocabIndex();
-        }
-      }
-    }
-    if (carried != nullptr) {
-      break;
-    }
-  }
+  auto [entries, blocks] = newDeltaTriples.copyLocalVocab();
+  ASSERT_THAT(entries, ::testing::SizeIs(1));
+  const LocalVocabEntry* carried = entries.at(0);
   ASSERT_NE(carried, nullptr);
   EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getImpl());
-  EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(),
-            "\"zzz-reanchor\"");
+  EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(), "\"zzz\"");
 
   // The carried entry must behave exactly like a fresh entry that was created
   // with the new index: same position in the NEW vocabulary (a plain copy
