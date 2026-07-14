@@ -111,10 +111,10 @@ class File {
   // during `Qlever::swapInRebuiltIndex`).
   [[nodiscard]] File duplicateForReading() const {
     AD_CONTRACT_CHECK(isOpen());
-    int newFd = dup(fd());
+    int newFd = ::dup(fd());
     AD_CONTRACT_CHECK(newFd != -1, "Duplicating the file descriptor for file ",
                       name_, " failed");
-    FILE* newFile = fdopen(newFd, "r");
+    FILE* newFile = ::fdopen(newFd, "r");
     AD_CONTRACT_CHECK(newFile != nullptr);
     File result;
     result.name_ = name_;
