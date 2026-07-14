@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata
 # NOTE: We are deliberately explicit here, for two reasons. First, so that we
 # don't copy more than necessary without having to rely on `.dockerignore`.
 # Second, so that we can copy `docker-entrypoint.sh` separately below (we don't
-# to rebuild the whole container when making a small change in there).
+# want to rebuild the whole container when making a small change in there).
 COPY src /qlever/src/
 COPY test /qlever/test/
 COPY e2e /qlever/e2e/
@@ -36,10 +36,11 @@ COPY GitVersion.cmake /qlever/
 # `-march=native`.
 # `-fuse-ld=mold` uses the `mold` linker, which is faster and much more
 # memory-efficient than the default linker. `CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`
-# defers GoogleTest test discovery from build time to test time, which avoids
-# running all test binaries while building/linking other tests. Both these
-# changes aim to mitigate crashes in the CI for ARM64 docker builds, which we
-# suspect to be caused by the OOM-killer.
+# defers GoogleTest test discovery from build time to test time; by default,
+# each test binary is executed right after it is built to enumerate its test
+# cases, which costs memory while other tests are still being compiled and
+# linked. Both these changes aim to mitigate crashes in the CI for ARM64
+# docker builds, which we suspect to be caused by the OOM-killer.
 # `-Wno-psabi` silences very frequent notes in the ARM build that inform us that
 # QLever might not be ABI-compatible on ARM with software compiled on a compiler
 # older than GCC10.
