@@ -156,6 +156,8 @@ addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
+addLinkAndDiscoverTestNoLibs(NullStreamTest)
+
 addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
