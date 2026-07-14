@@ -120,6 +120,14 @@ inline S2Polyline simplifyPolyline(const S2Polyline& polyline,
 // must be positive.
 // Falls back to the original loop vertices if simplification would reduce a
 // loop below three vertices.
+//
+// NOTE: This function is not yet used in production (the cached geo index
+// currently only supports line strings). Unlike for polylines, per-loop
+// Douglas-Peucker can make a loop self-intersecting (which the
+// `S2Debug::DISABLE` below deliberately does not check) and the nesting of
+// the loops is re-inferred from the simplified loops. Before polygons are
+// simplified in production, consider a topology-preserving simplification,
+// e.g. via `S2Builder`.
 inline S2Polygon simplifyPolygon(const S2Polygon& polygon, double metersError) {
   AD_CONTRACT_CHECK(metersError > 0.0);
   auto tolerance = S2Earth::MetersToAngle(metersError);

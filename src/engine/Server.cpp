@@ -291,7 +291,7 @@ std::string Server::describePinResultWithNameForLog(
         " with geo index on ?", pinNamedGeoIndex.value(), simplification);
   }
   return absl::StrCat(" [pin result with name \"", pinResultWithName.value(),
-                      geoIndexDescription, "\"]");
+                      "\"", geoIndexDescription, "]");
 }
 
 // ____________________________________________________________________________
