@@ -1,7 +1,7 @@
 add_subdirectory(HttpParser)
 add_library(mediaTypes MediaTypes.h MediaTypes.cpp)
 target_compile_options(mediaTypes PUBLIC -Wno-attributes)
-qlever_target_link_libraries(mediaTypes qlever_util)
+qlever_target_link_libraries(mediaTypes qlever_util httpParser)
 
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
 add_library(http HttpServer.h HttpServer.cpp HttpClient.h HttpClient.cpp HttpUtils.h HttpUtils.cpp UrlParser.h UrlParser.cpp "HttpParser/AcceptHeaderQleverVisitor.h"
