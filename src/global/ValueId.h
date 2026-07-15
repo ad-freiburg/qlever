@@ -53,7 +53,7 @@ enum struct Datatype {
 // with this datatype directly encode the value they represent and do not point
 // to an external resource. In other words: These IDs can safely be shared
 // across different QLever indices without having to rewrite them. Note:
-// `BlankNodeIndex` is deliberately NOT considiered trivial, as blank nodes
+// `BlankNodeIndex` is deliberately NOT considered trivial, as blank nodes
 // depend on the context, in particular they have to be remapped when results
 // from different  RDF sources are merged. Same goes for `EncodedVal` which
 // depends on the (configurable!) prefixes for the encoding.
