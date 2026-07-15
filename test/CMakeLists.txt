@@ -547,3 +547,5 @@ addLinkAndDiscoverTest(FilesystemHelpersTest util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest util)
+
+addLinkAndDiscoverTest(ResourceMonitorTest util)
