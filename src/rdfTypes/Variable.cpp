@@ -93,29 +93,25 @@ void Variable::appendEscapedWord(std::string_view word, std::string& target) {
     // the unicode-free use cases anyway.
     target.append(word);
   } else {
-#ifndef QLEVER_NO_UNICODE
-    const char* ptr = word.data();
-    const char* end = word.data() + word.size();
+    QLEVER_UNICODE_ONLY("Variable::appendEscapedWord", {
+      const char* ptr = word.data();
+      const char* end = word.data() + word.size();
 
-    while (ptr < end) {
-      // Convert all other characters based on their unicode codepoint.
-      UChar32 codePoint;
-      int64_t i = 0;
-      U8_NEXT(reinterpret_cast<const uint8_t*>(ptr), i,
-              static_cast<int64_t>(word.size()), codePoint);
-      AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8");
-      if (codePointSuitableForVariableName(codePoint)) {
-        target.append(ptr, i);
-      } else {
-        absl::StrAppend(&target, "_", codePoint, "_");
+      while (ptr < end) {
+        // Convert all other characters based on their unicode codepoint.
+        UChar32 codePoint;
+        int64_t i = 0;
+        U8_NEXT(reinterpret_cast<const uint8_t*>(ptr), i,
+                static_cast<int64_t>(word.size()), codePoint);
+        AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8");
+        if (codePointSuitableForVariableName(codePoint)) {
+          target.append(ptr, i);
+        } else {
+          absl::StrAppend(&target, "_", codePoint, "_");
+        }
+        ptr += i;
       }
-      ptr += i;
-    }
-#else
-    throw std::runtime_error(
-        "Variable::appendEscapedWord<true> requires ICU, but QLever was built "
-        "without ICU support (NO_UNICODE).");
-#endif
+    });
   }
 }
 // Explicit instantiations for both configurations.

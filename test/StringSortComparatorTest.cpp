@@ -365,7 +365,7 @@ TEST(StringSortComparatorNoICU, LocaleManager) {
   auto sortKey = loc.getSortKey("abc", L::PRIMARY);
   EXPECT_EQ(sortKey.get().size(), 3u);
   EXPECT_EQ(loc.compare(loc.getSortKey("abc", L::PRIMARY),
-                        loc.getSortKey("abd", L::PRIMARY)),
+                        loc.getSortKey("abd", L::PRIMARY)),  // codespell-ignore
             -1);
 }
 

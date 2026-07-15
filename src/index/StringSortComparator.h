@@ -1,8 +1,12 @@
-//  Copyright 2019, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2026 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2019 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_STRINGSORTCOMPARATOR_H
 #define QLEVER_STRINGSORTCOMPARATOR_H
@@ -33,14 +37,12 @@
 
 #ifndef QLEVER_NO_UNICODE
 
-/**
- * @brief This class wraps all calls to the ICU library that are required by
- * QLever It internally handles all conversion to and from UTF-8 and from c++ to
- * c-strings where they are required by ICU
- */
+// This class wraps all calls to the ICU library that are required by QLever. It
+// internally handles all conversion to and from UTF-8 and from c++ to c-strings
+// where they are required by ICU.
 class LocaleManagerICU : public LocaleManagerBase {
  public:
-  /// Copy constructor
+  // Copy constructor.
   LocaleManagerICU(const LocaleManagerICU& rhs)
       : LocaleManagerBase(),
         _icuLocale(rhs._icuLocale),
@@ -49,22 +51,18 @@ class LocaleManagerICU : public LocaleManagerBase {
     setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
   }
 
-  /// Default constructor. Use the settings from "../global/Constants.h"
+  // Default constructor. Use the settings from "../global/Constants.h"
   LocaleManagerICU()
       : LocaleManagerICU(std::string{LOCALE_DEFAULT_LANG},
                          std::string{LOCALE_DEFAULT_COUNTRY},
                          LOCALE_DEFAULT_IGNORE_PUNCTUATION) {}
 
-  /**
-   * @param lang The language of the locale, e.g. "en" or "de"
-   * @param country The country of the locale, e.g. "US" or "CA"
-   * @param ignorePunctuationAtFirstLevel If true then spaces/punctuation etc.
-   * will only be considered for comparisons if strings match otherwise Throws
-   * std::runtime_error if the locale cannot be constructed from lang and
-   * country args
-   *
-   * \todo(joka921): make the exact punctuation level configurable.
-   */
+  // `lang` is the language of the locale, e.g. "en" or "de". `country` is the
+  // country of the locale, e.g. "US" or "CA". If
+  // `ignorePunctuationAtFirstLevel` is true then spaces/punctuation etc. will
+  // only be considered for comparisons if strings match otherwise. Throws
+  // `std::runtime_error` if the locale cannot be constructed from `lang` and
+  // `country`. \todo(joka921): make the exact punctuation level configurable.
   LocaleManagerICU(const std::string& lang, const std::string& country,
                    bool ignorePunctuationAtFirstLevel) {
     _icuLocale = icu::Locale(lang.c_str(), country.c_str());
@@ -79,7 +77,7 @@ class LocaleManagerICU : public LocaleManagerBase {
     setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
   }
 
-  /// Assign from another LocaleManagerICU
+  // Assign from another LocaleManagerICU.
   LocaleManagerICU& operator=(const LocaleManagerICU& other) {
     if (this == &other) return *this;
     _icuLocale = other._icuLocale;
@@ -89,13 +87,9 @@ class LocaleManagerICU : public LocaleManagerBase {
     return *this;
   }
 
-  /**
-   * @brief Compare two UTF-8 encoded string_views according to the held Locale
-   * @param a
-   * @param b
-   * @param level Compare according to this collation Level
-   * @return <0 iff a<b , >0 iff a>b,  0 iff a==b
-   */
+  // Compare two UTF-8 encoded string_views according to the held Locale.
+  // Compare according to the collation Level `level`. Return <0 iff a<b, >0 iff
+  // a>b, 0 iff a==b.
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level) const {
     UErrorCode err = U_ZERO_ERROR;
@@ -106,32 +100,24 @@ class LocaleManagerICU : public LocaleManagerBase {
     return res;
   }
 
-  /**
-   * @brief Compare two WeightStrings. These have to be extracted by a call to
-   * getSortKey using the same level specification and on the same LocaleManager
-   * otherwise the behavior is undefined
-   * @param a
-   * @param b
-   * @param level This parameter is ignored but required to have a symmetric
-   * interface
-   * @return <0 iff a<b , >0 iff a>b,  0 iff a==b
-   */
+  // Compare two WeightStrings. These have to be extracted by a call to
+  // getSortKey using the same level specification and on the same LocaleManager
+  // otherwise the behavior is undefined. The `level` parameter is ignored but
+  // required to have a symmetric interface. Return <0 iff a<b, >0 iff a>b, 0
+  // iff a==b.
   template <typename T, typename U>
   static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
                      [[maybe_unused]] const Level = Level::PRIMARY) {
     return a.compare(b);
   }
 
-  /**
-   * @brief Transform a UTF-8 string into a `SortKey`.
-   *
-   * We need this wrapper because ICU internally only works on utf16 and does
-   * not create c++ strings in large parts of the API
-   * @param s A UTF-8 encoded string.
-   * @param level The Collation Level for which we want to create the SortKey
-   * @return A `SortKey` s.t. compare(s, t, level) ==
-   * compare(getSortKey(s, level), getSortKey(t, level))
-   */
+  // Transform a UTF-8 string into a `SortKey`.
+  //
+  // We need this wrapper because ICU internally only works on utf16 and does
+  // not create c++ strings in large parts of the API. `s` is a UTF-8 encoded
+  // string, `level` the Collation Level for which we want to create the
+  // SortKey. Return a `SortKey` s.t. compare(s, t, level) ==
+  // compare(getSortKey(s, level), getSortKey(t, level)).
   SortKey getSortKey(std::string_view s, const Level level) const {
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
     auto& col = *_collator[static_cast<uint8_t>(level)];
@@ -169,54 +155,17 @@ class LocaleManagerICU : public LocaleManagerBase {
     return result;
   }
 
-  /// Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
-  /// \param s The input of which we want to obtain a sort key.
-  /// \param prefixLength Obtain a SortKey for `prefixLength` many relevant
-  /// characters
-  ///               (see below).
-  /// \return A `SortKey` that is a prefix of the `SortKey` for `s` w.r.t
-  ///         `Level::PRIMARY` and that also is a `SortKey` for a prefix "p"
-  ///         of `s`. "p" is the minimal prefix of `s` which consists of
-  ///         at least `prefixLength` codepoints and whose SortKey fulfills the
-  ///         first condition. Codepoints, which do not contribute to the
-  ///         `SortKey` because they are irrelevant for the `PRIMARY` level do
-  ///         not count towards `prefixLength`. The first element of the return
-  ///         value is the actual number of (contributing) codepoints in "p". If
-  ///         `s` contains less than `prefixLength` contributing codepoints,
-  ///         then {totalNumberOfContributingCodepoints, completeSortKey} is
-  ///         returned.
+  // Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
+  // For the exact semantics see `getPrefixSortKeyImpl` in
+  // `StringSortComparatorTypes.h`.
   [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
       std::string_view s, size_t prefixLength) const {
-    size_t numContributingCodepoints = 0;
-    SortKey sortKey;
-    size_t prefixLengthSoFar = 1;
-    SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
-    while (numContributingCodepoints < prefixLength ||
-           !completeSortKey.starts_with(sortKey)) {
-      auto [numCodepoints, prefix] =
-          ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
-      auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
-      if (nextLongerSortKey != sortKey) {
-        // The `SortKey` changed by adding a codepoint, so that codepoint
-        // was contributing.
-        numContributingCodepoints++;
-        sortKey = std::move(nextLongerSortKey);
-      }
-      if (numCodepoints < prefixLengthSoFar) {
-        // We have checked the complete string without finding a sufficiently
-        // long contributing prefix.
-        break;
-      }
-      prefixLengthSoFar++;
-    }
-    return {numContributingCodepoints, std::move(sortKey)};
+    return getPrefixSortKeyImpl<true>(*this, s, prefixLength);
   }
 
-  /**
-   * @brief convert a UTF-8 String to lowercase according to the held locale
-   * @param s UTF-8 encoded string
-   * @return The lowercase version of s, also encoded as UTF-8
-   */
+  // Convert a UTF-8 String to lowercase according to the held locale. `s` is a
+  // UTF-8 encoded string; return the lowercase version of s, also encoded as
+  // UTF-8.
   [[nodiscard]] std::string getLowercaseUtf8(const std::string_view s) const {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);
@@ -231,14 +180,11 @@ class LocaleManagerICU : public LocaleManagerBase {
     return res;
   }
 
-  /**
-   * @brief Normalize a Utf8 string to a canonical representation.
-   * Maps e.g. single codepoint é and e + accent aigu to single codepoint é by
-   * applying the UNICODE NFC (Normalization form C) This is independent from
-   * the locale
-   * @param input The String to be normalized. Must be UTF-8 encoded
-   * @return The NFC canonical form of NFC in UTF-8 encoding.
-   */
+  // Normalize a Utf8 string to a canonical representation.
+  // Maps e.g. single codepoint é and e + accent aigu to single codepoint é by
+  // applying the UNICODE NFC (Normalization form C) This is independent from
+  // the locale. `input` must be UTF-8 encoded; return the NFC canonical form in
+  // UTF-8 encoding.
   [[nodiscard]] std::string normalizeUtf8(std::string_view input) const {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);

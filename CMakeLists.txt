@@ -217,7 +217,7 @@ find_package(Threads REQUIRED)
 #################################
 # ICU (for proper collation
 ################################
-option(NO_UNICODE "ignore locale settings and do all string comparisons and functions on ascii values. Disable the dependency to ICU" OFF)
+option(NO_UNICODE "Build QLever without a dependency on ICU (International Components for Unicode). When ON, `find_package(ICU)` is skipped, the ICU libraries are not linked, and the `QLEVER_NO_UNICODE` macro is defined. In this mode all string comparisons, sorting, case conversion and normalization operate on plain ASCII bytes instead of proper Unicode collation. This is intended for minimal or embedded builds where ICU is unavailable; do not enable it if you need correct Unicode handling." OFF)
 if (NO_UNICODE)
   add_compile_definitions(QLEVER_NO_UNICODE)
 endif()

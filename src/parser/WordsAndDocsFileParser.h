@@ -105,12 +105,9 @@ struct DocsFileLine {
 // `pos` or an empty substring if there is no next delimiter.
 // This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
-  // Find the next delimiter (a maximal run of non-alphanumeric characters).
-  //
-  // With `useICU == true` (the default in a regular build) alphanumeric
-  // detection is Unicode-aware (`u_isalnum` on decoded code points). With
-  // `useICU == false` (the ICU-free path) it falls back to the ASCII
-  // `std::isalnum`. Both instantiations exist so that both paths can be tested.
+  // Find the next delimiter (a maximal run of non-alphanumeric characters). If
+  // `useICU == false`, alphanumeric detection uses the ASCII `std::isalnum`
+  // instead of the Unicode-aware `u_isalnum`.
   template <bool useICU = ad_utility::useICUDefault>
   absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
     if constexpr (!useICU) {
@@ -123,29 +120,21 @@ struct LiteralsTokenizationDelimiter {
       auto endOfSep = std::find_if(begOfSep, text.end(), isAlNum);
       return {begOfSep, std::size_t(endOfSep - begOfSep)};
     } else {
-#ifndef QLEVER_NO_UNICODE
-      auto pos = static_cast<int64_t>(unsignedPos);
-      auto size = static_cast<int64_t>(text.size());
-      // Note: If the Unicode handling ever becomes a bottleneck for ASCII only
-      // words, we can integrate a fast path here that handles the ascii
-      // characters. But before tackling such microoptimizations, the text index
-      // builder should first be parallelized.
-      while (pos < size) {
-        size_t oldPos = pos;
-        UChar32 codePoint;
-        U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
-                codePoint);
-        AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8 in input");
-        if (!u_isalnum(codePoint)) {
-          return text.substr(oldPos, pos - oldPos);
+      QLEVER_UNICODE_ONLY("LiteralsTokenizationDelimiter::Find", {
+        auto pos = static_cast<int64_t>(unsignedPos);
+        auto size = static_cast<int64_t>(text.size());
+        while (pos < size) {
+          size_t oldPos = pos;
+          UChar32 codePoint;
+          U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
+                  codePoint);
+          AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8 in input");
+          if (!u_isalnum(codePoint)) {
+            return text.substr(oldPos, pos - oldPos);
+          }
         }
-      }
-      return text.substr(text.size());
-#else
-      throw std::runtime_error(
-          "LiteralsTokenizationDelimiter::Find<true> requires ICU, but QLever "
-          "was built without ICU support (NO_UNICODE).");
-#endif
+        return text.substr(text.size());
+      });
     }
   }
 };

@@ -28,9 +28,7 @@ constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
 constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
 /// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
-/// into the corresponding UTF-8 string (e.g. "ä"). This does not require ICU:
-/// the codepoint is parsed with `std::from_chars` and encoded with
-/// `ad_utility::utf8EncodeCodepoint`.
+/// into the corresponding UTF-8 string (e.g. "ä").
 std::string hexadecimalCharactersToUtf8(std::string_view hex) {
   uint32_t codepoint = 0;
   auto result =

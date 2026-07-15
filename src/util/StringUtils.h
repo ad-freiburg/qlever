@@ -43,16 +43,9 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 // depend on ICU.
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
 
-/*
- * @brief convert a UTF-8 String to lowercase according to the held locale
- * @param s UTF-8 encoded string
- * @return The lowercase version of s, also encoded as UTF-8
- *
- * @tparam useICU If true, use ICU for proper Unicode-aware case folding. If
- * false, fall back to a plain ASCII (bytewise) `std::tolower`. The default
- * depends on the build configuration (see `useICUDefault`). Both instantiations
- * exist so that both paths can be tested regardless of the build.
- */
+// Convert a UTF-8 string to lowercase according to the held locale. If
+// `useICU == false`, only ASCII characters are lowercased (each byte is
+// treated individually).
 template <bool useICU = useICUDefault>
 std::string utf8ToLower(std::string_view s);
 
@@ -91,9 +84,8 @@ std::string_view getUTF8Substring(const std::string_view str, size_t start);
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
  * codepoints of sv, encoded as UTF-8
  *
- * @tparam useICU If true, decode proper UTF-8 codepoints (requires ICU). If
- * false, treat every byte as a single codepoint. The default depends on the
- * build configuration (see `useICUDefault`).
+ * If `useICU == false`, only an ASCII prefix is formed (each byte is treated as
+ * a codepoint).
  */
 template <bool useICU = useICUDefault>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,

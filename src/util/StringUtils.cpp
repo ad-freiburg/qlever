@@ -111,27 +111,23 @@ template <bool useICU>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
   if constexpr (useICU) {
-#ifndef QLEVER_NO_UNICODE
-    const char* s = sv.data();
-    int32_t length = sv.length();
-    size_t numCodepoints = 0;
-    int32_t i = 0;
-    for (i = 0; i < length && numCodepoints < prefixLength;) {
-      UChar32 c;
-      U8_NEXT(s, i, length, c);
-      if (c >= 0) {
-        ++numCodepoints;
-      } else {
-        throw std::runtime_error(
-            "Illegal UTF sequence in ad_utility::getUTF8Prefix");
+    QLEVER_UNICODE_ONLY("getUTF8Prefix", {
+      const char* s = sv.data();
+      int32_t length = sv.length();
+      size_t numCodepoints = 0;
+      int32_t i = 0;
+      for (i = 0; i < length && numCodepoints < prefixLength;) {
+        UChar32 c;
+        U8_NEXT(s, i, length, c);
+        if (c >= 0) {
+          ++numCodepoints;
+        } else {
+          throw std::runtime_error(
+              "Illegal UTF sequence in ad_utility::getUTF8Prefix");
+        }
       }
-    }
-    return {numCodepoints, sv.substr(0, i)};
-#else
-    throw std::runtime_error(
-        "ad_utility::getUTF8Prefix<true> requires ICU, but QLever was built "
-        "without ICU support (NO_UNICODE).");
-#endif
+      return {numCodepoints, sv.substr(0, i)};
+    });
   } else {
     // Without ICU we treat every byte as a single codepoint.
     auto length = std::min(prefixLength, sv.size());
@@ -168,21 +164,16 @@ std::string utf8StringTransform(std::string_view s, F transformation) {
 template <bool useICU>
 std::string utf8ToLower(std::string_view s) {
   if constexpr (useICU) {
-#ifndef QLEVER_NO_UNICODE
-    return detail::utf8StringTransform(s, [](auto&&... args) {
-      return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-    });
-#else
-    throw std::runtime_error(
-        "ad_utility::utf8ToLower<true> requires ICU, but QLever was built "
-        "without ICU support (NO_UNICODE).");
-#endif
+    QLEVER_UNICODE_ONLY(
+        "utf8ToLower",
+        return detail::utf8StringTransform(s, [](auto&&... args) {
+          return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+        }););
   } else {
-    std::string result;
-    result.reserve(s.size());
-    ql::ranges::transform(s, std::back_inserter(result),
-                          [](unsigned char c) { return std::tolower(c); });
-    return result;
+    return ::ranges::to<std::string>(
+        s | ql::views::transform([](unsigned char c) {
+          return static_cast<char>(std::tolower(c));
+        }));
   }
 }
 // Explicit instantiations for both configurations.
@@ -193,21 +184,16 @@ template std::string utf8ToLower<false>(std::string_view);
 template <bool useICU>
 std::string utf8ToUpper(std::string_view s) {
   if constexpr (useICU) {
-#ifndef QLEVER_NO_UNICODE
-    return detail::utf8StringTransform(s, [](auto&&... args) {
-      return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-    });
-#else
-    throw std::runtime_error(
-        "ad_utility::utf8ToUpper<true> requires ICU, but QLever was built "
-        "without ICU support (NO_UNICODE).");
-#endif
+    QLEVER_UNICODE_ONLY(
+        "utf8ToUpper",
+        return detail::utf8StringTransform(s, [](auto&&... args) {
+          return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+        }););
   } else {
-    std::string result;
-    result.reserve(s.size());
-    ql::ranges::transform(s, std::back_inserter(result),
-                          [](unsigned char c) { return std::toupper(c); });
-    return result;
+    return ::ranges::to<std::string>(
+        s | ql::views::transform([](unsigned char c) {
+          return static_cast<char>(std::toupper(c));
+        }));
   }
 }
 // Explicit instantiations for both configurations.

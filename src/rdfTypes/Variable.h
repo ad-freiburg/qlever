@@ -77,14 +77,9 @@ class Variable {
   static bool isValidVariableName(std::string_view var);
 
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
-  // it at the end of target.
-  //
-  // With `useICU == true` (the default in a regular build) non-ASCII code
-  // points are decoded and escaped based on their Unicode code point. With
-  // `useICU == false` (the ICU-free path) no escaping happens and `word` is
-  // appended unchanged; this is acceptable because the escaping is only
-  // relevant for the text index, which is not used in the ICU-free
-  // configuration. Both instantiations exist so that both paths can be tested.
+  // it at the end of target. If `useICU == false`, no escaping happens and
+  // `word` is appended unchanged (the escaping is only relevant for the text
+  // index, which is not used in the ICU-free configuration).
   template <bool useICU = ad_utility::useICUDefault>
   static void appendEscapedWord(std::string_view word, std::string& target);
 
