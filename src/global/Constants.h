@@ -97,6 +97,13 @@ constexpr inline std::string_view default_graph = "default-graph";
 constexpr inline std::string_view DEFAULT_GRAPH_IRI =
     makeQleverInternalIriConst<string_constants::detail::default_graph>();
 namespace string_constants::detail {
+constexpr inline std::string_view inferred_graph = "inferred-graph";
+}  // namespace string_constants::detail
+// Default named graph for materialized (inferred) triples. Using a dedicated
+// named graph keeps derived triples provenance-separate from base data.
+constexpr inline std::string_view QLEVER_INFERRED_GRAPH_IRI =
+    makeQleverInternalIriConst<string_constants::detail::inferred_graph>();
+namespace string_constants::detail {
 constexpr inline std::string_view internal_graph = "internal-graph";
 }  // namespace string_constants::detail
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
