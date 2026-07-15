@@ -224,7 +224,7 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
-constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
+constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
 
 constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
@@ -342,5 +342,10 @@ constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
 
 constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
     "http-graph-store";
+
+// The number of `BatchIoManager`s pooled by `VocabularyOnDisk` for batched
+// vocabulary lookups (`lookupBatch`). Each manager owns an io_uring ring; the
+// pool size bounds how many batch lookups can be served concurrently.
+constexpr inline size_t NUM_VOCAB_BATCH_IO_MANAGERS = 8;
 
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

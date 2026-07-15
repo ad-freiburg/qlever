@@ -14,6 +14,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
@@ -185,5 +186,72 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
                          SpatialJoinCachedIndexTest, ::testing::Bool());
+
+// _____________________________________________________________________________
+// Tests for `SpatialJoinCachedIndex` with and without simplification.
+class SpatialJoinCachedIndexSimplificationTest
+    : public ::testing::TestWithParam<bool> {};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithoutSimplification) {
+  bool shouldSerialize = GetParam();
+  // A 3-vertex linestring: without simplification all 3 vertices (= 2 edges)
+  // must be stored in the S2 shape index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // 3 vertices → 2 edges, stored as a single shape.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 2);
+}
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithSimplification) {
+  bool shouldSerialize = GetParam();
+  // Same 3-vertex linestring, but the middle vertex is only ~6 m off the
+  // direct path, so a 10 m simplification tolerance should remove it, leaving
+  // 2 vertices (= 1 edge) in the index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}, 10.0};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // Middle vertex removed by simplification: 2 vertices → 1 edge.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 1);
+}
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
+                         SpatialJoinCachedIndexSimplificationTest,
+                         ::testing::Bool());
 
 }  // namespace

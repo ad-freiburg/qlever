@@ -67,6 +67,8 @@ class MaterializedViewsTest : public ::testing::Test {
   const std::string testIndexBase_ = gtestCurrentTestName();
   const std::string simpleWriteQuery_ = "SELECT * { ?s ?p ?o . BIND(1 AS ?g) }";
   std::stringstream log_;
+  std::optional<decltype(setGlobalLoggingStreamForTesting(nullptr))>
+      logStreamCleanup_;
 
   // ___________________________________________________________________________
   virtual std::string getDummyTurtle() const {
@@ -75,7 +77,7 @@ class MaterializedViewsTest : public ::testing::Test {
 
   // ___________________________________________________________________________
   void SetUp() override {
-    ad_utility::setGlobalLoggingStream(&log_);
+    logStreamCleanup_.emplace(setGlobalLoggingStreamForTesting(&log_));
     makeTestIndex(testIndexBase_, getDummyTurtle());
     qlever::EngineConfig config;
     config.baseName_ = testIndexBase_;
@@ -86,7 +88,8 @@ class MaterializedViewsTest : public ::testing::Test {
   void TearDown() override {
     qlv_ = nullptr;
     removeTestIndex(testIndexBase_);
-    ad_utility::setGlobalLoggingStream(&std::cout);
+    // Calls the cleanup, restoring the log stream to the previous value.
+    logStreamCleanup_.reset();
   }
 
   // ___________________________________________________________________________
@@ -102,7 +105,9 @@ class MaterializedViewsTest : public ::testing::Test {
   // an `IdTable` with the same column ordering as the columns in the `SELECT`
   // statement.
   IdTable getQueryResultAsIdTable(std::string query) {
-    auto [qet, qec, parsed] = qlv().parseAndPlanQuery(std::move(query));
+    auto plannedQuery = qlv().parseAndPlanQuery(std::move(query));
+    auto qet = plannedQuery.sharedQueryExecutionTree();
+    auto& parsed = plannedQuery.parsedQuery();
 
     // Get the visible variables' column indices in the correct order.
     if (!parsed.hasSelectClause()) {
@@ -161,12 +166,19 @@ class MaterializedViewsQueryRewriteTest
     : public ::testing::TestWithParam<RewriteTestParams> {
  protected:
   std::stringstream log_;
+  std::optional<decltype(setGlobalLoggingStreamForTesting(nullptr))>
+      logStreamCleanup_;
 
   // ___________________________________________________________________________
-  void SetUp() override { ad_utility::setGlobalLoggingStream(&log_); }
+  void SetUp() override {
+    logStreamCleanup_.emplace(setGlobalLoggingStreamForTesting(&log_));
+  }
 
   // ___________________________________________________________________________
-  void TearDown() override { ad_utility::setGlobalLoggingStream(&std::cout); }
+  void TearDown() override {
+    // Calls the cleanup, restoring the log stream to the previous value.
+    logStreamCleanup_.reset();
+  }
 };
 
 // We make subclasses of `MaterializedViewsQueryRewriteTest` here s.t. we can
@@ -188,8 +200,8 @@ inline void qpExpect(qlever::Qlever& qlv, const auto& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto [qet, qec, parsed] = qlv.parseAndPlanQuery(std::string{query});
-  EXPECT_THAT(*qet, matcher);
+  auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
+  EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
 };
 
 // _____________________________________________________________________________

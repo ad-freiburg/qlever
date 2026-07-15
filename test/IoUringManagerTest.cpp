@@ -19,6 +19,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -161,12 +162,42 @@ class SequentialReadScenarioForTesting {
   const std::vector<std::string>& expected() const { return expected_; }
 };
 
+#ifdef QLEVER_HAS_IO_URING
+// Return `true` iff io_uring actually works at runtime. Even when compiled
+// in, the `io_uring_setup` syscall can be blocked (for example, by the
+// default seccomp profile of Docker, which also applies to the `RUN` steps
+// of the CI image build that execute this test suite). The result is probed
+// once and cached.
+bool ioUringAvailableAtRuntime() {
+  static const bool available = []() {
+    bool preferIoUring = true;
+    [[maybe_unused]] auto manager = ad_utility::makeBatchManager(preferIoUring);
+    return preferIoUring;
+  }();
+  return available;
+}
+#endif
+
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
 // concrete I/O policy. When io_uring is present the tests run against both the
-// `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present,
+// `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present
+// (at compile time, or blocked at runtime, see `ioUringAvailableAtRuntime`),
 // the tests run against `SyncIoPolicy` only.
 template <typename T>
-class IoUringManagerTest : public ::testing::Test {};
+class IoUringManagerTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+#ifdef QLEVER_HAS_IO_URING
+    if constexpr (std::is_same_v<
+                      T, ad_utility::BatchManager<ad_utility::IoUringPolicy>>) {
+      if (!ioUringAvailableAtRuntime()) {
+        GTEST_SKIP() << "io_uring is compiled in, but not available at "
+                        "runtime (e.g. blocked by seccomp inside Docker)";
+      }
+    }
+#endif
+  }
+};
 
 #ifdef QLEVER_HAS_IO_URING
 using ManagerTypes =
@@ -210,7 +241,7 @@ TYPED_TEST(IoUringManagerTest, mismatchedSpanLengthsThrow) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       std::ignore = manager.addBatch(fd, numBytes, fileOffsets, buffers),
-      HasSubstr("spans should have same length"));
+      HasSubstr("spans must have same length"));
 }
 
 // MultipleBatchesSequential: 3 batches submitted and waited in order.
@@ -434,10 +465,7 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
   // Capture the log so we can assert that the destructor stays silent.
-  std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
-  absl::Cleanup restoreLog{
-      [] { ad_utility::setGlobalLoggingStream(&std::cout); }};
+  auto [restoreLog, logStream] = setGlobalLoggingStreamToStringStream();
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
@@ -461,15 +489,16 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
 // the asynchronous io_uring backend, so the test is not part of the typed
 // suite.
 TEST(IoUringManagerDrop, dropRunningManager) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime "
+                    "(e.g. blocked by seccomp inside Docker)";
+  }
   using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
   // Redirect the global logging stream so we can assert on the destructor's
   // warning.
-  std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
-  absl::Cleanup restoreLog{
-      [] { ad_utility::setGlobalLoggingStream(&std::cout); }};
+  auto [restoreLog, logStream] = setGlobalLoggingStreamToStringStream();
 
   ReadBatchForTesting batch;
   batch.add({{8, 4}, {0, 4}, {12, 4}});
@@ -523,5 +552,61 @@ TYPED_TEST(IoUringManagerTest, fakeHandle) {
   manager.wait(realHandle);
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
+}
+
+// Check that the `manager` (as returned by `makeBatchManager`, see the tests
+// below) performs correct reads via the type-erased `BatchManagerBase`
+// interface.
+void expectManagerWorks(ad_utility::BatchManagerBase& manager) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");
+  ReadBatchForTesting batch;
+  batch.add({{4, 4}, {0, 4}});
+  manager.wait(batch.submitTo(manager, fd));
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("BBBB", "AAAA"));
+}
+
+// With `preferIoUring == false`, `makeBatchManager` must return a
+// `SyncIoPolicy`-backed manager without probing io_uring, and leave the flag
+// `false`.
+TEST(MakeBatchManager, syncBackendWhenIoUringNotPreferred) {
+  bool preferIoUring = false;
+  auto manager = ad_utility::makeBatchManager(preferIoUring);
+  ASSERT_NE(manager, nullptr);
+  EXPECT_FALSE(preferIoUring);
+  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                manager.get()),
+            nullptr);
+  expectManagerWorks(*manager);
+}
+
+// With `preferIoUring == true`, the backend depends on the runtime
+// environment: if io_uring is compiled in and its setup succeeds, an
+// `IoUringPolicy`-backed manager is returned and the flag stays `true`.
+// Otherwise (io_uring not compiled in, or its setup fails at runtime, e.g.
+// blocked by seccomp inside Docker), the flag is set to `false` and a
+// `SyncIoPolicy`-backed manager is returned. Either way, the returned
+// manager must work.
+TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
+  bool preferIoUring = true;
+  auto manager = ad_utility::makeBatchManager(preferIoUring);
+  ASSERT_NE(manager, nullptr);
+#ifdef QLEVER_HAS_IO_URING
+  if (preferIoUring) {
+    EXPECT_NE(
+        dynamic_cast<ad_utility::BatchManager<ad_utility::IoUringPolicy>*>(
+            manager.get()),
+        nullptr);
+  } else {
+    EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                  manager.get()),
+              nullptr);
+  }
+#else
+  EXPECT_FALSE(preferIoUring);
+  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                manager.get()),
+            nullptr);
+#endif
+  expectManagerWorks(*manager);
 }
 }  // namespace

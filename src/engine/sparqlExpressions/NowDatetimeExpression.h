@@ -2,10 +2,11 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NOWDATETIMEEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NOWDATETIMEEXPRESSION_H
+
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "util/ChunkedForLoop.h"
 #include "util/DateYearDuration.h"
-#include "util/Random.h"
 
 namespace sparqlExpression {
 
@@ -31,8 +32,15 @@ class NowDatetimeExpression : public SparqlExpression {
     return Id::makeFromDate(date_);
   }
 
+  // Since the result of `NOW()` is determined at construction time, it is
+  // deterministic as long as the cache key is the same which depends on the
+  // time stored in `date_`.
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NOWDATETIMEEXPRESSION_H
