@@ -251,10 +251,9 @@ class Server {
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         const ad_utility::Timer& requestTimer,
-                         TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle, TimeLimit timeLimit,
+                         const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -352,15 +351,6 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  // Given a name and query, compute the query result and write a new
-  // materialized view of this result to disk. This assumes that the access
-  // token has already been checked.
-  void writeMaterializedView(
-      const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
-      const ad_utility::Timer& requestTimer,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
   // Trigger an index rebuild with `indexBaseName` as the base name for the new
