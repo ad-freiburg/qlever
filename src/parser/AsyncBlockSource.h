@@ -70,6 +70,12 @@ class AsyncBlockSource {
   // The handler is dispatched onto the executor associated with `token`, or
   // onto the executor passed to the constructor if `token` has none of its
   // own.
+  // IMPORTANT: At most one request may be outstanding at any time; the next
+  // call to `asyncGetNextBlock` may only be initiated after the completion
+  // handler of the previous call has run. Sources with state (e.g.
+  // `AsyncStatementBoundaryBlockSource`) rely on this for synchronization
+  // (concurrent calls used to be serialized by a strand in this base class,
+  // which no longer exists).
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& token) {
     namespace net = boost::asio;
@@ -136,13 +142,14 @@ class AsyncBlockSource {
 // systems without `io_uring` that is worth the complexity.
 //
 // Wrapper/combinator sources that themselves call into another
-// `AsyncBlockSource` (which might not be blocking, e.g. `HttpBodyBlockSource`)
-// must NOT derive from this class: blocking on the inner source's result from
-// within a task already running on this class's own (possibly single-thread)
-// strand can deadlock if the inner source's completion is itself scheduled on
-// that very same strand/executor. See `AsyncStatementBoundaryBlockSource`,
-// which derives from `AsyncBlockSource` directly and chains onto its inner
-// source via callbacks instead of blocking on it.
+// `AsyncBlockSource` (which might not be blocking, e.g. a future source that
+// reads from the body of an HTTP request) must NOT derive from this class:
+// blocking on the inner source's result from within a task already running on
+// this class's own (possibly single-thread) strand can deadlock if the inner
+// source's completion is itself scheduled on that very same strand/executor.
+// See `AsyncStatementBoundaryBlockSource`, which derives from
+// `AsyncBlockSource` directly and chains onto its inner source via callbacks
+// instead of blocking on it.
 class BlockingBlockSource : public AsyncBlockSource {
  private:
   boost::asio::strand<boost::asio::any_io_executor> strand_;

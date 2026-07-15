@@ -49,11 +49,19 @@ BlockingBlockSource::BlockingBlockSource(const net::any_io_executor& exec,
 // ____________________________________________________________________________
 void BlockingBlockSource::asyncGetNextBlockImpl(Handler handler) {
   net::post(strand_, [this, h = std::move(handler)]() mutable {
+    // NOTE: The handler is deliberately invoked *outside* the `try` block:
+    // the `try` must only guard `getNextBlockImpl()`. Otherwise an exception
+    // thrown from within the handler chain itself (which for wrapper sources
+    // runs inline and contains fallible work) would be caught here and lead
+    // to the handler being invoked a second time, which violates the
+    // exactly-once contract and invokes a moved-from `Handler`.
+    std::optional<Block> block;
     try {
-      h(nullptr, getNextBlockImpl());
+      block = getNextBlockImpl();
     } catch (...) {
-      h(std::current_exception(), std::nullopt);
+      return h(std::current_exception(), std::nullopt);
     }
+    h(nullptr, std::move(block));
   });
 }
 
@@ -165,9 +173,17 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
             Block rawInput = std::move(*rawOpt);
 
             // Search for the end of the last statement near the end of the
-            // raw block.
-            auto endPosition = findEndPosition_(
-                std::string_view{rawInput.data(), rawInput.size()});
+            // raw block. `findEndPosition_` is user-supplied code, so an
+            // exception from it is delivered via the handler like any other
+            // error (and must not escape into the code that invoked this
+            // callback, see `BlockingBlockSource::asyncGetNextBlockImpl`).
+            std::optional<size_t> endPosition;
+            try {
+              endPosition = findEndPosition_(
+                  std::string_view{rawInput.data(), rawInput.size()});
+            } catch (...) {
+              return handler(std::current_exception(), std::nullopt);
+            }
             if (endPosition.has_value()) {
               return assembleAndDeliver(handler, rawInput, endPosition.value());
             }

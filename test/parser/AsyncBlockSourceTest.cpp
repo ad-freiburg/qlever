@@ -268,3 +268,25 @@ TEST(AsyncStatementBoundaryBlockSource, ForwardsExceptionFromPeek) {
   AD_EXPECT_THROW_WITH_MESSAGE(drainAllBlocks(buf),
                                ::testing::HasSubstr("boom from peek"));
 }
+
+// ________________________________________________________
+TEST(AsyncStatementBoundaryBlockSource,
+     ForwardsExceptionFromEndPositionFinder) {
+  boost::asio::thread_pool pool{1};
+  // `findEndPosition_` is user-supplied code and runs inline in the handler
+  // chain of the inner source. An exception from it must be delivered via
+  // the completion handler like any other error: exactly once (the handler
+  // is one-shot, see `BlockingBlockSource::asyncGetNextBlockImpl`) and
+  // without escaping into the inner source's executor.
+  auto inner = std::make_unique<ScriptedBlockSource>(
+      pool.get_executor(), 4_B,
+      std::vector<ScriptedBlockSource::Step>{
+          ScriptedBlockSource::Step{qp::ByteBlock{'a', 'b', 'c', 'd'}}});
+  auto findThrows = [](std::string_view) -> std::optional<size_t> {
+    throw std::runtime_error{"boom from findEndPosition"};
+  };
+  qp::AsyncStatementBoundaryBlockSource buf(
+      pool.get_executor(), std::move(inner), findThrows, "throwing finder");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      drainAllBlocks(buf), ::testing::HasSubstr("boom from findEndPosition"));
+}
