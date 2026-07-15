@@ -42,7 +42,7 @@ CPP_concept QueryOrUpdate =
 
 // Forward declaration for testing.
 namespace serverTestHelpers {
-struct SimulateHttpRequest;
+class ServerForTesting;
 }
 
 //! The HTTP Server used.
@@ -55,7 +55,7 @@ class Server {
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
-  friend serverTestHelpers::SimulateHttpRequest;
+  friend serverTestHelpers::ServerForTesting;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -206,6 +206,23 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
+  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
+  // meters for the simplification of geometries before indexing) from its
+  // string representation. Return `std::nullopt` if `simplificationStr` is
+  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
+  // floating-point number.
+  static std::optional<double> parsePinGeoIndexSimplification(
+      const std::optional<std::string>& simplificationStr);
+  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
+  // Describe the pinning of a named result (and, if applicable, of its geo
+  // index) for the request log line, e.g. `" [pin result with name
+  // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
+  // string if `pinResultWithName` is `std::nullopt`.
+  static std::string describePinResultWithNameForLog(
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters);
+  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
   auto prepareOperation(SharedIndexAndView indexAndViews,
                         std::string_view operationName,
@@ -223,11 +240,14 @@ class Server {
   // set, then the `qec` is configured such that the query result will be stored
   // in the named result cache. If `pinNamedGeoIndex` is also set, it is
   // expected to be the variable name of a column (without leading `?`) on which
-  // a geometry index should be built. Throws if named pinning is required, but
-  // the access token is not okay.
+  // a geometry index should be built. If `geoIndexSimplificationInMeters` is
+  // also set, geometries are simplified with the given maximum error in meters
+  // before indexing. Throw if named pinning is required, but the access token
+  // is not okay.
   static void configurePinnedResultWithName(
       const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
