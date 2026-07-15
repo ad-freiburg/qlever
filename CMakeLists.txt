@@ -217,7 +217,14 @@ find_package(Threads REQUIRED)
 #################################
 # ICU (for proper collation
 ################################
+option(NO_UNICODE "Build QLever without a dependency on ICU (International Components for Unicode). When ON, `find_package(ICU)` is skipped, the ICU libraries are not linked, and the `QLEVER_NO_UNICODE` macro is defined. In this mode all string comparisons, sorting, case conversion and normalization operate on plain ASCII bytes instead of proper Unicode collation. This is intended for minimal or embedded builds where ICU is unavailable; do not enable it if you need correct Unicode handling." OFF)
+if (NO_UNICODE)
+  add_compile_definitions(QLEVER_NO_UNICODE)
+endif()
+
+if (NOT NO_UNICODE)
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
+endif()
 
 ###################################
 # JEMALLOC
@@ -302,8 +309,11 @@ find_package(OpenSSL REQUIRED)
 # against the common libraries.
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
+            absl::flat_hash_set absl::strings absl::str_format
+            OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
+    if (NOT NO_UNICODE)
+      target_link_libraries(${target} ICU::uc ICU::i18n)
+    endif()
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")

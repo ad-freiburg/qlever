@@ -78,6 +78,26 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
 }
 
 // _____________________________________________________________________________
+// Test both instantiations of `Variable::appendEscapedWord`. The `useICU ==
+// true` path escapes characters that are not suitable for variable names, while
+// the ICU-free `useICU == false` path appends the word unchanged.
+TEST(Variable, appendEscapedWord) {
+  // ICU path: 'a' and 'b' are valid, the space (0x20 == 32) is escaped.
+  std::string targetIcu = "pre_";
+  Variable::appendEscapedWord<true>("a b", targetIcu);
+  EXPECT_EQ(targetIcu, "pre_a_32_b");
+
+  // ICU-free path: no escaping happens, the word is appended verbatim.
+  std::string targetNoIcu = "pre_";
+  Variable::appendEscapedWord<false>("a b", targetNoIcu);
+  EXPECT_EQ(targetNoIcu, "pre_a b");
+
+  std::string targetUnicode = "pre_";
+  Variable::appendEscapedWord<false>("äpfel*", targetUnicode);
+  EXPECT_EQ(targetUnicode, "pre_äpfel*");
+}
+
+// _____________________________________________________________________________
 TEST(Variable, ScoreAndMatchUnicodeExhaustive) {
 #ifndef QLEVER_RUN_EXPENSIVE_TESTS
   GTEST_SKIP();

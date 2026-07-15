@@ -159,9 +159,9 @@ struct UpperOrLowerCaseImpl {
 };
 
 using UppercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper<>>>;
 using LowercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToLower>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToLower<>>>;
 
 // SUBSTR
 class SubstrImpl {

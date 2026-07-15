@@ -6,10 +6,9 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#include <unicode/unistr.h>
 
+#include <charconv>
 #include <ctre-unicode.hpp>
-#include <sstream>
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -31,12 +30,12 @@ constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 /// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
 /// into the corresponding UTF-8 string (e.g. "ä").
 std::string hexadecimalCharactersToUtf8(std::string_view hex) {
-  UChar32 x;
-  std::stringstream sstream;
-  sstream << std::hex << hex;
-  sstream >> x;
+  uint32_t codepoint = 0;
+  auto result =
+      std::from_chars(hex.data(), hex.data() + hex.size(), codepoint, 16);
+  AD_CORRECTNESS_CHECK(result.ec == std::errc{});
   std::string res;
-  icu::UnicodeString(x).toUTF8String(res);
+  ad_utility::utf8EncodeCodepoint(codepoint, res);
   return res;
 }
 

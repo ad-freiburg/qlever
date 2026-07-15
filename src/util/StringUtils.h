@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
 #define QLEVER_SRC_UTIL_STRINGUTILS_H
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -14,6 +15,7 @@
 #include "backports/span.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
+#include "util/UnicodeSupport.h"
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -35,14 +37,20 @@ bool strIsLangTag(const std::string& strLangTag);
 // Implements a case insensitive `language-range` to `language-tag`comparison.
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
-/*
- * @brief convert a UTF-8 String to lowercase according to the held locale
- * @param s UTF-8 encoded string
- * @return The lowercase version of s, also encoded as UTF-8
- */
+// Encode the single Unicode `codepoint` as UTF-8 and append the resulting bytes
+// to `output`. Codepoints outside the valid Unicode range (> 0x10FFFF) are
+// encoded as the Unicode replacement character U+FFFD. This function does not
+// depend on ICU.
+void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
+
+// Convert a UTF-8 string to lowercase according to the held locale. If
+// `useICU == false`, only ASCII characters are lowercased (each byte is
+// treated individually).
+template <bool useICU = useICUDefault>
 std::string utf8ToLower(std::string_view s);
 
-// Get the uppercase value. For details see `utf8ToLower` above
+// Get the uppercase value. For details see `utf8ToLower` above.
+template <bool useICU = useICUDefault>
 std::string utf8ToUpper(std::string_view s);
 
 /**
@@ -75,7 +83,11 @@ std::string_view getUTF8Substring(const std::string_view str, size_t start);
  * @param prefixLength The number of Unicode codepoints we want to extract.
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
  * codepoints of sv, encoded as UTF-8
+ *
+ * If `useICU == false`, only an ASCII prefix is formed (each byte is treated as
+ * a codepoint).
  */
+template <bool useICU = useICUDefault>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
                                                   size_t prefixLength);
 

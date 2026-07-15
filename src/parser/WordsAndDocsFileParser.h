@@ -7,15 +7,20 @@
 #define QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
 
 #include <absl/strings/str_split.h>
+#ifndef QLEVER_NO_UNICODE
 #include <unicode/locid.h>
 #include <unicode/uchar.h>
+#endif
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <string>
 
 #include "global/Id.h"
 #include "index/StringSortComparator.h"
 #include "util/Iterators.h"
+#include "util/UnicodeSupport.h"
 #include "util/Views.h"
 
 /**
@@ -100,24 +105,37 @@ struct DocsFileLine {
 // `pos` or an empty substring if there is no next delimiter.
 // This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
+  // Find the next delimiter (a maximal run of non-alphanumeric characters). If
+  // `useICU == false`, alphanumeric detection uses the ASCII `std::isalnum`
+  // instead of the Unicode-aware `u_isalnum`.
+  template <bool useICU = ad_utility::useICUDefault>
   absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
-    auto pos = static_cast<int64_t>(unsignedPos);
-    auto size = static_cast<int64_t>(text.size());
-    // Note: If the Unicode handling ever becomes a bottleneck for ASCII only
-    // words, we can integrate a fast path here that handles the ascii
-    // characters. But before tackling such microoptimizations, the text index
-    // builder should first be parallelized.
-    while (pos < size) {
-      size_t oldPos = pos;
-      UChar32 codePoint;
-      U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
-              codePoint);
-      AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8 in input");
-      if (!u_isalnum(codePoint)) {
-        return text.substr(oldPos, pos - oldPos);
+    if constexpr (!useICU) {
+      auto isAlNum = [](unsigned char c) { return std::isalnum(c); };
+      auto begOfSep =
+          std::find_if_not(text.begin() + unsignedPos, text.end(), isAlNum);
+      if (begOfSep == text.end()) {
+        return {text.end(), 0};
       }
+      auto endOfSep = std::find_if(begOfSep, text.end(), isAlNum);
+      return {begOfSep, std::size_t(endOfSep - begOfSep)};
+    } else {
+      QLEVER_UNICODE_ONLY("LiteralsTokenizationDelimiter::Find", {
+        auto pos = static_cast<int64_t>(unsignedPos);
+        auto size = static_cast<int64_t>(text.size());
+        while (pos < size) {
+          size_t oldPos = pos;
+          UChar32 codePoint;
+          U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), pos, size,
+                  codePoint);
+          AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8 in input");
+          if (!u_isalnum(codePoint)) {
+            return text.substr(oldPos, pos - oldPos);
+          }
+        }
+        return text.substr(text.size());
+      });
     }
-    return text.substr(text.size());
   }
 };
 

@@ -179,3 +179,22 @@ TEST(TokenizeAndNormalizeText, Unicode) {
   AD_EXPECT_THROW_WITH_MESSAGE(testTokenizeAndNormalizeText("\255", {}),
                                ::testing::HasSubstr("Invalid UTF-8"));
 }
+
+// _____________________________________________________________________________
+// Test both instantiations of `LiteralsTokenizationDelimiter::Find`. The
+// `useICU == true` path is Unicode-aware (`u_isalnum`), the ICU-free `useICU ==
+// false` path uses the ASCII `std::isalnum`, so non-ASCII bytes are treated as
+// delimiters.
+TEST(WordsAndDocsFileParser, LiteralsTokenizationDelimiterNoICU) {
+  LiteralsTokenizationDelimiter delimiter;
+
+  // For ASCII input both variants find the space as the delimiter.
+  EXPECT_EQ(delimiter.Find<true>("ab cd", 0), " ");
+  EXPECT_EQ(delimiter.Find<false>("ab cd", 0), " ");
+
+  // In "abäcd" the character 'ä' occupies the bytes 0xC3 0xA4. With ICU it is
+  // alphanumeric, so the whole string is a single token (no delimiter, the
+  // empty tail is returned). Without ICU its bytes are treated as a delimiter.
+  EXPECT_TRUE(delimiter.Find<true>("abäcd", 0).empty());
+  EXPECT_EQ(delimiter.Find<false>("abäcd", 0), "ä");
+}

@@ -7,8 +7,13 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
+#ifndef QLEVER_NO_UNICODE
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
+#endif
+
+#include <cctype>
+#include <iterator>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
@@ -78,25 +83,64 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
 }
 
 // ___________________________________________________________________________
-std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
-                                                  size_t prefixLength) {
-  const char* s = sv.data();
-  int32_t length = sv.length();
-  size_t numCodepoints = 0;
-  int32_t i = 0;
-  for (i = 0; i < length && numCodepoints < prefixLength;) {
-    UChar32 c;
-    U8_NEXT(s, i, length, c);
-    if (c >= 0) {
-      ++numCodepoints;
-    } else {
-      throw std::runtime_error(
-          "Illegal UTF sequence in ad_utility::getUTF8Prefix");
-    }
+void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
+  // Encode `codepoint` according to the UTF-8 standard. Codepoints outside of
+  // the valid Unicode range are replaced by U+FFFD (the replacement character).
+  if (codepoint > 0x10FFFF) {
+    codepoint = 0xFFFD;
   }
-  return {numCodepoints, sv.substr(0, i)};
+  if (codepoint <= 0x7F) {
+    output += static_cast<char>(codepoint);
+  } else if (codepoint <= 0x7FF) {
+    output += static_cast<char>(0xC0 | (codepoint >> 6));
+    output += static_cast<char>(0x80 | (codepoint & 0x3F));
+  } else if (codepoint <= 0xFFFF) {
+    output += static_cast<char>(0xE0 | (codepoint >> 12));
+    output += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+    output += static_cast<char>(0x80 | (codepoint & 0x3F));
+  } else {
+    output += static_cast<char>(0xF0 | (codepoint >> 18));
+    output += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+    output += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+    output += static_cast<char>(0x80 | (codepoint & 0x3F));
+  }
 }
 
+// ___________________________________________________________________________
+template <bool useICU>
+std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
+                                                  size_t prefixLength) {
+  if constexpr (useICU) {
+    QLEVER_UNICODE_ONLY("getUTF8Prefix", {
+      const char* s = sv.data();
+      int32_t length = sv.length();
+      size_t numCodepoints = 0;
+      int32_t i = 0;
+      for (i = 0; i < length && numCodepoints < prefixLength;) {
+        UChar32 c;
+        U8_NEXT(s, i, length, c);
+        if (c >= 0) {
+          ++numCodepoints;
+        } else {
+          throw std::runtime_error(
+              "Illegal UTF sequence in ad_utility::getUTF8Prefix");
+        }
+      }
+      return {numCodepoints, sv.substr(0, i)};
+    });
+  } else {
+    // Without ICU we treat every byte as a single codepoint.
+    auto length = std::min(prefixLength, sv.size());
+    return {length, sv.substr(0, length)};
+  }
+}
+// Explicit instantiations for both configurations.
+template std::pair<size_t, std::string_view> getUTF8Prefix<true>(
+    std::string_view, size_t);
+template std::pair<size_t, std::string_view> getUTF8Prefix<false>(
+    std::string_view, size_t);
+
+#ifndef QLEVER_NO_UNICODE
 namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
@@ -114,20 +158,47 @@ std::string utf8StringTransform(std::string_view s, F transformation) {
   return result;
 }
 }  // namespace detail
+#endif  // QLEVER_NO_UNICODE
 
 // ____________________________________________________________________________
+template <bool useICU>
 std::string utf8ToLower(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
-    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-  });
+  if constexpr (useICU) {
+    QLEVER_UNICODE_ONLY("utf8ToLower", {
+      return detail::utf8StringTransform(s, [](auto&&... args) {
+        return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+      });
+    });
+  } else {
+    return ::ranges::to<std::string>(
+        s | ql::views::transform([](unsigned char c) {
+          return static_cast<char>(std::tolower(c));
+        }));
+  }
 }
+// Explicit instantiations for both configurations.
+template std::string utf8ToLower<true>(std::string_view);
+template std::string utf8ToLower<false>(std::string_view);
 
 // ____________________________________________________________________________
+template <bool useICU>
 std::string utf8ToUpper(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
-    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-  });
+  if constexpr (useICU) {
+    QLEVER_UNICODE_ONLY("utf8ToUpper", {
+      return detail::utf8StringTransform(s, [](auto&&... args) {
+        return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+      });
+    });
+  } else {
+    return ::ranges::to<std::string>(
+        s | ql::views::transform([](unsigned char c) {
+          return static_cast<char>(std::toupper(c));
+        }));
+  }
 }
+// Explicit instantiations for both configurations.
+template std::string utf8ToUpper<true>(std::string_view);
+template std::string utf8ToUpper<false>(std::string_view);
 
 // ____________________________________________________________________________
 std::string_view getUTF8Substring(const std::string_view str, size_t start,
