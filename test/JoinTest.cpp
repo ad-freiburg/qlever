@@ -321,10 +321,21 @@ auto I = ad_utility::testing::IntId;
 using Var = Variable;
 }  // namespace
 
-struct JoinTestParametrized : public ::testing::TestWithParam<bool> {};
+struct JoinTestParametrized
+    : public ::testing::TestWithParam<std::tuple<bool, bool>> {
+ protected:
+  bool keepJoinColumn() const { return std::get<0>(GetParam()); }
+  // The second parameter forces the bit fast path off and on, so every test
+  // below runs both ways.
+  decltype(setRuntimeParameterForTest<
+           &RuntimeParameters::enableJoinBitComparison_>(
+      true)) bitComparisonCleanup_ =
+      setRuntimeParameterForTest<&RuntimeParameters::enableJoinBitComparison_>(
+          static_cast<bool>(std::get<1>(GetParam())));
+};
 
 TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
-  bool keepJoinCol = GetParam();
+  bool keepJoinCol = keepJoinColumn();
   auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> <x>. <x> <a> 3.");
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
@@ -389,7 +400,7 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
 // maximal size for materialized index scans. That's why they are run twice with
 // different settings.
 TEST_P(JoinTestParametrized, joinWithColumnAndScan) {
-  bool keepJoinCol = GetParam();
+  bool keepJoinCol = keepJoinColumn();
   auto test = [keepJoinCol](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup = setRuntimeParameterForTest<
@@ -427,7 +438,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScan) {
 }
 
 TEST_P(JoinTestParametrized, joinWithColumnAndScanEmptyInput) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto test = [keepJoinCol](size_t materializationThreshold,
                             bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
@@ -470,7 +481,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanEmptyInput) {
 }
 
 TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto test = [keepJoinCol](size_t materializationThreshold,
                             bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
@@ -524,7 +535,7 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
 }
 
 TEST_P(JoinTestParametrized, joinTwoScans) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto test = [keepJoinCol](size_t materializationThreshold) {
     auto qec = ad_utility::testing::getQec(
         "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
@@ -575,7 +586,7 @@ TEST_P(JoinTestParametrized, joinTwoScans) {
 // https://github.com/ad-freiburg/qlever/issues/1893 and heavily simplified so
 // it can be reproduced in a unit test.
 TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   ad_utility::testing::TestIndexConfig config{
       "<x> <p1> <1> <g1> . <x> <p1> <2> <g1> . <x> <p2> <1> <g2> ."
       " <x> <p2> <2> <g2> ."};
@@ -618,7 +629,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
 TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
   // Default block size is 16 bytes for testing, so the triples are spread
   // across 3 blocks in total.
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto qec = ad_utility::testing::getQec(
       "<x> <p1> <1> . <x> <p1> <2> . <x> <p1> <3> . <x> <p1> <4> ."
       " <x> <p2> <5>");
@@ -666,7 +677,7 @@ TEST(JoinTest, invalidJoinVariable) {
 
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, joinTwoLazyOperationsWithAndWithoutUndefValues) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto performJoin =
       [keepJoinCol](std::vector<IdTable> leftTables,
                     std::vector<IdTable> rightTables, const IdTable& expectedIn,
@@ -758,7 +769,7 @@ TEST_P(JoinTestParametrized, joinTwoLazyOperationsWithAndWithoutUndefValues) {
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized,
        joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto performJoin =
       [keepJoinCol](IdTable leftTable, std::vector<IdTable> rightTables,
                     const IdTable& expectedIn,
@@ -841,7 +852,7 @@ TEST_P(JoinTestParametrized,
 
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, errorInSeparateThreadIsPropagatedCorrectly) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto qec = ad_utility::testing::getQec();
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
@@ -863,7 +874,7 @@ TEST_P(JoinTestParametrized, errorInSeparateThreadIsPropagatedCorrectly) {
 
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   auto qec =
       ad_utility::testing::getQec("<x> <p> <g>. <x2> <p> <h>. <x> <a> <i>.");
   auto cleanup = setRuntimeParameterForTest<
@@ -954,7 +965,7 @@ TEST(JoinTest, clone) {
 
 // _____________________________________________________________________________
 TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
-  auto keepJoinCol = GetParam();
+  auto keepJoinCol = keepJoinColumn();
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   // Not in graph no undef
@@ -1092,4 +1103,6 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
 
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(JoinTestWithAndWithoutKeptJoinColumn,
-                         JoinTestParametrized, ::testing::Values(true, false));
+                         JoinTestParametrized,
+                         ::testing::Combine(::testing::Values(true, false),
+                                            ::testing::Values(true, false)));
