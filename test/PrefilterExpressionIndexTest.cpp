@@ -1,6 +1,12 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures
-//  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Hannes Baumann <baumannh@informatik.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -953,6 +959,56 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
                      false, {b1, b2, b17, b18GapIriAndLiteral});
   makeTestIsDatatype(notExpr(isIri()), {b18GapIriAndLiteral, b27, b28}, false,
                      {b18GapIriAndLiteral, b27, b28});
+}
+
+// Regression test for the bug reported by @hannahbast in the review of PR #3069
+// (https://github.com/ad-freiburg/qlever/pull/3069): When a
+// `FILTER(ql:isIRI(?x))` or `FILTER(ql:isEncodedIri(?x))` is applied to an
+// index scan that is sorted by `?x`, blocks that consist entirely of encoded
+// IRIs (that is, `ValueId`s of datatype `EncodedVal`) must not be pruned.
+// Encoded IRIs are IRIs, so `isIri` has to keep them, and `isEncodedIri`
+// selects exactly these blocks. The bug was that both used a prefilter of the
+// form `?x >
+// <>`, which only covers the `VocabIndex` range and hence incorrectly discarded
+// blocks that contain only `EncodedVal` ids (these sort *after* all vocabulary
+// IRIs).
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
+  // Two `EncodedVal` ids that represent encoded IRIs. Their concrete payload is
+  // irrelevant for the prefilter; only their datatype and order matter.
+  const Id encodedIri1 = Id::makeFromEncodedVal(1);
+  const Id encodedIri2 = Id::makeFromEncodedVal(100);
+  // Blocks in ascending `ValueId` order over the evaluation column (column 2):
+  // numeric < vocabulary IRIs < encoded IRIs.
+  const CompressedBlockMetadata blockInt1 = makeBlock(IntId(0), IntId(5));
+  const CompressedBlockMetadata blockInt2 = makeBlock(IntId(5), IntId(6));
+  const CompressedBlockMetadata blockVocabIri =
+      makeBlock(getVocabId("<x0>"), getVocabId("<x1>"));
+  // A block that consists entirely of encoded IRIs.
+  const CompressedBlockMetadata blockEncodedIri =
+      makeBlock(encodedIri1, encodedIri2);
+  const std::vector<CompressedBlockMetadata> blocks = {
+      blockInt1, blockInt2, blockVocabIri, blockEncodedIri};
+
+  // `isIri` must keep both the regular vocabulary IRI block and the encoded IRI
+  // block. Before the fix, `blockEncodedIri` was incorrectly pruned.
+  EXPECT_EQ(
+      toVec(isIri()->evaluate(lvc, blocks, 2)),
+      (std::vector<CompressedBlockMetadata>{blockVocabIri, blockEncodedIri}));
+
+  // `isEncodedIri` must keep exactly the encoded IRI block. We build the
+  // prefilter via the same path as the query engine (from the SPARQL
+  // expression), which is where the datatype of the prefilter is chosen. Before
+  // the fix, this produced a `> <>` prefilter that returned `blockVocabIri` and
+  // pruned `blockEncodedIri`.
+  auto isEncodedIriSparqlExpr = sparqlExpression::makeIsEncodedIriExpression(
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}));
+  auto prefilterVec =
+      isEncodedIriSparqlExpr->getPrefilterExpressionForMetadata(lvc);
+  ASSERT_EQ(prefilterVec.size(), 1u);
+  const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
+  EXPECT_EQ(toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockEncodedIri}));
 }
 
 // Test InExpression

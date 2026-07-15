@@ -3,6 +3,7 @@
 // 2024 - 2025 Hannes Baumann <baumannh@cs.uni-freiburg.de>, UFR
 // 2026        Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 // 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -223,8 +224,12 @@ class LogicalExpression : public PrefilterExpression {
 
 // Values to differentiate `PrefilterExpression` for the respective `isDatatype`
 // SPARQL expressions. Supported by the following prefilter
-// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral` and `isNumeric`.
-enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
+// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral`, `isNumeric` and
+// `isEncodedIri`. Note: `ENCODED_IRI` is distinct from `IRI` because encoded
+// IRIs (datatype `EncodedVal`) are stored in a separate `ValueId` range that
+// sorts *after* all regular vocabulary IRIs, and only `isEncodedIri` selects
+// exactly that range.
+enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI };
 
 // The specialized `PrefilterExpression` class that actually applies the
 // pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
@@ -367,6 +372,8 @@ using IsLiteralExpression = prefilterExpressions::IsDatatypeExpression<
     prefilterExpressions::IsDatatype::LITERAL>;
 using IsNumericExpression = prefilterExpressions::IsDatatypeExpression<
     prefilterExpressions::IsDatatype::NUMERIC>;
+using IsEncodedIriExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::ENCODED_IRI>;
 
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.

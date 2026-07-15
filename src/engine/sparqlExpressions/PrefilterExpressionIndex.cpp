@@ -3,6 +3,7 @@
 // 2024 - 2025 Hannes Baumann <baumannh@cs.uni-freiburg.de>, UFR
 // 2026        Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 // 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -330,6 +331,8 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
       return "Literal";
     case NUMERIC:
       return "Numeric";
+    case ENCODED_IRI:
+      return "EncodedIri";
     default:
       AD_FAIL();
   }
@@ -682,12 +685,45 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const LocalVocabContext& context, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  // Remark: Ids containing LITERAL values precede IRI related Ids
-  // in order. The smallest possible IRI is represented by "<>", we
-  // use its corresponding ValueId later on as a lower bound.
-  return make<GreaterThanExpression>(
-             LVE::fromStringRepresentation("<>", context))
-      ->evaluateImpl(context, idRange, blockRange, isNegated_);
+  // IRIs are represented in one of two disjoint `ValueId` ranges: regular
+  // vocabulary IRIs (datatype `VocabIndex`/`LocalVocabIndex`) and encoded IRIs
+  // (datatype `EncodedVal`). We therefore have to keep the blocks for *both*
+  // representations.
+  //
+  // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
+  // in order. The smallest possible IRI is represented by "<>", we use its
+  // corresponding ValueId later on as a lower bound.
+  auto vocabIriRanges =
+      make<GreaterThanExpression>(LVE::fromStringRepresentation("<>", context))
+          ->evaluateImpl(context, idRange, blockRange, isNegated_);
+  // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
+  // prefilter above does not cover them and we have to add their datatype range
+  // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
+  // be incorrectly pruned.
+  std::array datatypes{Datatype::EncodedVal};
+  auto encodedIriRanges =
+      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  // For `isNegated_`, both sub-ranges are already complemented, so `!IRI =
+  // !vocabIri && !encodedIri` requires an intersection; otherwise `IRI =
+  // vocabIri || encodedIri` requires a union.
+  if (isNegated_) {
+    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
+        vocabIriRanges, encodedIriRanges);
+  } else {
+    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+        vocabIriRanges, encodedIriRanges);
+  }
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
+    [[maybe_unused]] const LocalVocabContext& context,
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
+  std::array datatypes{Datatype::EncodedVal};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
 //______________________________________________________________________________
@@ -901,6 +937,7 @@ template class IsDatatypeExpression<IsDatatype::IRI>;
 template class IsDatatypeExpression<IsDatatype::BLANK>;
 template class IsDatatypeExpression<IsDatatype::LITERAL>;
 template class IsDatatypeExpression<IsDatatype::NUMERIC>;
+template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
 
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
