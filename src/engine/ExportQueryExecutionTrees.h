@@ -38,12 +38,15 @@ class ExportQueryExecutionTrees {
 
   // The media types QLever can serialize for each SPARQL query form. These are
   // the per-query-form runtime contract.
+  // `qleverJson` is supported for every query form (it is special-cased in
+  // `computeResult` via `computeResultAsQLeverJSON`), so it appears in all
+  // three.
   static constexpr std::array supportedMediaTypesForConstructQueries{
-      turtle, csv, tsv, ntriples};
+      turtle, csv, tsv, ntriples, qleverJson};
   static constexpr std::array supportedMediaTypesForAskQueries{
       qleverJson, sparqlJson, sparqlXml};
   static constexpr std::array supportedMediaTypesForSelectQueries{
-      octetStream, csv, tsv, sparqlXml, sparqlJson};
+      octetStream, csv, tsv, sparqlXml, sparqlJson, qleverJson};
   // The media types the result-serialization templates may be instantiated
   // with.
   static constexpr std::array staticallySupportedMediaTypes{
