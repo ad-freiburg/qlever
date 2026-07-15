@@ -547,6 +547,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-smaller-side", threadsSmall);
+    auto numValidGeomsSmall = sweeper.numElements();
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
@@ -560,17 +561,22 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
         libspatialjoinParse(!smallerIsRight, larger, sweeper, NUM_THREADS,
                             sweeper.getPaddedBoundingBox(boxSmall));
+    auto numValidGeomsTotal = sweeper.numElements();
+    AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
+    auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
 
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-larger-side", threadsLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
                                                   countSmall + countLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
+                                                  numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", droppedLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
-    return countSmall > 0 && countLarge > 0;
+    return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
   LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol, bbLeft};
