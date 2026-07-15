@@ -164,11 +164,11 @@ std::string utf8StringTransform(std::string_view s, F transformation) {
 template <bool useICU>
 std::string utf8ToLower(std::string_view s) {
   if constexpr (useICU) {
-    QLEVER_UNICODE_ONLY(
-        "utf8ToLower",
-        return detail::utf8StringTransform(s, [](auto&&... args) {
-          return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-        }););
+    QLEVER_UNICODE_ONLY("utf8ToLower", {
+      return detail::utf8StringTransform(s, [](auto&&... args) {
+        return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+      });
+    });
   } else {
     return ::ranges::to<std::string>(
         s | ql::views::transform([](unsigned char c) {
@@ -184,11 +184,11 @@ template std::string utf8ToLower<false>(std::string_view);
 template <bool useICU>
 std::string utf8ToUpper(std::string_view s) {
   if constexpr (useICU) {
-    QLEVER_UNICODE_ONLY(
-        "utf8ToUpper",
-        return detail::utf8StringTransform(s, [](auto&&... args) {
-          return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-        }););
+    QLEVER_UNICODE_ONLY("utf8ToUpper", {
+      return detail::utf8StringTransform(s, [](auto&&... args) {
+        return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+      });
+    });
   } else {
     return ::ranges::to<std::string>(
         s | ql::views::transform([](unsigned char c) {
