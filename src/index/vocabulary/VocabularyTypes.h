@@ -113,8 +113,8 @@ struct IndexAndWord {
   std::string_view word_;
 };
 
-// The result type of every vocabulary's `scanAll`: a type-erased input range
-// that yields all words of the vocabulary in order, together with their index.
+// A type-erased input range vocabularies can use for `scanAll()`, that yields
+// all words of the vocabulary in order, together with their index.
 using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 
 namespace ad_utility::vocabulary {
