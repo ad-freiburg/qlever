@@ -23,10 +23,10 @@ using namespace ad_utility::memory_literals;
 
 namespace {
 // Minimal concrete `AsyncBlockSource` for use in factory-based tests.
-struct DummyAsyncBlockSource : qlever::parser::AsyncBlockSource {
+struct DummyAsyncBlockSource : qlever::parser::BlockingBlockSource {
   explicit DummyAsyncBlockSource(boost::asio::any_io_executor exec,
                                  ad_utility::MemorySize blocksize)
-      : AsyncBlockSource{exec, blocksize} {}
+      : BlockingBlockSource{exec, blocksize} {}
 
  protected:
   std::optional<qlever::parser::ByteBlock> getNextBlockImpl() override {
@@ -79,8 +79,7 @@ TEST(InputFileSpecification, MakeAsyncBlockSourceFileBased) {
   InputFileSpecification spec{tmpFile.string(), Filetype::Turtle, std::nullopt};
   auto src = spec.makeAsyncBlockSource(pool.get_executor(), 1024_B);
   EXPECT_NE(src, nullptr);
-  EXPECT_NE(dynamic_cast<qlever::parser::AsyncFileBlockSource*>(src.get()),
-            nullptr);
+  EXPECT_NE(dynamic_cast<qlever::parser::FileBlockSource*>(src.get()), nullptr);
 
   std::filesystem::remove(tmpFile);
 }
