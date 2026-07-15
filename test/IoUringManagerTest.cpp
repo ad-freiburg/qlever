@@ -518,4 +518,60 @@ TYPED_TEST(IoUringManagerTest, fakeHandle) {
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
 }
+
+// Check that the `manager` (as returned by `makeBatchManager`, see the tests
+// below) performs correct reads via the type-erased `BatchManagerBase`
+// interface.
+void expectManagerWorks(ad_utility::BatchManagerBase& manager) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");
+  ReadBatchForTesting batch;
+  batch.add({{4, 4}, {0, 4}});
+  manager.wait(batch.submitTo(manager, fd));
+  EXPECT_THAT(batch.result(), ::testing::ElementsAre("BBBB", "AAAA"));
+}
+
+// With `preferIoUring == false`, `makeBatchManager` must return a
+// `SyncIoPolicy`-backed manager without probing io_uring, and leave the flag
+// `false`.
+TEST(MakeBatchManager, syncBackendWhenIoUringNotPreferred) {
+  bool preferIoUring = false;
+  auto manager = ad_utility::makeBatchManager(preferIoUring);
+  ASSERT_NE(manager, nullptr);
+  EXPECT_FALSE(preferIoUring);
+  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                manager.get()),
+            nullptr);
+  expectManagerWorks(*manager);
+}
+
+// With `preferIoUring == true`, the backend depends on the runtime
+// environment: if io_uring is compiled in and its setup succeeds, an
+// `IoUringPolicy`-backed manager is returned and the flag stays `true`.
+// Otherwise (io_uring not compiled in, or its setup fails at runtime, e.g.
+// blocked by seccomp inside Docker), the flag is set to `false` and a
+// `SyncIoPolicy`-backed manager is returned. Either way, the returned
+// manager must work.
+TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
+  bool preferIoUring = true;
+  auto manager = ad_utility::makeBatchManager(preferIoUring);
+  ASSERT_NE(manager, nullptr);
+#ifdef QLEVER_HAS_IO_URING
+  if (preferIoUring) {
+    EXPECT_NE(
+        dynamic_cast<ad_utility::BatchManager<ad_utility::IoUringPolicy>*>(
+            manager.get()),
+        nullptr);
+  } else {
+    EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                  manager.get()),
+              nullptr);
+  }
+#else
+  EXPECT_FALSE(preferIoUring);
+  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                manager.get()),
+            nullptr);
+#endif
+  expectManagerWorks(*manager);
+}
 }  // namespace
