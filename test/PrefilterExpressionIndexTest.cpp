@@ -1009,6 +1009,22 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
   EXPECT_EQ(toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{blockEncodedIri}));
+
+  // Negated cases. Negated prefilters are easy to get wrong (they combine the
+  // sub-ranges via De Morgan, so a union becomes an intersection), hence we
+  // check them explicitly.
+
+  // `!isIri` must prune *both* IRI blocks: the regular vocabulary IRI block and
+  // the encoded IRI block (encoded IRIs are IRIs, so `!isIri` excludes them
+  // too), keeping only the numeric blocks.
+  EXPECT_EQ(toVec(isIri(true)->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockInt1, blockInt2}));
+
+  // `!isEncodedIri` must prune only the encoded IRI block and keep everything
+  // else, in particular the regular vocabulary IRI block.
+  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockInt1, blockInt2,
+                                                  blockVocabIri}));
 }
 
 // Test InExpression
