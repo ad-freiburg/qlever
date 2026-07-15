@@ -254,6 +254,9 @@ void resolveVocabIndexIds(
     return ids[i].getDatatype() == Datatype::VocabIndex;
   }));
 
+  // NOTE: The batch is deliberately not sorted by vocabulary position: the
+  // io_uring backend reorders the reads anyway, and only the synchronous
+  // fallback could profit from sequential file access.
   auto rawIndices = ::ranges::to_vector(
       positions | ql::views::transform([&ids](size_t i) {
         return static_cast<size_t>(ids[i].getVocabIndex().get());
