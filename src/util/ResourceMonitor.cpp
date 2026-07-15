@@ -179,6 +179,9 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
 void ResourceMonitor::setReadersForTesting(
     resource_monitor::RssReader rssReader,
     resource_monitor::CpuReader cpuReader) {
+  AD_CONTRACT_CHECK(!started_,
+                    "The readers must be swapped before `start` is called, "
+                    "otherwise this would race the sampling thread.");
   rssReader_ = std::move(rssReader);
   cpuReader_ = std::move(cpuReader);
 }

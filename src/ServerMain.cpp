@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
-  uint32_t resourceUsageIntervalS;
+  uint32_t resourceUsageIntervalS = 2;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};

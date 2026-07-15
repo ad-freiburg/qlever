@@ -126,6 +126,20 @@ TEST(ResourceMonitor, StartTwiceThrows) {
 }
 
 // _____________________________________________________________________________
+TEST(ResourceMonitor, SetReadersAfterStartThrows) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  ResourceMonitor monitor;
+  // A long interval so the sampling thread never actually writes a row
+  // during the test.
+  monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
+  // Swapping the readers after `start` would race the sampling thread and
+  // must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      monitor.setReadersForTesting(currentRssBytes, cpuTimeSeconds),
+      ::testing::HasSubstr("before `start`"));
+}
+
+// _____________________________________________________________________________
 TEST(ResourceMonitor, NonPositiveIntervalThrows) {
   for (auto interval :
        {std::chrono::milliseconds{0}, std::chrono::milliseconds{-5}}) {

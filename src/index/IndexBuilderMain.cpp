@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
   bool noResourceUsageLog = false;
-  uint32_t resourceUsageIntervalS;
+  uint32_t resourceUsageIntervalS = 1;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
