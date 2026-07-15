@@ -18,7 +18,7 @@
 #include "util/Serializer/Serializer.h"
 #include "util/Serializer/TripleSerializer.h"
 
-namespace {
+namespace namedResultCacheSerializer::detail {
 // An arbitrary magic byte that is written at the very beginning of a
 // serialized `NamedResultCache`. Used by `readFromSerializer` to give a clear
 // error message when the input is not a serialized `NamedResultCache`.
@@ -29,7 +29,7 @@ constexpr uint8_t magicByte = 0xC3;
 // previously serialized data, s.t. `readFromSerializer` can detect and reject
 // data that was written by an incompatible version of QLever.
 constexpr uint16_t formatVersion = 1;
-}  // namespace
+}  // namespace namedResultCacheSerializer::detail
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
@@ -39,8 +39,8 @@ CPP_template_def(typename Serializer)(
     const {
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
-  serializer << magicByte;
-  serializer << formatVersion;
+  serializer << namedResultCacheSerializer::detail::magicByte;
+  serializer << namedResultCacheSerializer::detail::formatVersion;
 
   auto lock = cache_.wlock();
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
@@ -72,19 +72,19 @@ CPP_template_def(typename Serializer)(
   // `writeToSerializer`.
   uint8_t readMagicByte;
   serializer >> readMagicByte;
-  if (readMagicByte != magicByte) {
+  if (readMagicByte != namedResultCacheSerializer::detail::magicByte) {
     AD_THROW(
         "The given input is not a serialized `NamedResultCache` (the magic "
         "byte does not match)");
   }
   uint16_t readFormatVersion;
   serializer >> readFormatVersion;
-  if (readFormatVersion != formatVersion) {
+  if (readFormatVersion != namedResultCacheSerializer::detail::formatVersion) {
     AD_THROW(absl::StrCat(
         "The serialized `NamedResultCache` has format version ",
         readFormatVersion,
         ", but this version of QLever only supports format version ",
-        formatVersion,
+        namedResultCacheSerializer::detail::formatVersion,
         ". The named result cache was probably written by an incompatible "
         "version of QLever"));
   }
