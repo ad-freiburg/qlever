@@ -93,33 +93,6 @@ class PerTripleFilter {
   }
 };
 
-// Constructs the *full-triple* deduplication key for the instantiation of
-// `triple` at `absoluteRow`: the `ValueId` at each of the three positions
-// (subject, predicate, object), taken from the constant's `dedupId_` or the
-// variable's bound `ValueId` in the row.
-inline DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
-                                          size_t absoluteRow,
-                                          const BatchEvaluationContext& ctx) {
-  DeduplicationKey key;
-  for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-    key[pos] = std::visit(
-        OverloadCallOperator{[](const PrecomputedConstant& c) {
-                               AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
-                               return c.dedupId_;
-                             },
-                             [&ctx, absoluteRow](const PrecomputedVariable& v) {
-                               return ctx.idTable_[absoluteRow][v.columnIndex_];
-                             },
-                             [](const PrecomputedBlankNode&) -> ValueId {
-                               // Blank-node triples bypass deduplication, so
-                               // their key is never built.
-                               AD_FAIL();
-                             }},
-        triple[pos]);
-  }
-  return key;
-}
-
 // Deduplication state for a whole CONSTRUCT clause. In every deduplicating mode
 // there is one filter, shared by all template triples and keyed on the
 // instantiated triple. This is what makes cross-template duplicates collapse
@@ -137,6 +110,36 @@ class ConstructDeduplicationState {
       const QueryExecutionContext& queryExecutionContext)
       : filter_{makeFilter(mode, queryExecutionContext)} {}
 
+  // Constructs the deduplication key for the instantiation of `triple` at
+  // `absoluteRow`: the `ValueId` at each of the three positions (subject,
+  // predicate, object), taken from the constant's `dedupId_` or the variable's
+  // bound `ValueId` in the row. Every id is canonicalized into `dedupVocab_` so
+  // the key never references a foreign (block/template) `LocalVocab` that may
+  // outlive the deduplication filter.
+  DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
+                                     size_t absoluteRow,
+                                     const BatchEvaluationContext& ctx) {
+    DeduplicationKey key;
+    for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
+      key[pos] = canonicalize(
+          std::visit(OverloadCallOperator{
+                         [](const PrecomputedConstant& c) {
+                           AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
+                           return c.dedupId_;
+                         },
+                         [&ctx, absoluteRow](const PrecomputedVariable& v) {
+                           return ctx.idTable_[absoluteRow][v.columnIndex_];
+                         },
+                         [](const PrecomputedBlankNode&) -> ValueId {
+                           // Blank-node triples bypass deduplication, so
+                           // their key is never built.
+                           AD_FAIL();
+                         }},
+                     triple[pos]));
+    }
+    return key;
+  }
+
   // Returns true if the instantiation of template triple `tripleIdx` at
   // `absoluteRow` is new (should be emitted), false if it is a duplicate
   // (skip).
@@ -152,15 +155,20 @@ class ConstructDeduplicationState {
   }
 
   // Inserts a ground triple's full-triple `key` into the shared filter, so that
-  // a later non-ground instantiation of the same triple is suppressed. No-op
-  // for `none` mode.
+  // a later non-ground instantiation of the same triple is suppressed. The key
+  // is canonicalized into `dedupVocab_` first, so it matches the keys built by
+  // `makeFullTripleKey` (otherwise a ground triple with a local-vocab constant
+  // would not suppress its non-ground duplicate). No-op for `none` mode.
   void seedGroundTriple(const DeduplicationKey& key) {
     if (filter_.has_value()) {
-      filter_->insert(key);
+      filter_->insert(canonicalizeKey(key));
     }
   }
 
  private:
+  // owns every local-vocab entry referenced by a stored key
+  LocalVocab dedupVocab_;
+
   // The single shared filter, or `nullopt` for `none` mode (never consulted).
   std::optional<PerTripleFilter> filter_;
 
@@ -171,6 +179,23 @@ class ConstructDeduplicationState {
       return std::nullopt;
     }
     return PerTripleFilter{mode, queryExecutionContext};
+  }
+
+  // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so stored keys never
+  // point into a freed block `LocalVocab`, and equal terms from different
+  // blocks collapse.
+  ValueId canonicalize(ValueId id) {
+    if (id.getDatatype() != Datatype::LocalVocabIndex) return id;  // fast path
+    return ValueId::makeFromLocalVocabIndex(
+        dedupVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
+  }
+
+  // Canonicalize every position of a pre-built key into `dedupVocab_`.
+  DeduplicationKey canonicalizeKey(DeduplicationKey key) {
+    for (ValueId& id : key) {
+      id = canonicalize(id);
+    }
+    return key;
   }
 };
 
