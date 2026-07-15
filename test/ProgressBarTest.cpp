@@ -50,12 +50,12 @@ TEST(ProgressBar, typicalUsage) {
       if (progressBar.update()) {
         ASSERT_LT(k + 1, expectedUpdateRegexes.size());
         ASSERT_THAT(progressBar.getProgressString(),
-                    ::testing::MatchesRegex(expectedUpdateRegexes[k]));
+                    MatchesStdRegex(expectedUpdateRegexes[k]));
         ++k;
       }
     }
     ASSERT_THAT(progressBar.getFinalProgressString(),
-                ::testing::MatchesRegex(expectedUpdateRegexes.back()));
+                MatchesStdRegex(expectedUpdateRegexes.back()));
     AD_EXPECT_THROW_WITH_MESSAGE(
         progressBar.getFinalProgressString(),
         ::testing::ContainsRegex("should only be called once"));
@@ -74,7 +74,7 @@ TEST(ProgressBar, numberOfStepsLessThanBatchSize) {
       "Steps: 30,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
-              ::testing::MatchesRegex(expectedUpdateRegex));
+              MatchesStdRegex(expectedUpdateRegex));
 }
 
 // Test `getTimer` by stopping the timer after 10ms, then sleeping for 10ms
@@ -93,5 +93,5 @@ TEST(ProgressBar, getTimer) {
       "Steps: 30,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
-              ::testing::MatchesRegex(expectedUpdateRegex));
+              MatchesStdRegex(expectedUpdateRegex));
 }

@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <optional>
+#include <regex>
 #include <sstream>
 
 #include "backports/concepts.h"
@@ -176,6 +177,15 @@ MATCHER_P(ParsedAsJson, matcher,
     *result_listener << "is not a JSON object.";
   }
   return false;
+}
+
+// Helper matcher for a full `std::regex` match, to use instead of
+// `::testing::MatchesRegex`, which works differently on non-POSIX platforms.
+// Example: EXPECT_THAT("t42", MatchesStdRegex("t[0-9]+"));
+MATCHER_P(MatchesStdRegex, pattern,
+          absl::StrCat(negation ? "doesn't match" : "matches", " the regex \"",
+                       pattern, "\"")) {
+  return std::regex_match(std::string{arg}, std::regex{pattern});
 }
 
 // Helper matcher that can be used to make assertions about a JSON object's

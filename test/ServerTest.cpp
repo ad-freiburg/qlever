@@ -694,7 +694,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
           "<a> <b> <c>",
           testing::AllOf(
               // Check that the random part of the graph is a V4 UUID.
-              LocationIs(testing::MatchesRegex(
+              LocationIs(MatchesStdRegex(
                   R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
               StatusIs(http::status::created)));
       locations.push_back(location);
@@ -713,7 +713,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
                    {http::field::content_type, "text/turtle"}},
                   "<a> <b> <c>"),
       testing::AllOf(
-          LocationIs(testing::MatchesRegex(
+          LocationIs(MatchesStdRegex(
               R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
           StatusIs(http::status::created)));
 
