@@ -19,6 +19,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -161,12 +162,42 @@ class SequentialReadScenarioForTesting {
   const std::vector<std::string>& expected() const { return expected_; }
 };
 
+#ifdef QLEVER_HAS_IO_URING
+// Return `true` iff io_uring actually works at runtime. Even when compiled
+// in, the `io_uring_setup` syscall can be blocked (for example, by the
+// default seccomp profile of Docker, which also applies to the `RUN` steps
+// of the CI image build that execute this test suite). The result is probed
+// once and cached.
+bool ioUringAvailableAtRuntime() {
+  static const bool available = []() {
+    bool preferIoUring = true;
+    [[maybe_unused]] auto manager = ad_utility::makeBatchManager(preferIoUring);
+    return preferIoUring;
+  }();
+  return available;
+}
+#endif
+
 // Typed test fixture: each `TypeParam` is a `BatchManager` instantiated with a
 // concrete I/O policy. When io_uring is present the tests run against both the
-// `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present,
+// `IoUringPolicy` and the `SyncIoPolicy` backends. If io_uring is not present
+// (at compile time, or blocked at runtime, see `ioUringAvailableAtRuntime`),
 // the tests run against `SyncIoPolicy` only.
 template <typename T>
-class IoUringManagerTest : public ::testing::Test {};
+class IoUringManagerTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+#ifdef QLEVER_HAS_IO_URING
+    if constexpr (std::is_same_v<
+                      T, ad_utility::BatchManager<ad_utility::IoUringPolicy>>) {
+      if (!ioUringAvailableAtRuntime()) {
+        GTEST_SKIP() << "io_uring is compiled in, but not available at "
+                        "runtime (e.g. blocked by seccomp inside Docker)";
+      }
+    }
+#endif
+  }
+};
 
 #ifdef QLEVER_HAS_IO_URING
 using ManagerTypes =
@@ -458,6 +489,10 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
 // the asynchronous io_uring backend, so the test is not part of the typed
 // suite.
 TEST(IoUringManagerDrop, dropRunningManager) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime "
+                    "(e.g. blocked by seccomp inside Docker)";
+  }
   using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
