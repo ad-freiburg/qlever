@@ -6,12 +6,9 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#ifndef _QLEVER_NO_UNICODE
-#include <unicode/unistr.h>
-#endif
 
+#include <charconv>
 #include <ctre-unicode.hpp>
-#include <sstream>
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -31,48 +28,17 @@ constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
 constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
 /// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
-/// into the corresponding UTF-8 string (e.g. "ä").
+/// into the corresponding UTF-8 string (e.g. "ä"). This does not require ICU:
+/// the codepoint is parsed with `std::from_chars` and encoded with
+/// `ad_utility::utf8EncodeCodepoint`.
 std::string hexadecimalCharactersToUtf8(std::string_view hex) {
-#ifndef _QLEVER_NO_UNICODE
-  UChar32 x;
-  std::stringstream sstream;
-  sstream << std::hex << hex;
-  sstream >> x;
-  std::string res;
-  icu::UnicodeString(x).toUTF8String(res);
-  return res;
-#else
-  // Parse the hex string into a codepoint.
   uint32_t codepoint = 0;
-  for (char c : hex) {
-    codepoint <<= 4;
-    if (c >= '0' && c <= '9')
-      codepoint |= (c - '0');
-    else if (c >= 'a' && c <= 'f')
-      codepoint |= (c - 'a' + 10);
-    else if (c >= 'A' && c <= 'F')
-      codepoint |= (c - 'A' + 10);
-  }
-
-  // Encode the codepoint as UTF-8.
+  auto result =
+      std::from_chars(hex.data(), hex.data() + hex.size(), codepoint, 16);
+  AD_CORRECTNESS_CHECK(result.ec == std::errc{});
   std::string res;
-  if (codepoint <= 0x7F) {
-    res += static_cast<char>(codepoint);
-  } else if (codepoint <= 0x7FF) {
-    res += static_cast<char>(0xC0 | (codepoint >> 6));
-    res += static_cast<char>(0x80 | (codepoint & 0x3F));
-  } else if (codepoint <= 0xFFFF) {
-    res += static_cast<char>(0xE0 | (codepoint >> 12));
-    res += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-    res += static_cast<char>(0x80 | (codepoint & 0x3F));
-  } else if (codepoint <= 0x10FFFF) {
-    res += static_cast<char>(0xF0 | (codepoint >> 18));
-    res += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
-    res += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-    res += static_cast<char>(0x80 | (codepoint & 0x3F));
-  }
+  ad_utility::utf8EncodeCodepoint(codepoint, res);
   return res;
-#endif
 }
 
 /**

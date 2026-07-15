@@ -44,6 +44,78 @@ TEST(StringUtils, utf8ToUpper) {
 }
 
 // _____________________________________________________________________________
+// Test the ICU-free (`useICU == false`) implementations of `utf8ToLower` and
+// `utf8ToUpper`. These only fold ASCII characters; all other bytes (including
+// the bytes of multibyte UTF-8 characters) are passed through unchanged.
+TEST(StringUtils, utf8ToLowerUpperNoICU) {
+  // For pure ASCII the result is identical to the ICU-based version.
+  EXPECT_EQ("schindler's list", utf8ToLower<false>("Schindler's List"));
+  EXPECT_EQ("#+-_foo__bar++", utf8ToLower<false>("#+-_foo__Bar++"));
+  EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper<false>("Schindler's List"));
+  EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper<false>("#+-_bImM__baMm++"));
+
+  // Non-ASCII characters are left untouched (no Unicode-aware case folding);
+  // only the ASCII letters are folded.
+  EXPECT_EQ("cafÉ", utf8ToLower<false>("CAFÉ"));
+  EXPECT_EQ("CAFé", utf8ToUpper<false>("café"));
+  EXPECT_EQ("aÔb", utf8ToLower<false>("AÔB"));
+  EXPECT_EQ("AÔB", utf8ToUpper<false>("aÔb"));
+
+  // The `useICU == true` instantiation exists and behaves like the default.
+  EXPECT_EQ(utf8ToLower<true>("Schindler's List"),
+            utf8ToLower("Schindler's List"));
+  EXPECT_EQ(utf8ToUpper<true>("Schindler's List"),
+            utf8ToUpper("Schindler's List"));
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free (`useICU == false`) implementation of `getUTF8Prefix`,
+// which treats every byte as a single codepoint.
+TEST(StringUtils, getUTF8PrefixNoICU) {
+  using ad_utility::getUTF8Prefix;
+  // Pure ASCII: identical to the ICU-based version.
+  {
+    auto [num, prefix] = getUTF8Prefix<false>("Apfelsaft", 3);
+    EXPECT_EQ(num, 3u);
+    EXPECT_EQ(prefix, "Apf");
+  }
+  // "Flöhe" where 'ö' occupies two bytes (0xC3 0xB6).
+  {
+    // The ICU-free version cuts after two bytes ("Fl").
+    auto [num, prefix] = getUTF8Prefix<false>("Flöhe", 2);
+    EXPECT_EQ(num, 2u);
+    EXPECT_EQ(prefix, "Fl");
+    // The ICU-based version counts three codepoints ("Flö", four bytes).
+    auto [numIcu, prefixIcu] = getUTF8Prefix<true>("Flöhe", 3);
+    EXPECT_EQ(numIcu, 3u);
+    EXPECT_EQ(prefixIcu, "Flö");
+  }
+  // Requesting more bytes than available returns the whole string.
+  {
+    auto [num, prefix] = getUTF8Prefix<false>("ab", 100);
+    EXPECT_EQ(num, 2u);
+    EXPECT_EQ(prefix, "ab");
+  }
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free `utf8EncodeCodepoint` for one-, two-, three- and four-byte
+// codepoints as well as the replacement of out-of-range codepoints.
+TEST(StringUtils, utf8EncodeCodepoint) {
+  auto encode = [](uint32_t cp) {
+    std::string out;
+    ad_utility::utf8EncodeCodepoint(cp, out);
+    return out;
+  };
+  EXPECT_EQ(encode(0x41), "A");              // one byte
+  EXPECT_EQ(encode(0x00E9), "é");            // two bytes (U+00E9)
+  EXPECT_EQ(encode(0x2702), "✂");            // three bytes
+  EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
+  // Out-of-range codepoints are replaced by U+FFFD.
+  EXPECT_EQ(encode(0x110000), "�");
+}
+
+// _____________________________________________________________________________
 TEST(StringUtils, getUTF8Substring) {
   // Works normally for strings with only single byte characters.
   ASSERT_EQ("fel", getUTF8Substring("Apfelsaft", 2, 3));

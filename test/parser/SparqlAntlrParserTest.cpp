@@ -66,6 +66,24 @@ TEST(SparqlParser, NumericLiterals) {
   expectNumericLiteralFails("-4.2E550");
 }
 
+// _____________________________________________________________________________
+// Test `ParserAndVisitor::unescapeUnicodeSequences`, which decodes the escape
+// sequences into UTF-8 (this does not depend on ICU).
+TEST(SparqlParser, unescapeUnicodeSequences) {
+  using sparqlParserHelpers::ParserAndVisitor;
+  // Strings without escape sequences are returned unchanged.
+  EXPECT_EQ(ParserAndVisitor::unescapeUnicodeSequences("abc"), "abc");
+
+  // A `\uXXXX` sequence is decoded (é == U+00E9).
+  EXPECT_EQ(ParserAndVisitor::unescapeUnicodeSequences("a\\u00E9b"), "aéb");
+  // A `\UXXXXXXXX` sequence is decoded into a four-byte codepoint.
+  EXPECT_EQ(ParserAndVisitor::unescapeUnicodeSequences("\\U0001F600"),
+            "\U0001F600");
+  // A surrogate pair is combined into a single codepoint.
+  EXPECT_EQ(ParserAndVisitor::unescapeUnicodeSequences("\\uD83D\\uDE00"),
+            "\U0001F600");
+}
+
 TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 

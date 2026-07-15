@@ -219,7 +219,7 @@ find_package(Threads REQUIRED)
 ################################
 option(NO_UNICODE "ignore locale settings and do all string comparisons and functions on ascii values. Disable the dependency to ICU" OFF)
 if (NO_UNICODE)
-  add_compile_definitions(_QLEVER_NO_UNICODE)
+  add_compile_definitions(QLEVER_NO_UNICODE)
 endif()
 
 if (NOT NO_UNICODE)
