@@ -1486,6 +1486,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   EXPECT_THAT(*isNum(),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Numeric\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isEncodedIri(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: EncodedIri\nis negated: false.\n.\n"));
   EXPECT_THAT(*isBlank(true),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Blank\nis negated: true.\n.\n"));
