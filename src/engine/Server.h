@@ -109,6 +109,8 @@ class Server {
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
 
+  // Deregisters callbacks on destruction. Declared after `qlever_` so that it
+  // is destroyed before `qlever_` which the callbacks access.
   std::unique_ptr<ServerMetrics> metrics_;
 
   template <typename T>

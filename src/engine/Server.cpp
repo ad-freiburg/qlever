@@ -68,25 +68,28 @@ Server::Server(
 
   metrics_ = std::make_unique<ServerMetrics>(
       [this]() -> int64_t {
-        auto [ins, del] = this->indexAndViewsSnapshot()
-                              ->index_.deltaTriplesManager()
-                              .getCurrentLocatedTriplesSharedState()
-                              ->counts_.value();
+        auto counts = indexAndViewsSnapshot()
+                          ->index_.deltaTriplesManager()
+                          .getCurrentLocatedTriplesSharedState()
+                          ->counts_;
+        AD_CORRECTNESS_CHECK(counts.has_value());
+        auto [ins, del] = counts.value();
         return ins + del;
       },
       [this]() -> int64_t { return allocator().amountMemoryLeft().getBytes(); },
       [this]() -> int64_t {
         return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
       },
-      config.memoryLimit_.value_or(ad_utility::MemorySize::max()));
+      config.memoryLimit_);
   metrics_->registerCallbacks();
-  // The update actions overwrite each other, so the action from previously
-  // registered actions (here in `Qlever`) also have to be run.
+  // `setOnUpdateAction` overwrites any previously registered `OnUpdateAction`,
+  // so the action registered earlier (here in `Qlever`) has to be re-run
+  // manually.
   // TODO<qup42>: either support multiple callbacks or move responsibility for
   // recording this metric.
   globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
       [this](ad_utility::MemorySize newValue) {
-        // Run code of the overwritten action.
+        // Run code of the overwritten `OnUpdateAction`.
         cache().setMaxSize(newValue);
         // New metric collection code.
         metrics_->memoryCacheLimit_->Record(newValue.getBytes());

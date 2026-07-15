@@ -20,7 +20,7 @@ ServerMetrics::ServerMetrics(
     absl::AnyInvocable<int64_t() const> getDeltaTriples,
     absl::AnyInvocable<int64_t() const> getMemoryLeft,
     absl::AnyInvocable<int64_t() const> getCacheUsed,
-    ad_utility::MemorySize maxMem)
+    std::optional<ad_utility::MemorySize> maxMem)
     : getDeltaTriples_(std::move(getDeltaTriples)),
       getMemoryLeft_(std::move(getMemoryLeft)),
       getCacheUsed_(std::move(getCacheUsed)) {
@@ -69,7 +69,9 @@ ServerMetrics::ServerMetrics(
                  .count();
   startTimeMetric_->Record(now);
   indexLoadMetric_->Record(now);
-  memoryQueryTotal_->Record(maxMem.getBytes());
+  if (maxMem.has_value()) {
+    memoryQueryTotal_->Record(maxMem.value().getBytes());
+  }
 
   // Record 0 once per label so every combination appears from the start.
   ad_utility::metrics::initializeCounter(startedSparqlOperations_.get(),

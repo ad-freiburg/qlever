@@ -19,9 +19,7 @@
 #include "util/MemorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
-// destruction. Must be declared after index_, allocator_, and cache_ so
-// that it is destroyed first and its destructor can safely access those
-// members via the stored callbacks.
+// destruction.
 class ServerMetrics {
  public:
   ~ServerMetrics();
@@ -47,7 +45,7 @@ class ServerMetrics {
   ServerMetrics(absl::AnyInvocable<int64_t() const> getDeltaTriples,
                 absl::AnyInvocable<int64_t() const> getMemoryLeft,
                 absl::AnyInvocable<int64_t() const> getCacheUsed,
-                ad_utility::MemorySize maxMem);
+                std::optional<ad_utility::MemorySize> maxMem);
   void registerCallbacks();
 
  private:
