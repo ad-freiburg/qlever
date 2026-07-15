@@ -369,14 +369,16 @@ namespace detail {
 template <const auto& arr, typename Func, typename Value, std::size_t... Is>
 constexpr decltype(auto) constexprSwitchFromArrayImpl(
     Func&& f, const Value& v, std::index_sequence<Is...>) {
-  return ConstexprSwitch<arr[Is]...>{}(std::forward<Func>(f), v);
+  return ConstexprSwitch<std::get<Is>(arr)...>{}(std::forward<Func>(f), v);
 }
 }  // namespace detail
 
 template <const auto& arr, typename Func, typename Value>
 constexpr decltype(auto) constexprSwitchFromArray(Func&& f, const Value& v) {
   return detail::constexprSwitchFromArrayImpl<arr>(
-      std::forward<Func>(f), v, std::make_index_sequence<arr.size()>{});
+      std::forward<Func>(f), v,
+      std::make_index_sequence<
+          std::tuple_size_v<std::decay_t<decltype(arr)>>>{});
 }
 
 }  // namespace ad_utility

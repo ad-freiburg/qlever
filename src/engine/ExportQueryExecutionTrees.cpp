@@ -462,7 +462,6 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   using enum ad_utility::MediaType;
-  // The mediatypes for which this function template may be instantiated.
   static_assert(ad_utility::contains(staticallySupportedMediaTypes, format));
 
   AD_CONTRACT_CHECK(
