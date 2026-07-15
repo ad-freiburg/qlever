@@ -298,24 +298,19 @@ auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
   return vocabulary_[idx.get()];
 }
 
-// Will be replaced by a more efficient implementation in PR #3056.
+// _____________________________________________________________________________
 template <typename S, typename C, typename I>
 VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
     ql::span<const size_t> indices) const {
-  // Placeholder implementation of the batched vocabulary lookup.
-  using Data = VocabLookupDataCommonBase<std::vector<std::string>>;
-  auto data = std::make_shared<Data>();
-  auto& strings = data->buffer();
-  auto& views = data->views();
-  strings.reserve(indices.size());
-  for (size_t idx : indices) {
-    strings.emplace_back(vocabulary_[idx]);
-  }
-  views.reserve(strings.size());
-  for (const std::string& s : strings) {
-    views.emplace_back(s);
-  }
-  return Data::asResult(std::move(data));
+  AD_CONTRACT_CHECK(!indices.empty());
+  return vocabulary_.lookupBatch(indices);
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabLookupOutput Vocabulary<S, C, I>::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return vocabulary_.lookupBatchesStreamed(std::move(input));
 }
 
 // Explicit template instantiations
