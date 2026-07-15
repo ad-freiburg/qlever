@@ -8,13 +8,28 @@
 #define QLEVER_SRC_ENGINE_NAMEDRESULTCACHESERIALIZER_H
 
 #include <boost/math/tools/roots.hpp>
+#include <cstdint>
 
 #include "engine/NamedResultCache.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Serializer/TripleSerializer.h"
+
+namespace {
+// An arbitrary magic byte that is written at the very beginning of a
+// serialized `NamedResultCache`. Used by `readFromSerializer` to give a clear
+// error message when the input is not a serialized `NamedResultCache`.
+constexpr uint8_t magicByte = 0xC3;
+
+// The version of the (de)serialization format implemented below. Increment
+// this whenever the format changes in a way that is incompatible with
+// previously serialized data, s.t. `readFromSerializer` can detect and reject
+// data that was written by an incompatible version of QLever.
+constexpr uint16_t formatVersion = 1;
+}  // namespace
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
@@ -22,6 +37,11 @@ CPP_template_def(typename Serializer)(
         Serializer>) void NamedResultCache::writeToSerializer(Serializer&
                                                                   serializer)
     const {
+  // Write the magic byte and format version first, s.t. `readFromSerializer`
+  // can detect and reject incompatible or unrelated input.
+  serializer << magicByte;
+  serializer << formatVersion;
+
   auto lock = cache_.wlock();
   std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
   for (const auto& key : lock->getAllNonpinnedKeys()) {
@@ -47,6 +67,27 @@ CPP_template_def(typename Serializer)(
                        const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
+
+  // Read and check the magic byte and format version written by
+  // `writeToSerializer`.
+  uint8_t readMagicByte;
+  serializer >> readMagicByte;
+  if (readMagicByte != magicByte) {
+    AD_THROW(
+        "The given input is not a serialized `NamedResultCache` (the magic "
+        "byte does not match)");
+  }
+  uint16_t readFormatVersion;
+  serializer >> readFormatVersion;
+  if (readFormatVersion != formatVersion) {
+    AD_THROW(absl::StrCat(
+        "The serialized `NamedResultCache` has format version ",
+        readFormatVersion,
+        ", but this version of QLever only supports format version ",
+        formatVersion,
+        ". The named result cache was probably written by an incompatible "
+        "version of QLever"));
+  }
 
   // Deserialize the number of entries.
   size_t numEntries;

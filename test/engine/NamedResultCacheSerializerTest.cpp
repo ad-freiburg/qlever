@@ -9,6 +9,7 @@
 
 #include <filesystem>
 
+#include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/NamedResultCache.h"
@@ -242,6 +243,42 @@ TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
     return cache2;
   }();
   EXPECT_EQ(cache2.numEntries(), 0);
+}
+
+// Test that `readFromSerializer` throws a helpful error message when the
+// magic byte or the format version of the input do not match, instead of
+// silently misinterpreting unrelated or incompatible data.
+TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
+  NamedResultCache cache;
+  ByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  auto data = std::move(writer).data();
+  ASSERT_GE(data.size(), 3u);
+
+  // Corrupt the magic byte, which is the very first byte of the serialized
+  // data.
+  auto dataWithWrongMagicByte = data;
+  dataWithWrongMagicByte[0] = static_cast<char>(~dataWithWrongMagicByte[0]);
+  ByteBufferReadSerializer readerWithWrongMagicByte{
+      std::move(dataWithWrongMagicByte)};
+  NamedResultCache cacheForWrongMagicByte;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      cacheForWrongMagicByte.readFromSerializer(
+          readerWithWrongMagicByte, ad_utility::makeUnlimitedAllocator<Id>(),
+          qec_->getLocalVocabContext()),
+      ::testing::HasSubstr("magic byte"));
+
+  // Corrupt the format version, which directly follows the magic byte.
+  auto dataWithWrongVersion = data;
+  dataWithWrongVersion[1] = static_cast<char>(dataWithWrongVersion[1] + 1);
+  ByteBufferReadSerializer readerWithWrongVersion{
+      std::move(dataWithWrongVersion)};
+  NamedResultCache cacheForWrongVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      cacheForWrongVersion.readFromSerializer(
+          readerWithWrongVersion, ad_utility::makeUnlimitedAllocator<Id>(),
+          qec_->getLocalVocabContext()),
+      ::testing::HasSubstr("format version"));
 }
 
 }  // namespace
