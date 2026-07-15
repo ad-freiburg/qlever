@@ -149,6 +149,11 @@ struct RuntimeParameters {
 
   Bool prefilteredOptionalJoin_{true, "prefiltered-optional-join"};
 
+  // Fast path for the sort-merge `Join` comparing `Id`s via
+  // `compareWithoutLocalVocab` when no join column has UNDEF or local-vocab
+  // values. Off forces the general join.
+  Bool enableJoinBitComparison_{true, "enable-join-bit-comparison"};
+
   // If set, the query planner checks if suitable materialized views are loaded
   // to substitute more expensive query plans.
   Bool enableMaterializedViewQueryRewrite_{

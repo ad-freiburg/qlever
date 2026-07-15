@@ -347,6 +347,74 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   return numOutOfOrder;
 }
 
+// Merge-join two sorted, UNDEF-free, bitwise-comparable `Id` ranges via
+// `ValueId::compareWithoutLocalVocab`, matching `zipperJoinWithUndef` but
+// skipping its datatype-dispatching `compareThreeWay`.
+CPP_template(typename Range1, typename Range2, typename EmitRun,
+             typename CheckCancellation = decltype(noop))(
+    requires ql::ranges::random_access_range<Range1> CPP_and
+        ql::ranges::random_access_range<
+            Range2>) void zipperJoinWithoutUndefOrLocalVocab(const Range1& left,
+                                                             const Range2&
+                                                                 right,
+                                                             const EmitRun&
+                                                                 emitRun,
+                                                             CheckCancellation
+                                                                 checkCancellation =
+                                                                     {}) {
+  const size_t n = ql::ranges::size(left);
+  const size_t m = ql::ranges::size(right);
+  auto l = ql::ranges::begin(left);
+  auto r = ql::ranges::begin(right);
+
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(left));
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(right));
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+      left, [](Id id) { return id.canBeComparedBitwise(); }));
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+      right, [](Id id) { return id.canBeComparedBitwise(); }));
+  // UNDEF is bitwise comparable but needs the general join's UNDEF handling.
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::none_of(left, [](Id id) { return id.isUndefined(); }));
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::none_of(right, [](Id id) { return id.isUndefined(); }));
+
+  constexpr size_t CANCELLATION_STRIDE = size_t{1} << 16;
+  size_t sinceCancellation = 0;
+
+  size_t i = 0;
+  size_t j = 0;
+  while (i < n && j < m) {
+    const size_t rowsBefore = i + j;
+    const Id a = l[i];
+    const Id b = r[j];
+    const auto c = a.compareWithoutLocalVocab(b);
+    if (c < 0) {
+      ++i;
+    } else if (c > 0) {
+      ++j;
+    } else {
+      size_t iEnd = i + 1;
+      while (iEnd < n && l[iEnd].compareWithoutLocalVocab(a) == 0) {
+        ++iEnd;
+      }
+      size_t jEnd = j + 1;
+      while (jEnd < m && r[jEnd].compareWithoutLocalVocab(b) == 0) {
+        ++jEnd;
+      }
+      emitRun(i, iEnd, j, jEnd);
+      i = iEnd;
+      j = jEnd;
+    }
+    // Count rows consumed, not iterations (a duplicate run advances by many).
+    sinceCancellation += (i + j) - rowsBefore;
+    if (sinceCancellation >= CANCELLATION_STRIDE) {
+      checkCancellation();
+      sinceCancellation = 0;
+    }
+  }
+}
+
 /**
  *
  * @brief Perform the galloping join algorithm on a `smaller` and a `larger`

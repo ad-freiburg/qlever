@@ -229,6 +229,17 @@ TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
 
+// The bit fast path (default on) must produce the same results as the general
+// join: run the shared test set with `enable-join-bit-comparison` forced off
+// and on, each checked against the same expected results.
+TEST(JoinTest, bitFastPathMatchesGeneralJoin) {
+  for (bool enabled : {false, true}) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::enableJoinBitComparison_>(enabled);
+    runTestCasesForAllJoinAlgorithms(createJoinTestSet());
+  }
+};
+
 // Several helpers for the test cases below.
 namespace {
 
