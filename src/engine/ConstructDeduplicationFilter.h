@@ -39,11 +39,12 @@ using ad_utility::DeduplicationMode;
 using ad_utility::HashSetWithMemoryLimit;
 using ad_utility::OverloadCallOperator;
 
-// Per-template-triple dedup filter. `BatchWise` mode keeps only the last N
-// unique keys in a bounded LRU cache; `Global` mode keeps every unique key in
-// an unbounded hash set; `None` mode holds no structure at all (it is routed to
-// the non-dedup code path and never deduplicates). The active alternative is
-// chosen once from the mode at construction time.
+// Per-template-triple dedup filter for the deduplicating modes only.
+// `BatchWise` keeps only the last N unique keys in a bounded LRU cache;
+// `Global` keeps every unique key in an unbounded hash set. `None` never
+// reaches this class: it is handled by the caller
+// (`ConstructDeduplicationState` holds no filter for it), so `PerTripleFilter`
+// is only ever constructed for `BatchWise` or `Global`.
 class PerTripleFilter {
  public:
   explicit PerTripleFilter(const DeduplicationMode& mode,
@@ -54,11 +55,6 @@ class PerTripleFilter {
   bool insert(const DeduplicationKey& key) {
     return std::visit(
         OverloadCallOperator{
-            [](NoFilter) -> bool {
-              // `DeduplicationMode::None` mode is routed to the non-dedup code
-              // path, so its filter must never receive a key.
-              AD_FAIL();
-            },
             [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
             [&key](HashSetWithMemoryLimit<DeduplicationKey>& set) {
               return set.insert(key).second;
@@ -67,37 +63,41 @@ class PerTripleFilter {
   }
 
  private:
-  struct NoFilter {};
-  using Filter = std::variant<NoFilter, LruDeduplicationCache,
+  using Filter = std::variant<LruDeduplicationCache,
                               HashSetWithMemoryLimit<DeduplicationKey>>;
 
   Filter filter_;
 
-  // Builds the dedup structure for `mode`: an empty `NoFilter` for `none`, a
-  // bounded LRU cache for `BatchWise` (capacity = batch size), and an unbounded
-  // hash set for `global`.
+  // Builds the dedup structure for `mode`: a bounded LRU cache for `BatchWise`
+  // (capacity = batch size) and an unbounded hash set for `Global`. `None` is a
+  // precondition violation here; the caller must not construct a filter for it.
   static Filter makeFilter(const DeduplicationMode& mode,
                            const QueryExecutionContext& queryExecutionContext) {
-    return std::visit(
-        OverloadCallOperator{
-            [](const DeduplicationMode::None&) -> Filter { return NoFilter{}; },
-            [&queryExecutionContext](
-                const DeduplicationMode::Global&) -> Filter {
-              return HashSetWithMemoryLimit<DeduplicationKey>{
-                  queryExecutionContext.getAllocator()};
-            },
-            [](const DeduplicationMode::BatchWise& bw) -> Filter {
-              return LruDeduplicationCache{bw.batchSize_};
-            }},
-        mode.value_);
+    return std::visit(OverloadCallOperator{
+                          [](const DeduplicationMode::None&) -> Filter {
+                            // `None` is handled by the caller (no filter is
+                            // created), so it must never reach
+                            // `PerTripleFilter`.
+                            AD_FAIL();
+                          },
+                          [&queryExecutionContext](
+                              const DeduplicationMode::Global&) -> Filter {
+                            return HashSetWithMemoryLimit<DeduplicationKey>{
+                                queryExecutionContext.getAllocator()};
+                          },
+                          [](const DeduplicationMode::BatchWise& bw) -> Filter {
+                            return LruDeduplicationCache{bw.batchSize_};
+                          }},
+                      mode.value_);
   }
 };
 
 // Deduplication state for a whole CONSTRUCT clause. In every deduplicating mode
 // there is one filter, shared by all template triples and keyed on the
-// instantiated triple. This is what makes cross-template duplicates collapse
-// (the same output triple produced by two different template triples is emitted
-// once). The modes differ only in the backing structure of that single filter:
+// instantiated triple. This is what makes cross-template-triple duplicates
+// collapse (the same output triple produced by two different template triples
+// is emitted once). The modes differ only in the backing structure of that
+// single filter:
 // - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
 // - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
 // approximation that only remembers the most recent keys).
