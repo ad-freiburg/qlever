@@ -42,9 +42,7 @@ using ad_utility::OverloadCallOperator;
 // Per-template-triple dedup filter for the deduplicating modes only.
 // `BatchWise` keeps only the last N unique keys in a bounded LRU cache;
 // `Global` keeps every unique key in an unbounded hash set. `None` never
-// reaches this class: it is handled by the caller
-// (`ConstructDeduplicationState` holds no filter for it), so `PerTripleFilter`
-// is only ever constructed for `BatchWise` or `Global`.
+// reaches this class: it is handled by the caller.
 class PerTripleFilter {
  public:
   explicit PerTripleFilter(const DeduplicationMode& mode,
@@ -73,6 +71,8 @@ class PerTripleFilter {
   // precondition violation here; the caller must not construct a filter for it.
   static Filter makeFilter(const DeduplicationMode& mode,
                            const QueryExecutionContext& queryExecutionContext) {
+    AD_CONTRACT_CHECK(
+        std::holds_alternative<DeduplicationMode::None>(mode.value_));
     return std::visit(OverloadCallOperator{
                           [](const DeduplicationMode::None&) -> Filter {
                             // `None` is handled by the caller (no filter is
