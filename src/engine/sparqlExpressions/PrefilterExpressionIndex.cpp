@@ -259,6 +259,21 @@ BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
                                           const BlockMetadataRanges& r2) {
   return mergeRelevantBlockItRanges<true>(r1, r2);
 }
+
+// Combine `r1` and `r2`, which represent a semantic *disjunction* (`r1 || r2`)
+// of two sub-prefilters that have both already been evaluated with the same
+// `isNegated` flag. Without negation this is simply the union. Under negation,
+// De Morgan's law turns the disjunction into a conjunction of the (already
+// complemented) operands (`!(A || B) == !A && !B`), so the intersection is
+// returned instead. This is used by prefilters that keep the blocks of a
+// disjunction of datatype/value ranges, e.g. `isIri` (vocabulary IRIs *or*
+// encoded IRIs) and `isLiteral` (inlined *or* non-inlined literals).
+static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
+    const BlockMetadataRanges& r1, const BlockMetadataRanges& r2,
+    bool isNegated) {
+  return isNegated ? getIntersectionOfBlockRanges(r1, r2)
+                   : getUnionOfBlockRanges(r1, r2);
+}
 }  // namespace logicalOps
 }  // namespace detail
 
@@ -703,16 +718,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   std::array datatypes{Datatype::EncodedVal};
   auto encodedIriRanges =
       getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
-  // For `isNegated_`, both sub-ranges are already complemented, so `!IRI =
-  // !vocabIri && !encodedIri` requires an intersection; otherwise `IRI =
-  // vocabIri || encodedIri` requires a union.
-  if (isNegated_) {
-    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        vocabIriRanges, encodedIriRanges);
-  } else {
-    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        vocabIriRanges, encodedIriRanges);
-  }
+  // `IRI = vocabIri || encodedIri` (an intersection under negation, see the
+  // helper for details).
+  return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
+      vocabIriRanges, encodedIriRanges, isNegated_);
 }
 
 //______________________________________________________________________________
@@ -743,13 +752,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
       make<LessThanExpression>(LVE::fromStringRepresentation("<>", context))
           ->evaluateImpl(context, idRange, blockRange, isNegated_);
 
-  if (isNegated_) {
-    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        inlinedRanges, nonInlinedRanges);
-  } else {
-    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        inlinedRanges, nonInlinedRanges);
-  }
+  // `LITERAL = inlined || nonInlined` (an intersection under negation, see the
+  // helper for details).
+  return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
+      inlinedRanges, nonInlinedRanges, isNegated_);
 }
 
 // SECTION IS-IN-EXPRESSION (and NOT-IS-IN-EXPRESSION)

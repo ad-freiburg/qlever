@@ -225,10 +225,9 @@ class LogicalExpression : public PrefilterExpression {
 // Values to differentiate `PrefilterExpression` for the respective `isDatatype`
 // SPARQL expressions. Supported by the following prefilter
 // `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral`, `isNumeric` and
-// `isEncodedIri`. Note: `ENCODED_IRI` is distinct from `IRI` because encoded
-// IRIs (datatype `EncodedVal`) are stored in a separate `ValueId` range that
-// sorts *after* all regular vocabulary IRIs, and only `isEncodedIri` selects
-// exactly that range.
+// `isEncodedIri`. Note: `IRI` includes "ordinary" (VocabIndex, LocalVocabIndex)
+// IRIs, as well as ID-encoded IRIs. `ENCODED_IRI` only includes the ID-encoded
+// IRIs.
 enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI };
 
 // The specialized `PrefilterExpression` class that actually applies the
