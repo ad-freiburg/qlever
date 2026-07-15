@@ -105,10 +105,19 @@ class PerTripleFilter {
 // entered.
 class ConstructDeduplicationState {
  public:
+  // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`: once
+  // the strings added to it exceed this, all dedup state is dropped (which
+  // makes deduplication approximate). Defaults to a quarter of the query's
+  // currently available memory. Tests may pass a tiny value to force a reset.
   ConstructDeduplicationState(
       const DeduplicationMode& mode,
-      const QueryExecutionContext& queryExecutionContext)
-      : filter_{makeFilter(mode, queryExecutionContext)} {}
+      const QueryExecutionContext& queryExecutionContext,
+      std::optional<ad_utility::MemorySize> maxDedupVocabSize = std::nullopt)
+      : mode_{mode},
+        queryExecutionContext_{queryExecutionContext},
+        maxDedupVocabBytes_{computeMaxDedupVocabBytes(queryExecutionContext,
+                                                      maxDedupVocabSize)},
+        filter_{makeFilter(mode, queryExecutionContext)} {}
 
   // Constructs the deduplication key for the instantiation of `triple` at
   // `absoluteRow`: the `ValueId` at each of the three positions (subject,
@@ -150,6 +159,7 @@ class ConstructDeduplicationState {
     if (tmpl.tripleContainsBlankNode_[tripleIdx]) {
       return true;
     }
+    resetIfVocabTooLarge();
     return filter_->insert(makeFullTripleKey(
         tmpl.preprocessedTriples_[tripleIdx], absoluteRow, ctx));
   }
@@ -166,11 +176,32 @@ class ConstructDeduplicationState {
   }
 
  private:
+  // Stored by value (not reference): callers may pass a temporary `mode`, and
+  // `mode_` is read later in `resetIfVocabTooLarge`.
+  const DeduplicationMode mode_;
+  const QueryExecutionContext& queryExecutionContext_;
+  // Approximate total byte size of the strings currently held in `dedupVocab_`.
+  size_t dedupVocabBytes_ = 0;
+  // When `dedupVocabBytes_` reaches this, all dedup state is dropped (see
+  // `resetIfVocabTooLarge`) to bound the vocab's memory. Set from the query's
+  // available memory at construction (see the constructor).
+  const size_t maxDedupVocabBytes_;
+
   // owns every local-vocab entry referenced by a stored key
   LocalVocab dedupVocab_;
 
   // The single shared filter, or `nullopt` for `none` mode (never consulted).
   std::optional<PerTripleFilter> filter_;
+
+  // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
+  // given, else a quarter of the query's currently available memory.
+  static size_t computeMaxDedupVocabBytes(
+      const QueryExecutionContext& queryExecutionContext,
+      std::optional<ad_utility::MemorySize> maxDedupVocabSize) {
+    return maxDedupVocabSize
+        .value_or(queryExecutionContext.getAllocator().amountMemoryLeft() / 4)
+        .getBytes();
+  }
 
   static std::optional<PerTripleFilter> makeFilter(
       const DeduplicationMode& mode,
@@ -186,8 +217,26 @@ class ConstructDeduplicationState {
   // blocks collapse.
   ValueId canonicalize(ValueId id) {
     if (id.getDatatype() != Datatype::LocalVocabIndex) return id;  // fast path
-    return ValueId::makeFromLocalVocabIndex(
-        dedupVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
+    const auto& entry = *id.getLocalVocabIndex();
+    size_t sizeBefore = dedupVocab_.size();
+    auto index = dedupVocab_.getIndexAndAddIfNotContained(entry);
+    if (dedupVocab_.size() != sizeBefore) {  // a new string was actually added
+      dedupVocabBytes_ += entry.toStringRepresentation().size();
+    }
+    return ValueId::makeFromLocalVocabIndex(index);
+  }
+
+  // Bound `dedupVocab_`s memory: once the accumulated string bytes reach the
+  // threshold, drop all dedup state and start fresh. The filter's keys
+  // reference `dedupVocab_`, so both are reset together.
+  //
+  // NOTE: This makes deduplication approximate (triples seen before a reset
+  // may be emitted again).
+  void resetIfVocabTooLarge() {
+    if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
+    filter_ = makeFilter(mode_, queryExecutionContext_);
+    dedupVocab_ = LocalVocab();
+    dedupVocabBytes_ = 0;
   }
 
   // Canonicalize every position of a pre-built key into `dedupVocab_`.
