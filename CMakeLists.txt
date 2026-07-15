@@ -217,6 +217,17 @@ find_package(Threads REQUIRED)
 #################################
 # ICU (for proper collation
 ################################
+# The `NO_UNICODE` option selects the ICU-free (bytewise) `LocaleManager` and
+# comparator variants at compile time by defining the `QLEVER_NO_UNICODE` macro
+# (see `StringSortComparator.h`). Note: as a preparatory step, ICU is still
+# required and linked unconditionally even when `NO_UNICODE` is set (the ICU-free
+# variants still reuse a few ICU-based helpers for now), so that both code paths
+# remain buildable and testable.
+option(NO_UNICODE "Select the ICU-free (bytewise) `LocaleManager` and comparator variants by defining the `QLEVER_NO_UNICODE` macro. In this preparatory step ICU is still required and linked; only the compile-time selection of the comparator types is switched." OFF)
+if (NO_UNICODE)
+  add_compile_definitions(QLEVER_NO_UNICODE)
+endif()
+
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
 
 ###################################

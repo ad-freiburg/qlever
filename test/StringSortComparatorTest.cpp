@@ -329,3 +329,95 @@ TEST(LocaleManager, PrefixSortKey) {
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
 }
+
+// The following tests exercise the ICU-free (bytewise) variants of the locale
+// manager and the comparators. They are always compiled and run, regardless of
+// whether QLever is built with ICU, so that the ICU-free code paths are
+// covered.
+
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, LocaleManager) {
+  using L = LocaleManagerNoICU::Level;
+  LocaleManagerNoICU loc;
+
+  // Comparison is bytewise, so (unlike ICU) case and punctuation matter and the
+  // collation level is irrelevant.
+  for (L level : {L::PRIMARY, L::SECONDARY, L::TERTIARY, L::QUARTERNARY,
+                  L::IDENTICAL, L::TOTAL}) {
+    // 'A' (65) < 'a' (97).
+    EXPECT_LT(loc.compare("ALPHA", "alpha", level), 0);
+    EXPECT_GT(loc.compare("alpha", "ALPHA", level), 0);
+    EXPECT_EQ(loc.compare("alpha", "alpha", level), 0);
+    EXPECT_LT(loc.compare("alpha", "beta", level), 0);
+  }
+
+  // As a preparatory step the lowercasing still reuses the ICU-based
+  // `ad_utility::utf8ToLower`.
+  EXPECT_EQ("schindler's list", loc.getLowercaseUtf8("Schindler's List"));
+  EXPECT_EQ("café", loc.getLowercaseUtf8("CAFé"));
+
+  // Normalization is a no-op.
+  std::string composed = "\xc3\xa9";     // é as a single codepoint
+  std::string decomposed = "e\xcc\x81";  // é as e + combining accent
+  EXPECT_EQ(loc.normalizeUtf8(composed), composed);
+  EXPECT_EQ(loc.normalizeUtf8(decomposed), decomposed);
+
+  // The sort key is just the bytes of the input.
+  auto sortKey = loc.getSortKey("abc", L::PRIMARY);
+  EXPECT_EQ(sortKey.get().size(), 3u);
+  EXPECT_EQ(loc.compare(loc.getSortKey("abc", L::PRIMARY),
+                        loc.getSortKey("abd", L::PRIMARY)),  // codespell-ignore
+            -1);
+}
+
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, SimpleStringComparator) {
+  SimpleStringComparatorNoICU comp("en", "US", true);
+
+  // Bytewise ordering: uppercase letters come before lowercase ones.
+  EXPECT_TRUE(comp("ALPHA", "alpha"));
+  EXPECT_FALSE(comp("alpha", "ALPHA"));
+  EXPECT_TRUE(comp("alpha", "beta"));
+  EXPECT_FALSE(comp("beta", "alpha"));
+
+  // Something is not smaller than itself.
+  EXPECT_FALSE(comp("beta", "beta"));
+
+  // Consistency with the `SortKey`-based overload on the PRIMARY level.
+  using L = SimpleStringComparatorNoICU::Level;
+  auto sortKeyBeta = comp.getLocaleManager().getSortKey("beta", L::PRIMARY);
+  EXPECT_TRUE(comp("alpha", sortKeyBeta, L::PRIMARY));
+  EXPECT_FALSE(comp("gamma", sortKeyBeta, L::PRIMARY));
+}
+
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, TripleComponentComparator) {
+  TripleComponentComparatorNoICU comp("en", "US", false);
+  using L = TripleComponentComparatorNoICU::Level;
+
+  // The inner value is compared bytewise, so casing DOES affect the order
+  // (in contrast to the ICU-based comparator).
+  EXPECT_TRUE(comp("\"ALPHA\"", "\"beta\""));   // 'A' (65) < 'b' (98)
+  EXPECT_TRUE(comp("\"ALPHA\"", "\"alpha\""));  // 'A' (65) < 'a' (97)
+  EXPECT_FALSE(comp("\"alpha\"", "\"ALPHA\""));
+  EXPECT_TRUE(comp("\"alpha\"", "\"beta\""));
+
+  // Something is not smaller than itself.
+  EXPECT_FALSE(comp("\"beta\"", "\"beta\""));
+
+  // The datatype (first character) is compared first.
+  EXPECT_TRUE(comp("\"zzz\"", "<aaa>"));  // '"' (34) < '<' (60)
+
+  // On the TOTAL level the language tag is a tiebreaker.
+  EXPECT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en", L::TOTAL));
+  EXPECT_FALSE(comp("\"Hannibal\"@en", "\"Hannibal\"@af", L::TOTAL));
+
+  // `isLessInTotalWithExternalFlag` breaks ties on equal values by the flag.
+  EXPECT_TRUE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", false));
+  EXPECT_FALSE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", true));
+
+  // `normalizeUtf8` is a no-op in the ICU-free variant.
+  EXPECT_EQ(comp.normalizeUtf8("\xc3\xa9"), "\xc3\xa9");
+}
