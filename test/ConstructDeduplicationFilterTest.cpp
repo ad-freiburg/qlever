@@ -48,7 +48,6 @@ PreprocessedConstructTemplate singleTripleTemplate() {
   return tmpl;
 }
 
-// _____________________________________________________________________________
 // Non-local-vocab ids (here: an encoded integer) pass through unchanged; the
 // canonicalization fast path leaves them untouched.
 TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
@@ -63,8 +62,7 @@ TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
   EXPECT_EQ(key, (DeduplicationKey{id, id, id}));
 }
 
-// _____________________________________________________________________________
-// The same literal reached via two *different* `LocalVocab`s must produce the
+// The same literal reached via two different `LocalVocab`s must produce the
 // same key, because both are reseated into the state's own `dedupVocab_`.
 TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
   auto qec = getQec("<s> <p> <o>");
@@ -81,7 +79,6 @@ TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
             state.makeFullTripleKey(kVarTriple, 0, c2));
 }
 
-// _____________________________________________________________________________
 // A key built from a `LocalVocab` that is then destroyed must not dangle: the
 // reseated ids live in `dedupVocab_`, which outlives the source. Run under ASan
 // to turn a lifetime regression into a detected use-after-free.
@@ -100,12 +97,12 @@ TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
   LocalVocab fresh;
   auto table = singleIdTable(lvId(fresh, "x", *qec));
   BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
-  // Comparing/hashing `key1` here dereferences its ids; it must not UAF, and
-  // it must still equal the equal-string key from a fresh vocab.
+  // Comparing/hashing `key1` here dereferences its ids; so it must not read
+  // freed memory, and `key1` must still equal the equal-string key from a fresh
+  // vocab.
   EXPECT_EQ(key1, state.makeFullTripleKey(kVarTriple, 0, ctx));
 }
 
-// _____________________________________________________________________________
 // `global` dedup collapses the same local-vocab triple across two result
 // blocks (each with its own, separately-destroyed `LocalVocab`).
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
@@ -126,7 +123,6 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // duplicate across blocks
 }
 
-// _____________________________________________________________________________
 // Same as above, but through the `BatchWise` (LRU) filter path.
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   auto qec = getQec("<s> <p> <o>");
@@ -144,7 +140,6 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));
 }
 
-// _____________________________________________________________________________
 // A ground triple seeded with a local-vocab constant suppresses a later
 // non-ground instantiation of the same triple. This exercises `canonicalizeKey`
 // (the seed and the non-ground key must agree after reseating).
