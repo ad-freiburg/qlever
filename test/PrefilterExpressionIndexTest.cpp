@@ -1,6 +1,12 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures
-//  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Hannes Baumann <baumannh@informatik.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -955,6 +961,96 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
                      {b18GapIriAndLiteral, b27, b28});
 }
 
+// Regression test for the bug reported by @hannahbast in the review of PR #3069
+// (https://github.com/ad-freiburg/qlever/pull/3069): When a
+// `FILTER(ql:isIRI(?x))` or `FILTER(ql:isEncodedIri(?x))` is applied to an
+// index scan that is sorted by `?x`, blocks that consist entirely of encoded
+// IRIs (that is, `ValueId`s of datatype `EncodedVal`) must not be pruned.
+// Encoded IRIs are IRIs, so `isIri` has to keep them, and `isEncodedIri`
+// selects exactly these blocks. The bug was that both used a prefilter of the
+// form `?x >
+// <>`, which only covers the `VocabIndex` range and hence incorrectly discarded
+// blocks that contain only `EncodedVal` ids (these sort *after* all vocabulary
+// IRIs).
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
+  // Two `EncodedVal` ids that represent encoded IRIs. Their concrete payload is
+  // irrelevant for the prefilter; only their datatype and order matter.
+  const Id encodedIri1 = Id::makeFromEncodedVal(1);
+  const Id encodedIri2 = Id::makeFromEncodedVal(100);
+  const Id vocabIri0 = getVocabId("<x0>");
+  const Id vocabIri1 = getVocabId("<x1>");
+  // Blocks in ascending `ValueId` order over the evaluation column (column 2):
+  // numeric < vocabulary IRIs < encoded IRIs. In addition to the "pure" blocks
+  // (whose two bounding `ValueId`s have the same datatype), we also add
+  // "mixed" blocks whose bounding `ValueId`s have different datatypes. A mixed
+  // block might "hide" a matching value of any datatype in between its bounds,
+  // so it is conservatively kept by *every* prefilter; in particular it is part
+  // of the result of a prefilter as well as of its negation.
+  const CompressedBlockMetadata blockInt = makeBlock(IntId(0), IntId(5));
+  // A mixed block spanning a numeric literal and a regular vocabulary IRI.
+  const CompressedBlockMetadata blockIntAndVocabIri =
+      makeBlock(IntId(5), vocabIri0);
+  // A block that consists entirely of regular vocabulary IRIs.
+  const CompressedBlockMetadata blockVocabIri = makeBlock(vocabIri0, vocabIri1);
+  // A mixed block spanning a regular vocabulary IRI and an encoded IRI.
+  const CompressedBlockMetadata blockVocabAndEncodedIri =
+      makeBlock(vocabIri1, encodedIri1);
+  // A block that consists entirely of encoded IRIs.
+  const CompressedBlockMetadata blockEncodedIri =
+      makeBlock(encodedIri1, encodedIri2);
+  const std::vector<CompressedBlockMetadata> blocks = {
+      blockInt, blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
+      blockEncodedIri};
+
+  // `isIri` must keep the regular vocabulary IRI block and the encoded IRI
+  // block (before the fix, `blockEncodedIri` was incorrectly pruned), as well
+  // as both mixed blocks.
+  EXPECT_EQ(toVec(isIri()->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{
+                blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
+                blockEncodedIri}));
+
+  // `isEncodedIri` must keep the encoded IRI block and the two mixed blocks,
+  // but prune the pure numeric and pure vocabulary IRI blocks. We build the
+  // prefilter via the same path as the query engine (from the SPARQL
+  // expression), which is where the datatype of the prefilter is chosen. Before
+  // the fix, this produced a `> <>` prefilter that kept `blockVocabIri` and
+  // pruned `blockEncodedIri`.
+  auto isEncodedIriSparqlExpr = sparqlExpression::makeIsEncodedIriExpression(
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}));
+  auto prefilterVec =
+      isEncodedIriSparqlExpr->getPrefilterExpressionForMetadata(lvc);
+  ASSERT_EQ(prefilterVec.size(), 1u);
+  const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
+  EXPECT_EQ(
+      toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
+      (std::vector<CompressedBlockMetadata>{
+          blockIntAndVocabIri, blockVocabAndEncodedIri, blockEncodedIri}));
+
+  // Negated cases. Negated prefilters are easy to get wrong (they combine the
+  // sub-ranges via De Morgan, so a union becomes an intersection), hence we
+  // check them explicitly.
+
+  // `!isIri` must prune *both* pure IRI blocks: the regular vocabulary IRI
+  // block and the encoded IRI block (encoded IRIs are IRIs, so `!isIri`
+  // excludes them too). It keeps the numeric block and, as always, the mixed
+  // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
+  // part of the result of both `isIri` and `!isIri`.
+  EXPECT_EQ(toVec(isIri(true)->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
+                                                  blockVocabAndEncodedIri}));
+
+  // `!isEncodedIri` must prune only the pure encoded IRI block and keep
+  // everything else, in particular the pure vocabulary IRI block and the mixed
+  // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
+  // part of the result of both `isEncodedIri` and `!isEncodedIri`.
+  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
+                                                  blockVocabIri,
+                                                  blockVocabAndEncodedIri}));
+}
+
 // Test InExpression
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
@@ -1430,6 +1526,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   EXPECT_THAT(*isNum(),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Numeric\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isEncodedIri(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: EncodedIri\nis negated: false.\n.\n"));
   EXPECT_THAT(*isBlank(true),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Blank\nis negated: true.\n.\n"));

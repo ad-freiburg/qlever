@@ -1,6 +1,12 @@
-//  Copyright 2024 - 2025, University of Freiburg,
-//                  Chair of Algorithms and Data Structures
-//  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Hannes Baumann <baumannh@informatik.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
 #define QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
@@ -89,6 +95,8 @@ constexpr inline auto isLit = isDtypeExpr<IsLiteralExpression>;
 constexpr inline auto isNum = isDtypeExpr<IsNumericExpression>;
 // IS BLANK
 constexpr inline auto isBlank = isDtypeExpr<IsBlankExpression>;
+// IS ENCODED IRI
+constexpr inline auto isEncodedIri = isDtypeExpr<IsEncodedIriExpression>;
 // AND (`&&`)
 constexpr inline auto andExpr = logExpr<AndExpression>;
 // OR (`||`)

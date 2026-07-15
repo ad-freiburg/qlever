@@ -683,6 +683,8 @@ template struct TypeErasedValueGetter<LiteralValueGetterWithoutStrFunction>;
 template struct TypeErasedValueGetter<
     IsValueIdValueGetter<Datatype::BlankNodeIndex>>;
 template struct TypeErasedValueGetter<IsValueIdValueGetter<Datatype::GeoPoint>>;
+template struct TypeErasedValueGetter<
+    IsValueIdValueGetter<Datatype::EncodedVal>>;
 template struct TypeErasedValueGetter<IsNumericValueGetter>;
 template struct TypeErasedValueGetter<IsIriValueGetter>;
 template struct TypeErasedValueGetter<IsLiteralValueGetter>;
