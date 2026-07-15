@@ -491,22 +491,23 @@ TEST(ConcurrentCache,
       ad_utility::Exception);
 }
 
-// _____________________________________________________________________________
 // Regression test for a race in `moveFromInProgressToCache`. A fresh
 // computation could end up inserting a key that a concurrent thread had already
 // inserted into the cache, which used to crash with "Trying to insert a cache
 // key which was already present". The deterministic interleaving is:
-//   1. Thread `A` computes the key, but its result is unsuitable for caching,
-//      so it deregisters the key from `_inProgress` and signals
-//      `finish(nullptr)` without inserting anything into the cache.
-//   2. Thread `W` was waiting for `A`. Because `A` finished with a null result
-//      (rather than throwing, which would make `W` throw as well), `W` falls
-//      back to computing the result itself and inserts it into the cache via
-//      the guarded `tryInsertIfNotPresent`.
-//   3. Thread `C` starts a fresh computation of the same key in the window
-//      after `A` deregistered the key but before `W` inserted it. `C`
-//      becomes the "must compute" thread and eventually calls
-//      `moveFromInProgressToCache` with the key already present in the cache.
+//
+// 1. Thread `A` computes the key, but its result is unsuitable for caching, so
+//    it deregisters the key from `_inProgress` and signals
+//    `finish(nullptr)` without inserting anything into the cache.
+// 2. Thread `W` was waiting for `A`. Because `A` finished with a null result
+//    (rather than throwing, which would make `W` throw as well), `W` falls
+//    back to computing the result itself and inserts it into the cache via
+//    the guarded `tryInsertIfNotPresent`.
+// 3. Thread `C` starts a fresh computation of the same key in the window
+//    after `A` deregistered the key but before `W` inserted it. `C`
+//    becomes the "must compute" thread and eventually calls
+//    `moveFromInProgressToCache` with the key already present in the cache.
+//
 // Before the fix, step 3 crashed; now the insert is skipped.
 TEST(ConcurrentCache, moveFromInProgressToCacheSkipsAlreadyPresentKey) {
   SimpleConcurrentLruCache cache{};
