@@ -548,4 +548,6 @@ addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest util)
 
+addLinkAndDiscoverTest(ResourceMonitorTest util)
+
 addLinkAndDiscoverTest(MetricsTest metrics)

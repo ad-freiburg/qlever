@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -21,6 +22,7 @@
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
 #include "util/metrics/Metrics.h"
 
 using std::size_t;
@@ -54,6 +56,8 @@ int main(int argc, char** argv) {
   bool metricsEnabled = false;
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
+  bool noResourceUsageLog = false;
+  uint32_t resourceUsageIntervalS = 2;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -114,6 +118,13 @@ int main(int argc, char** argv) {
       "Disable the per-query metrics log. By default a JSONL log of query "
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS and "
+      "CPU usage of the server is written next to the index files "
+      "(`<index-basename>.server.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(2),
+      "The sampling interval of the resource-usage log in seconds.");
   add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
@@ -244,6 +255,13 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
+    // Samples RSS and CPU usage, starting before the index is loaded.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Append,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
                   noAccessCheck, std::move(metricsReader));
@@ -254,8 +272,8 @@ int main(int argc, char** argv) {
     }
     server.run();
   } catch (const std::exception& e) {
-    // Reached if opening the metrics log fails; server.run() otherwise handles
-    // its own exceptions.
+    // Reached if opening the metrics log fails; server.run() otherwise
+    // handles its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }
