@@ -978,28 +978,44 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // irrelevant for the prefilter; only their datatype and order matter.
   const Id encodedIri1 = Id::makeFromEncodedVal(1);
   const Id encodedIri2 = Id::makeFromEncodedVal(100);
+  const Id vocabIri0 = getVocabId("<x0>");
+  const Id vocabIri1 = getVocabId("<x1>");
   // Blocks in ascending `ValueId` order over the evaluation column (column 2):
-  // numeric < vocabulary IRIs < encoded IRIs.
-  const CompressedBlockMetadata blockInt1 = makeBlock(IntId(0), IntId(5));
-  const CompressedBlockMetadata blockInt2 = makeBlock(IntId(5), IntId(6));
-  const CompressedBlockMetadata blockVocabIri =
-      makeBlock(getVocabId("<x0>"), getVocabId("<x1>"));
+  // numeric < vocabulary IRIs < encoded IRIs. In addition to the "pure" blocks
+  // (whose two bounding `ValueId`s have the same datatype), we also add
+  // "mixed" blocks whose bounding `ValueId`s have different datatypes. A mixed
+  // block might "hide" a matching value of any datatype in between its bounds,
+  // so it is conservatively kept by *every* prefilter; in particular it is part
+  // of the result of a prefilter as well as of its negation.
+  const CompressedBlockMetadata blockInt = makeBlock(IntId(0), IntId(5));
+  // A mixed block spanning a numeric literal and a regular vocabulary IRI.
+  const CompressedBlockMetadata blockIntAndVocabIri =
+      makeBlock(IntId(5), vocabIri0);
+  // A block that consists entirely of regular vocabulary IRIs.
+  const CompressedBlockMetadata blockVocabIri = makeBlock(vocabIri0, vocabIri1);
+  // A mixed block spanning a regular vocabulary IRI and an encoded IRI.
+  const CompressedBlockMetadata blockVocabAndEncodedIri =
+      makeBlock(vocabIri1, encodedIri1);
   // A block that consists entirely of encoded IRIs.
   const CompressedBlockMetadata blockEncodedIri =
       makeBlock(encodedIri1, encodedIri2);
   const std::vector<CompressedBlockMetadata> blocks = {
-      blockInt1, blockInt2, blockVocabIri, blockEncodedIri};
+      blockInt, blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
+      blockEncodedIri};
 
-  // `isIri` must keep both the regular vocabulary IRI block and the encoded IRI
-  // block. Before the fix, `blockEncodedIri` was incorrectly pruned.
-  EXPECT_EQ(
-      toVec(isIri()->evaluate(lvc, blocks, 2)),
-      (std::vector<CompressedBlockMetadata>{blockVocabIri, blockEncodedIri}));
+  // `isIri` must keep the regular vocabulary IRI block and the encoded IRI
+  // block (before the fix, `blockEncodedIri` was incorrectly pruned), as well
+  // as both mixed blocks.
+  EXPECT_EQ(toVec(isIri()->evaluate(lvc, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{
+                blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
+                blockEncodedIri}));
 
-  // `isEncodedIri` must keep exactly the encoded IRI block. We build the
+  // `isEncodedIri` must keep the encoded IRI block and the two mixed blocks,
+  // but prune the pure numeric and pure vocabulary IRI blocks. We build the
   // prefilter via the same path as the query engine (from the SPARQL
   // expression), which is where the datatype of the prefilter is chosen. Before
-  // the fix, this produced a `> <>` prefilter that returned `blockVocabIri` and
+  // the fix, this produced a `> <>` prefilter that kept `blockVocabIri` and
   // pruned `blockEncodedIri`.
   auto isEncodedIriSparqlExpr = sparqlExpression::makeIsEncodedIriExpression(
       std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}));
@@ -1007,24 +1023,32 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
       isEncodedIriSparqlExpr->getPrefilterExpressionForMetadata(lvc);
   ASSERT_EQ(prefilterVec.size(), 1u);
   const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
-  EXPECT_EQ(toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
-            (std::vector<CompressedBlockMetadata>{blockEncodedIri}));
+  EXPECT_EQ(
+      toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
+      (std::vector<CompressedBlockMetadata>{
+          blockIntAndVocabIri, blockVocabAndEncodedIri, blockEncodedIri}));
 
   // Negated cases. Negated prefilters are easy to get wrong (they combine the
   // sub-ranges via De Morgan, so a union becomes an intersection), hence we
   // check them explicitly.
 
-  // `!isIri` must prune *both* IRI blocks: the regular vocabulary IRI block and
-  // the encoded IRI block (encoded IRIs are IRIs, so `!isIri` excludes them
-  // too), keeping only the numeric blocks.
+  // `!isIri` must prune *both* pure IRI blocks: the regular vocabulary IRI
+  // block and the encoded IRI block (encoded IRIs are IRIs, so `!isIri`
+  // excludes them too). It keeps the numeric block and, as always, the mixed
+  // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
+  // part of the result of both `isIri` and `!isIri`.
   EXPECT_EQ(toVec(isIri(true)->evaluate(lvc, blocks, 2)),
-            (std::vector<CompressedBlockMetadata>{blockInt1, blockInt2}));
+            (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
+                                                  blockVocabAndEncodedIri}));
 
-  // `!isEncodedIri` must prune only the encoded IRI block and keep everything
-  // else, in particular the regular vocabulary IRI block.
+  // `!isEncodedIri` must prune only the pure encoded IRI block and keep
+  // everything else, in particular the pure vocabulary IRI block and the mixed
+  // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
+  // part of the result of both `isEncodedIri` and `!isEncodedIri`.
   EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(lvc, blocks, 2)),
-            (std::vector<CompressedBlockMetadata>{blockInt1, blockInt2,
-                                                  blockVocabIri}));
+            (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
+                                                  blockVocabIri,
+                                                  blockVocabAndEncodedIri}));
 }
 
 // Test InExpression
