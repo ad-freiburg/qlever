@@ -52,6 +52,17 @@ class VocabularyInternalExternal {
   // Delegate to `scanAll` of the underlying vocabulary.
   auto scanAll() const { return externalVocab_.scanAll(); }
 
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `words_` are sorted according to the comparator (exactly like in

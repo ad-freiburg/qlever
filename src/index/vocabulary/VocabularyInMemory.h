@@ -71,6 +71,17 @@ class VocabularyInMemory
     return ad_utility::vocabulary::scanAllViaOperatorBracket(this);
   }
 
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
+  }
+
   // Conversion function that is used by the Mixin base class.
   template <typename It>
   WordAndIndex iteratorToWordAndIndex(It it) const {

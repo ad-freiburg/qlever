@@ -1,7 +1,12 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025-2026 The QLever Authors, in particular:
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2025-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
@@ -77,6 +82,12 @@ class PolymorphicVocabulary {
   // `VocabularyScanRange`. The (type-erased) ranges of the different possible
   // underlying vocabularies are unified into a single `VocabularyScanRange`.
   VocabularyScanRange scanAll() const;
+
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
 
   // Return a reference to currently underlying vocabulary, as a variant of the
   // possible types.

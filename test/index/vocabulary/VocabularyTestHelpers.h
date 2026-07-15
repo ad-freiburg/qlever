@@ -7,7 +7,10 @@
 
 #include <gmock/gmock.h>
 
+#include <array>
+
 #include "../../util/GTestHelpers.h"
+#include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
@@ -251,7 +254,7 @@ auto testAccessOperatorForUnorderedVocabulary(F createVocabulary) {
 // `createVocabulary(std::vector<std::string>{})`, works as expected with the
 // given comparator.
 template <typename F, typename C>
-auto testEmptyVocabularyWithComparator(F createVocabulary, C comparator) {
+auto testEmptyVocabularyWithComparator(F&& createVocabulary, C comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
   auto expected = WordAndIndex::end();
@@ -291,6 +294,86 @@ std::vector<std::pair<uint64_t, std::string>> scanAllToIndexAndWordVector(
     result.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
   }
   return result;
+}
+
+// The default set of words written by `writeWordsAndFinish`.
+// Sorted lexicographically, since the underlying vocabularies require sorted
+// input at write time.
+inline constexpr std::array<std::string_view, 4> defaultTestWords{
+    "alpha", "beta", "delta", "gamma"};
+
+// Feed `words` into an already-constructed word `writer` and `finish()` it. The
+// `words` must be sorted.
+template <typename Writer>
+void writeWordsAndFinish(
+    Writer& writer, ql::span<const std::string_view> words = defaultTestWords) {
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+}
+
+// Assert that the vocabulary contains `expectedWords[i]` at vocabulary index
+// `indices[i]`, for all positions `i`.
+template <typename Vocab, typename Indices>
+void assertVocabularyMatchesAtIndices(
+    const Vocab& vocab, const Indices& indices,
+    std::initializer_list<std::string_view> expectedWords) {
+  ASSERT_EQ(ql::ranges::distance(indices), expectedWords.size());
+
+  for (const auto& [idx, expectedWord] :
+       ::ranges::views::zip(indices, expectedWords)) {
+    EXPECT_EQ(std::string{vocab[idx]}, expectedWord)
+        << "at vocabulary index " << idx;
+  }
+}
+
+// Assert that the vocabulary contains `expectedWords[i]` at vocabulary index
+// `i`, for all indices `i` in `[0, expectedWords.size())`.
+template <typename Vocab>
+void assertVocabularyMatchesContiguousIndices(
+    const Vocab& vocab, std::initializer_list<std::string_view> expectedWords) {
+  assertVocabularyMatchesAtIndices(
+      vocab, ql::views::iota(size_t{0}, expectedWords.size()), expectedWords);
+}
+
+// Assert that `lookupResult[i]` equals `vocab[indices[i]]`, for all positions
+// `i`.
+template <typename Vocab, typename Indices>
+void assertLookupResultMatchesVocabularyAtIndices(
+    const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
+    const Indices& indices) {
+  ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
+
+  auto at = [&](size_t i) -> decltype(auto) {
+    if constexpr (requires { vocab[i]; }) {
+      return vocab[i];
+    } else {
+      using IndexType = typename Vocab::IndexType;
+      return vocab[IndexType::make(i)];
+    }
+  };
+
+  for (const auto& [resultWord, idx] :
+       ::ranges::views::zip(*lookupResult, indices)) {
+    EXPECT_EQ(resultWord, at(idx)) << " at  vocabulary index " << idx;
+  }
+}
+
+// Assert that every streamed lookup result equals the individual `vocab[]`
+// lookups for the corresponding batch in `expectedBatches`, and that the
+// batches are yielded in order.
+template <typename Vocab, typename ExpectedBatches>
+void assertStreamedLookupMatchesVocabularyAtIndices(
+    const Vocab& vocab, VocabLookupOutput& streamedResults,
+    const ExpectedBatches& expectedBatches) {
+  auto results = ::ranges::to_vector(streamedResults);
+  ASSERT_EQ(results.size(), expectedBatches.size());
+
+  for (const auto& [result, indices] :
+       ::ranges::views::zip(results, expectedBatches)) {
+    assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  }
 }
 
 }  // namespace vocabulary_test

@@ -34,6 +34,16 @@ class UnicodeVocabulary {
   // Delegate to `scanAll` of the underlying vocabulary.
   auto scanAll() const { return _underlyingVocabulary.scanAll(); }
 
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return _underlyingVocabulary.lookupBatch(indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return _underlyingVocabulary.lookupBatchesStreamed(std::move(input));
+  }
+
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or

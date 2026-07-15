@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,6 +20,8 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
+#include "util/TransparentFunctors.h"
+#include "util/Views.h"
 
 // The result type for a batch of vocabulary lookups.
 using VocabBatchLookupResult = std::shared_ptr<ql::span<std::string_view>>;
@@ -117,6 +120,12 @@ struct IndexAndWord {
 // all words of the vocabulary in order, together with their index.
 using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 
+// A vocabulary batch-lookup result whose words are already materialized as
+// owning `std::string`s. The words are moved into the
+// `std::vector<std::string>` buffer and the `views()` point at those strings.
+struct StringVectorVocabBatchLookupData
+    : VocabLookupDataCommonBase<std::vector<std::string>> {};
+
 namespace ad_utility::vocabulary {
 
 // Generic fallback implementation of `scanAll` for vocabularies without a
@@ -143,6 +152,49 @@ auto scanAllViaOperatorBracket(const Vocab* vocab) {
           return IndexAndWord{index, std::string_view{buffer}};
         }
       }};
+}
+
+// Generic sequential fallback implementations of the batch-lookup interface,
+// used by all vocabularies that do not provide a specialized (e.g. io_uring)
+// implementation. They simply loop over the indices and issue the ordinary
+// single-word `operator[]` lookups one after another.
+
+// Sequential fallback for `lookupBatch`: look up each index individually via
+// `vocab[idx]`, returning one `string_view` per index. Works for any vocabulary
+// whose `operator[]` yields something convertible to `std::string`.
+template <typename Vocab>
+VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
+                                             ql::span<const size_t> indices) {
+  AD_CONTRACT_CHECK(!indices.empty());
+  // Materialize the words as owning `std::string`s and move them into the
+  // result's `std::vector<std::string>` buffer. The views then point at those
+  // strings; no byte copying into a contiguous buffer is needed. Building the
+  // views after the move is safe: moving the vector does not relocate the
+  // contained strings.
+
+  std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
+      indices | ql::views::transform(
+                    [&vocab](size_t idx) { return std::string{vocab[idx]}; }));
+
+  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+  data->buffer() = std::move(words);
+  data->views() = ::ranges::to_vector(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+
+  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+}
+
+// Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the
+// passed `vocab` to each batch of the (type-erased) input range.
+// The referenced `vocab` must outlive the returned range.
+template <typename Vocab>
+VocabLookupOutput lookupBatchesStreamed(const Vocab& vocab,
+                                        VocabLookupInput input) {
+  return VocabLookupOutput{ad_utility::OwningView{std::move(input)} |
+                           ql::views::transform([&vocab](const auto& indices) {
+                             return vocab.lookupBatch(indices);
+                           })};
 }
 
 }  // namespace ad_utility::vocabulary

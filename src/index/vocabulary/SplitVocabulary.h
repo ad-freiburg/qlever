@@ -192,6 +192,17 @@ class SplitVocabulary {
     return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
+  }
+
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
   // vocabularies.
   [[nodiscard]] uint64_t size() const {
