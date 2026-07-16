@@ -273,6 +273,16 @@ class IndexImpl {
     vocab_.writeAsZeroCopyBlob(serializer);
   }
 
+  // Get the configuration JSON (index metadata) of this `IndexImpl`.
+  const nlohmann::json& configurationJson() const { return configurationJson_; }
+
+  // Apply the given configuration JSON (index metadata) to this `IndexImpl`,
+  // setting up the vocabulary type, case comparator, locale, encoded-IRI
+  // prefixes, triple counts, etc. This is the part of `readConfiguration` that
+  // does not itself read from disk, factored out so that a configuration
+  // obtained from elsewhere (e.g. a serialized blob) can be applied directly.
+  void applyConfiguration(const nlohmann::json& configuration);
+
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
   };

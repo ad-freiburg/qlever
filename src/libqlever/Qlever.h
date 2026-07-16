@@ -27,6 +27,7 @@
 #include "util/AlignedAllocator.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Synchronized.h"
 #include "util/http/MediaTypes.h"
 
@@ -248,12 +249,12 @@ class Qlever {
   using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Keeps the buffer of a vocabulary-and-named-result-cache blob (see
-  // `loadVocabularyAndNamedResultCacheBlob`) alive for the lifetime of this
+  // Keeps the decompressed buffer of a deserialized blob (see
+  // `deserializeFromUncompressedBlob`) alive for the lifetime of this
   // instance, because the loaded vocabulary and named cache entries are
   // zero-copy views directly into this buffer.
   std::optional<std::vector<char, ad_utility::AlignedAllocator<char>>>
-      vocabularyAndNamedResultCacheBuffer_;
+      deserializedBlobLifetimeExtender_;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -393,28 +394,44 @@ class Qlever {
                                          indexAndViews->index_);
   }
 
-  // Serialize the vocabulary and the `NamedResultCache` of this instance into
-  // a single, self-contained blob that can later be loaded via
-  // `loadVocabularyAndNamedResultCacheBlob` (e.g. by a different process,
-  // without needing access to the on-disk index). The returned buffer is not
-  // compressed; callers that want compression can compress it themselves.
-  // Throws if the vocabulary implementation currently in use is not the
-  // in-memory, uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`).
-  std::vector<char, ad_utility::AlignedAllocator<char>>
-  writeVocabularyAndNamedResultCacheBlob() const;
+  // Serialize the index metadata JSON, the vocabulary, and the
+  // `NamedResultCache` of this instance into a single, self-contained blob
+  // that can later be loaded via `deserializeFromUncompressedBlob` (e.g. by a
+  // different process, without needing access to the on-disk index). Throws if
+  // the vocabulary implementation currently in use is not the in-memory,
+  // uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`).
+  //
+  // NOTE: Despite its name, the returned blob is in fact ZSTD-compressed (with
+  // the uncompressed size appended as a trailing `uint64_t`). The misleading
+  // name is retained for now and will be fixed in a follow-up.
+  std::vector<char> serializeToUncompressedBlob() const;
 
-  // Load a blob previously written by
-  // `writeVocabularyAndNamedResultCacheBlob`: replace this instance's
-  // vocabulary and populate its `NamedResultCache` with zero-copy views
-  // directly into a buffer holding a copy of `blob`. That buffer is kept
-  // alive for the lifetime of this instance.
+  // Load a blob previously written by `serializeToUncompressedBlob`: decompress
+  // it, apply the contained index metadata, replace this instance's vocabulary
+  // and populate its `NamedResultCache`, all as zero-copy views directly into
+  // the decompressed buffer. That buffer is kept alive for the lifetime of
+  // this instance.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
   // query is answered. Must not be called more than once on the same
   // instance.
-  void loadVocabularyAndNamedResultCacheBlob(ql::span<const char> blob);
+  void deserializeFromUncompressedBlob(ql::span<const char> blob);
 
+ private:
+  // Decompress a blob written by `serializeToUncompressedBlob` (ZSTD-compressed
+  // data followed by a trailing `uint64_t` holding the uncompressed size) into
+  // a freshly allocated, suitably aligned buffer.
+  static std::vector<char, ad_utility::AlignedAllocator<char>> decompressBlob(
+      ql::span<const char> compressedBlob);
+
+  // Read and verify the magic header and format version at the start of a
+  // decompressed blob, advancing `serializer` past them. Throws on mismatch.
+  static void skipAndVerifyBlobHeader(
+      ad_utility::serialization::ByteBufferReadSerializerT<
+          true, ql::span<const char>>& serializer);
+
+ public:
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state.

@@ -1280,7 +1280,27 @@ std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
-  f >> configurationJson_;
+  nlohmann::json configuration;
+  f >> configuration;
+  applyConfiguration(configuration);
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  //
+  // NOTE: This is computed here rather than in `applyConfiguration`, because
+  // `getKbName` reads from the `PSO` permutation, which is only available on
+  // the on-disk load path (`applyConfiguration` is also used when loading from
+  // a blob, where no permutations are loaded).
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
+                          numSubjects_.normal, ".", numPredicates_.normal, ".",
+                          numObjects_.normal);
+}
+
+// ___________________________________________________________________________
+void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
+  configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     AD_LOG_INFO << "The git hash used to build this index was "
                 << configurationJson_["git-hash"] << std::endl;
@@ -1410,14 +1430,6 @@ void IndexImpl::readConfiguration() {
                  EncodedIriManager{});
   loadDataMember("graphNameManager", graphNameManager_,
                  GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
-
-  // Compute unique ID for this index.
-  //
-  // TODO: This is a simplistic way. It would be better to incorporate bytes
-  // from the index files.
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
-                          numSubjects_.normal, ".", numPredicates_.normal, ".",
-                          numObjects_.normal);
 }
 
 // ___________________________________________________________________________

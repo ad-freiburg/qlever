@@ -261,18 +261,18 @@ TEST(LibQlever, combinedBlob) {
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
   sourceConfig.baseName_ = "LibQlever.combinedBlobSource";
-  // `writeVocabularyAndNamedResultCacheBlob` currently requires the
-  // in-memory, uncompressed vocabulary implementation (see
+  // `serializeToUncompressedBlob` currently requires the in-memory,
+  // uncompressed vocabulary implementation (see
   // `Vocabulary::writeAsZeroCopyBlob`).
   sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
   EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
 
-  std::vector<char, ad_utility::AlignedAllocator<char>> blob;
+  std::vector<char> blob;
   {
     Qlever source{EngineConfig{sourceConfig}};
     source.queryAndPinResultWithName(
         "blobPin", "SELECT ?s ?o WHERE { ?s <combinedBlobPredicate> ?o }");
-    EXPECT_NO_THROW(blob = source.writeVocabularyAndNamedResultCacheBlob());
+    EXPECT_NO_THROW(blob = source.serializeToUncompressedBlob());
     EXPECT_FALSE(blob.empty());
   }
 
@@ -300,7 +300,7 @@ TEST(LibQlever, combinedBlob) {
       target.query(cachedResultQuery, ad_utility::MediaType::tsv),
       HasSubstr("is not contained in the named result cache"));
 
-  EXPECT_NO_THROW(target.loadVocabularyAndNamedResultCacheBlob(blob));
+  EXPECT_NO_THROW(target.deserializeFromUncompressedBlob(blob));
 
   // The named cached result, and the vocabulary needed to correctly export
   // its IDs as strings, must now come from the blob.
@@ -314,9 +314,98 @@ TEST(LibQlever, combinedBlob) {
       HasSubstr("permutation to be loaded"));
 
   // Loading a second blob on the same instance must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE(target.deserializeFromUncompressedBlob(blob),
+                               HasSubstr("must not be called more than once"));
+}
+
+// _____________________________________________________________________________
+// End-to-end test for a blob that carries a spatial (s2) index in its named
+// result cache: build an index (with in-memory vocabulary), pin a query result
+// together with a cached geometry index, serialize everything to a blob, load
+// it into a fresh instance, and run a spatial join that uses the cached
+// geometry index from the blob.
+TEST(LibQlever, blobWithSpatialIndex) {
+  // Four rail segments (linestrings, the "right"/pinned side) and one station
+  // node (a point, the "left" side). The point lies within 1 km of all four
+  // segments (see `SpatialJoinCachedIndexTest`).
+  std::string sourceFilename = "libQleverBlobSpatialSource.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(sourceFilename);
+    ofs << "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8413293 "
+           "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
+           ".\n"
+           "<s2> <asWKT> \"LINESTRING(7.8409068 47.9975041,7.8420114 "
+           "47.9989233)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
+           ".\n"
+           "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+           "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
+           ".\n"
+           "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
+           "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
+           ".\n"
+           "<p1> <asWKT2> \"POINT(7.841295 "
+           "47.997731)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
+           ".\n";
+  }
+  IndexBuilderConfig sourceConfig;
+  sourceConfig.inputFiles_.push_back(
+      {sourceFilename, Filetype::Turtle, std::nullopt});
+  sourceConfig.baseName_ = "LibQlever.blobSpatialSource";
+  // `serializeToUncompressedBlob` currently requires the in-memory,
+  // uncompressed vocabulary implementation (see
+  // `Vocabulary::writeAsZeroCopyBlob`).
+  sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
+  EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
+
+  std::vector<char> blob;
+  {
+    Qlever source{EngineConfig{sourceConfig}};
+    // Pin the linestrings together with a cached s2 geometry index on `?geo2`.
+    source.queryAndPinResultWithName(
+        QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+        "SELECT * { ?s2 <asWKT> ?geo2 }");
+    EXPECT_NO_THROW(blob = source.serializeToUncompressedBlob());
+    EXPECT_FALSE(blob.empty());
+  }
+
+  // A spatial join whose right side is the cached geometry index (referenced by
+  // name), and whose left side (`?geo1`) is scanned from the permutations.
+  std::string spatialQuery =
+      "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/> "
+      "SELECT ?s1 ?s2 WHERE { "
+      "?s1 <asWKT2> ?geo1 . "
+      "SERVICE qlss: { "
+      "_:config qlss:right ?geo2 ; "
+      "qlss:left ?geo1 ; "
+      "qlss:maxDistance 1000 ; "
+      "qlss:algorithm qlss:experimentalPointPolyline ; "
+      "qlss:experimentalRightCacheName \"geoPin\" . "
+      "} }";
+
+  // A fresh instance built from the same on-disk index. It has the
+  // permutations (needed for the left side of the spatial join) but not the
+  // pinned geometry index, so the spatial query fails before the blob is
+  // loaded.
+  Qlever target{EngineConfig{sourceConfig}};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      target.loadVocabularyAndNamedResultCacheBlob(blob),
-      HasSubstr("must not be called more than once"));
+      target.query(spatialQuery, ad_utility::MediaType::tsv),
+      HasSubstr("is not contained in the named result cache"));
+
+  // After loading the blob, the cached geometry index comes from the blob and
+  // the spatial join succeeds, relating the station node to all four segments.
+  EXPECT_NO_THROW(target.deserializeFromUncompressedBlob(blob));
+  auto res = target.query(spatialQuery, ad_utility::MediaType::tsv);
+  EXPECT_THAT(res, HasSubstr("<p1>"));
+  EXPECT_THAT(res, HasSubstr("<s1>"));
+  EXPECT_THAT(res, HasSubstr("<s2>"));
+  EXPECT_THAT(res, HasSubstr("<s3>"));
+  EXPECT_THAT(res, HasSubstr("<s4>"));
+
+  // The pinned result itself is also queryable directly from the blob.
+  auto cachedRes = target.query(
+      "SELECT ?s2 ?geo2 WHERE { SERVICE ql:cached-result-with-name-geoPin {} }",
+      ad_utility::MediaType::tsv);
+  EXPECT_THAT(cachedRes, HasSubstr("<s1>"));
 }
 
 // _____________________________________________________________________________
