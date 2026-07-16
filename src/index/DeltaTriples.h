@@ -320,9 +320,12 @@ class DeltaTriples {
  private:
   // Remap the `Id` from the old index to the new index using the given
   // `idMapping`. If the `Id` can't be remapped, this means that it was added
-  // after the mapping was created and will be left unchanged.
+  // after the mapping was created and is left unchanged, except for local vocab
+  // ids, which are re-anchored to the new `index` by inserting a copy of their
+  // entry into `localVocab`.
   static void remapId(
-      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
+      LocalVocab& localVocab, const IndexImpl& index);
 #endif
 
   // Call `consolidateAll()` iff `consolidate` is `Consolidate::Yes`. Used by
