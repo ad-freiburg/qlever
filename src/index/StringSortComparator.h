@@ -87,7 +87,6 @@ class SimpleStringComparatorImpl {
    * @param a A UTF-8 encoded string
    * @param b This Weight string has to be obtained by a previous call to
    * transformToFirstPossibleBiggerValue
-   * @
    * @return true iff a comes before the string whose SortKey is b
    */
   bool operator()(std::string_view a, const LocaleManagerBase::SortKey& b,
@@ -185,8 +184,7 @@ class TripleComponentComparatorImpl {
    * @tparam InnerString either LocaleManagerBase::SortKey or std::string_view.
    * Both variants differ greatly in their usage. Details can be found after the
    * class definition, together with the explicit aliases `SplitVal` and
-   * `SplitValOwning` for the template instantiations that are actually used.
-   * the template instantiations
+   * `SplitValNonOwning` for the template instantiations that are actually used.
    * @tparam LanguageTag and FullString, either `std::string` or
    * `std::string_view`. They are used as deterministic tie breaks on the
    * `TOTAL` sort level.
