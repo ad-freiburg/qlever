@@ -8,27 +8,18 @@
 
 #include <re2/re2.h>
 
+#include <utility>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/NaryExpressionImpl.h"
-#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/RegexExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
-#include "global/ValueIdComparators.h"
 
 using namespace std::literals;
 
 namespace sparqlExpression::detail {
-
-void ensureIsSimpleLiteral(
-    const ad_utility::triple_component::Literal& literal) {
-  if (literal.hasDatatype() || literal.hasLanguageTag()) {
-    throw std::runtime_error{
-        "The REGEX function only accepts simple literals (literals without a "
-        "language tag or a datatype)"};
-  }
-}
 
 // _____________________________________________________________________________
 void ensureIsValidRegexIfConstant(const SparqlExpression& expression) {
@@ -81,343 +72,226 @@ struct RegexImpl {
   }
 };
 
-using RegexExpression =
-    string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
+// The standard `REGEX` expression. It always evaluates the actual regex (via
+// Google's RE2 library) by delegating to the string-expression machinery.
+class RegexExpressionBase
+    : public string_expressions::StringExpressionImpl<2, RegexImpl,
+                                                      RegexValueGetter> {
+  using Base =
+      string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
+  using Base::Base;
+};
+
+// A `RegexExpressionBase` that additionally supports prefiltering when the
+// regex is a prefix regex (e.g. `^prefix`) applied to a plain variable. The
+// prefilter only restricts the blocks that are scanned; the actual regex is
+// still evaluated on the remaining rows by the base class.
+class RegexExpression : public RegexExpressionBase {
+ private:
+  // The variable and the guaranteed literal prefix (see `getPrefixRegex`) if
+  // the regex is a prefix regex on a plain variable, `std::nullopt` otherwise.
+  std::optional<std::pair<Variable, std::string>> prefix_;
+
+ public:
+  RegexExpression(Ptr child, Ptr regex,
+                  std::optional<std::pair<Variable, std::string>> prefix)
+      : RegexExpressionBase(std::move(child), std::move(regex)),
+        prefix_{std::move(prefix)} {}
+
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
+      [[maybe_unused]] bool isNegated) const override {
+    if (!prefix_.has_value()) {
+      return {};
+    }
+    std::vector<PrefilterExprVariablePair> prefilterVec;
+    prefilterVec.emplace_back(
+        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+            TripleComponent::Literal::literalWithNormalizedContent(
+                asNormalizedStringViewUnsafe(prefix_->second))),
+        prefix_->first);
+    return prefilterVec;
+  }
+};
+
+// If `string` is a plain variable and `regex` is a constant simple-literal
+// prefix regex (see `getPrefixRegex`), return the variable and the extracted
+// prefix, which enables prefiltering. Return `std::nullopt` otherwise. Throws
+// if the regex is a constant literal with a datatype or language tag (which the
+// `REGEX` function forbids).
+//
+// Note: Prefiltering `STR(?var)` is deliberately not supported, since we would
+// not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
+// current prefilter expressions do not consider this matching logic.
+std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
+    const SparqlExpression::Ptr& string, const SparqlExpression& regex) {
+  bool childIsStrExpression = string->isStrExpression();
+  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
+      childIsStrExpression ? string->children()[0].get() : string.get());
+  const auto* stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&regex);
+  if (!variableExpression || !stringLiteralExpression) {
+    return std::nullopt;
+  }
+  const auto& stringLiteral = stringLiteralExpression->value();
+  ensureIsSimpleLiteral(stringLiteral);
+  if (childIsStrExpression) {
+    return std::nullopt;
+  }
+  std::optional<std::string> prefixRegex = getPrefixRegex(
+      std::string{asStringViewUnsafe(stringLiteral.getContent())});
+  if (!prefixRegex.has_value()) {
+    return std::nullopt;
+  }
+  return std::pair{variableExpression->value(), std::move(prefixRegex.value())};
+}
 
 }  // namespace sparqlExpression::detail
 
 namespace sparqlExpression {
 
+namespace {
+// The regex characters that have a special meaning. An unescaped occurrence
+// terminates a literal prefix, and an escaped occurrence (e.g. `\.`) denotes
+// the corresponding literal character (the backslash is included so that `\\`
+// denotes a literal backslash).
+constexpr std::string_view regexSpecialChars = R"(\^$.|?*+()[]{})";
+
+// Return true iff `regex` (which must be a valid regex) contains an alternation
+// (`|`) at the top level, i.e. outside of any group `(...)` or character class
+// `[...]`. Such an alternation invalidates any prefix guarantee, e.g. `^ab|cd`
+// also matches "cd...".
+bool hasTopLevelAlternation(std::string_view regex) {
+  size_t parenDepth = 0;
+  bool inCharClass = false;
+  for (size_t i = 0; i < regex.size(); ++i) {
+    char c = regex[i];
+    if (c == '\\') {
+      ++i;  // Skip the escaped character.
+      continue;
+    }
+    if (inCharClass) {
+      if (c == ']') {
+        inCharClass = false;
+      }
+      continue;
+    }
+    switch (c) {
+      case '[':
+        inCharClass = true;
+        break;
+      case '(':
+        ++parenDepth;
+        break;
+      case ')':
+        if (parenDepth > 0) {
+          --parenDepth;
+        }
+        break;
+      case '|':
+        if (parenDepth == 0) {
+          return true;
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+}  // namespace
+
 // _____________________________________________________________________________
-std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
-    std::string regex) {
+std::optional<std::string> getPrefixRegex(std::string regex) {
   if (!ql::starts_with(regex, '^')) {
     return std::nullopt;
   }
-  // Check if we can use the more efficient prefix filter instead
-  // of an expensive regex filter.
-  bool escaped = false;
+  // A top-level alternation means that not every match starts with the leading
+  // literal (e.g. `^abc.*|def` also matches "Xdef"), so we cannot derive a
+  // prefix. This has to be a full scan of the whole regex up front: the
+  // accumulation loop below stops at the first special character, so it would
+  // not notice a `|` that appears later (as in `^abc.*|def`).
+  if (hasTopLevelAlternation(std::string_view{regex}.substr(1))) {
+    return std::nullopt;
+  }
 
-  // Positions of backslashes that are used for escaping within the regex. These
-  // have to be removed if the regex is simply a prefix filter.
-  std::vector<size_t> escapePositions;
-
-  // Check if the regex is only a prefix regex or also contains other special
-  // regex characters that are not properly escaped.
-  for (size_t i = 1; i < regex.size(); i++) {
-    if (regex[i] == '\\') {
-      if (!escaped) {
-        escapePositions.push_back(i);
-      }
-      escaped = !escaped;  // correctly deal with consecutive backslashes
-      continue;
-    }
+  // Accumulate the guaranteed literal prefix, starting after the leading `^`.
+  std::string prefix;
+  for (size_t i = 1; i < regex.size();) {
     char c = regex[i];
-    constexpr std::string_view regexSpecialChars = "[]^$.|?*+()";
-    bool isControlChar = regexSpecialChars.find(c) != std::string_view::npos;
-    if (!escaped && isControlChar) {
-      return std::nullopt;
-    } else if (escaped && !isControlChar) {
-      // The regex contains an escape of a non-special char (e.g. `\d`).
-      // This is a valid regex feature (handled by RE2 in the general path),
-      // but it is not expressible as a simple prefix filter, so bail out.
-      return std::nullopt;
-    }
-    escaped = false;
-  }
-  // There are no regex special chars apart from the leading '^'
-  // so we can use a prefix filter.
-
-  // we have to remove the escaping backslashes
-  for (auto it = escapePositions.rbegin(); it != escapePositions.rend(); ++it) {
-    regex.erase(regex.begin() + *it);
-  }
-  // also remove the leading "^".
-  regex.erase(regex.begin());
-  return regex;
-}
-
-// _____________________________________________________________________________
-PrefixRegexExpression::PrefixRegexExpression(Ptr child, std::string prefixRegex,
-                                             Variable variable)
-    : child_{std::move(child)},
-      prefixRegex_{std::move(prefixRegex)},
-      variable_{std::move(variable)} {
-  // If we have a `STR()` expression, remove the `STR()` and remember that it
-  // was there.
-  if (child_->isStrExpression()) {
-    child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
-    childIsStrExpression_ = true;
-  }
-}
-
-// _____________________________________________________________________________
-std::string PrefixRegexExpression::getCacheKey(
-    const VariableToColumnMap& varColMap) const {
-  return absl::StrCat("Prefix REGEX expression: ", prefixRegex_,
-                      " child:", child_->getCacheKey(varColMap),
-                      " str:", childIsStrExpression_);
-}
-
-// _____________________________________________________________________________
-ql::span<SparqlExpression::Ptr> PrefixRegexExpression::childrenImpl() {
-  return {&child_, 1};
-}
-
-// _____________________________________________________________________________
-ExpressionResult PrefixRegexExpression::evaluate(
-    EvaluationContext* context) const {
-  // This function must only be called if we have a simple prefix regex.
-  auto optColumn = context->getColumnIndexForVariable(variable_);
-  if (!optColumn.has_value()) {
-    return Id::makeUndefined();
-  }
-
-  // If the expression is enclosed in `STR()`, we have two ranges: for the
-  // prefix with and without leading "<".
-  //
-  // TODO<joka921> prefix filters currently have false negatives when the prefix
-  // is not in the vocabulary, and there exist local vocab entries in the input
-  // that are between the prefix and the next local vocab entry. This is
-  // non-trivial to fix as it involves fiddling with Unicode prefix encodings.
-  //
-  // TODO<joka921> prefix filters currently never find numbers or other
-  // datatypes that are encoded directly inside the IDs.
-  std::vector<std::string> actualPrefixes;
-  actualPrefixes.push_back("\"" + prefixRegex_);
-  if (childIsStrExpression_) {
-    actualPrefixes.push_back("<" + prefixRegex_);
-  }
-
-  // Compute the (one or two) ranges.
-  std::vector<std::pair<Id, Id>> lowerAndUpperIds;
-  lowerAndUpperIds.reserve(actualPrefixes.size());
-  for (const auto& prefix : actualPrefixes) {
-    const auto& ranges = context->_qec.getIndex().prefixRanges(prefix);
-    for (const auto& [begin, end] : ranges.ranges()) {
-      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(begin),
-                                    Id::makeFromVocabIndex(end));
-    }
-  }
-  checkCancellation(context);
-
-  // Helper that checks whether a single `Id` lies in (at least) one of the
-  // prefix ranges.
-  auto matchesPrefix = [&lowerAndUpperIds](Id id) {
-    if (id.isUndefined()) {
-      return Id::makeUndefined();
-    }
-    return Id::makeFromBool(
-        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
-          return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
-                 valueIdComparators::compareByBits(id, lowerUpper.second);
-        }));
-  };
-
-  // When we work on aggregated data (i.e. as part of a GROUP BY, but outside of
-  // an aggregate), the variable is grouped and thus constant within each group.
-  if (worksOnAggregatedData(context)) {
-    AD_CORRECTNESS_CHECK(
-        context->_groupedVariables.contains(variable_),
-        "A non-grouped variable outside of an aggregate should have been "
-        "rejected by the parser");
-    return std::visit(
-        [context, &matchesPrefix](const auto& childResult) -> ExpressionResult {
-          using T = std::decay_t<decltype(childResult)>;
-          // Usually the child of a prefix-regex expression is a
-          // `VariableExpression`, so the result is a single `ValueId`.
-          if constexpr (ad_utility::isSimilar<T, ValueId>) {
-            return matchesPrefix(childResult);
-            // Hash-map based or lazy GROUP BY implementations can lead to the
-            // child being replaced by `sparqlExpression::VectorIdExpression`.
-            // In this case, we have to apply the prefix check to each value in
-            // the vector.
-          } else if constexpr (ad_utility::isSimilar<
-                                   T, VectorWithMemoryLimit<ValueId>>) {
-            VectorWithMemoryLimit<Id> result{context->_allocator};
-            result.reserve(childResult.size());
-            for (Id id : childResult) {
-              result.push_back(matchesPrefix(id));
-              checkCancellation(context);
-            }
-            return ExpressionResult{std::move(result)};
-          } else {
-            // The child of a prefix-regex expression is always a single
-            // variable, so this is unreachable.
-            AD_FAIL();
-          }
-        },
-        child_->evaluate(context));
-  }
-
-  // Begin and end of the input (for each row of which we want to
-  // evaluate the regex).
-  auto beg = context->_inputTable.begin() + context->_beginIndex;
-  auto end = context->_inputTable.begin() + context->_endIndex;
-  AD_CONTRACT_CHECK(end <= context->_inputTable.end());
-
-  // In this function, the expression is a simple variable. If the input is
-  // sorted by that variable, the result can be computed by a constant number
-  // of binary searches and the result is a set of intervals.
-  const auto& column = optColumn.value();
-  if (context->isResultSortedBy(variable_) &&
-      (beg == end || !(*beg)[column].isUndefined())) {
-    std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
-    for (auto [lowerId, upperId] : lowerAndUpperIds) {
-      // Two binary searches to find the lower and upper bounds of the range.
-      auto lower = std::lower_bound(
-          beg, end, nullptr,
-          [column, lowerId = lowerId](const auto& l, const auto&) {
-            return l[column] < lowerId;
-          });
-      auto upper = std::lower_bound(
-          beg, end, nullptr,
-          [column, upperId = upperId](const auto& l, const auto&) {
-            return l[column] < upperId;
-          });
-      // Return the empty result as an empty `SetOfIntervals` instead of as an
-      // empty range.
-      if (lower != upper) {
-        resultSetOfIntervals.push_back(
-            ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
+    // The literal character that is a candidate for the prefix, and the index
+    // of the character following it (used to peek for a following quantifier).
+    char literal = '\0';
+    size_t next = 0;
+    if (c == '\\') {
+      // A trailing backslash cannot occur in a valid regex.
+      if (i + 1 >= regex.size()) {
+        break;
       }
-      checkCancellation(context);
+      char escaped = regex[i + 1];
+      // Only escapes of special characters (e.g. `\.` or `\\`) denote a literal
+      // character. Other escapes (e.g. `\d`, `\b`) are character classes or
+      // assertions and terminate the prefix.
+      if (regexSpecialChars.find(escaped) == std::string_view::npos) {
+        break;
+      }
+      literal = escaped;
+      next = i + 2;
+    } else if (regexSpecialChars.find(c) != std::string_view::npos) {
+      // An unescaped special character terminates the literal prefix.
+      break;
+    } else {
+      literal = c;
+      next = i + 1;
     }
-    return ::ranges::accumulate(resultSetOfIntervals,
-                                ad_utility::SetOfIntervals{},
-                                ad_utility::SetOfIntervals::Union{});
+
+    // Peek at the following character to correctly handle quantifiers, which
+    // bind to the preceding (literal) character.
+    char quantifier = next < regex.size() ? regex[next] : '\0';
+    if (quantifier == '?' || quantifier == '*' || quantifier == '{') {
+      // The preceding character is optional or repeated a variable number of
+      // times (possibly zero), so it is not part of the guaranteed prefix.
+      break;
+    }
+    prefix.push_back(literal);
+    if (quantifier == '+') {
+      // The character is guaranteed at least once, but the repetition means we
+      // cannot extend the prefix any further.
+      break;
+    }
+    i = next;
   }
 
-  // If the input is not sorted by the variable, we have to check each row
-  // individually (by checking inclusion in the ranges).
-  auto resultSize = context->size();
-  VectorWithMemoryLimit<Id> result{context->_allocator};
-  result.reserve(resultSize);
-  for (auto id : detail::makeGenerator(variable_, resultSize, context)) {
-    result.push_back(matchesPrefix(id));
-    checkCancellation(context);
-  }
-  return result;
-}
-
-// _____________________________________________________________________________
-auto PrefixRegexExpression::getEstimatesForFilterExpression(
-    uint64_t inputSize,
-    const std::optional<Variable>& firstSortedVariable) const -> Estimates {
-  // Assume that only 10^-k entries remain, where k is the length of the prefix
-  // and cap to reasonable maximal values to prevent numerical stability
-  // problems.
-  double reductionFactor =
-      std::pow(10, std::min<size_t>(8, prefixRegex_.size()));
-  size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
-  size_t costEstimate = firstSortedVariable == variable_
-                            ? sizeEstimate
-                            : sizeEstimate + inputSize;
-
-  return {sizeEstimate, costEstimate};
-}
-
-// _____________________________________________________________________________
-void PrefixRegexExpression::checkCancellation(
-    const EvaluationContext* context, ad_utility::source_location location) {
-  context->cancellationHandle_->throwIfCancelled(location);
-}
-
-// _____________________________________________________________________________
-std::vector<PrefilterExprVariablePair>
-PrefixRegexExpression::getPrefilterExpressionForMetadata(
-    [[maybe_unused]] const LocalVocabContext& context,
-    [[maybe_unused]] bool isNegated) const {
-  // It is currently not possible to prefilter PREFIX expressions involving
-  // STR(?var), since we not only have to match "Bob", but also "Bob"@en,
-  // "Bob"^^<iri>, and so on. The current prefilter expressions do not consider
-  // this matching logic.
-  if (childIsStrExpression_) {
-    return {};
-  }
-  std::vector<PrefilterExprVariablePair> prefilterVec;
-  prefilterVec.emplace_back(
-      std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-          TripleComponent::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(prefixRegex_))),
-      variable_);
-  return prefilterVec;
-}
-
-// _____________________________________________________________________________
-std::optional<PrefixRegexExpression>
-PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
-    Ptr& string, const SparqlExpression& regex) {
-  detail::ensureIsValidRegexIfConstant(regex);
-  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
-      string->isStrExpression() ? string->children()[0].get() : string.get());
-  if (!variableExpression) {
+  if (prefix.empty()) {
     return std::nullopt;
   }
-  const auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(&regex);
-  if (!stringLiteralExpression) {
-    return std::nullopt;
-  }
-  const auto& stringLiteral = stringLiteralExpression->value();
-  detail::ensureIsSimpleLiteral(stringLiteral);
-  if (std::optional<std::string> prefixRegex = getPrefixRegex(
-          std::string{asStringViewUnsafe(stringLiteral.getContent())})) {
-    return PrefixRegexExpression{std::move(string),
-                                 std::move(prefixRegex.value()),
-                                 variableExpression->value()};
-  }
-  return std::nullopt;
+  return prefix;
 }
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr regex,
                                           SparqlExpression::Ptr flags) {
+  detail::ensureIsValidRegexIfConstant(*regex);
   if (flags) {
     if (auto* stringLiteralExpression =
             dynamic_cast<const StringLiteralExpression*>(flags.get())) {
       detail::ensureIsSimpleLiteral(stringLiteralExpression->value());
     }
-    detail::ensureIsValidRegexIfConstant(*regex);
     detail::ensureIsValidFlagIfConstant(*flags);
+    // Merge the flags into the regex. The result is no longer a plain string
+    // literal, so a regex with flags will never allow prefiltering (see
+    // `getRegexPrefilterInfo`).
     regex = makeMergeRegexPatternAndFlagsExpression(std::move(regex),
                                                     std::move(flags));
-  } else if (auto prefixExpression =
-                 PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
-                     string, *regex)) {
-    return std::make_unique<PrefixRegexExpression>(
-        std::move(prefixExpression.value()));
-  } else {
-    detail::ensureIsValidRegexIfConstant(*regex);
   }
-  return std::make_unique<detail::RegexExpression>(std::move(string),
-                                                   std::move(regex));
-}
-
-// _____________________________________________________________________________
-SparqlExpression::Ptr makePrefixMatchExpression(
-    SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix) {
-  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
-      string->isStrExpression() ? string->children()[0].get() : string.get());
-  if (!variableExpression) {
-    throw std::runtime_error{
-        "ql:prefix-match does only support STR(?var) or ?var as the first "
-        "argument"};
-  }
-  auto stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(&*prefix);
-  if (!stringLiteralExpression) {
-    throw std::runtime_error{
-        "ql:prefix-match does only support static string literals as the "
-        "second argument"};
-  }
-  const auto& stringLiteral = stringLiteralExpression->value();
-  detail::ensureIsSimpleLiteral(stringLiteral);
-  return std::make_unique<PrefixRegexExpression>(
-      std::move(string),
-      std::string{asStringViewUnsafe(stringLiteral.getContent())},
-      variableExpression->value());
+  // Compute the prefilter information (if the regex is a prefix regex) before
+  // moving the arguments into the expression. The actual regex is always
+  // evaluated by `RegexExpression`; the prefilter only restricts the scanned
+  // blocks.
+  auto prefilterInfo = detail::getRegexPrefilterInfo(string, *regex);
+  return std::make_unique<detail::RegexExpression>(
+      std::move(string), std::move(regex), std::move(prefilterInfo));
 }
 
 }  // namespace sparqlExpression

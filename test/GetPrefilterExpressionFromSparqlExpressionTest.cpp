@@ -511,6 +511,14 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                        pr(notExpr(prefixRegex(L("\"de\""))), varX));
   evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
                        pr(prefixRegex(L("\"prefix\"")), varX));
+  // A prefix regex followed by other regex syntax still prefilters on the
+  // guaranteed literal prefix (here `prefix`).
+  evalAndEqualityCheck(regexSparql(varX, L("\"^prefix[0-9]\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  // A regex that is not anchored at the start, or that has a top-level
+  // alternation, cannot be prefiltered.
+  evalAndEqualityCheck(regexSparql(varX, L("\"prefix\"")));
+  evalAndEqualityCheck(regexSparql(varX, L("\"^prefix|other\"")));
   // It is currently not possible to prefilter expressions involving STR(?var),
   // since we not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and
   // so on. The current prefilter expressions do not consider this matching
