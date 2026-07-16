@@ -9,14 +9,16 @@
 
 #include "util/FilesystemHelpers.h"
 
-#include <filesystem>
 #include <string>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
+#include "util/File.h"
 
 namespace qlever::util {
-namespace fs = std::filesystem;
+namespace fs = ql::filesystem;
 
 // _____________________________________________________________________________
 bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
@@ -30,12 +32,38 @@ bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
     return true;
   }
 
-  std::string prefix = base.filename().string();
+  // Use `ql::pathFilename` (not `base.filename()`) so that a trailing separator
+  // yields an empty prefix (matching any file in `dir`) for both `std` and
+  // `boost` filesystem; see the comment on `ql::pathFilename`.
+  std::string prefix = ql::pathFilename(base).string();
   return ql::ranges::any_of(
-      fs::directory_iterator(dir), [&prefix](const auto& entry) {
+      ql::directoryRange(dir), [&prefix](const auto& entry) {
         std::string name = entry.path().filename().string();
         return ql::starts_with(name, prefix);
       });
+}
+
+// _____________________________________________________________________________
+size_t deleteFilesInDirectory(
+    const fs::path& directory,
+    absl::FunctionRef<bool(const fs::path&)> shouldDelete) {
+  if (!fs::exists(directory) || !fs::is_directory(directory)) {
+    return 0;
+  }
+  // Collect the matching regular files first and delete them only afterwards.
+  // Deleting entries while iterating a directory is unspecified behavior and
+  // can cause entries to be skipped on some platforms (observed on macOS),
+  // leaving leftover files behind.
+  std::vector<fs::path> toDelete;
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (entry.is_regular_file() && shouldDelete(entry.path())) {
+      toDelete.push_back(entry.path());
+    }
+  }
+  for (const auto& path : toDelete) {
+    ad_utility::deleteFile(path);
+  }
+  return toDelete.size();
 }
 
 // _____________________________________________________________________________

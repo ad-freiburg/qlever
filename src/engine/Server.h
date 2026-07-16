@@ -10,11 +10,11 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -70,7 +70,7 @@ class Server {
 
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
-  void configureQueryEventLog(const std::filesystem::path& path);
+  void configureQueryEventLog(const ql::filesystem::path& path);
 
   // Get server statistics.
   static json composeStatsJson(const Index& index);
@@ -206,6 +206,23 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
+  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
+  // meters for the simplification of geometries before indexing) from its
+  // string representation. Return `std::nullopt` if `simplificationStr` is
+  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
+  // floating-point number.
+  static std::optional<double> parsePinGeoIndexSimplification(
+      const std::optional<std::string>& simplificationStr);
+  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
+  // Describe the pinning of a named result (and, if applicable, of its geo
+  // index) for the request log line, e.g. `" [pin result with name
+  // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
+  // string if `pinResultWithName` is `std::nullopt`.
+  static std::string describePinResultWithNameForLog(
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters);
+  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
   auto prepareOperation(SharedIndexAndView indexAndViews,
                         std::string_view operationName,
@@ -223,18 +240,20 @@ class Server {
   // set, then the `qec` is configured such that the query result will be stored
   // in the named result cache. If `pinNamedGeoIndex` is also set, it is
   // expected to be the variable name of a column (without leading `?`) on which
-  // a geometry index should be built. Throws if named pinning is required, but
-  // the access token is not okay.
+  // a geometry index should be built. If `geoIndexSimplificationInMeters` is
+  // also set, geometries are simplified with the given maximum error in meters
+  // before indexing. Throw if named pinning is required, but the access token
+  // is not okay.
   static void configurePinnedResultWithName(
       const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         const ad_utility::Timer& requestTimer,
-                         TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle, TimeLimit timeLimit,
+                         const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -332,15 +351,6 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  // Given a name and query, compute the query result and write a new
-  // materialized view of this result to disk. This assumes that the access
-  // token has already been checked.
-  void writeMaterializedView(
-      const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
-      const ad_utility::Timer& requestTimer,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
   // Trigger an index rebuild with `indexBaseName` as the base name for the new
