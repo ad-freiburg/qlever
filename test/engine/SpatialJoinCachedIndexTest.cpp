@@ -67,9 +67,12 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   auto cacheEntry = qec->namedResultCache().get("dummy");
 
   ASSERT_NE(cacheEntry.get(), nullptr);
-  ASSERT_NE(cacheEntry->result_.get(), nullptr);
-  EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
-  EXPECT_EQ(cacheEntry->result_->numRows(), 5);
+  ASSERT_THAT(cacheEntry->result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
+  auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
+  EXPECT_EQ(resultView.numColumns(), 2);
+  EXPECT_EQ(resultView.numRows(), 5);
 
   ASSERT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
   EXPECT_EQ(cacheEntry->cachedGeoIndex_.value().getGeometryColumn().name(),
@@ -137,8 +140,9 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");
-  EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
-  EXPECT_EQ(cacheEntry->result_->numRows(), 5);
+  auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
+  EXPECT_EQ(resultView.numColumns(), 2);
+  EXPECT_EQ(resultView.numRows(), 5);
   EXPECT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
 
   // Prepare a spatial join using the s2 point polyline algorithm on this
