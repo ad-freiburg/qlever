@@ -116,7 +116,7 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);
   }
-  ASSERT_THAT(s, MatchesStdRegex("message: (2[5-9]|3[0-9])"));
+  ASSERT_THAT(s, MatchesRegex("message: (2[5-9]|3[0-9])"));
 }
 
 // ____________________________________________________________________________

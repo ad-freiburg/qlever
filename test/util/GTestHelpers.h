@@ -10,10 +10,10 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
+#include <re2/re2.h>
 
 #include <memory>
 #include <optional>
-#include <regex>
 #include <sstream>
 
 #include "backports/concepts.h"
@@ -179,13 +179,13 @@ MATCHER_P(ParsedAsJson, matcher,
   return false;
 }
 
-// Helper matcher for a full `std::regex` match, to use instead of
+// Helper matcher for a full `RE2` match, to use instead of
 // `::testing::MatchesRegex`, which works differently on non-POSIX platforms.
-// Example: EXPECT_THAT("t42", MatchesStdRegex("t[0-9]+"));
-MATCHER_P(MatchesStdRegex, pattern,
+// Example: EXPECT_THAT("t42", MatchesRegex("t[0-9]+"));
+MATCHER_P(MatchesRegex, pattern,
           absl::StrCat(negation ? "doesn't match" : "matches", " the regex \"",
                        pattern, "\"")) {
-  return std::regex_match(std::string{arg}, std::regex{pattern});
+  return RE2::FullMatch(arg, RE2{pattern});
 }
 
 // Helper matcher that can be used to make assertions about a JSON object's

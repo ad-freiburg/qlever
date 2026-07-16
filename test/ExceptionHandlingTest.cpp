@@ -179,7 +179,7 @@ TEST(ExceptionCollector, isThreadSafe) {
     // Wait for threads to complete.
   }
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
-                                        MatchesStdRegex("t[0-9]+"),
+                                        MatchesRegex("t[0-9]+"),
                                         std::runtime_error);
 }
 
