@@ -29,6 +29,32 @@ void LocalVocab::mergeWith(const LocalVocab& other) {
 }
 
 // _____________________________________________________________________________
+void LocalVocab::setMemoryPoolForTracking(
+    std::optional<ad_utility::detail::AllocationMemoryLeftThreadsafe> pool) {
+  memoryPoolForTracking() = std::move(pool);
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::detail::AllocationMemoryLeftThreadsafe>&
+LocalVocab::memoryPoolForTracking() {
+  static std::optional<ad_utility::detail::AllocationMemoryLeftThreadsafe>
+      pool = std::nullopt;
+  return pool;
+}
+
+// _____________________________________________________________________________
+ad_utility::MemorySize LocalVocab::entrySizeEstimate(
+    const LocalVocabEntry& word) {
+  // The overhead of a node of the `absl::node_hash_set` (the node pointer in
+  // the slot array plus the allocation overhead of the node itself). This is
+  // an estimate, the exact value is an implementation detail of Abseil.
+  constexpr size_t nodeOverhead = 32;
+  return ad_utility::MemorySize::bytes(sizeof(LocalVocabEntry) +
+                                       word.toStringRepresentation().size() +
+                                       nodeOverhead);
+}
+
+// _____________________________________________________________________________
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // We can't modify the word set after it has been copied, otherwise we will
@@ -38,7 +64,15 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // still might end up with data races but it helps to find wrong
   // implementations.
   AD_CORRECTNESS_CHECK(!copied_->load());
+  // Claim the memory before inserting (this way, the set remains unchanged if
+  // the claim throws because the memory limit is exceeded). If the word turns
+  // out to be a duplicate, the claim is refunded below.
+  const auto claimSize = entrySizeEstimate(word);
+  primaryClaim_->add(claimSize);
   auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
+  if (!isNewWord) {
+    primaryClaim_->refund(claimSize);
+  }
   size_ += static_cast<size_t>(isNewWord);
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
   // the MacOS build.

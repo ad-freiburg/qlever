@@ -17,6 +17,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "index/LocalVocabEntry.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
@@ -41,7 +42,63 @@ class LocalVocab {
   // the `LocalVocabEntry`s and it is hence essential that their addresses
   // remain stable over their lifetime in the hash set.
   using Set = absl::node_hash_set<LocalVocabEntry>;
-  std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
+
+  // Accounting of the approximate memory used by one word set against the
+  // memory pool registered via `setMemoryPoolForTracking` below (typically the
+  // pool of the server's overall memory limit). Bytes are claimed when a word
+  // is added to the set and are returned when the set is destroyed. Word sets
+  // are shared between `LocalVocab`s via `shared_ptr`s and are freed when the
+  // last owner goes away; the accounting piggybacks on exactly that lifetime
+  // by storing a `shared_ptr` to this claim in the set's deleter (see
+  // `makeWordSet`), so no central management of the entries is needed and the
+  // memory of a shared set is counted exactly once. When no pool is registered
+  // (index build, most unit tests), all operations are no-ops.
+  class MemoryClaim {
+   public:
+    MemoryClaim() : pool_{memoryPoolForTracking()} {}
+    MemoryClaim(const MemoryClaim&) = delete;
+    MemoryClaim& operator=(const MemoryClaim&) = delete;
+    ~MemoryClaim() {
+      if (pool_.has_value() && claimed_ != ad_utility::MemorySize::bytes(0)) {
+        pool_.value().ptr()->wlock()->increase(claimed_);
+      }
+    }
+    // Claim `amount` additional bytes. Throws `AllocationExceedsLimitException`
+    // if the pool does not have that much memory left.
+    void add(ad_utility::MemorySize amount) {
+      if (!pool_.has_value()) {
+        return;
+      }
+      pool_.value().ptr()->wlock()->decrease_if_enough_left_or_throw(amount);
+      claimed_ += amount;
+    }
+    // Return `amount` bytes to the pool (e.g. when an insert turned out to be
+    // a duplicate).
+    void refund(ad_utility::MemorySize amount) {
+      if (!pool_.has_value()) {
+        return;
+      }
+      pool_.value().ptr()->wlock()->increase(amount);
+      claimed_ -= amount;
+    }
+
+   private:
+    std::optional<ad_utility::detail::AllocationMemoryLeftThreadsafe> pool_;
+    ad_utility::MemorySize claimed_ = ad_utility::MemorySize::bytes(0);
+  };
+
+  // Create a word set whose deleter keeps the given claim alive, such that the
+  // claimed bytes are returned exactly when the set (and hence the memory of
+  // its entries) is freed.
+  static std::shared_ptr<Set> makeWordSet(std::shared_ptr<MemoryClaim> claim) {
+    return std::shared_ptr<Set>{
+        new Set{}, [claim = std::move(claim)](Set* set) { delete set; }};
+  }
+
+  // NOTE: The claim has to be declared before the set, because the set's
+  // deleter holds a reference to it.
+  std::shared_ptr<MemoryClaim> primaryClaim_ = std::make_shared<MemoryClaim>();
+  std::shared_ptr<Set> primaryWordSet_ = makeWordSet(primaryClaim_);
 
   using LocalBlankNodeManager =
       ad_utility::BlankNodeManager::LocalBlankNodeManager;
@@ -220,7 +277,26 @@ class LocalVocab {
   // You can safely keep writing to this `LocalVocab` after acquiring it.
   LifetimeExtender getLifetimeExtender() const;
 
+  // Register the memory pool against which all `LocalVocab`s created from now
+  // on account the (approximate) memory of their entries. This is called once
+  // at server startup with the pool of the overall memory limit, so that
+  // queries that create a lot of local vocabulary (e.g. via `GROUP_CONCAT`)
+  // fail with a proper memory-limit error instead of invisibly exhausting the
+  // machine's memory. When no pool is registered, no accounting takes place.
+  static void setMemoryPoolForTracking(
+      std::optional<ad_utility::detail::AllocationMemoryLeftThreadsafe> pool);
+
  private:
+  // The pool registered via `setMemoryPoolForTracking`, or `std::nullopt`.
+  static std::optional<ad_utility::detail::AllocationMemoryLeftThreadsafe>&
+  memoryPoolForTracking();
+
+  // The approximate number of bytes that the given entry occupies on the
+  // heap when stored in the primary set: the entry itself, the heap
+  // allocation of its string representation, and a constant for the per-node
+  // overhead of the hash set.
+  static ad_utility::MemorySize entrySizeEstimate(const LocalVocabEntry& word);
+
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
 

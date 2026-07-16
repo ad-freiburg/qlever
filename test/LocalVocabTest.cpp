@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <sstream>
@@ -666,4 +667,78 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       vocab.reserveBlankNodeBlocksFromExplicitIndices(indices, &bnm),
       ::testing::HasSubstr("Assertion"));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, memoryTracking) {
+  using ad_utility::MemorySize;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& context = qec->getLocalVocabContext();
+  constexpr auto lit = [](std::string_view s) {
+    return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
+  };
+
+  // Register a small pool and make sure that it is deregistered again at the
+  // end of the test, no matter how the test exits.
+  auto pool = ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+      MemorySize::kilobytes(10));
+  LocalVocab::setMemoryPoolForTracking(pool);
+  absl::Cleanup resetPool = [] {
+    LocalVocab::setMemoryPoolForTracking(std::nullopt);
+  };
+  auto left = [&pool]() { return pool.ptr()->wlock()->amountMemoryLeft(); };
+  const auto initiallyLeft = left();
+
+  {
+    // The clone is declared first, so that it outlives the vocabulary it is
+    // cloned from (see below).
+    LocalVocab clone;
+    {
+      LocalVocab vocab;
+      // Adding a word claims memory (at least the size of the string).
+      vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+          lit("aRatherLongLiteralSoThatTheSizeIsClearlyVisible"), context});
+      const auto afterFirstWord = left();
+      EXPECT_LT(afterFirstWord, initiallyLeft);
+
+      // Adding the same word again claims nothing.
+      vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+          lit("aRatherLongLiteralSoThatTheSizeIsClearlyVisible"), context});
+      EXPECT_EQ(left(), afterFirstWord);
+
+      // Cloning only shares the already accounted set and claims nothing.
+      clone = vocab.clone();
+      EXPECT_EQ(left(), afterFirstWord);
+    }
+    // The vocabulary is gone, but the clone still keeps the shared set (and
+    // hence the claim) alive.
+    EXPECT_LT(left(), initiallyLeft);
+  }
+  // All owners are gone, so all the claimed memory has been returned.
+  EXPECT_EQ(left(), initiallyLeft);
+
+  // When the pool is exhausted, adding a word throws a proper memory-limit
+  // error and leaves the vocabulary unchanged.
+  auto tinyPool = ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+      MemorySize::bytes(8));
+  LocalVocab::setMemoryPoolForTracking(tinyPool);
+  {
+    LocalVocab vocab;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        vocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry{lit("doesNotFitInEightBytes"), context}),
+        ::testing::HasSubstr("Tried to allocate"));
+    EXPECT_EQ(vocab.size(), 0u);
+    EXPECT_EQ(tinyPool.ptr()->wlock()->amountMemoryLeft(),
+              MemorySize::bytes(8));
+  }
+
+  // Vocabularies created while no pool is registered are not tracked.
+  LocalVocab::setMemoryPoolForTracking(std::nullopt);
+  {
+    LocalVocab vocab;
+    vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry{lit("nobodyIsCounting"), context});
+    EXPECT_EQ(left(), initiallyLeft);
+  }
 }

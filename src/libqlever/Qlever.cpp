@@ -15,6 +15,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
@@ -35,6 +36,12 @@ Qlever::Qlever(const EngineConfig& config)
           Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
+  // Let all local vocabularies account their (approximate) memory against the
+  // same pool as the overall memory limit, so that queries that create a lot
+  // of local vocabulary fail with a proper memory-limit error instead of
+  // invisibly exhausting the machine's memory.
+  LocalVocab::setMemoryPoolForTracking(allocator_.getMemoryLeft());
+
   // Set runtime parameters relevant for caching and propagate them to the
   // cache.
   globalRuntimeParameters.wlock()->cacheMaxNumEntries_.setOnUpdateAction(
