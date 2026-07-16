@@ -59,10 +59,9 @@ struct RuntimeParameters {
   // The number of threads used to read and decompress blocks during the scan of
   // the old permutations in a runtime index rebuild (see `IndexRebuilder`).
   // This read/decompress work dominates the rebuild's CPU usage, so lowering it
-  // reduces the rebuild's peak CPU - without affecting query scans, which are
-  // unaffected by this parameter. A value of 0 (the default) falls back to
-  // `lazy-index-scan-num-threads` (i.e. the same as query scans, which is the
-  // historical behavior).
+  // reduces the rebuild's peak CPU without affecting query scans. A value of 0
+  // (the default) falls back to `lazy-index-scan-num-threads`, the same value
+  // as for query scans, which is the historical behavior.
   SizeT rebuildIndexScanNumThreads_{0, "rebuild-index-scan-num-threads"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
