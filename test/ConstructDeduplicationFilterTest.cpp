@@ -104,6 +104,36 @@ TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
   EXPECT_EQ(key1, state.makeFullTripleKey(kVarTriple, 0, ctx));
 }
 
+// A constant position contributes its precomputed `dedupId_` to the key
+// (rather than reading anything from the row).
+TEST(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
+  auto qec = getQec("<s> <p> <o>");
+  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+
+  PreprocessedTriple constTriple{PrecomputedConstant{{}, IntId(7)},
+                                 PrecomputedConstant{{}, IntId(8)},
+                                 PrecomputedConstant{{}, IntId(9)}};
+  auto table = singleIdTable(IntId(0));  // no variable positions: row unused
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+
+  DeduplicationKey key = state.makeFullTripleKey(constTriple, 0, ctx);
+  EXPECT_EQ(key, (DeduplicationKey{IntId(7), IntId(8), IntId(9)}));
+}
+
+// Building a key for a blank-node position is a precondition violation:
+// blank-node triples bypass deduplication and never reach `makeFullTripleKey`.
+TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
+  auto qec = getQec("<s> <p> <o>");
+  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+
+  PreprocessedTriple bnTriple{PrecomputedBlankNode{"_:g", "_0"},
+                              PrecomputedVariable{0}, PrecomputedVariable{0}};
+  auto table = singleIdTable(IntId(1));
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+
+  EXPECT_ANY_THROW(state.makeFullTripleKey(bnTriple, 0, ctx));
+}
+
 // `global` dedup collapses the same local-vocab triple across two result
 // blocks (each with its own, separately-destroyed `LocalVocab`).
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
@@ -139,6 +169,21 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   auto t2 = singleIdTable(lvId(v2, "x", *qec));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, 1};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));
+}
+
+// A template triple flagged as containing a blank node is always reported
+// "new": blank-node triples bypass deduplication, so no key is built and
+// nothing is ever recorded (so a second call is "new" again too).
+TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
+  auto qec = getQec("<s> <p> <o>");
+  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  auto tmpl = singleTripleTemplate();
+  tmpl.tripleContainsBlankNode_ = {true};
+
+  auto table = singleIdTable(IntId(1));
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
 }
 
 // A ground triple seeded with a local-vocab constant suppresses a later
@@ -178,6 +223,23 @@ TEST(ConstructDeduplicationFilter, resetsWhenVocabExceedsThreshold) {
   // The 1-byte threshold was exceeded, so the next call resets the dedup state
   // and the identical triple is treated as new again.
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));
+}
+
+// `PerTripleFilter` must never be constructed for `none`: the caller creates no
+// filter in that mode, so building one is a precondition violation (see the
+// `AD_CONTRACT_CHECK` in `PerTripleFilter::makeFilter`).
+TEST(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
+  auto qec = getQec("<s> <p> <o>");
+  EXPECT_ANY_THROW(PerTripleFilter(DeduplicationMode::none(), *qec));
+}
+
+// In `none` mode no filter is built (`makeFilter` returns `nullopt`), and
+// `seedGroundTriple` is a no-op (its filter-empty branch). This must not touch
+// any dedup state or crash.
+TEST(ConstructDeduplicationFilter, noneModeHasNoFilter) {
+  auto qec = getQec("<s> <p> <o>");
+  ConstructDeduplicationState state{DeduplicationMode::none(), *qec};
+  state.seedGroundTriple(DeduplicationKey{IntId(1), IntId(1), IntId(1)});
 }
 
 }  // namespace
