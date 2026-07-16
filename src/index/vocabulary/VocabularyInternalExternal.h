@@ -49,7 +49,9 @@ class VocabularyInternalExternal {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 
-  // Delegate to `scanAll` of the underlying vocabulary.
+  // Delegate to `scanAll` of the underlying vocabulary. All words that are
+  // stored in the internal vocabulary, can also be found in the external
+  // vocabulary.
   auto scanAll() const { return externalVocab_.scanAll(); }
 
   //____________________________________________________________________________

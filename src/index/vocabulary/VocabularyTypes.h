@@ -126,38 +126,11 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
-namespace ad_utility::vocabulary {
-
-// Generic fallback implementation of `scanAll` for vocabularies without a
-// specialized (batched) one: simply enumerate the words `[0, size())` via the
-// ordinary single-word `operator[]`. If `operator[]` already yields a
-// `std::string_view` (into the vocabulary's own storage, which outlives the
-// range), it is forwarded without copying; otherwise (an owning `std::string`)
-// the word is kept alive in a buffer.
-template <typename Vocab>
-auto scanAllViaOperatorBracket(const Vocab* vocab) {
-  return InputRangeFromGetCallable{
-      [vocab, nextIdx = uint64_t{0},
-       buffer = std::string{}]() mutable -> std::optional<IndexAndWord> {
-        if (nextIdx >= vocab->size()) {
-          return std::nullopt;
-        }
-        uint64_t index = nextIdx++;
-        decltype(auto) word = (*vocab)[index];
-        if constexpr (std::is_same_v<std::decay_t<decltype(word)>,
-                                     std::string_view>) {
-          return IndexAndWord{index, word};
-        } else {
-          buffer = std::move(word);
-          return IndexAndWord{index, std::string_view{buffer}};
-        }
-      }};
-}
-
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
 // implementation. They simply loop over the indices and issue the ordinary
 // single-word `operator[]` lookups one after another.
+namespace ad_utility::vocabulary {
 
 // Sequential fallback for `lookupBatch`: look up each index individually via
 // `vocab[idx]`, returning one `string_view` per index. Works for any vocabulary

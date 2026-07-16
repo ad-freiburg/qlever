@@ -12,6 +12,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
@@ -59,21 +60,20 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
-  // words in batches) and decompress each word. The decompressed word is kept
-  // in a buffer so that a `string_view` to it can be yielded. The index needed
-  // for choosing the decoder is taken directly from the underlying range.
+  // words in batches) and decompress each word. `scanAll()` is expected to
+  // yield `IndexAndWord` elements, so we have to apply a transformation at the
+  // end.
   auto scanAll() const {
-    return ad_utility::InputRangeFromGetCallable{
-        [this, underlying = underlyingVocabulary_.scanAll(),
-         buffer = std::string{}]() mutable -> std::optional<IndexAndWord> {
-          std::optional<IndexAndWord> compressed = underlying.get();
-          if (!compressed.has_value()) {
-            return std::nullopt;
-          }
-          const auto& [index, word] = compressed.value();
-          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
-          return IndexAndWord{index, std::string_view{buffer}};
-        }};
+    return ad_utility::OwningView{ad_utility::CachingTransformInputRange(
+               underlyingVocabulary_.scanAll(),
+               [this](const IndexAndWord& compressed) {
+                 const auto& [index, word] = compressed;
+                 return std::pair{index, compressionWrapper_.decompress(
+                                             word, getDecoderIdx(index))};
+               })} |
+           ql::views::transform([](const std::pair<uint64_t, std::string>& p) {
+             return IndexAndWord{p.first, std::string_view{p.second}};
+           });
   }
 
   //____________________________________________________________________________

@@ -68,7 +68,14 @@ class VocabularyInMemory
 
   // Default fallback iteration over all words.
   auto scanAll() const {
-    return ad_utility::vocabulary::scanAllViaOperatorBracket(this);
+    return ad_utility::InputRangeFromGetCallable{
+        [this, nextIdx = uint64_t{0}]() mutable -> std::optional<IndexAndWord> {
+          if (nextIdx >= size()) {
+            return std::nullopt;
+          }
+          uint64_t index = nextIdx++;
+          return IndexAndWord{index, (*this)[index]};
+        }};
   }
 
   //____________________________________________________________________________

@@ -54,24 +54,23 @@ constexpr ad_utility::MemorySize UPPER_LIMIT = 10_MB;
 
 namespace {
 // Given the `offsets` of a chunk of words and a starting position `first`
-// within that chunk (with `total` words in the chunk), return how many words
-// starting at `first` can be read into a single data buffer without their
-// combined size exceeding `UPPER_LIMIT` -- but always at least one word, even
-// if that single word is larger than `UPPER_LIMIT` (a word must not be split).
-size_t numWordsWithinLimit(const std::vector<uint64_t>& offsets, size_t first,
-                           size_t total) {
+// within that chunk, return how many words starting at `first` can be read into
+// a single data buffer without their combined size exceeding `UPPER_LIMIT`, but
+// always at least one word, even if that single word is larger than
+// `UPPER_LIMIT` (a word must not be split).
+size_t numWordsWithinLimit(const std::vector<uint64_t>& offsets, size_t first) {
   // Common case: all remaining words of the chunk fit. Checking this first
   // (i.e. looking at the end right away) avoids a search in the expected case
   // where `BATCH_SIZE` words comfortably fit within `UPPER_LIMIT`.
-  if (offsets[total] - offsets[first] <= UPPER_LIMIT.getBytes()) {
-    return total - first;
+  if (offsets.back() - offsets[first] <= UPPER_LIMIT.getBytes()) {
+    return offsets.size() - 1 - first;
   }
   // Otherwise binary-search for the largest prefix that fits. `offsets` is
   // ascending, so the number of words that fit is the number of offsets in
   // `[first, total]` that are `<= offsets[first] + UPPER_LIMIT`, minus one.
   uint64_t threshold = offsets[first] + UPPER_LIMIT.getBytes();
   auto begin = offsets.begin() + first;
-  auto it = std::upper_bound(begin, offsets.begin() + total + 1, threshold);
+  auto it = std::upper_bound(begin, offsets.end(), threshold);
   size_t numFit = static_cast<size_t>(it - begin) - 1;
   return std::max<size_t>(numFit, 1);
 }
@@ -114,7 +113,7 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
       }
       // Read the word data for as many words (starting at `dataFirst`) as fit
       // within `UPPER_LIMIT`, in a single read.
-      numInData = numWordsWithinLimit(offsets, dataFirst, numWordsInChunk);
+      numInData = numWordsWithinLimit(offsets, dataFirst);
       data.resize(offsets[dataFirst + numInData] - offsets[dataFirst]);
       file_.read(data.data(), data.size(),
                  static_cast<off_t>(offsets[dataFirst]));
