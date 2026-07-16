@@ -20,10 +20,12 @@ ServerMetrics::ServerMetrics(
     absl::AnyInvocable<int64_t() const> getDeltaTriples,
     absl::AnyInvocable<int64_t() const> getMemoryLeft,
     absl::AnyInvocable<int64_t() const> getCacheUsed,
+    absl::AnyInvocable<int64_t() const> getCacheLimit,
     std::optional<ad_utility::MemorySize> maxMem)
     : getDeltaTriples_(std::move(getDeltaTriples)),
       getMemoryLeft_(std::move(getMemoryLeft)),
-      getCacheUsed_(std::move(getCacheUsed)) {
+      getCacheUsed_(std::move(getCacheUsed)),
+      getCacheLimit_(std::move(getCacheLimit)) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   startTimeMetric_ = meter->CreateInt64Gauge(
@@ -61,7 +63,7 @@ ServerMetrics::ServerMetrics(
                               "Memory allocated for query processing", "By");
   memoryCacheUsed_ = meter->CreateInt64ObservableGauge(
       "qlever.memory_cache_used", "Memory used for caching", "By");
-  memoryCacheLimit_ = meter->CreateInt64Gauge(
+  memoryCacheLimit_ = meter->CreateInt64ObservableGauge(
       "qlever.memory_cache_limit", "Memory allocated for caching", "By");
 
   auto now = std::chrono::duration_cast<std::chrono::seconds>(
@@ -96,6 +98,8 @@ ServerMetrics::~ServerMetrics() {
       &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
   memoryCacheUsed_->RemoveCallback(
       &observeCallback<&ServerMetrics::getCacheUsed_>, this);
+  memoryCacheLimit_->RemoveCallback(
+      &observeCallback<&ServerMetrics::getCacheLimit_>, this);
 }
 
 // _____________________________________________________________________________
@@ -106,6 +110,8 @@ void ServerMetrics::registerCallbacks() {
       &observeCallback<&ServerMetrics::getMemoryLeft_>, this);
   memoryCacheUsed_->AddCallback(&observeCallback<&ServerMetrics::getCacheUsed_>,
                                 this);
+  memoryCacheLimit_->AddCallback(
+      &observeCallback<&ServerMetrics::getCacheLimit_>, this);
 }
 
 // _____________________________________________________________________________

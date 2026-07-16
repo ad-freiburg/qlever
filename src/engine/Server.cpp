@@ -68,7 +68,7 @@ Server::Server(
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   metrics_ = std::make_unique<ServerMetrics>(
-      [this]() -> int64_t {
+      [this]() {
         auto counts = indexAndViewsSnapshot()
                           ->index_.deltaTriplesManager()
                           .getCurrentLocatedTriplesSharedState()
@@ -81,20 +81,9 @@ Server::Server(
       [this]() -> int64_t {
         return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
       },
+      [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
       config.memoryLimit_);
   metrics_->registerCallbacks();
-  // `setOnUpdateAction` overwrites any previously registered `OnUpdateAction`,
-  // so the action registered earlier (here in `Qlever`) has to be re-run
-  // manually.
-  // TODO<qup42>: either support multiple callbacks or move responsibility for
-  // recording this metric.
-  globalRuntimeParameters.wlock()->cacheMaxSize_.setOnUpdateAction(
-      [this](ad_utility::MemorySize newValue) {
-        // Run code of the overwritten `OnUpdateAction`.
-        cache().setMaxSize(newValue);
-        // New metric collection code.
-        metrics_->memoryCacheLimit_->Record(newValue.getBytes());
-      });
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"

@@ -40,11 +40,11 @@ class ServerMetrics {
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> sparqlErrors_;
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> httpErrors_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryQueryTotal_;
-  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> memoryCacheLimit_;
 
   ServerMetrics(absl::AnyInvocable<int64_t() const> getDeltaTriples,
                 absl::AnyInvocable<int64_t() const> getMemoryLeft,
                 absl::AnyInvocable<int64_t() const> getCacheUsed,
+                absl::AnyInvocable<int64_t() const> getCacheLimit,
                 std::optional<ad_utility::MemorySize> maxMem);
   void registerCallbacks();
 
@@ -58,6 +58,7 @@ class ServerMetrics {
   absl::AnyInvocable<int64_t() const> getDeltaTriples_;
   absl::AnyInvocable<int64_t() const> getMemoryLeft_;
   absl::AnyInvocable<int64_t() const> getCacheUsed_;
+  absl::AnyInvocable<int64_t() const> getCacheLimit_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -67,6 +68,8 @@ class ServerMetrics {
       memoryQueryFree_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       memoryCacheUsed_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      memoryCacheLimit_;
 };
 
 #endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
