@@ -709,7 +709,8 @@ class IdTable {
   // `ad_utility::IteratorForAccessOperator` template.
   template <typename ReferenceType>
   struct IteratorHelper {
-    auto operator()(auto&& idTable, size_t rowIdx) const {
+    template <typename Table>
+    auto operator()(Table&& idTable, size_t rowIdx) const {
       return ReferenceType{&idTable, rowIdx};
     }
   };

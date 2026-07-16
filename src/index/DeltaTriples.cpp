@@ -92,9 +92,11 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
+template <typename IsInternal>
 void DeltaTriples::eraseTriplesInPermutation(
     Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-    auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle) {
+    IsInternal isInternal,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   // The requested `Permutation` and `LocatedTriplesPerBlock` for that
   // permutation from which the triples are erased.
   const auto& perm = index_.getPermutation(permutation);

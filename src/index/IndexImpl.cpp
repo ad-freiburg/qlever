@@ -911,7 +911,8 @@ auto IndexImpl::convertPartialToGlobalIds(
 namespace {
 // Lift a callback that works on single elements to a callback that works on
 // blocks.
-auto liftCallback(auto callback) {
+template <typename Callback>
+auto liftCallback(Callback callback) {
   return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
@@ -2055,9 +2056,10 @@ namespace {
 // over all tables produced by scanning the given permutation. The customAction
 // is invoked for each table to allow for additional computations while
 // scanning.
+template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, auto customAction) {
+    const Permutation& permutation, CustomAction customAction) {
   return std::packaged_task<void()>{[&counter, &permutation,
                                      &locatedTriplesSharedState,
                                      customAction = std::move(customAction)]() {
