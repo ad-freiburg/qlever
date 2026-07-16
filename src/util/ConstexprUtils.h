@@ -366,17 +366,20 @@ constexpr void forEachValueInValueSequence(std::integer_sequence<T, values...>,
 }
 
 namespace detail {
-template <const auto& arr, typename Func, typename Value, std::size_t... Is>
+template <const auto& arr, typename Func, typename Value, typename... Args,
+          std::size_t... Is>
 constexpr decltype(auto) constexprSwitchFromArrayImpl(
-    Func&& f, const Value& v, std::index_sequence<Is...>) {
-  return ConstexprSwitch<std::get<Is>(arr)...>{}(std::forward<Func>(f), v);
+    Func&& f, const Value& v, Args&&... args, std::index_sequence<Is...>) {
+  return ConstexprSwitch<std::get<Is>(arr)...>{}(std::forward<Func>(f), v,
+                                                 std::forward<Args>(args)...);
 }
 }  // namespace detail
 
-template <const auto& arr, typename Func, typename Value>
-constexpr decltype(auto) constexprSwitchFromArray(Func&& f, const Value& v) {
+template <const auto& arr, typename Func, typename Value, typename... Args>
+constexpr decltype(auto) constexprSwitchFromArray(Func&& f, const Value& v,
+                                                  Args&&... args) {
   return detail::constexprSwitchFromArrayImpl<arr>(
-      std::forward<Func>(f), v,
+      std::forward<Func>(f), v, std::forward<Args>(args)...,
       std::make_index_sequence<
           std::tuple_size_v<std::decay_t<decltype(arr)>>>{});
 }

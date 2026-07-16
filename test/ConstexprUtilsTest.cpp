@@ -228,14 +228,15 @@ TEST(ConstExprUtils, constexprSwitchFromArray) {
   using namespace ad_utility;
   {
     auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * 2; }};
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 2), 4));
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 5), 10));
+    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 2)), 4);
+    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 5)), 10);
     ASSERT_ANY_THROW(constexprSwitchFromArray<switchFromArrayCases>(f, 4));
   }
   {
-    auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * j; }};
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 2, 7), 14));
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 5, 2), 10));
+    auto f =
+        ad_utility::ApplyAsValueIdentity{[](auto i, auto j) { return i * j; }};
+    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 2, 7)), 14);
+    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 5, 2)), 10);
     ASSERT_ANY_THROW(constexprSwitchFromArray<switchFromArrayCases>(f, 4, 3));
   }
 }
@@ -251,10 +252,12 @@ TEST(ConstExprUtils, constexprSwitchFromArrayImpl) {
     ASSERT_EQ(
         (detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 5, seq)),
         10);
-  ASSERT_ANY_THROW(detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 4, seq)))
+    ASSERT_ANY_THROW(
+        detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 4, seq));
   }
   {
-    auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * j; }};
+    auto f =
+        ad_utility::ApplyAsValueIdentity{[](auto i, auto j) { return i * j; }};
     auto seq = std::make_index_sequence<switchFromArrayCases.size()>{};
     ASSERT_EQ((detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(
                   f, 2, 7, seq)),
