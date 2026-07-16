@@ -27,16 +27,16 @@ namespace qlever {
 
 namespace {
 // The header that is written at the beginning of every blob (see
-// `Qlever::serializeToUncompressedBlob`/`Qlever::deserializeFromUncompressedBlob`),
-// to guard against loading a blob written by an incompatible version of
-// QLever.
+// `Qlever::serializeVocabAndNamedCacheToCompressedBlob` /
+// `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`), to guard against
+// loading a blob written by an incompatible version of QLever.
 constexpr std::array<char, 8> blobMagicBytes{'Q', 'L', 'B', 'L',
                                              'O', 'B', '1', '\0'};
 constexpr uint16_t blobFormatVersion = 1;
 }  // namespace
 
 // _____________________________________________________________________________
-Qlever::Qlever(const EngineConfig& config)
+Qlever::Qlever(const EngineConfig& config, bool skipLoading)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
@@ -65,10 +65,18 @@ Qlever::Qlever(const EngineConfig& config)
   auto snapshot = indexAndViewsSnapshot();
   auto& [index, materializedViewsManager] = *snapshot;
 
-  // Load the index from disk.
   index.usePatterns() = enablePatternTrick_;
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+
+  // If `skipLoading` is set, we do not touch the on-disk index at all; the
+  // instance is expected to be populated later from a blob (see
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
+  if (skipLoading) {
+    return;
+  }
+
+  // Load the index from disk.
   index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index.addTextFromOnDiskIndex();
@@ -226,11 +234,11 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // _____________________________________________________________________________
-std::vector<char> Qlever::serializeToUncompressedBlob() const {
+std::vector<char> Qlever::serializeVocabAndNamedCacheToCompressedBlob() const {
   // First serialize everything into an uncompressed, suitably aligned buffer.
   // The alignment (guaranteed by the `AlignedByteBufferWriteSerializer`) is
   // required so that the buffer can later be deserialized zero-copy (see
-  // `deserializeFromUncompressedBlob`).
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
   ad_utility::serialization::AlignedByteBufferWriteSerializer serializer;
   serializer << blobMagicBytes;
   serializer << blobFormatVersion;
@@ -246,8 +254,9 @@ std::vector<char> Qlever::serializeToUncompressedBlob() const {
   writeNamedResultCacheToSerializer(serializer);
   auto uncompressed = std::move(serializer).data();
 
-  // Compress the buffer and append the uncompressed size as a trailing
-  // `uint64_t`, so that `decompressBlob` can allocate the right buffer size.
+  // Compress the whole buffer, and append the size of the uncompressed buffer
+  // as a trailing `uint64_t`. `decompressBlob` reads this trailing size to
+  // allocate a target buffer of exactly the right size for the decompression.
   std::vector<char> compressed =
       ZstdWrapper::compress(uncompressed.data(), uncompressed.size());
   uint64_t uncompressedSize = uncompressed.size();
@@ -258,8 +267,13 @@ std::vector<char> Qlever::serializeToUncompressedBlob() const {
 }
 
 // _____________________________________________________________________________
-std::vector<char, ad_utility::AlignedAllocator<char>> Qlever::decompressBlob(
-    ql::span<const char> compressedBlob) {
+std::vector<char, Qlever::BlobAllocator> Qlever::decompressBlob(
+    ql::span<const char> compressedBlob,
+    ql::pmr::polymorphic_allocator<char> allocator) {
+  // The size of the uncompressed buffer is stored as a trailing `uint64_t` at
+  // the very end of the whole compressed block (see
+  // `serializeVocabAndNamedCacheToCompressedBlob`). Read it off first, then
+  // strip it from the span that is passed to the decompression.
   uint64_t uncompressedSize;
   AD_CONTRACT_CHECK(compressedBlob.size() >= sizeof(uncompressedSize));
   std::memcpy(
@@ -269,10 +283,14 @@ std::vector<char, ad_utility::AlignedAllocator<char>> Qlever::decompressBlob(
   compressedBlob = compressedBlob.subspan(
       0, compressedBlob.size() - sizeof(uncompressedSize));
 
-  // Decompress into an aligned buffer, which is required for the zero-copy
-  // deserialization performed by `deserializeFromUncompressedBlob`.
-  std::vector<char, ad_utility::AlignedAllocator<char>> uncompressed(
-      uncompressedSize);
+  // Decompress into a buffer that is 1. allocated via the caller-provided
+  // `allocator`, 2. aligned to the maximal possible alignment (required for the
+  // zero-copy deserialization), and 3. not needlessly zero-initialized before
+  // the decompression overwrites it (see `BlobAllocator`).
+  std::vector<char, BlobAllocator> uncompressed(
+      uncompressedSize,
+      BlobAllocator{ad_utility::AlignedAllocator<
+          char, ql::pmr::polymorphic_allocator<char>>{allocator}});
   auto decompressedSize = ZstdWrapper::decompressToBuffer(
       compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
       uncompressed.size());
@@ -286,13 +304,13 @@ void Qlever::skipAndVerifyBlobHeader(
         true, ql::span<const char>>& serializer) {
   std::decay_t<decltype(blobMagicBytes)> magicBytes{};
   serializer >> magicBytes;
-  AD_CORRECTNESS_CHECK(magicBytes == blobMagicBytes,
-                       "The given blob was not written by "
-                       "`Qlever::serializeToUncompressedBlob`, "
-                       "or is corrupted");
+  AD_CONTRACT_CHECK(magicBytes == blobMagicBytes,
+                    "The given blob was not written by "
+                    "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`, "
+                    "or is corrupted");
   uint16_t version;
   serializer >> version;
-  AD_CORRECTNESS_CHECK(
+  AD_CONTRACT_CHECK(
       version == blobFormatVersion,
       "The given blob was written by an incompatible version of QLever "
       "(format version ",
@@ -300,17 +318,18 @@ void Qlever::skipAndVerifyBlobHeader(
 }
 
 // _____________________________________________________________________________
-void Qlever::deserializeFromUncompressedBlob(ql::span<const char> blob) {
+void Qlever::deserializeVocabAndNamedCacheFromCompressedBlob(
+    ql::span<const char> blob, ql::pmr::polymorphic_allocator<char> allocator) {
   AD_CONTRACT_CHECK(
       !deserializedBlobLifetimeExtender_.has_value(),
-      "`deserializeFromUncompressedBlob` must not be called more than once on "
-      "the same `Qlever` instance");
+      "`deserializeVocabAndNamedCacheFromCompressedBlob` must not be called "
+      "more than once on the same `Qlever` instance");
 
   // Decompress into `deserializedBlobLifetimeExtender_`, which is kept alive
   // for the lifetime of this `Qlever` instance because the vocabulary and
   // named result cache entries loaded below are zero-copy views directly into
   // it.
-  deserializedBlobLifetimeExtender_.emplace(decompressBlob(blob));
+  deserializedBlobLifetimeExtender_.emplace(decompressBlob(blob, allocator));
 
   // Use a serializer that only borrows a view of
   // `deserializedBlobLifetimeExtender_`, rather than one that owns/moves it, so
@@ -318,8 +337,7 @@ void Qlever::deserializeFromUncompressedBlob(ql::span<const char> blob) {
   // rest of this instance's lifetime.
   ad_utility::serialization::ByteBufferReadSerializerT<true,
                                                        ql::span<const char>>
-      reader{ql::span<const char>{deserializedBlobLifetimeExtender_->data(),
-                                  deserializedBlobLifetimeExtender_->size()}};
+      reader{ql::span<const char>{deserializedBlobLifetimeExtender_.value()}};
 
   skipAndVerifyBlobHeader(reader);
 

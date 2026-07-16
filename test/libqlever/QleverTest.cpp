@@ -10,8 +10,10 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "backports/memory_resource.h"
 #include "engine/ExternalValues.h"
 #include "libqlever/Qlever.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 
 using namespace qlever;
 using namespace testing;
@@ -245,11 +247,10 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 }
 
 // _____________________________________________________________________________
-// Test that a combined blob (vocabulary + named result cache), written from
-// one `Qlever` instance, can be loaded into a completely different instance
-// (built from an unrelated index, so its on-disk vocabulary alone could not
-// possibly resolve the source instance's IRIs) and there produce correct
-// query results without loading any permutations.
+// Test that a blob (index metadata + vocabulary + named result cache), written
+// from one `Qlever` instance, can be loaded into a completely separate instance
+// that has NO index files on disk at all (constructed with `skipLoading`), and
+// there produce correct query results without loading any permutations.
 TEST(LibQlever, combinedBlob) {
   std::string sourceFilename = "libQleverCombinedBlobSource.ttl";
   {
@@ -261,73 +262,149 @@ TEST(LibQlever, combinedBlob) {
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
   sourceConfig.baseName_ = "LibQlever.combinedBlobSource";
-  // `serializeToUncompressedBlob` currently requires the in-memory,
-  // uncompressed vocabulary implementation (see
+  // `serializeVocabAndNamedCacheToCompressedBlob` currently requires the
+  // in-memory, uncompressed vocabulary implementation (see
   // `Vocabulary::writeAsZeroCopyBlob`).
   sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
   EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
 
-  std::vector<char> blob;
-  {
+  const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
     source.queryAndPinResultWithName(
         "blobPin", "SELECT ?s ?o WHERE { ?s <combinedBlobPredicate> ?o }");
-    EXPECT_NO_THROW(blob = source.serializeToUncompressedBlob());
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
     EXPECT_FALSE(blob.empty());
-  }
+    return blob;
+  }();
 
-  // Build a second, unrelated index with a disjoint vocabulary.
-  std::string targetFilename = "libQleverCombinedBlobTarget.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(targetFilename);
-    ofs << "<unrelatedSubject> <unrelatedPredicate> <unrelatedObject>.";
-  }
-  IndexBuilderConfig targetConfig;
-  targetConfig.inputFiles_.push_back(
-      {targetFilename, Filetype::Turtle, std::nullopt});
-  targetConfig.baseName_ = "LibQlever.combinedBlobTarget";
-  EXPECT_NO_THROW(Qlever::buildIndex(targetConfig));
+  // A completely fresh instance with NO index files on disk (`skipLoading`);
+  // everything needed to answer the cached-result query comes from the blob.
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
 
-  EngineConfig targetEngineConfig{targetConfig};
-  targetEngineConfig.doNotLoadPermutations_ = true;
-  Qlever target{targetEngineConfig};
-
-  // Before loading the blob, the target's own (unrelated) vocabulary must not
-  // contain the source's IRIs/literals.
+  // Before loading the blob, the named result cache is empty.
   std::string cachedResultQuery =
       "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}";
   AD_EXPECT_THROW_WITH_MESSAGE(
       target.query(cachedResultQuery, ad_utility::MediaType::tsv),
       HasSubstr("is not contained in the named result cache"));
 
-  EXPECT_NO_THROW(target.deserializeFromUncompressedBlob(blob));
+  EXPECT_NO_THROW(
+      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob));
 
   // The named cached result, and the vocabulary needed to correctly export
-  // its IDs as strings, must now come from the blob.
+  // its IDs as strings, now come entirely from the blob.
   auto res = target.query(cachedResultQuery, ad_utility::MediaType::tsv);
   EXPECT_EQ(res, "?s\t?o\n<combinedBlobSubject>\t\"combined blob literal\"\n");
 
-  // Permutations are still not loaded, so a query needing them still throws.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      target.query("SELECT ?s WHERE { ?s <unrelatedPredicate> ?o }",
-                   ad_utility::MediaType::tsv),
-      HasSubstr("permutation to be loaded"));
+  // Permutations are not part of the blob, so a query that needs them (i.e.
+  // any query with actual triples) is unsupported on a blob-only instance and
+  // throws.
+  EXPECT_ANY_THROW(
+      target.query("SELECT ?s WHERE { ?s <combinedBlobPredicate> ?o }",
+                   ad_utility::MediaType::tsv));
 
   // Loading a second blob on the same instance must throw.
-  AD_EXPECT_THROW_WITH_MESSAGE(target.deserializeFromUncompressedBlob(blob),
-                               HasSubstr("must not be called more than once"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
+      HasSubstr("must not be called more than once"));
+}
+
+// _____________________________________________________________________________
+// A `ql::pmr::memory_resource` that counts the allocations routed through it,
+// used to verify that a caller-provided allocator is actually used for the
+// decompressed blob buffer.
+class CountingMemoryResource : public ql::pmr::memory_resource {
+ public:
+  size_t numAllocations_ = 0;
+  size_t bytesAllocated_ = 0;
+
+ private:
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    ++numAllocations_;
+    bytesAllocated_ += bytes;
+    return ql::pmr::new_delete_resource()->allocate(bytes, alignment);
+  }
+  void do_deallocate(void* p, size_t bytes, size_t alignment) override {
+    ql::pmr::new_delete_resource()->deallocate(p, bytes, alignment);
+  }
+  bool do_is_equal(
+      const ql::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+};
+
+// _____________________________________________________________________________
+// Test that the `allocator` passed to
+// `deserializeVocabAndNamedCacheFromCompressedBlob` is in fact used to allocate
+// the (large) decompressed blob buffer.
+TEST(LibQlever, blobUsesProvidedAllocator) {
+  std::string sourceFilename = "libQleverBlobAllocatorSource.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(sourceFilename);
+    ofs << "<allocatorBlobSubject> <allocatorBlobPredicate> "
+           "\"allocator blob literal\".";
+  }
+  IndexBuilderConfig sourceConfig;
+  sourceConfig.inputFiles_.push_back(
+      {sourceFilename, Filetype::Turtle, std::nullopt});
+  sourceConfig.baseName_ = "LibQlever.blobAllocatorSource";
+  sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
+  EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
+
+  const std::vector<char> compressedBlob = [&sourceConfig]() {
+    Qlever source{EngineConfig{sourceConfig}};
+    source.queryAndPinResultWithName(
+        "blobPin", "SELECT ?s ?o WHERE { ?s <allocatorBlobPredicate> ?o }");
+    return source.serializeVocabAndNamedCacheToCompressedBlob();
+  }();
+
+  CountingMemoryResource resource;
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  EXPECT_NO_THROW(target.deserializeVocabAndNamedCacheFromCompressedBlob(
+      compressedBlob, ql::pmr::polymorphic_allocator<char>{&resource}));
+
+  // The decompressed blob buffer must have been allocated via `resource`.
+  EXPECT_GT(resource.numAllocations_, 0u);
+  EXPECT_GT(resource.bytesAllocated_, 0u);
+
+  // The instance still answers queries correctly from the resource-backed
+  // buffer.
+  auto res = target.query(
+      "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
+      ad_utility::MediaType::tsv);
+  EXPECT_EQ(res,
+            "?s\t?o\n<allocatorBlobSubject>\t\"allocator blob literal\"\n");
+}
+
+// _____________________________________________________________________________
+// Test that loading a blob that does not carry a valid header is rejected.
+TEST(LibQlever, deserializeRejectsInvalidBlob) {
+  // A validly ZSTD-compressed blob (with a correct trailing uncompressed size)
+  // whose decompressed content does not start with the expected magic header.
+  std::vector<char> bogus(64, 'X');
+  std::vector<char> compressedBlob =
+      ZstdWrapper::compress(bogus.data(), bogus.size());
+  uint64_t uncompressedSize = bogus.size();
+  const char* sizeBytes = reinterpret_cast<const char*>(&uncompressedSize);
+  compressedBlob.insert(compressedBlob.end(), sizeBytes,
+                        sizeBytes + sizeof(uncompressedSize));
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
+      HasSubstr("was not written by"));
 }
 
 // _____________________________________________________________________________
 // End-to-end test for a blob that carries a spatial (s2) index in its named
 // result cache: build an index (with in-memory vocabulary), pin a query result
 // together with a cached geometry index, serialize everything to a blob, load
-// it into a fresh instance, and run a spatial join that uses the cached
-// geometry index from the blob.
+// it into a fresh instance that has NO index files on disk, and run a spatial
+// join that uses the cached geometry index from the blob.
 TEST(LibQlever, blobWithSpatialIndex) {
-  // Four rail segments (linestrings, the "right"/pinned side) and one station
-  // node (a point, the "left" side). The point lies within 1 km of all four
-  // segments (see `SpatialJoinCachedIndexTest`).
+  // Four rail segments (linestrings) that are pinned as a cached s2 geometry
+  // index. The query point used below lies within 1 km of all four segments
+  // (see `SpatialJoinCachedIndexTest`).
   std::string sourceFilename = "libQleverBlobSpatialSource.ttl";
   {
     auto ofs = ad_utility::makeOfstream(sourceFilename);
@@ -342,38 +419,34 @@ TEST(LibQlever, blobWithSpatialIndex) {
            ".\n"
            "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
            "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
-           ".\n"
-           "<p1> <asWKT2> \"POINT(7.841295 "
-           "47.997731)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
            ".\n";
   }
   IndexBuilderConfig sourceConfig;
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
   sourceConfig.baseName_ = "LibQlever.blobSpatialSource";
-  // `serializeToUncompressedBlob` currently requires the in-memory,
-  // uncompressed vocabulary implementation (see
-  // `Vocabulary::writeAsZeroCopyBlob`).
   sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
   EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
 
-  std::vector<char> blob;
-  {
+  const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
     // Pin the linestrings together with a cached s2 geometry index on `?geo2`.
     source.queryAndPinResultWithName(
         QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
         "SELECT * { ?s2 <asWKT> ?geo2 }");
-    EXPECT_NO_THROW(blob = source.serializeToUncompressedBlob());
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
     EXPECT_FALSE(blob.empty());
-  }
+    return blob;
+  }();
 
-  // A spatial join whose right side is the cached geometry index (referenced by
-  // name), and whose left side (`?geo1`) is scanned from the permutations.
+  // A spatial join whose right side is the cached geometry index (from the
+  // blob) and whose left side is a single point provided inline via `VALUES`,
+  // so that no permutations (and hence no on-disk index) are needed.
   std::string spatialQuery =
       "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/> "
-      "SELECT ?s1 ?s2 WHERE { "
-      "?s1 <asWKT2> ?geo1 . "
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+      "SELECT ?s2 WHERE { "
+      "VALUES ?geo1 { \"POINT(7.841295 47.997731)\"^^geo:wktLiteral } "
       "SERVICE qlss: { "
       "_:config qlss:right ?geo2 ; "
       "qlss:left ?geo1 ; "
@@ -382,20 +455,18 @@ TEST(LibQlever, blobWithSpatialIndex) {
       "qlss:experimentalRightCacheName \"geoPin\" . "
       "} }";
 
-  // A fresh instance built from the same on-disk index. It has the
-  // permutations (needed for the left side of the spatial join) but not the
-  // pinned geometry index, so the spatial query fails before the blob is
-  // loaded.
-  Qlever target{EngineConfig{sourceConfig}};
+  // A fresh instance with no index files on disk. Before loading the blob the
+  // cached geometry index does not exist, so the spatial query fails.
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
   AD_EXPECT_THROW_WITH_MESSAGE(
       target.query(spatialQuery, ad_utility::MediaType::tsv),
       HasSubstr("is not contained in the named result cache"));
 
   // After loading the blob, the cached geometry index comes from the blob and
-  // the spatial join succeeds, relating the station node to all four segments.
-  EXPECT_NO_THROW(target.deserializeFromUncompressedBlob(blob));
+  // the spatial join succeeds, relating the query point to all four segments.
+  EXPECT_NO_THROW(
+      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob));
   auto res = target.query(spatialQuery, ad_utility::MediaType::tsv);
-  EXPECT_THAT(res, HasSubstr("<p1>"));
   EXPECT_THAT(res, HasSubstr("<s1>"));
   EXPECT_THAT(res, HasSubstr("<s2>"));
   EXPECT_THAT(res, HasSubstr("<s3>"));

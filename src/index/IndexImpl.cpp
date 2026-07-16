@@ -40,6 +40,7 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/json.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -1279,10 +1280,8 @@ std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
 
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
-  nlohmann::json configuration;
-  f >> configuration;
-  applyConfiguration(configuration);
+  applyConfiguration(
+      fileToJson<nlohmann::json>(onDiskBase_ + CONFIGURATION_FILE));
 
   // Compute unique ID for this index.
   //

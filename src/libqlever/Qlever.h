@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -29,6 +30,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Synchronized.h"
+#include "util/UninitializedAllocator.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -249,11 +251,22 @@ class Qlever {
   using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Keeps the decompressed buffer of a deserialized blob (see
-  // `deserializeFromUncompressedBlob`) alive for the lifetime of this
-  // instance, because the loaded vocabulary and named cache entries are
-  // zero-copy views directly into this buffer.
-  std::optional<std::vector<char, ad_utility::AlignedAllocator<char>>>
+  // Allocator for the decompressed blob buffer (see `decompressBlob`). It is
+  // stacked so that the buffer is 1. default-initialized (no redundant zeroing
+  // of a buffer that is about to be overwritten by the decompression), 2.
+  // allocated via a caller-provided `pmr` memory resource, and 3. aligned to
+  // the maximal possible alignment (required so that the aligned, zero-copy
+  // serialization written by `serializeVocabAndNamedCacheToCompressedBlob` can
+  // be read back without misalignment).
+  using BlobAllocator = ad_utility::default_init_allocator<
+      char,
+      ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
+
+  // In this buffer, the blob passed to
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` is kept alive (in
+  // decompressed form) for the lifetime of this instance, because the loaded
+  // vocabulary and named cache entries are zero-copy views directly into it.
+  std::optional<std::vector<char, BlobAllocator>>
       deserializedBlobLifetimeExtender_;
 
  public:
@@ -261,8 +274,12 @@ class Qlever {
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
-  // explained above.
-  explicit Qlever(const EngineConfig& config);
+  // explained above. If `skipLoading` is true, no index is loaded from disk
+  // (in particular, none of the on-disk index files, not even the vocabulary
+  // or the `.meta-data.json`, need to exist); the instance must then be
+  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
+  // before it can answer queries.
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
   using PlannedQuery = qlever::PlannedQuery;
 
@@ -395,35 +412,37 @@ class Qlever {
   }
 
   // Serialize the index metadata JSON, the vocabulary, and the
-  // `NamedResultCache` of this instance into a single, self-contained blob
-  // that can later be loaded via `deserializeFromUncompressedBlob` (e.g. by a
-  // different process, without needing access to the on-disk index). Throws if
-  // the vocabulary implementation currently in use is not the in-memory,
+  // `NamedResultCache` of this instance into a single, self-contained,
+  // ZSTD-compressed blob that can later be loaded via
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
+  // process, without needing access to the on-disk index). Throws if the
+  // vocabulary implementation currently in use is not the in-memory,
   // uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`).
-  //
-  // NOTE: Despite its name, the returned blob is in fact ZSTD-compressed (with
-  // the uncompressed size appended as a trailing `uint64_t`). The misleading
-  // name is retained for now and will be fixed in a follow-up.
-  std::vector<char> serializeToUncompressedBlob() const;
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const;
 
-  // Load a blob previously written by `serializeToUncompressedBlob`: decompress
-  // it, apply the contained index metadata, replace this instance's vocabulary
-  // and populate its `NamedResultCache`, all as zero-copy views directly into
-  // the decompressed buffer. That buffer is kept alive for the lifetime of
-  // this instance.
+  // Load a blob previously written by
+  // `serializeVocabAndNamedCacheToCompressedBlob`: decompress it, apply the
+  // contained index metadata, replace this instance's vocabulary and populate
+  // its `NamedResultCache`, all as zero-copy views directly into the
+  // decompressed buffer. That buffer is kept alive for the lifetime of this
+  // instance and is allocated via `allocator` (see `BlobAllocator`).
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
   // query is answered. Must not be called more than once on the same
   // instance.
-  void deserializeFromUncompressedBlob(ql::span<const char> blob);
+  void deserializeVocabAndNamedCacheFromCompressedBlob(
+      ql::span<const char> blob,
+      ql::pmr::polymorphic_allocator<char> allocator = {});
 
  private:
-  // Decompress a blob written by `serializeToUncompressedBlob` (ZSTD-compressed
-  // data followed by a trailing `uint64_t` holding the uncompressed size) into
-  // a freshly allocated, suitably aligned buffer.
-  static std::vector<char, ad_utility::AlignedAllocator<char>> decompressBlob(
-      ql::span<const char> compressedBlob);
+  // Decompress a blob written by `serializeVocabAndNamedCacheToCompressedBlob`
+  // (ZSTD-compressed data followed by a trailing `uint64_t` holding the
+  // uncompressed size) into a freshly allocated buffer that uses `allocator`
+  // for its storage (see `BlobAllocator`).
+  static std::vector<char, BlobAllocator> decompressBlob(
+      ql::span<const char> compressedBlob,
+      ql::pmr::polymorphic_allocator<char> allocator);
 
   // Read and verify the magic header and format version at the start of a
   // decompressed blob, advancing `serializer` past them. Throws on mismatch.
@@ -454,7 +473,19 @@ class Qlever {
   // Atomically swap in a freshly built `IndexAndViews`. The old instance stays
   // alive as long as some `shared_ptr` (e.g. obtained via
   // `indexAndViewsSnapshot()`) still references it.
+  //
+  // PRECONDITION: The `NamedResultCache` must be empty. Its entries reference
+  // IDs (and possibly zero-copy views) that are only valid for the specific
+  // index snapshot they were created against; swapping in a different index
+  // would silently invalidate them. Callers that want to swap the index must
+  // therefore clear the named result cache first. (This is a deliberately
+  // minimally invasive guard; full support for keeping the named result cache
+  // across index snapshots is future work.)
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
+    AD_CONTRACT_CHECK(
+        namedResultCache_.numEntries() == 0,
+        "The index snapshot must not be swapped while the named result cache "
+        "is not empty");
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
 
