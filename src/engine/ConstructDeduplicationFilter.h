@@ -234,6 +234,14 @@ class ConstructDeduplicationState {
   // may be emitted again).
   void resetIfVocabTooLarge() {
     if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
+    if (std::holds_alternative<DeduplicationMode::None>(mode_.value_)) {
+      AD_THROW(
+          "CONSTRUCT export with `construct-deduplication = global` exceeded "
+          "its "
+          "memory budget: Reduce the result size, raise the memory limit, or "
+          "switch `construct-deduplication` to a `batchwise:<N>` mode (bounded "
+          "memory, approximate) or `none` (no deduplication).");
+    }
     filter_ = makeFilter(mode_, queryExecutionContext_);
     dedupVocab_ = LocalVocab();
     dedupVocabBytes_ = 0;
