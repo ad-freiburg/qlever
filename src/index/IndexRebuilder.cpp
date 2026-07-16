@@ -424,8 +424,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // The rebuilt index gets its own build date, namely the time when the
   // rebuild started (the statistics below are derived from the configuration
   // of the old index and hence contain the old date).
-  auto dateOfIndexBuild = absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
-                                           absl::Now(), absl::UTCTimeZone());
+  auto dateOfIndexBuild = IndexImpl::formatIndexBuildTime(absl::Now());
 
   auto logFile = ad_utility::makeOfstream(logFileName);
 
@@ -445,7 +444,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
-  newStats["date-of-index-build"] = dateOfIndexBuild;
+  newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
   auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
 

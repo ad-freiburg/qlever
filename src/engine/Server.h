@@ -12,11 +12,11 @@
 
 #include <absl/functional/any_invocable.h>
 
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -80,7 +80,7 @@ class Server {
 
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
-  void configureQueryEventLog(const std::filesystem::path& path);
+  void configureQueryEventLog(const ql::filesystem::path& path);
 
   // Get server statistics.
   static json composeStatsJson(const Index& index);

@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 
 #include <boost/asio/awaitable.hpp>
@@ -12,7 +13,6 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
-#include <filesystem>
 
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
@@ -20,11 +20,14 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/Server.h"
+#include "global/Constants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
+#include "util/FilesystemHelpers.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -486,7 +489,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
-    EXPECT_FALSE(std::filesystem::exists(prefix + suffix))
+    EXPECT_FALSE(ql::filesystem::exists(prefix + suffix))
         << "File " << prefix + suffix
         << " should not exist before the task is executed.";
   }
@@ -503,7 +506,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   net::co_spawn(threadPool, std::move(task), net::detached);
   threadPool.join();
   for (std::string_view suffix : suffixes) {
-    EXPECT_TRUE(std::filesystem::exists(prefix + suffix));
+    EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
     EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
               fileToBuffer(prefix + suffix));
   }
@@ -541,18 +544,34 @@ TEST(IndexRebuilder, materializeToIndex) {
         index.deltaTriplesManager()
             .getCurrentLocatedTriplesSharedStateWithVocab();
 
-    std::filesystem::create_directory(baseFolder);
+    ql::filesystem::create_directory(baseFolder);
     absl::Cleanup removeIndexFiles{
-        [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+
+    auto sourceDate = index.getImpl().dateOfIndexBuild();
 
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(std::filesystem::exists(logFile));
+    EXPECT_TRUE(ql::filesystem::exists(logFile));
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
+
+    // The rebuilt index gets its own, more recent build date. Both dates are
+    // recorded with second resolution, so the rebuild may happen within the
+    // same second as the original build; hence we only assert "not older".
+    auto parseDate = [](const std::string& date) {
+      absl::Time result;
+      std::string error;
+      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                  absl::UTCTimeZone(), &result, &error))
+          << error;
+      return result;
+    };
+    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+
     EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
               index.getBlankNodeManager()->minIndex_ +
                   ad_utility::BlankNodeManager::blockSize_);
@@ -606,9 +625,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  std::filesystem::create_directory(baseFolder);
+  ql::filesystem::create_directory(baseFolder);
   absl::Cleanup removeIndexFiles{
-      [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
   EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
                                              state, vocab, blankNodes,

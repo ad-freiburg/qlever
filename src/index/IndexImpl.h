@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
 
 #include <memory>
@@ -502,6 +503,10 @@ class IndexImpl {
   // build).
   std::string dateOfIndexBuild() const;
 
+  // Format the given time as a UTC timestamp string in the
+  // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
+  static std::string formatIndexBuildTime(absl::Time time);
+
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
   size_t getNofEntityPostings() const {
@@ -734,6 +739,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, recomputeStatistics);
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
+  FRIEND_TEST(IndexImpl, dateOfIndexBuild);
 
   bool isLiteral(std::string_view object) const;
 
@@ -853,8 +859,9 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
+  template <typename... Args>
   std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
-      auto&&... args) {
+      Args&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {

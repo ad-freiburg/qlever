@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "CompilationInfo.h"
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/GraphStoreProtocol.h"
@@ -79,7 +80,7 @@ Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
 }
 
 // _____________________________________________________________________________
-void Server::configureQueryEventLog(const std::filesystem::path& path) {
+void Server::configureQueryEventLog(const ql::filesystem::path& path) {
   // One log, owned by a `shared_ptr` copied into both callbacks, so its
   // lifetime follows the callbacks (and thus the registry).
   auto log = std::make_shared<ad_utility::QueryEventLog>();
