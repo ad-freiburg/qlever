@@ -104,6 +104,32 @@ class File {
     return fileno(file_);
   }
 
+  // Return a new `File` for the same underlying file by duplicating the file
+  // descriptor. In contrast to opening the file again by name, this also
+  // works when the file has been renamed since it was opened (which happens
+  // to the files of the active index when a rebuilt index is swapped in at
+  // runtime, see #2832).
+  //
+  // NOTE: The duplicate shares the file offset with the original, so on the
+  // two `File`s only the positioned `read` overload (which uses `pread`) can
+  // be used independently; the sequential `read`/`seek` interface must not
+  // be mixed across duplicates.
+  [[nodiscard]] File duplicateForReading() const {
+    AD_CONTRACT_CHECK(isOpen());
+    int newFd = ::dup(fd());
+    AD_CONTRACT_CHECK(newFd != -1, "Duplicating the file descriptor for file ",
+                      name_, " failed");
+    FILE* newFile = ::fdopen(newFd, "r");
+    if (newFile == nullptr) {
+      ::close(newFd);
+    }
+    AD_CONTRACT_CHECK(newFile != nullptr);
+    File result;
+    result.name_ = name_;
+    result.file_ = newFile;
+    return result;
+  }
+
   //! Close file.
   bool close() {
     if (not isOpen()) {
