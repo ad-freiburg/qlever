@@ -262,7 +262,8 @@ TEST(ConstExprUtils, constexprSwitchFromArrayImpl) {
     ASSERT_EQ((detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(
                   f, 5, 2, seq)),
               10);
-  ASSERT_ANY_THROW(detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 4, 3, seq)))
+    ASSERT_ANY_THROW(detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(
+        f, 4, 3, seq));
   }
 }
 
