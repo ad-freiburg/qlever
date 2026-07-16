@@ -72,6 +72,13 @@ class LocaleManagerBase {
    public:
     SortKeyImpl() = default;
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
+    // Construct an owning `SortKey` directly from a `U8String`. Only available
+    // for the owning `SortKey`, not for the non-owning `SortKeyView` (which
+    // would dangle).
+    CPP_template(typename U = T)(
+        requires std::is_same_v<U, U8String>) explicit SortKeyImpl(U8String
+                                                                       sortKey)
+        : sortKey_(std::move(sortKey)) {}
     [[nodiscard]] constexpr const T& get() const noexcept { return sortKey_; }
     constexpr T& get() noexcept { return sortKey_; }
 
@@ -146,9 +153,8 @@ std::pair<size_t, LocaleManagerBase::SortKey> getPrefixSortKeyImpl(
 
 #ifndef QLEVER_NO_UNICODE
 
-// This class wraps all calls to the ICU library that are required by QLever. It
-// internally handles all conversion to and from UTF-8 and from c++ to c-strings
-// where they are required by ICU.
+// This class wraps all calls to the ICU library that are required by QLever
+// when comparing strings according to a Locale.
 class LocaleManagerICU : public LocaleManagerBase {
  public:
   // Copy constructor.
@@ -390,9 +396,9 @@ class LocaleManagerICU : public LocaleManagerBase {
 
 #endif  // QLEVER_NO_UNICODE
 
-// Bytewise-comparison replacement for `LocaleManagerICU` when building without
-// ICU. All locale parameters are accepted but ignored; comparison is done
-// bytewise via `std::string_view::compare`.
+// A `LocaleManager` that completely ignores the locale, and only compares
+// strings byte-wise (no UTF handling). Can be used if ICU is not available and
+// correct unicode handling is not important.
 class LocaleManagerNoICU : public LocaleManagerBase {
  public:
   LocaleManagerNoICU() = default;
@@ -417,11 +423,9 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
   [[nodiscard]] SortKey getSortKey(std::string_view s,
                                    const Level /*level*/) const {
-    SortKey result;
-    result.get() = ::ranges::to<U8String>(s | ql::views::transform([](char c) {
+    return SortKey{::ranges::to<U8String>(s | ql::views::transform([](char c) {
                                             return static_cast<uint8_t>(c);
-                                          }));
-    return result;
+                                          }))};
   }
 
   [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
@@ -436,6 +440,7 @@ class LocaleManagerNoICU : public LocaleManagerBase {
     return ad_utility::utf8ToLower(s);
   }
 
+  // As this class does no unicode handling, normalization is a no-op.
   [[nodiscard]] std::string normalizeUtf8(std::string_view input) const {
     return std::string(input);
   }

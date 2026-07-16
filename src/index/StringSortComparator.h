@@ -19,9 +19,14 @@
 #include "util/TypeTraits.h"
 
 /**
- * @brief This class compares strings according to proper Unicode collation,
- * e.g. strings from the text index vocabulary. To compare components of
- * RDFS triples use the `TripleComponentComparator` defined below
+ * @brief This class compares strings, e.g. strings from the text index
+ * vocabulary, according to the collation of the held `LocaleManagerT`. To
+ * compare components of RDFS triples use the `TripleComponentComparatorImpl`
+ * defined below.
+ *
+ * The actual comparison logic is handled via the `LocaleManagerT` (see
+ * `LocaleManager.h`), which performs proper Unicode collation when built with
+ * ICU, or a plain bytewise comparison otherwise.
  */
 template <typename LocaleManagerT>
 class SimpleStringComparatorImpl {
@@ -130,7 +135,7 @@ class SimpleStringComparatorImpl {
     return transformed;
   }
 
-  /// Obtain access to the held LocaleManager
+  /// Obtain access to the held `LocaleManagerT`
   [[nodiscard]] const LocaleManagerT& getLocaleManager() const {
     return _locManager;
   }
@@ -141,10 +146,14 @@ class SimpleStringComparatorImpl {
 
 /**
  * @brief Handles the comparisons between RDFS triple elements according to
- * their data types and proper Unicode collation.
+ * their data types and the collation of the held `LocaleManagerT`.
  *
  *  General Approach: First Sort by the datatype, then by the actual value
  * and then by the language tag.
+ *
+ * The actual comparison logic is handled via the `LocaleManagerT` (see
+ * `LocaleManager.h`), which performs proper Unicode collation when built with
+ * ICU, or a plain bytewise comparison otherwise.
  */
 template <typename LocaleManagerT>
 class TripleComponentComparatorImpl {
@@ -173,7 +182,7 @@ class TripleComponentComparatorImpl {
    * @brief An entry of the Vocabulary, split up into its components and
    * possibly converted to a format that is easier to compare
    *
-   * @tparam InnerString either LocaleManager::SortKey or std::string_view.
+   * @tparam InnerString either LocaleManagerBase::SortKey or std::string_view.
    * Both variants differ greatly in their usage. Details can be found after the
    * class definition, together with the explicit aliases `SplitVal` and
    * `SplitValOwning` for the template instantiations that are actually used.
@@ -363,13 +372,13 @@ class TripleComponentComparatorImpl {
     return transformed;
   }
 
-  /// obtain const access to the held LocaleManager
+  /// obtain const access to the held `LocaleManagerT`
   [[nodiscard]] const LocaleManagerT& getLocaleManager() const {
     return _locManager;
   }
 
   /**
-   * @brief trivialy wraps LocaleManager::normalizeUtf8, see there for
+   * @brief trivialy wraps `LocaleManagerT::normalizeUtf8`, see there for
    * documentation
    */
   [[nodiscard]] std::string normalizeUtf8(std::string_view sv) const {
