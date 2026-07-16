@@ -17,6 +17,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -742,10 +743,10 @@ TEST_F(DeltaTriplesTest, restoreFromNonExistingFile) {
 TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
   DeltaTriples deltaTriples{testQec->getIndex()};
   auto tmpFile =
-      std::filesystem::temp_directory_path() / "testEmptyDeltaTriples";
+      ql::filesystem::temp_directory_path() / "testEmptyDeltaTriples";
   // Make sure no artifacts from previous crashed runs exists.
-  std::filesystem::remove(tmpFile);
-  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  ql::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   deltaTriples.setPersists(tmpFile.string());
   // Write "empty" file
   EXPECT_NO_THROW(deltaTriples.writeToDisk());
@@ -818,7 +819,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
 
   std::array<char, expectedContent.size()> actualContent{};
 
-  std::ifstream tmpFileStream{tmpFile, std::ios::binary};
+  std::ifstream tmpFileStream{tmpFile.string(), std::ios::binary};
   tmpFileStream.read(actualContent.data(), actualContent.size());
   EXPECT_TRUE(tmpFileStream.good());
   EXPECT_EQ(tmpFileStream.peek(), std::char_traits<char>::eof());
@@ -836,10 +837,10 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
 TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   using namespace ::testing;
   using ad_utility::triple_component::LiteralOrIri;
-  auto tmpFile = std::filesystem::temp_directory_path() / "testDeltaTriples";
+  auto tmpFile = ql::filesystem::temp_directory_path() / "testDeltaTriples";
   // Make sure no file like this exists
-  std::filesystem::remove(tmpFile);
-  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  ql::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   auto defaultGraph =
       TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
           .toValueId(testQec->getIndex().getImpl())

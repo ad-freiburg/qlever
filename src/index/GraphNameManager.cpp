@@ -9,8 +9,7 @@
 
 #include "index/GraphNameManager.h"
 
-#include <filesystem>
-
+#include "backports/filesystem.h"
 #include "util/Serializer/FileSerializer.h"
 
 // _____________________________________________________________________________
@@ -35,7 +34,7 @@ void GraphNameManager::writeToDisk() const {
   tempPath += ".tmp";
   ad_utility::serialization::FileWriteSerializer serializer{tempPath.string()};
   serializer | *this;
-  std::filesystem::rename(tempPath, path);
+  ql::filesystem::rename(tempPath, path);
 }
 
 // _____________________________________________________________________________
@@ -43,7 +42,7 @@ void GraphNameManager::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
-  if (!std::filesystem::exists(filenameForPersisting_.value())) {
+  if (!ql::filesystem::exists(filenameForPersisting_.value())) {
     return;
   }
 
@@ -54,7 +53,7 @@ void GraphNameManager::readFromDisk() {
 
 // _____________________________________________________________________________
 void GraphNameManager::setFilenameForPersistingAndReadFromDisk(
-    std::filesystem::path filename) {
+    ql::filesystem::path filename) {
   filenameForPersisting_ = std::move(filename);
   readFromDisk();
 }
