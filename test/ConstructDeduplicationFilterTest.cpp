@@ -159,7 +159,6 @@ TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // suppressed by the ground seed
 }
 
-// _____________________________________________________________________________
 // A tiny memory threshold forces the filter to drop all dedup state once its
 // internal vocab grows past it, which makes deduplication approximate: the same
 // local-vocab triple is reported "new" again after the reset (rather than a

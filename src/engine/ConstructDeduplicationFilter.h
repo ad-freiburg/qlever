@@ -72,7 +72,7 @@ class PerTripleFilter {
   static Filter makeFilter(const DeduplicationMode& mode,
                            const QueryExecutionContext& queryExecutionContext) {
     AD_CONTRACT_CHECK(
-        std::holds_alternative<DeduplicationMode::None>(mode.value_));
+        !std::holds_alternative<DeduplicationMode::None>(mode.value_));
     return std::visit(OverloadCallOperator{
                           [](const DeduplicationMode::None&) -> Filter {
                             // `None` is handled by the caller (no filter is
