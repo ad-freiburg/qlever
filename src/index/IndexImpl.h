@@ -847,8 +847,9 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
+  template <typename... Args>
   std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
-      auto&&... args) {
+      Args&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {

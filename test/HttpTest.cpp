@@ -48,8 +48,9 @@ boost::asio::awaitable<std::string> consumeBody(
     http::request<http::string_body> req) {
   co_return req.body();
 }
+template <typename Request, typename BodyGetter>
 boost::asio::awaitable<std::string> consumeBody(
-    [[maybe_unused]] const auto& request, auto bodyGetter) {
+    [[maybe_unused]] const Request& request, BodyGetter bodyGetter) {
   std::string body;
   while (auto chunk = co_await bodyGetter()) {
     body += chunk.value();
@@ -91,7 +92,8 @@ auto makeIgnoreBodyServer(size_t chunkSize) {
 
 // Sends an echo response (METHOD\nTARGET\nBODY) and then rethrows `exception`.
 // Shared between eager and lazy `makeThrowingEchoServer` handlers.
-boost::asio::awaitable<void> throwingEchoBody(const auto& req, auto& send,
+template <typename Req, typename Send>
+boost::asio::awaitable<void> throwingEchoBody(const Req& req, Send& send,
                                               std::string_view body,
                                               std::exception_ptr exception) {
   co_await send(createOkResponse(absl::StrCat(verbName(req.method()), "\n",
@@ -113,7 +115,8 @@ auto makeThrowingEchoServer(std::exception_ptr exception, size_t chunkSize) {
 
 // Common redirect/success handler logic: inspects URL parameters to redirect
 // or respond with "Success", and sets `lastTarget` to the request target.
-boost::asio::awaitable<void> redirectHandlerCore(const auto& req, auto& send,
+template <typename Req, typename Send>
+boost::asio::awaitable<void> redirectHandlerCore(const Req& req, Send& send,
                                                  std::string& lastTarget) {
   boost::url_view url{req.target()};
   lastTarget = req.target();

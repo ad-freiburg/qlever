@@ -85,9 +85,10 @@ CPP_template(typename R,
 
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
+CPP_template(typename It, typename RowT)(
+    requires ql::concepts::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        const auto& row, const size_t numLastUndefined, It begin, It end,
+        const RowT& row, const size_t numLastUndefined, It begin, It end,
         bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
@@ -138,8 +139,9 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
-CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
-    auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
+CPP_template(typename It, typename RowT)(
+    requires ql::concepts::random_access_iterator<It>)  //
+    auto findSmallerUndefRangesArbitrary(const RowT& row, It begin, It end,
                                          bool& resultMightBeUnsorted) {
   assert(row.size() == (*begin).size());
   assert(

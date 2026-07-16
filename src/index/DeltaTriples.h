@@ -397,9 +397,11 @@ class DeltaTriples {
 
   // Drop multiple update triples in a permutation.
   // Note: This is currently used for `vacuum`.
+  template <typename IsInternal>
   void eraseTriplesInPermutation(
       Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-      auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle);
+      IsInternal isInternal,
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   friend class DeltaTriplesManager;
   FRIEND_TEST(DeltaTriplesTest, remapId);

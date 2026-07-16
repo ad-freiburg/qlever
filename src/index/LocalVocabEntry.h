@@ -66,7 +66,8 @@ class alignas(16) LocalVocabEntry
       : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known.
-  LocalVocabEntry(Base&& base, auto lower, auto upper,
+  template <typename Lower, typename Upper>
+  LocalVocabEntry(Base&& base, Lower lower, Upper upper,
                   const LocalVocabContext& context)
       : Base{std::move(base)},
         context_{&context},

@@ -1020,10 +1020,11 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
 
   // Consume range `first` first and store it in a vector, then do the same
   // with `second`.
+  template <typename PostCondition>
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
   consumeSequentially(Result::LazyResult first, Result::LazyResult second,
-                      auto postCondition) {
+                      PostCondition postCondition) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 

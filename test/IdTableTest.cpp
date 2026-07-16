@@ -260,7 +260,8 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // member function needs additional arguments. Currently, the only additional
 // argument is the filename for the copy for `IdTables` that store their data in
 // a `BufferedVector`. For an example usage see the test cases below.
-auto clone(const auto& table, auto... args) {
+template <typename Table, typename... Args>
+auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {
     return table.clone();
   } else {

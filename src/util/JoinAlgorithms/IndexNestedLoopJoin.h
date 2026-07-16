@@ -284,7 +284,9 @@ class IndexNestedLoopJoin {
  public:
   // Function for MINUS and EXISTS operations when the right side is fully
   // materialized.
-  Result::LazyResult computeRightExistance(auto transformationFunc) {
+  template <typename TransformationFunc>
+  Result::LazyResult computeRightExistance(
+      TransformationFunc transformationFunc) {
     std::vector<ColumnIndex> leftColumns;
     std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {

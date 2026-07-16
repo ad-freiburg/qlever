@@ -922,17 +922,20 @@ std::vector<TurtleTriple> parseFromFile(
 // `useBatchInterface` argument) and possible additional args, and run this
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
-auto forAllParallelParsers(const auto& function, const auto&... args) {
+template <typename Function, typename... Args>
+auto forAllParallelParsers(const Function& function, const Args&... args) {
   function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, true, args...);
   function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, false, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, true, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, false, args...);
 }
-auto forAllMultifileParsers(const auto& function, const auto&... args) {
+template <typename Function, typename... Args>
+auto forAllMultifileParsers(const Function& function, const Args&... args) {
   function(ti<RdfMultifileParser>, true, args...);
 }
 
-auto forAllParsers(const auto& function, const auto&... args) {
+template <typename Function, typename... Args>
+auto forAllParsers(const Function& function, const Args&... args) {
   function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, true, args...);
   function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, false, args...);
   function(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>, true, args...);
