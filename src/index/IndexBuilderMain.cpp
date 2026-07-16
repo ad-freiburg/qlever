@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -21,6 +22,7 @@
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
 #include "util/json.h"
 
 using std::string;
@@ -192,6 +194,8 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  bool noResourceUsageLog = false;
+  uint32_t resourceUsageIntervalS = 1;
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -291,6 +295,13 @@ int main(int argc, char** argv) {
       "create materialized views after index building. Takes a JSON object "
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS and "
+      "CPU usage of the index build is written next to the index files "
+      "(`<index-basename>.index.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(1),
+      "The sampling interval of the resource-usage log in seconds.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -319,6 +330,13 @@ int main(int argc, char** argv) {
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
+    // Samples RSS and CPU usage for the duration of the build.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".index.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Truncate,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =

@@ -96,7 +96,8 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 // Check that `expected` and `actual` have the same contents. The `int`s in
 // expected are converted to `Id`s of type `VocabIndex` using the `V`-function
 // before the comparison.
-void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
+template <typename Expected>
+void checkThatTablesAreEqual(const Expected& expected, const IdTable& actual,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
@@ -270,7 +271,8 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`.  `blocksize` is the size of the
 // blocks in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
+template <typename Inputs>
+void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
                              ad_utility::MemorySize blocksize,
                              float locatedTriplesProbability = 0.5) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
@@ -304,7 +306,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
 
   // TODO<C++23> `ql::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
+  ql::ranges::copy(ql::views::iota(ColumnIndex{3}, getNumColumns(inputs) + 1),
                    std::back_inserter(additionalColumns));
   // Get a pair<optional<RelationMetadata>, bool>` for the given `col0`, where
   // the `bool` is true if the `col0` is a "large" relation, meaning that the
@@ -950,7 +952,7 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 
   // The block contains graph `1`, but we only want graph `3`, so the block can
   // be skipped.
-  graphs.insert(V(3));
+  graphs = ad_utility::HashSet<Id>{V(3)};
   graphFilter = GF::Whitelist(std::move(graphs));
   EXPECT_TRUE(filter.canBlockBeSkipped(metadata));
 

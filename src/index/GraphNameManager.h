@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 #define QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 
+#include "backports/filesystem.h"
 #include "global/Constants.h"
 #include "gtest/gtest_prod.h"
 #include "rdfTypes/Iri.h"
@@ -31,7 +32,7 @@ class GraphNameManager {
   ad_utility::CopyableAtomic<uint64_t> nextUnallocatedGraph_ = 1;
 
   // File where the state is persisted to.
-  std::optional<std::filesystem::path> filenameForPersisting_;
+  std::optional<ql::filesystem::path> filenameForPersisting_;
 
   FRIEND_TEST(GraphNameManager, storeAndRestoreData);
   FRIEND_TEST(GraphNameManager, readFromDisk);
@@ -64,7 +65,7 @@ class GraphNameManager {
   // Read the state from disk to restore it after a restart.
   void readFromDisk();
   // Set the file where the state is persisted to and try to read the state.
-  void setFilenameForPersistingAndReadFromDisk(std::filesystem::path filename);
+  void setFilenameForPersistingAndReadFromDisk(ql::filesystem::path filename);
 
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
     serializer | arg.prefixWithoutBraces_;

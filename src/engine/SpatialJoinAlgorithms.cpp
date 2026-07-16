@@ -23,9 +23,9 @@
 #include <util/geo/Geo.h>
 
 #include <cmath>
-#include <filesystem>
 #include <set>
 
+#include "backports/filesystem.h"
 #include "backports/three_way_comparison.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
@@ -459,6 +459,11 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
   cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
   cfg.computeDE9IM = false;
+  // Never let `libspatialjoin` fall back to a self-join when it considers one
+  // side to be empty; QLever's callbacks rely on the first geometry of each
+  // result pair coming from the left side and the second one from the right
+  // side (see #3068).
+  cfg.forceTwoSided = true;
   cfg.writeRelCb = {};
   cfg.logCb = {};
   cfg.statsCb = {};
@@ -512,7 +517,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   };
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  auto basePath = std::filesystem::path(qec_->getIndex().getOnDiskBase());
+  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
 
   std::string sweeperTmpPath = basePath.parent_path().string();
 
@@ -521,7 +526,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     sweeperTmpPath = ".";
   }
 
-  std::string baseName = basePath.filename().string();
+  std::string baseName = ql::pathFilename(basePath).string();
 
   // The prefix added before each spatialjoin file.
   //
@@ -546,6 +551,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-smaller-side", threadsSmall);
+    auto numValidGeomsSmall = sweeper.numElements();
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
@@ -559,17 +565,22 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
         libspatialjoinParse(!smallerIsRight, larger, sweeper, NUM_THREADS,
                             sweeper.getPaddedBoundingBox(boxSmall));
+    auto numValidGeomsTotal = sweeper.numElements();
+    AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
+    auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
 
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-larger-side", threadsLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
                                                   countSmall + countLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
+                                                  numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", droppedLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
-    return countSmall > 0 && countLarge > 0;
+    return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
   LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol, bbLeft};

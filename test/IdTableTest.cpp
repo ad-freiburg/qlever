@@ -272,7 +272,8 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // additional argument is the filename for the copy for `IdTables` that store
 // their data in a `VectorWithExtraConstructor`. For an example usage see the
 // test cases below.
-auto clone(const auto& table, auto... args) {
+template <typename Table, typename... Args>
+auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {
     return table.clone();
   } else {
@@ -1250,6 +1251,54 @@ TEST(IdTable, moveOrCloneOnView) {
   IdTable cloned2 = std::move(view).moveOrClone();
   EXPECT_EQ(cloned2, table);
   EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+}
+
+// ____________________________________________________________________________
+TEST(IdTable, fromColumns) {
+  std::vector<Id> col0{V(1), V(2), V(3)};
+  std::vector<Id> col1{V(4), V(5), V(6)};
+  auto allocator = makeAllocator();
+
+  IdTableView<0>::ViewSpans columns{col0, col1};
+  auto view = IdTableView<0>::fromColumns(columns, 2, 3, allocator);
+
+  ASSERT_EQ(view.numColumns(), 2u);
+  ASSERT_EQ(view.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(view(i, 0), col0[i]);
+    EXPECT_EQ(view(i, 1), col1[i]);
+    // The view must not copy the data: its elements are the very same
+    // objects as those in `col0`/`col1`.
+    EXPECT_EQ(&view(i, 0), &col0[i]);
+    EXPECT_EQ(&view(i, 1), &col1[i]);
+  }
+
+  // The `columns` and the passed in `numColumns` must be consistent.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Each of the `columns` must have exactly `numRows` elements.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 2, 2, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // A statically-sized `IdTableView<N>` requires `numColumns == N`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<2>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Constructing a static `IdTableView<2>` with the correct `numColumns`
+  // works and yields the same contents as the dynamic view above.
+  auto staticView = IdTableView<2>::fromColumns(columns, 2, 3, allocator);
+  ASSERT_EQ(staticView.numColumns(), 2u);
+  ASSERT_EQ(staticView.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(staticView(i, 0), col0[i]);
+    EXPECT_EQ(staticView(i, 1), col1[i]);
+    EXPECT_EQ(&staticView(i, 0), &col0[i]);
+    EXPECT_EQ(&staticView(i, 1), &col1[i]);
+  }
 }
 
 // ____________________________________________________________________________

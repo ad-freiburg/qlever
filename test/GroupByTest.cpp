@@ -118,9 +118,9 @@ TEST(GroupBy, clone) {
 namespace {
 // All the operations take a `QueryExecutionContext` as a first argument.
 // Todo: Continue the comment.
-template <typename Operation>
+template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, auto&&... args) {
+    QueryExecutionContext* qec, Args&&... args) {
   return std::make_shared<QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
@@ -1125,15 +1125,15 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   IdTable testTable{qec->getAllocator()};
   testTable.setNumColumns(2);
   testTable.resize(6);
-  std::vector<unsigned long> firstColumn{1, 1, 1, 3, 3, 3};
-  std::vector<unsigned long> secondColumn{42, 9, 3, 13, 1, 4};
+  std::vector<uint64_t> firstColumn{1, 1, 1, 3, 3, 3};
+  std::vector<uint64_t> secondColumn{42, 9, 3, 13, 1, 4};
   std::vector<std::optional<Variable>> variables = {Variable{"?a"},
                                                     Variable{"?b"}};
 
   auto firstTableColumn = testTable.getColumn(0);
   auto secondTableColumn = testTable.getColumn(1);
 
-  auto unsignedLongToValueId = [](unsigned long value) {
+  auto unsignedLongToValueId = [](uint64_t value) {
     return ValueId::makeFromInt(static_cast<int64_t>(value));
   };
   ql::ranges::transform(firstColumn.begin(), firstColumn.end(),
