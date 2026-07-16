@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
@@ -24,13 +26,11 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
-#include "util/AlignedAllocator.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Synchronized.h"
-#include "util/UninitializedAllocator.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -251,23 +251,15 @@ class Qlever {
   using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Allocator for the decompressed blob buffer (see `decompressBlob`). It is
-  // stacked so that the buffer is 1. default-initialized (no redundant zeroing
-  // of a buffer that is about to be overwritten by the decompression), 2.
-  // allocated via a caller-provided `pmr` memory resource, and 3. aligned to
-  // the maximal possible alignment (required so that the aligned, zero-copy
-  // serialization written by `serializeVocabAndNamedCacheToCompressedBlob` can
-  // be read back without misalignment).
-  using BlobAllocator = ad_utility::default_init_allocator<
-      char,
-      ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
+  // Handles the (de)serialization of the vocabulary and the `NamedResultCache`
+  // to and from a compressed blob (see the delegating public methods
+  // `serializeVocabAndNamedCacheToCompressedBlob` /
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` below). It is a friend of
+  // this class so that it can access the internals it needs.
+  NamedCachedQueryBlobManager blobManager_;
+  friend class NamedCachedQueryBlobManager;
 
-  // In this buffer, the blob passed to
-  // `deserializeVocabAndNamedCacheFromCompressedBlob` is kept alive (in
-  // decompressed form) for the lifetime of this instance, because the loaded
-  // vocabulary and named cache entries are zero-copy views directly into it.
-  std::optional<std::vector<char, BlobAllocator>>
-      deserializedBlobLifetimeExtender_;
+  FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -397,35 +389,24 @@ class Qlever {
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
 
-  // Write the contents of the `NamedResultCache` to disk.
-  template <typename Serializer>
-  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
-    namedResultCache_.writeToSerializer(serializer);
-  }
-
-  // Read the contents of the `NamedResultCache` from disk.
-  template <typename Serializer>
-  void readNamedResultCacheFromDisk(Serializer& serializer) {
-    auto indexAndViews = indexAndViewsSnapshot();
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         indexAndViews->index_);
-  }
-
   // Serialize the index metadata JSON, the vocabulary, and the
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
   // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
   // process, without needing access to the on-disk index). Throws if the
   // vocabulary implementation currently in use is not the in-memory,
-  // uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`).
-  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const;
+  // uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`). Delegates to
+  // `blobManager_`.
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
+    return blobManager_.serialize(*this);
+  }
 
   // Load a blob previously written by
   // `serializeVocabAndNamedCacheToCompressedBlob`: decompress it, apply the
   // contained index metadata, replace this instance's vocabulary and populate
   // its `NamedResultCache`, all as zero-copy views directly into the
-  // decompressed buffer. That buffer is kept alive for the lifetime of this
-  // instance and is allocated via `allocator` (see `BlobAllocator`).
+  // decompressed buffer (which is kept alive for the lifetime of this instance
+  // and allocated via `allocator`). Delegates to `blobManager_`.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
@@ -433,24 +414,9 @@ class Qlever {
   // instance.
   void deserializeVocabAndNamedCacheFromCompressedBlob(
       ql::span<const char> blob,
-      ql::pmr::polymorphic_allocator<char> allocator = {});
-
- private:
-  // Decompress a blob written by `serializeVocabAndNamedCacheToCompressedBlob`
-  // (ZSTD-compressed data followed by a trailing `uint64_t` holding the
-  // uncompressed size) into a freshly allocated buffer that uses `allocator`
-  // for its storage (see `BlobAllocator`).
-  static std::vector<char, BlobAllocator> decompressBlob(
-      ql::span<const char> compressedBlob,
-      ql::pmr::polymorphic_allocator<char> allocator);
-
-  // Read and verify the magic header and format version at the start of a
-  // decompressed blob, advancing `serializer` past them. Throws on mismatch.
-  static void skipAndVerifyBlobHeader(
-      ad_utility::serialization::ByteBufferReadSerializerT<
-          true, ql::span<const char>>& serializer);
-
- public:
+      ql::pmr::polymorphic_allocator<char> allocator = {}) {
+    blobManager_.deserialize(*this, blob, std::move(allocator));
+  }
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state.
