@@ -1,0 +1,31 @@
+{
+  "name": "qlever",
+  "version": "0.0.0-dev",
+  "description": "QLever SPARQL engine compiled to WebAssembly. Build RDF indexes and run SPARQL queries directly in the browser or using Node.js.",
+  "main": "qlever.js",
+  "types": "qlever.d.ts",
+  "files": [
+    "qlever.js",
+    "qlever.wasm",
+    "qlever.d.ts"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ad-freiburg/qlever",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ad-freiburg/qlever.git"
+  },
+  "keywords": [
+    "sparql",
+    "rdf",
+    "wasm",
+    "webassembly",
+    "database",
+    "triplestore",
+    "knowledge-graph",
+    "qlever"
+  ],
+  "engines": {
+    "node": ">=24"
+  }
+}
