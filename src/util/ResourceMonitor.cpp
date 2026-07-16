@@ -137,7 +137,7 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
   namespace fs = ql::filesystem;
   // Decide about the header before opening: truncating destroys the
   // old file size. A missing file or failed stat also gets a header.
-  std::error_code ec;
+  ql::error_code ec;
   auto oldSize = fs::file_size(path, ec);
   bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
   auto openMode = mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
