@@ -209,7 +209,9 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   // Remove all permissions to make read fail
   ql::filesystem::permissions(tmpFile, ql::filesystem_perms_none);
 
-  if (FILE* handle = fopen(tmpFile.c_str(), "r")) {
+  // NOTE: `path::c_str()` is `const wchar_t*` on Windows; `string().c_str()`
+  // is `const char*`.
+  if (FILE* handle = fopen(tmpFile.string().c_str(), "r")) {
     fclose(handle);
     // This can happen in docker environments.
     GTEST_SKIP_("File permissions are not set to none");
