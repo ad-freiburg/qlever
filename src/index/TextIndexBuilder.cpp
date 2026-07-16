@@ -9,8 +9,8 @@
 #include <absl/cleanup/cleanup.h>
 
 #include <charconv>
-#include <filesystem>
 
+#include "backports/filesystem.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
@@ -505,7 +505,7 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   // To avoid excessive use of RAM, we stream the offsets into a temporary file
   // and append them to the end of the docsDB file once all text records have
   // been written.
-  std::filesystem::path offsetsFilename = onDiskBase_ + ".text.docsDB.tmp";
+  ql::filesystem::path offsetsFilename = onDiskBase_ + ".text.docsDB.tmp";
   absl::Cleanup deleteOffsetsFile{[&offsetsFilename]() {
     ad_utility::deleteFile(offsetsFilename, /*warnOnFailure=*/false);
   }};

@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
 
 #include <memory>
@@ -17,7 +18,6 @@
 #include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "global/Pattern.h"
 #include "global/SpecialIds.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -38,6 +38,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/BufferedVector.h"
+#include "util/CompactStringVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -256,16 +257,19 @@ class IndexImpl {
   // access this `IndexImpl`, e.g. right after construction and before the
   // first query is answered.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<Serializer>)
-      void loadVocabularyFromZeroCopyBlob(Serializer& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<
+          Serializer>) void loadVocabularyFromZeroCopyBlob(Serializer&
+                                                               serializer) {
     vocab_.loadFromZeroCopyDeserializer(serializer);
   }
 
   // Serialize the currently loaded vocabulary to `serializer`. See
   // `Vocabulary::writeAsZeroCopyBlob` for details and restrictions.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<Serializer>) void
-      writeVocabularyToZeroCopyBlob(Serializer& serializer) const {
+      requires ad_utility::serialization::WriteSerializer<
+          Serializer>) void writeVocabularyToZeroCopyBlob(Serializer&
+                                                              serializer)
+      const {
     vocab_.writeAsZeroCopyBlob(serializer);
   }
 
@@ -479,6 +483,17 @@ class IndexImpl {
   const std::string& getOnDiskBase() const { return onDiskBase_; }
   const std::string& getIndexId() const { return indexId_; }
   const std::string& getGitShortHash() const { return gitShortHash_; }
+
+  // Return the datetime when the build of this index started, in the format
+  // `2026-07-12T14:03:52Z` (UTC). For indexes that were built before this
+  // date was recorded in the configuration, the modification time of the
+  // configuration file is used instead (which approximates the END of the
+  // build).
+  std::string dateOfIndexBuild() const;
+
+  // Format the given time as a UTC timestamp string in the
+  // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
+  static std::string formatIndexBuildTime(absl::Time time);
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -712,6 +727,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, recomputeStatistics);
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
+  FRIEND_TEST(IndexImpl, dateOfIndexBuild);
 
   bool isLiteral(std::string_view object) const;
 
@@ -831,8 +847,9 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
+  template <typename... Args>
   std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
-      auto&&... args) {
+      Args&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {

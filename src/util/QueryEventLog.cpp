@@ -8,6 +8,7 @@
 
 #include "util/QueryEventLog.h"
 
+#include "backports/filesystem.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -22,12 +23,12 @@ QueryEventLog::~QueryEventLog() {
 }
 
 // _____________________________________________________________________________
-void QueryEventLog::setOutputFile(const std::filesystem::path& path) {
+void QueryEventLog::setOutputFile(const ql::filesystem::path& path) {
   AD_CONTRACT_CHECK(!configured_.exchange(true),
                     "QueryEventLog::setOutputFile may only be called once.");
   // Open stream and construct queue before spawning the writer; it
   // captures `this` and starts popping immediately.
-  stream_.open(path, std::ios::app | std::ios::out);
+  stream_.open(path.string(), std::ios::app | std::ios::out);
   AD_CONTRACT_CHECK(stream_.is_open(),
                     "QueryEventLog: failed to open output file.");
   queue_ = std::make_unique<data_structures::ThreadSafeQueue<std::string>>(

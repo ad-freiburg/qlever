@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -262,9 +263,36 @@ class Qlever {
   // explained above.
   explicit Qlever(const EngineConfig& config);
 
-  // Parse and plan the given `query`.
+  using PlannedQuery = qlever::PlannedQuery;
+
+  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
+  // is also used to represent SPARQL update operations (see
+  // ParsedQuery::hasUpdateClause()); this function handles both cases
+  // uniformly.
   //
-  // NOTE: This is useful as a separate function for the following reasons.
+  // If `requestTimer` is set, the elapsed time of that timer at the end of
+  // query planning is stored in the query's runtime information as
+  // `timeQueryPlanning`. This information can be accessed via the
+  // query execution tree's root operation.
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle,
+                         std::optional<TimeLimit> timeLimit,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
+
+  // Parse and plan the given `query` (see `planQuery` above; despite the
+  // name, `query` may also be a SPARQL update operation).
+  //
+  // NOTES: This is useful as a separate function for the following reasons.
   //
   // 1. Using a `PlannedQuery`, one can execute a `query` multiple times without
   // having to parse and plan it again.
@@ -277,20 +305,18 @@ class Qlever {
   //
   // TODO<joka921,damekt> The `timeLimit` is currently only used for
   // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time `parseAndPlanQuery` is called until the execution of the
-  // query has finished. This might be very unintuitive when the `PlannedQuery`
-  // is stored for later execution.
-  // This is not an issue for now (only the `Server` actually imposes time
-  // limits and then executes the queries right away), but should be addressed
-  // in the future once the timeout management also is moved into the `QLever`
-  // class.
-  using PlannedQuery = qlever::PlannedQuery;
-
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
-      ad_utility::SharedCancellationHandle handle =
+      SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false) const;
@@ -332,7 +358,19 @@ class Qlever {
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
-  void writeMaterializedView(std::string name, std::string query) const;
+  //
+  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
+  // (see there for their exact semantics). If omitted, the query is planned
+  // and executed without a timer, without a time limit, and with a fresh,
+  // never-triggered cancellation handle, i.e. it always runs to completion.
+  void writeMaterializedView(
+      std::string name, std::string query,
+      const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
@@ -420,12 +458,6 @@ class Qlever {
 
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
-
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    auto snapshot = *indexAndViews_.rlock();
-    MaterializedViewsManager* manager = &snapshot->materializedViewsManager_;
-    return {std::move(snapshot), manager};
-  }
 };
 }  // namespace qlever
 

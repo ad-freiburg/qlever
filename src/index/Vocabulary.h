@@ -123,6 +123,12 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
+  // Batch lookup: look up multiple indices at once and return their words.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  // Streaming variant of batch lookup.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
+
   // Get an Id from the vocabulary for some full word (not prefix of a word).
   // Return a boolean value that signals if the word was found. If the word was
   // not found, the lower bound for the word is stored in idx, otherwise the
@@ -247,14 +253,24 @@ class Vocabulary {
   // `VocabularyInMemory::fromZeroCopyDeserializer`). This switches the active
   // vocabulary implementation to `VocabularyInMemory`, regardless of what was
   // previously loaded. Only possible if `UnderlyingVocabulary` is
-  // `PolymorphicVocabulary` or `VocabularyInMemory` itself; throws (via a
-  // `static_assert`) for any other vocabulary implementation. The returned
-  // vocabulary is only valid as long as the memory backing `serializer`'s
-  // buffer is valid and unchanged.
+  // `PolymorphicVocabulary` or `VocabularyInMemory` itself; for any other
+  // vocabulary implementation, this fails to compile (via a `static_assert`).
+  // The returned vocabulary is only valid as long as the memory backing
+  // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<Serializer>)
-      void loadFromZeroCopyDeserializer(Serializer& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<
+          Serializer>) void loadFromZeroCopyDeserializer(Serializer&
+                                                             serializer) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      // `vocabulary_.getUnderlyingVocabulary()` returns the
+      // `PolymorphicVocabulary`, whose own `getUnderlyingVocabulary()` in
+      // turn returns a reference to the `std::variant` of the concrete
+      // vocabulary implementations that it can hold (see
+      // `PolymorphicVocabulary::getUnderlyingVocabulary`). Assigning a
+      // `VocabularyInMemory` to that variant switches the active
+      // implementation, which requires that `VocabularyInMemory` is one of
+      // the variant's alternatives (currently always true, see
+      // `PolymorphicVocabulary`'s `Variant` type alias).
       vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary() =
           VocabularyInMemory::fromZeroCopyDeserializer(serializer);
     } else {
@@ -275,8 +291,8 @@ class Vocabulary {
   // `VocabularyType::Enum::InMemoryUncompressed` was called); throws
   // otherwise.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<Serializer>) void
-      writeAsZeroCopyBlob(Serializer& serializer) const {
+      requires ad_utility::serialization::WriteSerializer<
+          Serializer>) void writeAsZeroCopyBlob(Serializer& serializer) const {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       const auto& variant =
           vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();

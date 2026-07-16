@@ -134,8 +134,14 @@ option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t i
 if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} OR (CMAKE_CXX_STANDARD LESS 20))
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+    # In the C++17 backports mode, `ql::filesystem` (see `backports/filesystem.h`)
+    # aliases `boost::filesystem` instead of `std::filesystem`, so we then need
+    # `Boost::filesystem` as a dependency. Without the backports we use
+    # `std::filesystem` and must not depend on `boost::filesystem` at all.
+    set(QLEVER_CPP_17_BACKPORTS_ENABLED ON)
 else ()
     add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
+    set(QLEVER_CPP_17_BACKPORTS_ENABLED OFF)
 endif ()
 
 ###############################################################################
@@ -149,7 +155,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG 7917641ff965959afae189afb5f052524395525c # main branch on 2025/09/11
+        GIT_TAG 973323ed64a05b128418e7eab67016db5ba049df # main branch on 2026/06/30
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -202,7 +208,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 2d2a6d74ddf28447afabb75943913a6445a27d4f
+        GIT_TAG 344a3fa41e96db38ac775cc78224847255d0152f
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -278,12 +284,21 @@ endif ()
 ######################################
 # BOOST
 ######################################
+# `Boost::filesystem` is only needed in the C++17 backports mode, where
+# `ql::filesystem` aliases `boost::filesystem` (see `backports/filesystem.h`).
+# Without the backports we use `std::filesystem` and must not depend on
+# `boost::filesystem`, so only request the component when the backports are on.
+if (QLEVER_CPP_17_BACKPORTS_ENABLED)
+  set(QLEVER_BOOST_FILESYSTEM_COMPONENT filesystem)
+else()
+  set(QLEVER_BOOST_FILESYSTEM_COMPONENT "")
+endif()
 if (REDUCED_FEATURE_SET_FOR_CPP17)
   # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
   # which is only available in Boost versions >= 1.81
-  find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container ${QLEVER_BOOST_FILESYSTEM_COMPONENT} REQUIRED CONFIG)
 else()
-  find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container ${QLEVER_BOOST_FILESYSTEM_COMPONENT} REQUIRED CONFIG)
 endif()
 include_directories(${Boost_INCLUDE_DIR})
 
@@ -301,9 +316,17 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
+    # Only link `Boost::filesystem` in the C++17 backports mode (see the `BOOST`
+    # section above); without the backports `ql::filesystem` is `std::filesystem`
+    # and `boost::filesystem` must not be a dependency.
+    if (QLEVER_CPP_17_BACKPORTS_ENABLED)
+        set(QLEVER_BOOST_FILESYSTEM_LIB Boost::filesystem)
+    else()
+        set(QLEVER_BOOST_FILESYSTEM_LIB "")
+    endif()
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -378,7 +401,7 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        GIT_TAG 255c84dadd029fd8ad25c5efb5933e47beaa00c7  # tag 20260107.1 (LTS 2026-01-07)
         EXCLUDE_FROM_ALL
 )
 
@@ -389,7 +412,7 @@ set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
-        GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        GIT_TAG a37aba69f14af676e9605cd9515c8aca6cef8342  # tag v0.13.1
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -452,7 +475,7 @@ set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 FetchContent_Declare(
         re2
         GIT_REPOSITORY https://github.com/google/re2.git
-        GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
+        GIT_TAG 972a15cedd008d846f1a39b2e88ce48d7f166cbd  # main branch from January 23 2026
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
         SYSTEM
@@ -480,10 +503,16 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 ################################
 # Apply FetchContent
 ################################
+# On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
+# but its headers "auto-detect" =0, an ODR mismatch, so we have to set this explicitly.
+# See https://github.com/google/googletest/issues/5015
+if (EMSCRIPTEN)
+    add_compile_definitions(GTEST_HAS_PTHREAD=1)
+endif ()
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
 # Disable some warnings in RE2 and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
-target_compile_options(re2 PRIVATE -Wno-unused-parameter)
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
+target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()

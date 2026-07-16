@@ -25,17 +25,24 @@ namespace qlever::parser {
 
 // A small wrapper around an `AsyncBlockSource` that is required temporarily
 // while the rest of the index builder pipeline is not yet migrated to
-// Boost::Asio. It internally holds a `unique_ptr<AsyncEndRegexBlockSource>` and
-// schedules it on a thread pool with a single thread. The public interface is
-// a synchronous `getNextBlock()` function, the asynchronous prefetching of the
-// next block is purely internal.
+// Boost::Asio. It internally holds a
+// `unique_ptr<AsyncStatementBoundaryBlockSource>` and schedules it on a thread
+// pool with a single thread. The public interface is a synchronous
+// `getNextBlock()` function, the asynchronous prefetching of the next block is
+// purely internal.
 class AsyncFileBlockDriver {
  public:
-  // Open the file described by `spec`, wrap it in an `AsyncEndRegexBlockSource`
-  // with the given `endRegex`, and immediately start prefetching the first
-  // block.
-  AsyncFileBlockDriver(const qlever::InputFileSpecification& spec,
-                       ad_utility::MemorySize blocksize, std::string endRegex);
+  // Open the file described by `spec`, wrap it in an
+  // `AsyncStatementBoundaryBlockSource` that cuts blocks at the positions
+  // determined by `findEndPosition`
+  // (`description` is used in error messages, see
+  // `AsyncStatementBoundaryBlockSource`), and immediately start prefetching the
+  // first block.
+  AsyncFileBlockDriver(
+      const qlever::InputFileSpecification& spec,
+      ad_utility::MemorySize blocksize,
+      AsyncStatementBoundaryBlockSource::EndPositionFinder findEndPosition,
+      std::string description);
 
   // Synchronously obtain the next block. This waits for the next block to
   // become available and then immediately starts prefetching the next one.
