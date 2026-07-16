@@ -187,7 +187,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
-  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+  template <typename SequenceOfBlocks>
+  static bool checkInvariantsForSortedBlocks(
+      const SequenceOfBlocks& sequenceOfBlocks) {
     return ::ranges::all_of(
         ::ranges::views::sliding(sequenceOfBlocks, 2),
         [](const auto& adjacent) {
@@ -871,11 +873,13 @@ class CompressedRelationReader {
   const Allocator& allocator() const { return allocator_; }
 
   // Allow to construct a `CompressedRelationReader` using a different
-  // allocator.
+  // allocator. The underlying file descriptor is duplicated (instead of
+  // opening the file again by name), so this also works when the file has
+  // been renamed since it was opened (see `File::duplicateForReading`).
   CompressedRelationReader makeReaderWithReboundAllocator(
       Allocator allocator) const {
     return CompressedRelationReader{std::move(allocator),
-                                    ad_utility::File{file_.name(), "r"},
+                                    file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
 
