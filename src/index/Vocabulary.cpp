@@ -260,8 +260,6 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  bool ignorePunctuation) {
   vocabulary_.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
-  vocabulary_.getComparator() =
-      ComparatorType(language, country, ignorePunctuation);
 }
 
 // _____________________________________________________________________________
