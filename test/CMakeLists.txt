@@ -344,6 +344,8 @@ addLinkAndDiscoverTest(RegexExpressionTest parser sparqlExpressions index engine
 
 addLinkAndDiscoverTest(LocalVocabTest engine)
 
+addLinkAndDiscoverTest(LocalVocabEntryTest index)
+
 addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(ServiceTest engine)
@@ -547,3 +549,5 @@ addLinkAndDiscoverTest(FilesystemHelpersTest util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest util)
+
+addLinkAndDiscoverTest(ResourceMonitorTest util)
