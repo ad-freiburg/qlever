@@ -73,10 +73,11 @@ class LocaleManagerBase {
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
     // Construct an owning `SortKey` directly from a `U8String`. Only available
     // for the owning `SortKey`, not for the non-owning `SortKeyView` (which
-    // would dangle).
-    CPP_template(typename U = T)(
-        requires std::is_same_v<U, U8String>) explicit SortKeyImpl(U8String
-                                                                       sortKey)
+    // would dangle). Note: `CPP_ctor` (not `CPP_template`) is required here
+    // because this is a constrained constructor nested inside a `CPP_template`
+    // class (nesting `CPP_template` breaks in the C++17 SFINAE mode).
+    CPP_member explicit CPP_ctor(SortKeyImpl)(U8String sortKey)(
+        requires(std::is_same_v<T, U8String>))
         : sortKey_(std::move(sortKey)) {}
     [[nodiscard]] constexpr const T& get() const noexcept { return sortKey_; }
     constexpr T& get() noexcept { return sortKey_; }
