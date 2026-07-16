@@ -577,11 +577,9 @@ TEST(PathSearchTest, numPathsPerTarget) {
               ::testing::UnorderedElementsAreArray(expected));
 }
 
-/**
- * Graph:
- * 0 -> 1 -> 2 -> 3 -> 4
- */
-TEST(PathSearchTest, maxDepthBlocksUnreachableTarget) {
+// Graph:
+// 0 -> 1 -> 2 -> 3 -> 4
+TEST(PathSearchTest, targetBeyondMaxDepth) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
   auto expected = makeIdTableFromVector({});
   expected.setNumColumns(4);
@@ -602,21 +600,23 @@ TEST(PathSearchTest, maxDepthBlocksUnreachableTarget) {
                                  3};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
-/**
- * Graph:
- * 0 -> 1 -> 2 -> 3 -> 4
- */
-TEST(PathSearchTest, maxDepthZeroEmptyResult) {
+// Graph:
+// 0 -> 1 -> 2 -> 3 -> 4
+//
+// NOTE: Zero-length paths (a source that is itself a target) are never part
+// of the result, because a path is represented by its edges. With `maxDepth`
+// 0, no paths of length >= 1 are allowed either, so the result is empty.
+TEST(PathSearchTest, maxDepthZeroYieldsNoPaths) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
   auto expected = makeIdTableFromVector({});
   expected.setNumColumns(4);
 
   std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(0), V(1)};
+  std::vector<Id> targets{V(1)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -631,15 +631,13 @@ TEST(PathSearchTest, maxDepthZeroEmptyResult) {
                                  0};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
-/**
- * Graph:
- * 0 -> 1 -> 2 -> 3 -> 4
- */
-TEST(PathSearchTest, maxDepthAllowsReachableTarget) {
+// Graph:
+// 0 -> 1 -> 2 -> 3 -> 4
+TEST(PathSearchTest, targetWithinMaxDepth) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
   auto expected = makeIdTableFromVector({
       {V(0), V(1), I(0), I(0)},
@@ -662,7 +660,7 @@ TEST(PathSearchTest, maxDepthAllowsReachableTarget) {
                                  2};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 

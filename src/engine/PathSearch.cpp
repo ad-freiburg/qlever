@@ -346,9 +346,10 @@ PathsLimited PathSearch::findPaths(const Id& source,
       visited{allocator()};
 
   visited.insert(source.getBits());
-  // The source sits at depth 0; its outgoing edges would yield depth-1
-  // paths. If `maxDepth` is 0 we therefore seed nothing.
-  if (!maxDepth || *maxDepth > 0) {
+  // The source sits at depth 0, so its outgoing edges yield paths of depth
+  // 1. If `maxDepth` is 0, we therefore must not seed the stack at all.
+  // NOTE: `std::nullopt` (no depth limit) compares unequal to 0 here.
+  if (maxDepth != 0) {
     for (auto edge : binSearch.outgoingEdes(source)) {
       edgeStack.push_back(std::move(edge));
     }
@@ -384,7 +385,7 @@ PathsLimited PathSearch::findPaths(const Id& source,
     // Only expand the frontier if we are still allowed to grow the spine.
     // `currentPath.size()` is the depth of the just-extended path; the
     // pushed edges would extend it by one.
-    if (!maxDepth || currentPath.size() < *maxDepth) {
+    if (!maxDepth.has_value() || currentPath.size() < maxDepth.value()) {
       for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
         if (!ad_utility::contains(visited, outgoingEdge.end_.getBits())) {
           edgeStack.push_back(outgoingEdge);

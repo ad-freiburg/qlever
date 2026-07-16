@@ -49,7 +49,11 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     if (!object.isInt()) {
       throw PathSearchException("The parameter <maxDepth> expects an integer");
     }
-    maxDepth_ = object.getInt();
+    if (object.getInt() < 0) {
+      throw PathSearchException(
+          "The parameter <maxDepth> must not be negative");
+    }
+    maxDepth_ = static_cast<uint64_t>(object.getInt());
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
       throw PathSearchException("The <algorithm> value has to be an IRI");
