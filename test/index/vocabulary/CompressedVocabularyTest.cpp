@@ -190,10 +190,11 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
   // Abandon a scan early; the destructor has to clean up properly.
   {
     auto range = vocab.scanAll();
-    auto indexAndWord = range.get();
-    ASSERT_TRUE(indexAndWord.has_value());
-    EXPECT_EQ(indexAndWord.value().index_, 0);
-    EXPECT_EQ(indexAndWord.value().word_, words.at(0));
+    auto it = ql::ranges::begin(range);
+    ASSERT_NE(it, ql::ranges::end(range));
+    IndexAndWord indexAndWord = *it;
+    EXPECT_EQ(indexAndWord.index_, 0);
+    EXPECT_EQ(indexAndWord.word_, words.at(0));
   }
 }
 
@@ -201,5 +202,6 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
 TYPED_TEST(CompressedVocabularyF, ScanAllEmptyVocabulary) {
   auto createVocab = TestFixture::createCompressedVocabulary();
   auto vocab = createVocab({});
-  EXPECT_FALSE(vocab.scanAll().get().has_value());
+  auto range = vocab.scanAll();
+  EXPECT_EQ(ql::ranges::begin(range), ql::ranges::end(range));
 }
