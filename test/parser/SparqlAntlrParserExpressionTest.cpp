@@ -337,6 +337,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(absl::StrCat(ql, "isEncodedIri>(?x)"),
+                     matchUnary(&makeIsEncodedIriExpression));
   expectFunctionCall(absl::StrCat(ql, "toEpoch>(?x)"),
                      matchUnary(&makeToEpochExpression));
   expectFunctionCall(absl::StrCat(ql, "envelopeLowerLeft>(?x)"),
@@ -603,9 +605,10 @@ using namespace sparqlExpression;
 // points to an `AggregateExpr`, that the distinctness and the child variable of
 // the aggregate expression match, and that the `AggregateExpr`(via dynamic
 // cast) matches all the `additionalMatchers`.
-template <typename AggregateExpr>
+template <typename AggregateExpr, typename... AdditionalMatchers>
 ::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
-    bool distinct, const Variable& child, const auto&... additionalMatchers) {
+    bool distinct, const Variable& child,
+    const AdditionalMatchers&... additionalMatchers) {
   using namespace ::testing;
   using namespace m::builtInCall;
   using Exp = SparqlExpression;
