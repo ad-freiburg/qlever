@@ -19,6 +19,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
@@ -1785,7 +1786,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
   addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
 
-  auto base = std::filesystem::current_path() / "_spatialjoinAbsTestIndex";
+  auto base = ql::filesystem::current_path() / "_spatialjoinAbsTestIndex";
 
   ad_utility::testing::TestIndexConfig idxConfig{kg};
   std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;

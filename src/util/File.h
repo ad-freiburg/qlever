@@ -14,12 +14,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <utility>
 
+#include "backports/filesystem.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Log.h"
@@ -234,9 +234,9 @@ class File {
  * @brief Delete the file at a given path
  * @param path
  */
-inline void deleteFile(const std::filesystem::path& path,
+inline void deleteFile(const ql::filesystem::path& path,
                        bool warnOnFailure = true) {
-  if (!std::filesystem::remove(path)) {
+  if (!ql::filesystem::remove(path)) {
     if (warnOnFailure) {
       AD_LOG_WARN << "Deletion of file '" << path << "' was not successful"
                   << std::endl;
@@ -246,7 +246,7 @@ inline void deleteFile(const std::filesystem::path& path,
 
 namespace detail {
 template <typename Stream, bool forWriting, typename... Args>
-Stream makeFilestream(const std::filesystem::path& path, Args&&... args) {
+Stream makeFilestream(const ql::filesystem::path& path, Args&&... args) {
   Stream stream{path.string(), AD_FWD(args)...};
   std::string_view mode = forWriting ? "for writing" : "for reading";
   if (!stream.is_open()) {
@@ -254,7 +254,7 @@ Stream makeFilestream(const std::filesystem::path& path, Args&&... args) {
         absl::StrCat("Could not open file \"", path.string(), "\" ", mode,
                      ". Possible causes: The file does not exist or the "
                      "permissions are insufficient. The absolute path is \"",
-                     std::filesystem::absolute(path).string(), "\".");
+                     ql::filesystem::absolute(path).string(), "\".");
     throw std::runtime_error{error};
   }
   return stream;
@@ -265,13 +265,13 @@ Stream makeFilestream(const std::filesystem::path& path, Args&&... args) {
 // additional `args`. Throw an exception stating the filename and the absolute
 // path when the file can't be opened.
 template <typename... Args>
-std::ifstream makeIfstream(const std::filesystem::path& path, Args&&... args) {
+std::ifstream makeIfstream(const ql::filesystem::path& path, Args&&... args) {
   return detail::makeFilestream<std::ifstream, false>(path, AD_FWD(args)...);
 }
 
 // Similar to `makeIfstream`, but returns `std::ofstream`
 template <typename... Args>
-std::ofstream makeOfstream(const std::filesystem::path& path, Args&&... args) {
+std::ofstream makeOfstream(const ql::filesystem::path& path, Args&&... args) {
   return detail::makeFilestream<std::ofstream, true>(path, AD_FWD(args)...);
 }
 

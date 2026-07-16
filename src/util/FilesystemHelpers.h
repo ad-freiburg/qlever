@@ -10,13 +10,31 @@
 #ifndef QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
 #define QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H
 
+#include <absl/functional/function_ref.h>
+
+#include <cstddef>
 #include <string>
+
+#include "backports/filesystem.h"
 
 namespace qlever::util {
 // Return `true` if the directory from `path` contains at least one file whose
 // name starts with the base name of `path`; otherwise return `false`. If the
 // base name is empty, return `false` if and only if the directory is empty.
 bool doesDirectoryContainFileWithBasename(const std::string& path);
+
+// Delete every regular file directly contained in `directory` for which
+// `shouldDelete(entryPath)` returns `true`, and return the number of files that
+// were deleted. The matching files are collected first and deleted only
+// afterwards, because deleting directory entries while iterating a directory is
+// unspecified behavior that can cause entries to be skipped on some platforms
+// (observed on macOS), leaving leftover files behind. Non-regular entries (e.g.
+// subdirectories) are never passed to `shouldDelete` and never deleted. If
+// `directory` does not exist or is not a directory, nothing is deleted and `0`
+// is returned.
+size_t deleteFilesInDirectory(
+    const ql::filesystem::path& directory,
+    absl::FunctionRef<bool(const ql::filesystem::path&)> shouldDelete);
 
 // Return `true` if the directory from `path1` is a subdirectory of the
 // directory from `path2`; otherwise return `false`.
