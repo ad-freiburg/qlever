@@ -125,7 +125,7 @@ ResourceMonitor::~ResourceMonitor() {
 }
 
 // _____________________________________________________________________________
-void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
+void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
                             std::chrono::milliseconds interval) {
   AD_CONTRACT_CHECK(!started_.exchange(true),
                     "ResourceMonitor::start may only be called once.");
@@ -134,7 +134,7 @@ void ResourceMonitor::start(const std::filesystem::path& path, Mode mode,
 #if defined(__APPLE__) || defined(__linux__)
   // Monitoring is optional: on an unwritable file, warn and let QLever run
   // on rather than aborting the process.
-  namespace fs = std::filesystem;
+  namespace fs = ql::filesystem;
   // Decide about the header before opening: truncating destroys the
   // old file size. A missing file or failed stat also gets a header.
   std::error_code ec;

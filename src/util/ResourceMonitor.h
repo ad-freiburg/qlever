@@ -15,13 +15,13 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
-#include <filesystem>
 #include <fstream>
 #include <istream>
 #include <mutex>
 #include <optional>
 #include <string>
 
+#include "backports/filesystem.h"
 #include "util/jthread.h"
 
 namespace ad_utility {
@@ -89,7 +89,7 @@ class ResourceMonitor {
   // non-empty file) and start sampling. An unopenable file only warns
   // and disables monitoring. Throws if called more than once or if
   // `interval` is not positive.
-  void start(const std::filesystem::path& path, Mode mode,
+  void start(const ql::filesystem::path& path, Mode mode,
              std::chrono::milliseconds interval);
 
   // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
