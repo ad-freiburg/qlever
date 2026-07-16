@@ -316,6 +316,8 @@ addLinkAndDiscoverTest(GeoPointTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
+addLinkAndDiscoverTest(GeoConvertersTest util)
+
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateYearDurationTest util parser)
@@ -341,6 +343,8 @@ addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 addLinkAndDiscoverTest(RegexExpressionTest parser sparqlExpressions index engine parser)
 
 addLinkAndDiscoverTest(LocalVocabTest engine)
+
+addLinkAndDiscoverTest(LocalVocabEntryTest index)
 
 addLinkAndDiscoverTest(ValuesTest engine)
 
@@ -545,3 +549,5 @@ addLinkAndDiscoverTest(FilesystemHelpersTest util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest util)
+
+addLinkAndDiscoverTest(ResourceMonitorTest util)
