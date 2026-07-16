@@ -7,20 +7,20 @@ project(QLever C CXX)
 if (APPLE)
     # Dynamically detect Homebrew prefix
     execute_process(
-            COMMAND brew --prefix
-            OUTPUT_VARIABLE HOMEBREW_PREFIX
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            RESULT_VARIABLE BREW_RESULT
-            ERROR_QUIET
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE BREW_RESULT
+        ERROR_QUIET
     )
     if (BREW_RESULT EQUAL 0 AND HOMEBREW_PREFIX)
         message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
         list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
         link_directories(${HOMEBREW_PREFIX}/lib)
         include_directories(${HOMEBREW_PREFIX}/include)
-    else ()
+    else()
         message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
-    endif ()
+    endif()
 endif ()
 
 # C/C++ Versions
@@ -29,10 +29,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Allow the explicit overriding of the C++ standard version, e.g. when the reduced feature set for C++17 is used.
 if (NOT DEFINED CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN)
-    set(CMAKE_CXX_STANDARD 20)
-else ()
+  set(CMAKE_CXX_STANDARD 20)
+else()
     set(CMAKE_CXX_STANDARD ${CMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN})
-endif ()
+endif()
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -66,7 +66,7 @@ if (CHEAPER_COMPILATION)
     add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
     # General flag used throughout the codebase to opt into cheaper-to-compile alternatives.
     add_compile_definitions(QLEVER_CHEAPER_COMPILATION)
-endif ()
+endif()
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
@@ -75,12 +75,12 @@ option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
 option(REDUCED_FEATURE_SET_FOR_CPP17 "Exclude some features like `SERVICE`, `LOAD`, and transitive property paths, that haven't been migrated to C++17 yet" OFF)
 if (REDUCED_FEATURE_SET_FOR_CPP17)
     add_compile_definitions(QLEVER_REDUCED_FEATURE_SET_FOR_CPP17 QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
-endif ()
+endif()
 
 option(EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17 "Use the C++17 backports inside `SparqlExpressionGenerators.h`. They are currently less efficient than the C++20 implementations. This option is implicitly activated by the `REDUCED_FEATURE_SET_FOR_CPP17` option, but can be activated separately to run the unit tests for the backports of the `ExpressionGenerators`" OFF)
 if (EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
     add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
-endif ()
+endif()
 
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -90,7 +90,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -120,10 +120,10 @@ set(CMAKE_CXX_FLAGS_ASAN
 # compiled by /usr/bin/cc even when the main build uses Clang).
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     add_compile_options(
-            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
-            $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
-            $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
-            $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:GNU>>:-fdiagnostics-color=always>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:Clang,AppleClang>>:-fcolor-diagnostics>
     )
 endif ()
 
@@ -345,13 +345,13 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # user types, std::variant). Suppress for the affected version range so the
 # flag can be re-enabled easily once GCC fixes the false-positive behavior.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
-        CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
-        CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
     # False positives from template instantiation crossing system-header boundaries.
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
-endif ()
+endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
@@ -592,7 +592,7 @@ set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
 
 set(LOGLEVEL DEBUG CACHE STRING
-        "The maximum log level QLever is compiled with. Less verbose log levels can be chosen at runtime via the 'log-level' runtime parameter."
+    "The maximum log level QLever is compiled with. Less verbose log levels can be chosen at runtime via the 'log-level' runtime parameter."
 )
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
@@ -602,7 +602,7 @@ add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 # Warnings about incorrect combination of CMake variables
 
 if (LOGLEVEL MATCHES "FATAL|ERROR|WARN|INFO" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
-    message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
+  message(WARNING "`QUERY_CANCELLATION_MODE` is set to `ENABLED`, but the log level is set to ${LOGLEVEL}; therefore, cancellation check messages, which have log level `DEBUG`, are not printed (but there is a dedicated thread that decides when to print those messages)")
 endif ()
 
 add_subdirectory(src/parser)
@@ -619,13 +619,13 @@ add_subdirectory(src/libqlever)
 # PRECOMPILED_HEADER_FILES_EXTERNAL: stable third-party headers that never change
 # and are expensive to parse. Applied to every library target.
 set(PRECOMPILED_HEADER_FILES_EXTERNAL
-        <absl/strings/str_cat.h>
-        <absl/container/flat_hash_map.h>
-        <absl/container/flat_hash_set.h>
-        <range/v3/all.hpp>
-        # JSON_USE_IMPLICIT_CONVERSIONS=0 is set globally above, so the bare
-        # nlohmann header already sees the correct flag value.
-        <nlohmann/json.hpp>
+    <absl/strings/str_cat.h>
+    <absl/container/flat_hash_map.h>
+    <absl/container/flat_hash_set.h>
+    <range/v3/all.hpp>
+    # JSON_USE_IMPLICIT_CONVERSIONS=0 is set globally above, so the bare
+    # nlohmann header already sees the correct flag value.
+    <nlohmann/json.hpp>
 )
 
 # PRECOMPILED_HEADER_FILES_WITH_BEAST: extends EXTERNAL with boost networking and
@@ -635,26 +635,26 @@ set(PRECOMPILED_HEADER_FILES_EXTERNAL
 # Operation.h → QueryExecutionContext.h → ResponseMiddleware.h → beast.h, even
 # though it is already covered for engine TUs.
 set(PRECOMPILED_HEADER_FILES_WITH_BEAST
-        <util/http/beast.h>
-        <boost/iostreams/filter/gzip.hpp>
-        <boost/iostreams/filtering_stream.hpp>
-        ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    <util/http/beast.h>
+    <boost/iostreams/filter/gzip.hpp>
+    <boost/iostreams/filtering_stream.hpp>
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
 
 set(PRECOMPILED_HEADER_FILES_ENGINE
-        src/util/HashMap.h
-        src/engine/Operation.h
-        src/engine/QueryExecutionTree.h
-        ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+    src/util/HashMap.h
+    src/engine/Operation.h
+    src/engine/QueryExecutionTree.h
+    ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
 
 set(PRECOMPILED_HEADER_FILES_PARSER
-        src/engine/sparqlExpressions/AggregateExpression.h
-        ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp
-        ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h
-        ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    src/engine/sparqlExpressions/AggregateExpression.h
+    ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp
+    ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h
+    ${PRECOMPILED_HEADER_FILES_EXTERNAL})
 
 set(PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS
-        src/engine/sparqlExpressions/SparqlExpression.h
-        ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
+   src/engine/sparqlExpressions/SparqlExpression.h
+   ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
 
 if (USE_PRECOMPILED_HEADERS)
     target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
@@ -693,8 +693,8 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
-    endif ()
-endif ()
+    endif()
+endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
 qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
@@ -707,11 +707,11 @@ qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS
-            qlever-index
-            qlever-server
-            RUNTIME DESTINATION bin
+        qlever-index
+        qlever-server
+        RUNTIME DESTINATION bin
     )
-endif ()
+endif()
 
 ###############################################################
 # CPack packaging
@@ -733,19 +733,19 @@ if (PROJECT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9]+)?(-g[0-9a-f]+)
     if (CMAKE_MATCH_2)
         string(SUBSTRING "${CMAKE_MATCH_2}" 1 -1 COMMITS_AHEAD)
         set(CPACK_PACKAGE_VERSION "${TAG_VERSION}+${COMMITS_AHEAD}")
-    else ()
+    else()
         set(CPACK_PACKAGE_VERSION "${TAG_VERSION}")
-    endif ()
+    endif()
 
-else ()
+else()
     # Fallback for non-tagged builds: Use commit hash
     if (PROJECT_VERSION MATCHES "-g([0-9a-f]+)$")
         set(HASH "${CMAKE_MATCH_1}")
-    else ()
+    else()
         set(HASH "${PROJECT_VERSION}")
-    endif ()
+    endif()
     set(CPACK_PACKAGE_VERSION "0.0.0+${HASH}")
-endif ()
+endif()
 
 # Debian package revision number (e.g., the "1" in "0.5.42-1~plucky~25.04").
 # Override with: cmake -DPACKAGE_REVISION=2
@@ -762,24 +762,24 @@ if (EXISTS "/etc/os-release")
     set(_OS_VERSION_ID "")
     set(_OS_VERSION_CODENAME "")
 
-    foreach (line ${OS_RELEASE_CONTENTS})
+    foreach(line ${OS_RELEASE_CONTENTS})
         if (line MATCHES "^ID=\"?([^\"]*)\"?$")
             set(_OS_ID "${CMAKE_MATCH_1}")
         elseif (line MATCHES "^VERSION_ID=\"?([^\"]*)\"?$")
             set(_OS_VERSION_ID "${CMAKE_MATCH_1}")
         elseif (line MATCHES "^VERSION_CODENAME=\"?([^\"]*)\"?$")
             set(_OS_VERSION_CODENAME "${CMAKE_MATCH_1}")
-        endif ()
-    endforeach ()
+        endif()
+    endforeach()
 
     if (_OS_VERSION_CODENAME AND _OS_VERSION_ID)
         if (_OS_ID STREQUAL "ubuntu")
             set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~${_OS_VERSION_ID}")
         elseif (_OS_ID STREQUAL "debian")
             set(DEFAULT_VERSION_SUFFIX "~${_OS_VERSION_CODENAME}~deb${_OS_VERSION_ID}")
-        endif ()
-    endif ()
-endif ()
+        endif()
+    endif()
+endif()
 
 set(VERSION_SUFFIX "${DEFAULT_VERSION_SUFFIX}" CACHE STRING "Distribution-specific version suffix")
 
