@@ -52,6 +52,28 @@ CPP_template(typename UnderlyingVocabulary,
   // constructor leads to an empty vocabulary.
   CompressedVocabulary() = default;
 
+  // Build a `CompressedVocabulary` as a (partially) non-owning, zero-copy view
+  // directly into the buffer of `serializer`. The words are deserialized
+  // zero-copy by delegating to the `UnderlyingVocabulary` (which therefore has
+  // to support zero-copy deserialization itself, see
+  // `SupportsZeroCopyDeserialization`). The `decoders` are small, so they are
+  // simply read (and thus copied) as usual. The layout read here exactly
+  // matches the one written by the generic serialization function below. The
+  // returned vocabulary is only valid as long as the memory backing
+  // `serializer`'s buffer is valid and unchanged.
+  CPP_template(typename S)(
+      requires ad_utility::serialization::SupportsZeroCopyDeserialization<
+          UnderlyingVocabulary, S>) static CompressedVocabulary
+      fromZeroCopyDeserializer(S& serializer) {
+    CompressedVocabulary result;
+    result.underlyingVocabulary_ =
+        UnderlyingVocabulary::fromZeroCopyDeserializer(serializer);
+    std::vector<typename CompressionWrapper::Decoder> decoders;
+    serializer | decoders;
+    result.compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+    return result;
+  }
+
   // Get the uncompressed word at the given index.
   std::string operator[](uint64_t idx) const {
     return compressionWrapper_.decompress(

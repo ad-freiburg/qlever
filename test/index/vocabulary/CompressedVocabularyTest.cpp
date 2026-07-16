@@ -172,4 +172,37 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ad_utility::deleteFile(filename);
 }
 
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+
+  // Create vocabulary with small block size (4 words per block) on top of an
+  // in-memory (and hence zero-copy-capable) underlying vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
+  std::string filename = gtestCurrentTestName();
+  auto writerPtr = vocab.makeDiskWriterPtr(filename);
+  auto& writer = *writerPtr;
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+  vocab.open(filename);
+
+  // Write using an aligned serializer (required for zero-copy reads).
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer | vocab;
+
+  // Read back the words as a non-owning, zero-copy view, and the (small)
+  // decoders normally.
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view =
+      (CompressedVocabulary<VocabularyInMemory, TypeParam,
+                            4>::fromZeroCopyDeserializer(readSerializer));
+  assertThatRangesAreEqual(vocab, view);
+
+  ad_utility::deleteFile(filename);
+}
+
 }  // namespace
