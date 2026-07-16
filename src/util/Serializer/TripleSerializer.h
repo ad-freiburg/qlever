@@ -172,7 +172,7 @@ CPP_template(typename Range)(
     requires ql::ranges::range<
         Range>) void serializeIds(const std::filesystem::path& path,
                                   const LocalVocab& vocab, Range&& idRanges) {
-  serialization::FileWriteSerializer serializer{path.c_str()};
+  serialization::FileWriteSerializer serializer{path.string()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
@@ -190,7 +190,7 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
   if (!std::filesystem::exists(path)) {
     return {};
   }
-  auto serializer = [p = path.c_str()]() {
+  auto serializer = [p = path.string()]() {
     try {
       return serialization::FileReadSerializer{p};
     } catch (const std::runtime_error& err) {
