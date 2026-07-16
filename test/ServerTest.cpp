@@ -3,10 +3,15 @@
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
+#include <optional>
 
+#include "./util/FileTestHelpers.h"
 #include "ServerTestHelpers.h"
+#include "backports/filesystem.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -143,7 +148,8 @@ TEST(ServerTest, chooseBestFittingMediaType) {
 // _____________________________________________________________________________
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
   const auto req = makeGetRequest("/");
@@ -168,25 +174,30 @@ TEST(ServerTest, getQueryId) {
 
 // _____________________________________________________________________________
 TEST(ServerTest, composeStatsJson) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
                     {"name-index", ""},
                     {"name-text-index", ""},
                     {"num-entity-occurrences", 0},
-                    {"num-permutations", 2},
-                    {"num-predicates-internal", 0},
-                    {"num-predicates-normal", 0},
+                    {"num-objects-internal", 0},
+                    {"num-objects-normal", 1},
+                    {"num-permutations", 6},
+                    {"num-predicates-internal", 1},
+                    {"num-predicates-normal", 1},
+                    {"num-subjects-internal", 0},
+                    {"num-subjects-normal", 1},
                     {"num-text-records", 0},
-                    {"num-triples-internal", 0},
-                    {"num-triples-normal", 0},
+                    {"num-triples-internal", 1},
+                    {"num-triples-normal", 1},
                     {"num-word-occurrences", 0}};
-  EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
+  EXPECT_THAT(server.composeStatsJson(server.indexAndViewsSnapshot()->index_),
+              testing::Eq(expectedJson));
 }
 
 // _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
   reqWithExplicitQueryId.set("Query-Id", customQueryId);
@@ -239,7 +250,7 @@ TEST(ServerTest, createResponseMetadata) {
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
-  const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
+  const qlever::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
 
   // Execute the update
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
@@ -286,7 +297,7 @@ TEST(ServerTest, createResponseMetadata) {
 // _____________________________________________________________________________
 TEST(ServerTest, adjustParsedQueryLimitOffset) {
   using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
+  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
     auto* qec = ad_utility::testing::getQec();
     QueryExecutionTree qet =
@@ -344,31 +355,49 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Test with no pinNamed value - should not modify qec
   std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, true, *qec);
+  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
   std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedResultWithName(pinNamed, std::nullopt, true, *qec);
-  EXPECT_TRUE(qec->pinResultWithName().has_value());
+  Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+            std::nullopt);
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
   // Test with pinNamed AND pinned geo Var.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", true, *qec);
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", std::nullopt,
+                                        true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
               ::testing::Optional(Variable{"?geom_var"}));
+  EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+            std::nullopt);
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+  // Test with pinNamed, geo var, AND simplification.
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", 10.0, true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
+              ::testing::Optional(Variable{"?geom_var"}));
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+              ::testing::Optional(10.0));
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, std::nullopt, false,
-                                            *qec),
+      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
+                                            std::nullopt, false, *qec),
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
@@ -377,31 +406,99 @@ TEST(ServerTest, configurePinnedResultWithName) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, parsePinGeoIndexSimplification) {
+  // No value given - no simplification.
+  EXPECT_EQ(Server::parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
+
+  // A valid positive number is parsed correctly.
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("10.5"),
+              ::testing::Optional(10.5));
+
+  // A non-numeric value throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::parsePinGeoIndexSimplification("not-a-number"),
+      testing::HasSubstr(
+          "Invalid value for `pin-geo-index-simplification`: must be a "
+          "floating-point number of meters."));
+
+  // Negative and zero values are not rejected by the parser itself (that is
+  // left to the downstream consumer, see `GeoConverters::simplifyPolyline`).
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("-5"),
+              ::testing::Optional(-5.0));
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("0"),
+              ::testing::Optional(0.0));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, describePinResultWithNameForLog) {
+  // No pinned name - nothing to describe.
+  EXPECT_EQ(Server::describePinResultWithNameForLog(std::nullopt, std::nullopt,
+                                                    std::nullopt),
+            "");
+
+  // Pinned name only.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", std::nullopt,
+                                                    std::nullopt),
+            " [pin result with name \"myPin\"]");
+
+  // Pinned name and geo index, but no simplification.
+  EXPECT_EQ(
+      Server::describePinResultWithNameForLog("myPin", "geom", std::nullopt),
+      " [pin result with name \"myPin\" with geo index on ?geom]");
+
+  // Pinned name, geo index, and simplification.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", "geom", 5.0),
+            " [pin result with name \"myPin\" with geo index on ?geom, "
+            "simplification=5m]");
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  auto config = serverTestHelpers::getDefaultConfig();
+  Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.checkAccessToken("invalidAccessToken"),
       testing::HasSubstr("Access token was provided but it was invalid"));
 
-  Server server2{1234, 1, ad_utility::MemorySize::megabytes(1), "", true};
+  config.persistUpdates_ = false;
+
+  Server server2{
+      1234, 1, "", config, true,
+  };
   EXPECT_TRUE(server2.checkAccessToken(std::nullopt));
 }
 
 // _____________________________________________________________________________
-MATCHER_P(ContentTypeIs, contentType,
-          absl::StrCat("Content-Type is ", negation ? "not " : "",
-                       contentType)) {
-  auto it = arg.find(http::field::content_type);
+MATCHER_P2(HeaderFieldIs, field, matcher,
+           absl::StrCat(std::string{boost::beast::http::to_string(field)}, " ",
+                        testing::DescribeMatcher<std::string>(matcher,
+                                                              negation))) {
+  auto it = arg.find(field);
   if (it == arg.end()) {
-    *result_listener << "which has no Content-Type header";
+    *result_listener << "which has no " << field << " header";
     return false;
   }
-  auto actualContentType = it->value();
-  *result_listener << "which has Content-Type " << actualContentType;
-  return actualContentType == contentType;
+  auto fieldValue = it->value();
+  *result_listener << "which has " << field << " with " << fieldValue;
+  return testing::ExplainMatchResult(matcher, fieldValue, result_listener);
 }
+
+// _____________________________________________________________________________
+auto ContentTypeIs = [](const std::string& contentType) {
+  return HeaderFieldIs(http::field::content_type, testing::StrEq(contentType));
+};
+
+// _____________________________________________________________________________
+auto LocationIs = [](const auto& matcher) {
+  return HeaderFieldIs(http::field::location, matcher);
+};
+
+// _____________________________________________________________________________
+auto HasHeader = [](http::field field) {
+  return HeaderFieldIs(field, testing::Not(testing::IsEmpty()));
+};
 
 // _____________________________________________________________________________
 MATCHER_P(StatusIs, status,
@@ -417,9 +514,9 @@ using namespace serverTestHelpers;
 // _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
-
-  auto testHead = [&simulateHttpRequest](
+  // Each request runs on a fresh server, so that the sub-tests are
+  // independent of each other.
+  auto testHead = [&qec](
                       const std::optional<std::string>& accept,
                       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
@@ -427,9 +524,10 @@ TEST(ServerTest, gspHead) {
     if (accept.has_value()) {
       head.set(http::field::accept, accept.value());
     }
-    auto response = simulateHttpRequest.processRaw(head);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(head);
     EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
-    EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
+    EXPECT_THAT(responseBodyToString(std::move(response.body())),
                 testing::IsEmpty());
   };
   testHead(std::nullopt);
@@ -442,9 +540,9 @@ TEST(ServerTest, gspHead) {
 // _____________________________________________________________________________
 TEST(ServerTest, gspGet) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
-
-  auto testGet = [&simulateHttpRequest](
+  // Each request runs on a fresh server, so that the sub-tests are
+  // independent of each other.
+  auto testGet = [&qec](
                      const std::optional<std::string>& accept,
                      const testing::Matcher<const std::string&>& bodyMatcher,
                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -453,10 +551,10 @@ TEST(ServerTest, gspGet) {
     if (accept.has_value()) {
       get.set(http::field::accept, accept.value());
     }
-    auto response = simulateHttpRequest.processRaw(get);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(get);
     EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
-    EXPECT_THAT(SimulateHttpRequest::bodyToString(std::move(response.body())),
-                bodyMatcher);
+    EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };
   testGet(std::nullopt, testing::Eq("<a> <b> <c> .\n<a> <b> <d> .\n"));
   testGet("text/csv", testing::Eq("<a>,<b>,<c>\n<a>,<b>,<d>\n"));
@@ -468,19 +566,19 @@ TEST(ServerTest, gspGet) {
 // _____________________________________________________________________________
 TEST(ServerTest, gspPut) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
-
-  auto testPut = [&simulateHttpRequest](
+  // Each request runs on a fresh server, so that the sub-tests are
+  // independent of each other.
+  auto testPut = [&qec](
                      const std::string& contentType, const std::string& body,
                      const std::string& graph, const auto& bodyMatcher,
                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-
     auto request =
         makeRequest(http::verb::put, "/?" + graph,
                     {{http::field::authorization, "Bearer accessToken"}}, body);
     request.set(http::field::content_type, contentType);
-    auto response = simulateHttpRequest.processRaw(request);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(request);
     EXPECT_THAT(response, bodyMatcher);
   };
   testPut("text/turtle", "<a> <b> <c> .", "default",
@@ -492,20 +590,239 @@ TEST(ServerTest, gspPut) {
 // _____________________________________________________________________________
 TEST(ServerTest, gspDelete) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  SimulateHttpRequest simulateHttpRequest{qec->getIndex().getOnDiskBase()};
-
-  auto testDelete = [&simulateHttpRequest](const std::string& graph,
-                                           const auto& bodyMatcher,
-                                           ad_utility::source_location l =
-                                               AD_CURRENT_SOURCE_LOC()) {
+  // Each request runs on a fresh server, so that the sub-tests are
+  // independent of each other.
+  auto testDelete = [&qec](const std::string& graph, const auto& bodyMatcher,
+                           ad_utility::source_location l =
+                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-
     auto request =
         makeRequest(http::verb::delete_, "/?" + graph,
                     {{http::field::authorization, "Bearer accessToken"}});
-    auto response = simulateHttpRequest.processRaw(request);
+    auto response =
+        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(request);
     EXPECT_THAT(response, bodyMatcher);
   };
   testDelete("default", StatusIs(http::status::ok));
   testDelete("graph=foo", StatusIs(http::status::not_found));
+}
+
+MATCHER(PairwiseUnequal, "contains no duplicate elements") {
+  const auto& container = arg;
+  auto begin = std::begin(container);
+  auto end = std::end(container);
+
+  for (auto it = begin; it != end; ++it) {
+    for (auto jt = std::next(it); jt != end; ++jt) {
+      if (*it == *jt) {
+        *result_listener << "duplicate value found: "
+                         << ::testing::PrintToString(*it);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPost) {
+  // TODO<qup42> test more thoroughly including the exact delta triples state
+  auto baseName = gtestCurrentTestName();
+  makeTestIndex(baseName, "");
+  auto serverForTesting = makeServerForTesting(baseName);
+  auto expectPost = [&serverForTesting](std::string body,
+                                        const auto& responseMatcher) {
+    auto request =
+        makeRequest(http::verb::post, "/?graph=foo",
+                    {{http::field::authorization, "Bearer accessToken"},
+                     {http::field::host, "example.org"},
+                     {http::field::content_type, "text/turtle"}},
+                    std::move(body));
+    auto response = serverForTesting.process(request);
+    EXPECT_THAT(response, responseMatcher);
+  };
+  auto NumDeltaTriples = [](const auto& matcher) {
+    return testing::ResultOf(
+        [](const ServerForTesting& server) {
+          return server.deltaTriplesManager()
+              .getCurrentLocatedTriplesSharedState()
+              ->getLocatedTriplesForPermutation<false>(Permutation::PSO)
+              .numTriplesForTesting();
+        },
+        matcher);
+  };
+  expectPost("", StatusIs(http::status::no_content));
+  EXPECT_THAT(serverForTesting, NumDeltaTriples(testing::Eq(0)));
+  expectPost("<a> <b> <c> .", StatusIs(http::status::ok));
+  EXPECT_THAT(serverForTesting, NumDeltaTriples(testing::Eq(1)));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, gspPostCreateNewGraph) {
+  auto testPost = [](ServerForTesting serverForTesting, auto request,
+                     const auto& bodyMatcher,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto response = serverForTesting.process(request);
+    EXPECT_THAT(response, bodyMatcher);
+    return response;
+  };
+
+  // Insert a payload into a new graph chosen by the server 1000 times. Check
+  // that the returned graph has the expected format and that no graph is
+  // selected twice.
+  {
+    std::string basename = "ServerTest_gspPostCreateNewGraph";
+    auto index = makeTestIndex(basename, "");
+    auto testPostCreateNewGraph =
+        [&testPost, &basename](const std::string& body, const auto& bodyMatcher,
+                               ad_utility::source_location l =
+                                   AD_CURRENT_SOURCE_LOC()) -> std::string {
+      auto request =
+          makeRequest(http::verb::post,
+                      "/?graph=http%3A%2F%2Fexample.org%2Fhttp-graph-store",
+                      {{http::field::authorization, "Bearer accessToken"},
+                       {http::field::host, "example.org"},
+                       {http::field::content_type, "text/turtle"}},
+                      body);
+      auto response =
+          testPost(makeServerForTesting(basename), request, bodyMatcher, l);
+      return response.at(http::field::location);
+    };
+    std::vector<std::string> locations;
+    for (int i = 0; i < 10; ++i) {
+      auto location = testPostCreateNewGraph(
+          "<a> <b> <c>",
+          testing::AllOf(
+              // Check that the random part of the graph is a V4 UUID.
+              LocationIs(testing::MatchesRegex(
+                  R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+              StatusIs(http::status::created)));
+      locations.push_back(location);
+    }
+    EXPECT_THAT(locations, PairwiseUnequal());
+  }
+
+  // Same behavior via Direct Graph Identification: POST `/http-graph-store`
+  // with no `?graph=`. The graph IRI is constructed from `Host` + path and
+  // matches the instance's graph store URL, so a new graph is created.
+  testPost(
+      makeServerForTesting("ServerTest_gspPostCreateNewGraph"),
+      makeRequest(http::verb::post, "/http-graph-store",
+                  {{http::field::authorization, "Bearer accessToken"},
+                   {http::field::host, "example.org"},
+                   {http::field::content_type, "text/turtle"}},
+                  "<a> <b> <c>"),
+      testing::AllOf(
+          LocationIs(testing::MatchesRegex(
+              R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
+          StatusIs(http::status::created)));
+
+  auto IsPostNoCreatedGraph = [](http::status status) {
+    return testing::AllOf(StatusIs(status),
+                          testing::Not(HasHeader(http::field::location)));
+  };
+  // Here we only care that logic for creating a new graph doesn't fire. The
+  // updated triples are not the primary concern here.
+  testPost(makeServerForTesting("ServerTest_gspPostCreateNewGraph"),
+           makeRequest(http::verb::post, "/?default",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
+  testPost(makeServerForTesting("ServerTest_gspPostCreateNewGraph"),
+           makeRequest(http::verb::post, "/?graph=foo",
+                       {{http::field::authorization, "Bearer accessToken"},
+                        {http::field::host, "example.org"},
+                        {http::field::content_type, "text/turtle"}},
+                       "<a> <b> <c>"),
+           IsPostNoCreatedGraph(http::status::ok));
+}
+
+// _____________________________________________________________________________
+// Read a query-event-log file and parse each JSONL line.
+namespace {
+std::vector<json> parseEventLog(const ql::filesystem::path& path) {
+  std::vector<json> events;
+  for (const auto& line : ad_utility::testing::readLines(path)) {
+    events.push_back(json::parse(line));
+  }
+  return events;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// A successful query writes a `start` event carrying the X-Real-IP client IP
+// and an `end` event with status "ok".
+TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto base = qec->getIndex().getOnDiskBase();
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    auto serverForTesting = makeServerForTesting(base, path);
+
+    auto request = makePostRequest("/", "application/sparql-query",
+                                   "SELECT * WHERE { ?a ?b ?c }");
+    request.set("X-Real-IP", "10.0.0.5");
+    request.set(http::field::accept, "application/sparql-results+json");
+    EXPECT_THAT(serverForTesting.process(request), StatusIs(http::status::ok));
+  }  // server (hence log) destroyed → queue drained, file closed
+
+  // The TUI byte-slices the timestamp, so every line must begin with
+  // `{"ts-ms":`.
+  for (const auto& line : ad_utility::testing::readLines(path)) {
+    EXPECT_THAT(line, ::testing::StartsWith("{\"ts-ms\":"));
+  }
+
+  auto events = parseEventLog(path);
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_GT(start.at("ts-ms").get<int64_t>(), 0);
+  EXPECT_FALSE(start.at("qid").get<std::string>().empty());
+  EXPECT_EQ(start.at("client-ip").get<std::string>(), "10.0.0.5");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "SELECT * WHERE { ?a ?b ?c }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "ok");
+  // One end per start: same qid, end not before start.
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
+  EXPECT_GE(end.at("ts-ms").get<int64_t>(), start.at("ts-ms").get<int64_t>());
+}
+
+// _____________________________________________________________________________
+// A query that fails during planning writes an `end` event with status
+// "failed". It parses (so `start` is written), then planning throws.
+TEST(ServerTest, queryEventLogRecordsFailedStatus) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto base = qec->getIndex().getOnDiskBase();
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    auto serverForTesting = makeServerForTesting(base, path);
+
+    auto request = makePostRequest(
+        "/", "application/sparql-query",
+        "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
+    serverForTesting.process(request);
+  }
+
+  auto events = parseEventLog(path);
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "failed");
+  // One end per start: same qid.
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
 }

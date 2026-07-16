@@ -11,6 +11,10 @@ concurrency:
   group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
   cancel-in-progress: true
 
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     # The CMake configure and build commands are platform-agnostic and should work equally
@@ -55,7 +59,7 @@ jobs:
       - name: Test
         id: complete_tests
         working-directory: ${{github.workspace}}/build/test
-        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j $(sysctl -n hw.ncpu) .
 
       - name: Running and printing the benchmark examples.
         working-directory: ${{github.workspace}}/build

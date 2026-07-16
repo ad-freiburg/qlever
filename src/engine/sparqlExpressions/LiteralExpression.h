@@ -153,6 +153,8 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
  protected:
   // ___________________________________________________________________________
   std::optional<::Variable> getVariableOrNullopt() const override {
@@ -194,11 +196,17 @@ class LiteralExpression : public SparqlExpression {
     if (!column.has_value()) {
       return Id::makeUndefined();
     }
-    // If a variable is grouped, then we know that it always has the same
-    // value and can treat it as a constant. This is not possible however when
-    // we are inside an aggregate, because for example `SUM(?variable)` must
-    // still compute the sum over the whole group.
-    if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
+    // When we work on aggregated data (i.e. as part of a GROUP BY, but outside
+    // of an aggregate), the variable is one of the grouped variables and thus
+    // always has the same value within the group, so we can treat it as a
+    // constant. This is not possible when we are inside an aggregate, because
+    // for example `SUM(?variable)` must still compute the sum over the whole
+    // group.
+    if (worksOnAggregatedData(context)) {
+      AD_CORRECTNESS_CHECK(
+          context->_groupedVariables.contains(variable),
+          "A non-grouped variable outside of an aggregate should have been "
+          "rejected by the parser");
       const auto& table = context->_inputTable;
       auto constantValue = table.at(context->_beginIndex, column.value());
       AD_EXPENSIVE_CHECK((
@@ -242,6 +250,8 @@ struct SingleUseExpression : public SparqlExpression {
   }
 
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+
+  [[nodiscard]] bool isDeterministic() const override { return true; }
 };
 
 }  // namespace detail

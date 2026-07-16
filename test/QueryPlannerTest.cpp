@@ -3111,7 +3111,7 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
                   hasLimit({std::nullopt, 3})));
   // Last offset should only be applied by exporter since VALUES does not
-  // support OFFSET natively
+  // handle OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} OFFSET 1 } OFFSET 2 } OFFSET 5",
@@ -3120,8 +3120,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
   h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
-  // Last limit should only be applied by exporter since VALUES does not support
-  // OFFSET natively
+  // Last limit should only be applied by exporter since VALUES does not handle
+  // OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} LIMIT 3 } LIMIT 2 } LIMIT 1",
@@ -4049,4 +4049,28 @@ SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
 GROUP BY ?p
 )",
             h::_);
+}
+
+// _____________________________________________________________________________
+// Regression test for the issue mentioned in
+// https://github.com/ad-freiburg/qlever/pull/2782. Joining a `BIND(BNODE(...))`
+// subquery against a UNION must not distribute the non-deterministic BIND over
+// the UNION branches (which would require cloning the BIND and produce
+// different blank-node IDs for each branch).
+TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // This previously triggered an assertion violation because the query planner
+  // tried to clone the BIND(BNODE(...)) subquery to push it into both branches
+  // of the UNION.
+  h::expect(
+      "SELECT * WHERE {"
+      "  { SELECT ?s WHERE { BIND(BNODE(\"1\") AS ?s) VALUES ?x { 1 } } }"
+      "  { ?s ?p ?o } UNION { ?s ?p ?o }"
+      "}",
+      // The non-deterministic BIND must not be distributed into the UNION, so
+      // the join has to be on top!
+      h::Join(::testing::A<const QueryExecutionTree&>(),
+              ::testing::A<const QueryExecutionTree&>()));
 }

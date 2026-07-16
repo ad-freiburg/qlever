@@ -5,10 +5,12 @@
 #include "engine/SpatialJoinCachedIndex.h"
 
 #include <s2/mutable_s2shape_index.h>
+#include <s2/s2error.h>
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
 #include "engine/SpatialJoinAlgorithms.h"
+#include "util/GeoConverters.h"
 
 // An instance of this type erased class holds the actual data for each
 // `SpatialJoinCachedIndex`. It contains a `MutableS2ShapeIndex` for querying as
@@ -22,19 +24,25 @@ class SpatialJoinCachedIndexImpl {
   using ShapeIndexToRow = SpatialJoinCachedIndex::ShapeIndexToRow;
 
   // Construct the index, and return the mapping from shape indices to rows.
-  ShapeIndexToRow populate(ColumnIndex col, const IdTable& restable,
-                           const Index& index) {
+  // If `simplificationErrorInMeters` has a value, polyline geometries are
+  // simplified before indexing; `std::nullopt` skips simplification.
+  ShapeIndexToRow populate(ColumnIndex col, const IdTableView<0>& restable,
+                           const Index& index,
+                           std::optional<double> simplificationErrorInMeters) {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
-    // Populate the index from the given `IdTable`
     for (size_t row = 0; row < restable.size(); row++) {
       auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
-      if (p.has_value()) {
-        auto shapeIndex =
-            s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
-                std::make_unique<S2Polyline>(std::move(p.value()))));
-        shapeIndexToRow[shapeIndex] = row;
+      if (!p.has_value()) {
+        continue;
       }
+      if (simplificationErrorInMeters.has_value()) {
+        p = geometryConverters::simplifyPolyline(
+            p.value(), simplificationErrorInMeters.value());
+      }
+      auto shapeIndex = s2index_.Add(std::make_unique<S2Polyline::OwningShape>(
+          std::make_unique<S2Polyline>(std::move(p.value()))));
+      shapeIndexToRow[shapeIndex] = row;
     }
     // By default, the S2 indices are constructed lazily on the first query,
     // which then is slow. The following call avoids this.
@@ -44,13 +52,13 @@ class SpatialJoinCachedIndexImpl {
 };
 
 // ____________________________________________________________________________
-SpatialJoinCachedIndex::SpatialJoinCachedIndex(Variable geometryColumn,
-                                               ColumnIndex col,
-                                               const IdTable& restable,
-                                               const Index& index)
+SpatialJoinCachedIndex::SpatialJoinCachedIndex(
+    Variable geometryColumn, ColumnIndex col, const IdTableView<0>& restable,
+    const Index& index, std::optional<double> simplificationErrorInMeters)
     : geometryColumn_{std::move(geometryColumn)},
       pimpl_{std::make_shared<SpatialJoinCachedIndexImpl>()} {
-  shapeIndexToRow_ = pimpl_->populate(col, restable, index);
+  shapeIndexToRow_ =
+      pimpl_->populate(col, restable, index, simplificationErrorInMeters);
 }
 
 // ____________________________________________________________________________
@@ -77,9 +85,10 @@ void SpatialJoinCachedIndex::populateFromSerialized(
     std::string_view serializedShapes) {
   AD_CORRECTNESS_CHECK(pimpl_ != nullptr);
   Decoder decoder(serializedShapes.data(), serializedShapes.size());
+  S2Error error;
   bool success = pimpl_->s2index_.Init(
-      &decoder, s2shapeutil::FullDecodeShapeFactory(&decoder));
-  AD_CORRECTNESS_CHECK(success,
+      &decoder, s2shapeutil::FullDecodeShapeFactory(&decoder, error));
+  AD_CORRECTNESS_CHECK(success && error.ok(),
                        "Initializing the S2 index from its serialized form "
                        "failed, probably the input data is corrupt");
   // We call `ForceBuild` when initializing the index, and the serialization

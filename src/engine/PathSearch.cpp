@@ -21,7 +21,7 @@
 using namespace pathSearch;
 
 // _____________________________________________________________________________
-BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
+BinSearchWrapper::BinSearchWrapper(const IdTableView<0>& table, size_t startCol,
                                    size_t endCol, std::vector<size_t> edgeCols)
     : table_(table),
       startCol_(startCol),
@@ -234,7 +234,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{allocator()};
   idTable.setNumColumns(getResultWidth());
 
-  const IdTable& dynSub = subRes->idTable();
+  const IdTableView<0>& dynSub = subRes->idTableView();
   if (!dynSub.empty()) {
     auto timer = ad_utility::Timer(ad_utility::Timer::Started);
 
@@ -302,13 +302,13 @@ PathSearch::handleSearchSides() const {
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
-    sourceIds = resultTable->idTable().getColumn(sourceCol_.value());
-    targetIds = resultTable->idTable().getColumn(targetCol_.value());
+    sourceIds = resultTable->idTableView().getColumn(sourceCol_.value());
+    targetIds = resultTable->idTableView().getColumn(targetCol_.value());
     return {sourceIds, targetIds};
   }
 
   if (sourceTree_.has_value()) {
-    sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(
+    sourceIds = sourceTree_.value()->getResult()->idTableView().getColumn(
         sourceCol_.value());
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
@@ -317,7 +317,7 @@ PathSearch::handleSearchSides() const {
   }
 
   if (targetTree_.has_value()) {
-    targetIds = targetTree_.value()->getResult()->idTable().getColumn(
+    targetIds = targetTree_.value()->getResult()->idTableView().getColumn(
         targetCol_.value());
   } else if (config_.targetIsVariable()) {
     targetIds = {};

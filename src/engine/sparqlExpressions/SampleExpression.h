@@ -30,6 +30,10 @@ class SampleExpression : public SparqlExpression {
   // __________________________________________________________________________
   ql::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
+  [[nodiscard]] bool isDeterministic() const override {
+    return _child->isDeterministic();
+  }
+
   // SAMPLE is an aggregate, the distinctness doesn't matter, so we return "not
   // distinct", because that allows for more efficient implementations in GROUP
   // BY.

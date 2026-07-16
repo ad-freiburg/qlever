@@ -260,7 +260,8 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // member function needs additional arguments. Currently, the only additional
 // argument is the filename for the copy for `IdTables` that store their data in
 // a `BufferedVector`. For an example usage see the test cases below.
-auto clone(const auto& table, auto... args) {
+template <typename Table, typename... Args>
+auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {
     return table.clone();
   } else {
@@ -1229,6 +1230,132 @@ TEST(IdTable, moveOrClone) {
   EXPECT_EQ(t3, t2);
   // `table` was moved from.
   EXPECT_TRUE(table.empty());
+}
+
+// ______________________________________________________________________________
+TEST(IdTable, moveOrCloneOnView) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  IdTableView<0> view = table.asStaticView<0>();
+  // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
+  IdTable cloned = view.moveOrClone();
+  EXPECT_EQ(cloned, table);
+  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+
+  // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
+  // views cannot transfer ownership.
+  IdTable cloned2 = std::move(view).moveOrClone();
+  EXPECT_EQ(cloned2, table);
+  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+}
+
+// ____________________________________________________________________________
+TEST(IdTable, fromColumns) {
+  std::vector<Id> col0{V(1), V(2), V(3)};
+  std::vector<Id> col1{V(4), V(5), V(6)};
+  auto allocator = makeAllocator();
+
+  IdTableView<0>::ViewSpans columns{col0, col1};
+  auto view = IdTableView<0>::fromColumns(columns, 2, 3, allocator);
+
+  ASSERT_EQ(view.numColumns(), 2u);
+  ASSERT_EQ(view.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(view(i, 0), col0[i]);
+    EXPECT_EQ(view(i, 1), col1[i]);
+    // The view must not copy the data: its elements are the very same
+    // objects as those in `col0`/`col1`.
+    EXPECT_EQ(&view(i, 0), &col0[i]);
+    EXPECT_EQ(&view(i, 1), &col1[i]);
+  }
+
+  // The `columns` and the passed in `numColumns` must be consistent.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Each of the `columns` must have exactly `numRows` elements.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 2, 2, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // A statically-sized `IdTableView<N>` requires `numColumns == N`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<2>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Constructing a static `IdTableView<2>` with the correct `numColumns`
+  // works and yields the same contents as the dynamic view above.
+  auto staticView = IdTableView<2>::fromColumns(columns, 2, 3, allocator);
+  ASSERT_EQ(staticView.numColumns(), 2u);
+  ASSERT_EQ(staticView.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(staticView(i, 0), col0[i]);
+    EXPECT_EQ(staticView(i, 1), col1[i]);
+    EXPECT_EQ(&staticView(i, 0), &col0[i]);
+    EXPECT_EQ(&staticView(i, 1), &col1[i]);
+  }
+}
+
+// ____________________________________________________________________________
+// Typed test fixture for `subView`, covering both owned `IdTable` and
+// `IdTableView<0>`.
+template <typename T>
+class IdTableSubViewTest : public testing::Test {};
+using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
+TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
+
+TYPED_TEST(IdTableSubViewTest, subView) {
+  auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
+  IdTable table{2, alloc};
+  for (int i = 0; i < 5; ++i) {
+    table.push_back({V(i * 10), V(i * 10 + 1)});
+  }
+
+  // Shared test body: run all `subView` assertions on `target`, which is
+  // either the owned `table` itself or a view of it.
+  auto runTests = [&](auto& target) {
+    // Full range: `subView(0, numRows)` must equal the original table.
+    auto fullView = target.subView(0, 5);
+    EXPECT_EQ(fullView.numRows(), 5u);
+    EXPECT_EQ(fullView.numColumns(), 2u);
+    EXPECT_EQ(fullView, table);
+
+    // Empty sub-view: `subView(0, 0)` must have zero rows.
+    auto emptyView = target.subView(0, 0);
+    EXPECT_EQ(emptyView.numRows(), 0u);
+    EXPECT_EQ(emptyView.numColumns(), 2u);
+
+    // Suffix: rows [2, 5).
+    auto suffixView = target.subView(2, 3);
+    EXPECT_EQ(suffixView.numRows(), 3u);
+    EXPECT_EQ(suffixView(0, 0), V(20));
+    EXPECT_EQ(suffixView(0, 1), V(21));
+    EXPECT_EQ(suffixView(2, 0), V(40));
+
+    // Interior slice: rows [1, 3).
+    auto sliceView = target.subView(1, 2);
+    EXPECT_EQ(sliceView.numRows(), 2u);
+    EXPECT_EQ(sliceView(0, 0), V(10));
+    EXPECT_EQ(sliceView(1, 0), V(20));
+
+    // `subView` is non-owning: data pointers point into the original table.
+    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
+    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+
+    // Out-of-range access must trigger a contract check.
+    EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.
+    EXPECT_ANY_THROW(target.subView(6, 0));  // offset > numRows.
+  };
+
+  if constexpr (std::is_same_v<TypeParam, IdTableView<0>>) {
+    auto view = table.asStaticView<0>();
+    runTests(view);
+  } else {
+    runTests(table);
+  }
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

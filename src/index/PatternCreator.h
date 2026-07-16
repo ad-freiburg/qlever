@@ -16,6 +16,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/BufferedVector.h"
+#include "util/CompactStringVector.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/Serializer/Serializer.h"
@@ -131,7 +132,7 @@ class PatternCreator {
   explicit PatternCreator(std::string basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{std::move(basename)},
-        tripleBuffer_(100'000, basename + ".tripleBufferForPatterns.dat"),
+        tripleBuffer_(100'000, filename_ + ".tripleBufferForPatterns.dat"),
         tripleSorter_{
             std::make_unique<PSOSorter>(
                 filename_ + ".additionalTriples.pso.dat", memoryLimit / 2,

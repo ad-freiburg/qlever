@@ -68,11 +68,11 @@ Result Minus::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Minus subresult computation done" << std::endl;
 
   AD_LOG_DEBUG << "Computing minus of results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
-  IdTable idTable = computeMinus(leftResult->idTable(), rightResult->idTable(),
-                                 _matchedColumns);
+  IdTable idTable = computeMinus(leftResult->idTableView(),
+                                 rightResult->idTableView(), _matchedColumns);
 
   AD_LOG_DEBUG << "Minus result computation done" << endl;
   return {std::move(idTable), resultSortedOn(),
@@ -116,7 +116,8 @@ size_t Minus::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
+auto Minus::makeUndefRangesChecker(bool left,
+                                   const IdTableView<0>& idTable) const {
   const auto& operation = left ? _left : _right;
   bool alwaysDefined = ql::ranges::all_of(
       _matchedColumns, [&operation, left, &idTable](const auto& cols) {
@@ -137,10 +138,11 @@ auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
 }
 
 // _____________________________________________________________________________
-template <typename T>
+template <typename IdTableT, typename T>
 IdTable Minus::copyMatchingRows(
-    const IdTable& left, T reference,
+    const IdTableT& left, T reference,
     const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const {
+  static_assert(IdTableLike<IdTableT>);
   IdTable result{getResultWidth(), left.getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 
@@ -167,14 +169,14 @@ IdTable Minus::copyMatchingRows(
 }
 // _____________________________________________________________________________
 IdTable Minus::computeMinus(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
   if (left.empty()) {
     return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
   }
 
   if (right.empty() || joinColumns.empty()) {
-    return left.clone();
+    return IdTable{left.clone()};
   }
 
   ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
@@ -251,7 +253,7 @@ std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   }
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
-  const IdTable& leftTable = leftRes->idTable();
+  const IdTableView<0>& leftTable = leftRes->idTableView();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _matchedColumns, std::move(leftRes), std::move(rightRes)};
@@ -280,7 +282,7 @@ std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       _matchedColumns, std::move(leftRes), std::move(rightRes)};
   auto result = nestedLoopJoin.computeRightExistance(
-      [this](const IdTable& idTable, LocalVocab localVocab,
+      [this](const auto& idTable, LocalVocab localVocab,
              const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
                  matchingTracker) {
         return Result::IdTableVocabPair{

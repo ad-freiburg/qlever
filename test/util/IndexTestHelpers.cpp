@@ -4,15 +4,22 @@
 
 #include "IndexTestHelpers.h"
 
+#include <absl/strings/str_cat.h>
+
+#include <array>
+
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
 
 using qlever::TextScoringMetric;
@@ -158,28 +165,27 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 // _____________________________________________________________________________
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
-  // these tests.
-  static std::ostringstream ignoreLogStream;
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // these tests. The returned cleanup restores the previously active logging
+  // stream when it goes out of scope at the end of this function.
+  std::ostringstream ignoreLogStream;
+  auto logCleanup = setGlobalLoggingStreamForTesting(&ignoreLogStream);
   // Remove previous index files. This is necessary because if we previously
   // built the same index without patterns or all 6 permutations, we wouldn't
   // overwrite the patterns or the missing permutations. This would lead to a
   // false positive when we later check that the patterns or the missing
   // permutations are not present, because they would actually be present from
   // the previous index build.
-  namespace fs = std::filesystem;
-  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
-    if (!entry.is_regular_file()) continue;
-
-    std::string name = entry.path().filename().string();
-
-    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
-        ql::starts_with(name, indexBasename + ".index") ||
-        ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
-      ad_utility::deleteFile(entry.path());
-    }
-  }
+  namespace fs = ql::filesystem;
+  static constexpr std::array<std::string_view, 6> suffixes{
+      VOCAB_SUFFIX,       ".index",          ".internal.index",
+      CONFIGURATION_FILE, ".update-triples", ".allocated-graphs-state"};
+  qlever::util::deleteFilesInDirectory(
+      fs::current_path(), [&indexBasename](const auto& path) {
+        std::string name = path.filename().string();
+        return ql::ranges::any_of(suffixes, [&](std::string_view suffix) {
+          return ql::starts_with(name, absl::StrCat(indexBasename, suffix));
+        });
+      });
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
     c.turtleInput =
@@ -303,7 +309,6 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
-  ad_utility::setGlobalLoggingStream(&std::cout);
 
   if (c.usePatterns && c.loadAllPermutations) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
@@ -317,7 +322,8 @@ Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
 }
 
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(TestIndexConfig c) {
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                              TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -356,27 +362,38 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
             materializedViewsManager_);
   };
 
-  static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
+  static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>
+      contextMap;
 
-  if (!contextMap.contains(c)) {
+  if (!contextMap.contains({c, indexBasenamePrefix})) {
+    // We have to pass `false` to `gtestCurrentTestName` to make this work for
+    // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
+    // also calls `getQec()` outside a running gtest.
     std::string testIndexBasename =
-        "_staticGlobalTestIndex" + std::to_string(contextMap.size());
+        absl::StrCat(indexBasenamePrefix, gtestCurrentTestName(false), "_",
+                     contextMap.size());
     contextMap.emplace(
-        c, Context{TypeErasedCleanup{[testIndexBasename]() {
-                     for (const std::string& indexFilename :
-                          getAllIndexFilenames(testIndexBasename)) {
-                       // Don't log when a file can't be deleted,
-                       // because the logging might already be
-                       // destroyed.
-                       ad_utility::deleteFile(indexFilename, false);
-                     }
-                   }},
-                   std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
-                   std::make_unique<QueryResultCache>(),
-                   std::make_unique<NamedResultCache>(),
-                   std::make_shared<MaterializedViewsManager>()});
+        std::pair<TestIndexConfig, std::string>{c, indexBasenamePrefix},
+        Context{TypeErasedCleanup{[testIndexBasename]() {
+                  for (const std::string& indexFilename :
+                       getAllIndexFilenames(testIndexBasename)) {
+                    // Don't log when a file can't be deleted,
+                    // because the logging might already be
+                    // destroyed.
+                    ad_utility::deleteFile(indexFilename, false);
+                  }
+                }},
+                std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
+                std::make_unique<QueryResultCache>(),
+                std::make_unique<NamedResultCache>(),
+                std::make_shared<MaterializedViewsManager>()});
   }
-  return contextMap.at(c).qec_.get();
+  return contextMap.at({c, indexBasenamePrefix}).qec_.get();
+}
+
+// ________________________________________________________________________________
+QueryExecutionContext* getQec(TestIndexConfig c) {
+  return getQec("_staticGlobalTestIndex", std::move(c));
 }
 
 // _____________________________________________________________________________

@@ -6,8 +6,6 @@
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 
-#include <cstdio>
-
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -16,21 +14,27 @@
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
-#include "index/TextIndexBuilder.h"
+#include "index/DeltaTriples.h"
+#include "index/IndexImpl.h"
 #include "parser/SparqlParser.h"
+#include "util/DateYearDuration.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
@@ -70,68 +74,11 @@ Id getLocalVocabIdFromVocab(const LocalVocab& localVocab,
             return entry.toStringRepresentation();
           }),
           ", ")));
-};
+}
 }  // namespace
 
-// This fixture is used to create an Index for the tests.
-// The full index creation is required for initialization of the vocabularies.
-class GroupByTest : public ::testing::Test {
- public:
-  GroupByTest() {
-    // Create the index. The full index creation is run here to allow for
-    // loading a docsDb file, which is not otherwise accessible
-    std::string docsFileContent = "0\tExert 1\n1\tExert 2\n2\tExert3";
-    std::string wordsFileContent =
-        "Exert\t0\t0\t0\n"
-        "1\t0\t0\t0\n"
-        "Exert\t1\t0\t0\n"
-        "2\t1\t0\t0\n"
-        "Exert\t2\t0\t0\n"
-        "3\t2\t0\t0\n";
-    std::string ntFileContent = "<a>\t<b>\t<c>\t.";
-    ad_utility::File docsFile("group_by_test.documents", "w");
-    ad_utility::File wordsFile("group_by_test.words", "w");
-    ad_utility::File ntFile("group_by_test.nt", "w");
-    docsFile.write(docsFileContent.c_str(), docsFileContent.size());
-    wordsFile.write(wordsFileContent.c_str(), wordsFileContent.size());
-    ntFile.write(ntFileContent.c_str(), ntFileContent.size());
-    docsFile.close();
-    wordsFile.close();
-    ntFile.close();
-    _index.setKbName("group_by_test");
-    _index.setTextName("group_by_test");
-    _index.setOnDiskBase("group_ty_test");
-    _index.createFromFiles(
-        {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    TextIndexBuilder textIndexBuilder{ad_utility::makeUnlimitedAllocator<Id>(),
-                                      _index.getOnDiskBase()};
-    textIndexBuilder.buildTextIndexFile(
-        std::pair<std::string, std::string>{"group_by_test.words",
-                                            "group_by_test.documents"},
-        false);
-    textIndexBuilder.buildDocsDB("group_by_test.documents");
-
-    _index.addTextFromOnDiskIndex();
-    _index.parserBufferSize() = 1_kB;
-  }
-
-  virtual ~GroupByTest() {
-    // delete all files created during index creation
-    std::remove("group_by_test.documents");
-    std::remove("group_by_test.words");
-    std::remove("group_by_test.text.vocabulary");
-    std::remove("group_by_test.vocabulary");
-    std::remove("group_by_test.text.index");
-    std::remove("group_by_test.text.docsDB");
-    std::remove("group_by_test.index.pso");
-    std::remove("group_by_test.index.pos");
-    std::remove("group_by_test.nt");
-  }
-
-  Index _index = makeIndexWithTestSettings();
-};
-
-TEST_F(GroupByTest, getDescriptor) {
+// _____________________________________________________________________________
+TEST(GroupBy, getDescriptor) {
   auto expr =
       std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
   auto alias =
@@ -140,16 +87,15 @@ TEST_F(GroupByTest, getDescriptor) {
 
   parsedQuery::SparqlValues input;
   input._variables = {Variable{"?a"}};
-  auto values = ad_utility::makeExecutionTree<Values>(
-      ad_utility::testing::getQec(), input);
+  auto* qec = getQec();
+  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
-  GroupBy groupBy{
-      ad_utility::testing::getQec(), {Variable{"?a"}}, {alias}, values};
+  GroupBy groupBy{qec, {Variable{"?a"}}, {alias}, values};
   ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
 }
 
 // _____________________________________________________________________________
-TEST_F(GroupByTest, clone) {
+TEST(GroupBy, clone) {
   auto expr =
       std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
   auto alias =
@@ -158,9 +104,10 @@ TEST_F(GroupByTest, clone) {
 
   parsedQuery::SparqlValues input;
   input._variables = {Variable{"?a"}};
-  auto values = ad_utility::makeExecutionTree<Values>(getQec(), input);
+  auto* qec = getQec();
+  auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
-  GroupBy groupBy{getQec(), {Variable{"?a"}}, {alias}, values};
+  GroupBy groupBy{qec, {Variable{"?a"}}, {alias}, values};
 
   auto clone = groupBy.clone();
   ASSERT_TRUE(clone);
@@ -168,250 +115,12 @@ TEST_F(GroupByTest, clone) {
   EXPECT_EQ(clone->getDescriptor(), groupBy.getDescriptor());
 }
 
-TEST_F(GroupByTest, doGroupBy) {
-  using std::string;
-  using std::vector;
-
-  // There are 7 different aggregates, of which 5 (all apart from SAMPLE and
-  // COUNT) react different to the 5 different ResultTypes.
-
-  Id floatBuffers[3]{Id::makeUndefined(), Id::makeUndefined(),
-                     Id::makeUndefined()};
-  float floatValues[3] = {-3, 2, 1231};
-  for (int i = 0; i < 3; i++) {
-    floatBuffers[i] = Id::makeFromDouble(floatValues[i]);
-  }
-
-  // Add some words to the index's vocabulary.
-  auto& vocab = const_cast<RdfsVocabulary&>(_index.getVocab());
-  ad_utility::HashSet<std::string> s;
-  s.insert("<entity1>");
-  s.insert("<entity2>");
-  s.insert("<entity3>");
-  auto filename = "groupByTestVocab.dat";
-  vocab.createFromSet(s, filename);
-  ad_utility::deleteFile(filename);
-
-  // Create an input result table with a local vocabulary.
-  auto localVocab = std::make_shared<LocalVocab>();
-  auto iriref = [this](std::string_view s) {
-    return LocalVocabEntry::fromIriref(s, _index);
-  };
-  localVocab->getIndexAndAddIfNotContained(iriref("<local1>"));
-  localVocab->getIndexAndAddIfNotContained(iriref("<local2>"));
-  localVocab->getIndexAndAddIfNotContained(iriref("<local3>"));
-
-  IdTable inputData(6, makeAllocator());
-  // The input data types are KB, KB, VERBATIM, TEXT, FLOAT, STRING.
-  inputData.push_back({I(1), I(4), I(123), I(0), floatBuffers[0], I(0)});
-  inputData.push_back({I(1), I(5), I(0), I(1), floatBuffers[1], I(1)});
-
-  inputData.push_back({I(2), I(6), I(41223), I(2), floatBuffers[2], I(2)});
-  inputData.push_back({I(2), I(7), I(123), I(0), floatBuffers[0], I(0)});
-  inputData.push_back({I(2), I(7), I(123), I(0), floatBuffers[0], I(0)});
-
-  inputData.push_back({I(3), I(8), I(0), I(1), floatBuffers[1], I(1)});
-  inputData.push_back({I(3), I(9), I(41223), I(2), floatBuffers[2], I(2)});
-
-  /*
-    COUNT,
-    GROUP_CONCAT,
-    FIRST,
-    LAST,
-    SAMPLE,
-    MIN,
-    MAX,
-    SUM,
-    AVG
-   */
-
-  /*
-  std::vector<size_t> groupByCols = {0};
-  std::string delim1(", ");
-  std::vector<GroupBy::Aggregate> aggregates = {
-      // type                                in out userdata
-      {ParsedQuery::AggregateType::COUNT, 1, 1, nullptr},
-
-      {ParsedQuery::AggregateType::GROUP_CONCAT, 1, 2, &delim1},
-      {ParsedQuery::AggregateType::GROUP_CONCAT, 2, 3, &delim1},
-      {ParsedQuery::AggregateType::GROUP_CONCAT, 3, 4, &delim1},
-      {ParsedQuery::AggregateType::GROUP_CONCAT, 4, 5, &delim1},
-      {ParsedQuery::AggregateType::GROUP_CONCAT, 5, 6, &delim1},
-
-      {ParsedQuery::AggregateType::SAMPLE, 1, 7, nullptr},
-
-      {ParsedQuery::AggregateType::MIN, 1, 8, nullptr},
-      {ParsedQuery::AggregateType::MIN, 2, 9, nullptr},
-      {ParsedQuery::AggregateType::MIN, 3, 10, nullptr},
-      {ParsedQuery::AggregateType::MIN, 4, 11, nullptr},
-
-      {ParsedQuery::AggregateType::MAX, 1, 12, nullptr},
-      {ParsedQuery::AggregateType::MAX, 2, 13, nullptr},
-      {ParsedQuery::AggregateType::MAX, 3, 14, nullptr},
-      {ParsedQuery::AggregateType::MAX, 4, 15, nullptr},
-
-      {ParsedQuery::AggregateType::SUM, 1, 16, nullptr},
-      {ParsedQuery::AggregateType::SUM, 2, 17, nullptr},
-      {ParsedQuery::AggregateType::SUM, 3, 18, nullptr},
-      {ParsedQuery::AggregateType::SUM, 4, 19, nullptr},
-
-      {ParsedQuery::AggregateType::AVG, 1, 20, nullptr},
-      {ParsedQuery::AggregateType::AVG, 2, 21, nullptr},
-      {ParsedQuery::AggregateType::AVG, 3, 22, nullptr},
-      {ParsedQuery::AggregateType::AVG, 4, 23, nullptr}};
-
-  Result outTable{allocator()};
-
-  // This is normally done when calling computeResult in the GroupBy
-  // operation.
-  outTable._data.setNumColumns(24);
-
-  int inWidth = inputData.cols();
-  int outWidth = outTable._data.cols();
-  GroupBy G{nullptr, {}, {}};
-  CALL_FIXED_SIZE_2(inWidth, outWidth, G.doGroupBy, inputData, inputTypes,
-                    groupByCols, aggregates, &outTable._data, &inTable,
-                    &outTable, this->_index);
-
-  ASSERT_EQ(3u, outTable._data.size());
-
-  ASSERT_EQ(24u, outTable._data[0].size());
-  ASSERT_EQ(24u, outTable._data[1].size());
-  ASSERT_EQ(24u, outTable._data[2].size());
-
-  // COUNT CHECKS
-  ASSERT_EQ(2u, outTable._data[0][1]);
-  ASSERT_EQ(3u, outTable._data[1][1]);
-  ASSERT_EQ(2u, outTable._data[2][1]);
-
-  // GROUP CONCAT CHECKS
-  // check that the local vocab ids are ascending
-  for (int i = 0; i < 5; i++) {
-    ASSERT_EQ(0u + i, outTable._data[0][2 + i]);
-    ASSERT_EQ(0u + i + 5, outTable._data[1][2 + i]);
-    ASSERT_EQ(0u + i + 10, outTable._data[2][2 + i]);
-  }
-  // check for a local vocab entry for each of the 5 input numColumns
-  ASSERT_EQ(std::string("<entity1>, <entity2>"), (*outTable._localVocab)[0]);
-  ASSERT_EQ(std::string("123, 0"), (*outTable._localVocab)[1]);
-  ASSERT_EQ(std::string("Exert 1, Exert 2"), (*outTable._localVocab)[2]);
-  std::ostringstream groupConcatFloatString;
-  groupConcatFloatString << floatValues[0] << ", " << floatValues[1];
-  ASSERT_EQ(groupConcatFloatString.str(), (*outTable._localVocab)[3]);
-  ASSERT_EQ(std::string("<local1>, <local2>"), (*outTable._localVocab)[4]);
-
-  // SAMPLE CHECKS
-  ASSERT_EQ(5u, outTable._data[0][7]);
-  ASSERT_EQ(7u, outTable._data[1][7]);
-  ASSERT_EQ(9u, outTable._data[2][7]);
-
-  // MIN CHECKS
-  float buffer;
-  ASSERT_EQ(4u, outTable._data[0][8]);
-  ASSERT_EQ(6u, outTable._data[1][8]);
-  ASSERT_EQ(8u, outTable._data[2][8]);
-
-  ASSERT_EQ(0u, outTable._data[0][9]);
-  ASSERT_EQ(123u, outTable._data[1][9]);
-  ASSERT_EQ(0u, outTable._data[2][9]);
-
-  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][10]);
-  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][10]);
-  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][10]);
-
-  std::memcpy(&buffer, &outTable._data[0][11], sizeof(float));
-  ASSERT_FLOAT_EQ(-3, buffer);
-  std::memcpy(&buffer, &outTable._data[1][11], sizeof(float));
-  ASSERT_FLOAT_EQ(-3, buffer);
-  std::memcpy(&buffer, &outTable._data[2][11], sizeof(float));
-  ASSERT_FLOAT_EQ(2, buffer);
-
-  // MAX CHECKS
-  ASSERT_EQ(5u, outTable._data[0][12]);
-  ASSERT_EQ(7u, outTable._data[1][12]);
-  ASSERT_EQ(9u, outTable._data[2][12]);
-
-  ASSERT_EQ(123u, outTable._data[0][13]);
-  ASSERT_EQ(41223u, outTable._data[1][13]);
-  ASSERT_EQ(41223u, outTable._data[2][13]);
-
-  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][14]);
-  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][14]);
-  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][14]);
-
-  std::memcpy(&buffer, &outTable._data[0][15], sizeof(float));
-  ASSERT_FLOAT_EQ(2, buffer);
-  std::memcpy(&buffer, &outTable._data[1][15], sizeof(float));
-  ASSERT_FLOAT_EQ(1231, buffer);
-  std::memcpy(&buffer, &outTable._data[2][15], sizeof(float));
-  ASSERT_FLOAT_EQ(1231, buffer);
-
-  // SUM CHECKS
-  std::memcpy(&buffer, &outTable._data[0][16], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[1][16], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[2][16], sizeof(float));
-  ASSERT_FLOAT_EQ(12, buffer);
-
-  std::memcpy(&buffer, &outTable._data[0][17], sizeof(float));
-  ASSERT_FLOAT_EQ(123, buffer);
-  std::memcpy(&buffer, &outTable._data[1][17], sizeof(float));
-  ASSERT_FLOAT_EQ(41469, buffer);
-  std::memcpy(&buffer, &outTable._data[2][17], sizeof(float));
-  ASSERT_FLOAT_EQ(41223, buffer);
-
-  std::memcpy(&buffer, &outTable._data[0][18], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[1][18], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[2][18], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-
-  std::memcpy(&buffer, &outTable._data[0][19], sizeof(float));
-  ASSERT_FLOAT_EQ(-1, buffer);
-  std::memcpy(&buffer, &outTable._data[1][19], sizeof(float));
-  ASSERT_FLOAT_EQ(1225, buffer);
-  std::memcpy(&buffer, &outTable._data[2][19], sizeof(float));
-  ASSERT_FLOAT_EQ(1233, buffer);
-
-  // AVG CHECKS
-  std::memcpy(&buffer, &outTable._data[0][20], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[1][20], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[2][20], sizeof(float));
-  ASSERT_FLOAT_EQ(6, buffer);
-
-  std::memcpy(&buffer, &outTable._data[0][21], sizeof(float));
-  ASSERT_FLOAT_EQ(61.5, buffer);
-  std::memcpy(&buffer, &outTable._data[1][21], sizeof(float));
-  ASSERT_FLOAT_EQ(13823, buffer);
-  std::memcpy(&buffer, &outTable._data[2][21], sizeof(float));
-  ASSERT_FLOAT_EQ(20611.5, buffer);
-
-  std::memcpy(&buffer, &outTable._data[0][22], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[1][22], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._data[2][22], sizeof(float));
-  ASSERT_TRUE(std::isnan(buffer));
-
-  std::memcpy(&buffer, &outTable._data[0][23], sizeof(float));
-  ASSERT_FLOAT_EQ(-0.5, buffer);
-  std::memcpy(&buffer, &outTable._data[1][23], sizeof(float));
-  ASSERT_FLOAT_EQ(408.3333333333333, buffer);
-  std::memcpy(&buffer, &outTable._data[2][23], sizeof(float));
-  ASSERT_FLOAT_EQ(616.5, buffer);
-   */
-}
-
 namespace {
 // All the operations take a `QueryExecutionContext` as a first argument.
 // Todo: Continue the comment.
-template <typename Operation>
+template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, auto&&... args) {
+    QueryExecutionContext* qec, Args&&... args) {
   return std::make_shared<QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
@@ -573,26 +282,54 @@ struct GroupByOptimizations : ::testing::Test {
 TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
   using enum Permutation::Enum;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
+  GroupByImpl groupBy{
+      ad_utility::testing::getQec(), {Variable{"?x"}}, {}, xyzScanSortedByX};
 
   // Valid inputs.
-  ASSERT_EQ(SPO, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
-                                                                   varX, varX));
-  ASSERT_EQ(POS, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
-                                                                   varY, varZ));
-  ASSERT_EQ(OSP, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
-                                                                   varZ, varY));
+  auto normalPermutation = [](Permutation::Enum permutationEnum) {
+    return ::testing::AllOf(
+        AD_PROPERTY(Permutation, permutation, ::testing::Eq(permutationEnum)),
+        AD_PROPERTY(Permutation, permutationType,
+                    ::testing::Eq(Permutation::Type::NORMAL)));
+  };
+  EXPECT_THAT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varX, varX).value(),
+      normalPermutation(SPO));
+  EXPECT_THAT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varY, varZ).value(),
+      normalPermutation(POS));
+  EXPECT_THAT(
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varZ, varY).value(),
+      normalPermutation(OSP));
 
   // First variable not contained in triple.
   AD_EXPECT_NULLOPT(
-      GroupByImpl::getPermutationForThreeVariableTriple(xyzScan, varA, varX));
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varA, varX));
 
   // Second variable not contained in triple.
   AD_EXPECT_NULLOPT(
-      GroupByImpl::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
+      groupBy.getPermutationForThreeVariableTriple(xyzScan, varX, varA));
 
   // Not a three variable triple.
   AD_EXPECT_NULLOPT(
-      GroupByImpl::getPermutationForThreeVariableTriple(*xScan, varX, varX));
+      groupBy.getPermutationForThreeVariableTriple(*xScan, varX, varX));
+
+  // Three variable triple but with a graph filter (not all graphs allowed).
+  Tree xyzScanWithGraphFilter = makeExecutionTree<IndexScan>(
+      qec, SOP, xyzTriple,
+      IndexScan::Graphs::Whitelist({TripleComponent{iri("<someGraph>")}}));
+  AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
+      *xyzScanWithGraphFilter, varX, varX));
+
+  // Three variable triple with INTERNAL permutation type.
+  auto psoPtr = qec->getIndex().getImpl().getPermutationPtr(PSO);
+  Tree internalScan =
+      makeExecutionTree<IndexScan>(qec,
+                                   std::shared_ptr<const Permutation>(
+                                       psoPtr, &psoPtr->internalPermutation()),
+                                   qec->locatedTriplesSharedState(), xyzTriple);
+  AD_EXPECT_NULLOPT(
+      groupBy.getPermutationForThreeVariableTriple(*internalScan, varX, varX));
 }
 
 // _____________________________________________________________________________
@@ -703,7 +440,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
                Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(6)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(6)}}));
   }
   {
     auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -718,7 +456,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
                Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(6)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(6)}}));
   }
   // Distinct should not be optimized
   {
@@ -733,7 +472,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
                                Variable{"?x"}}},
                         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(5)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(5)}}));
   }
   // With variable name should also not be optimized
   {
@@ -747,7 +487,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         {Alias{makeCountPimpl(Variable{"?a"}, false), Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(5)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(5)}}));
   }
   {
     auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -760,7 +501,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         {Alias{makeCountPimpl(Variable{"?a"}, true), Variable{"?x"}}},
         std::move(subtree)};
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(4)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(4)}}));
   }
 }
 
@@ -929,7 +671,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
     auto result = groupBy.computeResultOnlyForTesting();
     ASSERT_TRUE(result.isFullyMaterialized());
     EXPECT_THAT(
-        result.idTable(),
+        result.idTableView(),
         matchesIdTableFromVector({{I(3), D(5)}, {I(5), D(6)}, {I(8), D(27)}}));
   };
   runTest(true);
@@ -1019,7 +761,7 @@ TEST_F(GroupByOptimizations,
                   {std::move(alias), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1076,7 +818,7 @@ TEST_F(GroupByOptimizations,
                   {std::move(alias)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1132,7 +874,7 @@ TEST_F(GroupByOptimizations,
                   {std::move(alias)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1196,7 +938,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
                   {std::move(alias)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1270,7 +1012,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
                   {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1343,7 +1085,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
                   {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -1383,15 +1125,15 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   IdTable testTable{qec->getAllocator()};
   testTable.setNumColumns(2);
   testTable.resize(6);
-  std::vector<unsigned long> firstColumn{1, 1, 1, 3, 3, 3};
-  std::vector<unsigned long> secondColumn{42, 9, 3, 13, 1, 4};
+  std::vector<uint64_t> firstColumn{1, 1, 1, 3, 3, 3};
+  std::vector<uint64_t> secondColumn{42, 9, 3, 13, 1, 4};
   std::vector<std::optional<Variable>> variables = {Variable{"?a"},
                                                     Variable{"?b"}};
 
   auto firstTableColumn = testTable.getColumn(0);
   auto secondTableColumn = testTable.getColumn(1);
 
-  auto unsignedLongToValueId = [](unsigned long value) {
+  auto unsignedLongToValueId = [](uint64_t value) {
     return ValueId::makeFromInt(static_cast<int64_t>(value));
   };
   ql::ranges::transform(firstColumn.begin(), firstColumn.end(),
@@ -1428,7 +1170,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
                   {std::move(alias1), std::move(alias2), std::move(alias3)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto i = IntId;
@@ -1476,7 +1218,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   // WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   auto getId = makeGetId(qec->getIndex());
   const auto& localVocabContext = qec->getLocalVocabContext();
@@ -1521,7 +1263,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
 
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   auto getId = makeGetId(qec->getIndex());
   auto d = DoubleId;
@@ -1566,7 +1308,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
   // SELECT (MIN(?y) as ?z) (MAX(?y) as ?w) WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasMin, aliasMax}, subtreeWithSort};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   auto getId = makeGetId(qec->getIndex());
 
@@ -1713,7 +1455,10 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
       groupBy.checkIfJoinWithFullScan(getOperation(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
-  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_.permutation(),
+            Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_.permutationType(),
+            Permutation::Type::NORMAL);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
@@ -1935,6 +1680,46 @@ TEST_F(GroupByOptimizations,
 }
 
 // _____________________________________________________________________________
+TEST_F(GroupByOptimizations,
+       computeGroupByForSingleIndexScanWithNamedGraphDuplicates) {
+  TestIndexConfig config;
+  config.indexType = qlever::Filetype::NQuad;
+  config.turtleInput =
+      "<s> <p> <o> <g1> . <s> <p> <o> <g2> . <s> <p> <o> <g3> .";
+  auto* qecNquad = getQec(config);
+
+  {
+    SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"},
+                                 Variable{"?z"}};
+
+    // The full GROUP BY (via the general computation path) must return the
+    // correct count of 1.
+    auto xyzScanNquad = makeExecutionTree<IndexScan>(
+        qecNquad, Permutation::Enum::SPO, xyzTriple);
+    GroupByImpl groupBy{qecNquad, emptyVariables, aliasesCountX, xyzScanNquad};
+    auto result = groupBy.getResult();
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_THAT(result->idTableView(), matchesIdTableFromVector({{I(1)}}));
+  }
+
+  {
+    SparqlTripleSimple xyzgTriple{
+        Variable{"?x"},
+        Variable{"?y"},
+        Variable{"?z"},
+        {std::pair<ColumnIndex, Variable>{3, Variable{"?g"}}}};
+
+    // With graph column this should return 3.
+    auto xyzScanNquad = makeExecutionTree<IndexScan>(
+        qecNquad, Permutation::Enum::SPO, xyzgTriple);
+    GroupByImpl groupBy{qecNquad, emptyVariables, aliasesCountX, xyzScanNquad};
+    auto result = groupBy.getResult();
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_THAT(result->idTableView(), matchesIdTableFromVector({{I(3)}}));
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   // Construct a GROUP BY operation from the given GROUP BY variables, aliases,
   // and index scan. Return `true` if and only if the optimization from
@@ -2072,6 +1857,206 @@ TEST(GroupByOptimizationsRegression,
   // predicate `<p>` must be `1`, not the size of the whole block.
   EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
               optionalHasTable({{getId("<p>"), I(1)}}));
+}
+
+// Helper struct to create a modifiable `Index` + `QueryExecutionContext`.
+struct QecWrapper {
+  std::shared_ptr<Index> index_;
+  QueryResultCache cache_{};
+  NamedResultCache namedCache_{};
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_ =
+      std::make_shared<MaterializedViewsManager>();
+
+  QueryExecutionContext makeQec() {
+    return QueryExecutionContext{
+        index_,
+        &cache_,
+        makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{},
+        &namedCache_,
+        materializedViewsManager_};
+  }
+};
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples, singleIndexScanTotalCountAfterInsert) {
+  QecWrapper ctx{
+      std::make_shared<Index>(makeTestIndex("<a> <p1> <b> . <b> <p1> <a> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto b = getId("<b>");
+  auto p1 = getId("<p1>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{b, p1, b, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT (COUNT(?x) AS ?count) WHERE { ?x ?y ?z }
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
+  auto scan =
+      makeExecutionTree<IndexScan>(&qec, Permutation::Enum::SPO, xyzTriple);
+  Variable varX{"?x"};
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+
+  // The full computation must reflect the insertion (count = 3, not 2).
+  // We use computeResultOnlyForTesting because the optimization shortcut now
+  // falls back to the general algorithm when delta triples are present, so
+  // testing the end-to-end result is the right regression check.
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{I(3)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples,
+     singleIndexScanDistinctCountAfterDelete) {
+  QecWrapper ctx{
+      std::make_shared<Index>(makeTestIndex("<a> <p2> <b> . <b> <p2> <a> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto a = getId("<a>");
+  auto p2 = getId("<p2>");
+  auto b = getId("<b>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.deleteTriples(cancellationHandle, {IdTriple<0>{{a, p2, b, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT (COUNT(DISTINCT ?x) AS ?count) WHERE { ?x ?y ?z }
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
+  auto scan =
+      makeExecutionTree<IndexScan>(&qec, Permutation::Enum::SPO, xyzTriple);
+  Variable varX{"?x"};
+  auto countDistinctXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          true, std::make_unique<VariableExpression>(varX)),
+      "COUNT(DISTINCT ?x)"};
+  std::vector<Alias> aliases{
+      Alias{std::move(countDistinctXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+
+  // After deleting <a> <p2> <b>, only <b> remains as a subject -> count = 1.
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{I(1)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples, objectWithCountInsertInUniformBlock) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("<x> <label3> <a> . <x> <label3> <b> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto x = getId("<x>");
+  auto label3 = getId("<label3>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{x, label3, x, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x <label3> ?y } GROUP BY ?x
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{Variable{"?x"}, iri("<label3>"), Variable{"?y"}});
+  Variable varX{"?x"};
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {varX}, aliases, scan};
+
+  // After the insert, <x> has 3 triples with predicate <label3>, not 2.
+  EXPECT_THAT(groupBy.computeGroupByObjectWithCount(),
+              optionalHasTable({{getId("<x>"), I(3)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples,
+     fullIndexScanCountAfterInsertInUniformBlock) {
+  QecWrapper ctx{
+      std::make_shared<Index>(makeTestIndex("<x> <p4> <a> . <x> <p4> <b> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto x = getId("<x>");
+  auto p4 = getId("<p4>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{x, p4, x, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x ?y ?z } GROUP BY ?x
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
+  auto scan =
+      makeExecutionTree<IndexScan>(&qec, Permutation::Enum::SPO, xyzTriple);
+  Variable varX{"?x"};
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {varX}, aliases, scan};
+
+  // After the insert, <x> has 3 triples, not 2.
+  EXPECT_THAT(groupBy.computeGroupByForFullIndexScan(),
+              optionalHasTable({{getId("<x>"), I(3)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizationsDeltaTriples, joinWithFullScanCardinalityAfterInsert) {
+  // Index with 3 triples, all with subject <a>. SPO cardinality of <a> = 3.
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("<a> <p5> <b> . <a> <p5> <c> . <a> <p6> <d> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string{DEFAULT_GRAPH_IRI});
+  auto a = getId("<a>");
+  auto p6 = getId("<p6>");
+  auto b = getId("<b>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  // Insert a 4th triple with subject <a>; SPO cardinality goes from 3 to 4.
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle, {IdTriple<0>{{a, p6, b, g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // Build VALUES (?x) { (<a>) } as the non-full-scan child of the join.
+  Variable varX{"?x"};
+  parsedQuery::SparqlValues sparqlValues;
+  sparqlValues._variables.push_back(varX);
+  sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<a>")}});
+  auto values = makeExecutionTree<Values>(&qec, sparqlValues);
+
+  // Full scan ?x ?y ?z in SPO order (sorted by subject = ?x).
+  auto xyzScan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::SPO,
+      SparqlTripleSimple{varX, Variable{"?y"}, Variable{"?z"}});
+
+  // Join on ?x (column 0 of both).
+  auto join = makeExecutionTree<Join>(&qec, values, xyzScan, 0, 0);
+
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { VALUES ... . ?x ?y ?z } GROUP BY ?x
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          false, std::make_unique<VariableExpression>(varX)),
+      "COUNT(?x)"};
+  std::vector<Alias> aliases{Alias{std::move(countXPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {varX}, aliases, join};
+
+  // 1 VALUES row for <a>, SPO cardinality of <a> = 4 (not 3) -> count = 4.
+  EXPECT_THAT(groupBy.computeGroupByForJoinWithFullScan(),
+              optionalHasTable({{getId("<a>"), I(4)}}));
 }
 
 // _____________________________________________________________________________
@@ -2242,7 +2227,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -2305,7 +2290,7 @@ TEST(GroupBy, AliasResultReused) {
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
 
   // Check the result.
   auto d = DoubleId;
@@ -2350,7 +2335,7 @@ TEST(GroupBy, AddedHavingRows) {
       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
   EXPECT_THAT(tree.getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  const auto& table = res->idTable();
+  const auto& table = res->idTableView();
   auto i = IntId;
   auto expected = makeIdTableFromVector({{i(0), i(3), Id::makeFromBool(true)}});
   EXPECT_EQ(table, expected);
@@ -2400,6 +2385,8 @@ class SetOfIntervalsExpression : public SparqlExpression {
     return "SetOfIntervalsExpression";
   }
 
+  bool isDeterministic() const override { return true; }
+
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
 };
@@ -2419,6 +2406,8 @@ class AggregationFunctionWithVector : public SparqlExpression {
     return "AggregationFunctionWithVector";
   }
 
+  bool isDeterministic() const override { return true; }
+
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
 };
@@ -2432,6 +2421,10 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
       std::vector<std::optional<Variable>>{Variable{"?a"}});
 
   {
+    // A bare, non-grouped variable outside of an aggregate can only occur if a
+    // malformed query bypassed the parser (which normally rejects such
+    // queries). It is caught by a correctness check when the variable is
+    // (incorrectly) treated as a grouped constant.
     auto expr0 = std::make_unique<VariableExpression>(Variable{"?a"});
     GroupBy groupBy{qec,
                     {},
@@ -2440,7 +2433,9 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
                     subtree};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         groupBy.computeResultOnlyForTesting(false),
-        ::testing::HasSubstr("An expression returned an invalid type"),
+        ::testing::HasSubstr(
+            "A non-grouped variable outside of an aggregate should have been "
+            "rejected by the parser"),
         ad_utility::Exception);
   }
   {
@@ -2456,7 +2451,7 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
         ad_utility::Exception);
   }
   {
-    // Return empty vector
+    // Return empty vector.
     auto expr2 = std::make_unique<AggregationFunctionWithVector>(
         VectorWithMemoryLimit<ValueId>{qec->getAllocator()});
     GroupBy groupBy{qec,
@@ -2466,13 +2461,11 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
                     subtree};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         groupBy.computeResultOnlyForTesting(false),
-        ::testing::HasSubstr(
-            "An expression returned a vector expression result "
-            "that contained an unexpected amount of entries."),
+        ::testing::HasSubstr("An expression returned an invalid type"),
         ad_utility::Exception);
   }
   {
-    // Return vector with 2 elements
+    // Return vector with 2 elements.
     auto expr3 = std::make_unique<AggregationFunctionWithVector>(
         VectorWithMemoryLimit{{Id::makeFromBool(true), Id::makeFromBool(false)},
                               qec->getAllocator()});
@@ -2483,12 +2476,11 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
                     subtree};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         groupBy.computeResultOnlyForTesting(false),
-        ::testing::HasSubstr(
-            "An expression returned a vector expression result "
-            "that contained an unexpected amount of entries."),
+        ::testing::HasSubstr("An expression returned an invalid type"),
         ad_utility::Exception);
   }
   {
+    // A vector with a single element should also be rejected.
     auto expr4 = std::make_unique<AggregationFunctionWithVector>(
         VectorWithMemoryLimit{{Id::makeFromBool(true)}, qec->getAllocator()});
     GroupBy groupBy{qec,
@@ -2496,7 +2488,10 @@ TEST(GroupBy, nonConstantAggregationFunctions) {
                     {{SparqlExpressionPimpl{std::move(expr4), "expr4"},
                       Variable{"?result"}}},
                     subtree};
-    EXPECT_NO_THROW(groupBy.computeResultOnlyForTesting(false));
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        groupBy.computeResultOnlyForTesting(false),
+        ::testing::HasSubstr("An expression returned an invalid type"),
+        ad_utility::Exception);
   }
 }
 
@@ -2520,7 +2515,8 @@ TEST(GroupBy, countDistinctGraph) {
                     std::move(subtree)};
 
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(1)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(1)}}));
   }
   {
     auto subtree = ad_utility::makeExecutionTree<IndexScan>(
@@ -2539,7 +2535,8 @@ TEST(GroupBy, countDistinctGraph) {
                     std::move(subtree)};
 
     auto result = groupBy.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeFromInt(0)}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeFromInt(0)}}));
   }
 }
 
@@ -2699,7 +2696,7 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
       for (const IdTable& idTable : idTables) {
         aggregatedTable.insertAtEnd(idTable);
       }
-      EXPECT_EQ(result.idTable(), aggregatedTable);
+      EXPECT_EQ(result.idTableView(), aggregatedTable);
     }
   }
 
@@ -2907,7 +2904,7 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
     ASSERT_TRUE(entry2.has_value());
     ASSERT_TRUE(entry3.has_value());
 
-    EXPECT_EQ(result.idTable(),
+    EXPECT_EQ(result.idTableView(),
               makeIdTableFromVector({{i(0), entryToId(entry1)},
                                      {i(1), entryToId(entry2)},
                                      {i(2), entryToId(entry3)}}));
@@ -2949,4 +2946,235 @@ TEST_P(GroupByLazyFixture, countStarWorks) {
       qec_, {}, {std::move(alias), std::move(aliasDummy)}, std::move(subtree)};
 
   expectReturningIdTables<1>(groupBy, {makeIntTable({{4, 4}})});
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, isDeterministic) {
+  using namespace sparqlExpression;
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
+
+  // Deterministic expression.
+  {
+    Alias detAlias{
+        SparqlExpressionPimpl{
+            std::make_unique<SumExpression>(
+                false, std::make_unique<VariableExpression>(Variable{"?x"})),
+            "SUM(?x)"},
+        Variable{"?sum"}};
+    GroupBy gb{qec, {Variable{"?x"}}, {detAlias}, subtree};
+    EXPECT_TRUE(gb.isDeterministic());
+  }
+
+  // Non-deterministic expression.
+  {
+    Alias nonDetAlias{
+        SparqlExpressionPimpl{makeUniqueBlankNodeExpression(), "BNODE()"},
+        Variable{"?bn"}};
+    GroupBy gb{qec, {}, {nonDetAlias}, subtree};
+    EXPECT_FALSE(gb.isDeterministic());
+  }
+}
+
+// Regression tests for https://github.com/ad-freiburg/qlever/issues/2960
+
+// _____________________________________________________________________________
+TEST(GroupBy, RegexOnGroupedVariable) {
+  auto* qec = getQec("<a> <p> \"abc\" . <b> <p> \"abc\" . <c> <p> \"xyz\" .");
+  auto getId = makeGetId(qec->getIndex());
+  Id abc = getId("\"abc\"");
+  Id xyz = getId("\"xyz\"");
+  Variable o{"?o"};
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+
+  auto makeSubtree = [qec, &abc, &xyz, &o]() {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{abc}, {abc}, {xyz}}),
+        std::vector<std::optional<Variable>>{o}, false,
+        std::vector<ColumnIndex>{0});
+  };
+
+  auto runRegex = [qec, &o, &makeSubtree](SparqlExpression::Ptr regex) {
+    GroupByImpl groupBy{qec,
+                        {o},
+                        {Alias{SparqlExpressionPimpl{std::move(regex), "regex"},
+                               Variable{"?m"}}},
+                        makeSubtree()};
+    return groupBy.computeResultOnlyForTesting(false);
+  };
+
+  // Test Prefix-regex expression.
+  EXPECT_EQ(runRegex(makeRegexExpression(
+                         std::make_unique<VariableExpression>(o),
+                         std::make_unique<StringLiteralExpression>(lit("^abc")),
+                         nullptr))
+                .idTableView(),
+            makeIdTableFromVector({{abc, T}, {xyz, F}}));
+
+  // Test regular regex expression.
+  EXPECT_EQ(runRegex(makeRegexExpression(
+                         std::make_unique<VariableExpression>(o),
+                         std::make_unique<StringLiteralExpression>(lit("b")),
+                         nullptr))
+                .idTableView(),
+            makeIdTableFromVector({{abc, T}, {xyz, F}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+          true);
+  auto* qec = getQec("<a> <p> \"abc\" . <b> <p> \"abc\" . <c> <p> \"xyz\" .");
+  auto getId = makeGetId(qec->getIndex());
+  Id abc = getId("\"abc\"");
+  Id xyz = getId("\"xyz\"");
+  Variable o{"?o"};
+  Variable y{"?y"};
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{abc, I(1)}, {abc, I(2)}, {xyz, I(3)}}),
+      std::vector<std::optional<Variable>>{o, y});
+  auto sorted = ad_utility::makeExecutionTree<Sort>(
+      qec, values, std::vector<ColumnIndex>{0});
+
+  auto count = std::make_unique<CountExpression>(
+      false, std::make_unique<VariableExpression>(y));
+  auto regex = makeRegexExpression(
+      std::make_unique<VariableExpression>(o),
+      std::make_unique<StringLiteralExpression>(lit("^abc")), nullptr);
+
+  GroupByImpl groupBy{
+      qec,
+      {std::move(o)},
+      {Alias{SparqlExpressionPimpl{std::move(count), "count"}, Variable{"?c"}},
+       Alias{SparqlExpressionPimpl{std::move(regex), "regex"}, Variable{"?m"}}},
+      std::move(sorted)};
+
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
+            makeIdTableFromVector({{abc, I(2), T}, {xyz, I(1), F}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, CoalesceOnGroupedVariable) {
+  auto* qec = getQec("<a> <p> \"abc\" . <b> <p> \"abc\" . <c> <p> \"xyz\" .");
+  auto getId = makeGetId(qec->getIndex());
+  Id abc = getId("\"abc\"");
+  Id xyz = getId("\"xyz\"");
+  Variable o{"?o"};
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{abc}, {abc}, {xyz}}),
+      std::vector<std::optional<Variable>>{o}, false,
+      std::vector<ColumnIndex>{0});
+
+  std::vector<SparqlExpression::Ptr> children;
+  children.push_back(std::make_unique<VariableExpression>(o));
+  auto coalesce = makeCoalesceExpression(std::move(children));
+
+  GroupByImpl groupBy{
+      qec,
+      {std::move(o)},
+      {Alias{SparqlExpressionPimpl{std::move(coalesce), "coalesce"},
+             Variable{"?c"}}},
+      std::move(subtree)};
+
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
+            makeIdTableFromVector({{abc, abc}, {xyz, xyz}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, CoalesceWithGroupedVariableAndSample) {
+  auto* qec = getQec();
+  Variable missing{"?missing"};
+  Variable v{"?v"};
+  Id U = Id::makeUndefined();
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{U, I(7)}, {U, I(7)}}),
+      std::vector<std::optional<Variable>>{missing, v}, false,
+      std::vector<ColumnIndex>{0});
+
+  std::vector<SparqlExpression::Ptr> children;
+  children.push_back(std::make_unique<VariableExpression>(missing));
+  children.push_back(std::make_unique<SampleExpression>(
+      false, std::make_unique<VariableExpression>(v)));
+  auto coalesce = makeCoalesceExpression(std::move(children));
+
+  GroupByImpl groupBy{
+      qec,
+      {std::move(missing)},
+      {Alias{SparqlExpressionPimpl{std::move(coalesce), "coalesce"},
+             Variable{"?c"}}},
+      std::move(subtree)};
+
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
+            makeIdTableFromVector({{U, I(7)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
+  auto* qec = getQec();
+  Variable work{"?work"};
+  Variable date{"?date"};
+  Variable start{"?start"};
+  Id U = Id::makeUndefined();
+  Id date2000 = Id::makeFromDate(DateYearOrDuration{Date{2000, 1, 1}});
+  Id date1990 = Id::makeFromDate(DateYearOrDuration{Date{1990, 1, 1}});
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{I(1), date2000, U}, {I(1), date2000, U}, {I(2), U, date1990}}),
+      std::vector<std::optional<Variable>>{work, date, start}, false,
+      std::vector<ColumnIndex>{0});
+
+  std::vector<SparqlExpression::Ptr> children;
+  children.push_back(std::make_unique<MinExpression>(
+      false, makeYearExpression(std::make_unique<VariableExpression>(date))));
+  children.push_back(std::make_unique<MinExpression>(
+      false, makeYearExpression(std::make_unique<VariableExpression>(start))));
+  auto coalesce = makeCoalesceExpression(std::move(children));
+
+  GroupByImpl groupBy{
+      qec,
+      {std::move(work)},
+      {Alias{SparqlExpressionPimpl{std::move(coalesce), "coalesce"},
+             Variable{"?year"}}},
+      std::move(subtree)};
+
+  EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
+            makeIdTableFromVector({{I(1), I(2000)}, {I(2), I(1990)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, BlankNodeInGroupBy) {
+  auto* qec = getQec();
+  Variable o{"?o"};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1)}, {I(1)}, {I(2)}}),
+      std::vector<std::optional<Variable>>{o}, false,
+      std::vector<ColumnIndex>{0});
+
+  GroupByImpl groupBy{
+      qec,
+      {std::move(o)},
+      {Alias{SparqlExpressionPimpl{makeUniqueBlankNodeExpression(), "bnode"},
+             Variable{"?b"}}},
+      std::move(subtree)};
+
+  const auto result = groupBy.computeResultOnlyForTesting(false);
+  const auto& table = result.idTableView();
+  ASSERT_EQ(table.numRows(), 2);
+  EXPECT_EQ(table(0, 0), I(1));
+  EXPECT_EQ(table(1, 0), I(2));
+  // Each group produces exactly one well-formed, distinct blank node.
+  EXPECT_EQ(table(0, 1).getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_NE(table(0, 1), table(1, 1));
 }
