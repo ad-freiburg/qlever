@@ -92,10 +92,10 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // always deserializes into the owning `shared_ptr<const IdTable>`
   // alternative, never a zero-copy view).
   ASSERT_TRUE(std::holds_alternative<std::shared_ptr<const IdTable>>(
-      deserializedValue.result_));
-  ASSERT_NE(
-      std::get<std::shared_ptr<const IdTable>>(deserializedValue.result_),
-      nullptr);
+      deserializedValue.result_.table()));
+  ASSERT_NE(std::get<std::shared_ptr<const IdTable>>(
+                deserializedValue.result_.table()),
+            nullptr);
 
   // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();

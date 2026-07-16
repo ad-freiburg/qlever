@@ -251,18 +251,18 @@ TEST(LibQlever, combinedBlob) {
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
   sourceConfig.baseName_ = "LibQlever.combinedBlobSource";
-  // `writeCombinedBlob` currently requires the in-memory, uncompressed
-  // vocabulary implementation (see `Vocabulary::writeAsZeroCopyBlob`).
+  // `writeVocabularyAndNamedResultCacheBlob` currently requires the
+  // in-memory, uncompressed vocabulary implementation (see
+  // `Vocabulary::writeAsZeroCopyBlob`).
   sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
   EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
 
-  std::vector<char> blob;
+  std::vector<char, ad_utility::AlignedAllocator<char>> blob;
   {
     Qlever source{EngineConfig{sourceConfig}};
     source.queryAndPinResultWithName(
-        "blobPin",
-        "SELECT ?s ?o WHERE { ?s <combinedBlobPredicate> ?o }");
-    EXPECT_NO_THROW(blob = source.writeCombinedBlob());
+        "blobPin", "SELECT ?s ?o WHERE { ?s <combinedBlobPredicate> ?o }");
+    EXPECT_NO_THROW(blob = source.writeVocabularyAndNamedResultCacheBlob());
     EXPECT_FALSE(blob.empty());
   }
 
@@ -290,13 +290,12 @@ TEST(LibQlever, combinedBlob) {
       target.query(cachedResultQuery, ad_utility::MediaType::tsv),
       HasSubstr("is not contained in the named result cache"));
 
-  EXPECT_NO_THROW(target.loadCombinedBlob(blob));
+  EXPECT_NO_THROW(target.loadVocabularyAndNamedResultCacheBlob(blob));
 
   // The named cached result, and the vocabulary needed to correctly export
   // its IDs as strings, must now come from the blob.
   auto res = target.query(cachedResultQuery, ad_utility::MediaType::tsv);
-  EXPECT_EQ(res,
-           "?s\t?o\n<combinedBlobSubject>\t\"combined blob literal\"\n");
+  EXPECT_EQ(res, "?s\t?o\n<combinedBlobSubject>\t\"combined blob literal\"\n");
 
   // Permutations are still not loaded, so a query needing them still throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -305,8 +304,9 @@ TEST(LibQlever, combinedBlob) {
       HasSubstr("permutation to be loaded"));
 
   // Loading a second blob on the same instance must throw.
-  AD_EXPECT_THROW_WITH_MESSAGE(target.loadCombinedBlob(blob),
-                               HasSubstr("must not be called more than once"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.loadVocabularyAndNamedResultCacheBlob(blob),
+      HasSubstr("must not be called more than once"));
 }
 
 // _____________________________________________________________________________

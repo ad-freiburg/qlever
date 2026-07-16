@@ -26,7 +26,8 @@ ExplicitIdTableOperation::ExplicitIdTableOperation(
 }
 
 // _____________________________________________________________________________
-IdTableView<0> ExplicitIdTableOperation::viewOf(const IdTableOrView& table) {
+IdTableView<0> ExplicitIdTableOperation::IdTableOrView::makeView(
+    const Table& table) {
   return std::visit(
       [](const auto& arg) -> IdTableView<0> {
         using T = std::decay_t<decltype(arg)>;
@@ -55,7 +56,7 @@ Result ExplicitIdTableOperation::computeResult(
       [this](const auto& arg) -> Result {
         return {arg, resultSortedOn(), localVocab_.clone()};
       },
-      idTable_);
+      idTable_.table());
 }
 
 // _____________________________________________________________________________

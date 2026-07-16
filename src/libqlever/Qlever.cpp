@@ -6,7 +6,6 @@
 
 #include "libqlever/Qlever.h"
 
-#include <cstring>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -18,19 +17,20 @@
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/http/UrlParser.h"
 
 namespace qlever {
 
 namespace {
-// The header that is written at the beginning of every "combined blob" (see
-// `Qlever::writeCombinedBlob`/`Qlever::loadCombinedBlob`), to guard against
-// loading a blob written by an incompatible version of QLever.
-constexpr std::array<char, 8> kCombinedBlobMagicBytes{'Q', 'L', 'B', 'L',
-                                                       'O', 'B', '1', '\0'};
-constexpr uint16_t kCombinedBlobFormatVersion = 1;
+// The header that is written at the beginning of every
+// vocabulary-and-named-result-cache blob (see
+// `Qlever::writeVocabularyAndNamedResultCacheBlob`/
+// `Qlever::loadVocabularyAndNamedResultCacheBlob`), to guard against loading
+// a blob written by an incompatible version of QLever.
+constexpr std::array<char, 8> vocabularyAndNamedResultCacheBlobMagicBytes{
+    'Q', 'L', 'B', 'L', 'O', 'B', '1', '\0'};
+constexpr uint16_t vocabularyAndNamedResultCacheBlobFormatVersion = 1;
 }  // namespace
 
 // _____________________________________________________________________________
@@ -218,68 +218,60 @@ void Qlever::eraseResultWithName(std::string name) {
 }
 
 // _____________________________________________________________________________
-std::vector<char> Qlever::writeCombinedBlob() const {
-  ad_utility::serialization::AlignedByteBufferWriteSerializer uncompressed;
-  uncompressed << kCombinedBlobMagicBytes;
-  uncompressed << kCombinedBlobFormatVersion;
+std::vector<char, ad_utility::AlignedAllocator<char>>
+Qlever::writeVocabularyAndNamedResultCacheBlob() const {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer serializer;
+  serializer << vocabularyAndNamedResultCacheBlobMagicBytes;
+  serializer << vocabularyAndNamedResultCacheBlobFormatVersion;
 
   auto indexAndViews = indexAndViewsSnapshot();
-  indexAndViews->index_.getImpl().writeVocabularyToZeroCopyBlob(uncompressed);
-  writeNamedResultCacheToSerializer(uncompressed);
+  indexAndViews->index_.getImpl().writeVocabularyToZeroCopyBlob(serializer);
+  writeNamedResultCacheToSerializer(serializer);
 
-  const auto& buffer = uncompressed.data();
-  uint64_t uncompressedSize = buffer.size();
-  std::vector<char> compressed =
-      ZstdWrapper::compress(buffer.data(), buffer.size());
-
-  const char* sizeBytes = reinterpret_cast<const char*>(&uncompressedSize);
-  std::vector<char> result;
-  result.reserve(sizeof(uncompressedSize) + compressed.size());
-  result.insert(result.end(), sizeBytes, sizeBytes + sizeof(uncompressedSize));
-  result.insert(result.end(), compressed.begin(), compressed.end());
-  return result;
+  return std::move(serializer).data();
 }
 
 // _____________________________________________________________________________
-void Qlever::loadCombinedBlob(ql::span<const char> blob) {
-  AD_CONTRACT_CHECK(!combinedBlobBuffer_.has_value(),
-                    "`loadCombinedBlob` must not be called more than once on "
-                    "the same `Qlever` instance");
+void Qlever::loadVocabularyAndNamedResultCacheBlob(ql::span<const char> blob) {
+  AD_CONTRACT_CHECK(
+      !vocabularyAndNamedResultCacheBuffer_.has_value(),
+      "`loadVocabularyAndNamedResultCacheBlob` must not be called more than "
+      "once on the same `Qlever` instance");
 
-  uint64_t uncompressedSize;
-  AD_CONTRACT_CHECK(blob.size() >= sizeof(uncompressedSize));
-  std::memcpy(&uncompressedSize, blob.data(), sizeof(uncompressedSize));
-  blob = blob.subspan(sizeof(uncompressedSize),
-                      blob.size() - sizeof(uncompressedSize));
+  // Copy `blob` into `vocabularyAndNamedResultCacheBuffer_`, which is kept
+  // alive for the lifetime of this `Qlever` instance because the vocabulary
+  // and named result cache entries loaded below are zero-copy views directly
+  // into it. The copy is also required to guarantee the alignment needed for
+  // the zero-copy deserialization below, which `blob` itself does not
+  // guarantee.
+  vocabularyAndNamedResultCacheBuffer_.emplace(blob.begin(), blob.end());
 
-  // Decompress into `combinedBlobBuffer_`, which is kept alive for the
-  // lifetime of this `Qlever` instance because the vocabulary and named
-  // result cache entries loaded below are zero-copy views directly into it.
-  combinedBlobBuffer_.emplace(uncompressedSize);
-  auto decompressedSize = ZstdWrapper::decompressToBuffer(
-      blob.data(), blob.size(), combinedBlobBuffer_->data(), uncompressedSize);
-  AD_CORRECTNESS_CHECK(decompressedSize == uncompressedSize);
-
-  // Use a serializer that only borrows a view of `combinedBlobBuffer_`,
-  // rather than one that owns/moves it, so that the buffer stays owned by
-  // `combinedBlobBuffer_` for the rest of this instance's lifetime.
+  // Use a serializer that only borrows a view of
+  // `vocabularyAndNamedResultCacheBuffer_`, rather than one that owns/moves
+  // it, so that the buffer stays owned by
+  // `vocabularyAndNamedResultCacheBuffer_` for the rest of this instance's
+  // lifetime.
   ad_utility::serialization::ByteBufferReadSerializerT<true,
-                                                        ql::span<const char>>
-      reader{ql::span<const char>{combinedBlobBuffer_->data(),
-                                  combinedBlobBuffer_->size()}};
+                                                       ql::span<const char>>
+      reader{
+          ql::span<const char>{vocabularyAndNamedResultCacheBuffer_->data(),
+                               vocabularyAndNamedResultCacheBuffer_->size()}};
 
-  std::decay_t<decltype(kCombinedBlobMagicBytes)> magicBytes{};
+  std::decay_t<decltype(vocabularyAndNamedResultCacheBlobMagicBytes)>
+      magicBytes{};
   reader >> magicBytes;
-  AD_CORRECTNESS_CHECK(magicBytes == kCombinedBlobMagicBytes,
-                       "The given blob was not written by "
-                       "`Qlever::writeCombinedBlob`, or is corrupted");
+  AD_CORRECTNESS_CHECK(
+      magicBytes == vocabularyAndNamedResultCacheBlobMagicBytes,
+      "The given blob was not written by "
+      "`Qlever::writeVocabularyAndNamedResultCacheBlob`, or is corrupted");
   uint16_t version;
   reader >> version;
   AD_CORRECTNESS_CHECK(
-      version == kCombinedBlobFormatVersion,
+      version == vocabularyAndNamedResultCacheBlobFormatVersion,
       "The given blob was written by an incompatible version of QLever "
       "(format version ",
-      version, ", expected ", kCombinedBlobFormatVersion, ")");
+      version, ", expected ", vocabularyAndNamedResultCacheBlobFormatVersion,
+      ")");
 
   auto indexAndViews = indexAndViewsSnapshot();
   indexAndViews->index_.getImpl().loadVocabularyFromZeroCopyBlob(reader);

@@ -247,12 +247,12 @@ class Qlever {
   using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Keeps the decompressed buffer of a combined blob (see
-  // `loadCombinedBlob`) alive for the lifetime of this instance, because the
-  // loaded vocabulary and named cache entries are zero-copy views directly
-  // into this buffer.
+  // Keeps the buffer of a vocabulary-and-named-result-cache blob (see
+  // `loadVocabularyAndNamedResultCacheBlob`) alive for the lifetime of this
+  // instance, because the loaded vocabulary and named cache entries are
+  // zero-copy views directly into this buffer.
   std::optional<std::vector<char, ad_utility::AlignedAllocator<char>>>
-      combinedBlobBuffer_;
+      vocabularyAndNamedResultCacheBuffer_;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -356,23 +356,26 @@ class Qlever {
   }
 
   // Serialize the vocabulary and the `NamedResultCache` of this instance into
-  // a single, compressed, self-contained blob that can later be loaded via
-  // `loadCombinedBlob` (e.g. by a different process, without needing access to
-  // the on-disk index). Throws if the vocabulary implementation currently in
-  // use is not the in-memory, uncompressed one (see
-  // `Vocabulary::writeAsZeroCopyBlob`).
-  std::vector<char> writeCombinedBlob() const;
+  // a single, self-contained blob that can later be loaded via
+  // `loadVocabularyAndNamedResultCacheBlob` (e.g. by a different process,
+  // without needing access to the on-disk index). The returned buffer is not
+  // compressed; callers that want compression can compress it themselves.
+  // Throws if the vocabulary implementation currently in use is not the
+  // in-memory, uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`).
+  std::vector<char, ad_utility::AlignedAllocator<char>>
+  writeVocabularyAndNamedResultCacheBlob() const;
 
-  // Load a blob previously written by `writeCombinedBlob`: replace this
-  // instance's vocabulary and populate its `NamedResultCache` with zero-copy
-  // views directly into a buffer decompressed from `blob`. The decompressed
-  // buffer is kept alive for the lifetime of this instance.
+  // Load a blob previously written by
+  // `writeVocabularyAndNamedResultCacheBlob`: replace this instance's
+  // vocabulary and populate its `NamedResultCache` with zero-copy views
+  // directly into a buffer holding a copy of `blob`. That buffer is kept
+  // alive for the lifetime of this instance.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
   // query is answered. Must not be called more than once on the same
   // instance.
-  void loadCombinedBlob(ql::span<const char> blob);
+  void loadVocabularyAndNamedResultCacheBlob(ql::span<const char> blob);
 
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a

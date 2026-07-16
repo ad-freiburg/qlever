@@ -82,7 +82,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     // Serialize the IdTable (uses the `serializeIds` helper which handles
     // LocalVocab IDs).
-    auto resultView = ExplicitIdTableOperation::viewOf(arg.result_);
+    const auto& resultView = ExplicitIdTableOperation::viewOf(arg.result_);
     serializer << resultView.numRows();
     serializer << resultView.numColumns();
     for (const auto& col : resultView.getColumns()) {
@@ -142,37 +142,40 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     serializer >> numColumns;
 
     AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
-    ExplicitIdTableOperation::IdTableOrView resultTable;
-    if constexpr (ZeroCopyReadSerializer<S>) {
-      // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-      // spans into the serializer's buffer, without copying the column data.
-      // Since the writing side (see above) rejects any entry that contains a
-      // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
-      // the columns, so skipping `deserializeIds`'s remapping step here is
-      // safe. We still defensively re-check the invariant.
-      IdTableView<0>::ViewSpans columns;
-      columns.reserve(numColumns);
-      for (size_t i = 0; i < numColumns; ++i) {
-        auto column = zeroCopyDeserializeToSpan<Id>(serializer);
-        AD_CORRECTNESS_CHECK(column.size() == numRows);
-        AD_CORRECTNESS_CHECK(
-            ql::ranges::find(column, Datatype::LocalVocabIndex,
-                             &Id::getDatatype) == column.end(),
-            "Named result cache entries that contain local vocab entries "
-            "currently cannot be deserialized.");
-        columns.push_back(column);
+    ExplicitIdTableOperation::IdTableOrView resultTable =
+        [&]() -> ExplicitIdTableOperation::IdTableOrView {
+      if constexpr (ZeroCopyReadSerializer<S>) {
+        // Zero-copy path: build a non-owning `IdTableView<0>` directly from
+        // spans into the serializer's buffer, without copying the column
+        // data. Since the writing side (see above) rejects any entry that
+        // contains a `LocalVocabIndex` id, `mapping` can never actually apply
+        // to any id in the columns, so skipping `deserializeIds`'s remapping
+        // step here is safe. We still defensively re-check the invariant.
+        IdTableView<0>::ViewSpans columns;
+        columns.reserve(numColumns);
+        for (size_t i = 0; i < numColumns; ++i) {
+          auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+          AD_CORRECTNESS_CHECK(column.size() == numRows);
+          AD_CORRECTNESS_CHECK(
+              ql::ranges::find(column, Datatype::LocalVocabIndex,
+                               &Id::getDatatype) == column.end(),
+              "Named result cache entries that contain local vocab entries "
+              "currently cannot be deserialized.");
+          columns.push_back(column);
+        }
+        return IdTableView<0>::fromColumns(
+            std::move(columns), numColumns, numRows,
+            arg.allocatorForSerialization_.value());
+      } else {
+        auto idTable = std::make_shared<IdTable>(
+            numColumns, arg.allocatorForSerialization_.value());
+        idTable->resize(numRows);
+        for (auto&& col : idTable->getColumns()) {
+          ad_utility::detail::deserializeIds(serializer, mapping, col);
+        }
+        return std::shared_ptr<const IdTable>(std::move(idTable));
       }
-      resultTable = IdTableView<0>::fromColumns(
-          std::move(columns), numColumns, numRows,
-          arg.allocatorForSerialization_.value());
-    } else {
-      IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
-      idTable.resize(numRows);
-      for (auto&& col : idTable.getColumns()) {
-        ad_utility::detail::deserializeIds(serializer, mapping, col);
-      }
-      resultTable = std::make_shared<const IdTable>(std::move(idTable));
-    }
+    }();
 
     // Deserialize VariableToColumnMap manually.
     size_t mapSize;
@@ -205,12 +208,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     // Construct the `Value`.
     arg = NamedResultCache::Value{
-        std::move(resultTable),
-        std::move(varToColMap),
-        std::move(resultSortedOn),
-        std::move(localVocab),
-        std::move(cacheKey),
-        std::move(cachedGeoIndex)};
+        std::move(resultTable),    std::move(varToColMap),
+        std::move(resultSortedOn), std::move(localVocab),
+        std::move(cacheKey),       std::move(cachedGeoIndex)};
   }
 }
 

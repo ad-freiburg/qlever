@@ -25,6 +25,7 @@
 #include "util/ResetWhenMoved.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 /**
@@ -69,8 +70,9 @@ class CompactVectorOfStrings {
   // `util/Serializer/Serializer.h`). The returned object is only valid as
   // long as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
-      static CompactVectorOfStrings fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<
+          S>) static CompactVectorOfStrings
+      fromZeroCopyDeserializer(S& serializer) {
     CompactVectorOfStrings result;
     result.data_ =
         ad_utility::serialization::zeroCopyDeserializeToSpan<data_type>(
@@ -150,8 +152,7 @@ class CompactVectorOfStrings {
                                                           data_type>)
       CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
-    auto offsets = offsetsSpan();
-    clone.offsets_ = std::vector<offset_type>(offsets.begin(), offsets.end());
+    clone.offsets_ = ::ranges::to_vector(offsetsSpan());
     clone.data_ = ::ranges::to_vector(
         dataSpan() | ql::views::transform(std::move(mappingFunction)));
     return clone;
@@ -171,50 +172,42 @@ class CompactVectorOfStrings {
   // `fromZeroCopyDeserializer` to obtain a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      auto data = arg.dataSpan();
-      auto offsets = arg.offsetsSpan();
-      serializer | data;
-      serializer | offsets;
+      serializer << arg.dataSpan();
+      serializer << arg.offsetsSpan();
     } else {
-      std::vector<data_type> data;
-      std::vector<offset_type> offsets;
-      serializer | data;
-      serializer | offsets;
-      arg.data_ = std::move(data);
-      arg.offsets_ = std::move(offsets);
+      auto& data = arg.data_.template emplace<DataVector>();
+      auto& offsets = arg.offsets_.template emplace<OffsetVector>();
+      serializer >> data;
+      serializer >> offsets;
     }
   }
 
  private:
+  using DataVector = std::vector<data_type>;
+  using OffsetVector = std::vector<offset_type>;
+  using DataSpan = ql::span<const data_type>;
+  using OffsetSpan = ql::span<const offset_type>;
+
   // The storage either owns its elements (after `build()` or after reading
   // from a regular, non-zero-copy serializer), or is a non-owning view into
   // externally-owned memory (after `fromZeroCopyDeserializer`).
-  std::variant<std::vector<data_type>, ql::span<const data_type>> data_;
-  std::variant<std::vector<offset_type>, ql::span<const offset_type>>
-      offsets_;
+  std::variant<DataVector, DataSpan> data_;
+  std::variant<OffsetVector, OffsetSpan> offsets_;
 
-  ql::span<const data_type> dataSpan() const {
-    return std::visit(
-        [](const auto& x) -> ql::span<const data_type> {
-          return {x.data(), x.size()};
-        },
-        data_);
+  DataSpan dataSpan() const {
+    return std::visit(ad_utility::staticCast<DataSpan>, data_);
   }
 
-  ql::span<const offset_type> offsetsSpan() const {
-    return std::visit(
-        [](const auto& x) -> ql::span<const offset_type> {
-          return {x.data(), x.size()};
-        },
-        offsets_);
+  OffsetSpan offsetsSpan() const {
+    return std::visit(ad_utility::staticCast<OffsetSpan>, offsets_);
   }
 
   // Access the owned vector alternatives. Throws (via `std::get`) if this
   // object is currently a non-owning view, which is a programming error (a
   // zero-copy view is read-only, so `build()`/`cloneAndRemap()` must not be
   // called on it).
-  std::vector<data_type>& ownedData() { return std::get<0>(data_); }
-  std::vector<offset_type>& ownedOffsets() { return std::get<0>(offsets_); }
+  DataVector& ownedData() { return std::get<DataVector>(data_); }
+  OffsetVector& ownedOffsets() { return std::get<OffsetVector>(offsets_); }
 };
 
 namespace detail {

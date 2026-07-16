@@ -1001,6 +1001,32 @@ TEST(IdTable, conversion) {
   }
 }
 
+// ____________________________________________________________________________
+TEST(IdTable, fromColumns) {
+  std::vector<Id> col0{V(1), V(2), V(3)};
+  std::vector<Id> col1{V(4), V(5), V(6)};
+  IdTableView<0>::ViewSpans columns{col0, col1};
+
+  auto view = IdTableView<0>::fromColumns(columns, 2, 3, makeAllocator());
+  static_assert(std::is_same_v<decltype(view), IdTableView<0>>);
+  ASSERT_EQ(view.numColumns(), 2u);
+  ASSERT_EQ(view.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(view(i, 0), col0[i]);
+    EXPECT_EQ(view(i, 1), col1[i]);
+  }
+
+  // A static view checks that `numColumns` matches its static `NumColumns`.
+  ASSERT_NO_THROW(IdTableView<2>::fromColumns(columns, 2, 3, makeAllocator()));
+  ASSERT_ANY_THROW(IdTableView<3>::fromColumns(columns, 2, 3, makeAllocator()));
+
+  // `columns.size()` must match `numColumns`.
+  ASSERT_ANY_THROW(IdTableView<0>::fromColumns(columns, 3, 3, makeAllocator()));
+
+  // Every column must have exactly `numRows` elements.
+  ASSERT_ANY_THROW(IdTableView<0>::fromColumns(columns, 2, 2, makeAllocator()));
+}
+
 TEST(IdTable, empty) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{3};
