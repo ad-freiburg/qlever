@@ -229,7 +229,8 @@ constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
 
 // The key under which the datetime when the index build started is stored in
 // the index configuration.
-constexpr std::string_view DATE_OF_INDEX_BUILD_KEY = "date-of-index-build";
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_KEY =
+    "date-of-index-build";
 
 // The datetime format used for the `date-of-index-build` entry in the index
 // configuration (the time when the build started), e.g.

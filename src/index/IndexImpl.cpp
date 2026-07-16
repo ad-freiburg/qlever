@@ -1257,18 +1257,17 @@ std::string IndexImpl::dateOfIndexBuild() const {
     return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
   }
   // For indexes that were built before the build date was recorded in the
-  // configuration, fall back to the last write time of the configuration
-  // file (it is written at the end of the index build).
-  auto time =
-      std::filesystem::last_write_time(onDiskBase_ + CONFIGURATION_FILE);
-  // `last_write_time` returns a time point on the `file_clock`. We cannot
-  // convert it via `std::chrono::clock_cast` that is not available in C++17
-  // and not implemented by the libc++.
-  auto systemTime =
-      std::chrono::system_clock::now() +
-      std::chrono::duration_cast<std::chrono::system_clock::duration>(
-          time - std::filesystem::file_time_type::clock::now());
-  return formatIndexBuildTime(absl::FromChrono(systemTime));
+  // configuration, fall back to the last modification time of the
+  // configuration file, which is written at the end of the index build. We
+  // deliberately use `stat` and not `std::filesystem::last_write_time`: the
+  // latter returns a time point on the `file_clock`, which cannot be
+  // converted portably to a wall-clock time in C++17 (`clock_cast` requires
+  // C++20), and `std::filesystem` is not available on all toolchains that
+  // QLever targets.
+  struct stat fileStat {};
+  auto configFilename = onDiskBase_ + CONFIGURATION_FILE;
+  AD_CONTRACT_CHECK(stat(configFilename.c_str(), &fileStat) == 0);
+  return formatIndexBuildTime(absl::FromTimeT(fileStat.st_mtime));
 }
 
 // ____________________________________________________________________________
