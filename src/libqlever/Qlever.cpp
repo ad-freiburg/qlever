@@ -32,14 +32,9 @@
 namespace qlever {
 
 // _____________________________________________________________________________
-Qlever::Qlever(const EngineConfig& config, bool skipLoading)
-    : allocator_{ad_utility::AllocatorWithLimit<Id>{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
-          [this](ad_utility::MemorySize numMemoryToAllocate) {
-            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
-                                            numMemoryToAllocate);
-          }}},
+Qlever::Qlever(const EngineConfig& config, bool skipLoading,
+               Allocator<Id> allocator)
+    : allocator_{std::move(allocator)},
       indexAndViews_{std::make_shared<IndexAndViews>(
           Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
