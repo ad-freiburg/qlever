@@ -227,6 +227,17 @@ constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
 
+// The key under which the datetime when the index build started is stored in
+// the index configuration.
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_KEY =
+    "date-of-index-build";
+
+// The datetime format used for the `date-of-index-build` entry in the index
+// configuration (the time when the build started), e.g.
+// `2026-07-12T14:03:52Z` (UTC).
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_FORMAT =
+    "%Y-%m-%dT%H:%M:%SZ";
+
 constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "
     "your settings.json and rebuild your index. You can optionally specify the "

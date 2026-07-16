@@ -7,6 +7,9 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_join.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <cstdio>
@@ -392,6 +395,8 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
+  configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
+      formatIndexBuildTime(absl::Now());
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1244,6 +1249,31 @@ void IndexImpl::writeConfiguration() const {
   configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::dateOfIndexBuild() const {
+  if (configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY)) {
+    return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  }
+  // For indexes that were built before the build date was recorded in the
+  // configuration, fall back to the last modification time of the
+  // configuration file, which is written at the end of the index build. We
+  // deliberately use `stat` and not `std::filesystem::last_write_time`: the
+  // latter returns a time point on the `file_clock`, which cannot be
+  // converted portably to a wall-clock time in C++17 (`clock_cast` requires
+  // C++20), and `std::filesystem` is not available on all toolchains that
+  // QLever targets.
+  struct stat fileStat {};
+  auto configFilename = onDiskBase_ + CONFIGURATION_FILE;
+  AD_CONTRACT_CHECK(stat(configFilename.c_str(), &fileStat) == 0);
+  return formatIndexBuildTime(absl::FromTimeT(fileStat.st_mtime));
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
+  return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
+                          absl::UTCTimeZone());
 }
 
 // ___________________________________________________________________________

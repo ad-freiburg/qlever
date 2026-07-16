@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 
 #include <boost/asio/awaitable.hpp>
@@ -21,6 +22,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/Server.h"
+#include "global/Constants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -545,6 +547,8 @@ TEST(IndexRebuilder, materializeToIndex) {
     absl::Cleanup removeIndexFiles{
         [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
 
+    auto sourceDate = index.getImpl().dateOfIndexBuild();
+
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(std::filesystem::exists(logFile));
@@ -553,6 +557,20 @@ TEST(IndexRebuilder, materializeToIndex) {
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
+
+    // The rebuilt index gets its own, more recent build date. Both dates are
+    // recorded with second resolution, so the rebuild may happen within the
+    // same second as the original build; hence we only assert "not older".
+    auto parseDate = [](const std::string& date) {
+      absl::Time result;
+      std::string error;
+      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                  absl::UTCTimeZone(), &result, &error))
+          << error;
+      return result;
+    };
+    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+
     EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
               index.getBlankNodeManager()->minIndex_ +
                   ad_utility::BlankNodeManager::blockSize_);
