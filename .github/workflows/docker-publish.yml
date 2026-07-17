@@ -50,6 +50,7 @@ jobs:
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
             # For pushes to the primary branch, use the normal tags.
             type=raw,value=latest,enable={{is_default_branch}}
+            # Note: this is `pr-` in this step, but the tags are also not used in this step.
             type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable={{is_default_branch}}
             type=sha,prefix=commit-,enable={{is_default_branch}}
             # For pull requests, derive a version from the PR number.
@@ -127,6 +128,9 @@ jobs:
           # We build multiplatform images which have an image index above the
           # image manifests. Attach the annotations directly to the image index.
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
+          # With the standard length 7 having a collision is possible though not likely.
+          # For 3000 commits the chance is ~1.6%. With a length of 10 the chance is ~0.0004%.
+          DOCKER_METADATA_SHORT_SHA_LENGTH: 10
         with:
           images: ${{ env.IMAGE }}
           # Reuse the tag rules defined in the `build` job (the `image_tags`
