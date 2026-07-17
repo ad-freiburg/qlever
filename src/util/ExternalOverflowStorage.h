@@ -23,7 +23,7 @@ namespace ad_utility {
 
 // A minimal, append-only storage for elements of type `T`. The first
 // `threshold` elements are kept in memory, all further elements are written to
-// a temporary file on disk via a `FileWriteSerializer`.  `T` must be
+// a temporary file on disk via a `FileWriteSerializer`. `T` must be
 // serializable using the `ad_utility::serialization` framework. The temporary
 // file is deleted when the storage is destroyed.
 template <typename T>

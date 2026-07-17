@@ -9,11 +9,11 @@
 
 #include <gmock/gmock.h>
 
-#include <filesystem>
 #include <string>
 #include <vector>
 
 #include "./util/GTestHelpers.h"
+#include "backports/filesystem.h"
 #include "util/ExternalOverflowStorage.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
@@ -61,7 +61,7 @@ TEST(ExternalOverflowStorage, allInMemory) {
   }
   EXPECT_THAT(collect(storage), ::testing::ElementsAreArray(expected));
   // No overflow file should have been created.
-  EXPECT_FALSE(std::filesystem::exists(filename));
+  EXPECT_FALSE(ql::filesystem::exists(filename));
 }
 
 // ___________________________________________________________________________
@@ -123,15 +123,15 @@ TEST(ExternalOverflowStorage, nonTriviallySerializableType) {
 // ___________________________________________________________________________
 TEST(ExternalOverflowStorage, overflowFileIsDeletedOnDestruction) {
   std::string filename = gtestCurrentTestName();
-  ASSERT_FALSE(std::filesystem::exists(filename));
+  ASSERT_FALSE(ql::filesystem::exists(filename));
   {
     ExternalOverflowStorage<int> storage{5, filename};
     for (int i = 0; i < 100; ++i) {
       storage.push_back(i);
     }
     // The overflow file has been created.
-    EXPECT_TRUE(std::filesystem::exists(filename));
+    EXPECT_TRUE(ql::filesystem::exists(filename));
   }
   // ... and is deleted again when the storage is destroyed.
-  EXPECT_FALSE(std::filesystem::exists(filename));
+  EXPECT_FALSE(ql::filesystem::exists(filename));
 }
