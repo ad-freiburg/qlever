@@ -12,4 +12,4 @@ add_library(index
         IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
         InputFileSpecification.cpp)
-qlever_target_link_libraries(index util parser vocabulary global)
+qlever_target_link_libraries(index qlever_util parser vocabulary global)

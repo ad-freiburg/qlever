@@ -22,6 +22,7 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
+#include "util/metrics/Metrics.h"
 
 using std::size_t;
 using std::string;
@@ -51,6 +52,7 @@ int main(int argc, char** argv) {
   std::string accessToken;
   bool noAccessCheck = false;
   unsigned short port;
+  bool metricsEnabled = false;
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
@@ -223,6 +225,10 @@ int main(int argc, char** argv) {
       "\"batchwise:N\" (positive integer N): deduplicate against the N most "
       "recently seen unique triples per template triple (bounded memory, "
       "partial deduplication).")");
+  add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
+      "Enable metrics collection and expose a Prometheus /metrics endpoint on "
+      "the main server port. Accessing the endpoint requires a valid access "
+      "token.");
   po::variables_map optionsMap;
 
   try {
@@ -255,8 +261,9 @@ int main(int argc, char** argv) {
                             ad_utility::ResourceMonitor::Mode::Append,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
+    auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck);
+                  noAccessCheck, std::move(metricsReader));
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {
