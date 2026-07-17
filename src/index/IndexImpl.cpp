@@ -22,6 +22,7 @@
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
@@ -2066,9 +2067,20 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    // The statistics are only recomputed as part of a runtime index rebuild
+    // (see `IndexRebuilder`), so this scan is also throttled by
+    // `rebuild-index-scan-num-threads` (several permutations are scanned in
+    // parallel, so without the throttle this short phase has a high peak
+    // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
+    auto rebuildScanThreads =
+        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+    std::optional<size_t> numThreadsOverride =
+        rebuildScanThreads == 0 ? std::nullopt
+                                : std::optional<size_t>{rebuildScanThreads};
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-        additionalColumns, cancellationHandle, *locatedTriplesSharedState);
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState,
+        numThreadsOverride);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
