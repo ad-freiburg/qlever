@@ -80,6 +80,7 @@ jobs:
           git -C "$GITHUB_WORKSPACE/qlever-code" describe --tags --always > conformance-report/engine_version
       - name: Execute test suite
         working-directory: ${{ github.workspace }}/sparql-conformance
+        # Note: we exclude entailment because qlever and the tool currently do not support it and the deprecated GraphStoreProtocol tests
         run: |
           sparql-conformance \
             --name "$REPORT_SHA" \
@@ -87,14 +88,15 @@ jobs:
             --engine ./src/sparql_conformance/engines/qlever-binaries-manager.py \
             --binaries-directory ${{ github.workspace }}/qlever-code/build/ \
             --port 7001 \
-            --graph-store /http-graph-store \
-            --sparql11-dir ${{ github.workspace }}/sparql-test-suite/sparql/sparql11/ \
-            --sparql10-dir ${{ github.workspace }}/sparql-test-suite/sparql/sparql10/ \
+            --test-suites '{"sparql11":"${{ github.workspace }}/sparql-test-suite/sparql/sparql11/","sparql10":"${{ github.workspace }}/sparql-test-suite/sparql/sparql10/"}' \
             --report line \
-            --exclude entailment \
+            --exclude entailment,http-rdf-update \
             --type-alias '[["http://www.w3.org/2001/XMLSchema#int", "http://www.w3.org/2001/XMLSchema#integer"], ["http://www.w3.org/2001/XMLSchema#float", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#float"], ["http://www.w3.org/2001/XMLSchema#string", null]]'
       - name: Verify conformance report
-        run: test -s "conformance-report/$REPORT_SHA.json.bz2"
+        run: |
+          result_file="conformance-report/$REPORT_SHA.json.bz2"
+          test -s "$result_file"
+          python -c 'import bz2, json, sys; data = json.load(bz2.open(sys.argv[1], "rt")); assert list(data.get("suites", {}))[:2] == ["sparql11", "sparql10"]' "$result_file"
       - name: Upload conformance report artifact
         if: always()
         uses: actions/upload-artifact@v4
