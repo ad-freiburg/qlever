@@ -286,8 +286,8 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // place, but since we're creating our own instance of `QueryPlanner` we
     // can't prevent them without refactoring the code. This workaround has the
     // downside that it might look confusing. This is also used to "mask"
-    // non-grouped variables from joining in an EXISTS clause within a GROUP BY
-    // operation.
+    // non-grouped variables from joining in an `EXISTS` clause within a
+    // `GROUP BY` operation.
     tree->getRootOperation()->setSelectedVariablesForSubquery(joinVariables);
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
