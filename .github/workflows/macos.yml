@@ -75,7 +75,9 @@ jobs:
 
       - name: Build
         # Build your program with the given configuration
-        # Sourcing the conanrun.sh even for building is required to make gtest_discover_tests pass reliably.
+        # Sourcing the conanrun.sh is not strictly needed for building anymore
+        # (with `PRE_TEST` discovery, no test binaries are executed during the
+        # build), but it is harmless and we keep it to be safe.
         run: |
           df -h
           source ${{github.workspace}}/build/conanrun.sh
