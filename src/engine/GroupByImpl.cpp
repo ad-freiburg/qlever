@@ -1715,6 +1715,7 @@ sparqlExpression::ExpressionResult
 GroupByImpl::evaluateChildExpressionOfAggregateFunction(
     const HashMapAggregateInformation& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext) {
+  AD_CORRECTNESS_CHECK(aggregate.expr_ != nullptr);
   // An `EXISTS` is treated like `SAMPLE` over the column computed by the
   // corresponding `ExistsJoin` (see `findAggregatesImpl`). The value to be
   // sampled is exactly that column, which we obtain by evaluating the internal
