@@ -1,6 +1,11 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -908,6 +913,92 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
+// _____________________________________________________________________________
+// Regression test for the bug reported by @hannahbast in the review of PR #3069
+// (https://github.com/ad-freiburg/qlever/pull/3069): When a
+// `FILTER(ql:isIRI(?o))` or `FILTER(ql:isEncodedIri(?o))` is applied to an
+// index scan sorted by `?o`, blocks that consist entirely of encoded IRIs
+// (datatype `EncodedVal`) must not be pruned. This is an end-to-end check on a
+// real index scan (as opposed to the block-metadata level test in
+// `PrefilterExpressionIndexTest.cpp`).
+TEST(IndexScan, prefilterIsIriAndIsEncodedIriKeepEncodedIriBlocks) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  auto I = ad_utility::testing::IntId;
+  // The predicate `<p>` is a regular IRI. In the `POS` permutation (sorted by
+  // the object `?o`), the objects appear in ascending `ValueId` order: numeric
+  // literals, then regular vocabulary IRIs, then encoded IRIs (prefix
+  // `http://example.org/`, which sort after all vocabulary IRIs). With the
+  // small default test block size, the encoded IRIs form blocks that contain
+  // only `EncodedVal` ids.
+  std::string kg =
+      "<s1> <p> 10 . <s2> <p> 20 . "
+      "<s3> <p> <a> . <s4> <p> <b> . "
+      "<s5> <p> <http://example.org/1> . "
+      "<s6> <p> <http://example.org/2> . "
+      "<s7> <p> <http://example.org/3> . "
+      "<s8> <p> <http://example.org/4> .";
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  const Id iriA = getId("<a>");
+  const Id iriB = getId("<b>");
+  const Id enc1 = getId("<http://example.org/1>");
+  const Id enc2 = getId("<http://example.org/2>");
+  const Id enc3 = getId("<http://example.org/3>");
+  const Id enc4 = getId("<http://example.org/4>");
+  // Sanity check that the setup is as intended: the encoded IRIs really are of
+  // datatype `EncodedVal` and sort after the regular vocabulary IRIs.
+  ASSERT_EQ(enc1.getDatatype(), Datatype::EncodedVal);
+  ASSERT_EQ(iriA.getDatatype(), Datatype::VocabIndex);
+  ASSERT_LT(iriB, enc1);
+
+  SparqlTripleSimple triple{Tc{Variable{"?s"}}, iri("<p>"), Tc{Variable{"?o"}}};
+  const Variable varO{"?o"};
+
+  // Apply the given prefilter to a `POS` scan (sorted by `?o`) and return the
+  // ids of the object column. Note: prefiltering works at block granularity, so
+  // the result contains all rows of the *kept* blocks (not just the matching
+  // rows); we therefore assert on containment rather than exact equality, which
+  // keeps the test robust against the concrete block boundaries.
+  auto scanWithPrefilter =
+      [&](std::unique_ptr<prefilterExpressions::PrefilterExpression>
+              prefilter) {
+        IndexScan scan{qec, Permutation::POS, triple};
+        auto optUpdatedQet =
+            scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                makePrefilterVec(pr(std::move(prefilter), varO)));
+        // The prefilter has to be applicable for a `POS` scan sorted by `?o`.
+        EXPECT_TRUE(optUpdatedQet.has_value());
+        auto updatedQet = optUpdatedQet.value();
+        IdTable table = updatedQet->getRootOperation()
+                            ->computeResultOnlyForTesting()
+                            .cloneIdTable();
+        auto col = table.getColumn(updatedQet->getVariableColumn(varO));
+        return std::vector<Id>(col.begin(), col.end());
+      };
+
+  // `isIri` must keep the regular *and* the encoded IRIs. Before the fix, the
+  // blocks containing only encoded IRIs were pruned, so the encoded IRIs were
+  // missing from the result.
+  EXPECT_THAT(scanWithPrefilter(isIri()),
+              ::testing::IsSupersetOf({iriA, iriB, enc1, enc2, enc3, enc4}));
+
+  // `isEncodedIri` must keep exactly the blocks with encoded IRIs. Before the
+  // fix, it used the same `> <>` prefilter as `isIri`, which kept the regular
+  // vocabulary IRI block and pruned the encoded IRI blocks.
+  auto encodedIriResult = scanWithPrefilter(isEncodedIri());
+  EXPECT_THAT(encodedIriResult,
+              ::testing::IsSupersetOf({enc1, enc2, enc3, enc4}));
+  // The purely-numeric blocks are pruned, so the numeric literals never appear.
+  EXPECT_THAT(encodedIriResult,
+              ::testing::AllOf(::testing::Not(::testing::Contains(I(10))),
+                               ::testing::Not(::testing::Contains(I(20)))));
+}
+
 class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
                               public ad_utility::testing::LazyJoinTestHelper {
  protected:
@@ -929,10 +1020,11 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool>,
 
   // Consume range `first` first and store it in a vector, then do the same
   // with `second`.
+  template <typename PostCondition>
   static std::pair<std::vector<Result::IdTableVocabPair>,
                    std::vector<Result::IdTableVocabPair>>
   consumeSequentially(Result::LazyResult first, Result::LazyResult second,
-                      auto postCondition) {
+                      PostCondition postCondition) {
     std::vector<Result::IdTableVocabPair> firstResult;
     std::vector<Result::IdTableVocabPair> secondResult;
 

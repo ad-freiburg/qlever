@@ -1,6 +1,11 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025-2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2025-2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
@@ -31,6 +36,24 @@ size_t PolymorphicVocabulary::size() const {
 // _____________________________________________________________________________
 std::string PolymorphicVocabulary::operator[](uint64_t i) const {
   return std::visit([i](auto& vocab) { return std::string{vocab[i]}; }, vocab_);
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
+    ql::span<const size_t> indices) const {
+  return std::visit(
+      [&indices](const auto& vocab) { return vocab.lookupBatch(indices); },
+      vocab_);
+}
+
+// _____________________________________________________________________________
+VocabLookupOutput PolymorphicVocabulary::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return std::visit(
+      [&input](const auto& vocab) {
+        return vocab.lookupBatchesStreamed(std::move(input));
+      },
+      vocab_);
 }
 
 // _____________________________________________________________________________

@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -187,7 +188,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
-  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+  template <typename SequenceOfBlocks>
+  static bool checkInvariantsForSortedBlocks(
+      const SequenceOfBlocks& sequenceOfBlocks) {
     return ::ranges::all_of(
         ::ranges::views::sliding(sequenceOfBlocks, 2),
         [](const auto& adjacent) {
@@ -546,6 +549,15 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
+  // Optional override for the number of threads used to read and decompress
+  // blocks in `asyncParallelBlockGenerator`. When set, it takes precedence over
+  // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
+  // runtime index rebuild, which scans the old permutations through a dedicated
+  // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
+  // read/decompress parallelism without affecting query scans (which use the
+  // permutation's shared reader, where this stays `nullopt`).
+  std::optional<size_t> lazyScanNumThreadsOverride_ = std::nullopt;
+
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
   // and the information whether this column is required as part of the output,
@@ -871,11 +883,13 @@ class CompressedRelationReader {
   const Allocator& allocator() const { return allocator_; }
 
   // Allow to construct a `CompressedRelationReader` using a different
-  // allocator.
+  // allocator. The underlying file descriptor is duplicated (instead of
+  // opening the file again by name), so this also works when the file has
+  // been renamed since it was opened (see `File::duplicateForReading`).
   CompressedRelationReader makeReaderWithReboundAllocator(
       Allocator allocator) const {
     return CompressedRelationReader{std::move(allocator),
-                                    ad_utility::File{file_.name(), "r"},
+                                    file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
 

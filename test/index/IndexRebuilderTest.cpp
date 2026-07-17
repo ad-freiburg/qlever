@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 
 #include <boost/asio/awaitable.hpp>
@@ -12,19 +13,22 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
-#include <filesystem>
 
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/Server.h"
+#include "global/Constants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
+#include "util/FilesystemHelpers.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -486,7 +490,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
-    EXPECT_FALSE(std::filesystem::exists(prefix + suffix))
+    EXPECT_FALSE(ql::filesystem::exists(prefix + suffix))
         << "File " << prefix + suffix
         << " should not exist before the task is executed.";
   }
@@ -503,7 +507,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   net::co_spawn(threadPool, std::move(task), net::detached);
   threadPool.join();
   for (std::string_view suffix : suffixes) {
-    EXPECT_TRUE(std::filesystem::exists(prefix + suffix));
+    EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
     EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
               fileToBuffer(prefix + suffix));
   }
@@ -541,18 +545,34 @@ TEST(IndexRebuilder, materializeToIndex) {
         index.deltaTriplesManager()
             .getCurrentLocatedTriplesSharedStateWithVocab();
 
-    std::filesystem::create_directory(baseFolder);
+    ql::filesystem::create_directory(baseFolder);
     absl::Cleanup removeIndexFiles{
-        [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+
+    auto sourceDate = index.getImpl().dateOfIndexBuild();
 
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(std::filesystem::exists(logFile));
+    EXPECT_TRUE(ql::filesystem::exists(logFile));
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
+
+    // The rebuilt index gets its own, more recent build date. Both dates are
+    // recorded with second resolution, so the rebuild may happen within the
+    // same second as the original build; hence we only assert "not older".
+    auto parseDate = [](const std::string& date) {
+      absl::Time result;
+      std::string error;
+      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                  absl::UTCTimeZone(), &result, &error))
+          << error;
+      return result;
+    };
+    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+
     EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
               index.getBlankNodeManager()->minIndex_ +
                   ad_utility::BlankNodeManager::blockSize_);
@@ -606,9 +626,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  std::filesystem::create_directory(baseFolder);
+  ql::filesystem::create_directory(baseFolder);
   absl::Cleanup removeIndexFiles{
-      [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
   EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
                                              state, vocab, blankNodes,
@@ -643,25 +663,11 @@ void cleanFilesWithPrefix(std::string_view prefix) {
   AD_CONTRACT_CHECK(!prefix.empty(),
                     "This function is not meant to delete all files in the "
                     "current directory. Please specify a prefix.");
-  namespace fs = std::filesystem;
-  // Collect the matching entries first and delete them only afterwards.
-  // Deleting entries while iterating the directory is unspecified behavior and
-  // can cause entries to be skipped on some platforms (observed on macOS),
-  // leaving leftover files behind.
-  std::vector<fs::directory_entry> toDelete;
-  ql::ranges::copy_if(fs::directory_iterator("."), std::back_inserter(toDelete),
-                      [prefix](const auto& e) {
-                        return ql::starts_with(e.path().filename().string(),
-                                               prefix);
-                      });
-  AD_CONTRACT_CHECK(
-      ql::ranges::all_of(
-          toDelete, [](const auto& entry) { return entry.is_regular_file(); }),
-      "All entries matching the prefix must be regular files, this function "
-      "does not delete directories.");
-  for (const auto& entry : toDelete) {
-    ad_utility::deleteFile(entry.path());
-  }
+  // `deleteFilesInDirectory` collects the matching entries first and deletes
+  // them only afterwards, and only deletes regular files (not directories).
+  qlever::util::deleteFilesInDirectory(".", [prefix](const auto& path) {
+    return ql::starts_with(path.filename().string(), prefix);
+  });
 }
 }  // namespace
 
@@ -714,14 +720,14 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // We use this config as a proxy for the index rebuilder having finished
   // successfully.
-  EXPECT_TRUE(std::filesystem::exists("my-name.meta-data.json"));
+  EXPECT_TRUE(ql::filesystem::exists("my-name.meta-data.json"));
 
   auto request3 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
-  EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+  EXPECT_TRUE(ql::filesystem::exists("new_index.meta-data.json"));
 
   // The index with the same name already exists, so we don't want to overwrite
   // it.
@@ -745,4 +751,42 @@ TEST(IndexRebuilder, serverIntegration) {
       ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
+}
+
+// _____________________________________________________________________________
+// The thread-count override for the rebuild's scans must be set on the
+// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
+// the permutation's shared reader, which is used by the query scans, must
+// never carry an override.
+TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
+  auto index = ad_utility::testing::makeTestIndex("lazyScanNumThreadsOverride",
+                                                  "<a> <b> <c> .");
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::PSO);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+
+  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
+    return permutation.lazyScanWithUnlimitedReader(
+        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
+        cancellationHandle, *state, numThreadsOverride);
+  };
+  auto [reader, scan] = scanWithOverride(3);
+  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
+  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
+  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
+  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
+
+  // Recomputing the statistics with the throttle set must give exactly the
+  // same result as with the default (0, which means "fall back to
+  // `lazy-index-scan-num-threads`"). This exercises the translation of the
+  // runtime parameter to the override at both of its use sites.
+  auto statsDefault = index.getImpl().recomputeStatistics(state);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
+  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
 }
