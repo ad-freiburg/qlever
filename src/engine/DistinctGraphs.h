@@ -77,6 +77,8 @@ class DistinctGraphs : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override {
     return numOfDistinctGraphs_;
   }
+  
+  [[nodiscard]] bool isDeterministicImpl() const override {return true;}
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
