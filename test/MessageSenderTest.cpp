@@ -117,9 +117,10 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
 // `sharedStatus()` must hand out the OwningQueryId's own status atomic, so a
 // write through one handle is visible through another.
 ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
+  boost::asio::any_io_executor executor = ioContext.get_executor();
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{executor};
 
   {
     MessageSender messageSender{std::move(queryId), queryHub};

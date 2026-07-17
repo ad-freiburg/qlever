@@ -81,8 +81,9 @@ class ServerForTesting {
     std::future<ResT> fut = co_spawn(
         io,
         [](auto request, Server* server,
-           auto& io) -> boost::asio::awaitable<ResT> {
-          auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
+           auto& executor) -> boost::asio::awaitable<ResT> {
+          auto queryHub =
+              std::make_shared<ad_utility::websocket::QueryHub>(executor);
           server->queryHub_ = queryHub;
 
           auto result =
@@ -90,7 +91,7 @@ class ServerForTesting {
                   ->template onlyForTestingProcess<decltype(request), ResT>(
                       request);
           co_return result;
-        }(request, server_.get(), io),
+        }(request, server_.get(), executor),
         boost::asio::use_future);
     io.run();
     return fut.get();
