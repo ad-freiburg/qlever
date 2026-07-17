@@ -49,6 +49,9 @@ struct LocatedTriplesState {
   // than another, then the version that has been modified last has a higher
   // index. The index is used in the query cache.
   size_t index_;
+  // Counts of the external triples. Only set when this is a deep copy, not for
+  // references.
+  std::optional<DeltaTriplesCount> counts_ = std::nullopt;
   // Get `LocatedTriplesPerBlock` objects for the given permutation.
   template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(

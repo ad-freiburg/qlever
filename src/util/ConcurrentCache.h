@@ -312,6 +312,9 @@ class ConcurrentCache {
     _cacheAndInProgressMap.wlock()->_cache.setMaxSizeSingleEntry(maxSize);
   }
 
+  MemorySize getMaxSize() const {
+    return _cacheAndInProgressMap.wlock()->_cache.getMaxSize();
+  }
   MemorySize getMaxSizeSingleEntry() const {
     return _cacheAndInProgressMap.wlock()->_cache.getMaxSizeSingleEntry();
   }
