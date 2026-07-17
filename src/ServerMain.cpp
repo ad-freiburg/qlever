@@ -171,6 +171,13 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::enablePrefilterOnIndexScans_>(),
       "If set to false, the prefilter procedures for FILTER expressions are "
       "disabled.");
+  add("union-graph-as-default-graph",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::unionGraphAsDefaultGraph_>(),
+      "If set to true (the default), queries without an explicit dataset "
+      "clause use the union of all graphs as their default graph. If set to "
+      "false, such queries implicitly use only the explicit unnamed default "
+      "graph (spelled `ql:default-graph` inside QLever).");
   add("spatial-join-max-num-threads",
       optionFactory
           .getProgramOption<&RuntimeParameters::spatialJoinMaxNumThreads_>(),

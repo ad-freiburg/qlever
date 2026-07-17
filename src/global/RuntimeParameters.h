@@ -198,6 +198,12 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
+  // If set to `true` (the default), then a query without an explicit dataset
+  // clause (`FROM`/`FROM NAMED`) uses the union of all graphs (including the
+  // default graph) as its default graph. If set to `false`, then such a query
+  // instead implicitly uses only `ql:default-graph` as its default graph.
+  Bool unionGraphAsDefaultGraph_{true, "union-graph-as-default-graph"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
