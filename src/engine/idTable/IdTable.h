@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/CompilerWarnings.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
@@ -419,8 +420,16 @@ class IdTable {
   // Note: The semantics of this function is similar to `std::vector::resize`.
   // To set the capacity, use the `reserve` function.
   CPP_template(typename = void)(requires(!isView)) void resize(size_t numRows) {
-    ql::ranges::for_each(data(),
-                         [numRows](auto& column) { column.resize(numRows); });
+    ql::ranges::for_each(data(), [numRows](auto& column) {
+      // GCC 12 emits a spurious `-Wstringop-overflow` for the
+      // `__builtin_memmove` in libstdc++'s bitwise-relocate path of
+      // `std::vector` growth when instantiated with `ValueId`: it derives a
+      // bogus `[2^63, 2^64)` size range for the (unreachable) copy and treats
+      // it as an overflow.
+      DISABLE_STRINGOP_OVERFLOW_WARNINGS
+      column.resize(numRows);
+      GCC_REENABLE_WARNINGS
+    });
     numRows_ = numRows;
   }
 
