@@ -56,14 +56,12 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 25
-          # Writes an `.npmrc` that authenticates `npm publish` via the
-          # `NODE_AUTH_TOKEN` environment variable (see `Publish to npm`).
-          registry-url: "https://registry.npmjs.org"
 
-      # `emcc` needs `tsc` at link time to generate the TypeScript definitions
-      # for the `qleverwasm` target.
-      - name: Install TypeScript
-        run: npm install -g typescript
+      # `tsc` is needed by `emcc` at link time to generate the TypeScript
+      # definitions for the `qleverwasm` target. A recent `npm` (>= 11.5) is
+      # needed by the `Publish to npm` step for trusted publishing (OIDC).
+      - name: Install TypeScript and a recent npm
+        run: npm install -g typescript npm@latest
 
       - name: Install conan
         run: pipx install conan
@@ -160,6 +158,12 @@ jobs:
       # version under the `next` dist-tag, which never affects `latest`;
       # users opt in explicitly with `npm install @ad-freiburg/qlever@next`. Pull requests
       # and merge groups only build and upload the tarball, never publish.
+      #
+      # Authentication uses npm "trusted publishing": the package's settings on
+      # npmjs.com name this repository and workflow file as its trusted
+      # publisher, and npm authenticates via GitHub's OIDC provider (the
+      # workflow-level `id-token: write` permission). No npm token is
+      # involved, and provenance attestations are generated automatically.
       - name: Publish to npm
         if: github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
         run: |
@@ -169,5 +173,3 @@ jobs:
             DIST_TAG=next
           fi
           npm publish src/libqlever/npm/ad-freiburg-qlever-*.tgz --provenance --access public --tag "${DIST_TAG}"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
