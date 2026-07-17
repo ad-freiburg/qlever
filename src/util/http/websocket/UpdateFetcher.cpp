@@ -12,9 +12,12 @@ net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   AD_CORRECTNESS_CHECK(distributor_);
   AD_EXPENSIVE_CHECK(strand().running_in_this_thread());
 
-  auto [data, latest] =
+  // NOTE: Deliberately not a structured binding. See `Server::process`: with
+  // GCC 15 the hidden object behind a structured binding in a coroutine is
+  // never destroyed, which would leak the payload on every update.
+  auto dataAndLatest =
       co_await distributor_->waitForNextDataPiece(currentIndex_);
-  currentIndex_ = latest;
-  co_return data;
+  currentIndex_ = dataAndLatest.second;
+  co_return dataAndLatest.first;
 }
 }  // namespace ad_utility::websocket
