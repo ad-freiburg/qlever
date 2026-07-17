@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/MmapVectorLegacyFormat.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
@@ -171,16 +172,12 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
       "delta",
       "z"};
 
-  // Write the words file (the plain concatenation of all words) and the offsets
-  // file. The offsets are written via a real `MmapVector<uint64_t>`, which on
-  // destruction rounds its capacity up to a page boundary and appends the
-  // metadata trailer, reproducing the legacy on-disk format with unused
-  // capacity. The offsets file holds one offset per word plus a final offset
-  // marking the end of the last word.
+  // Write the words file (the plain concatenation of all words) and collect the
+  // offsets: one offset per word plus a final offset marking the end of the
+  // last word.
+  std::vector<uint64_t> offsets;
   {
     ad_utility::File wordsFile{vocabFilename, "w"};
-    ad_utility::MmapVector<uint64_t> offsets{offsetsFilename,
-                                             ad_utility::CreateTag{}};
     uint64_t currentOffset = 0;
     for (std::string_view word : words) {
       offsets.push_back(currentOffset);
@@ -188,6 +185,10 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
     }
     offsets.push_back(currentOffset);
   }
+  // Write the offsets file in the legacy `MmapVector<uint64_t>` on-disk layout,
+  // which rounds its capacity up to a page boundary and appends the metadata
+  // trailer, reproducing the legacy format with a region of unused capacity.
+  ad_utility::testing::writeLegacyMmapVectorFile(offsetsFilename, offsets);
 
   // Sanity check that we actually exercise the "unused capacity" path: the
   // offsets file is considerably larger than the offsets plus the trailer alone
