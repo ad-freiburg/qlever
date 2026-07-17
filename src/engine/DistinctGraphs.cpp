@@ -45,18 +45,18 @@ size_t DistinctGraphs::getCostEstimate() {
       .numTriples();
 }
 
-// Implements support for SPARQL queries of the form `GRAPH ?g { ... }` where ?g
-// is an unbound variable.
-// * DistinctGraphs operation efficiently reads all distinct named graph IDs
+// Implements support for SPARQL queries of the form `GRAPH ?g { ... }` where
+// `?g` is not bound by the inner pattern.
+// The `DistinctGraphs` operation efficiently reads all distinct named graph IDs
 // directly from the block metadata of the index, without a full table scan
 // where possible.
-// * If distinct graph count <= `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`:
+// If distinct graph count <= `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`:
 // - Traverse through the `graphInfo_`;
 // - If a new graph Id is seen, decompress and read it to prove its existence.
 // Else:
-// - Decompress, read, and add all graph Ids to the result.
+// - Decompress, read, and add all graph ids to the result.
 //
-// Filters out the default graph IRI from the result when the
+// Filter out the default graph IRI from the result when the
 // `treatDefaultGraphAsNamedGraph` runtime parameter is off.
 //
 // A result object containing a unique set of all matching named graph Ids.

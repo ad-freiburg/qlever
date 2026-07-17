@@ -86,7 +86,7 @@ class DistinctGraphs : public Operation {
   Variable graphVariable_;
 
   // Last saved number of distinct graphs, default to
-  // MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA
+  // `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`
   inline static std::atomic<uint64_t> numOfDistinctGraphs_{
       MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA};
 };
