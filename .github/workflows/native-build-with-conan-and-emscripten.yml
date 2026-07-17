@@ -61,7 +61,7 @@ jobs:
       # definitions for the `qleverwasm` target. A recent `npm` (>= 11.5) is
       # needed by the `Publish to npm` step for trusted publishing (OIDC).
       - name: Install TypeScript and a recent npm
-        run: npm install -g typescript npm@latest
+        run: npm install -g typescript npm@12
 
       - name: Install conan
         run: pipx install conan
