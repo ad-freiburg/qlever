@@ -12,8 +12,8 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/PrefixMatchExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
-#include "engine/sparqlExpressions/SampleExpression.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -38,8 +38,10 @@ auto variable(std::string literal) {
 }
 
 // _____________________________________________________________________________
+// The `REGEX` function never produces a `PrefixMatchExpression` (that is only
+// used by `ql:prefix-match`); this helper is used to assert exactly that.
 bool isPrefixExpression(const SparqlExpression::Ptr& expression) {
-  return dynamic_cast<PrefixRegexExpression*>(expression.get());
+  return dynamic_cast<PrefixMatchExpression*>(expression.get());
 }
 
 // Make `RegexExpression` from given the `child` (the expression on which to
@@ -204,6 +206,25 @@ TEST(RegexExpression, nonPrefixRegex) {
                         {T, F, T, T, T, U}, false);
 }
 
+// A `REGEX` with a prefix regex (`^...`) is no longer turned into a prefix
+// filter, but evaluates the actual regex. In particular it is case-sensitive
+// and does not use the primary-level collation (where `a` and `ä` are equal),
+// unlike the `ql:prefix-match` function (see below).
+TEST(RegexExpression, prefixRegexRunsRealRegex) {
+  // ?vocab column is `"Beta", "alpha", "älpha"`.
+  auto test = testNonPrefixRegex;
+  test("?vocab", "^Be", {T, F, F});
+  // Case-sensitive: `^be` does not match `"Beta"`.
+  test("?vocab", "^be", {F, F, F});
+  // No primary-level collation: `^al` does not match `"älpha"` and vice versa.
+  test("?vocab", "^al", {F, T, F});
+  test("?vocab", "^äl", {F, F, T});
+  // A prefix regex with trailing special syntax (which still allows
+  // prefiltering, see `getPrefixRegex`) is evaluated as a real regex.
+  test("?vocab", "^al[abcp]", {F, T, F});
+  test("?vocab", "^[aä]lpha", {F, T, T});
+}
+
 // Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
   auto* qec = ad_utility::testing::getQec();
@@ -311,230 +332,41 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
 }
 
 namespace sparqlExpression {
-// Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
-// is not a simple prefix regex).
+// Test the `getPrefixRegex` function, which returns the longest guaranteed
+// literal prefix of a regex (or `std::nullopt` if there is none).
 TEST(RegexExpression, getPrefixRegex) {
-  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("alpha"));
-  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("^al.ha"));
-  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("^alh*"));
-  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("^a(lh)"));
-
-  ASSERT_EQ("alpha", PrefixRegexExpression::getPrefixRegex("^alpha"));
-  ASSERT_EQ(R"(\al*ph.a()",
-            PrefixRegexExpression::getPrefixRegex(R"(^\\al\*ph\.a\()"));
-  // Escapes of non-special characters (e.g. `\"`) are valid regex features
-  // handled by RE2 in the general regex path, so the prefix check declines
-  // (returns `std::nullopt`) rather than throwing.
-  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex(R"(^\")"));
-}
-
-// _____________________________________________________________________________
-TEST(RegexExpression, makePrefixMatchExpression) {
-  using namespace ::testing;
-  auto hasPrefixAndVariableMatcher = [](std::string variableName,
-                                        std::string_view prefix) {
-    return Pointee(WhenDynamicCastTo<const PrefixRegexExpression&>(
-        AllOf(AD_FIELD(PrefixRegexExpression, prefixRegex_, Eq(prefix)),
-              AD_FIELD(PrefixRegexExpression, variable_,
-                       Eq(Variable{std::move(variableName)})))));
-  };
-  EXPECT_THAT(makePrefixMatchExpression(variable("?x"), literal("Prefix")),
-              hasPrefixAndVariableMatcher("?x", "Prefix"));
-  EXPECT_THAT(makePrefixMatchExpression(makeStrExpression(variable("?x")),
-                                        literal("Prefix")),
-              hasPrefixAndVariableMatcher("?x", "Prefix"));
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      makePrefixMatchExpression(makeStrExpression(variable("?x")),
-                                literal("Prefix", "@en")),
-      HasSubstr("literals without a language tag or a datatype"),
-      std::runtime_error);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      makePrefixMatchExpression(literal("Not a variable"), literal("Prefix")),
-      HasSubstr("STR(?var) or ?var"), std::runtime_error);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      makePrefixMatchExpression(variable("?x"), variable("?not_a_constant")),
-      HasSubstr("static string literals"), std::runtime_error);
+  // No leading `^` -> no prefix.
+  ASSERT_EQ(std::nullopt, getPrefixRegex("alpha"));
+  // A plain prefix regex yields the full prefix.
+  ASSERT_EQ("alpha", getPrefixRegex("^alpha"));
+  // Trailing special syntax only shortens the prefix, it no longer disables the
+  // optimization completely.
+  ASSERT_EQ("al", getPrefixRegex("^al.ha"));
+  ASSERT_EQ("al", getPrefixRegex("^alh*"));
+  ASSERT_EQ("a", getPrefixRegex("^a(lh)"));
+  ASSERT_EQ("Abc", getPrefixRegex("^Abc[def]"));
+  // A quantifier makes the preceding character optional (`?`, `*`) or repeated
+  // (`+`); this is handled when computing the guaranteed prefix.
+  ASSERT_EQ("abc", getPrefixRegex("^abcd?"));
+  ASSERT_EQ("abc", getPrefixRegex("^abcd*"));
+  ASSERT_EQ("abcd", getPrefixRegex("^abcd+"));
+  // Escaped special characters are part of the prefix (the backslash is
+  // removed).
+  ASSERT_EQ(R"(\al*ph.a()", getPrefixRegex(R"(^\\al\*ph\.a\()"));
+  // Escapes of non-special characters (e.g. `\"` or `\d`) are character classes
+  // or literal escapes handled by RE2 in the general regex path; the prefix
+  // scan simply stops there.
+  ASSERT_EQ(std::nullopt, getPrefixRegex(R"(^\")"));
+  ASSERT_EQ("abc", getPrefixRegex(R"(^abc\d)"));
+  // An alternation inside a group is fine, but a top-level alternation breaks
+  // the prefix guarantee.
+  ASSERT_EQ("abc", getPrefixRegex("^abc(d|e)"));
+  ASSERT_EQ(std::nullopt, getPrefixRegex("^abc|def"));
+  ASSERT_EQ(std::nullopt, getPrefixRegex("^abc.*|def"));
+  // An empty prefix is not useful for prefiltering.
+  ASSERT_EQ(std::nullopt, getPrefixRegex("^"));
 }
 }  // namespace sparqlExpression
-
-// _____________________________________________________________________________
-auto testPrefixRegexUnorderedColumn =
-    [](std::string variable, std::string regex,
-       const std::vector<Id>& expectedResult, bool childAsStr = false,
-       source_location l = AD_CURRENT_SOURCE_LOC()) {
-      auto trace = generateLocationTrace(l, "testUnorderedPrefix");
-      auto expr = makeRegexExpression(std::move(variable), std::move(regex),
-                                      std::nullopt, childAsStr);
-      EXPECT_TRUE(isPrefixExpression(expr));
-      testWithExplicitResult(*expr, expectedResult);
-    };
-
-// _____________________________________________________________________________
-TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
-  auto test = testPrefixRegexUnorderedColumn;
-  // ?vocab column is `"Beta", "alpha", "älpha"
-  // ?mixed column is `1, -0.1, <x>`
-
-  test("?vocab", "^Be", {T, F, F});
-  // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^be", {T, F, F});
-  // Prefix filters currently always work on the primary level, where `a` and
-  // `ä` are considered equal.
-  test("?vocab", "^al", {F, T, T});
-  test("?vocab", "^äl", {F, T, T});
-
-  test("?vocab", "^c", {F, F, F});
-
-  // We explicitly need to pass the STR() function for non-literal entries.
-  test("?mixed", "^x", {F, F, T}, true);
-  test("?mixed", "^x", {F, F, F}, false);
-
-  // Unbound input, regression test for
-  // https://github.com/ad-freiburg/qlever/issues/2712 .
-  {
-    auto expr = makeRegexExpression("?doesNotExist", "^", std::nullopt, false);
-    EXPECT_TRUE(isPrefixExpression(expr));
-    TestContext ctx;
-    auto resultAsVariant = expr->evaluate(&ctx.context);
-    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<Id>(U));
-  }
-
-  // Input with UNDEF.
-  test("?everything", "^x", {F, F, U}, false);
-
-  // TODO<joka921> Prefix filters on numbers do not yet work.
-}
-
-// _____________________________________________________________________________
-auto testPrefixRegexOrderedColumn =
-    [](std::string variableAsString, std::string regex,
-       ad_utility::SetOfIntervals expected, bool childAsStr = false,
-       source_location l = AD_CURRENT_SOURCE_LOC()) {
-      auto trace = generateLocationTrace(l, "testPrefixRegexOrderedColumn");
-      auto variable = Variable{variableAsString};
-      TestContext ctx = TestContext::sortedBy(variable);
-      auto expression = makeRegexExpression(variableAsString, regex,
-                                            std::nullopt, childAsStr);
-      EXPECT_TRUE(isPrefixExpression(expression));
-      auto resultAsVariant = expression->evaluate(&ctx.context);
-      const auto& result =
-          std::get<ad_utility::SetOfIntervals>(resultAsVariant);
-      ASSERT_EQ(result, expected);
-    };
-
-// _____________________________________________________________________________
-TEST(RegexExpression, prefixRegexOrderedColumn) {
-  auto test = testPrefixRegexOrderedColumn;
-  // Sorted order (by bits of the valueIds):
-  // ?vocab column is  "alpha", "älpha", "Beta"
-  // ?mixed column is `1, -0.1, <x>`
-  test("?vocab", "^Be", {{{2, 3}}});
-  // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^be", {{{2, 3}}});
-  // Prefix filters currently always work on the primary level, where `a` and
-  // `ä` are considered equal.
-  test("?vocab", "^al", {{{0, 2}}});
-  test("?vocab", "^äl", {{{0, 2}}});
-  test("?vocab", "^c", {});
-  test("?mixed", "^x", {{{2, 3}}}, true);
-
-  // Input with UNDEF.
-  {
-    Variable variable{"?everything"};
-    TestContext ctx = TestContext::sortedBy(variable);
-    auto expression =
-        makeRegexExpression(variable.name(), "^x", std::nullopt, false);
-    EXPECT_TRUE(isPrefixExpression(expression));
-    auto resultAsVariant = expression->evaluate(&ctx.context);
-    EXPECT_THAT(resultAsVariant,
-                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
-                    ::testing::ElementsAre(U, F, F)));
-  }
-  // Empty input.
-  {
-    Variable variable{"?everything"};
-    TestContext ctx = TestContext::sortedBy(variable);
-    ctx.context._endIndex = 0;
-    auto expression =
-        makeRegexExpression(variable.name(), "^x", std::nullopt, false);
-    EXPECT_TRUE(isPrefixExpression(expression));
-    auto resultAsVariant = expression->evaluate(&ctx.context);
-    EXPECT_THAT(resultAsVariant,
-                ::testing::VariantWith<ad_utility::SetOfIntervals>(
-                    ad_utility::SetOfIntervals{}));
-  }
-}
-
-// _____________________________________________________________________________
-TEST(RegexExpression, prefixRegexOnGroupedVariableIsConstant) {
-  // Evaluate on a single-row "group" in which `?vocab` is constant (`"Beta"`).
-  auto setUpGroupedContext = [](TestContext& ctx) {
-    ctx.context._groupedVariables = {Variable{"?vocab"}};
-    ctx.context._isPartOfGroupBy = true;
-    ctx.context._beginIndex = 0;
-    ctx.context._endIndex = 1;
-  };
-
-  // `"Beta"` matches the prefix `^Be` -> constant `true`.
-  {
-    auto expression = makeRegexExpression("?vocab", "^Be");
-    ASSERT_TRUE(isPrefixExpression(expression));
-    TestContext ctx;
-    setUpGroupedContext(ctx);
-    EXPECT_THAT(expression->evaluate(&ctx.context),
-                ::testing::VariantWith<Id>(T));
-  }
-  // `"Beta"` does not match the prefix `^al` -> constant `false`.
-  {
-    auto expression = makeRegexExpression("?vocab", "^al");
-    ASSERT_TRUE(isPrefixExpression(expression));
-    TestContext ctx;
-    setUpGroupedContext(ctx);
-    EXPECT_THAT(expression->evaluate(&ctx.context),
-                ::testing::VariantWith<Id>(F));
-  }
-}
-
-// _____________________________________________________________________________
-TEST(RegexExpression, prefixRegexInsideAggregateIsNotFolded) {
-  auto regex = makeRegexExpression("?vocab", "^al");
-  ASSERT_TRUE(isPrefixExpression(regex));
-  // Wrap the regex in an aggregate.
-  auto aggregate = std::make_unique<SampleExpression>(false, std::move(regex));
-  const auto* prefixRegex = aggregate->children()[0].get();
-  ASSERT_TRUE(prefixRegex->isInsideAggregate());
-
-  TestContext ctx;
-  ctx.context._groupedVariables = {Variable{"?vocab"}};
-  ctx.context._isPartOfGroupBy = true;
-  // The result is computed per row (a vector), not folded to a single constant.
-  EXPECT_THAT(prefixRegex->evaluate(&ctx.context),
-              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
-                  ::testing::ElementsAre(F, T, T)));
-}
-
-// _____________________________________________________________________________
-TEST(RegexExpression, prefixRegexOnGroupedVariableWithUnexpectedChildResult) {
-  // The child of a `PrefixRegexExpression` is always a single variable, so when
-  // the variable is grouped, the child evaluates either to a single `ValueId`
-  // or (for hash-map/lazy GROUP BY) to a `VectorWithMemoryLimit<ValueId>`. Here
-  // we force an unexpected result type by replacing the child with an
-  // expression that yields an `IdOrLocalVocabEntry`, which must trigger the
-  // `AD_FAIL()` in the otherwise unreachable `else` branch.
-  auto expression = makeRegexExpression("?vocab", "^al");
-  ASSERT_TRUE(isPrefixExpression(expression));
-  expression->replaceChild(
-      0, std::make_unique<SingleUseExpression>(
-             ExpressionResult{IdOrLocalVocabEntry{Id::makeFromBool(true)}}));
-
-  TestContext ctx;
-  ctx.context._groupedVariables = {Variable{"?vocab"}};
-  ctx.context._isPartOfGroupBy = true;
-  ctx.context._beginIndex = 0;
-  ctx.context._endIndex = 1;
-  AD_EXPECT_THROW_WITH_MESSAGE(expression->evaluate(&ctx.context),
-                               ::testing::HasSubstr("unreachable"));
-}
 
 // _____________________________________________________________________________
 TEST(RegexExpression, getCacheKey) {
@@ -546,11 +378,11 @@ TEST(RegexExpression, getCacheKey) {
   VariableToColumnMap map;
   map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
   map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
-  EXPECT_TRUE(isPrefixExpression(exp0));
-  EXPECT_THAT(
-      exp0->getCacheKey(map),
-      AllOf(StartsWith("Prefix REGEX"), HasSubstr("str:0"), HasSubstr("alp"),
-            HasSubstr(exp0->children()[0]->getCacheKey(map))));
+  // `^alp` is now a regular regex expression (which additionally supports
+  // prefiltering), not a special prefix expression.
+  EXPECT_FALSE(isPrefixExpression(exp0));
+  EXPECT_THAT(exp0->getCacheKey(map),
+              HasSubstr(exp0->children()[0]->getCacheKey(map)));
   EXPECT_NE(exp0->getCacheKey(map), exp1->getCacheKey(map));
   ASSERT_EQ(exp1->getCacheKey(map), exp2->getCacheKey(map));
 
@@ -586,10 +418,10 @@ TEST(RegexExpression, getCacheKey) {
                                   variable("?third"));
   EXPECT_NE(exp8->getCacheKey(map), exp9->getCacheKey(map));
 
+  // The `STR()` variant has a different cache key than the non-`STR()` variant.
   auto exp10 = makeRegexExpression("?first", "^alp", std::nullopt, true);
   EXPECT_THAT(exp10->getCacheKey(map),
-              AllOf(HasSubstr("str:1"), HasSubstr("alp"),
-                    HasSubstr(exp10->children()[0]->getCacheKey(map))));
+              HasSubstr(exp10->children()[0]->getCacheKey(map)));
   EXPECT_NE(exp0->getCacheKey(map), exp10->getCacheKey(map));
 }
 
@@ -641,48 +473,4 @@ TEST(RegexExpression, invalidConstruction) {
   EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"a\""),
                                        literal("\"x\"")),
                std::runtime_error);
-}
-
-// _____________________________________________________________________________
-TEST(RegexExpression, getEstimatesForFilterExpression) {
-  using Estimates = SparqlExpressionPimpl::Estimates;
-  auto hasEstimate = [](size_t sizeEstimate, size_t costEstimate) {
-    using namespace ::testing;
-    return AllOf(AD_FIELD(Estimates, sizeEstimate, Eq(sizeEstimate)),
-                 AD_FIELD(Estimates, costEstimate, Eq(costEstimate)));
-  };
-  auto expression = makeRegexExpression("?a", "^abc");
-  EXPECT_THAT(expression->getEstimatesForFilterExpression(10000, std::nullopt),
-              hasEstimate(10, 10010));
-  EXPECT_THAT(expression->getEstimatesForFilterExpression(100000, std::nullopt),
-              hasEstimate(100, 100100));
-  EXPECT_THAT(
-      expression->getEstimatesForFilterExpression(10000, Variable{"?b"}),
-      hasEstimate(10, 10010));
-  EXPECT_THAT(
-      expression->getEstimatesForFilterExpression(100000, Variable{"?b"}),
-      hasEstimate(100, 100100));
-  EXPECT_THAT(
-      expression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
-      hasEstimate(10, 10));
-  EXPECT_THAT(
-      expression->getEstimatesForFilterExpression(100000, Variable{"?a"}),
-      hasEstimate(100, 100));
-
-  auto longRegexExpression = makeRegexExpression("?a", "^thisisverylong");
-  EXPECT_THAT(longRegexExpression->getEstimatesForFilterExpression(
-                  1000000000, std::nullopt),
-              hasEstimate(10, 1000000010));
-  EXPECT_THAT(longRegexExpression->getEstimatesForFilterExpression(
-                  1000000000, Variable{"?a"}),
-              hasEstimate(10, 10));
-
-  auto zeroLengthExpression = makeRegexExpression("?a", "^");
-  ASSERT_TRUE(isPrefixExpression(zeroLengthExpression));
-  EXPECT_THAT(
-      zeroLengthExpression->getEstimatesForFilterExpression(100, std::nullopt),
-      hasEstimate(100, 200));
-  EXPECT_THAT(zeroLengthExpression->getEstimatesForFilterExpression(
-                  1000000000, Variable{"?a"}),
-              hasEstimate(1000000000, 1000000000));
 }
