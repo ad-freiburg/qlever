@@ -19,7 +19,8 @@ using ::testing::Pointee;
 
 ASYNC_TEST(UpdateFetcher, checkIndexIncrements) {
   QueryId queryId = QueryId::idFromString("abc");
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   UpdateFetcher updateFetcher{queryHub, queryId};
 
   auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);

@@ -16,6 +16,7 @@
 #include "util/http/beast.h"
 #include "util/http/websocket/WebSocketSession.h"
 #include "util/jthread.h"
+#include "util/metrics/InstrumentedExecutor.h"
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
 namespace net = boost::asio;       // from <boost/asio.hpp>
@@ -74,13 +75,26 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   int numServerThreads_;
   net::io_context ioContext_;
   WebSocketHandler webSocketHandler_;
+  // Metrics and instrumented executor are initialized after `ioContext_`
+  // (their in-class initializers depend on it) and before `acceptorStrand_`.
+  std::shared_ptr<ad_utility::IoContextMetrics> ioContextMetrics_ =
+      std::make_shared<ad_utility::IoContextMetrics>(
+          ad_utility::makeIoContextMetrics());
+  ad_utility::InstrumentedExecutor<net::io_context::executor_type>
+      instrumentedExec_{ioContext_.get_executor(), ioContextMetrics_};
+  net::any_io_executor executor_{instrumentedExec_};
+
   ad_utility::MemorySize lazyBodyChunkSize_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
   // unit tests.
-  net::strand<net::io_context::executor_type> acceptorStrand_ =
-      net::make_strand(ioContext_);
+  // Use strand<any_io_executor> so that coroutines (which use any_io_executor
+  // internally) and socket type conversions all work without type friction.
+  // The any_io_executor wraps our InstrumentedExecutor, so every handler
+  // dispatch is still instrumented.
+  net::strand<net::any_io_executor> acceptorStrand_ =
+      net::make_strand(executor_);
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
 
@@ -98,7 +112,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   template <typename HandlerSupplier>
   static constexpr bool isSupplier =
       ad_utility::InvocableWithConvertibleReturnType<
-          HandlerSupplier, WebSocketHandler, net::io_context&>;
+          HandlerSupplier, WebSocketHandler, net::any_io_executor&>;
   CPP_template_2(typename HandlerSupplier)(
       requires isSupplier<
           HandlerSupplier>) explicit HttpServer(unsigned short port,
@@ -120,8 +134,9 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
         webSocketHandler_{
-            std::invoke(std::move(webSocketHandlerSupplier), ioContext_)},
+            std::invoke(std::move(webSocketHandlerSupplier), executor_)},
         lazyBodyChunkSize_{lazyBodyChunkSize} {
+    ioContextMetrics_->maxHandlers_->Record(numServerThreads_);
     try {
       tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
@@ -433,7 +448,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         // Although a coroutine is conceptually single-threaded we still
         // schedule onto an explicit strand because the Websocket implementation
         // expects a strand.
-        auto strand = net::make_strand(ioContext_);
+        auto strand = net::make_strand(executor_);
         auto socket =
             co_await acceptor_.async_accept(strand, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
@@ -571,6 +586,6 @@ HttpServer(unsigned short, const std::string&, int, HttpHandler,
            WebSocketHandlerSupplier)
     -> HttpServer<
         BodyReadMode::Eager, HttpHandler,
-        std::invoke_result_t<WebSocketHandlerSupplier, net::io_context&>>;
+        std::invoke_result_t<WebSocketHandlerSupplier, net::any_io_executor&>>;
 
 #endif  // QLEVER_HTTPSERVER_H

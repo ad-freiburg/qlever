@@ -12,7 +12,8 @@ using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryToSocketDistributor;
 
 ASIO_TEST(QueryHub, simulateLifecycleWithoutListeners) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   QueryId queryId = QueryId::idFromString("abc");
   auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);
   std::weak_ptr<QueryToSocketDistributor> observer = distributor;
@@ -22,7 +23,8 @@ ASIO_TEST(QueryHub, simulateLifecycleWithoutListeners) {
 
 // _____________________________________________________________________________
 ASIO_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   QueryId queryId = QueryId::idFromString("abc");
   std::weak_ptr<const QueryToSocketDistributor> observer;
   {
@@ -39,7 +41,8 @@ ASIO_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
 
 // _____________________________________________________________________________
 ASIO_TEST(QueryHub, simulateStandardLifecycle) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   QueryId queryId = QueryId::idFromString("abc");
   std::weak_ptr<const QueryToSocketDistributor> observer;
   {
@@ -59,7 +62,8 @@ ASIO_TEST(QueryHub, simulateStandardLifecycle) {
 
 // _____________________________________________________________________________
 ASIO_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   QueryId queryId = QueryId::idFromString("abc");
   auto distributor1 = queryHub.createOrAcquireDistributorForReceiving(queryId);
   {
@@ -80,7 +84,8 @@ ASIO_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
 // _____________________________________________________________________________
 
 ASIO_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   QueryId queryId1 = QueryId::idFromString("abc");
   QueryId queryId2 = QueryId::idFromString("def");
   auto distributor1 = queryHub.createOrAcquireDistributorForSending(queryId1);
@@ -101,7 +106,8 @@ namespace ad_utility::websocket {
 
 // Ensures that nothing is scheduled when QueryHub is already destroyed
 ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
-  std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(executor);
   auto distributor = queryHub->createOrAcquireDistributorForSending(
       QueryId::idFromString("abc"));
   queryHub.reset();
@@ -117,8 +123,9 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
 // Ensures that a scheduled task does not modify the map after destruction
 // of the QueryHub.
 ASIO_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
+  boost::asio::any_io_executor executor = ioContext.get_executor();
   std::weak_ptr<QueryHub::MapType> distributorMap;
-  std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+  std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(executor);
   auto distributor = queryHub->createOrAcquireDistributorForSending(
       QueryId::idFromString("abc"));
   distributor->signalEnd();
@@ -134,7 +141,8 @@ ASIO_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
 // _____________________________________________________________________________
 
 ASIO_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   auto queryId = QueryId::idFromString("abc");
   auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);
   // Under normal conditions this would happen when
@@ -154,7 +162,8 @@ ASIO_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
 // _____________________________________________________________________________
 
 ASIO_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
-  QueryHub queryHub{ioContext};
+  boost::asio::any_io_executor executor = ioContext.get_executor();
+  QueryHub queryHub{executor};
   QueryId queryId = QueryId::idFromString("abc");
 
   [[maybe_unused]] auto distributor =

@@ -29,9 +29,10 @@ using ::testing::Pointee;
 using ::testing::VariantWith;
 
 ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
+  boost::asio::any_io_executor executor = ioContext.get_executor();
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{executor};
 
   auto distributor =
       queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
@@ -55,9 +56,10 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
+  boost::asio::any_io_executor executor = ioContext.get_executor();
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{executor};
 
   {
     auto distributor =
@@ -94,10 +96,11 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
+  boost::asio::any_io_executor executor = ioContext.get_executor();
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
   QueryId reference = queryId.toQueryId();
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{executor};
 
   {
     MessageSender messageSender{std::move(queryId), queryHub};

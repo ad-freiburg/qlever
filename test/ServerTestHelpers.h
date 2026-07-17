@@ -77,6 +77,7 @@ class ServerForTesting {
   // request, but the `Server` itself is reused across calls.
   ResT process(const ReqT& request) {
     boost::asio::io_context io;
+    boost::asio::any_io_executor executor = io.get_executor();
     std::future<ResT> fut = co_spawn(
         io,
         [](auto request, Server* server,
