@@ -99,7 +99,10 @@ class SparqlExpressionPimpl {
   SparqlExpressionPimpl(const SparqlExpressionPimpl&);
   SparqlExpressionPimpl& operator=(const SparqlExpressionPimpl&);
 
-  std::vector<const Variable*> containedVariables() const;
+  // If `excludeExists` is true, `EXISTS` is treated as a scope boundary: the
+  // variables that occur only inside the body of an `EXISTS` are not returned.
+  std::vector<const Variable*> containedVariables(
+      bool excludeExists = false) const;
 
   // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
