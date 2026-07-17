@@ -20,6 +20,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
+#include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -892,6 +893,11 @@ class CompressedRelationReader {
                                     file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
+
+  ad_utility::HashSet<Id::T> computeUniqueGraphIds(
+      const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
