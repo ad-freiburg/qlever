@@ -162,11 +162,18 @@ class Permutation {
   // `CompressedRelationReader` with an unlimited-memory allocator instead of
   // this permutation's shared reader. This allows the scan to run independently
   // of memory constraints imposed on most queries.
+  //
+  // `numThreadsOverride`, if set, overrides the number of block read/decompress
+  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
+  // parameter is used, as for query scans). The runtime index rebuild uses this
+  // to throttle its read parallelism (and hence peak CPU) without affecting
+  // queries.
   LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      std::optional<size_t> numThreadsOverride = std::nullopt) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
