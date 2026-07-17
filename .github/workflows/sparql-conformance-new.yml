@@ -1,0 +1,106 @@
+name: sparql-conformance-new
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  build:
+    env:
+      compiler: clang
+      compiler-version: 16
+      build-type: Release
+      cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
+      REPORT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+          path: qlever-code
+      - name: Checkout sparql-test-suite-files
+        uses: actions/checkout@v6
+        with:
+          repository: "w3c/rdf-tests"
+          path: sparql-test-suite
+          fetch-depth: 1
+      - name: Checkout sparql-conformance
+        uses: actions/checkout@v6
+        with:
+          repository: "SIRDNARch/sparql-conformance"
+          path: sparql-conformance
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: sparql-conformance/pyproject.toml
+      - name: Install sparql-conformance
+        run: python -m pip install ./sparql-conformance
+      - name: Install dependencies
+        uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
+      - name: Install compiler
+        uses: ./qlever-code/.github/workflows/install-compiler-ubuntu
+        with:
+          compiler: "clang"
+          compiler-version: "16"
+      - name: Create build directory
+        run: mkdir ${{github.workspace}}/qlever-code/build
+      - name: Configure CMake
+        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
+      - name: Build qlever binaries
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target qlever-index qlever-server --config ${{env.build-type}} -- -j $(nproc)
+      - name: Save workflow information
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF_KIND: ${{ github.ref_type }}
+          RUN_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.merge_group.head_sha || github.sha }}
+        run: |
+          mkdir -p conformance-report
+          printf '%s\n' "$EVENT_NAME" > conformance-report/event
+          printf '%s\n' "$PR_NUMBER" > conformance-report/pr
+          printf '%s\n' "$REPOSITORY" > conformance-report/github_repository
+          printf '%s\n' "$REPORT_SHA" > conformance-report/sha
+          printf '%s\n' "$REF_NAME" > conformance-report/ref_name
+          printf '%s\n' "$HEAD_REF" > conformance-report/head_ref
+          printf '%s\n' "$REF_KIND" > conformance-report/ref_kind
+          printf '%s\n' "${RUN_TITLE%%$'\n'*}" > conformance-report/run_title
+          git -C "$GITHUB_WORKSPACE/qlever-code" describe --tags --always > conformance-report/engine_version
+      - name: Execute test suite
+        working-directory: ${{ github.workspace }}/sparql-conformance
+        # Note: we exclude entailment because qlever and the tool currently do not support it and the deprecated GraphStoreProtocol tests
+        run: |
+          sparql-conformance \
+            --name "$REPORT_SHA" \
+            --results-dir "$GITHUB_WORKSPACE/conformance-report" \
+            --engine ./src/sparql_conformance/engines/qlever-binaries-manager.py \
+            --binaries-directory ${{ github.workspace }}/qlever-code/build/ \
+            --port 7001 \
+            --test-suites '{"sparql11":"${{ github.workspace }}/sparql-test-suite/sparql/sparql11/","sparql10":"${{ github.workspace }}/sparql-test-suite/sparql/sparql10/"}' \
+            --report line \
+            --exclude entailment,http-rdf-update \
+            --type-alias '[["http://www.w3.org/2001/XMLSchema#int", "http://www.w3.org/2001/XMLSchema#integer"], ["http://www.w3.org/2001/XMLSchema#float", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#double"], ["http://www.w3.org/2001/XMLSchema#decimal", "http://www.w3.org/2001/XMLSchema#float"], ["http://www.w3.org/2001/XMLSchema#string", null]]'
+      - name: Verify conformance report
+        run: |
+          result_file="conformance-report/$REPORT_SHA.json.bz2"
+          test -s "$result_file"
+          python -c 'import bz2, json, sys; data = json.load(bz2.open(sys.argv[1], "rt")); assert list(data.get("suites", {}))[:2] == ["sparql11", "sparql10"]' "$result_file"
+      - name: Upload conformance report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: conformance-report/
+          if-no-files-found: error
