@@ -413,7 +413,8 @@ class CompressedRelationWriter {
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+      ad_utility::MemorySize memoryForTwinSorter);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:

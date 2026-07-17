@@ -851,8 +851,10 @@ class CompressedExternalIdTableSorter
     auto rowGenerators =
         this->writer_.template getAllRowGenerators<NumStaticCols>();
 
-    const size_t blockSizeOutput =
-        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
+    size_t blockSizeOutput =
+        blocksize.has_value()
+            ? blocksize.value()
+            : computeBlockSizeForMergePhase(rowGenerators.size());
 
     auto projection = [](const auto& el) -> decltype(auto) {
       return *el.first;
