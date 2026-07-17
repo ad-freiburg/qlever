@@ -19,6 +19,7 @@
 #include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -253,6 +254,28 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                [&map = subtree->getVariableColumns()](const auto& var) {
                  return !map.contains(var);
                });
+
+  // Restrict all `EXISTS` expressions that are evaluated on the aggregated data
+  // (i.e. not inside an aggregate) to the grouped variables. This ensures that
+  // the corresponding `ExistsJoin` only joins on the grouped variables, such
+  // that the result of the `EXISTS` is constant within a group and can thus be
+  // substituted by that constant during the evaluation of the aliases (see
+  // `GroupByImpl::findAggregatesImpl`).
+  //
+  // An `EXISTS` that is *inside* an aggregate (e.g. `SUM(IF(EXISTS {...},
+  // ...))`) must not be restricted: it is evaluated once per row and therefore
+  // has to keep joining on all of its (correlated) variables, just like in a
+  // `FILTER`.
+  for (auto& alias : _aliases) {
+    for (auto* expr : alias._expression.getExistsExpressions()) {
+      auto* existsExpression =
+          dynamic_cast<sparqlExpression::ExistsExpression*>(expr);
+      AD_CORRECTNESS_CHECK(existsExpression != nullptr);
+      if (!existsExpression->isInsideAggregate()) {
+        existsExpression->selectVariables(_groupByVariables);
+      }
+    }
+  }
 
   // The subtrees of a GROUP BY only need to compute columns that are grouped or
   // used in any of the aggregate aliases.
@@ -1301,6 +1324,19 @@ bool GroupByImpl::findAggregatesImpl(
     }
   }
 
+  // An `EXISTS` inside a `GROUP BY` alias reads from a column that was
+  // restricted to the grouped variables (see the `GroupByImpl` constructor),
+  // hence its value is constant within each group. We can therefore treat it
+  // like a `SAMPLE` aggregate: the (constant) value is picked once per group
+  // and then substituted into the alias expression, exactly like a regular
+  // aggregate.
+  if (expr->isExistsExpression()) {
+    info.emplace_back(
+        expr, 0, HashMapAggregateTypeWithData{HashMapAggregateType::SAMPLE},
+        parentAndChildIndex);
+    return true;
+  }
+
   auto children = expr->children();
 
   bool childrenContainOnlySupportedAggregates = true;
@@ -1679,6 +1715,17 @@ sparqlExpression::ExpressionResult
 GroupByImpl::evaluateChildExpressionOfAggregateFunction(
     const HashMapAggregateInformation& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext) {
+  AD_CORRECTNESS_CHECK(aggregate.expr_ != nullptr);
+  // An `EXISTS` is treated like `SAMPLE` over the column computed by the
+  // corresponding `ExistsJoin` (see `findAggregatesImpl`). The value to be
+  // sampled is exactly that column, which we obtain by evaluating the internal
+  // variable of the `EXISTS` (returning the `Variable` makes the aggregation
+  // read the column, just like `SAMPLE(?var)` would).
+  if (auto* existsExpression =
+          dynamic_cast<const sparqlExpression::ExistsExpression*>(
+              aggregate.expr_)) {
+    return existsExpression->variable();
+  }
   // The code below assumes that DISTINCT is not supported yet.
   AD_CORRECTNESS_CHECK(aggregate.expr_->isAggregate() ==
                        sparqlExpression::SparqlExpression::AggregateStatus::

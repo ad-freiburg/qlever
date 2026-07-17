@@ -2701,6 +2701,23 @@ TEST(QueryPlanner, Exists) {
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
                  h::ExistsJoin(xyz, abc)));
 
+  // Inside a `GROUP BY`, a top-level `EXISTS` (i.e. one that is not inside an
+  // aggregate) may only join on and expose the grouped variables, so that its
+  // result is constant within each group. Here the body `{?x ?y ?c}` shares the
+  // grouped `?x` and the non-grouped `?y` with the outer query, but only `?x`
+  // may be used, so the right side of the `ExistsJoin` exposes only `?x`.
+  h::expect("SELECT ?x (EXISTS{?x ?y ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+            h::GroupBy({V{"?x"}}, {"(EXISTS{?x ?y ?c} as ?e)"},
+                       h::ExistsJoin(::testing::_, h::hasVariables({"?x"}))));
+  // In contrast, an `EXISTS` inside an aggregate is evaluated once per row and
+  // therefore keeps exposing all of its variables (here `?x`, `?b`, and `?c`),
+  // exactly as it would inside a `FILTER`.
+  h::expect(
+      "SELECT ?x (SAMPLE(EXISTS{?x ?b ?c}) as ?e) { ?x ?y ?z } GROUP BY ?x",
+      h::GroupBy(
+          {V{"?x"}}, {"(SAMPLE(EXISTS{?x ?b ?c}) as ?e)"},
+          h::ExistsJoin(::testing::_, h::hasVariables({"?x", "?b", "?c"}))));
+
   // Similar tests, but with multiple EXISTS clauses
   auto existsAbcDef = h::ExistsJoin(h::ExistsJoin(xyz, abc), def);
   h::expect(

@@ -24,6 +24,7 @@
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -676,6 +677,132 @@ TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
   };
   runTest(true);
   runTest(false);
+}
+
+// _____________________________________________________________________________
+// An `EXISTS` inside a `GROUP BY` alias reads from a column that is constant
+// within each group, so it has to be substituted like a grouped variable during
+// the evaluation of the alias. This test checks that this works for all three
+// variants of the group by (hash map optimization, lazy, and fully
+// materialized), both for a top-level `EXISTS` and for an `EXISTS` nested
+// inside another expression. We use a real `ExistsJoin` (built from a `VALUES`
+// clause), so that column stripping (enabled by default) is exercised as well.
+TEST_F(GroupByOptimizations, existsInGroupByAlias) {
+  using namespace sparqlExpression;
+  const auto T = Id::makeFromBool(true);
+  const auto F = Id::makeFromBool(false);
+
+  auto makeExistsArgument = [](const std::vector<Variable>& variables,
+                               const std::vector<std::vector<int64_t>>& rows) {
+    ParsedQuery pq;
+    parsedQuery::Values valuesClause;
+    valuesClause._inlineValues._variables = variables;
+    for (const auto& row : rows) {
+      std::vector<TripleComponent> valueRow;
+      valueRow.reserve(row.size());
+      for (int64_t value : row) {
+        valueRow.emplace_back(value);
+      }
+      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+    }
+    pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
+    for (const auto& variable : variables) {
+      pq.registerVariableVisibleInQueryBody(variable);
+    }
+    pq.selectClause().setAsterisk();
+    return pq;
+  };
+
+  // Runs `SELECT ?x (makeAliasExpression(EXISTS{existsArgument}) AS ?e)
+  // GROUP BY ?x` over the given input and checks that the result equals
+  // `expected`. `inputSorted` and `inputLazy` (together with `hashMapEnabled`)
+  // select the group-by variant. Column stripping is left at its (enabled)
+  // default.
+  auto runTest = [&](const auto& makeAliasExpression,
+                     ParsedQuery existsArgument,
+                     std::vector<std::optional<Variable>> inputVariables,
+                     const VectorTable& inputTable, bool hashMapEnabled,
+                     bool inputSorted, bool inputLazy,
+                     const VectorTable& expected) {
+    auto hashMapCleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+            hashMapEnabled);
+    qec->getQueryTreeCache().clearAll();
+
+    auto exists = std::make_unique<ExistsExpression>(std::move(existsArgument));
+    Alias alias{
+        SparqlExpressionPimpl{makeAliasExpression(std::move(exists)), "alias"},
+        Variable{"?e"}};
+
+    std::vector<ColumnIndex> sortedColumns;
+    if (inputSorted) {
+      sortedColumns.push_back(0);
+    }
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector(inputTable, I), std::move(inputVariables),
+        false, sortedColumns);
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputLazy;
+
+    GroupByImpl groupBy{
+        qec, variablesOnlyX, {std::move(alias)}, std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting(false);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_THAT(result.idTableView(), matchesIdTableFromVector(expected));
+  };
+
+  auto identity = [](auto exists) {
+    return SparqlExpression::Ptr{std::move(exists)};
+  };
+  auto negate = [](auto exists) {
+    return makeUnaryNegateExpression(std::move(exists));
+  };
+
+  // The default input: a single grouped column `?x = {1, 1, 1, 2, 2, 3}`.
+  std::vector<std::optional<Variable>> inputX{varX};
+  VectorTable tableX{{1}, {1}, {1}, {2}, {2}, {3}};
+
+  // Correlated `EXISTS` on the grouped variable: the value varies per group
+  // (`?x == 1` and `?x == 3` exist). The sorted input keeps the `ExistsJoin`
+  // output sorted on `?x` (so no `Sort` is inserted and the hash map
+  // optimization does not apply); we thus reach the lazy and the fully
+  // materialized (sequential) variants.
+  // Lazy group by:
+  runTest(identity, makeExistsArgument({varX}, {{1}, {3}}), inputX, tableX,
+          false, true, true, {{I(1), T}, {I(2), F}, {I(3), T}});
+  // Fully materialized (sequential) group by:
+  runTest(identity, makeExistsArgument({varX}, {{1}, {3}}), inputX, tableX,
+          false, true, false, {{I(1), T}, {I(2), F}, {I(3), T}});
+  // Nested `!EXISTS`, which exercises the substitution of the `EXISTS` inside a
+  // larger expression:
+  runTest(negate, makeExistsArgument({varX}, {{1}, {3}}), inputX, tableX, false,
+          true, true, {{I(1), F}, {I(2), T}, {I(3), F}});
+
+  // Uncorrelated `EXISTS` (its body shares no variable with the outer query):
+  // the value is constant for all groups. The unsorted input forces a `Sort`,
+  // which enables the hash map optimization.
+  runTest(identity, makeExistsArgument({Variable{"?w"}}, {{1}}), inputX, tableX,
+          true, false, false, {{I(1), T}, {I(2), T}, {I(3), T}});
+
+  // Edge case: the body of the `EXISTS` has multiple variables, only one of
+  // which (`?x`) is grouped. `?y` also occurs in the outer query but is not
+  // grouped, and `?c` is a novel variable. The `EXISTS` must only join on the
+  // grouped `?x`; the values of `?y` and `?c` in the body are irrelevant. Hence
+  // the `EXISTS` is `true` exactly for the groups whose `?x` appears in the
+  // body (here `?x == 1`), independent of the outer `?y`. If the join
+  // incorrectly also used `?y`, the result would be `false` for all groups (no
+  // outer `?y` equals the body's `?y == 999`).
+  const std::vector<std::optional<Variable>> inputXY{varX, varY};
+  const VectorTable tableXY{{1, 10}, {1, 11}, {2, 12}};
+  auto multiVarBody = [&] {
+    return makeExistsArgument({varX, varY, Variable{"?c"}}, {{1, 999, 999}});
+  };
+  // Lazy group by:
+  runTest(identity, multiVarBody(), inputXY, tableXY, false, true, true,
+          {{I(1), T}, {I(2), F}});
+  // Fully materialized (sequential) group by:
+  runTest(identity, multiVarBody(), inputXY, tableXY, false, true, false,
+          {{I(1), T}, {I(2), F}});
 }
 
 // _____________________________________________________________________________
