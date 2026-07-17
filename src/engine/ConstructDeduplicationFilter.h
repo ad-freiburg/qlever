@@ -234,7 +234,7 @@ class ConstructDeduplicationState {
   // may be emitted again).
   void resetIfVocabTooLarge() {
     if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
-    if (std::holds_alternative<DeduplicationMode::None>(mode_.value_)) {
+    if (std::holds_alternative<DeduplicationMode::Global>(mode_.value_)) {
       AD_THROW(
           "CONSTRUCT export with `construct-deduplication = global` exceeded "
           "its "
