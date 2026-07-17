@@ -57,7 +57,7 @@ TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 
   Id id = IntId(42);
   auto table = singleIdTable(id);
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
 
   DeduplicationKey key = state.makeFullTripleKey(kVarTriple, 0, ctx);
   EXPECT_EQ(key, (DeduplicationKey{id, id, id}));
@@ -73,8 +73,8 @@ TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
   LocalVocab v2;
   auto t1 = singleIdTable(lvId(v1, "x", *qec));
   auto t2 = singleIdTable(lvId(v2, "x", *qec));
-  BatchEvaluationContext c1{t1.asStaticView<0>(), 0, 1};
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
+  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
 
   EXPECT_EQ(state.makeFullTripleKey(kVarTriple, 0, c1),
             state.makeFullTripleKey(kVarTriple, 0, c2));
@@ -91,13 +91,13 @@ TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
   {
     LocalVocab tmp;  // destroyed at the end of this scope
     auto table = singleIdTable(lvId(tmp, "x", *qec));
-    BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+    BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
     key1 = state.makeFullTripleKey(kVarTriple, 0, ctx);
   }  // `tmp` (and its entries) gone; `key1` must still be valid.
 
   LocalVocab fresh;
   auto table = singleIdTable(lvId(fresh, "x", *qec));
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
   // Comparing/hashing `key1` here dereferences its ids; so it must not read
   // freed memory, and `key1` must still equal the equal-string key from a fresh
   // vocab.
@@ -114,7 +114,7 @@ TEST(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
                                  PrecomputedConstant{{}, IntId(8)},
                                  PrecomputedConstant{{}, IntId(9)}};
   auto table = singleIdTable(IntId(0));  // no variable positions: row unused
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
 
   DeduplicationKey key = state.makeFullTripleKey(constTriple, 0, ctx);
   EXPECT_EQ(key, (DeduplicationKey{IntId(7), IntId(8), IntId(9)}));
@@ -129,7 +129,7 @@ TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
   PreprocessedTriple bnTriple{PrecomputedBlankNode{"_:g", "_0"},
                               PrecomputedVariable{0}, PrecomputedVariable{0}};
   auto table = singleIdTable(IntId(1));
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
 
   EXPECT_ANY_THROW(state.makeFullTripleKey(bnTriple, 0, ctx));
 }
@@ -144,13 +144,13 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
   {
     LocalVocab v1;
     auto t1 = singleIdTable(lvId(v1, "x", *qec));
-    BatchEvaluationContext c1{t1.asStaticView<0>(), 0, 1};
+    BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
     EXPECT_TRUE(state.isNew(0, 0, tmpl, c1));  // first occurrence
   }  // block-1 vocab freed before block-2 is seen
 
   LocalVocab v2;
   auto t2 = singleIdTable(lvId(v2, "x", *qec));
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // duplicate across blocks
 }
 
@@ -162,12 +162,12 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
 
   LocalVocab v1;
   auto t1 = singleIdTable(lvId(v1, "x", *qec));
-  BatchEvaluationContext c1{t1.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c1));
 
   LocalVocab v2;
   auto t2 = singleIdTable(lvId(v2, "x", *qec));
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));
 }
 
@@ -181,7 +181,7 @@ TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
   tmpl.tripleContainsBlankNode_ = {true};
 
   auto table = singleIdTable(IntId(1));
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
 }
@@ -200,7 +200,7 @@ TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
 
   LocalVocab v2;
   auto t2 = singleIdTable(lvId(v2, "x", *qec));
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // suppressed by the ground seed
 }
 
@@ -217,7 +217,7 @@ TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
 
   LocalVocab v;
   auto t = singleIdTable(lvId(v, "x", *qec));
-  BatchEvaluationContext c{t.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
   // The 1-byte threshold was exceeded, so the next call resets the dedup state
@@ -236,7 +236,7 @@ TEST(ConstructDeduplicationFilter, globalThrowsWhenVocabExceedsThreshold) {
 
   LocalVocab v;
   auto t = singleIdTable(lvId(v, "x", *qec));
-  BatchEvaluationContext c{t.asStaticView<0>(), 0, 1};
+  BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
   // The 1-byte threshold was exceeded; the next call must throw rather than
