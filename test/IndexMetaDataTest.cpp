@@ -19,7 +19,7 @@
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
-#include "util/MmapVector.h"
+#include "util/MmapVectorLegacyFormat.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 
@@ -107,22 +107,19 @@ TEST(IndexMetaDataTest, writeReadTest2) {
 // Check that the RAM-based `MetaDataWrapperDense` is on-disk compatible with
 // the legacy `MmapVector`-based format in both directions: it can read files
 // written by older QLever versions (which used `MmapVector`), and files it
-// writes can still be read by an `MmapVectorView` (as older versions would).
+// writes can still be read the way an `MmapVectorView` would (as older versions
+// would).
 TEST(IndexMetaDataTest, mmapFormatBackwardsCompatibility) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
   CompressedRelationMetadata rmd1{V(1), 3, 2.0, 42.0, 16};
   CompressedRelationMetadata rmd2{V(2), 5, 3.0, 43.0, 10};
 
-  // Reading a legacy file: write it using `MmapVector` (the page-aligned layout
-  // with the metadata trailer that older versions produced) and read it back
-  // with the new wrapper.
-  {
-    ad_utility::MmapVector<CompressedRelationMetadata> legacy{
-        filename, ad_utility::CreateTag{}};
-    legacy.push_back(rmd1);
-    legacy.push_back(rmd2);
-  }
+  // Reading a legacy file: write it in the legacy `MmapVector` on-disk layout
+  // (the page-aligned array with the metadata trailer that older versions
+  // produced) and read it back with the new wrapper.
+  ad_utility::testing::writeLegacyMmapVectorFile<CompressedRelationMetadata>(
+      filename, {rmd1, rmd2});
   MetaDataWrapperDense wrapper;
   {
     ad_utility::File file{filename, "r"};
@@ -133,16 +130,17 @@ TEST(IndexMetaDataTest, mmapFormatBackwardsCompatibility) {
   ASSERT_EQ(wrapper.getIfPresent(V(2)).value(), rmd2);
 
   // Writing a file that older versions can still read: write it with the new
-  // wrapper and read it back with an `MmapVectorView`.
+  // wrapper and read it back the way an old `MmapVectorView` would have.
   {
     ad_utility::File file{filename, "w"};
     wrapper.writeToFile(file);
   }
-  ad_utility::MmapVectorView<CompressedRelationMetadata> view{
-      filename, ad_utility::ReuseTag{}};
-  ASSERT_EQ(view.size(), 2u);
-  ASSERT_EQ(view[0], rmd1);
-  ASSERT_EQ(view[1], rmd2);
+  auto elements =
+      ad_utility::testing::readLegacyMmapVectorFile<CompressedRelationMetadata>(
+          filename);
+  ASSERT_EQ(elements.size(), 2u);
+  ASSERT_EQ(elements[0], rmd1);
+  ASSERT_EQ(elements[1], rmd2);
 }
 
 // _____________________________________________________________________________

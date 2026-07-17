@@ -19,6 +19,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/Server.h"
@@ -836,4 +837,42 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
 
   threadPool.join();
   cleanDirsWithPrefix("droppedState.");
+}
+
+// _____________________________________________________________________________
+// The thread-count override for the rebuild's scans must be set on the
+// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
+// the permutation's shared reader, which is used by the query scans, must
+// never carry an override.
+TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
+  auto index = ad_utility::testing::makeTestIndex("lazyScanNumThreadsOverride",
+                                                  "<a> <b> <c> .");
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::PSO);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+
+  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
+    return permutation.lazyScanWithUnlimitedReader(
+        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
+        cancellationHandle, *state, numThreadsOverride);
+  };
+  auto [reader, scan] = scanWithOverride(3);
+  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
+  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
+  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
+  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
+
+  // Recomputing the statistics with the throttle set must give exactly the
+  // same result as with the default (0, which means "fall back to
+  // `lazy-index-scan-num-threads`"). This exercises the translation of the
+  // runtime parameter to the override at both of its use sites.
+  auto statsDefault = index.getImpl().recomputeStatistics(state);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
+  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
 }
