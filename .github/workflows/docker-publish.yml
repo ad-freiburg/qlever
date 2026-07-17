@@ -72,7 +72,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/digests/*
@@ -130,7 +130,7 @@ jobs:
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Download digests
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
