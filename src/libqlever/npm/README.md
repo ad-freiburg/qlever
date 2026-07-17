@@ -11,7 +11,7 @@ QLever uses threads, so index building and querying are blocking calls —
 run them inside a Web Worker (browser) or a worker thread (Node.js).
 
 ```js
-const factory = require("qlever"); // or importScripts("qlever.js") in a classic worker
+const factory = require("@ad-freiburg/qlever"); // or importScripts("qlever.js") in a classic worker
 
 const m = await factory();
 

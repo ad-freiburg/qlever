@@ -1,5 +1,5 @@
 {
-  "name": "qlever",
+  "name": "@ad-freiburg/qlever",
   "version": "0.0.0-dev",
   "description": "QLever SPARQL engine compiled to WebAssembly. Build RDF indexes and run SPARQL queries directly in the browser or using Node.js.",
   "main": "qlever.js",
