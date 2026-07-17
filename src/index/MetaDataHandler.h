@@ -24,9 +24,9 @@
 // permutation is small enough to be held completely in RAM. It is stored in a
 // separate file next to the permutation (see `META_FILE_SUFFIX`) via
 // `readFromFile` and `writeToFile`. For backwards compatibility, that file uses
-// the exact same on-disk layout that `ad_utility::MmapVector` uses: the array
-// of metadata objects, followed by an `ad_utility::MmapVectorMetaData` trailer
-// at the very end of the file.
+// the exact same on-disk layout that the (now removed) `ad_utility::MmapVector`
+// used: the array of metadata objects, followed by an
+// `ad_utility::MmapVectorMetaData` trailer at the very end of the file.
 class MetaDataWrapperDense {
  private:
   // The metadata objects, sorted by `col0Id_`.

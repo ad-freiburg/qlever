@@ -1918,12 +1918,11 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
         getPatternFilename(), idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
-      bool ignoreForPatterns = false;
       static_assert(NumColumnsIndexBuilding == 4,
                     "this place probably has to be changed when additional "
                     "payload columns are added");
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
-      patternCreator.processTriple(tripleArr, ignoreForPatterns);
+      patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
