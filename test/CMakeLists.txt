@@ -548,3 +548,6 @@ addLinkAndDiscoverTest(LogTest)
 addLinkAndDiscoverTest(QueryEventLogTest util)
 
 addLinkAndDiscoverTest(ResourceMonitorTest util)
+
+# Tests for the extensions under `src/extensions`.
+add_subdirectory(extensions)

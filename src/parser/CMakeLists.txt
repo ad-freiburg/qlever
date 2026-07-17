@@ -15,6 +15,7 @@ add_library(parser
         TripleComponent.cpp
         GraphPatternOperation.cpp
         MagicServiceQuery.cpp
+        SparqlFunctionRegistry.cpp
         NamedCachedResult.cpp
         PathQuery.cpp
         SpatialQuery.cpp

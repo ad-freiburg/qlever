@@ -45,6 +45,7 @@
 #include "parser/PathQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
+#include "parser/SparqlFunctionRegistry.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
@@ -52,6 +53,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
+#include "util/ParseException.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"
@@ -308,6 +310,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makePrefixMatchExpression);
     } else if (functionName == "simplifyGeometry") {
       return createBinary(&makeSimplifyGeometryExpression);
+    }
+  }
+
+  // Custom functions registered via `SparqlFunctionRegistry`.
+  if (auto factory = parsedQuery::SparqlFunctionRegistry::get().lookup(
+          iri.toStringRepresentation())) {
+    try {
+      return (*factory)(std::move(argList));
+    } catch (const parsedQuery::InvalidSparqlFunctionCall& e) {
+      reportError(ctx, e.what());
     }
   }
 

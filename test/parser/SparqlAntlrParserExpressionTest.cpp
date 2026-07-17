@@ -19,7 +19,9 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "parser/SparqlFunctionRegistry.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "util/ParseException.h"
 
 namespace {
 using namespace sparqlParserHelpers;
@@ -552,6 +554,68 @@ TEST(SparqlParser, FunctionCall) {
       absl::StrCat(prefixNexistepas, "nada>(?x)"),
       matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,
                                          ::testing::Eq(Id::makeUndefined()))));
+}
+
+// ______________________________________________________________________________
+// A custom function registered in the `SparqlFunctionRegistry`.
+TEST(SparqlParser, customFunctionRegistry) {
+  using namespace sparqlExpression;
+  using namespace m::builtInCall;
+  auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
+  auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
+
+  const std::string funcIri = "<http://example.org/qlever-test/f>";
+  parsedQuery::SparqlFunctionRegistry::get().addExact(
+      funcIri,
+      [](parsedQuery::SparqlFunctionRegistry::ArgList args)
+          -> parsedQuery::SparqlFunctionRegistry::ExpressionPtr {
+        if (args.size() != 1) {
+          throw parsedQuery::InvalidSparqlFunctionCall{
+              "f() takes exactly one argument"};
+        }
+        return std::make_unique<IdExpression>(IntId(42));
+      });
+
+  expectFunctionCall(absl::StrCat(funcIri, "(?x)"),
+                     matchPtr<IdExpression>(AD_PROPERTY(
+                         IdExpression, value, ::testing::Eq(IntId(42)))));
+  // `InvalidSparqlFunctionCall` becomes a query error (400).
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      parse<&Parser::functionCall>(absl::StrCat(funcIri, "(?x, ?y)")),
+      ::testing::HasSubstr("f() takes exactly one argument"),
+      InvalidSparqlQueryException);
+
+  // Any other exception propagates (500).
+  const std::string boomIri = "<http://example.org/qlever-test/boom>";
+  parsedQuery::SparqlFunctionRegistry::get().addExact(
+      boomIri,
+      [](parsedQuery::SparqlFunctionRegistry::ArgList)
+          -> parsedQuery::SparqlFunctionRegistry::ExpressionPtr {
+        throw std::runtime_error{"internal boom"};
+      });
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      parse<&Parser::functionCall>(absl::StrCat(boomIri, "(?x)")),
+      ::testing::HasSubstr("internal boom"), std::runtime_error);
+
+  // An unregistered IRI is still an unknown function.
+  expectFunctionCallFails("<http://example.org/qlever-test/unregistered>(?x)");
+}
+
+// ______________________________________________________________________________
+// Malformed or duplicate registrations are rejected with a diagnostic.
+TEST(SparqlParser, customFunctionRegistryRejectsBadRegistrations) {
+  auto& registry = parsedQuery::SparqlFunctionRegistry::get();
+  auto noop = [](parsedQuery::SparqlFunctionRegistry::ArgList)
+      -> parsedQuery::SparqlFunctionRegistry::ExpressionPtr { return nullptr; };
+  // A non-bracketed IRI could never match the parser's IRIs.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      registry.addExact("http://example.org/qlever-test/unbracketed", noop),
+      ::testing::HasSubstr("bracketed IRI"));
+  // A duplicate IRI is rejected.
+  const std::string iri = "<http://example.org/qlever-test/dup>";
+  registry.addExact(iri, noop);
+  AD_EXPECT_THROW_WITH_MESSAGE(registry.addExact(iri, noop),
+                               ::testing::HasSubstr("already registered"));
 }
 
 // ______________________________________________________________________________

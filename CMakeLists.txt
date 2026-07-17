@@ -585,6 +585,9 @@ add_subdirectory(src/util)
 add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(src/libqlever)
+# Compile-time extensions; before the binaries so their object libraries can be
+# linked into them below.
+add_subdirectory(src/extensions)
 
 ##################################################
 # Precompiled headers
@@ -685,6 +688,26 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
         RUNTIME DESTINATION bin
     )
 endif()
+
+# Aggregate the auto-detected extension object libraries into one interface
+# target. Linking it adds the objects directly to the consumer (not via an
+# archive), so their self-registrations survive the link. Any target that parses
+# queries must link it -- the query-parsing binaries below, and out-of-tree
+# embedders of the `qlever` library likewise (otherwise custom functions are
+# absent).
+get_property(extensionObjLibs GLOBAL PROPERTY QLEVER_EXTENSION_OBJLIBS)
+add_library(qleverExtensions INTERFACE)
+foreach (objLib ${extensionObjLibs})
+    # The object files, plus the library's own link dependencies and usage
+    # requirements (so an extension that pulls in extra libraries still links).
+    target_link_libraries(qleverExtensions INTERFACE
+            ${objLib} $<TARGET_OBJECTS:${objLib}>)
+endforeach ()
+foreach (target qlever-server qlever-index LibQLeverExample)
+    if (TARGET ${target})
+        target_link_libraries(${target} qleverExtensions)
+    endif ()
+endforeach ()
 
 ###############################################################
 # CPack packaging
