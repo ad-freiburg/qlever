@@ -40,6 +40,20 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          # The tag rules are shared with the `docker-merge` job via this YAML
+          # anchor, so both jobs derive the same `org.opencontainers.image.version`
+          # for the per-arch labels and the multi-arch index annotations.
+          tags: &image_tags |
+            # `type=semver` only runs for pushed tags.
+            type=semver,pattern={{version}}         # short for {{major}}.{{minor}}.{{patch}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            # For pushes to the primary branch, use the normal tags.
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable={{is_default_branch}}
+            type=sha,prefix=commit-,enable={{is_default_branch}}
+            # For pull requests, derive a version from the PR number.
+            type=ref,event=pr
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
@@ -115,15 +129,9 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
         with:
           images: ${{ env.IMAGE }}
-          tags: |
-            # `type=semver` only runs for pushed tags.
-            type=semver,pattern={{version}}         # short for {{major}}.{{minor}}.{{patch}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
-            # For pushes to the primary branch, use the normal tags.
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable={{is_default_branch}}
-            type=sha,prefix=commit-,enable={{is_default_branch}}
+          # Reuse the tag rules defined in the `build` job (the `image_tags`
+          # anchor) so the version is identical in the labels and annotations.
+          tags: *image_tags
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - name: Login to Docker Hub
