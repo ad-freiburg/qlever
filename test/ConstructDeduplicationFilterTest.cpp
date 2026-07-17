@@ -204,14 +204,14 @@ TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // suppressed by the ground seed
 }
 
-// A tiny memory threshold forces the filter to drop all dedup state once its
-// internal vocab grows past it, which makes deduplication approximate: the same
-// local-vocab triple is reported "new" again after the reset (rather than a
-// duplicate). Contrast with `dedupAcrossBlocksGlobal`, which uses the default
-// (large) threshold and deduplicates.
-TEST(ConstructDeduplicationFilter, resetsWhenVocabExceedsThreshold) {
+// In `batchWise` mode a tiny memory threshold forces the filter to drop all
+// dedup state once its internal vocab grows past it, which makes deduplication
+// approximate: the same local-vocab triple is reported "new" again after the
+// reset (rather than a duplicate). Contrast with `dedupAcrossBlocksBatchWise`,
+// which uses the default (large) threshold and deduplicates.
+TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec,
+  ConstructDeduplicationState state{DeduplicationMode::batchWise(10), *qec,
                                     ad_utility::MemorySize::bytes(1)};
   auto tmpl = singleTripleTemplate();
 
@@ -223,6 +223,25 @@ TEST(ConstructDeduplicationFilter, resetsWhenVocabExceedsThreshold) {
   // The 1-byte threshold was exceeded, so the next call resets the dedup state
   // and the identical triple is treated as new again.
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));
+}
+
+// `global` dedup is exact, so it must not silently reset on memory pressure:
+// once its internal vocab exceeds the threshold it fails loudly instead (the
+// user is told to shrink the result, raise the limit, or switch modes).
+TEST(ConstructDeduplicationFilter, globalThrowsWhenVocabExceedsThreshold) {
+  auto qec = getQec("<s> <p> <o>");
+  ConstructDeduplicationState state{DeduplicationMode::global(), *qec,
+                                    ad_utility::MemorySize::bytes(1)};
+  auto tmpl = singleTripleTemplate();
+
+  LocalVocab v;
+  auto t = singleIdTable(lvId(v, "x", *qec));
+  BatchEvaluationContext c{t.asStaticView<0>(), 0, 1};
+
+  EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
+  // The 1-byte threshold was exceeded; the next call must throw rather than
+  // drop dedup state (which would break `global`'s exactness guarantee).
+  EXPECT_ANY_THROW(state.isNew(0, 0, tmpl, c));
 }
 
 // `PerTripleFilter` must never be constructed for `none`: the caller creates no

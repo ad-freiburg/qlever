@@ -66,29 +66,22 @@ class PerTripleFilter {
 
   Filter filter_;
 
-  // Builds the dedup structure for `mode`: a bounded LRU cache for `BatchWise`
-  // (capacity = batch size) and an unbounded hash set for `Global`. `None` is a
-  // precondition violation here; the caller must not construct a filter for it.
+  // Builds the dedup structure for `mode`: an unbounded hash set for `Global`
+  // and a bounded LRU cache for `BatchWise` (capacity = batch size).
+  //
+  // Precondition: `mode` is not `None`. `None` means "no deduplication", so the
+  // caller (`ConstructDeduplicationState`) must not construct a filter for it.
+  // This invariant is asserted here rather than handled, to keep it explicit.
   static Filter makeFilter(const DeduplicationMode& mode,
                            const QueryExecutionContext& queryExecutionContext) {
     AD_CONTRACT_CHECK(
         !std::holds_alternative<DeduplicationMode::None>(mode.value_));
-    return std::visit(OverloadCallOperator{
-                          [](const DeduplicationMode::None&) -> Filter {
-                            // `None` is handled by the caller (no filter is
-                            // created), so it must never reach
-                            // `PerTripleFilter`.
-                            AD_FAIL();
-                          },
-                          [&queryExecutionContext](
-                              const DeduplicationMode::Global&) -> Filter {
-                            return HashSetWithMemoryLimit<DeduplicationKey>{
-                                queryExecutionContext.getAllocator()};
-                          },
-                          [](const DeduplicationMode::BatchWise& bw) -> Filter {
-                            return LruDeduplicationCache{bw.batchSize_};
-                          }},
-                      mode.value_);
+    if (std::holds_alternative<DeduplicationMode::Global>(mode.value_)) {
+      return HashSetWithMemoryLimit<DeduplicationKey>{
+          queryExecutionContext.getAllocator()};
+    }
+    const auto& bw = std::get<DeduplicationMode::BatchWise>(mode.value_);
+    return LruDeduplicationCache{bw.batchSize_};
   }
 };
 
@@ -116,8 +109,14 @@ class ConstructDeduplicationState {
       : mode_{mode},
         queryExecutionContext_{queryExecutionContext},
         maxDedupVocabBytes_{computeMaxDedupVocabBytes(queryExecutionContext,
-                                                      maxDedupVocabSize)},
-        filter_{makeFilter(mode, queryExecutionContext)} {}
+                                                      maxDedupVocabSize)} {
+    // Only the deduplicating modes get a filter. `None` leaves `filter_` empty
+    // (the dedup path is never entered); constructing a `PerTripleFilter` for
+    // it is a precondition violation (see `PerTripleFilter::makeFilter`).
+    if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
+      filter_.emplace(mode, queryExecutionContext);
+    }
+  }
 
   // Constructs the deduplication key for the instantiation of `triple` at
   // `absoluteRow`: the `ValueId` at each of the three positions (subject,
@@ -203,15 +202,6 @@ class ConstructDeduplicationState {
         .getBytes();
   }
 
-  static std::optional<PerTripleFilter> makeFilter(
-      const DeduplicationMode& mode,
-      const QueryExecutionContext& queryExecutionContext) {
-    if (std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
-      return std::nullopt;
-    }
-    return PerTripleFilter{mode, queryExecutionContext};
-  }
-
   // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so stored keys never
   // point into a freed block `LocalVocab`, and equal terms from different
   // blocks collapse.
@@ -227,11 +217,13 @@ class ConstructDeduplicationState {
   }
 
   // Bound `dedupVocab_`s memory: once the accumulated string bytes reach the
-  // threshold, drop all dedup state and start fresh. The filter's keys
-  // reference `dedupVocab_`, so both are reset together.
+  // threshold, either fail (`Global`, which must stay exact) or drop all dedup
+  // state and start fresh (`BatchWise`). The filter's keys reference
+  // `dedupVocab_`, so both are reset together.
   //
-  // NOTE: This makes deduplication approximate (triples seen before a reset
-  // may be emitted again).
+  // NOTE: The `BatchWise` reset makes deduplication approximate (triples seen
+  // before a reset may be emitted again). `Global` is exact, so it fails
+  // instead. `None` never reaches here (`isNew` asserts a filter exists).
   void resetIfVocabTooLarge() {
     if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
     if (std::holds_alternative<DeduplicationMode::Global>(mode_.value_)) {
@@ -242,7 +234,8 @@ class ConstructDeduplicationState {
           "switch `construct-deduplication` to a `batchwise:<N>` mode (bounded "
           "memory, approximate) or `none` (no deduplication).");
     }
-    filter_ = makeFilter(mode_, queryExecutionContext_);
+    // Only `BatchWise` reaches here, so rebuilding a filter is always valid.
+    filter_.emplace(mode_, queryExecutionContext_);
     dedupVocab_ = LocalVocab();
     dedupVocabBytes_ = 0;
   }
