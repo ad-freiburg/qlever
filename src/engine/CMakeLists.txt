@@ -38,6 +38,13 @@ if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(engine http)
 endif()
 
-add_library(server Server.cpp)
-qlever_target_link_libraries(server engine qlever_util index parser global http
-SortPerformanceEstimator qlever metrics)
+# Don't build the `server` library at all when the server (and the tests
+# linking it) are disabled for Emscripten: compiling `Server.cpp` crashes
+# emsdk 6.0.2's clang in the `WebAssemblyLateEHPrepare` backend pass (the
+# boost::beast HTTP session coroutine produces irreducible control flow
+# containing EH pads — the same LLVM bug that disables `HttpTest`).
+if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+    add_library(server Server.cpp)
+    qlever_target_link_libraries(server engine qlever_util index parser global http
+    SortPerformanceEstimator qlever metrics)
+endif ()
