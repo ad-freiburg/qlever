@@ -258,10 +258,15 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // the way `QueryExecutionTree::getJoinColumns` expects, so that
     // `ExistsJoin`'s constructor does not have to add an extra `Sort`.
     pq._isInternalSort = IsInternalSort::True;
+    // The `EXISTS` joins on the selected variables of its argument (which may
+    // be a strict subset of the visible variables, e.g. inside a `GROUP BY`,
+    // where they are restricted to the grouped variables). We hence sort on and
+    // expose exactly those variables (see also
+    // `setSelectedVariablesForSubquery` below).
+    const auto& joinVariables = pq.selectClause().getSelectedVariables();
     pq._orderBy = subtree->getVariableColumns() | ql::views::keys |
-                  ql::views::filter([&visibleVars = pq.getVisibleVariables()](
-                                        const Variable& variable) {
-                    return ad_utility::contains(visibleVars, variable);
+                  ql::views::filter([&joinVariables](const Variable& variable) {
+                    return ad_utility::contains(joinVariables, variable);
                   }) |
                   ql::views::transform([](const Variable& variable) {
                     return VariableOrderKey{variable};
@@ -276,13 +281,14 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                      });
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
-    // Hide non-visible variables in the subtree, so that they are not
-    // accidentally joined, ideally collisions wouldn't happen in the first
+    // Hide all but the selected variables in the subtree, so that they are not
+    // accidentally joined. Ideally collisions wouldn't happen in the first
     // place, but since we're creating our own instance of `QueryPlanner` we
     // can't prevent them without refactoring the code. This workaround has the
-    // downside that it might look confusing
-    tree->getRootOperation()->setSelectedVariablesForSubquery(
-        pq.getVisibleVariables());
+    // downside that it might look confusing. This is also used to "mask"
+    // non-grouped variables from joining in an EXISTS clause within a GROUP BY
+    // operation.
+    tree->getRootOperation()->setSelectedVariablesForSubquery(joinVariables);
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }
