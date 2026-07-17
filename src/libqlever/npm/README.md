@@ -1,17 +1,18 @@
 # QLever.js
 
-[QLever](https://github.com/ad-freiburg/qlever) is a fast SPARQL engine for
-knowledge graphs. This package contains QLever compiled to WebAssembly
-(via Emscripten), so you can build RDF indexes and run SPARQL queries
-directly in the browser or in Node.js, no server required.
+[QLever](https://github.com/ad-freiburg/qlever) is a fast SPARQL engine for knowledge graphs. This package contains
+QLever compiled to WebAssembly (via Emscripten), so you can build RDF indexes and run SPARQL queries directly in the
+browser or in Node.js, no server required.
 
 ## Usage
 
-QLever uses threads, so index building and querying are blocking calls —
-run them inside a Web Worker (browser) or a worker thread (Node.js).
+QLever uses threads, so index building and querying are blocking calls. Run them inside a Web Worker (browser) or a
+worker thread (Node.js).
+
+The package is an ES module; its default export is the module factory.
 
 ```js
-const factory = require("@ad-freiburg/qlever"); // or importScripts("qlever.js") in a classic worker
+import factory from "@ad-freiburg/qlever";
 
 const m = await factory();
 
@@ -38,11 +39,11 @@ console.log(JSON.parse(result));
 
 ## Browser deployment notes
 
-- QLever uses pthreads and therefore `SharedArrayBuffer`. The page that
-  loads the module must
-  be [cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/API/Window/crossOriginIsolated),
-  i.e. served with the headers `Cross-Origin-Opener-Policy: same-origin` and
+- QLever uses pthreads and therefore `SharedArrayBuffer`. The page that loads the module must
+  be [cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/API/Window/crossOriginIsolated), i.e. served
+  with the headers `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp`.
-- Serve `qlever.wasm` next to `qlever.js` (or point the `locateFile` module
-  option at its location) so the loader can fetch it.
+- Ship `qlever.wasm` alongside `qlever.mjs`. The loader resolves it relative to the module's own URL
+  (`import.meta.url`), which bundlers like Vite and webpack handle automatically; point the `locateFile` module option
+  at its location only if you deviate from that layout.
 - The module is built for wasm64, which requires a recent browser (or Node.js ≥ 24).

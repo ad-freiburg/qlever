@@ -126,7 +126,7 @@ jobs:
       - name: Assemble npm package
         working-directory: src/libqlever/npm
         run: |
-          cp ../../../build/src/libqlever/qlever.js ../../../build/src/libqlever/qlever.wasm ../../../build/src/libqlever/qlever.d.ts .
+          cp ../../../build/src/libqlever/qlever.mjs ../../../build/src/libqlever/qlever.wasm ../../../build/src/libqlever/qlever.d.ts .
           # For a release tag `vX.Y.Z` the package version is `X.Y.Z`. All
           # other builds get a prerelease of the NEXT patch version, derived
           # from the most recent release tag, e.g. `0.5.51-dev.17.g473fd17`
