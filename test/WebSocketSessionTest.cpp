@@ -87,7 +87,12 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 // _____________________________________________________________________________
 
 struct WebSocketTestContainer {
-  net::strand<net::any_io_executor> strand_;
+  // Note: this strand has to be created directly from the
+  // `io_context::executor_type` because creating it from `any_io_executor`
+  // causes a race in `runTest`. There `strand_` is wrapped into
+  // `any_io_executor` and copies are destroyed concurrently across
+  // threads.
+  net::strand<net::io_context::executor_type> strand_;
   std::unique_ptr<QueryHub> queryHub_;
   QueryRegistry registry_;
   tcp::socket server_;
@@ -108,11 +113,11 @@ struct WebSocketTestContainer {
 };
 
 net::awaitable<WebSocketTestContainer> createTestContainer(
-    net::any_io_executor& ioExecutor) {
-  auto strand = net::make_strand(ioExecutor);
+    net::io_context& ioContext) {
+  auto strand = net::make_strand(ioContext);
   WebSocketTestContainer container{
-      strand, std::make_unique<QueryHub>(ioExecutor), QueryRegistry{},
-      tcp::socket{strand}, tcp::socket{strand}};
+      strand, std::make_unique<QueryHub>(ioContext.get_executor()),
+      QueryRegistry{}, tcp::socket{strand}, tcp::socket{strand}};
   co_await connect(container.server_, container.client_);
   co_return std::move(container);
 }
@@ -123,8 +128,7 @@ net::awaitable<WebSocketTestContainer> createTestContainer(
 #define return co_return
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto distributor = c.queryHub().createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
@@ -153,8 +157,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
     boost::beast::websocket::stream<tcp::socket> webSocket{
@@ -173,8 +176,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto distributor = c.queryHub().createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
@@ -205,8 +207,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
   ASSERT_TRUE(queryId.has_value());
@@ -285,14 +286,13 @@ ASYNC_TEST(WebSocketSession, verifyWrongExecutorConfigThrows) {
     co_await (serverLogicTestWrapper() && clientLogic());
   };
 
-  net::any_io_executor executor = ioContext.get_executor();
   {
-    auto c = co_await createTestContainer(executor);
+    auto c = co_await createTestContainer(ioContext);
     co_await runTestWithDummyClient(c, c.serverLogic());
   }
   auto otherStrand = net::make_strand(ioContext);
   {
-    auto c = co_await createTestContainer(executor);
+    auto c = co_await createTestContainer(ioContext);
     co_await runTestWithDummyClient(
         c, net::co_spawn(c.strand_,
                          c.serverLogic(net::bind_executor(otherStrand,
@@ -300,7 +300,7 @@ ASYNC_TEST(WebSocketSession, verifyWrongExecutorConfigThrows) {
                          net::use_awaitable));
   }
   {
-    auto c = co_await createTestContainer(executor);
+    auto c = co_await createTestContainer(ioContext);
     co_await runTestWithDummyClient(
         c, net::co_spawn(otherStrand, c.serverLogic(), net::use_awaitable));
   }
@@ -309,8 +309,7 @@ ASYNC_TEST(WebSocketSession, verifyWrongExecutorConfigThrows) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
   ASSERT_TRUE(queryId.has_value());
@@ -376,8 +375,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
   ASSERT_TRUE(queryId.has_value());
@@ -404,8 +402,7 @@ ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(WebSocketSession, verifyCancelStringDoesNotThrowWithoutHandle) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
     boost::beast::websocket::stream<tcp::socket> webSocket{
@@ -427,8 +424,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringDoesNotThrowWithoutHandle) {
 
 ASYNC_TEST(WebSocketSession,
            verifyCancelOnCloseStringDoesNotThrowWithoutHandle) {
-  net::any_io_executor executor = ioContext.get_executor();
-  auto c = co_await createTestContainer(executor);
+  auto c = co_await createTestContainer(ioContext);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
     try {
