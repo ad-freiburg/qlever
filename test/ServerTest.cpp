@@ -211,8 +211,8 @@ TEST(ServerTest, createMessageSender) {
   {
     // Set a dummy query hub.
     boost::asio::io_context io_context;
-    boost::asio::any_io_executor executor = io_context.get_executor();
-    auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(executor);
+    auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
+        io_context.get_executor());
     server.queryHub_ = queryHub;
     // MessageSenders are created normally.
     server.createMessageSender(server.queryHub_, req,
