@@ -13,6 +13,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
+// _____________________________________________________________________________
 TEST(TransparentFunctors, FirstOfPair) {
   std::pair<std::string, std::vector<int>> pair{"hello", {2}};
   auto first = ad_utility::first(pair);
@@ -24,6 +25,7 @@ TEST(TransparentFunctors, FirstOfPair) {
   ASSERT_TRUE(pair.first.empty());
 }
 
+// _____________________________________________________________________________
 TEST(TransparentFunctors, SecondOfPair) {
   std::pair<std::string, std::vector<int>> pair{"hello", {2}};
   auto second = ad_utility::second(pair);
@@ -35,6 +37,7 @@ TEST(TransparentFunctors, SecondOfPair) {
   ASSERT_TRUE(pair.second.empty());
 }
 
+// _____________________________________________________________________________
 TEST(TransparentFunctors, MemberProjection) {
   using Pair = std::pair<int, std::string>;
   ad_utility::MemberProjection<&Pair::first> first;
@@ -66,6 +69,55 @@ TEST(TransparentFunctors, MemberProjection) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(TransparentFunctors, Dereference) {
+  {
+    std::string s = "hello";
+    std::string* ptr = &s;
+    EXPECT_EQ(ad_utility::dereference(ptr), "hello");
+    ad_utility::dereference(ptr) = "world";
+    EXPECT_EQ(s, "world");
+  }
+  {
+    std::vector<std::string> s{"foo", "bar", "baz"};
+    std::vector<std::string*> pointers{&s[0], &s[1], &s[2]};
+    auto values = pointers | ql::views::transform(ad_utility::dereference) |
+                  ::ranges::to<std::vector>();
+    EXPECT_THAT(values, testing::ElementsAre("foo", "bar", "baz"));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(TransparentFunctors, ToBool) {
+  EXPECT_TRUE(ad_utility::toBool(1));
+  EXPECT_FALSE(ad_utility::toBool(0));
+
+  std::optional<int> sth = 42;
+  std::optional<int> null = std::nullopt;
+  EXPECT_TRUE(ad_utility::toBool(sth));
+  EXPECT_FALSE(ad_utility::toBool(null));
+
+  std::vector<int> values{0, 1, 2, 0, 3};
+  auto truthy = values | ql::views::filter(ad_utility::toBool) |
+                ::ranges::to<std::vector>();
+  EXPECT_THAT(truthy, testing::ElementsAre(1, 2, 3));
+}
+
+// _____________________________________________________________________________
+TEST(TransparentFunctors, AddressOf) {
+  {
+    std::string s = "hello";
+    EXPECT_EQ(ad_utility::addressOf(s), &s);
+  }
+  {
+    std::vector<std::string> s{"foo", "bar", "baz"};
+    auto pointers = s | ql::views::transform(ad_utility::addressOf) |
+                    ::ranges::to<std::vector>();
+    EXPECT_THAT(pointers, testing::ElementsAre(&s[0], &s[1], &s[2]));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(TransparentFunctors, OptionalHandling) {
   {
     std::optional<std::string> null = std::nullopt;

@@ -404,8 +404,8 @@ void ParsedQuery::checkUsedVariablesAreVisible(
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
     std::string_view otherPossibleLocationDescription) {
   // Note: We pass `excludeExists = true`, because the variables that occur only
-  // inside the body of an `EXISTS` live in their own scope and thus need not be
-  // bound by the surrounding query.
+  // inside the body of an `EXISTS` live in their own scope and thus are not
+  // visible in the surrounding query.
   for (const auto* var : expression.containedVariables(true)) {
     checkVariableIsVisible(*var,
                            locationDescription + " in expression \"" +
