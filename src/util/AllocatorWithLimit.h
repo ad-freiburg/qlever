@@ -9,8 +9,10 @@
 #include <absl/strings/str_cat.h>
 
 #include <memory>
+#include <optional>
 
 #include "backports/functional.h"
+#include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 
@@ -278,6 +280,97 @@ template <typename T>
 AllocatorWithLimit<T> makeUnlimitedAllocator() {
   return makeAllocatorWithLimit<T>(MemorySize::max());
 }
+
+// A coarse-grained (chunked) reservation of memory from the shared memory pool
+// of an `AllocatorWithLimit`. It is meant for data structures that consist of
+// very many small objects (like the `LocalVocab`, which stores many small
+// strings): instead of accounting each small object against the shared,
+// spinlock-guarded counter (which becomes a massive contention point when the
+// pool is shared by many threads), the reservation grabs memory from the pool
+// in large chunks (see `chunkSize_`). The shared counter is thus only touched
+// once per chunk, while the exact byte count is tracked locally without any
+// synchronization. On destruction, all reserved memory is returned to the pool.
+//
+// NOTE: This is a "soft" limit: the actually used memory may exceed the limit
+// by up to `chunkSize_` before an exception is thrown, which is acceptable for
+// enforcing a memory limit on query processing.
+class MemoryLimitReservation {
+ public:
+  // The granularity in which memory is reserved from (and returned to) the
+  // shared pool.
+  static constexpr MemorySize chunkSize_ = MemorySize::megabytes(1);
+
+ private:
+  // Handle to the shared pool. This is `nullopt` for a moved-from reservation.
+  std::optional<detail::AllocationMemoryLeftThreadsafe> memoryLeft_;
+  // The number of bytes currently reserved from the pool.
+  MemorySize reserved_{};
+  // The number of bytes that have actually been accounted as used. The
+  // invariant `used_ <= reserved_` holds at all times.
+  MemorySize used_{};
+
+ public:
+  // Create a reservation that draws from the pool of the given allocator.
+  template <typename T>
+  explicit MemoryLimitReservation(const AllocatorWithLimit<T>& allocator)
+      : memoryLeft_{allocator.getMemoryLeft()} {}
+
+  // Move operations transfer the reservation and leave the moved-from object
+  // empty, so that it does not return any memory to the pool on destruction.
+  MemoryLimitReservation(MemoryLimitReservation&& other) noexcept
+      : memoryLeft_{std::move(other.memoryLeft_)},
+        reserved_{other.reserved_},
+        used_{other.used_} {
+    other.memoryLeft_.reset();
+    other.reserved_ = MemorySize{};
+    other.used_ = MemorySize{};
+  }
+  MemoryLimitReservation& operator=(MemoryLimitReservation&& other) noexcept {
+    std::swap(memoryLeft_, other.memoryLeft_);
+    std::swap(reserved_, other.reserved_);
+    std::swap(used_, other.used_);
+    return *this;
+  }
+
+  // The reservation is not copyable.
+  MemoryLimitReservation(const MemoryLimitReservation&) = delete;
+  MemoryLimitReservation& operator=(const MemoryLimitReservation&) = delete;
+
+  // Return all reserved memory to the shared pool.
+  ~MemoryLimitReservation() { returnReservedMemory(); }
+
+  // Account for `additionalMemory` more used bytes. If this would exceed the
+  // currently reserved amount, reserve one or more additional chunks from the
+  // shared pool. Throw an `AllocationExceedsLimitException` if the limit of the
+  // pool is exceeded.
+  void account(MemorySize additionalMemory) {
+    AD_CORRECTNESS_CHECK(memoryLeft_.has_value());
+    MemorySize newUsed = used_ + additionalMemory;
+    if (newUsed > reserved_) {
+      // Round the missing amount up to a multiple of `chunkSize_`.
+      MemorySize missing = newUsed - reserved_;
+      size_t numChunks = (missing.getBytes() + chunkSize_.getBytes() - 1) /
+                         chunkSize_.getBytes();
+      MemorySize toReserve = chunkSize_ * numChunks;
+      memoryLeft_.value().ptr()->wlock()->decrease_if_enough_left_or_throw(
+          toReserve);
+      reserved_ += toReserve;
+    }
+    used_ = newUsed;
+  }
+
+  // The number of bytes currently reserved from the pool (for testing).
+  MemorySize reservedForTesting() const { return reserved_; }
+
+ private:
+  // Return all reserved memory to the shared pool and reset the reservation.
+  void returnReservedMemory() {
+    if (memoryLeft_.has_value() && reserved_ != MemorySize{}) {
+      memoryLeft_.value().ptr()->wlock()->increase(reserved_);
+      reserved_ = MemorySize{};
+    }
+  }
+};
 
 }  // namespace ad_utility
 

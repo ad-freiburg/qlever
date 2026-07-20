@@ -31,7 +31,9 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/IndexTestHelpers.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
@@ -666,4 +668,74 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       vocab.reserveBlankNodeBlocksFromExplicitIndices(indices, &bnm),
       ::testing::HasSubstr("Assertion"));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, reservesMemoryInChunksAndReleasesOnDestruction) {
+  using namespace ad_utility::memory_literals;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& context = qec->getLocalVocabContext();
+  auto allocator = ad_utility::makeAllocatorWithLimit<char>(100_MB);
+  auto memoryWhenEmpty = allocator.amountMemoryLeft();
+  {
+    LocalVocab vocab{allocator};
+    // An empty `LocalVocab` does not reserve any memory.
+    EXPECT_EQ(allocator.amountMemoryLeft(), memoryWhenEmpty);
+
+    // Adding a single (short) word reserves exactly one chunk from the pool.
+    vocab.getIndexAndAddIfNotContained(
+        getTestCollectionOfWords(1, context).at(0));
+    EXPECT_EQ(allocator.amountMemoryLeft(),
+              memoryWhenEmpty - ad_utility::MemoryLimitReservation::chunkSize_);
+  }
+  // Destroying the `LocalVocab` returns all reserved memory to the pool.
+  EXPECT_EQ(allocator.amountMemoryLeft(), memoryWhenEmpty);
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, respectsMemoryLimit) {
+  using namespace ad_utility::memory_literals;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& context = qec->getLocalVocabContext();
+  // A small memory pool. Inserting sufficiently many distinct words must
+  // eventually exceed it and throw.
+  auto allocator = ad_utility::makeAllocatorWithLimit<char>(2_MB);
+  auto memoryWhenEmpty = allocator.amountMemoryLeft();
+  {
+    LocalVocab vocab{allocator};
+    auto words = getTestCollectionOfWords(200'000, context);
+    auto insertAll = [&vocab, &words]() {
+      for (auto& word : words) {
+        vocab.getIndexAndAddIfNotContained(word);
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(insertAll(),
+                                 ::testing::HasSubstr("Tried to allocate"));
+  }
+  // Even after the limit was exceeded, destroying the `LocalVocab` returns all
+  // reserved memory to the pool.
+  EXPECT_EQ(allocator.amountMemoryLeft(), memoryWhenEmpty);
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, clonedVocabDrawsFromTheSamePool) {
+  using namespace ad_utility::memory_literals;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& context = qec->getLocalVocabContext();
+  auto allocator = ad_utility::makeAllocatorWithLimit<char>(2_MB);
+  LocalVocab vocab{allocator};
+  vocab.getIndexAndAddIfNotContained(
+      getTestCollectionOfWords(1, context).at(0));
+  // The clone shares the (read-only) word set of the original and hence does
+  // not reserve additional memory, but writing to its own (empty) primary set
+  // is still accounted against the same limited pool.
+  LocalVocab clone = vocab.clone();
+  auto words = getTestCollectionOfWords(200'000, context);
+  auto insertAll = [&clone, &words]() {
+    for (auto& word : words) {
+      clone.getIndexAndAddIfNotContained(word);
+    }
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(insertAll(),
+                               ::testing::HasSubstr("Tried to allocate"));
 }

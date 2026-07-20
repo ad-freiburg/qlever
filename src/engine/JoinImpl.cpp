@@ -720,7 +720,7 @@ Result JoinImpl::computeResultForTwoMaterializedInputs(
 // _____________________________________________________________________________
 Result JoinImpl::createEmptyResult() const {
   return {IdTable{getResultWidth(), allocator()}, resultSortedOn(),
-          LocalVocab{}};
+          LocalVocab::unlimited()};
 }
 
 // _____________________________________________________________________________

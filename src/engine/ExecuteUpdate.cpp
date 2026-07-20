@@ -20,9 +20,9 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   tracer.beginTrace("evaluateWhere");
   auto result = qet.getResult(false);
   tracer.endTrace("evaluateWhere");
-  auto [toInsert, toDelete] =
-      computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
-                              cancellationHandle, metadata, tracer);
+  auto [toInsert, toDelete] = computeGraphUpdateQuads(
+      index, query, *result, qet.getVariableColumns(), cancellationHandle,
+      metadata, qet.getQec()->getAllocator(), tracer);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
@@ -53,7 +53,8 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
     const IndexImpl& index, const VariableToColumnMap& variableColumns,
-    const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+    const std::vector<SparqlTripleSimpleWithGraph>& triples,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) {
   const auto& encodedIriManager = index.encodedIriManager();
   // We collect all `TripleComponent`s from `triples` in a hash set.
   ad_utility::HashSet<TripleComponent> lookupItems;
@@ -112,7 +113,7 @@ ExecuteUpdate::transformTriplesTemplate(
   // NOTE: Not necessarily all of these will be added to the `LocalVocab` of
   // the `DeltaTriple`. For example, with `<a> <b> ?c` in an `INSERT` template,
   // `<a>` and `<b>` would not become part of it if `?c` has no solutions.
-  LocalVocab localVocab{};
+  LocalVocab localVocab{allocator};
 
   // Lookup the `TripleComponent`s in sorted order.
   //
@@ -224,6 +225,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
     ad_utility::timer::TimeTracer& tracer) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   const auto& updateClause = query.updateClause();
@@ -233,10 +235,11 @@ ExecuteUpdate::computeGraphUpdateQuads(
   tracer.beginTrace("computeIds");
 
   auto prepareTemplateAndResultContainer =
-      [&index, &variableColumns, &result](
+      [&index, &variableColumns, &result, &allocator](
           const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(index, variableColumns, tripleTemplates);
+            transformTriplesTemplate(index, variableColumns, tripleTemplates,
+                                     allocator);
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with

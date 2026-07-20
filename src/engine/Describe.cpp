@@ -166,7 +166,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
-      std::vector<ColumnIndex>{}, LocalVocab{},
+      std::vector<ColumnIndex>{}, LocalVocab::unlimited(),
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
@@ -235,7 +235,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
 
 // _____________________________________________________________________________
 Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
-  LocalVocab localVocab;
+  LocalVocab localVocab{getExecutionContext()->getAllocator()};
   // Compute the results of the WHERE clause and extract the `Id`s to describe.
   //
   // TODO<joka921> Would we benefit from computing `resultOfWhereClause` lazily?
