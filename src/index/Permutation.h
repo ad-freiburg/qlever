@@ -83,7 +83,7 @@ class Permutation {
   // files of an internal permutation, pass the base name with the
   // `QLEVER_INTERNAL_INDEX_INFIX` already appended.
   static std::vector<std::string> fileNames(Enum permutation,
-                                            const std::string& onDiskBase);
+                                            std::string_view onDiskBase);
 
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
