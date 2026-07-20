@@ -7,10 +7,12 @@
 #include "index/TextIndexBuilder.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 
 #include <charconv>
 
 #include "backports/filesystem.h"
+#include "global/Constants.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
@@ -22,7 +24,7 @@ void TextIndexBuilder::buildTextIndexFile(
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   AD_LOG_INFO << std::endl;
   AD_LOG_INFO << "Adding text index ..." << std::endl;
-  std::string indexFilename = onDiskBase_ + ".text.index";
+  std::string indexFilename = absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX);
   bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
   const auto& [wordsFile, docsFile] =
       !addFromWordAndDocsFile ? std::pair{"", ""} : wordsAndDocsFile.value();
@@ -84,7 +86,8 @@ size_t TextIndexBuilder::processWordsForVocabulary(
       distinctWords.insert(line.word_);
     }
   }
-  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
+  textVocab_.createFromSet(distinctWords,
+                           absl::StrCat(onDiskBase_, TEXT_VOCAB_FILE_SUFFIX));
   return numLines;
 }
 
@@ -501,7 +504,8 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   AD_LOG_INFO << "Building DocsDB...\n";
   // If the file doesn't exist, `std::getline` does nothing.
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs = ad_utility::makeOfstream(onDiskBase_ + ".text.docsDB");
+  std::ofstream ofs = ad_utility::makeOfstream(
+      absl::StrCat(onDiskBase_, TEXT_DOCS_DB_FILE_SUFFIX));
   // To avoid excessive use of RAM, we stream the offsets into a temporary file
   // and append them to the end of the docsDB file once all text records have
   // been written.

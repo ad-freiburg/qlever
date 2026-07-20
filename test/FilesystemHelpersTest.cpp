@@ -12,6 +12,7 @@
 
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "backports/filesystem.h"
 #include "util/FilesystemHelpers.h"
@@ -21,7 +22,9 @@
 namespace fs = ql::filesystem;
 using qlever::util::deleteFilesInDirectory;
 using qlever::util::doesDirectoryContainFileWithBasename;
+using qlever::util::filesWithBaseNameAndSuffix;
 using ::testing::HasSubstr;
+using ::testing::UnorderedElementsAreArray;
 
 namespace {
 
@@ -172,6 +175,51 @@ TEST(IsSubdirectoryOf, differentPaths) {
   // This only works if the test is not run inside `/`, but this should be fine.
   EXPECT_FALSE(isSubdirectoryOf("/malicious-path", "relative-path"));
   EXPECT_FALSE(isSubdirectoryOf("../malicious-path", "relative-path"));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, returnsOnlyFilesWithBaseNameAndSuffix) {
+  TempDir tmp;
+  auto base = tmp.path() / "index";
+  // Files that match `<base>.vocabulary*`.
+  touch(tmp.path() / "index.vocabulary");
+  touch(tmp.path() / "index.vocabulary.words");
+  touch(tmp.path() / "index.vocabulary.ids");
+  // Files that must NOT match: wrong suffix, wrong base name, a prefix of the
+  // base name, and a file whose name is only a prefix of `<base>.vocabulary`.
+  touch(tmp.path() / "index.meta");
+  touch(tmp.path() / "other.vocabulary");
+  touch(tmp.path() / "index");
+  touch(tmp.path() / "index.vocab");
+
+  auto result = filesWithBaseNameAndSuffix(base, ".vocabulary");
+  std::vector<std::string> expected{
+      (tmp.path() / "index.vocabulary").string(),
+      (tmp.path() / "index.vocabulary.words").string(),
+      (tmp.path() / "index.vocabulary.ids").string()};
+  EXPECT_THAT(result, UnorderedElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, ignoresSubdirectories) {
+  TempDir tmp;
+  auto base = tmp.path() / "index";
+  touch(tmp.path() / "index.view.a");
+  // A subdirectory that matches the prefix must be ignored (only regular files
+  // are returned).
+  fs::create_directory(tmp.path() / "index.view.dir");
+
+  auto result = filesWithBaseNameAndSuffix(base, ".view.");
+  EXPECT_THAT(result, UnorderedElementsAreArray(std::vector<std::string>{
+                          (tmp.path() / "index.view.a").string()}));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, noMatchReturnsEmpty) {
+  TempDir tmp;
+  touch(tmp.path() / "index.meta");
+  auto result = filesWithBaseNameAndSuffix(tmp.path() / "index", ".vocabulary");
+  EXPECT_THAT(result, ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________

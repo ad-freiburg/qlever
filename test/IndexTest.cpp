@@ -18,11 +18,17 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "engine/MaterializedViews.h"
+#include "global/Constants.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -1027,4 +1033,128 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}
+
+// _____________________________________________________________________________
+TEST(Permutation, fileNames) {
+  using enum Permutation::Enum;
+  EXPECT_THAT(Permutation::fileNames(PSO, "foo/index"),
+              ::testing::ElementsAre("foo/index.index.pso",
+                                     "foo/index.index.pso.meta"));
+  EXPECT_THAT(Permutation::fileNames(OSP, "base"),
+              ::testing::ElementsAre("base.index.osp", "base.index.osp.meta"));
+  // For an internal permutation, the caller appends the infix to the base name.
+  EXPECT_THAT(Permutation::fileNames(
+                  POS, absl::StrCat("index", QLEVER_INTERNAL_INDEX_INFIX)),
+              ::testing::ElementsAre("index.internal.index.pos",
+                                     "index.internal.index.pos.meta"));
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsManager, viewFilesOnDisk) {
+  auto [directory, cleanup] = makeTemporaryDirectory("viewFilesOnDisk");
+  std::string base = directory + "/index";
+  auto touch = [](const std::string& f) {
+    std::ofstream out{f};
+    out << "x";
+  };
+  // Two view files for the index, plus files that must be ignored: index files
+  // that are not view files, and a view file of a different index.
+  touch(MaterializedView::getFilenameBase(base, "viewA"));
+  touch(MaterializedView::getFilenameBase(base, "viewB") + ".spo");
+  touch(base + ".vocabulary");
+  touch(base + ".index.pso");
+  touch(directory + "/other.view.x");
+
+  EXPECT_THAT(MaterializedViewsManager::viewFilesOnDisk(base),
+              ::testing::UnorderedElementsAre(
+                  MaterializedView::getFilenameBase(base, "viewA"),
+                  MaterializedView::getFilenameBase(base, "viewB") + ".spo"));
+}
+
+// _____________________________________________________________________________
+// Checks that `IndexImpl::allIndexFiles` lists exactly the on-disk files that
+// belong to an index: no phantom entries, all components (including the
+// optional ones) present, and no file that shares the base name but is not an
+// index file (build logs, materialized-view files, input files).
+TEST(IndexImpl, allIndexFilesAreListed) {
+  auto [directory, cleanup] = makeTemporaryDirectory("allIndexFilesAreListed");
+  std::string base = directory + "/index";
+  makeTestIndex(base, "<a> <b> <c> . <a> <b> <d> . <d> <e> <f> .");
+
+  auto touch = [](const std::string& f) {
+    std::ofstream out{f};
+    out << "x";
+  };
+  // Optional index files that a plain build does not create; once present, they
+  // must be listed.
+  std::string settings = absl::StrCat(base, SETTINGS_FILE_SUFFIX);
+  std::string updates = absl::StrCat(base, UPDATE_TRIPLES_SUFFIX);
+  std::string graphs = absl::StrCat(base, ALLOCATED_GRAPHS_SUFFIX);
+  for (const auto& f : {settings, updates, graphs}) {
+    touch(f);
+  }
+  // Files that share the base name but are NOT index files; they must not be
+  // listed.
+  std::string indexLog = absl::StrCat(base, INDEX_LOG_SUFFIX);
+  std::string rebuildLog = absl::StrCat(base, REBUILD_INDEX_LOG_SUFFIX);
+  std::string viewFile = MaterializedView::getFilenameBase(base, "myView");
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    touch(f);
+  }
+
+  auto listed = IndexImpl::allIndexFiles(base);
+  ad_utility::HashSet<std::string> listedSet(listed.begin(), listed.end());
+
+  // No phantom entries.
+  for (const auto& f : listed) {
+    EXPECT_TRUE(ql::filesystem::exists(f)) << f;
+  }
+
+  // All core components and the optional files we created are listed.
+  EXPECT_THAT(
+      listedSet,
+      ::testing::IsSupersetOf(
+          {absl::StrCat(base, CONFIGURATION_FILE),
+           absl::StrCat(base, PATTERNS_FILE_SUFFIX),
+           absl::StrCat(base, ".index.pso"),
+           absl::StrCat(base, ".index.pso.meta"),
+           absl::StrCat(base, QLEVER_INTERNAL_INDEX_INFIX, ".index.pso"),
+           settings, updates, graphs}));
+  // At least one vocabulary file is listed (the exact set depends on the
+  // vocabulary type).
+  EXPECT_TRUE(ql::ranges::any_of(listed, [](const std::string& f) {
+    return ql::starts_with(ql::pathFilename(f).string(),
+                           absl::StrCat("index", VOCAB_SUFFIX));
+  }));
+
+  // The non-index files are not listed.
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    EXPECT_FALSE(listedSet.contains(f)) << f;
+  }
+
+  // Exhaustiveness: every regular file in the directory that shares the base
+  // name is either listed as an index file or one of the files that are
+  // deliberately left out: the build/rebuild logs, the materialized-view files
+  // (`.view.` infix), and the input files left over from the build
+  // (`<base>.ttl` and the settings input `<base>.ttl.settings.json`).
+  std::string baseName = ql::pathFilename(base).string();
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    std::string name = entry.path().filename().string();
+    if (!ql::starts_with(name, baseName) ||
+        listedSet.contains(entry.path().string())) {
+      continue;
+    }
+    std::string_view rest{name};
+    rest.remove_prefix(baseName.size());
+    bool isAllowedNonIndexFile =
+        rest == INDEX_LOG_SUFFIX || rest == REBUILD_INDEX_LOG_SUFFIX ||
+        ql::starts_with(rest, ".view.") || ql::starts_with(rest, ".ttl");
+    EXPECT_TRUE(isAllowedNonIndexFile)
+        << "File is neither an index file nor an allowed exclusion: "
+        << entry.path().string();
+  }
 }

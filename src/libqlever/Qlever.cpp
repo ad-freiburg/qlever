@@ -6,18 +6,26 @@
 
 #include "libqlever/Qlever.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
+#include "global/Constants.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/Exception.h"
 #include "util/http/UrlParser.h"
 
 namespace qlever {
@@ -322,5 +330,73 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
       pinSubtrees, pinResult, disableCaching);
+}
+
+// ___________________________________________________________________________
+std::string IndexRebuildConfig::tmpBasename() const {
+  return (ql::filesystem::path{tmpDirForRebuild_} / basenameForNewIndex_)
+      .lexically_normal()
+      .string();
+}
+
+// ___________________________________________________________________________
+std::string IndexRebuildConfig::finalBasename() const {
+  return (ql::filesystem::path{dirForNewIndex_} / basenameForNewIndex_)
+      .lexically_normal()
+      .string();
+}
+
+// ___________________________________________________________________________
+void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBase,
+                                       IndexAndViews& newIndexAndViews,
+                                       const IndexRebuildConfig& config) {
+  namespace fs = ql::filesystem;
+  auto& [newIndex, newManager] = newIndexAndViews;
+  const std::string rebuildBase = newIndex.getOnDiskBase();
+  const std::string newBase = config.finalBasename();
+
+  // Move the old index's files (including its view files) into the directory
+  // for the old index.
+  const auto& oldIndexDir = config.dirForOldIndex_;
+  fs::create_directories(oldIndexDir);
+  auto moveToOldIndexDir = [&oldIndexDir](const fs::path& file) {
+    fs::rename(file, fs::path{oldIndexDir} / file.filename());
+  };
+  ql::ranges::for_each(IndexImpl::allIndexFiles(originalBase),
+                       moveToOldIndexDir);
+  ql::ranges::for_each(MaterializedViewsManager::viewFilesOnDisk(originalBase),
+                       moveToOldIndexDir);
+  // Move the old index's build log with it (it was either built originally or
+  // by a previous rebuild, so exactly one of the two variants exists).
+  for (auto suffix : {INDEX_LOG_SUFFIX, REBUILD_INDEX_LOG_SUFFIX}) {
+    auto logFile = absl::StrCat(originalBase, suffix);
+    if (fs::exists(logFile)) {
+      moveToOldIndexDir(logFile);
+    }
+  }
+
+  // Move the new index's files to their final base name.
+  for (const auto& file : IndexImpl::allIndexFiles(rebuildBase)) {
+    AD_CORRECTNESS_CHECK(ql::starts_with(file, rebuildBase));
+    fs::rename(file, absl::StrCat(newBase, std::string_view{file}.substr(
+                                               rebuildBase.size())));
+  }
+  // Move the new index's rebuild log to its final place, next to the index it
+  // describes (from where it will later travel into the directory of the old
+  // index, when this index is in turn retired by a future rebuild).
+  auto rebuildLog = absl::StrCat(rebuildBase, REBUILD_INDEX_LOG_SUFFIX);
+  if (fs::exists(rebuildLog)) {
+    fs::rename(rebuildLog, absl::StrCat(newBase, REBUILD_INDEX_LOG_SUFFIX));
+  }
+
+  // Re-anchor the path-derived state of the new index.
+  newIndex.getImpl().setOnDiskBase(newBase);
+  if (newIndex.deltaTriplesManager().persists()) {
+    newIndex.deltaTriplesManager().setFilenameForPersistentUpdates(
+        absl::StrCat(newBase, UPDATE_TRIPLES_SUFFIX));
+    newIndex.getImpl().graphNameManager().setFilenameForPersisting(
+        absl::StrCat(newBase, ALLOCATED_GRAPHS_SUFFIX));
+  }
+  newManager.setOnDiskBase(newBase);
 }
 }  // namespace qlever

@@ -52,7 +52,7 @@ void Permutation::loadFromDisk(
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
-  auto filename = absl::StrCat(onDiskBase, ".index", fileSuffix_);
+  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");
@@ -159,6 +159,14 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
       return {2, 0, 1, 3};
   }
   AD_FAIL();
+}
+
+// _____________________________________________________________________
+std::vector<std::string> Permutation::fileNames(Enum permutation,
+                                                const std::string& onDiskBase) {
+  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
+                               ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename, META_FILE_SUFFIX)};
 }
 
 // _____________________________________________________________________

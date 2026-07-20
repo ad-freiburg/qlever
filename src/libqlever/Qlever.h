@@ -71,6 +71,32 @@ struct CommonConfig {
   bool addHasWordTriples_ = false;
 };
 
+// Configuration for relocating a runtime-rebuilt index (see
+// `Qlever::moveRebuiltIndexIntoPlace`). All paths are relative to the working
+// directory of the engine.
+struct IndexRebuildConfig {
+  // The temporary directory in which the new index is built. After the new
+  // index has been moved to its final place, the directory is removed again.
+  std::string tmpDirForRebuild_;
+
+  // The directory to which the files of the old index are moved when the new
+  // index is swapped in. That directory is then a complete index that a server
+  // can be started on.
+  std::string dirForOldIndex_;
+
+  // The directory and base name under which the new index is served after the
+  // swap (and from which a later restart loads it).
+  std::string dirForNewIndex_ = ".";
+  std::string basenameForNewIndex_;
+
+  // The base name of the new index during the rebuild (in the temporary
+  // directory).
+  std::string tmpBasename() const;
+
+  // The base name of the new index after the swap (in its final directory).
+  std::string finalBasename() const;
+};
+
 // Additional configuration used for building an index for a given dataset.
 struct IndexBuilderConfig : CommonConfig {
   // The specification of the input files, for which the index is built. See
@@ -409,6 +435,27 @@ class Qlever {
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
+
+  // Move a freshly rebuilt index into the place of the old one: move the files
+  // of the old index (with base name `originalBase`, including its materialized
+  // views and its build log) into the directory for the old index, move the
+  // files of the freshly rebuilt index `newIndexAndViews` from the temporary
+  // directory to their final base name, and re-anchor all path-derived state of
+  // the new index in memory (on-disk base name, files for persisted updates and
+  // graph names, and the views manager) accordingly. All target locations are
+  // given by `config`; by default the new index is served from the place of the
+  // old index (so that a later restart loads the latest index).
+  //
+  // The renames keep the open file handles of both indexes valid, so running
+  // queries are not affected. This must be called BEFORE swapping in the new
+  // `IndexAndViews`, and with the guarantee that no updates are added
+  // concurrently (an update between the rename and the re-anchoring would
+  // persist to the old path). If this throws halfway through, the in-memory
+  // state still refers to a consistent old index, but the on-disk layout may
+  // have to be repaired manually before the next restart.
+  static void moveRebuiltIndexIntoPlace(const std::string& originalBase,
+                                        IndexAndViews& newIndexAndViews,
+                                        const IndexRebuildConfig& config);
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }

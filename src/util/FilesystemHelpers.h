@@ -14,10 +14,22 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "backports/filesystem.h"
 
 namespace qlever::util {
+// Return the paths of all regular files directly contained in the directory of
+// `onDiskBase` whose file name starts with the file name of `onDiskBase`
+// immediately followed by `suffix`. For example, for `onDiskBase = "dir/wiki"`
+// and `suffix = ".vocabulary"`, all files matching `dir/wiki.vocabulary*` are
+// returned. This is used to enumerate the on-disk files of an index whose exact
+// set of names is not known in advance (the vocabulary files and the
+// materialized-view files).
+std::vector<std::string> filesWithBaseNameAndSuffix(
+    const ql::filesystem::path& onDiskBase, std::string_view suffix);
+
 // Return `true` if the directory from `path` contains at least one file whose
 // name starts with the base name of `path`; otherwise return `false`. If the
 // base name is empty, return `false` if and only if the directory is empty.

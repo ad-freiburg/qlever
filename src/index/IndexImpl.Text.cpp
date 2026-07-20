@@ -6,6 +6,7 @@
 
 #include "index/IndexImpl.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
 #include <charconv>
@@ -22,10 +23,11 @@
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
-  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary");
+  textVocab_.readFromFile(absl::StrCat(onDiskBase_, TEXT_VOCAB_FILE_SUFFIX));
 
   // Initialize the text index.
-  std::string textIndexFileName = onDiskBase_ + ".text.index";
+  std::string textIndexFileName =
+      absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX);
   AD_LOG_INFO << "Reading metadata from file " << textIndexFileName << " ..."
               << std::endl;
   textIndexFile_.open(textIndexFileName.c_str(), "r");
@@ -42,11 +44,12 @@ void IndexImpl::addTextFromOnDiskIndex() {
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
   // literals from our RDF vocabulary.
-  std::string docsDbFileName = onDiskBase_ + ".text.docsDB";
+  std::string docsDbFileName =
+      absl::StrCat(onDiskBase_, TEXT_DOCS_DB_FILE_SUFFIX);
   std::ifstream f(docsDbFileName.c_str());
   if (f.good()) {
     f.close();
-    docsDB_.init(std::string(onDiskBase_ + ".text.docsDB"));
+    docsDB_.init(docsDbFileName);
     AD_LOG_INFO << "Registered text records: #records = " << docsDB_._size
                 << std::endl;
   } else {
@@ -124,7 +127,8 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
 // _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
   AD_CONTRACT_CHECK(!onDiskBase_.empty());
-  textIndexFile_.open(std::string(onDiskBase_ + ".text.index").c_str(), "r");
+  textIndexFile_.open(absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX).c_str(),
+                      "r");
 }
 
 // _____________________________________________________________________________
