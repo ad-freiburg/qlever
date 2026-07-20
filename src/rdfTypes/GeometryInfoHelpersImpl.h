@@ -83,15 +83,21 @@ inline std::string addDatatype(const std::string_view wkt) {
 inline ParseResult parseWkt(const std::string_view& wkt) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
+  auto crs = getCRSType(wktLiteral);
+  // All geometries will be transformed to their CRS84 representation.
+  auto projFunc =
+      makeProjFunc<CoordType>(crs, CRS84, [](const Point<CoordType>& p) {
+        return Point<CoordType>{p.getX(), p.getY()};
+      });
   auto type = getWKTType(wktLiteral);
   using enum WKTType;
   try {
     switch (type) {
       case POINT:
-        parsed = pointFromWKT<CoordType>(wktLiteral);
+        parsed = pointFromWKTProj<CoordType>(wktLiteral, projFunc);
         break;
       case LINESTRING: {
-        auto line = lineFromWKT<CoordType>(wktLiteral);
+        auto line = lineFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (line.empty()) {
           throw std::runtime_error("Cannot parse line from WKT");
         }
@@ -99,7 +105,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case POLYGON: {
-        auto polygon = polygonFromWKT<CoordType>(wktLiteral);
+        auto polygon = polygonFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (polygon.getOuter().empty()) {
           throw std::runtime_error("Cannot parse polygon from WKT");
         }
@@ -107,7 +113,8 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case MULTIPOINT: {
-        auto multipoint = multiPointFromWKT<CoordType>(wktLiteral);
+        auto multipoint =
+            multiPointFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (multipoint.empty()) {
           throw std::runtime_error("Cannot parse multipoint from WKT");
         }
@@ -115,7 +122,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case MULTILINESTRING: {
-        auto multiline = multiLineFromWKT<CoordType>(wktLiteral);
+        auto multiline = multiLineFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (multiline.empty()) {
           throw std::runtime_error("Cannot parse multiline from WKT");
         }
@@ -123,7 +130,8 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case MULTIPOLYGON: {
-        auto multipolygon = multiPolygonFromWKT<CoordType>(wktLiteral);
+        auto multipolygon =
+            multiPolygonFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (multipolygon.empty()) {
           throw std::runtime_error("Cannot parse multipolygon from WKT");
         }
@@ -131,7 +139,8 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case COLLECTION: {
-        auto collection = collectionFromWKT<CoordType>(wktLiteral);
+        auto collection =
+            collectionFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (collection.empty()) {
           throw std::runtime_error("Cannot parse collection from WKT");
         }
@@ -580,6 +589,15 @@ inline std::optional<ParsedWkt> simplifyGeometry(
 struct WebMercatorProjection {
   DPoint operator()(const DPoint& p) const { return latLngToWebMerc(p); }
 };
+
+// TODO<yarox-1>
+// Implements a projection to a given coordinate reference system.
+// Use together via `ProjectionVisitor<CRSProjection>` for other geometry types.
+/*
+struct CRSProjection {
+  CRSType crs;
+  DPoint operator()(const DPoint&p) const { return convertToCRS(p, crs); }
+};*/
 
 // Concept to generically model a projection function (that is, point to point
 // mapping). Used for the `UtilGeomProjectionVisitor` below.
