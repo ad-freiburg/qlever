@@ -24,13 +24,14 @@ if (EMSCRIPTEN)
             -lembind
             # The module only exposes the embind bindings and has no `main`.
             --no-entry
-            # Emit an ES module whose default export is the `QLever()` factory
-            # (`import createQlever from "@ad-freiburg/qlever"`). MODULARIZE keeps
+            # Emit an ES module whose default export is the `createQleverModule()`
+            # factory (`import createQleverModule from "@ad-freiburg/qlever"`).
+            # MODULARIZE keeps
             # the global scope clean; EXPORT_ES6 makes the loader locate
             # `qlever.wasm` and spawn its pthread workers via `import.meta.url`,
             # which is what modern bundlers (Vite, webpack) and Node ESM expect.
             -sMODULARIZE=1
-            -sEXPORT_NAME=QLever
+            -sEXPORT_NAME=createQleverModule
             -sEXPORT_ES6=1
             -sENVIRONMENT=web,worker,node
             # In the browser, spawning a Web Worker for multi-threading requires

@@ -35,16 +35,16 @@ ad_utility::MemorySize memorySizeFromMegabytes(double numMegabytes) {
 // itself. Typical usage from JavaScript (inside a Web Worker, as index
 // building and querying are blocking calls):
 //
-//   const module = await QLever();
-//   module.FS.writeFile("/input.ttl", turtleData);
-//   const config = new module.IndexBuilderConfig();
+//   const qlever = await createQleverModule();
+//   qlever.FS.writeFile("/input.ttl", turtleData);
+//   const config = new qlever.IndexBuilderConfig();
 //   config.baseName = "/index";
-//   const file = new module.InputFileSpecification();
+//   const file = new qlever.InputFileSpecification();
 //   file.filename = "/input.ttl";
-//   file.filetype = module.Filetype.Turtle;
+//   file.filetype = qlever.Filetype.Turtle;
 //   config.inputFiles.push_back(file);
-//   module.Qlever.buildIndex(config);
-//   const engine = new module.Qlever(new module.EngineConfig(config));
+//   qlever.Qlever.buildIndex(config);
+//   const engine = new qlever.Qlever(new qlever.EngineConfig(config));
 //   const result = engine.query("SELECT * { ?s ?p ?o }");
 EMSCRIPTEN_BINDINGS(qlever) {
   // Helper types used by the configuration structs below.

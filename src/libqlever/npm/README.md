@@ -2,7 +2,8 @@
 
 [QLever](https://github.com/ad-freiburg/qlever) is a fast SPARQL engine for knowledge graphs. This package contains
 QLever compiled to WebAssembly (via Emscripten), so you can build RDF indexes and run SPARQL queries directly in the
-browser or in Node.js, no server required.
+browser or in Node.js, no server required. QLever for WebAssembly is currently still experimental and is not as
+efficient as native builds.
 
 ## Usage
 
@@ -12,28 +13,28 @@ worker thread (Node.js).
 The package is an ES module; its default export is the module factory.
 
 ```js
-import factory from "@ad-freiburg/qlever";
+import createQleverModule from "@ad-freiburg/qlever";
 
-const m = await factory();
+const qlever = await createQleverModule();
 
 // Put the input data into the in-memory filesystem.
-m.FS.writeFile("/input.ttl", turtleData);
+qlever.FS.writeFile("/input.ttl", turtleData);
 
 // Build an index.
-const config = new m.IndexBuilderConfig();
+const config = new qlever.IndexBuilderConfig();
 config.baseName = "/index";
-const file = new m.InputFileSpecification();
+const file = new qlever.InputFileSpecification();
 file.filename = "/input.ttl";
-file.filetype = m.Filetype.Turtle;
-const files = new m.InputFileSpecificationVector();
+file.filetype = qlever.Filetype.Turtle;
+const files = new qlever.InputFileSpecificationVector();
 files.push_back(file);
 config.inputFiles = files;
-m.Qlever.buildIndex(config);
+qlever.Qlever.buildIndex(config);
 
 // Load the index and query it.
-const engine = new m.Qlever(new m.EngineConfig(config));
+const engine = new qlever.Qlever(new qlever.EngineConfig(config));
 const result = engine.query(
-    "SELECT * WHERE { ?s ?p ?o }", m.MediaType.sparqlJson);
+    "SELECT * WHERE { ?s ?p ?o }", qlever.MediaType.sparqlJson);
 console.log(JSON.parse(result));
 ```
 
