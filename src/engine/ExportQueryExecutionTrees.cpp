@@ -895,7 +895,7 @@ ExportQueryExecutionTrees::computeResult(
   }(convertStreamGeneratorForChunkedTransfer(std::move(inner)));
 
 #else
-  ad_utility::constexprSwitchFromArray<staticallySupportedMediaTypes>(
+  ad_utility::constexprSwitchFromTuple<staticallySupportedMediaTypes>(
       compute, mediaType);
 #endif
 }
