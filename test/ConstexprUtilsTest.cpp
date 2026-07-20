@@ -225,53 +225,41 @@ constexpr std::array<int, 4> switchFromArrayCases{1, 2, 3, 5};
 }
 
 // The same tests as for `ConstexprSwitch` above, but going through
-// `constexprSwitchFromArray`, which reads the cases from a `std::array`.
-TEST(ConstexprUtils, constexprSwitchFromArray) {
+// `constexprSwitchFromTuple`, which reads the cases from a `std::array`.
+TEST(ConstexprUtils, constexprSwitchFromTuple) {
   using namespace ad_utility;
   {
     auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * 2; }};
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 2)), 4);
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 5)), 10);
-    ASSERT_ANY_THROW((constexprSwitchFromArray<switchFromArrayCases>(f, 4)));
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 2)), 4);
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 5)), 10);
+    ASSERT_ANY_THROW((constexprSwitchFromTuple<switchFromArrayCases>(f, 4)));
   }
   {
     auto f =
         ad_utility::ApplyAsValueIdentity{[](auto i, int j) { return i * j; }};
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 2, 7)), 14);
-    ASSERT_EQ((constexprSwitchFromArray<switchFromArrayCases>(f, 5, 2)), 10);
-    ASSERT_ANY_THROW((constexprSwitchFromArray<switchFromArrayCases>(f, 4, 3)));
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 2, 7)), 14);
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 5, 2)), 10);
+    ASSERT_ANY_THROW((constexprSwitchFromTuple<switchFromArrayCases>(f, 4, 3)));
   }
 }
 
-// The same tests as for `constexprSwitchFromArray`, but calling the `detail`
-// implementation directly with an explicit `std::index_sequence`.
-TEST(ConstexprUtils, constexprSwitchFromArrayImpl) {
+namespace {
+// Cases of different types, which is the reason `constExprSwitchFromTuple`
+// accepts an arbitrary tuple-like rather than `std::array`.
+constexpr std::tuple<int, char, long> switchFromTupleMixedCases{1, 'a', 5L};
+};  // namespace
+
+// `constExprSwitchFromTuple` with cases of different types. The lambda has to
+// map all of them to a common return type, as the cases are expanded into a
+// single `ConstExprSwitch`.
+TEST(ConstExprUtils, constExprSwitchFromTupleWithMixedTypes) {
   using namespace ad_utility;
-  auto seq = std::make_index_sequence<switchFromArrayCases.size()>{};
-  {
-    auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * 2; }};
-    ASSERT_EQ(
-        (detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 2, seq)),
-        4);
-    ASSERT_EQ(
-        (detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 5, seq)),
-        10);
-    ASSERT_ANY_THROW((
-        detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 4, seq)));
-  }
-  {
-    auto f =
-        ad_utility::ApplyAsValueIdentity{[](auto i, int j) { return i * j; }};
-    ASSERT_EQ((detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(
-                  f, 2, seq, 7)),
-              14);
-    ASSERT_EQ((detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(
-                  f, 5, seq, 2)),
-              10);
-    ASSERT_ANY_THROW(
-        (detail::constexprSwitchFromArrayImpl<switchFromArrayCases>(f, 4, seq,
-                                                                    3)));
-  }
+  auto f = ad_utility::ApplyAsValueIdentity{
+      [](auto c) -> int { return static_cast<int>(c); }};
+  ASSERT_EQ((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 1)), 1);
+  ASSERT_EQ((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 'a')), 97);
+  ASSERT_EQ((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 5L)), 5);
+  ASSERT_ANY_THROW((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 4)));
 }
 
 struct PushToVector {
