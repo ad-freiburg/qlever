@@ -124,7 +124,7 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
 
 // _____________________________________________________________________________
 void NamedCachedQueryBlobManager::deserialize(
-    Qlever& qlever, ql::span<const char> blob,
+    Qlever& qlever, ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
   AD_CONTRACT_CHECK(
       !deserializedBlobLifetimeExtender_.has_value(),
@@ -135,7 +135,7 @@ void NamedCachedQueryBlobManager::deserialize(
   // for the lifetime of this manager because the vocabulary and named result
   // cache entries loaded below are zero-copy views directly into it.
   deserializedBlobLifetimeExtender_.emplace(
-      decompressBlobWithTrailingSizeInfo(blob, allocator));
+      decompressBlobWithTrailingSizeInfo(compressedBlob, allocator));
 
   // Use a serializer that only borrows a view of
   // `deserializedBlobLifetimeExtender_`, rather than one that owns/moves it, so

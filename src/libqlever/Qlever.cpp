@@ -46,24 +46,23 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
+  // If `skipLoading` is set, we do not touch the on-disk index at all (not even
+  // grabbing the index snapshot); the instance is expected to be populated
+  // later from a blob (see `deserializeVocabAndNamedCacheFromCompressedBlob`).
+  if (skipLoading) {
+    return;
+  }
+
   // Grab the freshly constructed `Index` and `MaterializedViewsManager` once.
   // No other thread can observe them yet, so reading the snapshot here is safe.
   // `snapshot` keeps the `shared_ptr`s alive for the references below.
   auto snapshot = indexAndViewsSnapshot();
   auto& [index, materializedViewsManager] = *snapshot;
 
+  // Load the index from disk.
   index.usePatterns() = enablePatternTrick_;
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.doNotLoadPermutations() = config.doNotLoadPermutations_;
-
-  // If `skipLoading` is set, we do not touch the on-disk index at all; the
-  // instance is expected to be populated later from a blob (see
-  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
-  if (skipLoading) {
-    return;
-  }
-
-  // Load the index from disk.
   index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index.addTextFromOnDiskIndex();

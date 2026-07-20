@@ -54,21 +54,21 @@ class NamedCachedQueryBlobManager {
   // Serialize the index metadata JSON, the vocabulary, and the
   // `NamedResultCache` of `qlever` into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via `deserialize` (e.g. by a
-  // different process, without needing access to the on-disk index). Throws if
-  // the vocabulary implementation currently in use is not the in-memory,
-  // uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`).
+  // different process, without needing access to the on-disk index). Throw if
+  // the vocabulary implementation currently in use does not support zero-copy
+  // serialization (see `Vocabulary::writeAsZeroCopyBlob`).
   std::vector<char> serialize(const Qlever& qlever) const;
 
-  // Load a blob previously written by `serialize`: decompress it, apply the
-  // contained index metadata, replace `qlever`'s vocabulary and populate its
-  // `NamedResultCache`, all as zero-copy views directly into the decompressed
-  // buffer. That buffer is kept alive for the lifetime of this manager and is
-  // allocated via `allocator` (see `BlobAllocator`).
+  // Load a blob previously written by `serialize`: decompress it, store it in
+  // the buffer, and then replace `qlever`'s vocabulary and `NamedResultCache`
+  // by the contents of the blob using zero-copy deserialization. The buffer is
+  // kept alive for the lifetime of this manager and is allocated via the
+  // `allocator` (see `BlobAllocator` above).
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access `qlever`, e.g. right after construction and before the first query
   // is answered. Must not be called more than once on the same manager.
-  void deserialize(Qlever& qlever, ql::span<const char> blob,
+  void deserialize(Qlever& qlever, ql::span<const char> compressedBlob,
                    ql::pmr::polymorphic_allocator<char> allocator);
 
   // The following are stateless, self-contained utilities that make up the blob
@@ -91,7 +91,7 @@ class NamedCachedQueryBlobManager {
       ql::pmr::polymorphic_allocator<char> allocator);
 
   // Write the magic header and format version at the start of a blob. Mirrors
-  // `skipAndVerifyBlobHeader`.
+  // `skipAndVerifyBlobHeader` below.
   static void writeBlobHeader(
       ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer);
 

@@ -393,20 +393,15 @@ class Qlever {
   // `NamedResultCache` of this instance into a single, self-contained,
   // ZSTD-compressed blob that can later be loaded via
   // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
-  // process, without needing access to the on-disk index). Throws if the
-  // vocabulary implementation currently in use is not the in-memory,
-  // uncompressed one (see `Vocabulary::writeAsZeroCopyBlob`). Delegates to
-  // `blobManager_`.
+  // process, without needing access to the on-disk index). For details see
+  // `NamedCachedQueryBlobManager::serialize`.
   std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
     return blobManager_.serialize(*this);
   }
 
   // Load a blob previously written by
-  // `serializeVocabAndNamedCacheToCompressedBlob`: decompress it, apply the
-  // contained index metadata, replace this instance's vocabulary and populate
-  // its `NamedResultCache`, all as zero-copy views directly into the
-  // decompressed buffer (which is kept alive for the lifetime of this instance
-  // and allocated via `allocator`). Delegates to `blobManager_`.
+  // `serializeVocabAndNamedCacheToCompressedBlob`. For details see
+  // `NamedCachedQueryBlobManager::deserialize`.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
@@ -417,6 +412,7 @@ class Qlever {
       ql::pmr::polymorphic_allocator<char> allocator = {}) {
     blobManager_.deserialize(*this, blob, std::move(allocator));
   }
+
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state.
