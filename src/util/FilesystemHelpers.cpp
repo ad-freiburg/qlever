@@ -32,19 +32,18 @@ std::vector<std::string> filesWithBaseNameAndSuffix(const fs::path& onDiskBase,
   }
   std::string prefix =
       absl::StrCat(ql::pathFilename(onDiskBase).string(), suffix);
-  // NOTE: We `copy` into a vector instead of using `ql::ranges::to_vector`,
-  // because the directory range is a single-pass input range, which the latter
-  // does not accept.
+  // NOTE: We deliberately use an explicit loop instead of a `filter`/
+  // `transform`/`to_vector` range pipeline: `directoryRange` is a single-pass
+  // input range that is neither a view nor borrowed, so it is not a
+  // `viewable_range` and cannot be piped into `range-v3` view adaptors (this is
+  // also why the other functions in this file loop over it explicitly).
   std::vector<std::string> result;
-  ql::ranges::copy(
-      ql::directoryRange(directory) |
-          ql::views::filter([&prefix](const auto& entry) {
-            return entry.is_regular_file() &&
-                   ql::starts_with(entry.path().filename().string(), prefix);
-          }) |
-          ql::views::transform(
-              [](const auto& entry) { return entry.path().string(); }),
-      std::back_inserter(result));
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (entry.is_regular_file() &&
+        ql::starts_with(entry.path().filename().string(), prefix)) {
+      result.push_back(entry.path().string());
+    }
+  }
   return result;
 }
 
