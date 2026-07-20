@@ -68,7 +68,10 @@ tools.build:compiler_executables={"c": "emcc", "cpp": "em++"}
 # across every translation unit and dependency: a mismatch makes wasm-opt fail
 # validation. Hence `-fwasm-exceptions` appears in the compile flags, the link
 # flags, the boost override, and the package_id below.
-tools.build:cxxflags=['-fwasm-exceptions']
+# `-sWASM_LEGACY_EXCEPTIONS=0` selects the standardized exception handling
+# instructions (`try_table`) instead of the legacy ones (`try`), which
+# browsers have deprecated.
+tools.build:cxxflags=['-fwasm-exceptions', '-sWASM_LEGACY_EXCEPTIONS=0']
 
 # Make the EH mode part of each dependency's package_id, so changing it rebuilds
 # cached deps instead of silently linking them in a different EH mode.
@@ -79,10 +82,10 @@ tools.info.package_id:confs=['tools.build:cxxflags', 'tools.build:cflags']
 # deep recursion (ANTLR parser, query planner); the default stack is far smaller.
 # `-sUSE_ZLIB` / `-sUSE_BZIP2` supply the zlib/bzip2 headers the bundled spatialjoin
 # dep #includes; they are ports because zlib/bzip2 are not conan dependencies.
-tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions']
-tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions']
+tools.build:exelinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions', '-sWASM_LEGACY_EXCEPTIONS=0']
+tools.build:sharedlinkflags=['-sALLOW_MEMORY_GROWTH=1', '-sMAXIMUM_MEMORY=8GB', '-sINITIAL_MEMORY=64MB', '-sUSE_ZLIB=1', '-sUSE_BZIP2=1', '-sSTACK_SIZE=8MB', '-fwasm-exceptions', '-sWASM_LEGACY_EXCEPTIONS=0']
 
 # A package-specific list-conf replaces the global value rather than appending,
 # so boost must restate `-m64` (which the `wasm64` arch otherwise supplies to
 # CMake/autotools builds but not to boost's `b2`) alongside the EH mode.
-boost/*:tools.build:cxxflags=['-m64', '-fwasm-exceptions']
+boost/*:tools.build:cxxflags=['-m64', '-fwasm-exceptions', '-sWASM_LEGACY_EXCEPTIONS=0']

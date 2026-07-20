@@ -2,7 +2,12 @@ name: "Native build to WebAssembly using Conan and Emscripten"
 
 on:
   push:
+    # Pushes to master publish a dev version of the `@ad-freiburg/qlever` npm
+    # package under
+    # the `next` dist-tag; version tags publish the release under `latest`
+    # (see the `Publish to npm` step below).
     branches: [ master ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ master ]
   merge_group:
@@ -20,8 +25,11 @@ env:
   EMSDK_VERSION: "6.0.2"
 
 # The default GITHUB_TOKEN only needs to read the repository here.
+# `id-token: write` lets `npm publish --provenance` attest (via GitHub's OIDC
+# provider) that the package was built by this workflow.
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build:
@@ -31,6 +39,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+          # Full history, so that `git describe` can derive the npm package
+          # version of dev builds from the most recent release tag (see the
+          # `Assemble npm package` step).
+          fetch-depth: 0
 
       - name: Set up emsdk ${{ env.EMSDK_VERSION }}
         uses: mymindstorm/setup-emsdk@v14
@@ -43,7 +55,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 25
+          node-version: 26
+
+      # `tsc` is needed by `emcc` at link time to generate the TypeScript
+      # definitions for the `qleverwasm` target. A recent `npm` (>= 11.5) is
+      # needed by the `Publish to npm` step for trusted publishing (OIDC).
+      - name: Install TypeScript and a recent npm
+        run: npm install -g typescript npm@12
 
       - name: Install conan
         run: pipx install conan
@@ -98,3 +116,60 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel
+
+      # Assemble the `@ad-freiburg/qlever` npm package (see `src/libqlever/npm/`) on every
+      # run, so that pull requests also validate the packaging and the tarball
+      # can be downloaded from any CI run. Publishing happens only for version
+      # tags (below).
+      - name: Assemble npm package
+        working-directory: src/libqlever/npm
+        run: |
+          cp ../../../build/src/libqlever/qlever.mjs ../../../build/src/libqlever/qlever.wasm ../../../build/src/libqlever/qlever.d.ts .
+          # For a release tag `vX.Y.Z` the package version is `X.Y.Z`. All
+          # other builds get a prerelease of the NEXT patch version, derived
+          # from the most recent release tag, e.g. `0.5.51-dev.17.g473fd17`
+          # (17 commits after `v0.5.50`). Prerelease versions are invisible to
+          # semver range resolution (`^0.5.50`, `~0.5.51`, and even `*` never
+          # match them), so users can only ever get one by asking for it
+          # explicitly, either by exact version or via the `next` dist-tag.
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            DESCRIBE=$(git describe --tags --long --match 'v[0-9]*')
+            if [[ "${DESCRIBE}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-([0-9]+)-g([0-9a-f]+)$ ]]; then
+              VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))-dev.${BASH_REMATCH[4]}.g${BASH_REMATCH[5]}"
+            else
+              echo "::error::Cannot derive a version from 'git describe' output '${DESCRIBE}'"
+              exit 1
+            fi
+          fi
+          echo "Package version: ${VERSION}"
+          npm version --no-git-tag-version "${VERSION}"
+          npm pack
+
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-npm-package
+          path: src/libqlever/npm/ad-freiburg-qlever-*.tgz
+
+      # Release tags publish to the default `latest` dist-tag (what a plain
+      # `npm install @ad-freiburg/qlever` resolves to). Pushes to master publish the dev
+      # version under the `next` dist-tag, which never affects `latest`;
+      # users opt in explicitly with `npm install @ad-freiburg/qlever@next`. Pull requests
+      # and merge groups only build and upload the tarball, never publish.
+      #
+      # Authentication uses npm "trusted publishing": the package's settings on
+      # npmjs.com name this repository and workflow file as its trusted
+      # publisher, and npm authenticates via GitHub's OIDC provider (the
+      # workflow-level `id-token: write` permission). No npm token is
+      # involved, and provenance attestations are generated automatically.
+      - name: Publish to npm
+        if: github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            DIST_TAG=latest
+          else
+            DIST_TAG=next
+          fi
+          npm publish src/libqlever/npm/ad-freiburg-qlever-*.tgz --provenance --access public --tag "${DIST_TAG}"

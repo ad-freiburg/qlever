@@ -22,7 +22,12 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
+// The `server` library is not built under Emscripten (`Server.cpp` crashes
+// emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
+// server-integration test below is compiled out there.
+#ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#endif
 #include "global/Constants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
@@ -672,11 +677,11 @@ void cleanFilesWithPrefix(std::string_view prefix) {
 }  // namespace
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten: the `server` library it needs is not built
+// there (see the include of `engine/Server.h` above), and the test hangs
+// under Emscripten anyway (threaded server integration).
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   cleanFilesWithPrefix("my-name");
   cleanFilesWithPrefix("new_index");
   namespace net = boost::asio;
@@ -752,6 +757,7 @@ TEST(IndexRebuilder, serverIntegration) {
 
   threadPool.join();
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 // The thread-count override for the rebuild's scans must be set on the

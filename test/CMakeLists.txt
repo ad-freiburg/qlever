@@ -516,9 +516,16 @@ addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
 addLinkAndDiscoverTest(UnitOfMeasurementTest qlever_util)
 
-addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+# When the `server` library is not built (Emscripten, see
+# `src/engine/CMakeLists.txt`), the server-integration test is compiled out
+# via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.
+if (TARGET server)
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+else ()
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
+endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 

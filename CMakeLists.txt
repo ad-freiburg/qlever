@@ -534,6 +534,13 @@ FetchContent_Declare(
 # See https://github.com/google/googletest/issues/5015
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
+
+    # With Emscripten, the DWARF debug info that `-g` puts into the object
+    # files (which is all that CMake's `Debug`/`RelWithDebInfo` flags do) only
+    # ends up in the final `.wasm` when `-g` is ALSO passed at link time.
+    # Add it, so that debug build types produce binaries that can be debugged
+    # and profiled with source information in the browser dev tools.
+    add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp)
 # Disable some warnings in RE2 and GTEST
