@@ -885,7 +885,7 @@ ExportQueryExecutionTrees::computeResult(
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   auto inner =
-      ad_utility::constexprSwitchFromArray<staticallySupportedMediaTypes>(
+      ad_utility::constexprSwitchFromTuple<staticallySupportedMediaTypes>(
           compute, mediaType);
 
   return [](auto range) -> cppcoro::generator<std::string> {
