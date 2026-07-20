@@ -22,8 +22,9 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
 
 // ___________________________________________________________________________
-std::vector<const Variable*> SparqlExpressionPimpl::containedVariables() const {
-  return _pimpl->containedVariables();
+std::vector<const Variable*> SparqlExpressionPimpl::containedVariables(
+    bool excludeExists) const {
+  return _pimpl->containedVariables(excludeExists);
 }
 
 // ____________________________________________________________________________

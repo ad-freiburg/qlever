@@ -10,20 +10,25 @@
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
-std::vector<const Variable*> SparqlExpression::containedVariables() const {
+std::vector<const Variable*> SparqlExpression::containedVariables(
+    bool excludeExists) const {
+  // An `EXISTS` is a scope boundary: the variables of its body are only visible
+  // inside the `EXISTS` (correlated variables are resolved later via the
+  // `ExistsJoin`). Hence, when `excludeExists` is set, we do not descend into
+  // it.
+  if (excludeExists && isExistsExpression()) {
+    return {};
+  }
   std::vector<const Variable*> result;
-  // Recursively aggregate the strings from all children.
+  // Recursively aggregate the variables from all children.
   for (const auto& child : children()) {
-    auto variablesFromChild = child->containedVariables();
-    result.insert(result.end(), variablesFromChild.begin(),
-                  variablesFromChild.end());
+    ad_utility::appendVector(result, child->containedVariables(excludeExists));
   }
 
-  // Add the strings from this expression.
-  auto locallyAdded = getContainedVariablesNonRecursive();
-  for (auto& el : locallyAdded) {
-    result.push_back(&el);
-  }
+  // Add the variables from this expression.
+  ql::ranges::copy(getContainedVariablesNonRecursive() |
+                       ql::views::transform(ad_utility::addressOf),
+                   std::back_inserter(result));
   return result;
 }
 
