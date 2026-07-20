@@ -10,11 +10,11 @@
 #define QLEVER_SRC_UTIL_QUERYEVENTLOG_H
 
 #include <atomic>
-#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
 
+#include "backports/filesystem.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/jthread.h"
 
@@ -38,7 +38,7 @@ class QueryEventLog {
 
   // Open `path` in append mode and spawn the writer thread. Must be
   // called at most once per instance; a second call throws.
-  void setOutputFile(const std::filesystem::path& path);
+  void setOutputFile(const ql::filesystem::path& path);
 
   // Enqueue one already-formatted line; the writer appends the trailing
   // newline. No-op if the sink has not been configured.

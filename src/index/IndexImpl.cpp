@@ -7,6 +7,9 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_join.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <cstdio>
@@ -19,6 +22,7 @@
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
@@ -392,6 +396,8 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
+  configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
+      formatIndexBuildTime(absl::Now());
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -906,7 +912,8 @@ auto IndexImpl::convertPartialToGlobalIds(
 namespace {
 // Lift a callback that works on single elements to a callback that works on
 // blocks.
-auto liftCallback(auto callback) {
+template <typename Callback>
+auto liftCallback(Callback callback) {
   return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
@@ -1244,6 +1251,31 @@ void IndexImpl::writeConfiguration() const {
   configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::dateOfIndexBuild() const {
+  if (configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY)) {
+    return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  }
+  // For indexes that were built before the build date was recorded in the
+  // configuration, fall back to the last modification time of the
+  // configuration file, which is written at the end of the index build. We
+  // deliberately use `stat` and not `std::filesystem::last_write_time`: the
+  // latter returns a time point on the `file_clock`, which cannot be
+  // converted portably to a wall-clock time in C++17 (`clock_cast` requires
+  // C++20), and `std::filesystem` is not available on all toolchains that
+  // QLever targets.
+  struct stat fileStat {};
+  auto configFilename = onDiskBase_ + CONFIGURATION_FILE;
+  AD_CONTRACT_CHECK(stat(configFilename.c_str(), &fileStat) == 0);
+  return formatIndexBuildTime(absl::FromTimeT(fileStat.st_mtime));
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
+  return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
+                          absl::UTCTimeZone());
 }
 
 // ___________________________________________________________________________
@@ -1887,12 +1919,11 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
         getPatternFilename(), idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
-      bool ignoreForPatterns = false;
       static_assert(NumColumnsIndexBuilding == 4,
                     "this place probably has to be changed when additional "
                     "payload columns are added");
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
-      patternCreator.processTriple(tripleArr, ignoreForPatterns);
+      patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
@@ -2025,9 +2056,10 @@ namespace {
 // over all tables produced by scanning the given permutation. The customAction
 // is invoked for each table to allow for additional computations while
 // scanning.
+template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, auto customAction) {
+    const Permutation& permutation, CustomAction customAction) {
   return std::packaged_task<void()>{[&counter, &permutation,
                                      &locatedTriplesSharedState,
                                      customAction = std::move(customAction)]() {
@@ -2035,9 +2067,20 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    // The statistics are only recomputed as part of a runtime index rebuild
+    // (see `IndexRebuilder`), so this scan is also throttled by
+    // `rebuild-index-scan-num-threads` (several permutations are scanned in
+    // parallel, so without the throttle this short phase has a high peak
+    // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
+    auto rebuildScanThreads =
+        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+    std::optional<size_t> numThreadsOverride =
+        rebuildScanThreads == 0 ? std::nullopt
+                                : std::optional<size_t>{rebuildScanThreads};
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-        additionalColumns, cancellationHandle, *locatedTriplesSharedState);
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState,
+        numThreadsOverride);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
