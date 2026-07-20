@@ -103,7 +103,7 @@ struct SortedUnionImpl
 
   // Result storage.
   IdTable resultTable_;
-  LocalVocab localVocab_{};
+  LocalVocab localVocab_ = LocalVocab::unlimited();
 
   // Metadata
   ad_utility::AllocatorWithLimit<Id> allocator_;
@@ -182,7 +182,7 @@ struct SortedUnionImpl
                                            std::move(localVocab_)};
     resultTable_ = IdTable{resultTable_.numColumns(), allocator_};
     resultTable_.reserve(Union::chunkSize);
-    localVocab_ = LocalVocab{};
+    localVocab_ = LocalVocab::unlimited();
     return result;
   }
 

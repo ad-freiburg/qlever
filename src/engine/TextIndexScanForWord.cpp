@@ -50,7 +50,7 @@ Result TextIndexScanForWord::computeResult(
   // Add details to the runtimeInfo. This is has no effect on the result.
   runtimeInfo().addDetail("word: ", config_.word_);
 
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
 }
 
 // _____________________________________________________________________________

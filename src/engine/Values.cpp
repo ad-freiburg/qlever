@@ -112,7 +112,7 @@ Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();

@@ -147,11 +147,11 @@ void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
 Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (knownEmptyResult()) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), LocalVocab::unlimited()};
   }
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
-  LocalVocab staticMergedVocab{};
+  LocalVocab staticMergedVocab = LocalVocab::unlimited();
   staticMergedVocab.mergeWith(
       subResults |
       ql::views::transform([](const auto& result) -> const LocalVocab& {

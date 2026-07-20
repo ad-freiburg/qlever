@@ -383,6 +383,13 @@ class Operation {
     return getExecutionContext()->getAllocator();
   }
 
+  // Create a new, empty `LocalVocab` whose memory is accounted against this
+  // query's memory limit (via `allocator()`). Use this instead of a
+  // default-constructed `LocalVocab` for the result of an operation, so that
+  // the words stored in it (and in all `LocalVocab`s later cloned or merged
+  // from it) count towards the memory limit.
+  LocalVocab makeLocalVocab() const { return LocalVocab{allocator()}; }
+
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else

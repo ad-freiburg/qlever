@@ -84,7 +84,8 @@ class LazyGroupByRange
         singleIdTable_(singleIdTable),
         inWidth_(subTreeResultWidth),
         resultTable_(parent->getResultWidth(),
-                     parent->getExecutionContext()->getAllocator()) {
+                     parent->getExecutionContext()->getAllocator()),
+        currentLocalVocab_(parent->getExecutionContext()->getAllocator()) {
     AD_CONTRACT_CHECK(inWidth_ == IN_WIDTH || IN_WIDTH == 0);
     AD_CONTRACT_CHECK(parent_ != nullptr);
   }
@@ -545,7 +546,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
-    return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable).value(), resultSortedOn(), makeLocalVocab()};
   }
 
   std::vector<Aggregate> aggregates;
@@ -1775,7 +1776,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     SubResults subresults, const std::vector<size_t>& columnIndices) const {
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
-  LocalVocab localVocab;
+  LocalVocab localVocab{getExecutionContext()->getAllocator()};
 
   // Initialize the data for the aggregates of the GROUP BY operation.
   HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(
