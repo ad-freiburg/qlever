@@ -74,16 +74,16 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
-  WebSocketHandler webSocketHandler_;
-  // Metrics and instrumented executor are initialized after `ioContext_`
-  // (their in-class initializers depend on it) and before `acceptorStrand_`.
   std::shared_ptr<ad_utility::IoContextMetrics> ioContextMetrics_ =
       std::make_shared<ad_utility::IoContextMetrics>(
           ad_utility::makeIoContextMetrics());
+  // `instrumentedExec_` and `executor_` depend on `ioContext_`.
   ad_utility::InstrumentedExecutor<net::io_context::executor_type>
-      instrumentedExec_{ioContext_.get_executor(), ioContextMetrics_};
-  net::any_io_executor executor_{instrumentedExec_};
+      instrumentedExec_;
+  net::any_io_executor executor_;
 
+  // `websocketHandler_` depends on `executor_`.
+  WebSocketHandler webSocketHandler_;
   ad_utility::MemorySize lazyBodyChunkSize_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
@@ -133,6 +133,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
+        instrumentedExec_{ioContext_.get_executor(), ioContextMetrics_},
+        executor_{instrumentedExec_},
         webSocketHandler_{
             std::invoke(std::move(webSocketHandlerSupplier), executor_)},
         lazyBodyChunkSize_{lazyBodyChunkSize} {
