@@ -6,8 +6,12 @@
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
 
+#include <absl/cleanup/cleanup.h>
+
+#include <chrono>
 #include <cstdlib>
 #include <future>
+#include <thread>
 
 #include "backports/span.h"
 #include "util/Exception.h"
@@ -83,6 +87,11 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       net::make_strand(ioContext_);
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
+  // Number of currently active `session` coroutines. `shutDown` waits (for a
+  // bounded time) until this reaches zero before stopping the `io_context`, so
+  // that in-flight sessions can finish (in particular, flush their final log
+  // messages). See `shutDown` for details.
+  std::atomic<int> numActiveSessions_ = 0;
 
  public:
   /// Construct from the `queryRegistry`, port and ip address, on which this
@@ -183,6 +192,24 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
 
     // Wait until the posted task has successfully executed
     future.wait();
+
+    // Give still-active sessions a bounded grace period to finish before we
+    // tear down the `io_context`. This matters because a session may be
+    // suspended at an `async_*` operation between sending its response and
+    // running its exception-handling/logging code. `ioContext_.stop()` discards
+    // all queued completion handlers, so without this wait the handler that
+    // would resume such a session (and let it log) may never run, losing the
+    // log output. The client has already received the response at that point,
+    // so a test that shuts down right after reading the response would race
+    // with the server's logging (see `HttpTest`'s `ErrorHandlingInSession`).
+    // The bound is a safety net so that a genuinely stuck session (e.g. an idle
+    // keep-alive or WebSocket connection) cannot make `shutDown` hang forever.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (numActiveSessions_.load() > 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
     // Make sure the tests don't run forever because without this `run()` may
     // not terminate.
     ioContext_.stop();
@@ -452,6 +479,14 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   // This coroutine handles a single http session which is represented by a
   // socket.
   boost::asio::awaitable<void> session(tcp::socket socket) {
+    // Track this session as active so that `shutDown` can wait for it to finish
+    // before stopping the `io_context`. The counter is decremented when this
+    // coroutine's frame is destroyed, i.e. after all of its code (including any
+    // exception logging) has run.
+    numActiveSessions_.fetch_add(1);
+    absl::Cleanup decrementActiveSessions{
+        [this]() { numActiveSessions_.fetch_sub(1); }};
+
     beast::flat_buffer buffer;
     beast::tcp_stream stream{std::move(socket)};
 
