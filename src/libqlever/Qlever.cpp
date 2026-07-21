@@ -46,9 +46,9 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
         cache_.setMaxSizeSingleEntry(newValue);
       });
 
-  // If `skipLoading` is set, we do not touch the on-disk index at all (not even
-  // grabbing the index snapshot); the instance is expected to be populated
-  // later from a blob (see `deserializeVocabAndNamedCacheFromCompressedBlob`).
+  // If `skipLoading` is set, we do not touch the on-disk index at all; the
+  // instance is expected to be populated later from a blob (see
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
   if (skipLoading) {
     return;
   }
