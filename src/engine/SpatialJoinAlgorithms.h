@@ -239,7 +239,7 @@ class SpatialJoinAlgorithms {
   // contain two quotes, the string is returned as a whole
   std::string_view betweenQuotes(std::string_view extractFrom) const;
 
-  // Helper to add a row to the result table. As combines the selected columns
+  // Helper to add a row to the result table. Combines the selected columns
   // (given in `params_`) from the given row in each input table respectively.
   // Input tables are swapped if requested (required for the `WITHIN` join).
   void addResultTableEntry(IdTable* result, const IdTableView<0>* resultLeft,
