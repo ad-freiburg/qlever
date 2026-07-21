@@ -17,6 +17,7 @@
 using namespace std::literals;
 using ad_utility::source_location;
 
+// _____________________________________________________________________________
 TEST(LocaleManagerTest, Levels) {
   using L = LocaleManager::Level;
   LocaleManager loc;
@@ -27,6 +28,7 @@ TEST(LocaleManagerTest, Levels) {
   ASSERT_GT(loc.compare("älpha", "ALPHA", L::SECONDARY), 0);
 }
 
+// _____________________________________________________________________________
 TEST(LocaleManagerTest, getLowercaseUtf8) {
   LocaleManager loc;
   ASSERT_EQ("schindler's list", loc.getLowercaseUtf8("Schindler's List"));
@@ -34,6 +36,7 @@ TEST(LocaleManagerTest, getLowercaseUtf8) {
   ASSERT_EQ("fôéßaéé", loc.getLowercaseUtf8("FÔÉßaéÉ"));
 }
 
+// _____________________________________________________________________________
 TEST(LocaleManagerTest, Punctuation) {
   using L = LocaleManager::Level;
   {
@@ -53,6 +56,7 @@ TEST(LocaleManagerTest, Punctuation) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(LocaleManagerTest, Normalization) {
   // é as single codepoints
   std::string as = "\xc3\xa9"s;
@@ -67,6 +71,7 @@ TEST(LocaleManagerTest, Normalization) {
   ASSERT_EQ(resA, as);
 }
 
+// _____________________________________________________________________________
 TEST(LocaleManager, PrefixSortKey) {
   SimpleStringComparator comp("en", "US", true);
   LocaleManager locIgnorePunct = comp.getLocaleManager();
@@ -133,7 +138,7 @@ TEST(LocaleManager, PrefixSortKey) {
 // It is always compiled and run, regardless of whether QLever is built with
 // ICU, so that the ICU-free code path is covered.
 
-// ______________________________________________________________________________
+// _____________________________________________________________________________
 TEST(LocaleManager, NoICU) {
   using L = LocaleManagerNoICU::Level;
   LocaleManagerNoICU loc;

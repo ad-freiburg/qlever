@@ -95,50 +95,6 @@ class LocaleManagerBase {
   };
 };
 
-// Compute a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`,
-// using `manager` to compute the sort keys. Shared by the ICU and the ICU-free
-// locale managers (see `getPrefixSortKey` there).
-//
-// `prefixLength` is the number of relevant characters (see below). Return a
-// `SortKey` that is a prefix of the `SortKey` for `s` w.r.t `Level::PRIMARY`
-// and that also is a `SortKey` for a prefix "p" of `s`. "p" is the minimal
-// prefix of `s` which consists of at least `prefixLength` codepoints and whose
-// SortKey fulfills the first condition. Codepoints, which do not contribute to
-// the `SortKey` because they are irrelevant for the `PRIMARY` level do not
-// count towards `prefixLength`. The first element of the return value is the
-// actual number of (contributing) codepoints in "p". If `s` contains less than
-// `prefixLength` contributing codepoints, then
-// {totalNumberOfContributingCodepoints, completeSortKey} is returned.
-template <typename LocaleManagerT>
-std::pair<size_t, LocaleManagerBase::SortKey> getPrefixSortKeyImpl(
-    const LocaleManagerT& manager, std::string_view s, size_t prefixLength) {
-  using SortKey = LocaleManagerBase::SortKey;
-  using Level = LocaleManagerBase::Level;
-  size_t numContributingCodepoints = 0;
-  SortKey sortKey;
-  size_t prefixLengthSoFar = 1;
-  SortKey completeSortKey = manager.getSortKey(s, Level::PRIMARY);
-  while (numContributingCodepoints < prefixLength ||
-         !completeSortKey.starts_with(sortKey)) {
-    auto [numCodepoints, prefix] =
-        ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
-    auto nextLongerSortKey = manager.getSortKey(prefix, Level::PRIMARY);
-    if (nextLongerSortKey != sortKey) {
-      // The `SortKey` changed by adding a codepoint, so that codepoint was
-      // contributing.
-      numContributingCodepoints++;
-      sortKey = std::move(nextLongerSortKey);
-    }
-    if (numCodepoints < prefixLengthSoFar) {
-      // We have checked the complete string without finding a sufficiently long
-      // contributing prefix.
-      break;
-    }
-    prefixLengthSoFar++;
-  }
-  return {numContributingCodepoints, std::move(sortKey)};
-}
-
 #ifndef QLEVER_NO_UNICODE
 
 // This class wraps all calls to the ICU library that are required by QLever
@@ -257,11 +213,44 @@ class LocaleManagerICU : public LocaleManagerBase {
     return result;
   }
 
-  // Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
-  // For the exact semantics see `getPrefixSortKeyImpl` above.
+  // Compute a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of
+  // `s`.
+  //
+  // `prefixLength` is the number of relevant characters (see below). Return a
+  // `SortKey` that is a prefix of the `SortKey` for `s` w.r.t `Level::PRIMARY`
+  // and that also is a `SortKey` for a prefix "p" of `s`. "p" is the minimal
+  // prefix of `s` which consists of at least `prefixLength` codepoints and
+  // whose SortKey fulfills the first condition. Codepoints, which do not
+  // contribute to the `SortKey` because they are irrelevant for the `PRIMARY`
+  // level do not count towards `prefixLength`. The first element of the return
+  // value is the actual number of (contributing) codepoints in "p". If `s`
+  // contains less than `prefixLength` contributing codepoints, then
+  // {totalNumberOfContributingCodepoints, completeSortKey} is returned.
   [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
       std::string_view s, size_t prefixLength) const {
-    return getPrefixSortKeyImpl(*this, s, prefixLength);
+    size_t numContributingCodepoints = 0;
+    SortKey sortKey;
+    size_t prefixLengthSoFar = 1;
+    SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
+    while (numContributingCodepoints < prefixLength ||
+           !completeSortKey.starts_with(sortKey)) {
+      auto [numCodepoints, prefix] =
+          ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
+      auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
+      if (nextLongerSortKey != sortKey) {
+        // The `SortKey` changed by adding a codepoint, so that codepoint was
+        // contributing.
+        numContributingCodepoints++;
+        sortKey = std::move(nextLongerSortKey);
+      }
+      if (numCodepoints < prefixLengthSoFar) {
+        // We have checked the complete string without finding a sufficiently
+        // long contributing prefix.
+        break;
+      }
+      prefixLengthSoFar++;
+    }
+    return {numContributingCodepoints, std::move(sortKey)};
   }
 
   // Convert a UTF-8 String to lowercase according to the held locale. `s` is a
@@ -405,7 +394,10 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
   [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
       std::string_view s, size_t prefixLength) const {
-    return getPrefixSortKeyImpl(*this, s, prefixLength);
+    // Every byte is its own sort weight (see `getSortKey`), so the prefix sort
+    // key is just the first `min(prefixLength, s.size())` bytes.
+    size_t numBytes = std::min(prefixLength, s.size());
+    return {numBytes, getSortKey(s.substr(0, numBytes), Level::PRIMARY)};
   }
 
   // Lowercase `s`. As a preparatory step this still reuses the ICU-based
