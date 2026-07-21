@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <memory>
 #include <optional>
@@ -14,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "backports/memory_resource.h"
+#include "backports/span.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -22,6 +26,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
@@ -246,13 +251,27 @@ class Qlever {
   using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
+  // Handles the (de)serialization of the vocabulary and the `NamedResultCache`
+  // to and from a compressed blob (see the delegating public methods
+  // `serializeVocabAndNamedCacheToCompressedBlob` /
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` below). It is a friend of
+  // this class so that it can access the internals it needs.
+  NamedCachedQueryBlobManager blobManager_;
+  friend class NamedCachedQueryBlobManager;
+
+  FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
+
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
-  // explained above.
-  explicit Qlever(const EngineConfig& config);
+  // explained above. If `skipLoading` is true, no index is loaded from disk
+  // (in particular, none of the on-disk index files, not even the vocabulary
+  // or the `.meta-data.json`, need to exist); the instance must then be
+  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
+  // before it can answer queries.
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
   using PlannedQuery = qlever::PlannedQuery;
 
@@ -370,18 +389,28 @@ class Qlever {
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
 
-  // Write the contents of the `NamedResultCache` to disk.
-  template <typename Serializer>
-  void writeNamedResultCacheToSerializer(Serializer& serializer) const {
-    namedResultCache_.writeToSerializer(serializer);
+  // Serialize the index metadata JSON, the vocabulary, and the
+  // `NamedResultCache` of this instance into a single, self-contained,
+  // ZSTD-compressed blob that can later be loaded via
+  // `deserializeVocabAndNamedCacheFromCompressedBlob` (e.g. by a different
+  // process, without needing access to the on-disk index). For details see
+  // `NamedCachedQueryBlobManager::serialize`.
+  std::vector<char> serializeVocabAndNamedCacheToCompressedBlob() const {
+    return blobManager_.serialize(*this);
   }
 
-  // Read the contents of the `NamedResultCache` from disk.
-  template <typename Serializer>
-  void readNamedResultCacheFromDisk(Serializer& serializer) {
-    auto indexAndViews = indexAndViewsSnapshot();
-    namedResultCache_.readFromSerializer(serializer, allocator_,
-                                         indexAndViews->index_);
+  // Load a blob previously written by
+  // `serializeVocabAndNamedCacheToCompressedBlob`. For details see
+  // `NamedCachedQueryBlobManager::deserialize`.
+  //
+  // PRECONDITION: Must only be called while no other thread can concurrently
+  // access this instance, e.g. right after construction and before the first
+  // query is answered. Must not be called more than once on the same
+  // instance.
+  void deserializeVocabAndNamedCacheFromCompressedBlob(
+      ql::span<const char> blob,
+      ql::pmr::polymorphic_allocator<char> allocator = {}) {
+    blobManager_.deserialize(*this, blob, std::move(allocator));
   }
 
   // Create a Query Execution Context needed for execution of single SPARQL
@@ -406,7 +435,19 @@ class Qlever {
   // Atomically swap in a freshly built `IndexAndViews`. The old instance stays
   // alive as long as some `shared_ptr` (e.g. obtained via
   // `indexAndViewsSnapshot()`) still references it.
+  //
+  // PRECONDITION: The `NamedResultCache` must be empty. Its entries reference
+  // IDs (and possibly zero-copy views) that are only valid for the specific
+  // index snapshot they were created against; swapping in a different index
+  // would silently invalidate them. Callers that want to swap the index must
+  // therefore clear the named result cache first. (This is a deliberately
+  // minimally invasive guard; full support for keeping the named result cache
+  // across index snapshots is future work.)
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
+    AD_CONTRACT_CHECK(
+        namedResultCache_.numEntries() == 0,
+        "The index snapshot must not be swapped while the named result cache "
+        "is not empty");
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
 
