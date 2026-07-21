@@ -53,8 +53,7 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType);
 // Formats a triple (subject, predicate, object) according to the output
 // format `format`.
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
-                         const ad_utility::MediaType& mediaType,
-                         bool includeDataType = false);
+                         const ad_utility::MediaType& mediaType);
 
 // Creates a `StringTriple` object. Needed for backwards compatibility with
 // `ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON`

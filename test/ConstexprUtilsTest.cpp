@@ -220,6 +220,48 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
+namespace {
+constexpr std::array<int, 4> switchFromArrayCases{1, 2, 3, 5};
+}
+
+// The same tests as for `ConstexprSwitch` above, but going through
+// `constexprSwitchFromTuple`, which reads the cases from a `std::array`.
+TEST(ConstexprUtils, constexprSwitchFromTuple) {
+  using namespace ad_utility;
+  {
+    auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * 2; }};
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 2)), 4);
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 5)), 10);
+    ASSERT_ANY_THROW((constexprSwitchFromTuple<switchFromArrayCases>(f, 4)));
+  }
+  {
+    auto f =
+        ad_utility::ApplyAsValueIdentity{[](auto i, int j) { return i * j; }};
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 2, 7)), 14);
+    ASSERT_EQ((constexprSwitchFromTuple<switchFromArrayCases>(f, 5, 2)), 10);
+    ASSERT_ANY_THROW((constexprSwitchFromTuple<switchFromArrayCases>(f, 4, 3)));
+  }
+}
+
+namespace {
+// Cases of different types, which is the reason `constexprSwitchFromTuple`
+// accepts an arbitrary tuple-like rather than `std::array`.
+constexpr std::tuple<int, char, long> switchFromTupleMixedCases{1, 'a', 5L};
+};  // namespace
+
+// `constexprSwitchFromTuple` with cases of different types. The lambda has to
+// map all of them to a common return type, as the cases are expanded into a
+// single `ConstexprSwitch`.
+TEST(ConstExprUtils, constexprSwitchFromTupleWithMixedTypes) {
+  using namespace ad_utility;
+  auto f = ad_utility::ApplyAsValueIdentity{
+      [](auto c) -> int { return static_cast<int>(c); }};
+  ASSERT_EQ((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 1)), 1);
+  ASSERT_EQ((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 'a')), 97);
+  ASSERT_EQ((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 5L)), 5);
+  ASSERT_ANY_THROW((constexprSwitchFromTuple<switchFromTupleMixedCases>(f, 4)));
+}
+
 struct PushToVector {
   std::vector<std::string>* typeToStringVector;
 
