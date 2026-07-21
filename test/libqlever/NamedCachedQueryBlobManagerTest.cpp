@@ -103,6 +103,35 @@ TEST(NamedCachedQueryBlobManager, writeAndVerifyBlobHeader) {
 }
 
 // _____________________________________________________________________________
+// Test that a blob with the correct magic bytes but an incompatible format
+// version is rejected.
+TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsWrongVersion) {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  // The correct magic bytes (see `blobMagicBytes`), followed by a format
+  // version that is definitely not the current one.
+  writer << std::array<char, 8>{'Q', 'L', 'V', 'R', 'B', 'L', 'O', 'B'};
+  writer << uint16_t{63999};
+  auto data = std::move(writer).data();
+
+  ad_utility::serialization::ByteBufferReadSerializerT<true,
+                                                       ql::span<const char>>
+      reader{ql::span<const char>{data}};
+  AD_EXPECT_THROW_WITH_MESSAGE(Manager::skipAndVerifyBlobHeader(reader),
+                               HasSubstr("incompatible version"));
+}
+
+// _____________________________________________________________________________
+// Test that a (nonempty) blob that is too short to even contain the trailing
+// `uint64_t` size info is rejected.
+TEST(NamedCachedQueryBlobManager,
+     decompressBlobWithTrailingSizeInfoRejectsTooShortInput) {
+  std::vector<char> tooShort(3, 'x');
+  ASSERT_LT(tooShort.size(), sizeof(uint64_t));
+  EXPECT_THROW(Manager::decompressBlobWithTrailingSizeInfo(tooShort, {}),
+               ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
 // Test that a blob (index metadata + vocabulary + named result cache), written
 // from one `Qlever` instance, can be loaded into a completely separate instance
 // that has NO index files on disk at all (constructed with `skipLoading`), and
