@@ -161,8 +161,12 @@ struct UpperOrLowerCaseImpl {
 // `ad_utility::utf8ToLower` has an optional locale argument, so its address
 // cannot be used directly as the (single-argument) non-type template argument
 // of `UpperOrLowerCaseImpl`. Wrap it in a function with the exact required
-// signature. `LCASE` is locale-insensitive, so the default (root) locale is
-// used, matching the previous behavior.
+// signature.
+// TODO<RobinTF> This uses the locale-independent (root) lowercasing, as `LCASE`
+// always has. Note that this can differ from the (locale-dependent) lowercasing
+// the index uses for its vocabulary, which could in principle lead to missed
+// lookups; revisit once a locale can be wired into the n-ary string
+// expressions.
 inline std::string utf8ToLowerRootLocale(std::string_view s) {
   return ad_utility::utf8ToLower(s);
 }

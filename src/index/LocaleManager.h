@@ -2,12 +2,11 @@
 //
 // 2019 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
-//
 
 #ifndef QLEVER_SRC_INDEX_LOCALEMANAGER_H
 #define QLEVER_SRC_INDEX_LOCALEMANAGER_H
@@ -62,7 +61,6 @@ class LocaleManagerBase {
   // for why we cannot rely on `std::char_traits` directly).
   using U8CharTraits = ad_utility::GenericCharTraits<uint8_t>;
   using U8String = std::basic_string<uint8_t, U8CharTraits>;
-  using U8StringView = std::basic_string_view<uint8_t, U8CharTraits>;
 
   class SortKey {
    public:
@@ -76,7 +74,7 @@ class LocaleManagerBase {
     // Comparison of sort key is done lexicographically on the byte values
     // of member `sortKey_`
     [[nodiscard]] int compare(const SortKey& rhs) const noexcept {
-      return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
+      return sortKey_.compare(rhs.sortKey_);
     }
 
     QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKey, sortKey_)

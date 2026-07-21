@@ -2,12 +2,11 @@
 //
 // 2019 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
-//
 
 #include <gtest/gtest.h>
 
@@ -77,27 +76,15 @@ TEST(LocaleManager, PrefixSortKey) {
   LocaleManager locIgnorePunct = comp.getLocaleManager();
   LocaleManager locRespectPunct("en", "US", false);
 
-  auto print = []([[maybe_unused]] const auto& s) {
-    // The following code can be used for convenient debug output.
-    /*
-    for (const auto& ch : s) {
-      std::cout << int(ch) << ' ';
-    }
-    std::cout << std::endl;
-     */
-  };
-
   // Assert that all possible prefix sort keys of `s` are indeed prefixes
   // of the `SortKey` of `s`.
-  auto testSortKeysForLocale = [print](std::string_view s,
-                                       const LocaleManager& loc) {
+  auto testSortKeysForLocale = [](std::string_view s,
+                                  const LocaleManager& loc) {
     auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
-    print(complete);
     for (size_t i = 0; i < s.size(); ++i) {
       auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
       (void)numCodepoints;
       ASSERT_TRUE(ql::starts_with(complete, partial.get()));
-      print(partial.get());
     }
   };
 
