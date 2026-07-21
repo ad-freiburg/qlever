@@ -37,6 +37,15 @@ TEST(StringUtils, utf8ToLower) {
 }
 
 // _____________________________________________________________________________
+TEST(StringUtils, utf8ToLowerWithLocale) {
+  // With the default (root) locale, ASCII `I` lowercases to `i`.
+  EXPECT_EQ("i", utf8ToLower("I"));
+  EXPECT_EQ("i", utf8ToLower("I", ""));
+  // The Turkish locale instead lowercases `I` to the dotless `ı` (U+0131).
+  EXPECT_EQ("ı", utf8ToLower("I", "tr"));
+}
+
+// _____________________________________________________________________________
 TEST(StringUtils, utf8ToUpper) {
   EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper("Schindler's List"));
   EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper("#+-_bImM__baMm++"));

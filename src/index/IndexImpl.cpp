@@ -1314,6 +1314,22 @@ void IndexImpl::readConfiguration() {
     std::string lang{configurationJson_["locale"]["language"]};
     std::string country{configurationJson_["locale"]["country"]};
     bool ignorePunctuation{configurationJson_["locale"]["ignore-punctuation"]};
+    // Detect a mismatch between the index and the loading binary regarding the
+    // use of ICU-based Unicode collation vs. the ICU-free (bytewise) fallback.
+    // The two produce different sort orders, so an index built with one must
+    // not be loaded by a binary built with the other. Indexes built before this
+    // key existed were always built with ICU (hence the default `true`).
+    bool usingIcu = configurationJson_["locale"].value("using-icu", true);
+    if (usingIcu != localeManagerUsesICU) {
+      throw std::runtime_error(absl::StrCat(
+          "This index was built ", usingIcu ? "with" : "without",
+          " ICU-based Unicode collation, but the current QLever binary was "
+          "built ",
+          localeManagerUsesICU ? "with" : "without",
+          " it (see the `NO_UNICODE` CMake option). The sort order differs "
+          "between the two, so the index must be rebuilt with a matching "
+          "QLever binary."));
+    }
     vocab_.setLocale(lang, country, ignorePunctuation);
     textVocab_.setLocale(lang, country, ignorePunctuation);
   } else {
@@ -1514,6 +1530,11 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     configurationJson_["locale"]["language"] = lang;
     configurationJson_["locale"]["country"] = country;
     configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
+    // Record whether this index was built with ICU-based Unicode collation or
+    // with the ICU-free (bytewise) fallback, so that a mismatch with the
+    // loading binary can be detected (see `readConfiguration`). The two produce
+    // different sort orders.
+    configurationJson_["locale"]["using-icu"] = localeManagerUsesICU;
   }
 
   if (j.find("languages-internal") != j.end()) {

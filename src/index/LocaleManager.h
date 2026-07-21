@@ -12,7 +12,6 @@
 #define QLEVER_SRC_INDEX_LOCALEMANAGER_H
 
 #ifndef QLEVER_NO_UNICODE
-#include <unicode/casemap.h>
 #include <unicode/coll.h>
 #include <unicode/locid.h>
 #include <unicode/normalizer2.h>
@@ -30,13 +29,11 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
-#include "util/TypeTraits.h"
 
 // Base class holding the types shared by both the ICU and the NoICU variants of
 // the `LocaleManager` (see below). None of these types depend on ICU.
@@ -49,10 +46,10 @@ class LocaleManagerBase {
     TERTIARY = 2,
     QUARTERNARY = 3,
     IDENTICAL = 4,
-    TOTAL =
-        5  // if the identical level returns equal, we take the language  tag
-           // into account and then the result by strcmp. that way two strings
-           // that have a different byte representation never compare equal
+    // If the `IDENTICAL` level returns equal, we take the language tag into
+    // account and then the result of `strcmp`; that way two strings that have a
+    // different byte representation never compare equal.
+    TOTAL = 5
   };
 
   // A strong typedef for a string that contains unicode collation weights for
@@ -66,34 +63,26 @@ class LocaleManagerBase {
   using U8String = std::basic_string<uint8_t, U8CharTraits>;
   using U8StringView = std::basic_string_view<uint8_t, U8CharTraits>;
 
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, U8String, U8StringView>) class SortKeyImpl {
+  class SortKey {
    public:
-    SortKeyImpl() = default;
-    explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
-    // Construct an owning `SortKey` directly from a `U8String`. Only available
-    // for the owning `SortKey`, not for the non-owning `SortKeyView` (which
-    // would dangle). Note: `CPP_ctor` (not `CPP_template`) is required here
-    // because this is a constrained constructor nested inside a `CPP_template`
-    // class (nesting `CPP_template` breaks in the C++17 SFINAE mode).
-    CPP_member explicit CPP_ctor(SortKeyImpl)(U8String sortKey)(
-        requires(std::is_same_v<T, U8String>))
-        : sortKey_(std::move(sortKey)) {}
-    [[nodiscard]] constexpr const T& get() const noexcept { return sortKey_; }
-    constexpr T& get() noexcept { return sortKey_; }
+    SortKey() = default;
+    explicit SortKey(U8String sortKey) : sortKey_(std::move(sortKey)) {}
+    [[nodiscard]] constexpr const U8String& get() const noexcept {
+      return sortKey_;
+    }
+    constexpr U8String& get() noexcept { return sortKey_; }
 
     // Comparison of sort key is done lexicographically on the byte values
     // of member `sortKey_`
-    template <typename U>
-    [[nodiscard]] int compare(const SortKeyImpl<U>& rhs) const noexcept {
+    [[nodiscard]] int compare(const SortKey& rhs) const noexcept {
       return U8StringView{sortKey_}.compare(U8StringView{rhs.sortKey_});
     }
 
-    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKeyImpl, sortKey_)
+    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKey, sortKey_)
 
     // Is this sort key a prefix of another sort key. Note: This does not imply
     // any guarantees on the relation of the underlying strings.
-    bool starts_with(const SortKeyImpl& rhs) const noexcept {
+    bool starts_with(const SortKey& rhs) const noexcept {
       return ql::starts_with(get(), rhs.get());
     }
 
@@ -101,10 +90,8 @@ class LocaleManagerBase {
     std::string::size_type size() const noexcept { return get().size(); }
 
    private:
-    T sortKey_;
+    U8String sortKey_;
   };
-  using SortKey = SortKeyImpl<U8String>;
-  using SortKeyView = SortKeyImpl<U8StringView>;
 };
 
 // Compute a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`,
@@ -220,8 +207,7 @@ class LocaleManagerICU : public LocaleManagerBase {
   // otherwise the behavior is undefined. The `level` parameter is ignored but
   // required to have a symmetric interface. Return <0 iff a<b, >0 iff a>b, 0
   // iff a==b.
-  template <typename T, typename U>
-  static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
+  static int compare(const SortKey& a, const SortKey& b,
                      [[maybe_unused]] const Level = Level::PRIMARY) {
     return a.compare(b);
   }
@@ -280,18 +266,8 @@ class LocaleManagerICU : public LocaleManagerBase {
   // Convert a UTF-8 String to lowercase according to the held locale. `s` is a
   // UTF-8 encoded string; return the lowercase version of s, also encoded as
   // UTF-8.
-  [[nodiscard]] std::string getLowercaseUtf8(const std::string_view s) const {
-    std::string res;
-    icu::StringByteSink<std::string> sink(&res);
-    UErrorCode err = U_ZERO_ERROR;
-    // The reason for the `icu::StringPiece` is that older versions of ICU (for
-    // example, the standard version on Ubuntu 18.04) do not accept an
-    // std::string_view here (newer versions do).
-    icu::CaseMap::utf8ToLower(_icuLocale.getName(), 0,
-                              icu::StringPiece(s.data(), s.size()), sink,
-                              nullptr, err);
-    raise(err);
-    return res;
+  [[nodiscard]] std::string getLowercaseUtf8(std::string_view s) const {
+    return ad_utility::utf8ToLower(s, _icuLocale.getName());
   }
 
   // Normalize a Utf8 string to a canonical representation.
@@ -317,10 +293,9 @@ class LocaleManagerICU : public LocaleManagerBase {
   UColAttributeValue _ignorePunctuationStatus =
       UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
-  const icu::Normalizer2* _normalizer =
-      nullptr;  // actually locale-independent but useful to be placed here
-                // since it wraps ICU. Initialized by the setupCollators()
-                // method
+  // Actually locale-independent, but useful to place here since it wraps ICU.
+  // Initialized by the `setupCollators()` method.
+  const icu::Normalizer2* _normalizer = nullptr;
 
   // raise an exception if the error code holds an error.
   static void raise(const UErrorCode& err) {
@@ -415,8 +390,7 @@ class LocaleManagerNoICU : public LocaleManagerBase {
     return (res < 0) ? -1 : (res > 0) ? 1 : 0;
   }
 
-  template <typename T, typename U>
-  static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
+  static int compare(const SortKey& a, const SortKey& b,
                      [[maybe_unused]] const Level = Level::PRIMARY) {
     return a.compare(b);
   }
@@ -448,11 +422,16 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
 // Select the ICU or the NoICU locale manager depending on the build
 // configuration (the `QLEVER_NO_UNICODE` macro is defined via the `NO_UNICODE`
-// CMake option).
+// CMake option). `localeManagerUsesICU` records this choice so that it can be
+// stored in an index's metadata (see `IndexImpl`), to detect when an index is
+// loaded by a binary that was built with the opposite setting (the sort order
+// differs between the two).
 #ifdef QLEVER_NO_UNICODE
 using LocaleManager = LocaleManagerNoICU;
+inline constexpr bool localeManagerUsesICU = false;
 #else
 using LocaleManager = LocaleManagerICU;
+inline constexpr bool localeManagerUsesICU = true;
 #endif
 
 #endif  // QLEVER_SRC_INDEX_LOCALEMANAGER_H

@@ -36,11 +36,14 @@ bool strIsLangTag(const std::string& strLangTag);
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
 /*
- * @brief convert a UTF-8 String to lowercase according to the held locale
+ * @brief convert a UTF-8 String to lowercase
  * @param s UTF-8 encoded string
+ * @param localeName The ICU locale name used for locale-specific case folding
+ * (e.g. "tr" for Turkish). The default empty string uses the locale-independent
+ * root rules.
  * @return The lowercase version of s, also encoded as UTF-8
  */
-std::string utf8ToLower(std::string_view s);
+std::string utf8ToLower(std::string_view s, const char* localeName = "");
 
 // Get the uppercase value. For details see `utf8ToLower` above
 std::string utf8ToUpper(std::string_view s);

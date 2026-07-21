@@ -158,10 +158,19 @@ struct UpperOrLowerCaseImpl {
   }
 };
 
+// `ad_utility::utf8ToLower` has an optional locale argument, so its address
+// cannot be used directly as the (single-argument) non-type template argument
+// of `UpperOrLowerCaseImpl`. Wrap it in a function with the exact required
+// signature. `LCASE` is locale-insensitive, so the default (root) locale is
+// used, matching the previous behavior.
+inline std::string utf8ToLowerRootLocale(std::string_view s) {
+  return ad_utility::utf8ToLower(s);
+}
+
 using UppercaseExpression =
     LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper>>;
 using LowercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToLower>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&utf8ToLowerRootLocale>>;
 
 // SUBSTR
 class SubstrImpl {

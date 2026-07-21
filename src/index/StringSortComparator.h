@@ -429,29 +429,17 @@ class TripleComponentComparatorImpl {
   }
 };
 
-#ifndef QLEVER_NO_UNICODE
-// The ICU-based comparators are the generic comparator templates above
-// instantiated with the `LocaleManagerICU`.
-using SimpleStringComparatorICU = SimpleStringComparatorImpl<LocaleManagerICU>;
-using TripleComponentComparatorICU =
-    TripleComponentComparatorImpl<LocaleManagerICU>;
-#endif  // QLEVER_NO_UNICODE
-
-// The ICU-free comparators are the same templates instantiated with the
-// `LocaleManagerNoICU`.
+// The ICU-free comparators are the generic comparator templates above
+// instantiated with the `LocaleManagerNoICU`. They are used by the tests (and,
+// in an ICU-free build, also via `LocaleManager` below).
 using SimpleStringComparatorNoICU =
     SimpleStringComparatorImpl<LocaleManagerNoICU>;
 using TripleComponentComparatorNoICU =
     TripleComponentComparatorImpl<LocaleManagerNoICU>;
 
-// Select the ICU or the NoICU comparators depending on the build configuration
-// (the `QLEVER_NO_UNICODE` macro is defined via the `NO_UNICODE` CMake option).
-#ifdef QLEVER_NO_UNICODE
-using SimpleStringComparator = SimpleStringComparatorNoICU;
-using TripleComponentComparator = TripleComponentComparatorNoICU;
-#else
-using SimpleStringComparator = SimpleStringComparatorICU;
-using TripleComponentComparator = TripleComponentComparatorICU;
-#endif
+// The comparators used throughout QLever. `LocaleManager` already resolves to
+// the right locale manager for the build configuration (see `LocaleManager.h`).
+using SimpleStringComparator = SimpleStringComparatorImpl<LocaleManager>;
+using TripleComponentComparator = TripleComponentComparatorImpl<LocaleManager>;
 
 #endif  // QLEVER_STRINGSORTCOMPARATOR_H
