@@ -422,16 +422,11 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
 // Select the ICU or the NoICU locale manager depending on the build
 // configuration (the `QLEVER_NO_UNICODE` macro is defined via the `NO_UNICODE`
-// CMake option). `localeManagerUsesICU` records this choice so that it can be
-// stored in an index's metadata (see `IndexImpl`), to detect when an index is
-// loaded by a binary that was built with the opposite setting (the sort order
-// differs between the two).
+// CMake option).
 #ifdef QLEVER_NO_UNICODE
 using LocaleManager = LocaleManagerNoICU;
-inline constexpr bool localeManagerUsesICU = false;
 #else
 using LocaleManager = LocaleManagerICU;
-inline constexpr bool localeManagerUsesICU = true;
 #endif
 
 #endif  // QLEVER_SRC_INDEX_LOCALEMANAGER_H
