@@ -49,7 +49,7 @@ class PerTripleFilter {
                            const QueryExecutionContext& executionContext)
       : filter_{makeFilter(mode, executionContext)} {}
 
-  // Returns true if `key` is new (not a duplicate), false otherwise.
+  // Return true if `key` is new (not a duplicate), false otherwise.
   bool insert(const DeduplicationKey& key);
 
  private:

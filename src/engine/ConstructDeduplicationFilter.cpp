@@ -1,7 +1,16 @@
+// Copyright 2026 The QLever Authors, in particular:
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
 #include "ConstructDeduplicationFilter.h"
 
 namespace qlever::constructExport {
 
+//______________________________________________________________________________
 ConstructDeduplicationState::ConstructDeduplicationState(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext,
@@ -15,6 +24,7 @@ ConstructDeduplicationState::ConstructDeduplicationState(
   }
 }
 
+//______________________________________________________________________________
 PerTripleFilter::Filter PerTripleFilter::makeFilter(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext) {
@@ -34,6 +44,7 @@ PerTripleFilter::Filter PerTripleFilter::makeFilter(
       mode.value_);
 }
 
+//______________________________________________________________________________
 bool PerTripleFilter::insert(const DeduplicationKey& key) {
   return std::visit(
       OverloadCallOperator{
@@ -44,6 +55,7 @@ bool PerTripleFilter::insert(const DeduplicationKey& key) {
       filter_);
 }
 
+//______________________________________________________________________________
 DeduplicationKey ConstructDeduplicationState::makeFullTripleKey(
     const PreprocessedTriple& triple, size_t absoluteRow,
     const BatchEvaluationContext& ctx) {
@@ -67,6 +79,7 @@ DeduplicationKey ConstructDeduplicationState::makeFullTripleKey(
   return key;
 }
 
+//______________________________________________________________________________
 bool ConstructDeduplicationState::isNew(
     size_t tripleIdx, size_t absoluteRow,
     const PreprocessedConstructTemplate& tmpl,
@@ -80,6 +93,7 @@ bool ConstructDeduplicationState::isNew(
                                            absoluteRow, ctx));
 }
 
+//______________________________________________________________________________
 void ConstructDeduplicationState::seedGroundTriple(
     const DeduplicationKey& key) {
   if (filter_.has_value()) {
@@ -97,6 +111,7 @@ size_t ConstructDeduplicationState::computeMaxDedupVocabBytes(
       .getBytes();
 }
 
+//______________________________________________________________________________
 ValueId ConstructDeduplicationState::canonicalize(ValueId id) {
   if (id.getDatatype() != Datatype::LocalVocabIndex) return id;  // fast path
   const auto& entry = *id.getLocalVocabIndex();
@@ -108,6 +123,7 @@ ValueId ConstructDeduplicationState::canonicalize(ValueId id) {
   return ValueId::makeFromLocalVocabIndex(index);
 }
 
+//______________________________________________________________________________
 void ConstructDeduplicationState::resetIfVocabTooLarge() {
   if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
   if (std::holds_alternative<DeduplicationMode::Global>(mode_.value_)) {
@@ -124,6 +140,7 @@ void ConstructDeduplicationState::resetIfVocabTooLarge() {
   dedupVocabBytes_ = 0;
 }
 
+//______________________________________________________________________________
 DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
     DeduplicationKey key) {
   for (ValueId& id : key) {
