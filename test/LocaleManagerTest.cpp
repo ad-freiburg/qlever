@@ -7,6 +7,7 @@
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
 
 #include <gtest/gtest.h>
 
@@ -133,7 +134,7 @@ TEST(LocaleManager, PrefixSortKey) {
 // ICU, so that the ICU-free code path is covered.
 
 // ______________________________________________________________________________
-TEST(StringSortComparatorNoICU, LocaleManager) {
+TEST(LocaleManager, NoICU) {
   using L = LocaleManagerNoICU::Level;
   LocaleManagerNoICU loc;
 

@@ -7,6 +7,7 @@
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
+//
 
 #ifndef QLEVER_SRC_INDEX_LOCALEMANAGER_H
 #define QLEVER_SRC_INDEX_LOCALEMANAGER_H
