@@ -81,14 +81,9 @@ class PerTripleFilter {
 // entered.
 class ConstructDeduplicationState {
  public:
-  // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`: once
-  // the strings added to it exceed this, all dedup state is dropped (which
-  // makes deduplication approximate). Defaults to a quarter of the query's
-  // currently available memory. Tests may pass a tiny value to force a reset.
   ConstructDeduplicationState(
       const DeduplicationMode& mode,
-      const QueryExecutionContext& queryExecutionContext,
-      std::optional<ad_utility::MemorySize> maxDedupVocabSize = std::nullopt);
+      const QueryExecutionContext& queryExecutionContext);
 
   // Constructs the deduplication key for the instantiation of `triple` at
   // `absoluteRow`: the `ValueId` at each of the three positions (subject,
@@ -115,43 +110,16 @@ class ConstructDeduplicationState {
   void seedGroundTriple(const DeduplicationKey& key);
 
  private:
-  // Stored by value (not reference): callers may pass a temporary `mode`, and
-  // `mode_` is read later in `resetIfVocabTooLarge`.
-  const DeduplicationMode mode_;
-  const QueryExecutionContext& queryExecutionContext_;
-  // Approximate total byte size of the strings currently held in `dedupVocab_`.
-  size_t dedupVocabBytes_ = 0;
-  // When `dedupVocabBytes_` reaches this, all dedup state is dropped (see
-  // `resetIfVocabTooLarge`) to bound the vocab's memory. Set from the query's
-  // available memory at construction (see the constructor).
-  const size_t maxDedupVocabBytes_;
-
   // owns every local-vocab entry referenced by a stored key
   LocalVocab dedupVocab_;
 
   // The single shared filter, or `nullopt` for `none` mode (never consulted).
   std::optional<PerTripleFilter> filter_;
 
-  // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
-  // given, else a quarter of the query's currently available memory.
-  static size_t computeMaxDedupVocabBytes(
-      const QueryExecutionContext& queryExecutionContext,
-      std::optional<ad_utility::MemorySize> maxDedupVocabSize);
-
   // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so stored keys never
   // point into a freed block `LocalVocab`, and equal terms from different
   // blocks collapse.
   ValueId canonicalize(ValueId id);
-
-  // Bound `dedupVocab_`s memory: once the accumulated string bytes reach the
-  // threshold, either fail (`Global`, which must stay exact) or drop all dedup
-  // state and start fresh (`BatchWise`). The filter's keys reference
-  // `dedupVocab_`, so both are reset together.
-  //
-  // NOTE: The `BatchWise` reset makes deduplication approximate (triples seen
-  // before a reset may be emitted again). `Global` is exact, so it fails
-  // instead. `None` never reaches here (`isNew` asserts a filter exists).
-  void resetIfVocabTooLarge();
 
   // Canonicalize every position of a pre-built key into `dedupVocab_`.
   DeduplicationKey canonicalizeKey(DeduplicationKey key);
