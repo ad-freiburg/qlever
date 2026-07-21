@@ -10,9 +10,6 @@ ConstructDeduplicationState::ConstructDeduplicationState(
       queryExecutionContext_{queryExecutionContext},
       maxDedupVocabBytes_{
           computeMaxDedupVocabBytes(queryExecutionContext, maxDedupVocabSize)} {
-  // Only the deduplicating modes get a filter. `None` leaves `filter_` empty
-  // (the dedup path is never entered); constructing a `PerTripleFilter` for
-  // it is a precondition violation (see `PerTripleFilter::makeFilter`).
   if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
     filter_.emplace(mode, queryExecutionContext);
   }
