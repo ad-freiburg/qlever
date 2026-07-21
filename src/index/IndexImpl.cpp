@@ -390,6 +390,19 @@ void IndexImpl::createFromFiles(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+  // The `shared_ptr` makes the lambda copyable (as `std::function` requires);
+  // the factory is only ever invoked once.
+  auto sharedFiles = std::make_shared<
+      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification>>(
+      std::move(files));
+  createFromParser(
+      [this, sharedFiles = std::move(sharedFiles)](const EncodedIriManager*) {
+        return makeRdfParser(std::move(*sharedFiles));
+      });
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromParser(const ParserFactory& parserFactory) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -404,7 +417,7 @@ void IndexImpl::createFromFiles(
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(std::move(files)));
+      createIdTriplesAndVocab(parserFactory(&encodedIriManager()));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.

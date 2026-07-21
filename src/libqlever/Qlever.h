@@ -8,6 +8,7 @@
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
 #include <boost/optional.hpp>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +21,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/EncodedIriManager.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
@@ -28,7 +30,15 @@
 #include "util/Synchronized.h"
 #include "util/http/MediaTypes.h"
 
+class RdfParserBase;
+
 namespace qlever {
+
+// Type-erased parser factory for programmatic index building (triples
+// supplied by the embedding application instead of input files). See
+// `IndexImpl::ParserFactory` for why this is a factory and not a parser.
+using ParserFactory =
+    std::function<std::unique_ptr<RdfParserBase>(const EncodedIriManager*)>;
 
 // The common configuration shared by the index building and query execution.
 struct CommonConfig {
@@ -249,6 +259,14 @@ class Qlever {
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
+
+  // Build an index from triples supplied programmatically by the parser
+  // produced by `parserFactory` (`config.inputFiles_` is then ignored; an
+  // empty factory means "build from `config.inputFiles_`" as above). This
+  // allows embedding applications to feed triples from their own data
+  // structures without serializing them to an RDF text format first.
+  static void buildIndex(IndexBuilderConfig config,
+                         ParserFactory parserFactory);
 
   // Create a QLever instance for querying using an `EngineConfig` as
   // explained above.

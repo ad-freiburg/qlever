@@ -81,6 +81,12 @@ Qlever::Qlever(const EngineConfig& config)
 
 // _____________________________________________________________________________
 void Qlever::buildIndex(IndexBuilderConfig config) {
+  buildIndex(std::move(config), ParserFactory{});
+}
+
+// _____________________________________________________________________________
+void Qlever::buildIndex(IndexBuilderConfig config,
+                        ParserFactory parserFactory) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.
@@ -112,8 +118,12 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
-    AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_);
+    if (parserFactory) {
+      index.getImpl().createFromParser(std::move(parserFactory));
+    } else {
+      AD_CONTRACT_CHECK(!config.inputFiles_.empty());
+      index.createFromFiles(config.inputFiles_);
+    }
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {

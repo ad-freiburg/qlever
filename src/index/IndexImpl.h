@@ -10,6 +10,7 @@
 #include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -235,6 +236,21 @@ class IndexImpl {
 
   void createFromFiles(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files);
+
+  // Type-erased parser factory for programmatic index building (triples
+  // supplied by an embedding application instead of input files). It is a
+  // factory rather than a parser because the `EncodedIriManager` is only
+  // configured during index building, shortly before the parser is needed.
+  using ParserFactory =
+      std::function<std::unique_ptr<RdfParserBase>(const EncodedIriManager*)>;
+
+  // Creates an index from the triples yielded by the parser produced by
+  // `parserFactory`. Same orchestration as `createFromFiles` (vocabulary
+  // creation, conversion to global IDs, permutations, patterns), with the
+  // input source injected. The same restriction applies: the index cannot be
+  // used directly after this call, but has to be set up by
+  // `createFromOnDiskIndex`.
+  void createFromParser(const ParserFactory& parserFactory);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
