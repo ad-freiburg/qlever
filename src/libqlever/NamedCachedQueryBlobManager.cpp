@@ -1,7 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
@@ -22,8 +22,8 @@ namespace {
 // `NamedCachedQueryBlobManager::writeBlobHeader` /
 // `NamedCachedQueryBlobManager::skipAndVerifyBlobHeader`), to guard against
 // loading a blob written by an incompatible version of QLever.
-constexpr std::array<char, 8> blobMagicBytes{'Q', 'L', 'B', 'L',
-                                             'O', 'B', '1', '\0'};
+constexpr std::array<char, 8> blobMagicBytes{'Q', 'L', 'V', 'R',
+                                             'B', 'L', 'O', 'B'};
 constexpr uint16_t blobFormatVersion = 1;
 }  // namespace
 
@@ -75,27 +75,27 @@ NamedCachedQueryBlobManager::decompressBlobWithTrailingSizeInfo(
   // the very end of the whole compressed block (see
   // `compressBlobAndAddTrailingSizeInfo`). Read it off first, then strip it
   // from the span that is passed to the decompression.
-  uint64_t uncompressedSize;
-  AD_CONTRACT_CHECK(compressedBlob.size() >= sizeof(uncompressedSize));
-  std::memcpy(
-      &uncompressedSize,
-      compressedBlob.data() + compressedBlob.size() - sizeof(uncompressedSize),
-      sizeof(uncompressedSize));
+  uint64_t originalUncompressedSize;
+  AD_CONTRACT_CHECK(compressedBlob.size() >= sizeof(originalUncompressedSize));
+  std::memcpy(&originalUncompressedSize,
+              compressedBlob.data() + compressedBlob.size() -
+                  sizeof(originalUncompressedSize),
+              sizeof(originalUncompressedSize));
   compressedBlob = compressedBlob.subspan(
-      0, compressedBlob.size() - sizeof(uncompressedSize));
+      0, compressedBlob.size() - sizeof(originalUncompressedSize));
 
   // Decompress into a buffer that is 1. allocated via the caller-provided
   // `allocator`, 2. aligned to the maximal possible alignment (required for the
   // zero-copy deserialization), and 3. not needlessly zero-initialized before
   // the decompression overwrites it (see `BlobAllocator`).
   std::vector<char, BlobAllocator> uncompressed(
-      uncompressedSize,
+      originalUncompressedSize,
       BlobAllocator{ad_utility::AlignedAllocator<
           char, ql::pmr::polymorphic_allocator<char>>{allocator}});
-  auto decompressedSize = ZstdWrapper::decompressToBuffer(
+  auto actualUncompressedSize = ZstdWrapper::decompressToBuffer(
       compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
       uncompressed.size());
-  AD_CORRECTNESS_CHECK(decompressedSize == uncompressedSize);
+  AD_CORRECTNESS_CHECK(actualUncompressedSize == originalUncompressedSize);
   return uncompressed;
 }
 

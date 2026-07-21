@@ -1,15 +1,16 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
-#include <algorithm>
+#include <string_view>
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -18,6 +19,8 @@
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/Exception.h"
+#include "util/File.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace qlever;
@@ -57,17 +60,14 @@ TEST(NamedCachedQueryBlobManager, compressAndDecompressWithTrailingSizeInfo) {
   for (const std::string& original :
        {std::string{}, std::string{"x"}, std::string{"a short blob"},
         std::string(100'000, 'q')}) {
-    std::vector<char> uncompressed(original.begin(), original.end());
-    std::vector<char> compressed =
-        Manager::compressBlobAndAddTrailingSizeInfo(uncompressed);
+    std::vector<char> compressed = Manager::compressBlobAndAddTrailingSizeInfo(
+        ql::span<const char>{original});
     // The trailing `uint64_t` with the uncompressed size is always present.
     ASSERT_GE(compressed.size(), sizeof(uint64_t));
 
     auto roundTripped =
         Manager::decompressBlobWithTrailingSizeInfo(compressed, {});
-    ASSERT_EQ(roundTripped.size(), uncompressed.size());
-    EXPECT_TRUE(std::equal(roundTripped.begin(), roundTripped.end(),
-                           uncompressed.begin()));
+    EXPECT_THAT(roundTripped, ::testing::ElementsAreArray(original));
   }
 }
 
@@ -79,7 +79,7 @@ TEST(NamedCachedQueryBlobManager, writeAndVerifyBlobHeader) {
   Manager::writeBlobHeader(writer);
   // Append a payload so that we can check the reader is positioned correctly
   // after the header.
-  writer << std::string{"payload"};
+  writer << std::string_view{"payload"};
   auto data = std::move(writer).data();
 
   ad_utility::serialization::ByteBufferReadSerializerT<true,
@@ -108,16 +108,20 @@ TEST(NamedCachedQueryBlobManager, writeAndVerifyBlobHeader) {
 // that has NO index files on disk at all (constructed with `skipLoading`), and
 // there produce correct query results without loading any permutations.
 TEST(NamedCachedQueryBlobManager, combinedBlob) {
-  std::string sourceFilename = "libQleverCombinedBlobSource.ttl";
+  std::string basename = gtestCurrentTestName();
+  std::string sourceFilename = basename + ".ttl";
   {
     auto ofs = ad_utility::makeOfstream(sourceFilename);
     ofs << "<combinedBlobSubject> <combinedBlobPredicate> "
            "\"combined blob literal\".";
   }
+  absl::Cleanup cleanup = [&sourceFilename] {
+    ad_utility::deleteFile(sourceFilename);
+  };
   IndexBuilderConfig sourceConfig;
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
-  sourceConfig.baseName_ = "NamedCachedQueryBlobManager.combinedBlobSource";
+  sourceConfig.baseName_ = basename;
   // `serializeVocabAndNamedCacheToCompressedBlob` currently requires the
   // in-memory, uncompressed vocabulary implementation (see
   // `Vocabulary::writeAsZeroCopyBlob`).
@@ -155,9 +159,15 @@ TEST(NamedCachedQueryBlobManager, combinedBlob) {
   // Permutations are not part of the blob, so a query that needs them (i.e.
   // any query with actual triples) is unsupported on a blob-only instance and
   // throws.
-  EXPECT_ANY_THROW(
-      target.query("SELECT ?s WHERE { ?s <combinedBlobPredicate> ?o }",
-                   ad_utility::MediaType::tsv));
+  //
+  // NOTE: The exception thrown in this case (no index loaded, but the query
+  // requires one) is currently an internal `AD_CORRECTNESS_CHECK` (an
+  // `ad_utility::Exception`) rather than a user-facing error message. We accept
+  // this for now, as turning it into a graceful error would require changes to
+  // a lot of code paths.
+  EXPECT_THROW(target.query("SELECT ?s WHERE { ?s <combinedBlobPredicate> ?o }",
+                            ad_utility::MediaType::tsv),
+               ad_utility::Exception);
 
   // Loading a second blob on the same instance must throw.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -170,16 +180,20 @@ TEST(NamedCachedQueryBlobManager, combinedBlob) {
 // `deserializeVocabAndNamedCacheFromCompressedBlob` is in fact used to allocate
 // the (large) decompressed blob buffer.
 TEST(NamedCachedQueryBlobManager, blobUsesProvidedAllocator) {
-  std::string sourceFilename = "libQleverBlobAllocatorSource.ttl";
+  std::string basename = gtestCurrentTestName();
+  std::string sourceFilename = basename + ".ttl";
   {
     auto ofs = ad_utility::makeOfstream(sourceFilename);
     ofs << "<allocatorBlobSubject> <allocatorBlobPredicate> "
            "\"allocator blob literal\".";
   }
+  absl::Cleanup cleanup = [&sourceFilename] {
+    ad_utility::deleteFile(sourceFilename);
+  };
   IndexBuilderConfig sourceConfig;
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
-  sourceConfig.baseName_ = "NamedCachedQueryBlobManager.blobAllocatorSource";
+  sourceConfig.baseName_ = basename;
   sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
   EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
 
@@ -233,7 +247,8 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
   // Four rail segments (linestrings) that are pinned as a cached s2 geometry
   // index. The query point used below lies within 1 km of all four segments
   // (see `SpatialJoinCachedIndexTest`).
-  std::string sourceFilename = "libQleverBlobSpatialSource.ttl";
+  std::string basename = gtestCurrentTestName();
+  std::string sourceFilename = basename + ".ttl";
   {
     auto ofs = ad_utility::makeOfstream(sourceFilename);
     ofs << "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8413293 "
@@ -249,10 +264,13 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
            "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> "
            ".\n";
   }
+  absl::Cleanup cleanup = [&sourceFilename] {
+    ad_utility::deleteFile(sourceFilename);
+  };
   IndexBuilderConfig sourceConfig;
   sourceConfig.inputFiles_.push_back(
       {sourceFilename, Filetype::Turtle, std::nullopt});
-  sourceConfig.baseName_ = "NamedCachedQueryBlobManager.blobSpatialSource";
+  sourceConfig.baseName_ = basename;
   sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
   EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
 
