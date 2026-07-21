@@ -34,6 +34,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "gmock/gmock.h"
 #include "index/ExportIds.h"
 #include "index/LocalVocabEntry.h"
 #include "parser/PayloadVariables.h"
@@ -728,6 +729,63 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
   };
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
+}
+
+// Regression test for #3105.
+TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
+  // Test index with a rectangle polygon as the right side for `geof:sfWithin`.
+  std::string bb =
+      "\"POLYGON((0 0,5 0,5 5,0 5,0 0))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto* qec = ad_utility::testing::getQec("<a1> <a> " + bb + " .\n");
+  VocabIndex v;
+  ASSERT_TRUE(qec->getIndex().getVocab().getId(bb, &v));
+  auto bbId = ValueId::makeFromVocabIndex(v);
+  auto qetRight = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{bbId}}),
+      std::vector<std::optional<Variable>>{V{"?c"}}, true);
+
+  // The left side has two points (contained in the polygon), one invisible
+  // column and one visible payload column.
+  auto p1Id = ValueId::makeFromGeoPoint({1, 1});
+  auto p2Id = ValueId::makeFromGeoPoint({2, 2});
+  auto invisible1Id = ValueId::makeFromInt(10);
+  auto invisible2Id = ValueId::makeFromInt(11);
+  auto payload1Id = ValueId::makeFromInt(1);
+  auto payload2Id = ValueId::makeFromInt(2);
+  auto qetLeft = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{p1Id, invisible1Id, payload1Id}, {p2Id, invisible2Id, payload2Id}}),
+      std::vector<std::optional<Variable>>{V{"?a"}, std::nullopt, V{"?b"}},
+      false);
+
+  // Run a `SpatialJoin` with `SpatialJoinType::WITHIN`.
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{
+          LibSpatialJoinConfig{SpatialJoinType::WITHIN, std::nullopt},
+          Variable{"?a"}, Variable{"?c"}, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN},
+      qetLeft, qetRight);
+  auto result = spatialJoin->getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+
+  // We expect the three visible columns (two join cols and the payload column)
+  // to be in the result, but not the invisible column.
+  VariableToColumnMap expectedVarToCol{
+      {Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+      {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?c"}, makeAlwaysDefinedColumn(2)},
+  };
+  EXPECT_THAT(spatialJoin->getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVarToCol));
+
+  // Check that the columns are correctly copied to the result.
+  EXPECT_THAT(result->idTableView(), matchesIdTableFromVector({
+                                         {p1Id, payload1Id, bbId},
+                                         {p2Id, payload2Id, bbId},
+                                     }));
 }
 
 }  // namespace variableColumnMapAndResultWidth
