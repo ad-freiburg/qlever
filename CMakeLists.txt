@@ -82,6 +82,24 @@ if (EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
     add_compile_definitions(QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17)
 endif()
 
+# Select the memory-allocator backend that `qlever::Allocator` resolves to
+# (see `src/util/Allocator.h`):
+#   * `limit` (default): the historical `ad_utility::AllocatorWithLimit`.
+#   * `pmr`: a `std::pmr::memory_resource`-based allocator that keeps the same
+#     memory-limit semantics by default.
+# The `pmr` value is what allows building and running the same test suite
+# against the polymorphic allocator for validation.
+set(QLEVER_ALLOCATOR_BACKEND "limit" CACHE STRING "Allocator backend: limit or pmr")
+set_property(CACHE QLEVER_ALLOCATOR_BACKEND PROPERTY STRINGS "limit" "pmr")
+if (QLEVER_ALLOCATOR_BACKEND STREQUAL "pmr")
+    message(STATUS "QLever allocator backend: PMR (std::pmr::memory_resource)")
+    add_compile_definitions(QLEVER_USE_PMR_ALLOCATOR)
+elseif (QLEVER_ALLOCATOR_BACKEND STREQUAL "limit")
+    message(STATUS "QLever allocator backend: limit (AllocatorWithLimit)")
+else()
+    message(FATAL_ERROR "QLEVER_ALLOCATOR_BACKEND must be 'limit' or 'pmr', got '${QLEVER_ALLOCATOR_BACKEND}'")
+endif()
+
 set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
