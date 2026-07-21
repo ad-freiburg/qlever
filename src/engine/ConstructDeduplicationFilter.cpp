@@ -4,7 +4,12 @@ namespace qlever::constructExport {
 
 ConstructDeduplicationState::ConstructDeduplicationState(
     const DeduplicationMode& mode,
-    const QueryExecutionContext& queryExecutionContext) {
+    const QueryExecutionContext& queryExecutionContext,
+    std::optional<ad_utility::MemorySize> maxDedupVocabSize)
+    : mode_{mode},
+      queryExecutionContext_{queryExecutionContext},
+      maxDedupVocabBytes_{
+          computeMaxDedupVocabBytes(queryExecutionContext, maxDedupVocabSize)} {
   // Only the deduplicating modes get a filter. `None` leaves `filter_` empty
   // (the dedup path is never entered); constructing a `PerTripleFilter` for
   // it is a precondition violation (see `PerTripleFilter::makeFilter`).
@@ -73,6 +78,7 @@ bool ConstructDeduplicationState::isNew(
   if (tmpl.tripleContainsBlankNode_[tripleIdx]) {
     return true;
   }
+  resetIfVocabTooLarge();
   return filter_->insert(makeFullTripleKey(tmpl.preprocessedTriples_[tripleIdx],
                                            absoluteRow, ctx));
 }
@@ -84,11 +90,41 @@ void ConstructDeduplicationState::seedGroundTriple(
   }
 }
 
+// The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
+// given, else a quarter of the query's currently available memory.
+size_t ConstructDeduplicationState::computeMaxDedupVocabBytes(
+    const QueryExecutionContext& queryExecutionContext,
+    std::optional<ad_utility::MemorySize> maxDedupVocabSize) {
+  return maxDedupVocabSize
+      .value_or(queryExecutionContext.getAllocator().amountMemoryLeft() / 4)
+      .getBytes();
+}
+
 ValueId ConstructDeduplicationState::canonicalize(ValueId id) {
   if (id.getDatatype() != Datatype::LocalVocabIndex) return id;  // fast path
   const auto& entry = *id.getLocalVocabIndex();
+  size_t sizeBefore = dedupVocab_.size();
   auto index = dedupVocab_.getIndexAndAddIfNotContained(entry);
+  if (dedupVocab_.size() != sizeBefore) {  // a new string was actually added
+    dedupVocabBytes_ += entry.toStringRepresentation().size();
+  }
   return ValueId::makeFromLocalVocabIndex(index);
+}
+
+void ConstructDeduplicationState::resetIfVocabTooLarge() {
+  if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
+  if (std::holds_alternative<DeduplicationMode::Global>(mode_.value_)) {
+    AD_THROW(
+        "CONSTRUCT export with `construct-deduplication = global` exceeded "
+        "its "
+        "memory budget: Reduce the result size, raise the memory limit, or "
+        "switch `construct-deduplication` to a `batchwise:<N>` mode (bounded "
+        "memory, approximate) or `none` (no deduplication).");
+  }
+  // Only `BatchWise` reaches here, so rebuilding a filter is always valid.
+  filter_.emplace(mode_, queryExecutionContext_);
+  dedupVocab_ = LocalVocab();
+  dedupVocabBytes_ = 0;
 }
 
 DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
