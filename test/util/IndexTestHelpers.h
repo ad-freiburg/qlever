@@ -114,21 +114,6 @@ inline Index makeTestIndex(std::string turtle) {
   return makeTestIndex(gtestCurrentTestName(), std::move(turtle));
 }
 
-inline auto makeTestIndexWithCleanup(TestIndexConfig c) {
-  std::string indexBasename = gtestCurrentTestName();
-  absl::Cleanup cleanup{[indexBasename]() {
-    for (const std::string& indexFilename :
-         getAllIndexFilenames(indexBasename)) {
-      // Don't log when a file can't be deleted,
-      // because the logging might already be
-      // destroyed.
-      ad_utility::deleteFile(indexFilename, false);
-    }
-  }};
-  return std::make_pair(makeTestIndex(indexBasename, std::move(c)),
-                        std::move(cleanup));
-}
-
 // Return a static `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
