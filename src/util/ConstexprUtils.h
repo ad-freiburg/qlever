@@ -376,7 +376,7 @@ constexpr decltype(auto) constexprSwitchFromTupleImpl(
 }
 }  // namespace detail
 
-// Similar to `ConstExprSwitch` above, but the compile time constants are passed
+// Similar to `ConstexprSwitch` above, but the compile time constants are passed
 // in as a tuple or array (anything that supports `std::tuple_size` and
 // `std::get`).
 template <const auto& tuple, typename Func, typename Value, typename... Args>

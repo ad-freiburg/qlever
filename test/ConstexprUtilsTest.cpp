@@ -244,15 +244,15 @@ TEST(ConstexprUtils, constexprSwitchFromTuple) {
 }
 
 namespace {
-// Cases of different types, which is the reason `constExprSwitchFromTuple`
+// Cases of different types, which is the reason `constexprSwitchFromTuple`
 // accepts an arbitrary tuple-like rather than `std::array`.
 constexpr std::tuple<int, char, long> switchFromTupleMixedCases{1, 'a', 5L};
 };  // namespace
 
-// `constExprSwitchFromTuple` with cases of different types. The lambda has to
+// `constexprSwitchFromTuple` with cases of different types. The lambda has to
 // map all of them to a common return type, as the cases are expanded into a
-// single `ConstExprSwitch`.
-TEST(ConstExprUtils, constExprSwitchFromTupleWithMixedTypes) {
+// single `ConstexprSwitch`.
+TEST(ConstExprUtils, constexprSwitchFromTupleWithMixedTypes) {
   using namespace ad_utility;
   auto f = ad_utility::ApplyAsValueIdentity{
       [](auto c) -> int { return static_cast<int>(c); }};
