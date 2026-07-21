@@ -114,10 +114,8 @@ inline Index makeTestIndex(std::string turtle) {
   return makeTestIndex(gtestCurrentTestName(), std::move(turtle));
 }
 
-inline auto makeTestIndexWithCleanup(const ::testing::TestInfo* testInfo,
-                                     TestIndexConfig c) {
-  std::string indexBasename =
-      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name());
+inline auto makeTestIndexWithCleanup(TestIndexConfig c) {
+  std::string indexBasename = gtestCurrentTestName();
   absl::Cleanup cleanup{[indexBasename]() {
     for (const std::string& indexFilename :
          getAllIndexFilenames(indexBasename)) {
