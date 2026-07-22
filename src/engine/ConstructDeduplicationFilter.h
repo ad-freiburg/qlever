@@ -78,11 +78,9 @@ class PerTripleFilter {
 // - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
 // - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
 // approximation that only remembers the most recent keys).
-//
 // `DeduplicationMode::None` is NOT modelled here: for `None` the caller simply
 // does not construct a `ConstructDeduplicationState` (it holds an empty
-// `std::optional<ConstructDeduplicationState>` instead), so this class always
-// has a live filter and never needs a "no deduplication" branch.
+// `std::optional<ConstructDeduplicationState>` instead).
 class ConstructDeduplicationState {
  public:
   // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`: once
