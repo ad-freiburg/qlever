@@ -604,6 +604,25 @@ class IdTable {
         std::move(viewSpans), numColumns_, numRows_, allocator_};
   }
 
+  // Construct a non-owning view directly from a set of column spans, without
+  // requiring an already-existing owning `IdTable`. This is used e.g. to
+  // build a view directly from spans that were obtained via zero-copy
+  // deserialization from a buffer (see `zeroCopyDeserializeToSpan` in
+  // `util/Serializer/SerializeVector.h`). The caller is responsible for
+  // ensuring that the memory backing `columns` outlives the returned view.
+  CPP_template(typename = void)(requires(isView)) static IdTable
+      fromColumns(ViewSpans columns, size_t numColumns, size_t numRows,
+                  Allocator allocator) {
+    if constexpr (!isDynamic) {
+      AD_CONTRACT_CHECK(numColumns == NumColumns);
+    }
+    AD_CONTRACT_CHECK(columns.size() == numColumns);
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
+        columns, [numRows](const auto& col) { return col.size() == numRows; }));
+    return IdTable{std::move(columns), numColumns, numRows,
+                   std::move(allocator)};
+  }
+
   // Return a non-owning view of the rows [offset, offset + size). Requires
   // `offset + size <= numRows()`.
   IdTable<T, NumColumns, ColumnStorage, IsView::True> subView(
@@ -690,7 +709,8 @@ class IdTable {
   // `ad_utility::IteratorForAccessOperator` template.
   template <typename ReferenceType>
   struct IteratorHelper {
-    auto operator()(auto&& idTable, size_t rowIdx) const {
+    template <typename Table>
+    auto operator()(Table&& idTable, size_t rowIdx) const {
       return ReferenceType{&idTable, rowIdx};
     }
   };

@@ -11,12 +11,11 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <filesystem>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
-#include <system_error>
 
+#include "backports/filesystem.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -354,7 +353,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
   auto filename = getFilenameBase(onDiskBase_, name_);
 
   auto metadataFilename = absl::StrCat(filename, VIEW_INFO_SUFFIX);
-  if (!std::filesystem::exists(metadataFilename)) {
+  if (!ql::filesystem::exists(metadataFilename)) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name_, "' does not exist."));
   }
@@ -481,7 +480,7 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 void MaterializedViewsManager::deleteView(const std::string& name) const {
   MaterializedView::throwIfInvalidName(name);
   auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
-  if (!std::filesystem::exists(absl::StrCat(filenameBase, VIEW_INFO_SUFFIX))) {
+  if (!ql::filesystem::exists(absl::StrCat(filenameBase, VIEW_INFO_SUFFIX))) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name, "' does not exist."));
   }
@@ -497,8 +496,8 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
 
   // Delete all files belonging to the view from disk.
   for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
-    std::error_code ec;
-    std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
+    ql::error_code ec;
+    ql::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
     if (ec) {
       throw std::runtime_error(absl::StrCat(
           "Failed to delete file '", filenameBase, suffix,
