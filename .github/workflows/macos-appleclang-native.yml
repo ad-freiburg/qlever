@@ -27,7 +27,7 @@ jobs:
         build-type: [Release]
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install dependencies via Homebrew
         run: |
