@@ -80,7 +80,7 @@ class ConstructBatchEvaluator {
   // in `evaluationContext`. Each entry in `variableColumnIndices` is an
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
-      ql::span<const size_t> variableColumnIndices,
+      ql::span<const ColumnIndex> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
