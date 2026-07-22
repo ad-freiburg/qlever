@@ -82,7 +82,7 @@ std::optional<std::string> evaluate(
 
   if (const auto* var = std::get_if<PrecomputedVariable>(&*preprocessed)) {
     IdCache cache{1};
-    std::vector<size_t> cols{var->columnIndex_};
+    std::vector<ColumnIndex> cols{var->columnIndex_};
     BatchEvaluationContext ctx{exportCtx.idTable_,
                                exportCtx.resultTableRowIndex_,
                                exportCtx.resultTableRowIndex_ + 1};
