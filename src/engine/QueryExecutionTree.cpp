@@ -13,6 +13,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
@@ -147,21 +149,41 @@ bool QueryExecutionTree::isVariableCovered(Variable variable) const {
   return getVariableColumns().contains(variable);
 }
 
-// _______________________________________________________________________
-void QueryExecutionTree::readFromCache() {
+// _____________________________________________________________________________
+bool QueryExecutionTree::readFromCache() {
   AD_CORRECTNESS_CHECK(qec_ != nullptr);
   if (qec_->disableCaching()) {
-    return;
+    return false;
   }
   auto& cache = qec_->getQueryTreeCache();
   auto res =
       cache.getIfContained({getCacheKey(), qec_->locatedTriplesState().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
+    return true;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+void QueryExecutionTree::readFromMaterializedView() {
+  AD_CORRECTNESS_CHECK(qec_ != nullptr);
+  if (qec_->disableMaterializedViewRewriting() || qec_->disableCaching()) {
+    // If caching is disabled completely, we don't have cache keys and therefore
+    // can't match based on cache keys.
+    return;
+  }
+  auto scan = qec_->materializedViewsManager().makeIndexScan(
+      qec_, getCacheKey(), getVariableColumns());
+  if (scan != nullptr) {
+    rootOperation_ = std::static_pointer_cast<Operation>(scan);
+    // New cache key is important because of column permutation in materialized
+    // view.
+    cacheKey_ = rootOperation_->getCacheKey();
   }
 }
 
-// ________________________________________________________________________________________________________________
+// _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,

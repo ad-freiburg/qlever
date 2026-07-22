@@ -18,8 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/PropertyPath.h"
-#include "parser/SparqlParser.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
 
@@ -341,7 +340,7 @@ bool QueryPatternCache::analyzeJoinStar(
 }
 
 // _____________________________________________________________________________
-bool QueryPatternCache::analyzeView(ViewPtr view) {
+bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
                 << "' will not be added to the query pattern cache for query "
@@ -355,6 +354,22 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
         "The view was built without remembering the original query string.");
     return false;
   }
+
+  // Save the cache key for this view: once in full for matching the entire
+  // unchanged view query, and once with invariant patterns (such as `BIND`s)
+  // removed for matching queries that do not contain all of these patterns.
+  auto [full, withoutInvariant] = view->computeCacheKey(qec);
+  auto insert = [&](auto& cacheKeyAndCol) {
+    if (!cacheKeyAndCol.has_value()) {
+      return;
+    }
+    byCacheKey_.insert(
+        {std::move(cacheKeyAndCol.value().cacheKey_),
+         std::make_shared<ByCacheKeyInfo>(
+             view, std::move(cacheKeyAndCol.value().columnMapping_))});
+  };
+  insert(full);
+  insert(withoutInvariant);
 
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
@@ -440,6 +455,13 @@ void QueryPatternCache::removeView(ViewPtr view) {
 
   // Remove `view` from star cache.
   starCache_.erase(view);
+
+  // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
+  // works natively with our hash map unlike `ql::erase_if`.
+  absl::erase_if(byCacheKey_, [&view](const auto& pair) {
+    AD_CORRECTNESS_CHECK(pair.second != nullptr);
+    return pair.second->view_ == view;
+  });
 }
 
 // _____________________________________________________________________________
@@ -471,6 +493,15 @@ BindExpressionAndTargetCol extractBindExpressions(
                 varToColMap.at(bind._target).columnIndex_});
   }
   return map;
+}
+
+// _____________________________________________________________________________
+ByCacheKeyInfoPtr QueryPatternCache::lookupByCacheKey(
+    const std::string& cacheKey) const {
+  if (auto info = ad_utility::findOptional(byCacheKey_, cacheKey)) {
+    return info.value();
+  }
+  return nullptr;
 }
 
 }  // namespace materializedViewsQueryAnalysis

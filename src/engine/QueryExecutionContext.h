@@ -114,7 +114,8 @@ class QueryExecutionContext
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
-      DisableCaching = DisableCaching::FromRuntimeParameter);
+      DisableCaching = DisableCaching::FromRuntimeParameter,
+      bool disableMaterializedViewRewriting = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -177,6 +178,19 @@ class QueryExecutionContext
   void setDisableCachingOnlyForTesting(bool disableCaching) {
     disableCaching_ = disableCaching;
   }
+
+  // If materialized view rewriting is active. The global configuration is
+  // already taken into account by the return value.
+  bool disableMaterializedViewRewriting() const {
+    return disableMaterializedViewRewriting_;
+  }
+
+  // Set this to `true` to enforce materialized view rewriting to be disabled.
+  // If set to `false`, the global configuration will be used. In particular, if
+  // the global configuration disables rewriting, setting this to `false` does
+  // not enable rewriting.
+  void setDisableMaterializedViewRewriting(
+      bool disableMaterializedViewRewriting);
 
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
@@ -271,6 +285,12 @@ class QueryExecutionContext
   // limiting the update frequency when `sendPriority` is `IfDue`.
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
+
+  // Disable the automatic rewriting of joins to materialized views. This also
+  // deactivates the check for materialized view rewriting of
+  // `QueryExecutionTree` by cache key. This is needed in
+  // `MaterializedViewQueryAnalysis` to prevent a deadlock.
+  bool disableMaterializedViewRewriting_ = false;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

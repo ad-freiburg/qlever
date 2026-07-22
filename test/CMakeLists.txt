@@ -520,6 +520,8 @@ addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
 
 addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
 
+addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine server)
+
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
