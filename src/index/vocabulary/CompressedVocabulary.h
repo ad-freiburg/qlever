@@ -72,6 +72,8 @@ CPP_template(typename UnderlyingVocabulary,
                                              word, getDecoderIdx(index))};
                })} |
            ql::views::transform([](const std::pair<uint64_t, std::string>& p) {
+             // `CachingTransformInputRange` keeps the strings alive, so we can
+             // safely return a `std::string_view` here.
              return IndexAndWord{p.first, std::string_view{p.second}};
            });
   }

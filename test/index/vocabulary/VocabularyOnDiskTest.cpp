@@ -124,6 +124,24 @@ VocabularyOnDiskHandle createExampleVocabulary() {
   return createVocabularyFromWords({"alpha", "delta", "beta", "42", "gamma"});
 }
 
+// Create a `VocabularyOnDisk` from `words` and assert that `scanAll` yields
+// exactly those words in order: both as bare words and as `IndexAndWord`s with
+// contiguous indices `0, 1, 2, ...` (also across batch boundaries).
+void expectScanAllYields(const std::vector<std::string>& words) {
+  VocabularyCreator creator{gtestCurrentTestName()};
+  auto vocabulary = creator.createVocabulary(words);
+
+  EXPECT_THAT(scanAllToVector(vocabulary.scanAll()),
+              ::testing::ElementsAreArray(words));
+
+  auto indexAndWords = scanAllToIndexAndWordVector(vocabulary.scanAll());
+  ASSERT_EQ(indexAndWords.size(), words.size());
+  for (size_t i = 0; i < words.size(); ++i) {
+    EXPECT_EQ(indexAndWords[i].first, i) << "at index " << i;
+    EXPECT_EQ(indexAndWords[i].second, words[i]) << "at index " << i;
+  }
+}
+
 }  // namespace
 
 TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
@@ -214,19 +232,7 @@ TEST(VocabularyOnDisk, ScanAll) {
   for (size_t i = 0; i < 3000; ++i) {
     words.push_back(absl::StrCat("word", i, std::string(i % 7, 'x')));
   }
-  VocabularyCreator creator{gtestCurrentTestName()};
-  auto vocabulary = creator.createVocabulary(words);
-
-  using ::testing::ElementsAreArray;
-  EXPECT_THAT(scanAllToVector(vocabulary.scanAll()), ElementsAreArray(words));
-
-  // The indices are contiguous (`0, 1, 2, ...`), also across batch boundaries.
-  auto indexAndWords = scanAllToIndexAndWordVector(vocabulary.scanAll());
-  ASSERT_EQ(indexAndWords.size(), words.size());
-  for (size_t i = 0; i < words.size(); ++i) {
-    EXPECT_EQ(indexAndWords[i].first, i);
-    EXPECT_EQ(indexAndWords[i].second, words[i]);
-  }
+  expectScanAllYields(words);
 }
 
 // _____________________________________________________________________________
@@ -239,42 +245,21 @@ TEST(VocabularyOnDisk, ScanAllEmptyVocabulary) {
 
 // _____________________________________________________________________________
 TEST(VocabularyOnDisk, ScanAllByteLimitForcesMultipleBatches) {
-  // `scanAll` caps a batch's word data at `UPPER_LIMIT` (10 MB). Four words of
-  // 3 MB each (12 MB total) therefore don't fit into a single batch: the byte
-  // limit (not the word-count limit) forces a batch boundary after three words.
-  // `scanAll` must still yield all words in order with contiguous indices.
+  // `scanAll` caps a batch's word data at
+  // `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` (10 MB). Four words of 3 MB each
+  // (12 MB total) therefore don't fit into a single batch: the byte limit (not
+  // the word-count limit) forces a batch boundary after three words.
   constexpr size_t wordSize = 3'000'000;
-  std::vector<std::string> words{
-      std::string(wordSize, 'a'), std::string(wordSize, 'b'),
-      std::string(wordSize, 'c'), std::string(wordSize, 'd')};
-  VocabularyCreator creator{gtestCurrentTestName()};
-  auto vocabulary = creator.createVocabulary(words);
-
-  auto result = scanAllToIndexAndWordVector(vocabulary.scanAll());
-  ASSERT_EQ(result.size(), words.size());
-  for (size_t i = 0; i < words.size(); ++i) {
-    EXPECT_EQ(result[i].first, i);
-    EXPECT_EQ(result[i].second, words[i]);
-  }
+  expectScanAllYields({std::string(wordSize, 'a'), std::string(wordSize, 'b'),
+                       std::string(wordSize, 'c'), std::string(wordSize, 'd')});
 }
 
 // _____________________________________________________________________________
 TEST(VocabularyOnDisk, ScanAllSingleWordExceedsLimit) {
-  // A single word larger than `UPPER_LIMIT` (10 MB) must still be scanned; it
-  // is returned in a batch of its own even though it exceeds the limit, and the
-  // surrounding small words are unaffected.
-  std::string hugeWord(11'000'000, 'x');
-  std::vector<std::string> words{"before", hugeWord, "after"};
-  VocabularyCreator creator{gtestCurrentTestName()};
-  auto vocabulary = creator.createVocabulary(words);
-
-  auto result = scanAllToIndexAndWordVector(vocabulary.scanAll());
-  ASSERT_EQ(result.size(), words.size());
-  using P = std::pair<uint64_t, std::string>;
-  EXPECT_EQ(result[0], (P{0, "before"}));
-  EXPECT_EQ(result[1].first, 1);
-  EXPECT_EQ(result[1].second, hugeWord);
-  EXPECT_EQ(result[2], (P{2, "after"}));
+  // A single word larger than `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` (10 MB)
+  // must still be scanned; it is returned in a batch of its own even though it
+  // exceeds the limit, and the surrounding small words are unaffected.
+  expectScanAllYields({"before", std::string(11'000'000, 'x'), "after"});
 }
 
 // A `lookupBatch` result must equal the individual `vocab[]` lookups for the
