@@ -11,17 +11,14 @@
 namespace qlever::constructExport {
 
 //______________________________________________________________________________
-ConstructDeduplicationState::ConstructDeduplicationState(
-    const DeduplicationMode& mode,
-    const QueryExecutionContext& queryExecutionContext,
-    std::optional<ad_utility::MemorySize> maxDedupVocabSize)
-    : mode_{mode},
-      queryExecutionContext_{queryExecutionContext},
-      maxDedupVocabBytes_{
-          computeMaxDedupVocabBytes(queryExecutionContext, maxDedupVocabSize)} {
-  if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
-    filter_.emplace(mode, queryExecutionContext);
-  }
+bool PerTripleFilter::insert(const DeduplicationKey& key) {
+  return std::visit(
+      OverloadCallOperator{
+          [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
+          [&key](HashSetWithMemoryLimit<DeduplicationKey>& set) {
+            return set.insert(key).second;
+          }},
+      filter_);
 }
 
 //______________________________________________________________________________
@@ -45,14 +42,17 @@ PerTripleFilter::Filter PerTripleFilter::makeFilter(
 }
 
 //______________________________________________________________________________
-bool PerTripleFilter::insert(const DeduplicationKey& key) {
-  return std::visit(
-      OverloadCallOperator{
-          [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
-          [&key](HashSetWithMemoryLimit<DeduplicationKey>& set) {
-            return set.insert(key).second;
-          }},
-      filter_);
+ConstructDeduplicationState::ConstructDeduplicationState(
+    const DeduplicationMode& mode,
+    const QueryExecutionContext& queryExecutionContext,
+    std::optional<ad_utility::MemorySize> maxDedupVocabSize)
+    : mode_{mode},
+      queryExecutionContext_{queryExecutionContext},
+      maxDedupVocabBytes_{
+          computeMaxDedupVocabBytes(queryExecutionContext, maxDedupVocabSize)} {
+  if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
+    filter_.emplace(mode, queryExecutionContext);
+  }
 }
 
 //______________________________________________________________________________
@@ -124,6 +124,15 @@ ValueId ConstructDeduplicationState::canonicalize(ValueId id) {
 }
 
 //______________________________________________________________________________
+DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
+    DeduplicationKey key) {
+  for (ValueId& id : key) {
+    id = canonicalize(id);
+  }
+  return key;
+}
+
+//______________________________________________________________________________
 void ConstructDeduplicationState::resetIfVocabTooLarge() {
   if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
   if (std::holds_alternative<DeduplicationMode::Global>(mode_.value_)) {
@@ -138,15 +147,6 @@ void ConstructDeduplicationState::resetIfVocabTooLarge() {
   filter_.emplace(mode_, queryExecutionContext_);
   dedupVocab_ = LocalVocab();
   dedupVocabBytes_ = 0;
-}
-
-//______________________________________________________________________________
-DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
-    DeduplicationKey key) {
-  for (ValueId& id : key) {
-    id = canonicalize(id);
-  }
-  return key;
 }
 
 }  // namespace qlever::constructExport
