@@ -939,7 +939,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
   // Delete a materialized view through a simulated HTTP GET request.
   {
     clearLog();
-    ASSERT_TRUE(std::filesystem::exists(
+    ASSERT_TRUE(ql::filesystem::exists(
         absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
     auto request = makeGetRequest(
         "/?cmd=delete-materialized-view&view-name=testViewFromHTTP2"
@@ -954,7 +954,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
               "testViewFromHTTP2");
 
     // The view's files have been deleted.
-    EXPECT_FALSE(std::filesystem::exists(
+    EXPECT_FALSE(ql::filesystem::exists(
         absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
@@ -988,7 +988,7 @@ TEST_F(MaterializedViewsTest, Deletion) {
   // The view is unloaded and all of its files are gone.
   EXPECT_FALSE(manager.isViewLoaded("testView1"));
   for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
-    EXPECT_FALSE(std::filesystem::exists(
+    EXPECT_FALSE(ql::filesystem::exists(
         absl::StrCat(testIndexBase_, ".view.testView1", suffix)));
   }
 
@@ -1013,10 +1013,10 @@ TEST_F(MaterializedViewsTest, libqleverDeleteMaterializedView) {
   const std::string metadataFilename =
       absl::StrCat(testIndexBase_, ".view.viewToDelete.viewinfo.json");
   qlv().writeMaterializedView("viewToDelete", simpleWriteQuery_);
-  EXPECT_TRUE(std::filesystem::exists(metadataFilename));
+  EXPECT_TRUE(ql::filesystem::exists(metadataFilename));
 
   qlv().deleteMaterializedView("viewToDelete");
-  EXPECT_FALSE(std::filesystem::exists(metadataFilename));
+  EXPECT_FALSE(ql::filesystem::exists(metadataFilename));
   EXPECT_FALSE(qlv().isMaterializedViewLoaded("viewToDelete"));
 }
 
