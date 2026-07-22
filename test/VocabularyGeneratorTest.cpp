@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <cstdlib>
@@ -15,6 +16,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
+#include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/Vocabulary.h"
@@ -23,6 +25,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 
 using namespace ad_utility::vocabulary_merger;
@@ -268,6 +271,70 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
           },
           callback, 1_GB),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+// Test that IRIs whose vocabulary word matches one of the `blankNodePrefixes`
+// regexes are treated as blank nodes during `mergeVocabulary`: they are not
+// passed to the vocabulary word callback, and are mapped to blank node `Id`s.
+TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
+  std::string basePath = gtestCurrentTestName();
+  std::string wordsFile = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0);
+  std::string idMapFile = absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 0);
+  absl::Cleanup cleanup = [&wordsFile, &idMapFile] {
+    ad_utility::deleteFile(wordsFile, false);
+    ad_utility::deleteFile(idMapFile, false);
+  };
+
+  // Write a single partial vocabulary. The words must be in ascending order
+  // according to the comparator used below (plain `std::less`).
+  std::array<std::string_view, 4> words{"<http://ex/apple>", "<http://ex/bn_1>",
+                                        "<http://ex/bn_2>",
+                                        "<http://ex/cherry>"};
+  {
+    ad_utility::serialization::FileWriteSerializer partialVocab(wordsFile);
+    partialVocab << words.size();
+    for (size_t localIdx = 0; localIdx < words.size(); ++localIdx) {
+      partialVocab << words.at(localIdx);
+      partialVocab << false;
+      partialVocab << localIdx;
+    }
+  }
+
+  // Collect the words that are actually written to the vocabulary (i.e. not
+  // treated as blank nodes).
+  std::vector<std::string> vocabularyWords;
+  auto wordCallback = [&vocabularyWords](std::string_view word,
+                                         bool) -> uint64_t {
+    vocabularyWords.emplace_back(word);
+    return vocabularyWords.size() - 1;
+  };
+
+  // Treat all IRIs that contain `bn_` as blank nodes.
+  std::vector<std::string> blankNodePrefixes{"bn_"};
+  mergeVocabulary(
+      basePath, 1,
+      [](std::string_view a, bool, std::string_view b, bool) {
+        return std::less{}(a, b);
+      },
+      wordCallback, 1_GB, &blankNodePrefixes);
+
+  // The two `bn_` IRIs became blank nodes; only the other two IRIs remain in
+  // the vocabulary.
+  EXPECT_THAT(vocabularyWords, ::testing::ElementsAre("<http://ex/apple>",
+                                                      "<http://ex/cherry>"));
+
+  // In the id map, exactly the two `bn_` IRIs map to blank node `Id`s, the
+  // other two to vocabulary `Id`s.
+  IdMap idMap = getIdMapFromFile(idMapFile);
+  size_t numBlankNodes = 0;
+  for (const auto& [localId, globalId] : idMap) {
+    if (globalId.getDatatype() == Datatype::BlankNodeIndex) {
+      ++numBlankNodes;
+    }
+  }
+  EXPECT_EQ(numBlankNodes, 2);
+  EXPECT_EQ(idMap.size(), words.size());
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {

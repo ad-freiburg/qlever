@@ -69,6 +69,9 @@ struct TestIndexConfig {
   std::optional<VocabularyType> vocabularyType = std::nullopt;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
+  // Regexes for IRIs that should be treated as blank nodes during index
+  // building (see `IndexImpl::setBlankNodePrefixes`).
+  std::optional<std::vector<std::string>> blankNodePrefixes = std::nullopt;
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
@@ -83,19 +86,20 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(
-        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.addHasWordTriples);
+    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
+                      c.usePatterns, c.usePrefixCompression,
+                      c.blocksizePermutations, c.createTextIndex,
+                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
+                      c.indexType, c.encodedPrefixesWithoutAngleBrackets,
+                      c.blankNodePrefixes, c.addHasWordTriples);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, blocksizePermutations, createTextIndex,
       addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
       scoringMetric, bAndKParam, indexType, vocabularyType,
-      encodedPrefixesWithoutAngleBrackets, addHasWordTriples)
+      encodedPrefixesWithoutAngleBrackets, blankNodePrefixes, addHasWordTriples)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

@@ -120,6 +120,17 @@ TripleComponent::toValueIdOrBounds(const IndexImpl& index) const {
   if (lower != upper) {
     return Id::makeFromVocabIndex(lower);
   }
+  // If the word is an IRI that was treated as a blank node during index
+  // building (and is therefore not in the vocabulary), remap it to the blank
+  // node that was assigned to it (see `BlankNodeIriVocabulary`). This makes
+  // references to such IRIs (in particular via SPARQL UPDATE) resolve
+  // consistently to the same blank node.
+  if (isIri()) {
+    if (std::optional<Id> blankNodeId =
+            index.getBlankNodeIndexForIri(content)) {
+      return blankNodeId.value();
+    }
+  }
   return std::pair(lower, upper);
 }
 

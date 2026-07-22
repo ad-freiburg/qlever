@@ -205,6 +205,8 @@ addLinkAndDiscoverTest(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
+addLinkAndDiscoverTest(BlankNodeIriVocabularyTest index)
+
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
 addLinkAndDiscoverTest(ExternalOverflowStorageTest)

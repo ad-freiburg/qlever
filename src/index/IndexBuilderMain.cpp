@@ -282,6 +282,19 @@ int main(int argc, char** argv) {
       "among non-encoded IRIs is correct, but the order between encoded "
       "and non-encoded IRIs is not");
 
+  add("treat-as-blank-node",
+      po::value(&config.blankNodePrefixes_)->composing()->multitoken(),
+      "Space-separated list of regexes. IRIs whose vocabulary entry matches "
+      "one of these regexes (via RE2 partial match) are not stored in the "
+      "vocabulary, but converted to blank nodes. This saves memory for IRIs "
+      "that only act as internal connector nodes (e.g. statement nodes). NOTE: "
+      "Such IRIs then have blank-node semantics. The mapping from each such "
+      "IRI "
+      "to its blank node is remembered, so that references to the same IRI in "
+      "later SPARQL UPDATEs (and queries) are consistently mapped to the same "
+      "blank node. IRIs that match the regexes but were not part of the input "
+      "are not converted to blank nodes.");
+
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
       "The amount of memory in to use for sorting during the index build. "

@@ -176,9 +176,14 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // permutations are not present, because they would actually be present from
   // the previous index build.
   namespace fs = ql::filesystem;
-  static constexpr std::array<std::string_view, 6> suffixes{
-      VOCAB_SUFFIX,       ".index",          ".internal.index",
-      CONFIGURATION_FILE, ".update-triples", ".allocated-graphs-state"};
+  static constexpr std::array<std::string_view, 7> suffixes{
+      VOCAB_SUFFIX,
+      ".index",
+      ".internal.index",
+      CONFIGURATION_FILE,
+      ".update-triples",
+      ".allocated-graphs-state",
+      BLANK_NODE_IRI_VOCAB_SUFFIX};
   qlever::util::deleteFilesInDirectory(
       fs::current_path(), [&indexBasename](const auto& path) {
         std::string name = path.filename().string();
@@ -233,6 +238,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
       index.getImpl().setPrefixesForEncodedValues(
           std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+    }
+    if (c.blankNodePrefixes.has_value()) {
+      index.getImpl().setBlankNodePrefixes(
+          std::move(c.blankNodePrefixes.value()));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {

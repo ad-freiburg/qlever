@@ -224,6 +224,10 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
+// Suffix for the dedicated vocabulary that stores the IRIs which were treated
+// as blank nodes during index building (see `BlankNodeIriVocabulary`).
+constexpr inline std::string_view BLANK_NODE_IRI_VOCAB_SUFFIX =
+    ".blanknode-iri-vocabulary";
 constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
 

@@ -16,8 +16,11 @@
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_cat.h>
+#include <re2/re2.h>
 
 #include <atomic>
+#include <memory>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/memory_resource.h"
@@ -46,7 +49,25 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  bool isBlankNode() const { return ql::starts_with(iriOrLiteral_, "_:"); }
+  // Return true if this word is a blank node. A word is considered a blank
+  // node if it starts with `_:` or, when `blankNodePrefixes` is given, if it
+  // matches (via `RE2::PartialMatch`) any of the regexes in it. The latter is
+  // used to treat IRIs that only act as internal connector nodes as blank
+  // nodes (see `IndexImpl::setBlankNodePrefixes`).
+  bool isBlankNode(const std::vector<std::unique_ptr<re2::RE2>>*
+                       blankNodePrefixes = nullptr) const {
+    if (ql::starts_with(iriOrLiteral_, "_:")) {
+      return true;
+    }
+    if (blankNodePrefixes != nullptr) {
+      for (const auto& prefix : *blankNodePrefixes) {
+        if (re2::RE2::PartialMatch(iriOrLiteral_, *prefix)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;

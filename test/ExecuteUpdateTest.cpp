@@ -11,7 +11,10 @@
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
+#include "parser/TripleComponent.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -655,4 +658,81 @@ TEST(ExecuteUpdate, setMinus) {
          {IdTriple(4, 5, 6), IdTriple(7, 8, 9)}, {IdTriple(1, 2, 3)});
   expect({IdTriple(1, 2, 3)},
          {IdTriple(1, 2, 3), IdTriple(4, 5, 6), IdTriple(7, 8, 9)}, {});
+}
+
+// ____________________________________________________________________________
+TEST(ExecuteUpdate, treatAsBlankNodeConsistentRemapping) {
+  using namespace ad_utility::testing;
+  using Iri = ad_utility::triple_component::Iri;
+  using namespace deltaTriplesTestHelpers;
+
+  // Build an index in which `<http://ex/s/1>` only acts as an internal
+  // connector node and is therefore treated as a blank node.
+  TestIndexConfig config{"<a> <p> <http://ex/s/1> . <http://ex/s/1> <r> <b> ."};
+  config.blankNodePrefixes = std::vector<std::string>{"/s/"};
+  auto index = std::make_shared<Index>(
+      makeTestIndex("ExecuteUpdate_treatAsBlankNode", config));
+  const IndexImpl& impl = index->getImpl();
+
+  auto connector = [] {
+    return TripleComponent{Iri::fromIriref("<http://ex/s/1>")};
+  };
+  auto unknown = [] {
+    return TripleComponent{Iri::fromIriref("<http://ex/s/999>")};
+  };
+
+  // Read path: the connector IRI (which is not in the vocabulary) resolves to a
+  // global blank node via the remembered mapping.
+  std::optional<Id> blankNodeId = connector().toValueId(impl);
+  ASSERT_TRUE(blankNodeId.has_value());
+  EXPECT_EQ(blankNodeId->getDatatype(), Datatype::BlankNodeIndex);
+
+  // Update path (rvalue `toValueId`, as used by `ExecuteUpdate`): the IRI is
+  // remapped to the same blank node, and no new local vocab entry is created.
+  {
+    LocalVocab localVocab;
+    Id updateId = connector().toValueId(impl, localVocab);
+    EXPECT_EQ(updateId, blankNodeId.value());
+    EXPECT_EQ(localVocab.size(), 0u);
+  }
+
+  // An IRI that matches the pattern but was not part of the input is NOT
+  // remapped: in the read path it is not found, ...
+  EXPECT_EQ(unknown().toValueId(impl), std::nullopt);
+  // ... and in the update path it becomes a regular new local vocab entry.
+  {
+    LocalVocab localVocab;
+    Id unknownId = unknown().toValueId(impl, localVocab);
+    EXPECT_EQ(unknownId.getDatatype(), Datatype::LocalVocabIndex);
+  }
+
+  // Finally, run a real SPARQL UPDATE that inserts a triple referencing the
+  // connector IRI, and check that the pipeline succeeds and inserts exactly one
+  // triple (exercising `ExecuteUpdate` -> `transformTriplesTemplate` ->
+  // `toValueId`).
+  QueryResultCache cache;
+  NamedResultCache namedResultCache;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  QueryExecutionContext qec(
+      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{}, &namedResultCache, materializedViewsManager);
+  const auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  ad_utility::BlankNodeManager bnm;
+  auto pqs = SparqlParser::parseUpdate(
+      &bnm, encodedIriManager(), "INSERT DATA { <http://ex/s/1> <r2> <b2> }");
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    qec.setLocatedTriplesForEvaluation(
+        deltaTriples.getLocatedTriplesSharedStateReference());
+    for (auto& pq : pqs) {
+      deltaTriples.updateAugmentedMetadata();
+      QueryPlanner qp{&qec, handle};
+      const auto qet = qp.createExecutionTree(pq);
+      ExecuteUpdate::executeUpdate(*index, pq, qet, deltaTriples, handle);
+    }
+  });
+  index->deltaTriplesManager().modify<void>(
+      [](DeltaTriples& deltaTriples) {
+        EXPECT_THAT(deltaTriples, NumTriples(1, 0, 1));
+      },
+      false, false);
 }
