@@ -176,7 +176,7 @@ void QueryExecutionTree::readFromMaterializedView() {
   auto scan = qec_->materializedViewsManager().makeIndexScan(
       qec_, getCacheKey(), getVariableColumns());
   if (scan != nullptr) {
-    rootOperation_ = static_pointer_cast<Operation>(scan);
+    rootOperation_ = std::static_pointer_cast<Operation>(scan);
     // New cache key is important because of column permutation in materialized
     // view.
     cacheKey_ = rootOperation_->getCacheKey();
