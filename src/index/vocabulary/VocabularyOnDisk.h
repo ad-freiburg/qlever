@@ -82,6 +82,17 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // size`.
   std::string operator[](uint64_t idx) const;
 
+  // Efficient iteration over all words in the vocabulary, in order, yielded as
+  // `IndexAndWord`s (the word as a `string_view` together with its index).
+  // Internally the words are read in batches, each produced by two large
+  // sequential reads (offsets and word data). This is much faster than looking
+  // up the words one at a time via `operator[]`, which performs two small
+  // `pread`s and allocates a string per word. A batch is bounded both in the
+  // number of words and in the number of bytes of word data it holds (but
+  // always contains at least one word, even if that word alone exceeds the byte
+  // limit).
+  VocabularyScanRange scanAll() const;
+
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
@@ -141,6 +152,21 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // Get the `OffsetAndSize` for the element with the `idx`. Return
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
+
+  // Helper for `scanAll`: return a lazy input range that reads the word offsets
+  // from the `.offsets` file in batches of at most
+  // `VOCABULARY_SCAN_MAX_WORDS_PER_BATCH` words. Each element is a span over
+  // the offsets of one batch, with one trailing entry marking the end of the
+  // last word.
+  auto readOffsetsInBatches() const;
+
+  // Helper for `scanAll`: given the `offsets` of a single chunk of words (a
+  // span over the chunk's offsets, with one trailing entry marking the end of
+  // the last word), return a lazy input range that yields each word of the
+  // chunk as a `string_view`, reading the word data from disk in sub-batches of
+  // at most `UPPER_LIMIT` bytes. The return type is deduced, so this function
+  // can only be used within `VocabularyOnDisk.cpp`.
+  auto chunkToWords(ql::span<const uint64_t> offsets) const;
 
   // A word's start offset and the start offset of the following word (which
   // marks the end of the word), stored contiguously in the `.offsets` file.

@@ -123,6 +123,9 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
+  // Delegate to `scanAll` of the underlying vocabulary.
+  auto scanAll() const { return vocabulary_.scanAll(); }
+
   // Batch lookup: look up multiple indices at once and return their words.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 

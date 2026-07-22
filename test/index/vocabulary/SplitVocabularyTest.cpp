@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <variant>
 
@@ -15,7 +15,6 @@ namespace splitVocabTestHelpers {
 
 using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
-using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 
 [[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
   return ql::starts_with(s, "\"a");
@@ -422,6 +421,36 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   auto [l7, u7] = vocabulary.getPositionOfWord("\"POLYGON((1 2, 3 4))");
   ASSERT_EQ(l7, VocabIndex::make(4));
   ASSERT_EQ(u7, VocabIndex::make(4));
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyScanAll) {
+  // A `SplitVocabulary` distributes its words over multiple underlying
+  // vocabularies (here: words starting with `"a` go into the second vocab).
+  // `scanAll` must still enumerate all of them.
+  TwoSplitVocabulary sv;
+  auto ww = sv.makeDiskWriterPtr("splitVocabScanAll.dat");
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"axyz\"", true);
+  (*ww)("\"xyz\"", true);
+  ww->finish();
+  sv.readFromFile("splitVocabScanAll.dat");
+
+  // `scanAll` yields all words of all underlying vocabularies, together with
+  // their marker-encoded global index (main vocabulary first, then the second
+  // one). Each yielded index must round-trip through `operator[]`.
+  std::vector<std::pair<uint64_t, std::string>> scanned;
+  for (const IndexAndWord& indexAndWord : sv.scanAll()) {
+    EXPECT_EQ(sv[indexAndWord.index_], indexAndWord.word_);
+    scanned.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
+  }
+  using P = std::pair<uint64_t, std::string>;
+  EXPECT_THAT(scanned,
+              ::testing::ElementsAre(P{sv.addMarker(0, 0), "\"\""},
+                                     P{sv.addMarker(1, 0), "\"xyz\""},
+                                     P{sv.addMarker(0, 1), "\"abc\""},
+                                     P{sv.addMarker(1, 1), "\"axyz\""}));
 }
 
 // _____________________________________________________________________________

@@ -107,6 +107,19 @@ struct VocabBatchLookupData : VocabLookupDataCommonBase<std::vector<char>> {};
 using BufferType = std::unique_ptr<ql::pmr::monotonic_buffer_resource>;
 struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 
+// A single entry yielded by a vocabulary's `scanAll`: a word together with its
+// index in the vocabulary. For most vocabularies the indices are simply
+// `0, 1, 2, ...`, but e.g. a `SplitVocabulary` yields the (non-contiguous)
+// marker-encoded indices that its `operator[]` expects.
+struct IndexAndWord {
+  uint64_t index_;
+  std::string_view word_;
+};
+
+// A type-erased input range vocabularies can use for `scanAll()`, that yields
+// all words of the vocabulary in order, together with their index.
+using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
+
 // A vocabulary batch-lookup result whose words are already materialized as
 // owning `std::string`s. The words are moved into the
 // `std::vector<std::string>` buffer and the `views()` point at those strings.
