@@ -109,6 +109,12 @@ struct PreprocessedConstructTemplate {
   // `tripleContainsBlankNode[i]` is true iff `preprocessedTriples[i]` contains
   // a blank node constant.
   std::vector<bool> tripleContainsBlankNode_;
+  // Owns the `LocalVocabEntry`s created while resolving literal (and
+  // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
+  // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
+  // entry living in this vocab, so the `LocalVocab` must outlive every use of
+  // those ids. Kept here so the lifetime is tied to the preprocessed template.
+  LocalVocab localVocabForConstants_;
 };
 
 }  // namespace qlever::constructExport
