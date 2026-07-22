@@ -9,6 +9,7 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
+        BlankNodeIriVocabulary.cpp
         IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
         InputFileSpecification.cpp)

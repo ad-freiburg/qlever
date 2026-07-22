@@ -21,8 +21,10 @@
 
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/BlankNodeIriVocabulary.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
@@ -706,11 +708,34 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
+
+    // If some IRIs are treated as blank nodes, remember the mapping from each
+    // such IRI to its assigned blank node index in a dedicated on-disk
+    // vocabulary (see `BlankNodeIriVocabulary`), so it can be applied
+    // consistently to later updates.
+    std::unique_ptr<BlankNodeIriVocabulary::Writer> blankNodeIriWriter;
+    ad_utility::vocabulary_merger::BlankNodeIriCallback blankNodeIriCallback;
+    if (!blankNodePrefixes_.empty()) {
+      std::string blankNodeIriBase = onDiskBase_ + BLANK_NODE_IRI_VOCAB_SUFFIX;
+      blankNodeIriWriter = std::make_unique<BlankNodeIriVocabulary::Writer>(
+          vocab_.makeWordWriterPtr(blankNodeIriBase),
+          BlankNodeIriVocabulary::chunksFilename(blankNodeIriBase));
+      blankNodeIriCallback = [&writer = *blankNodeIriWriter](
+                                 std::string_view iri,
+                                 uint64_t blankNodeIndex) {
+        writer(iri, blankNodeIndex);
+      };
+    }
+
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
         memoryLimitIndexBuilding(),
-        blankNodePrefixes_.empty() ? nullptr : &blankNodePrefixes_);
+        blankNodePrefixes_.empty() ? nullptr : &blankNodePrefixes_,
+        blankNodeIriCallback);
     wordCallback.finish();
+    if (blankNodeIriWriter) {
+      blankNodeIriWriter->finish();
+    }
     return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
@@ -1071,6 +1096,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   setOnDiskBase(onDiskBase);
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  loadBlankNodeIriVocabulary();
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                << vocab_.size() << std::endl;
@@ -1996,6 +2022,54 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
 ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
   AD_CONTRACT_CHECK(blankNodeManager_);
   return blankNodeManager_.get();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::loadBlankNodeIriVocabulary() {
+  std::string base = onDiskBase_ + BLANK_NODE_IRI_VOCAB_SUFFIX;
+  // Only load the mapping if it was persisted (i.e. the feature was used during
+  // index building).
+  if (!ql::filesystem::exists(BlankNodeIriVocabulary::chunksFilename(base))) {
+    return;
+  }
+  // Use the same vocabulary type and locale as the main vocabulary so that
+  // lookups use the correct comparator.
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::OnDiskCompressed);
+  if (configurationJson_.count("vocabulary-type")) {
+    vocabType = static_cast<ad_utility::VocabularyType>(
+        configurationJson_["vocabulary-type"]);
+  }
+  std::string lang{LOCALE_DEFAULT_LANG};
+  std::string country{LOCALE_DEFAULT_COUNTRY};
+  bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
+  if (configurationJson_.count("locale")) {
+    lang = std::string{configurationJson_["locale"]["language"]};
+    country = std::string{configurationJson_["locale"]["country"]};
+    ignorePunctuation =
+        bool{configurationJson_["locale"]["ignore-punctuation"]};
+  }
+  blankNodeIriVocabulary_.readFromFile(base, vocabType, lang, country,
+                                       ignorePunctuation);
+  AD_LOG_INFO << "Loaded the mapping from IRIs that are treated as blank nodes "
+                 "to their "
+                 "blank node indices"
+              << std::endl;
+}
+
+// _____________________________________________________________________________
+std::optional<Id> IndexImpl::getBlankNodeIndexForIri(
+    std::string_view iri) const {
+  if (blankNodeIriVocabulary_.empty()) {
+    return std::nullopt;
+  }
+  std::optional<uint64_t> blankNodeIndex =
+      blankNodeIriVocabulary_.getBlankNodeIndex(iri);
+  if (!blankNodeIndex.has_value()) {
+    return std::nullopt;
+  }
+  return Id::makeFromBlankNodeIndex(
+      BlankNodeIndex::make(blankNodeIndex.value()));
 }
 
 // _____________________________________________________________________________

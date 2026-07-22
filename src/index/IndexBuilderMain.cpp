@@ -288,8 +288,12 @@ int main(int argc, char** argv) {
       "one of these regexes (via RE2 partial match) are not stored in the "
       "vocabulary, but converted to blank nodes. This saves memory for IRIs "
       "that only act as internal connector nodes (e.g. statement nodes). NOTE: "
-      "Such IRIs then have blank-node semantics and can no longer be matched "
-      "by their IRI in a query.");
+      "Such IRIs then have blank-node semantics. The mapping from each such "
+      "IRI "
+      "to its blank node is remembered, so that references to the same IRI in "
+      "later SPARQL UPDATEs (and queries) are consistently mapped to the same "
+      "blank node. IRIs that match the regexes but were not part of the input "
+      "are not converted to blank nodes.");
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),

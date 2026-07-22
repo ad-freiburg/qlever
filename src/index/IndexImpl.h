@@ -19,6 +19,7 @@
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
+#include "index/BlankNodeIriVocabulary.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
@@ -196,6 +197,13 @@ class IndexImpl {
   // `setBlankNodePrefixes`.
   std::vector<std::string> blankNodePrefixes_;
 
+  // Remembers which blank node index was assigned to each IRI that was treated
+  // as a blank node during index building (see `setBlankNodePrefixes` and
+  // `BlankNodeIriVocabulary`). Loaded from disk in `createFromOnDiskIndex` and
+  // used to consistently remap such IRIs when they are referenced again later
+  // (e.g. via SPARQL UPDATE). Empty if the feature was not used.
+  BlankNodeIriVocabulary blankNodeIriVocabulary_;
+
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
@@ -301,13 +309,22 @@ class IndexImpl {
   // building. Each entry is an `RE2` regex; a vocabulary word matching any of
   // them (via `RE2::PartialMatch`) is stored as a blank node instead of in the
   // vocabulary. This is useful for IRIs that only act as internal connector
-  // nodes (e.g. statement nodes), to save vocabulary memory.
+  // nodes (e.g. statement nodes), to save vocabulary memory. The mapping from
+  // each such IRI to its blank node is remembered (see
+  // `BlankNodeIriVocabulary`) so that references to the same IRI in later
+  // updates and queries are mapped consistently to the same blank node.
   void setBlankNodePrefixes(std::vector<std::string> blankNodePrefixes) {
     blankNodePrefixes_ = std::move(blankNodePrefixes);
   }
   const std::vector<std::string>& getBlankNodePrefixes() const {
     return blankNodePrefixes_;
   }
+
+  // If `iri` was treated as a blank node during index building (see
+  // `setBlankNodePrefixes` and `BlankNodeIriVocabulary`), return the `Id` of
+  // the blank node that was assigned to it, so it can be remapped consistently
+  // (e.g. during SPARQL UPDATE). Return `std::nullopt` otherwise.
+  std::optional<Id> getBlankNodeIndexForIri(std::string_view iri) const;
 
   // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
@@ -770,6 +787,11 @@ class IndexImpl {
 
   void writeConfiguration() const;
   void readConfiguration();
+
+  // Load the `BlankNodeIriVocabulary` from disk if it was persisted (i.e. the
+  // `--treat-as-blank-node` feature was used during index building). Must be
+  // called after `readConfiguration` and after the main vocabulary was loaded.
+  void loadBlankNodeIriVocabulary();
 
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();
