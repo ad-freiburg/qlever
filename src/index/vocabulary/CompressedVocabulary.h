@@ -64,18 +64,13 @@ CPP_template(typename UnderlyingVocabulary,
   // yield `IndexAndWord` elements, so we have to apply a transformation at the
   // end.
   auto scanAll() const {
-    return ad_utility::OwningView{ad_utility::CachingTransformInputRange(
-               underlyingVocabulary_.scanAll(),
-               [this](const IndexAndWord& compressed) {
-                 const auto& [index, word] = compressed;
-                 return std::pair{index, compressionWrapper_.decompress(
-                                             word, getDecoderIdx(index))};
-               })} |
-           ql::views::transform([](const std::pair<uint64_t, std::string>& p) {
-             // `CachingTransformInputRange` keeps the strings alive, so we can
-             // safely return a `std::string_view` here.
-             return IndexAndWord{p.first, std::string_view{p.second}};
-           });
+    return ad_utility::CachingTransformInputRange(
+        underlyingVocabulary_.scanAll(),
+        [this, buffer = std::string{}](const IndexAndWord& compressed) mutable {
+          const auto& [index, word] = compressed;
+          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
+          return IndexAndWord{index, buffer};
+        });
   }
 
   //____________________________________________________________________________
