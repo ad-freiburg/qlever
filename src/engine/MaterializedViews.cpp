@@ -613,8 +613,7 @@ SparqlTripleSimple MaterializedView::makeScanConfig(
   throwIfColumnsHaveIllegalFixedValues(s, p, o);
 
   // Additional columns must be sorted (required by internals of `IndexScan`)
-  std::sort(additionalCols.begin(), additionalCols.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
+  ql::ranges::sort(additionalCols, {}, ad_utility::first);
 
   return {s.value(), p, o, additionalCols};
 }
@@ -706,9 +705,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
       additionalCols.emplace_back(col, v);
     }
   }
-  ql::ranges::sort(additionalCols, [](const auto& a, const auto& b) {
-    return a.first < b.first;
-  });
+  ql::ranges::sort(additionalCols, {}, ad_utility::first);
   SparqlTripleSimple scanTriple{std::move(s), std::move(p), std::move(o),
                                 std::move(additionalCols)};
   auto v = varToCol | ql::ranges::views::keys;
@@ -811,9 +808,9 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
                                     std::move(mapping)};
   };
 
-  auto keyWithBinds = planAndComputeMapping(
-      parsedQuery);  // Needs to be passed by value as `qp.createExecutionTree`
-                     // modifies the parsed query.
+  // Needs to be passed by value as `qp.createExecutionTree` modifies the parsed
+  // query.
+  auto keyWithBinds = planAndComputeMapping(parsedQuery);
 
   // Remove all `BIND`s that are invariant to the query.
   graphPatternAnalysis::BasicGraphPatternsInvariantTo invariantCheck{
