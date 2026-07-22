@@ -370,6 +370,10 @@ class Qlever {
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
 
+  // Delete the materialized view with the given name: unload it if loaded and
+  // delete its files from disk. Throws if the view does not exist.
+  void deleteMaterializedView(std::string name) const;
+
   // Write the contents of the `NamedResultCache` to disk.
   template <typename Serializer>
   void writeNamedResultCacheToSerializer(Serializer& serializer) const {

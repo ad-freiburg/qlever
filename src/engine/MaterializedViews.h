@@ -12,9 +12,12 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <array>
+
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Constants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "index/Permutation.h"
@@ -24,6 +27,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlTriple.h"
 #include "util/HashMap.h"
+#include "util/StringUtils.h"
 #include "util/Synchronized.h"
 
 // Forward declarations
@@ -35,6 +39,17 @@ class IndexScan;
 // about the way materialized views are stored, we can break the existing ones
 // cleanly without breaking the entire index format.
 static constexpr size_t MATERIALIZED_VIEWS_VERSION = 1;
+
+// Filename suffixes for the on-disk representation of a materialized view.
+constexpr inline std::string_view VIEW_INFO_SUFFIX = ".viewinfo.json";
+constexpr inline std::string_view VIEW_SPO_SUFFIX = ".index.spo";
+constexpr inline std::string_view VIEW_SPO_META_SUFFIX =
+    ad_utility::constexprStrCat<VIEW_SPO_SUFFIX, META_FILE_SUFFIX>();
+
+// All suffixes of the files that make up a materialized view's on-disk
+// representation. Used to delete a view's files.
+constexpr inline std::array VIEW_ALL_SUFFIXES = {
+    VIEW_INFO_SUFFIX, VIEW_SPO_SUFFIX, VIEW_SPO_META_SUFFIX};
 
 // The `MaterializedViewWriter` can be used to write a new materialized view to
 // disk, given an already planned query. The query will be executed lazily and
@@ -278,6 +293,13 @@ class MaterializedViewsManager {
 
   mutable ad_utility::Synchronized<LoadedViews> loadedViews_;
 
+  // Load the given view into `state` if it isn't loaded yet and return it.
+  // Requires `state` to be the locked contents of `loadedViews_` (this is a
+  // helper for `loadView` and `getView`, so that the latter can look up the
+  // view atomically with loading it, without releasing the lock in between).
+  std::shared_ptr<MaterializedView> loadViewIntoLockedState(
+      const std::string& name, LoadedViews& state) const;
+
  public:
   MaterializedViewsManager() = default;
   explicit MaterializedViewsManager(std::string onDiskBase)
@@ -299,6 +321,10 @@ class MaterializedViewsManager {
   // Unload a materialized view if it is loaded. This function is a no-op
   // otherwise. It is `const` for the same reason described above.
   void unloadViewIfLoaded(const std::string& name) const;
+
+  // Delete a materialized view: unload it if loaded and delete all of its files
+  // from disk. Throws if the view does not exist.
+  void deleteView(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it. This pointer
   // is never `nullptr`. If the view does not exist, the function throws.

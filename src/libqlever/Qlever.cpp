@@ -312,6 +312,12 @@ void Qlever::loadMaterializedView(std::string name) const {
 }
 
 // ___________________________________________________________________________
+void Qlever::deleteMaterializedView(std::string name) const {
+  const auto indexAndViews = indexAndViewsSnapshot();
+  indexAndViews->materializedViewsManager_.deleteView(name);
+}
+
+// ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
     std::shared_ptr<IndexAndViews> indexAndViews,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
