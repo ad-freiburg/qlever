@@ -153,6 +153,13 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
 
+  // Helper for `scanAll`: return a lazy input range that reads the word offsets
+  // from the `.offsets` file in batches of at most
+  // `VOCABULARY_SCAN_MAX_WORDS_PER_BATCH` words. Each element is a span over
+  // the offsets of one batch, with one trailing entry marking the end of the
+  // last word.
+  auto readOffsetsInBatches() const;
+
   // Helper for `scanAll`: given the `offsets` of a single chunk of words (a
   // span over the chunk's offsets, with one trailing entry marking the end of
   // the last word), return a lazy input range that yields each word of the

@@ -5,6 +5,7 @@
 #include "index/vocabulary/VocabularyOnDisk.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/bind_front.h>
 
 #include <algorithm>
 #include <array>
@@ -66,62 +67,90 @@ size_t numWordsWithinLimit(ql::span<const uint64_t> offsets, size_t first) {
   size_t numFit = static_cast<size_t>(it - begin) - 1;
   return std::max<size_t>(numFit, 1);
 }
+
+// Turn the offsets of a chunk of words into an input range of sub-chunks, where
+// each sub-chunk contains the offsets of a maximal number of words that can be
+// read into a single data buffer without exceeding
+// `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH`, but always at least one word, even
+// if that single word is larger than the limit (a word must not be split).
+auto chunkOffsets(ql::span<const uint64_t> offsets) {
+  AD_CORRECTNESS_CHECK(!offsets.empty());
+  return ad_utility::InputRangeFromGetCallable{
+      [offsets,
+       start = size_t{0}]() mutable -> std::optional<ql::span<const uint64_t>> {
+        if (start >= offsets.size() - 1) {
+          return std::nullopt;
+        }
+        size_t numWords = numWordsWithinLimit(offsets, start);
+        size_t oldBegin = std::exchange(start, start + numWords);
+        return offsets.subspan(oldBegin, numWords + 1);
+      }};
+}
+
+// Map a chunk of offsets to an input range of string views, where each string
+// view corresponds to a word in the chunk. The string views are backed by the
+// given `data` buffer, which must contain the concatenated string data of all
+// words in the chunk, starting at the offset of the first word in the chunk.
+auto mapOffsetsToStringViews(ql::span<const uint64_t> offsets,
+                             std::string_view data) {
+  AD_CORRECTNESS_CHECK(!offsets.empty());
+  auto initialStart = offsets.front();
+  // `std::views::sliding` is not available in C++20, and also not in range-v3,
+  // so we use `zip` with a dropped view instead, which is equivalent to a
+  // sliding view of size 2.
+  return ::ranges::views::zip(offsets, offsets | ::ranges::views::drop(1)) |
+         ql::views::transform([data, initialStart](const auto& pair) {
+           auto [begin, end] = pair;
+           return std::string_view{data.data() + begin - initialStart,
+                                   end - begin};
+         });
+}
 }  // namespace
 
 // _____________________________________________________________________________
 auto VocabularyOnDisk::chunkToWords(ql::span<const uint64_t> offsets) const {
-  return ad_utility::InputRangeFromGetCallable{
-      [this, offsets, dataFirst = size_t{0}, numInData = size_t{0},
-       posInData = size_t{0},
-       data = std::string{}]() mutable -> std::optional<std::string_view> {
-        // Load the next sub-batch of word data once the current one is fully
-        // consumed (a single read of at most
-        // `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH`).
-        if (posInData >= numInData) {
-          dataFirst += numInData;
-          if (dataFirst + 1 >= offsets.size()) {
-            return std::nullopt;
-          }
-          numInData = numWordsWithinLimit(offsets, dataFirst);
-          AD_CORRECTNESS_CHECK(numInData > 0);  // a sub-batch holds >= 1 word
-          data.resize(offsets[dataFirst + numInData] - offsets[dataFirst]);
-          file_.read(data.data(), data.size(),
-                     static_cast<off_t>(offsets[dataFirst]));
-          posInData = 0;
-        }
-        size_t idx = dataFirst + posInData++;
-        size_t begin = offsets[idx] - offsets[dataFirst];
-        size_t end = offsets[idx + 1] - offsets[dataFirst];
-        return std::string_view{data.data() + begin, end - begin};
+  return ad_utility::CachingTransformInputRange{
+             chunkOffsets(offsets),
+             [this, data = std::string{}](
+                 ql::span<const uint64_t> subOffsets) mutable {
+               data.resize(subOffsets.back() - subOffsets.front());
+               file_.read(data.data(), data.size(),
+                          static_cast<off_t>(subOffsets.front()));
+               return mapOffsetsToStringViews(subOffsets, data);
+             }} |
+         ql::views::join;
+}
+
+// _____________________________________________________________________________
+auto VocabularyOnDisk::readOffsetsInBatches() const {
+  // For each batch, read the offsets of its words from disk to memory. We read
+  // one extra offset that marks the end of the last word in the batch.
+  return ad_utility::CachingTransformInputRange{
+      ::ranges::views::stride(::ranges::views::iota(size_t{0}, size()),
+                              VOCABULARY_SCAN_MAX_WORDS_PER_BATCH),
+      [this,
+       buffer =
+           std::array<uint64_t, VOCABULARY_SCAN_MAX_WORDS_PER_BATCH + 1>{}](
+          size_t chunkStart) mutable -> ql::span<const uint64_t> {
+        size_t numWords = std::min<size_t>(VOCABULARY_SCAN_MAX_WORDS_PER_BATCH,
+                                           size() - chunkStart);
+        size_t numWordsPlusOne = numWords + 1;
+        offsetsFile_.read(buffer.data(), numWordsPlusOne * sizeof(uint64_t),
+                          static_cast<off_t>(chunkStart * sizeof(uint64_t)));
+        return ql::span<const uint64_t>{buffer.data(), numWordsPlusOne};
       }};
 }
 
 // _____________________________________________________________________________
 VocabularyScanRange VocabularyOnDisk::scanAll() const {
-  namespace rv = ::ranges::views;
-  // Read the offsets of up to `VOCABULARY_SCAN_MAX_WORDS_PER_BATCH` words at a
-  // time from disk to memory.
-  auto offsetChunks = ad_utility::CachingTransformInputRange{
-      ad_utility::allView(rv::chunk(rv::iota(size_t{0}, size()),
-                                    VOCABULARY_SCAN_MAX_WORDS_PER_BATCH)),
-      [this,
-       buffer =
-           std::array<uint64_t, VOCABULARY_SCAN_MAX_WORDS_PER_BATCH + 1>{}](
-          const auto& indexChunk) mutable -> ql::span<const uint64_t> {
-        uint64_t chunkStart = indexChunk.front();
-        size_t numWordsPlusOne = 1 + ql::ranges::size(indexChunk);
-        offsetsFile_.read(buffer.data(), numWordsPlusOne * sizeof(uint64_t),
-                          static_cast<off_t>(chunkStart * sizeof(uint64_t)));
-        return ql::span<const uint64_t>{buffer.data(), numWordsPlusOne};
-      }};
-
-  auto words = ad_utility::CachingTransformInputRange{
-      std::move(offsetChunks), [this](ql::span<const uint64_t> offsets) {
-        return chunkToWords(offsets);
-      }};
-  auto joined = ql::views::join(ad_utility::allView(std::move(words)));
+  // Range of all words in the vocabulary.
+  auto words = ad_utility::OwningView{readOffsetsInBatches()} |
+               ql::views::transform(
+                   absl::bind_front(&VocabularyOnDisk::chunkToWords, this)) |
+               ql::views::join;
+  // Pair each word with its index in the vocabulary.
   return VocabularyScanRange{ad_utility::CachingTransformInputRange{
-      std::move(joined), [index = uint64_t{0}](std::string_view word) mutable {
+      std::move(words), [index = uint64_t{0}](std::string_view word) mutable {
         return IndexAndWord{index++, word};
       }}};
 }
