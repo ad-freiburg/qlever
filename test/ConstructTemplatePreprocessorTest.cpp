@@ -171,7 +171,7 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
         ConstructTemplatePreprocessor::preprocess(triples, varMap, index);
     return std::get<PrecomputedConstant>(
                result.preprocessedTriples_.at(0).at(2))
-        .dedupId_;
+        .dedupId_.value();
   };
 
   // (a) IRI constant vs. the same IRI from the data (vocabulary lookup).
@@ -526,7 +526,7 @@ ValueId dedupIdAt(const PreprocessedConstructTemplate& result, size_t tripleIdx,
                   size_t pos) {
   return std::get<PrecomputedConstant>(
              result.preprocessedTriples_.at(tripleIdx).at(pos))
-      .dedupId_;
+      .dedupId_.value();
 }
 
 // Every constant term (IRI or object literal) is resolved to a defined

@@ -40,6 +40,7 @@ struct EvaluatedTermData {
   std::string rdfTermString_;
   const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
 
+  //____________________________________________________________________________
   EvaluatedTermData(std::string rdfTermString, const char* rdfTermDataType)
       : rdfTermString_{std::move(rdfTermString)},
         rdfTermDataType_{rdfTermDataType} {}
@@ -57,7 +58,7 @@ struct PrecomputedConstant {
   // The `ValueId` for this constant, used for the CONSTRUCT result
   // deduplication. It is set to the correct value by
   // `ConstructTemplatePreprocessor::resolveConstantDedupId`
-  ValueId dedupId_ = ValueId::makeUndefined();
+  std::optional<ValueId> dedupId_ = std::nullopt;
 };
 
 // After preprocessing (via `ConstructTemplatePreprocessor::preprocess`),
@@ -99,28 +100,15 @@ struct EvaluatedTriple {
 };
 
 // Result of preprocessing all CONSTRUCT template triples.
-// `preprocessedTriples_` hols the (non-ground) template triples in template
-// order. `tripleContainsBlankNode_` is parallel to it: its i-th element
-// describes `preprocessedTriples_[i]`. In contrast, `uniqueVariableColumns_`
-// is a single flat set (not per-triple).
 struct PreprocessedConstructTemplate {
   // The (non-ground) template triples, in template order.
   std::vector<PreprocessedTriple> preprocessedTriples_;
   // Deduplicated `IdTable` column indices across all template triples, in order
   // of first encounter.
-  std::vector<size_t> uniqueVariableColumns_;
-  std::vector<std::vector<size_t>> variableColumnsPerTriple_;
-  // Per triple i: whether `preprocessedTriples_[i]` contains a blank-node term.
+  std::vector<ColumnIndex> uniqueVariableColumns_;
+  // `tripleContainsBlankNode[i]` is true iff `preprocessedTriples[i]` contains
+  // a blank node constant.
   std::vector<bool> tripleContainsBlankNode_;
-  // Ground (fully constant) template triples, pre-instantiated once at
-  // preprocessing time.
-  std::vector<EvaluatedTriple> groundTriples_;
-  // Owns the `LocalVocabEntry`s created while resolving literal (and
-  // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
-  // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
-  // entry living in this vocab, so the `LocalVocab` must outlive every use of
-  // those ids. Kept here so the lifetime is tied to the preprocessed template.
-  LocalVocab localVocabForConstants_;
 };
 
 }  // namespace qlever::constructExport
