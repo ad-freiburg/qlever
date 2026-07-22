@@ -108,13 +108,7 @@ static constexpr size_t bytesPerDedupKey =
     NUM_TRIPLE_POSITIONS * sizeof(ValueId);
 
 // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
-// given, else a mode-dependent default:
-// - `BatchWise`: `batchSize_` keys' worth of bytes. The LRU cache already holds
-//   `batchSize_` keys (~`batchSize_ * bytesPerDedupKey`), so granting the vocab
-//   a comparable budget keeps the two bounded together and cheap (e.g. batch
-//   size 10'000 => ~240 KB).
-// - `Global`: a quarter of the query's currently available memory (a safety cap
-//   only; exceeding it fails the query, since `Global` must stay exact).
+// given, else a mode-dependent default.
 size_t ConstructDeduplicationState::computeMaxDedupVocabBytes(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext,
