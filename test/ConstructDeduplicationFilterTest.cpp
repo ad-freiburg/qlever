@@ -63,21 +63,38 @@ TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
   EXPECT_EQ(key, (DeduplicationKey{id, id, id}));
 }
 
-// The same literal reached via two different `LocalVocab`s must produce the
-// same key, because both are reseated into the state's own `dedupVocab_`.
+// The same literal reached via two different `LocalVocab`s must be reseated
+// into the state's own `dedupVocab_`. We check this at the bit level, not with
+// `operator==`: two `LocalVocabIndex`es pointing to equal strings compare equal
+// regardless of which vocab they live in, so an `EXPECT_EQ` on the keys would
+// pass even without any reseating. Instead, we require that the reseated ids
+// are bitwise identical to each other (same `dedupVocab_` entry) yet bitwise
+// distinct from both sources (proving they were actually moved).
 TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
 
   LocalVocab v1;
   LocalVocab v2;
-  auto t1 = singleIdTable(lvId(v1, "x", *qec));
-  auto t2 = singleIdTable(lvId(v2, "x", *qec));
+  Id src1 = lvId(v1, "x", *qec);
+  Id src2 = lvId(v2, "x", *qec);
+  auto t1 = singleIdTable(src1);
+  auto t2 = singleIdTable(src2);
   BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
 
-  EXPECT_EQ(state.makeFullTripleKey(kVarTriple, 0, c1),
-            state.makeFullTripleKey(kVarTriple, 0, c2));
+  // The two sources are genuinely different ids (distinct vocab entries), even
+  // though they encode equal strings.
+  ASSERT_NE(src1.getBits(), src2.getBits());
+
+  Id reseated1 = state.makeFullTripleKey(kVarTriple, 0, c1)[0];
+  Id reseated2 = state.makeFullTripleKey(kVarTriple, 0, c2)[0];
+
+  // Collapsed: both keys hold the same `dedupVocab_` entry, so bitwise equal.
+  EXPECT_EQ(reseated1.getBits(), reseated2.getBits());
+  // Actually reseated: distinct from either source (not a pass-through).
+  EXPECT_NE(reseated1.getBits(), src1.getBits());
+  EXPECT_NE(reseated1.getBits(), src2.getBits());
 }
 
 // A key built from a `LocalVocab` that is then destroyed must not dangle: the
