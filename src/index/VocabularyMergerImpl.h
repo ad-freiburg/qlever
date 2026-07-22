@@ -29,22 +29,31 @@ namespace ad_utility::vocabulary_merger {
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
                      C& internalWordCallback,
-                     ad_utility::MemorySize memoryToUse)
+                     ad_utility::MemorySize memoryToUse,
+                     const std::vector<std::string>* blankNodePrefixes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, memoryToUse);
+                                internalWordCallback, memoryToUse,
+                                blankNodePrefixes);
 }
 
 // _________________________________________________________________
 template <typename W, typename C>
-auto VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                       size_t numFiles, W comparator,
-                                       C& wordCallback,
-                                       ad_utility::MemorySize memoryToUse)
+auto VocabularyMerger::mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
+    ad_utility::MemorySize memoryToUse,
+    const std::vector<std::string>* blankNodePrefixes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
+  // Compile the regexes for the IRIs that should be treated as blank nodes.
+  if (blankNodePrefixes != nullptr) {
+    for (const auto& prefix : *blankNodePrefixes) {
+      blankNodePrefixes_.push_back(std::make_unique<re2::RE2>(prefix));
+    }
+  }
+
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -133,7 +142,7 @@ CPP_template_def(typename C, typename L)(
 
       // Write the new word to the vocabulary.
       auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
+      if (nextWord.isBlankNode(&blankNodePrefixes_)) {
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
         nextWord.index_ =
@@ -151,7 +160,7 @@ CPP_template_def(typename C, typename L)(
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =
-        word.isBlankNode()
+        word.isBlankNode(&blankNodePrefixes_)
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write pair of local and global ID to buffer.
