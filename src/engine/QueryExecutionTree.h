@@ -132,6 +132,9 @@ class QueryExecutionTree {
   // to zero. Currently multiplicities are not affected
   bool readFromCache();
 
+  // Check whether the cache key of this `QueryExecutionTree` matches a loaded
+  // materialized view. If yes, replace the `rootOperation_` with an `IndexScan`
+  // on that view with a result equivalent to the current `rootOperation_`.
   void readFromMaterializedView();
 
   // recursively get all warnings from descendant operations
