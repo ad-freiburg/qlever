@@ -11,8 +11,8 @@
 #include <gmock/gmock.h>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./QueryPlannerTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
-#include "QueryPlannerTestHelpers.h"
 
 namespace {
 
