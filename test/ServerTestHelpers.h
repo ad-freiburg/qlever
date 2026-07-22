@@ -16,6 +16,7 @@
 #include "engine/Server.h"
 #include "libqlever/Qlever.h"
 #include "util/IndexTestHelpers.h"
+#include "util/metrics/Metrics.h"
 
 namespace serverTestHelpers {
 
@@ -46,9 +47,12 @@ class ServerForTesting {
  public:
   explicit ServerForTesting(size_t numThreads, std::string accessToken,
                             const qlever::EngineConfig& config,
-                            bool noAccessCheck = false)
-      : server_{std::make_unique<Server>(
-            4321, numThreads, std::move(accessToken), config, noAccessCheck)} {}
+                            bool noAccessCheck = false,
+                            std::shared_ptr<ad_utility::metrics::MetricsReader>
+                                metricsReader = nullptr)
+      : server_{std::make_unique<Server>(4321, numThreads,
+                                         std::move(accessToken), config,
+                                         noAccessCheck, metricsReader)} {}
 
   // Accessors for the `Server` and `DeltaTriples`.
   Server& server() { return *server_; }

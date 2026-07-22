@@ -31,6 +31,7 @@
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/LocalVocabEntry.h"
@@ -257,9 +258,18 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
+  // A value of 0 means "fall back to `lazy-index-scan-num-threads`" (the same
+  // thread count as query scans); a positive value throttles the rebuild's
+  // read/decompress parallelism only, reducing its peak CPU without touching
+  // queries.
+  auto rebuildScanThreads =
+      getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+  std::optional<size_t> numThreadsOverride =
+      rebuildScanThreads == 0 ? std::nullopt
+                              : std::optional<size_t>{rebuildScanThreads};
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState);
+      *locatedTriplesSharedState, numThreadsOverride);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
