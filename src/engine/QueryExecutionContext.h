@@ -179,9 +179,8 @@ class QueryExecutionContext
     disableCaching_ = disableCaching;
   }
 
-  bool disableMaterializedViewRewriting() const {
-    return disableMaterializedViewRewriting_;
-  }
+  bool disableMaterializedViewRewriting() const;
+
   void setDisableMaterializedViewRewriting(
       bool disableMaterializedViewRewriting) {
     disableMaterializedViewRewriting_ = disableMaterializedViewRewriting;

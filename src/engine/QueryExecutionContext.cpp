@@ -77,3 +77,10 @@ void QueryExecutionContext::signalQueryUpdate(
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }
 }
+
+// _____________________________________________________________________________
+bool QueryExecutionContext::disableMaterializedViewRewriting() const {
+  return !getRuntimeParameter<
+             &RuntimeParameters::enableMaterializedViewQueryRewrite_>() ||
+         disableMaterializedViewRewriting_;
+}
