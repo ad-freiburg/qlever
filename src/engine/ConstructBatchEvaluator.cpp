@@ -8,6 +8,7 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
+#include "global/Id.h"
 #include "index/ExportIds.h"
 #include "util/Views.h"
 
@@ -15,7 +16,7 @@ namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
-    ql::span<const size_t> variableColumnIndices,
+    ql::span<const ColumnIndex> variableColumnIndices,
     const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   BatchEvaluationResult batchResult;
