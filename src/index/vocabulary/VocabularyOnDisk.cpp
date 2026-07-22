@@ -109,7 +109,7 @@ auto mapOffsetsToStringViews(ql::span<const uint64_t> offsets,
 
 // _____________________________________________________________________________
 auto VocabularyOnDisk::chunkToWords(ql::span<const uint64_t> offsets) const {
-  return ad_utility::CachingTransformInputRange{
+  return ad_utility::allView(ad_utility::CachingTransformInputRange{
              chunkOffsets(offsets),
              [this, data = std::string{}](
                  ql::span<const uint64_t> subOffsets) mutable {
@@ -117,7 +117,7 @@ auto VocabularyOnDisk::chunkToWords(ql::span<const uint64_t> offsets) const {
                file_.read(data.data(), data.size(),
                           static_cast<off_t>(subOffsets.front()));
                return mapOffsetsToStringViews(subOffsets, data);
-             }} |
+             }}) |
          ql::views::join;
 }
 
