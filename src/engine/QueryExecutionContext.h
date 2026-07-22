@@ -179,12 +179,18 @@ class QueryExecutionContext
     disableCaching_ = disableCaching;
   }
 
-  bool disableMaterializedViewRewriting() const;
-
-  void setDisableMaterializedViewRewriting(
-      bool disableMaterializedViewRewriting) {
-    disableMaterializedViewRewriting_ = disableMaterializedViewRewriting;
+  // If materialized view rewriting is active. The global configuration is
+  // already taken into account by the return value.
+  bool disableMaterializedViewRewriting() const {
+    return disableMaterializedViewRewriting_;
   }
+
+  // Set this to `true` to enforce materialized view rewriting to be disabled.
+  // If set to `false`, the global configuration will be used. In particular, if
+  // the global configuration disables rewriting, setting this to `false` does
+  // not enable rewriting.
+  void setDisableMaterializedViewRewriting(
+      bool disableMaterializedViewRewriting);
 
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.

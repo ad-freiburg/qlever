@@ -38,8 +38,7 @@ QueryExecutionContext::QueryExecutionContext(
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedResultCache_(namedResultCache),
-      materializedViewsManager_(std::move(materializedViewsManager)),
-      disableMaterializedViewRewriting_(disableMaterializedViewRewriting) {
+      materializedViewsManager_(std::move(materializedViewsManager)) {
   disableCaching_ = [disableCaching]() {
     if (disableCaching == DisableCaching::True) {
       return true;
@@ -51,6 +50,9 @@ QueryExecutionContext::QueryExecutionContext(
       return getRuntimeParameter<&RuntimeParameters::disableCaching_>();
     }
   }();
+  // This is a separate function call to also take into account the runtime
+  // parameter.
+  setDisableMaterializedViewRewriting(disableMaterializedViewRewriting);
   AD_CORRECTNESS_CHECK(cache != nullptr);
   AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
   AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
@@ -79,8 +81,10 @@ void QueryExecutionContext::signalQueryUpdate(
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionContext::disableMaterializedViewRewriting() const {
-  return !getRuntimeParameter<
-             &RuntimeParameters::enableMaterializedViewQueryRewrite_>() ||
-         disableMaterializedViewRewriting_;
+void QueryExecutionContext::setDisableMaterializedViewRewriting(
+    bool disableMaterializedViewRewriting) {
+  disableMaterializedViewRewriting_ =
+      !getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>() ||
+      disableMaterializedViewRewriting;
 }
