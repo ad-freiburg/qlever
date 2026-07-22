@@ -197,6 +197,9 @@ int main(int argc, char** argv) {
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
+  ad_utility::ParameterToProgramOptionFactory optionFactory{
+      &globalRuntimeParameters};
+
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
   auto add = [&boostOptions](auto&&... args) {
@@ -302,6 +305,12 @@ int main(int argc, char** argv) {
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(1),
       "The sampling interval of the resource-usage log in seconds.");
+  add("log-level",
+      optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
+      "as an upper bound — messages above it are never emitted regardless of "
+      "this setting.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
