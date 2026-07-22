@@ -21,10 +21,9 @@
 namespace qlever::constructExport {
 
 // Resolve `tripleComponent` (a constant IRI or literal from the CONSTRUCT
-// template) to its `ValueId`: encoded values and vocabulary terms become
-// `ValueId`s directly; a literal/IRI not present in the vocabulary is assigned
-// a fresh `LocalVocabIndex` in `localvocabForConstructTemplateConstants`. This
-// `ValueId` is the constant's component of the full-triple deduplication key.
+// template) to a corresponding `ValueId`, literals and IRIs not present in the
+// vocabulary of `index_` are stored in the `localVocab_`. This `ValueId` is
+// used for the deduplication of CONSTRUCT results.
 ValueId ConstructTemplatePreprocessor::resolveConstantDedupId(
     TripleComponent tripleComponent) {
   return std::move(tripleComponent).toValueId(index_, localVocab_);
@@ -54,11 +53,9 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
   // A literal is only legal in OBJECT position; per SPARQL 1.1 §16.2 a template
   // instantiation yielding a literal in subject/predicate position produces no
   // RDF triple, so we return `nullopt` to drop the triple. For the object we
-  // use the full Turtle object parser (not a string normalize like
-  // `preprocessIri`): the literal's datatype decides its `ValueId` encoding
-  // (e.g. `"1"^^xsd:integer` → encoded integer, not a vocab string), which
-  // `parseTripleObject` resolves the same way the index does at build time,
-  // keeping the dedup key consistent.
+  // use the full Turtle object parser to handle all cases correctly, in
+  // particular IRIs with datatypes like `xsd:integer` which are folded into the
+  // ID.
   if (role != PositionInTriple::OBJECT) {
     return std::nullopt;
   }

@@ -46,8 +46,7 @@ class ConstructTemplatePreprocessor {
   // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. Returns
   // `std::nullopt` if the term is undefined (e.g. an unbound variable).
   // `localVocabForConstants` backs the entries of any constant's `dedupId_` and
-  // must outlive the returned term. Exposed (as a thin builder wrapper) for
-  // white-box per-term unit tests.
+  // must outlive the returned term. This function is only used in unit tests.
   static std::optional<PreprocessedTerm> preprocessTerm(
       const GraphTerm& term, PositionInTriple role,
       const VariableToColumnMap& variableColumns, const Index& index,
@@ -80,6 +79,7 @@ class ConstructTemplatePreprocessor {
         localVocab_{result_.localVocabForConstants_} {}
 
   // Constructor for the per-term flow: constants go into a caller-owned vocab.
+  // Only used in tests.
   ConstructTemplatePreprocessor(const VariableToColumnMap& variableColumns,
                                 const Index& index, LocalVocab& localVocab)
       : variableColumns_{variableColumns},

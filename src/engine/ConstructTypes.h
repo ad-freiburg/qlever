@@ -104,17 +104,14 @@ struct EvaluatedTriple {
 struct PreprocessedConstructTemplate {
   // The (non-ground) template triples, in template order.
   std::vector<PreprocessedTriple> preprocessedTriples_;
-  // Deduplicated `IdTable` column indices across all template triples, in order
-  // of first encounter.
+  // Deduplicated `IdTable` column indices of all variables that occur in the
+  // template triples, in order of first encounter.
   std::vector<ColumnIndex> uniqueVariableColumns_;
   // `tripleContainsBlankNode[i]` is true iff `preprocessedTriples[i]` contains
   // a blank node constant.
   std::vector<bool> tripleContainsBlankNode_;
-  // Owns the `LocalVocabEntry`s created while resolving literal (and
-  // not-in-vocabulary IRI) constants to their `PrecomputedConstant::dedupId_`.
-  // The `LocalVocabIndex` stored inside such a `dedupId_` is the address of an
-  // entry living in this vocab, so the `LocalVocab` must outlive every use of
-  // those ids. Kept here so the lifetime is tied to the preprocessed template.
+  // Owns and keeps alive the `LocalVocabEntry`s created while resolving literal
+  // and IRI constants to their `PrecomputedConstant::dedupId_`.
   LocalVocab localVocabForConstants_;
 };
 
