@@ -986,8 +986,7 @@ TEST_F(MaterializedViewsTest, Deletion) {
 
   // The view is unloaded and all of its files are gone.
   EXPECT_FALSE(manager.isViewLoaded("testView1"));
-  for (const auto* suffix :
-       {".index.spo", ".index.spo.meta", ".viewinfo.json"}) {
+  for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
     EXPECT_FALSE(std::filesystem::exists(
         absl::StrCat(testIndexBase_, ".view.testView1", suffix)));
   }

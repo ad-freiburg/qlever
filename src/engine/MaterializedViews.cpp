@@ -24,6 +24,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Constants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -251,7 +252,7 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 // _____________________________________________________________________________
 IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
-  std::string spoFilename = getFilenameBase() + ".index.spo";
+  std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
@@ -300,7 +301,7 @@ void MaterializedViewWriter::writeViewMetadata() const {
         }) |
         ::ranges::to<std::vector<nlohmann::json>>())},
       {"query", parsedQuery_._originalString}};
-  ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
+  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
 }
 
@@ -352,7 +353,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
-  auto metadataFilename = absl::StrCat(filename, ".viewinfo.json");
+  auto metadataFilename = absl::StrCat(filename, VIEW_INFO_SUFFIX);
   if (!std::filesystem::exists(metadataFilename)) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name_, "' does not exist."));
@@ -480,7 +481,7 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 void MaterializedViewsManager::deleteView(const std::string& name) const {
   MaterializedView::throwIfInvalidName(name);
   auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
-  if (!std::filesystem::exists(absl::StrCat(filenameBase, ".viewinfo.json"))) {
+  if (!std::filesystem::exists(absl::StrCat(filenameBase, VIEW_INFO_SUFFIX))) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name, "' does not exist."));
   }
@@ -495,8 +496,7 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
   }
 
   // Delete all files belonging to the view from disk.
-  for (const auto* suffix :
-       {".viewinfo.json", ".index.spo", ".index.spo.meta"}) {
+  for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
     std::error_code ec;
     std::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
     if (ec) {
