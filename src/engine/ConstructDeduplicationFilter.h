@@ -11,6 +11,7 @@
 
 #include <absl/container/inlined_vector.h>
 
+#include <functional>
 #include <optional>
 #include <variant>
 #include <vector>
@@ -118,7 +119,7 @@ class ConstructDeduplicationState {
   // Stored by value (not reference): callers may pass a temporary `mode`, and
   // `mode_` is read later in `resetIfVocabTooLarge`.
   const DeduplicationMode mode_;
-  const QueryExecutionContext& queryExecutionContext_;
+  std::reference_wrapper<const QueryExecutionContext> queryExecutionContext_;
   // Approximate total byte size of the strings currently held in `dedupVocab_`.
   size_t dedupVocabBytes_ = 0;
   // When `dedupVocabBytes_` reaches this, all dedup state is dropped (see
@@ -143,6 +144,9 @@ class ConstructDeduplicationState {
   // blocks collapse.
   ValueId canonicalize(ValueId id);
 
+  // Canonicalize every position of a pre-built key into `dedupVocab_`.
+  DeduplicationKey canonicalizeKey(DeduplicationKey key);
+
   // Bound `dedupVocab_`s memory: once the accumulated string bytes reach the
   // threshold, either fail (`Global`, which must stay exact) or drop all dedup
   // state and start fresh (`BatchWise`). The filter's keys reference
@@ -152,9 +156,6 @@ class ConstructDeduplicationState {
   // before a reset may be emitted again). `Global` is exact, so it fails
   // instead. `None` never reaches here (`isNew` asserts a filter exists).
   void resetIfVocabTooLarge();
-
-  // Canonicalize every position of a pre-built key into `dedupVocab_`.
-  DeduplicationKey canonicalizeKey(DeduplicationKey key);
 };
 
 }  // namespace qlever::constructExport
