@@ -52,12 +52,12 @@ using IdCache =
 // Identifies a contiguous sub-range of rows of an `IdTable` that forms one
 // batch.
 struct BatchEvaluationContext {
-  IdTableView<0> idTable_;
+  const IdTable& idTable_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
 
-  BatchEvaluationContext(IdTableView<0> idTable, size_t firstRow, size_t endRow)
-      : idTable_(std::move(idTable)), firstRow_(firstRow), endRow_(endRow) {
+  BatchEvaluationContext(const IdTable& idTable, size_t firstRow, size_t endRow)
+      : idTable_(idTable), firstRow_(firstRow), endRow_(endRow) {
     AD_CONTRACT_CHECK(firstRow <= endRow);
     AD_CONTRACT_CHECK(endRow <= idTable_.numRows());
   }
