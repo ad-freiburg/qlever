@@ -98,9 +98,10 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 /*
 Check the content of a `Result` row.
 */
+template <typename... WantedContent>
 static void checkResultTableRow(const ResultTable& table,
                                 const size_t& rowNumber,
-                                const auto&... wantedContent) {
+                                const WantedContent&... wantedContent) {
   // Calls the correct assert function based on type.
   auto assertEqual = [](const auto& a, const auto& b) {
     static_assert(std::is_same_v<decltype(a), decltype(b)>,

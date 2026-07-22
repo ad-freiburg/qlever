@@ -90,6 +90,16 @@ TEST(LibQlever, buildIndexAndRunQuery) {
 
     // Test that the requested materialized view exists.
     EXPECT_NO_THROW(engine.loadMaterializedView("demoView"));
+
+    // A non-positive `geoIndexSimplificationInMeters_` is rejected.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        engine.queryAndPinResultWithName(
+            QueryExecutionContext::PinResultWithName{"pin3", std::nullopt,
+                                                     -1.0},
+            query),
+        ::testing::HasSubstr(
+            "`geoIndexSimplificationInMeters_` must be a positive "
+            "floating-point number of meters."));
   }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -256,8 +266,8 @@ TEST(LibQlever, disableCaching) {
     ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
     Qlever engine{ec};
     auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
-    auto& qec = std::get<1>(plan);
-    EXPECT_TRUE(qec->disableCaching());
+    auto& qec = plan.queryExecutionContext();
+    EXPECT_TRUE(qec.disableCaching());
   }
   {
     // Load the index with `disableCaching` set to false.
@@ -265,8 +275,8 @@ TEST(LibQlever, disableCaching) {
     Qlever engine{ec};
     {
       auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
-      auto& qec = std::get<1>(plan);
-      EXPECT_FALSE(qec->disableCaching());
+      auto& qec = plan.queryExecutionContext();
+      EXPECT_FALSE(qec.disableCaching());
     }
   }
 
@@ -278,8 +288,8 @@ TEST(LibQlever, disableCaching) {
     Qlever engine{ec};
     {
       auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
-      auto& qec = std::get<1>(plan);
-      EXPECT_FALSE(qec->disableCaching());
+      auto& qec = plan.queryExecutionContext();
+      EXPECT_FALSE(qec.disableCaching());
     }
     // Now after the fact disable the caching for new operations via the runtime
     // parameters:
@@ -287,8 +297,8 @@ TEST(LibQlever, disableCaching) {
         setRuntimeParameterForTest<&RuntimeParameters::disableCaching_>(true);
     {
       auto plan = engine.parseAndPlanQuery("SELECT ?s WHERE {?x <p> ?o}");
-      auto& qec = std::get<1>(plan);
-      EXPECT_TRUE(qec->disableCaching());
+      auto& qec = plan.queryExecutionContext();
+      EXPECT_TRUE(qec.disableCaching());
     }
   }
 }
@@ -335,11 +345,12 @@ TEST(LibQlever, externallySpecifiedValues) {
 
   for (const auto& query : queries) {
     auto plan = engine.parseAndPlanQuery(query);
-    auto& [qet, qec, parsedQuery] = plan;
+    auto& qet = plan.queryExecutionTree();
+    auto& qec = plan.queryExecutionContext();
 
     // Collect the ExternalValues operations from the tree.
     std::vector<ExternalValues*> externalValues;
-    qet->getRootOperation()->getExternalValues(externalValues);
+    qet.getRootOperation()->getExternalValues(externalValues);
     ASSERT_EQ(externalValues.size(), 1u);
     EXPECT_EQ(externalValues[0]->getName(), "myValues");
     EXPECT_EQ(externalValues[0]->getResultWidth(), 1u);
@@ -352,15 +363,15 @@ TEST(LibQlever, externallySpecifiedValues) {
                          {TC::Iri::fromIriref("<s3>")}};
     externalValues[0]->updateValues(std::move(newValues));
 
-    auto res = qet->getResult();
+    auto res = qet.getResult();
     auto i = &Id::makeFromInt;
-    auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+    auto getId = ad_utility::testing::makeGetId(qec.getIndex());
     // The order of the two columns `?x` and `?o` might not be deterministic.
     auto expected =
         makeIdTableFromVector({{getId("<s1>"), i(1)}, {getId("<s3>"), i(3)}});
-    if (qet->getVariableColumn(Variable{"?x"}) != 0) {
+    if (qet.getVariableColumn(Variable{"?x"}) != 0) {
       expected.swapColumns(0, 1);
     }
-    EXPECT_THAT(res->idTable(), matchesIdTable(expected));
+    EXPECT_THAT(res->idTableView(), matchesIdTable(expected));
   }
 }

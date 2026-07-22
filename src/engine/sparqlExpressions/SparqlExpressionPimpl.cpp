@@ -68,6 +68,11 @@ bool SparqlExpressionPimpl::isResultAlwaysDefined(
   return _pimpl->isResultAlwaysDefined(variableToColumnMap);
 }
 
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isDeterministic() const {
+  return _pimpl->isDeterministic();
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();

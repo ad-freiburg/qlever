@@ -284,7 +284,9 @@ class IndexNestedLoopJoin {
  public:
   // Function for MINUS and EXISTS operations when the right side is fully
   // materialized.
-  Result::LazyResult computeRightExistance(auto transformationFunc) {
+  template <typename TransformationFunc>
+  Result::LazyResult computeRightExistance(
+      TransformationFunc transformationFunc) {
     std::vector<ColumnIndex> leftColumns;
     std::vector<ColumnIndex> rightColumns;
     for (const auto& [leftCol, rightCol] : joinColumns_) {
@@ -312,14 +314,9 @@ class IndexNestedLoopJoin {
                                       matchTracker.matchTracker_);
           };
           if (leftResult_->isFullyMaterialized()) {
-            // NOTE: We deliberately pass the owning `idTable()` (and not
-            // `idTableView()`) here: the `transformationFunc` of `Minus` only
-            // reads the table (no copy), whereas the one of `ExistsJoin` needs
-            // to take ownership via `moveOrClone()`. Passing the owning
-            // reference lets `Minus` avoid a copy while `ExistsJoin` clones
-            // only when it actually has to.
-            return Result::LazyResult{std::array{matchHelper(
-                leftResult_->idTable(), leftResult_->getCopyOfLocalVocab())}};
+            return Result::LazyResult{
+                std::array{matchHelper(leftResult_->idTableView(),
+                                       leftResult_->getCopyOfLocalVocab())}};
           }
           return Result::LazyResult{ad_utility::CachingTransformInputRange{
               leftResult_->idTables(),

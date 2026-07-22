@@ -224,8 +224,19 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
-constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
+constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
+
+// The key under which the datetime when the index build started is stored in
+// the index configuration.
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_KEY =
+    "date-of-index-build";
+
+// The datetime format used for the `date-of-index-build` entry in the index
+// configuration (the time when the build started), e.g.
+// `2026-07-12T14:03:52Z` (UTC).
+constexpr inline std::string_view DATE_OF_INDEX_BUILD_FORMAT =
+    "%Y-%m-%dT%H:%M:%SZ";
 
 constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "
@@ -342,5 +353,10 @@ constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
 
 constexpr inline std::string_view GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX =
     "http-graph-store";
+
+// The number of `BatchIoManager`s pooled by `VocabularyOnDisk` for batched
+// vocabulary lookups (`lookupBatch`). Each manager owns an io_uring ring; the
+// pool size bounds how many batch lookups can be served concurrently.
+constexpr inline size_t NUM_VOCAB_BATCH_IO_MANAGERS = 8;
 
 #endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

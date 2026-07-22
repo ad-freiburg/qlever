@@ -36,7 +36,7 @@ TEST(Union, computeUnion) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   auto U = Id::makeUndefined();
   auto expected = makeIdTableFromVector(
@@ -71,7 +71,7 @@ TEST(Union, computeUnionLarge) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   ASSERT_EQ(result, makeIdTableFromVector(expected));
 }
@@ -181,7 +181,7 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     auto U = Id::makeUndefined();
     auto expected =
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -218,7 +218,7 @@ TEST(Union, inputWithZeroColumns) {
     ASSERT_TRUE(resultTable.isFullyMaterialized());
 
     auto expected = makeIdTableFromVector({{}, {}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -293,7 +293,7 @@ TEST(Union, sortedMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 4}, {1, 2, 4}, {2, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -327,7 +327,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     qec->getQueryTreeCache().clearAll();
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -376,7 +376,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}, {5}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
                 ::testing::IsSupersetOf(vocab1.getAllWordsForTesting()));
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
@@ -434,13 +434,13 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
     auto result =
         unionOperation1.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 8}, {1, 4, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     auto result =
         unionOperation2.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, 4, U}, {1, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -540,7 +540,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{U, 2}, {1, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -554,7 +554,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U}, {U, 2}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -589,7 +589,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, U, U, 4}, {1, 2, 4, U}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -607,7 +607,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();

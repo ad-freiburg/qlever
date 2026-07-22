@@ -57,7 +57,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
@@ -71,12 +72,13 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table2));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
     auto op = cache.getOperation("query-1", qec);
-    EXPECT_THAT(op->computeResultOnlyForTesting().idTable(),
+    EXPECT_THAT(op->computeResultOnlyForTesting().idTableView(),
                 matchesIdTable(table2));
   }
 
@@ -93,7 +95,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table2));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
@@ -139,7 +142,7 @@ TEST(NamedResultCache, E2E) {
           "<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
-  EXPECT_THAT(result->idTable(), matchesIdTable(expected));
+  EXPECT_THAT(result->idTableView(), matchesIdTable(expected));
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
