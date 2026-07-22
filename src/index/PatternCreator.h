@@ -15,10 +15,11 @@
 #include "global/Pattern.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
-#include "util/BufferedVector.h"
 #include "util/CompactStringVector.h"
 #include "util/ExceptionHandling.h"
+#include "util/ExternalOverflowStorage.h"
 #include "util/HashMap.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
@@ -106,11 +107,8 @@ class PatternCreator {
 
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
-  struct TripleAndIsInternal {
-    std::array<Id, NumColumnsIndexBuilding> triple_;
-    bool isInternal_;
-  };
-  ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
+  ad_utility::ExternalOverflowStorage<std::array<Id, NumColumnsIndexBuilding>>
+      tripleBuffer_;
   TripleSorter tripleSorter_;
 
   // The predicates which have already occurred in one of the patterns. Needed
@@ -147,8 +145,7 @@ class PatternCreator {
   // This function has to be called for all the triples in the SPO permutation
   // The `triple` must be >= all previously pushed triples wrt the SPO
   // permutation.
-  void processTriple(std::array<Id, NumColumnsIndexBuilding> triple,
-                     bool ignoreTripleForPatterns);
+  void processTriple(const std::array<Id, NumColumnsIndexBuilding>& triple);
 
   // Write the patterns to disk after all triples have been pushed. Calls to
   // `processTriple` after calling `finish` lead to undefined behavior. Note

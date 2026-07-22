@@ -57,7 +57,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
@@ -71,7 +72,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table2));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
@@ -93,7 +95,8 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table2));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());

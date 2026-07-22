@@ -187,6 +187,12 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 // _____________________________________________________________________________
 void Qlever::queryAndPinResultWithName(
     QueryExecutionContext::PinResultWithName options, std::string query) {
+  if (options.geoIndexSimplificationInMeters_.has_value() &&
+      options.geoIndexSimplificationInMeters_.value() <= 0.0) {
+    throw std::runtime_error(
+        "`geoIndexSimplificationInMeters_` must be a positive "
+        "floating-point number of meters.");
+  }
   auto plannedQuery = parseAndPlanQuery(std::move(query));
   plannedQuery.queryExecutionContext().pinResultWithName() = std::move(options);
   [[maybe_unused]] auto result = this->query(plannedQuery);
@@ -212,8 +218,8 @@ void Qlever::eraseResultWithName(std::string name) {
 
 // ___________________________________________________________________________
 PlannedQuery Qlever::planQuery(
-    ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
-    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle,
+    ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
   handle->throwIfCancelled();
   QueryPlanner qp{&qec, handle};
@@ -244,8 +250,8 @@ PlannedQuery Qlever::planQuery(
 // ___________________________________________________________________________
 PlannedQuery Qlever::parseAndPlanQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
-    ad_utility::SharedCancellationHandle handle,
-    std::optional<TimeLimit> timeLimit,
+    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
@@ -256,8 +262,8 @@ PlannedQuery Qlever::parseAndPlanQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
       datasetClauses);
 
-  return planQuery(std::move(parsedQuery), timeLimit, *qecPtr,
-                   std::move(handle));
+  return planQuery(std::move(parsedQuery), *qecPtr, std::move(handle),
+                   timeLimit, requestTimer);
 }
 
 // ___________________________________________________________________________
@@ -281,25 +287,39 @@ void IndexBuilderConfig::validate() const {
 }
 
 // ___________________________________________________________________________
-void Qlever::writeMaterializedView(std::string name, std::string query) const {
-  materializedViewsManager()->writeViewToDisk(
-      std::move(name), parseAndPlanQuery(std::move(query)));
+void Qlever::writeMaterializedView(
+    std::string name, std::string query,
+    const std::vector<DatasetClause>& datasetClauses,
+    SharedCancellationHandle cancellationHandle,
+    std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  auto plan =
+      parseAndPlanQuery(std::move(query), datasetClauses,
+                        std::move(cancellationHandle), timeLimit, requestTimer);
+  const auto& viewsManager =
+      plan.queryExecutionContext().materializedViewsManager();
+  auto memoryLimit =
+      getRuntimeParameter<&RuntimeParameters::materializedViewWriterMemory_>();
+  viewsManager.writeViewToDisk(std::move(name), plan, memoryLimit);
 }
 
 // ___________________________________________________________________________
 bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
-  return materializedViewsManager()->isViewLoaded(name);
+  const auto indexAndViews = indexAndViewsSnapshot();
+  return indexAndViews->materializedViewsManager_.isViewLoaded(name);
 }
 
 // ___________________________________________________________________________
 void Qlever::unloadMaterializedView(const std::string& name) const {
-  materializedViewsManager()->unloadViewIfLoaded(name);
+  const auto indexAndViews = indexAndViewsSnapshot();
+  indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
 }
 
 // ___________________________________________________________________________
 void Qlever::loadMaterializedView(std::string name) const {
-  auto qec = createQueryExecutionContext(indexAndViewsSnapshot());
-  materializedViewsManager()->loadView(name, qec.get());
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto qec = createQueryExecutionContext(indexAndViews);
+  indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 }
 
 // ___________________________________________________________________________
