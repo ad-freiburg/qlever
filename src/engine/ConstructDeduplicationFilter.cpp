@@ -48,66 +48,85 @@ ConstructDeduplicationState::ConstructDeduplicationState(
     std::optional<ad_utility::MemorySize> maxDedupVocabSize)
     : mode_{mode},
       queryExecutionContext_{queryExecutionContext},
-      maxDedupVocabBytes_{
-          computeMaxDedupVocabBytes(queryExecutionContext, maxDedupVocabSize)} {
-  if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
-    filter_.emplace(mode, queryExecutionContext);
-  }
+      maxDedupVocabBytes_{computeMaxDedupVocabBytes(mode, queryExecutionContext,
+                                                    maxDedupVocabSize)},
+      filter_{mode, queryExecutionContext} {
+  AD_CONTRACT_CHECK(
+      !std::holds_alternative<DeduplicationMode::None>(mode.value_),
+      "`ConstructDeduplicationState` must not be constructed for `None` mode; "
+      "the caller handles `None` by not constructing it.");
 }
 
 //______________________________________________________________________________
 DeduplicationKey ConstructDeduplicationState::makeFullTripleKey(
-    const PreprocessedTriple& triple, size_t absoluteRow,
+    const PreprocessedTriple& triple, size_t rowIdxInIdTable,
     const BatchEvaluationContext& ctx) {
+  auto toDedupId = OverloadCallOperator{
+      [](const PrecomputedConstant& c) {
+        AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
+        return c.dedupId_;
+      },
+      [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) {
+        return ctx.idTable_[rowIdxInIdTable][v.columnIndex_];
+      },
+      [](const PrecomputedBlankNode&) -> ValueId {
+        // Blank-node triples bypass deduplication, so
+        // their key is never built.
+        AD_FAIL();
+      }};
+
   DeduplicationKey key;
-  for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-    key[pos] = canonicalize(std::visit(
-        OverloadCallOperator{[](const PrecomputedConstant& c) {
-                               AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
-                               return c.dedupId_;
-                             },
-                             [&ctx, absoluteRow](const PrecomputedVariable& v) {
-                               return ctx.idTable_[absoluteRow][v.columnIndex_];
-                             },
-                             [](const PrecomputedBlankNode&) -> ValueId {
-                               // Blank-node triples bypass deduplication, so
-                               // their key is never built.
-                               AD_FAIL();
-                             }},
-        triple[pos]));
+  for (auto&& [out, term] : ranges::views::zip(key, triple)) {
+    out = canonicalize(std::visit(toDedupId, term));
   }
   return key;
 }
 
 //______________________________________________________________________________
 bool ConstructDeduplicationState::isNew(
-    size_t tripleIdx, size_t absoluteRow,
+    size_t templateTripleIdx, size_t rowIdxInIdTable,
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationContext& ctx) {
-  AD_CORRECTNESS_CHECK(filter_.has_value());
-  if (tmpl.tripleContainsBlankNode_[tripleIdx]) {
+  if (tmpl.tripleContainsBlankNode_[templateTripleIdx]) {
     return true;
   }
   resetIfVocabTooLarge();
-  return filter_->insert(makeFullTripleKey(tmpl.preprocessedTriples_[tripleIdx],
-                                           absoluteRow, ctx));
+  return filter_.insert(makeFullTripleKey(
+      tmpl.preprocessedTriples_[templateTripleIdx], rowIdxInIdTable, ctx));
 }
 
 //______________________________________________________________________________
 void ConstructDeduplicationState::seedGroundTriple(
     const DeduplicationKey& key) {
-  if (filter_.has_value()) {
-    filter_->insert(canonicalizeKey(key));
-  }
+  filter_.insert(canonicalizeKey(key));
 }
 
+// Approximate size of a single full-triple dedup key: three `ValueId`s. Used to
+// relate the `dedupVocab_` budget to the number of keys the filter itself
+// holds.
+static constexpr size_t bytesPerDedupKey =
+    NUM_TRIPLE_POSITIONS * sizeof(ValueId);
+
 // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
-// given, else a quarter of the query's currently available memory.
+// given, else a mode-dependent default:
+// - `BatchWise`: `batchSize_` keys' worth of bytes. The LRU cache already holds
+//   `batchSize_` keys (~`batchSize_ * bytesPerDedupKey`), so granting the vocab
+//   a comparable budget keeps the two bounded together and cheap (e.g. batch
+//   size 10'000 => ~240 KB).
+// - `Global`: a quarter of the query's currently available memory (a safety cap
+//   only; exceeding it fails the query, since `Global` must stay exact).
 size_t ConstructDeduplicationState::computeMaxDedupVocabBytes(
+    const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext,
     std::optional<ad_utility::MemorySize> maxDedupVocabSize) {
-  return maxDedupVocabSize
-      .value_or(queryExecutionContext.getAllocator().amountMemoryLeft() / 4)
+  if (maxDedupVocabSize.has_value()) {
+    return maxDedupVocabSize.value().getBytes();
+  }
+  if (const auto* batchWise =
+          std::get_if<DeduplicationMode::BatchWise>(&mode.value_)) {
+    return batchWise->batchSize_ * bytesPerDedupKey;
+  }
+  return (queryExecutionContext.getAllocator().amountMemoryLeft() / 4)
       .getBytes();
 }
 
@@ -134,17 +153,13 @@ DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
 
 //______________________________________________________________________________
 void ConstructDeduplicationState::resetIfVocabTooLarge() {
-  if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
-  if (std::holds_alternative<DeduplicationMode::Global>(mode_.value_)) {
-    AD_THROW(
-        "CONSTRUCT export with `construct-deduplication = global` exceeded "
-        "its "
-        "memory budget: Reduce the result size, raise the memory limit, or "
-        "switch `construct-deduplication` to a `batchwise:<N>` mode (bounded "
-        "memory, approximate) or `none` (no deduplication).");
+  // Only `BatchWise` bounds its vocab here; `Global` must stay exact and is
+  // never reset.
+  if (!std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_)) {
+    return;
   }
-  // Only `BatchWise` reaches here, so rebuilding a filter is always valid.
-  filter_.emplace(mode_, queryExecutionContext_);
+  if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
+  filter_ = PerTripleFilter{mode_, queryExecutionContext_};
   dedupVocab_ = LocalVocab();
   dedupVocabBytes_ = 0;
 }

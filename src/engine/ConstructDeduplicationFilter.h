@@ -69,23 +69,29 @@ class PerTripleFilter {
                            const QueryExecutionContext& queryExecutionContext);
 };
 
-// Deduplication state for a whole CONSTRUCT clause. In every deduplicating mode
-// there is one filter, shared by all template triples and keyed on the
-// instantiated triple. This is what makes cross-template-triple duplicates
-// collapse (the same output triple produced by two different template triples
-// is emitted once). The modes differ only in the backing structure of that
-// single filter:
+// Deduplication state for a whole CONSTRUCT clause. There is one filter, shared
+// by all template triples and keyed on the instantiated triple. This is what
+// makes cross-template-triple duplicates collapse (the same output triple
+// produced by two different template triples is emitted once). The two
+// deduplicating modes differ only in the backing structure of that single
+// filter:
 // - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
 // - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
 // approximation that only remembers the most recent keys).
-// - `DeduplicationMode::None`: no filter at all; the dedup code path is never
-// entered.
+//
+// `DeduplicationMode::None` is NOT modelled here: for `None` the caller simply
+// does not construct a `ConstructDeduplicationState` (it holds an empty
+// `std::optional<ConstructDeduplicationState>` instead), so this class always
+// has a live filter and never needs a "no deduplication" branch.
 class ConstructDeduplicationState {
  public:
   // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`: once
   // the strings added to it exceed this, all dedup state is dropped (which
   // makes deduplication approximate). Defaults to a quarter of the query's
   // currently available memory. Tests may pass a tiny value to force a reset.
+  //
+  // Precondition: `mode` is not `DeduplicationMode::None`. For `None` the
+  // caller must not construct this state at all (see the class comment).
   ConstructDeduplicationState(
       const DeduplicationMode& mode,
       const QueryExecutionContext& queryExecutionContext,
@@ -112,7 +118,7 @@ class ConstructDeduplicationState {
   // a later non-ground instantiation of the same triple is suppressed. The key
   // is canonicalized into `dedupVocab_` first, so it matches the keys built by
   // `makeFullTripleKey` (otherwise a ground triple with a local-vocab constant
-  // would not suppress its non-ground duplicate). No-op for `none` mode.
+  // would not suppress its non-ground duplicate).
   void seedGroundTriple(const DeduplicationKey& key);
 
  private:
@@ -130,12 +136,15 @@ class ConstructDeduplicationState {
   // owns every local-vocab entry referenced by a stored key
   LocalVocab dedupVocab_;
 
-  // The single shared filter, or `nullopt` for `none` mode (never consulted).
-  std::optional<PerTripleFilter> filter_;
+  // The single shared filter. Always present: `None` mode is handled by not
+  // constructing this state (see the class comment).
+  PerTripleFilter filter_;
 
   // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
-  // given, else a quarter of the query's currently available memory.
+  // given, else a mode-dependent default (batch-size-relative for `BatchWise`,
+  // a quarter of available memory for `Global`; see the definition).
   static size_t computeMaxDedupVocabBytes(
+      const DeduplicationMode& mode,
       const QueryExecutionContext& queryExecutionContext,
       std::optional<ad_utility::MemorySize> maxDedupVocabSize);
 
@@ -147,14 +156,13 @@ class ConstructDeduplicationState {
   // Canonicalize every position of a pre-built key into `dedupVocab_`.
   DeduplicationKey canonicalizeKey(DeduplicationKey key);
 
-  // Bound `dedupVocab_`s memory: once the accumulated string bytes reach the
-  // threshold, either fail (`Global`, which must stay exact) or drop all dedup
-  // state and start fresh (`BatchWise`). The filter's keys reference
-  // `dedupVocab_`, so both are reset together.
+  // Bound `dedupVocab_`s memory in `BatchWise` mode: once the accumulated
+  // string bytes reach the threshold, drop all dedup state and start fresh. The
+  // filter's keys reference `dedupVocab_`, so both are reset together.
   //
-  // NOTE: The `BatchWise` reset makes deduplication approximate (triples seen
-  // before a reset may be emitted again). `Global` is exact, so it fails
-  // instead. `None` never reaches here (`isNew` asserts a filter exists).
+  // NOTE: This reset makes `BatchWise` deduplication approximate (triples seen
+  // before a reset may be emitted again). `Global` must stay exact, so it is
+  // never reset here.
   void resetIfVocabTooLarge();
 };
 

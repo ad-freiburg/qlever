@@ -225,10 +225,10 @@ TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));
 }
 
-// `global` dedup is exact, so it must not silently reset on memory pressure:
-// once its internal vocab exceeds the threshold it fails loudly instead (the
-// user is told to shrink the result, raise the limit, or switch modes).
-TEST(ConstructDeduplicationFilter, globalThrowsWhenVocabExceedsThreshold) {
+// `global` dedup is exact and is never reset on memory pressure: the vocab
+// threshold does not apply to it. So even with a 1-byte threshold the identical
+// triple is still recognized as a duplicate.
+TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicationState state{DeduplicationMode::global(), *qec,
                                     ad_utility::MemorySize::bytes(1)};
@@ -239,9 +239,9 @@ TEST(ConstructDeduplicationFilter, globalThrowsWhenVocabExceedsThreshold) {
   BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
-  // The 1-byte threshold was exceeded; the next call must throw rather than
-  // drop dedup state (which would break `global`'s exactness guarantee).
-  EXPECT_ANY_THROW(state.isNew(0, 0, tmpl, c));
+  // The tiny threshold is ignored for `global`: no reset, so the identical
+  // triple is still a duplicate.
+  EXPECT_FALSE(state.isNew(0, 0, tmpl, c));
 }
 
 // `PerTripleFilter` must never be constructed for `none`: the caller creates no
@@ -252,13 +252,13 @@ TEST(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
   EXPECT_ANY_THROW(PerTripleFilter(DeduplicationMode::none(), *qec));
 }
 
-// In `none` mode no filter is built (`makeFilter` returns `nullopt`), and
-// `seedGroundTriple` is a no-op (its filter-empty branch). This must not touch
-// any dedup state or crash.
-TEST(ConstructDeduplicationFilter, noneModeHasNoFilter) {
+// `None` is not modelled by `ConstructDeduplicationState`: the caller handles
+// it by not constructing the state at all. Constructing it with `None` is a
+// precondition violation.
+TEST(ConstructDeduplicationFilter, noneModeIsRejected) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::none(), *qec};
-  state.seedGroundTriple(DeduplicationKey{IntId(1), IntId(1), IntId(1)});
+  EXPECT_ANY_THROW(
+      ConstructDeduplicationState(DeduplicationMode::none(), *qec));
 }
 
 }  // namespace
