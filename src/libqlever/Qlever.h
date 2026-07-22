@@ -23,7 +23,7 @@
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
-#include "util/AllocatorWithLimit.h"
+#include "util/Allocator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 #include "util/http/MediaTypes.h"
@@ -237,7 +237,7 @@ class Qlever {
  private:
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
-  ad_utility::AllocatorWithLimit<Id> allocator_;
+  qlever::Allocator<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
@@ -252,7 +252,8 @@ class Qlever {
 
   // Create a QLever instance for querying using an `EngineConfig` as
   // explained above.
-  explicit Qlever(const EngineConfig& config);
+  explicit Qlever(const EngineConfig& config,
+                  Allocator<Id> allocator = makeDefaultAllocator<Id>());
 
   using PlannedQuery = qlever::PlannedQuery;
 
@@ -413,10 +414,8 @@ class Qlever {
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
 
-  ad_utility::AllocatorWithLimit<Id>& allocator() { return allocator_; }
-  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
-    return allocator_;
-  }
+  Allocator<Id>& allocator() { return allocator_; }
+  const Allocator<Id>& allocator() const { return allocator_; }
 
   SortPerformanceEstimator& sortPerformanceEstimator() {
     return sortPerformanceEstimator_;

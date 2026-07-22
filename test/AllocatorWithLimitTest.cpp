@@ -9,7 +9,11 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/GTestHelpers.h"
 
-using ad_utility::AllocatorWithLimit;
+// This is a white-box test of the limit-enforcing allocator implementation, so
+// it always targets `ad_utility::allocatorImpl::AllocatorWithLimit` directly
+// (rather than the public `ad_utility::AllocatorWithLimit` name, which is an
+// alias for the compile-time selected backend and may be the PMR allocator).
+using ad_utility::allocatorImpl::AllocatorWithLimit;
 using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
 using namespace ad_utility::memory_literals;
 
