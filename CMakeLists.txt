@@ -89,6 +89,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.0.0")
+        # GCC 11's libstdc++ doesn't yet provide `std::ranges::owning_view`, on
+        # which we now rely, so we fall back to `range-v3` for that compiler.
+        MESSAGE(STATUS "range-v3 is used for GCC 11 because its libstdc++ doesn't yet provide `std::ranges::owning_view`")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
