@@ -66,7 +66,7 @@ CPP_concept WordCallback =
                                              bool>;
 
 // A callback that is invoked for every IRI which is treated as a blank node
-// because it matched one of the `blankNodePrefixes` (not for `_:`-prefixed
+// because it matched one of the `blankNodeIriRegexes` (not for `_:`-prefixed
 // blank nodes). It receives the IRI and the blank node index that was assigned
 // to it, so that the mapping can be remembered (see `BlankNodeIriVocabulary`).
 // The IRIs are passed in ascending (sorted) order.
@@ -185,8 +185,8 @@ struct VocabularyMetaData {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
-// appearance. Argument `blankNodePrefixes` is an optional pointer to a list of
-// regexes; words matching any of them are treated as blank nodes (see
+// appearance. Argument `blankNodeIriRegexes` is an optional pointer to a list
+// of regexes; words matching any of them are treated as blank nodes (see
 // `TripleComponentWithIndex::isBlankNode`). Argument `blankNodeIriCallback` is
 // invoked for every such IRI together with its assigned blank node index (see
 // `BlankNodeIriCallback`).
@@ -194,7 +194,7 @@ template <typename W, typename C>
 auto mergeVocabulary(
     const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
     ad_utility::MemorySize memoryToUse,
-    const std::vector<std::string>* blankNodePrefixes = nullptr,
+    const std::vector<std::string>* blankNodeIriRegexes = nullptr,
     const BlankNodeIriCallback& blankNodeIriCallback = {})
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
@@ -213,18 +213,18 @@ class VocabularyMerger {
   std::vector<IdMapWriter> idMaps_;
   // Compiled regexes for IRIs that should be treated as blank nodes (see
   // `mergeVocabulary`). Empty if no such prefixes were specified.
-  std::vector<std::unique_ptr<re2::RE2>> blankNodePrefixes_;
+  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes_;
   // Callback that remembers the mapping from a regex-matched IRI to its blank
   // node index (see `BlankNodeIriCallback`). Empty if not needed.
   BlankNodeIriCallback blankNodeIriCallback_;
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
-  friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
-                              W comparator, C& wordCallback,
-                              ad_utility::MemorySize memoryToUse,
-                              const std::vector<std::string>* blankNodePrefixes,
-                              const BlankNodeIriCallback& blankNodeIriCallback)
+  friend auto mergeVocabulary(
+      const std::string& basename, size_t numFiles, W comparator,
+      C& wordCallback, ad_utility::MemorySize memoryToUse,
+      const std::vector<std::string>* blankNodeIriRegexes,
+      const BlankNodeIriCallback& blankNodeIriCallback)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -236,7 +236,7 @@ class VocabularyMerger {
   auto mergeVocabulary(const std::string& basename, size_t numFiles,
                        W comparator, C& wordCallback,
                        ad_utility::MemorySize memoryToUse,
-                       const std::vector<std::string>* blankNodePrefixes,
+                       const std::vector<std::string>* blankNodeIriRegexes,
                        const BlankNodeIriCallback& blankNodeIriCallback)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
@@ -288,7 +288,7 @@ class VocabularyMerger {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
     idMaps_.clear();
-    blankNodePrefixes_.clear();
+    blankNodeIriRegexes_.clear();
     blankNodeIriCallback_ = {};
   }
 };

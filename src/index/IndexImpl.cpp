@@ -709,7 +709,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
         memoryLimitIndexBuilding(),
-        blankNodePrefixes_.empty() ? nullptr : &blankNodePrefixes_);
+        blankNodeIriRegexes_.empty() ? nullptr : &blankNodeIriRegexes_);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
