@@ -76,6 +76,7 @@ DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
   for (auto&& [out, term] : ranges::views::zip(key, triple)) {
     out = canonicalize(std::visit(toDedupId, term));
   }
+  resetIfVocabTooLarge();
   return key;
 }
 
@@ -87,12 +88,16 @@ bool ConstructDeduplicator::isNew(size_t templateTripleIdx,
   if (tmpl.tripleContainsBlankNode_[templateTripleIdx]) {
     return true;
   }
+  // Reset only at a triple boundary, never mid-key (would dangle the key).
+  resetIfVocabTooLarge();
   return filter_.insert(makeFullTripleKey(
       tmpl.preprocessedTriples_[templateTripleIdx], rowIdxInIdTable, ctx));
 }
 
 //______________________________________________________________________________
 void ConstructDeduplicator::seedGroundTriple(const DeduplicationKey& key) {
+  // Reset only at a triple boundary, never mid-key (would dangle the key).
+  resetIfVocabTooLarge();
   filter_.insert(canonicalizeKey(key));
 }
 
@@ -135,7 +140,6 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   bool addedNewString = dedupVocab_.size() != sizeBefore;
   if (isBatchWise() && addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
-    resetIfVocabTooLarge();
   }
   return ValueId::makeFromLocalVocabIndex(index);
 }
