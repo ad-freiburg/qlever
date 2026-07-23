@@ -29,7 +29,8 @@ TripleDeduplicator::Deduplicator TripleDeduplicator::makeDeduplicator(
       OverloadCallOperator{
           [](const DeduplicationMode::None&) -> Deduplicator {
             AD_CONTRACT_CHECK(false,
-                              "No filter is constructed for `None` mode.");
+                              "No `Deduplicator` may be constructed for "
+                              "`DeduplicationMode::None`.");
           },
           [&queryExecutionContext](
               const DeduplicationMode::Global&) -> Deduplicator {

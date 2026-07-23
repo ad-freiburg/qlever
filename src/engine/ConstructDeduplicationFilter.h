@@ -111,26 +111,23 @@ class ConstructDeduplicator {
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx);
 
-  // Insert a ground triple's full-triple `key` into the shared filter, so that
-  // a later non-ground instantiation of the same triple is suppressed. The key
-  // is canonicalized into `dedupVocab_` first, so it matches the keys built by
-  // `makeFullTripleKey` (otherwise a ground triple with a local-vocab constant
-  // would not suppress its non-ground duplicate).
+  // Insert the `key` into the `deduplicator_`. This is used for ground triples
+  // which consist only of constants. If later an instantiated triple
+  // "accidentally" matches the ground triple, it is also detected as a
+  // duplicate.
   void seedGroundTriple(const DeduplicationKey& key);
 
  private:
-  // Stored by value (not reference): callers may pass a temporary `mode`, and
-  // `mode_` is read later in `resetIfVocabTooLarge`.
-  const DeduplicationMode mode_;
+  DeduplicationMode mode_;
   std::reference_wrapper<const QueryExecutionContext> queryExecutionContext_;
   // Approximate total byte size of the strings currently held in `dedupVocab_`.
   size_t dedupVocabBytes_ = 0;
   // When `dedupVocabBytes_` reaches this, all dedup state is dropped (see
   // `resetIfVocabTooLarge`) to bound the vocab's memory. Set from the query's
   // available memory at construction (see the constructor).
-  const size_t maxDedupVocabBytes_;
+  size_t maxDedupVocabBytes_;
 
-  // owns every local-vocab entry referenced by a stored key
+  // Owns every local-vocab entry referenced by a stored key
   LocalVocab dedupVocab_;
 
   // The single shared filter. Always present: `None` mode is handled by not
@@ -146,21 +143,17 @@ class ConstructDeduplicator {
       const QueryExecutionContext& queryExecutionContext,
       std::optional<ad_utility::MemorySize> maxDedupVocabSize);
 
-  // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so stored keys never
-  // point into a freed block `LocalVocab`, and equal terms from different
-  // blocks collapse.
+  // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so their lifetime is
+  // extended as appropriate.
+  // All other IDs are returned unchanged.
   ValueId canonicalize(ValueId id);
 
-  // Canonicalize every position of a pre-built key into `dedupVocab_`.
+  // Canonicalize every element of the `key` using `canonicalize` above .
   DeduplicationKey canonicalizeKey(DeduplicationKey key);
 
   // Bound `dedupVocab_`s memory in `BatchWise` mode: once the accumulated
   // string bytes reach the threshold, drop all dedup state and start fresh. The
   // filter's keys reference `dedupVocab_`, so both are reset together.
-  //
-  // NOTE: This reset makes `BatchWise` deduplication approximate (triples seen
-  // before a reset may be emitted again). `Global` must stay exact, so it is
-  // never reset here.
   void resetIfVocabTooLarge();
 };
 
