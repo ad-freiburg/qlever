@@ -305,12 +305,15 @@ int main(int argc, char** argv) {
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(1),
       "The sampling interval of the resource-usage log in seconds.");
+  auto logLevelDescription = absl::StrCat(
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (",
+      LogLevel{LOGLEVEL}.toString(),
+      ") applies as an upper bound — messages above it are never emitted "
+      "regardless of this setting.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
-      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
-      "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
-      "as an upper bound — messages above it are never emitted regardless of "
-      "this setting.");
+      logLevelDescription.c_str());
 
   // Process command line arguments.
   po::variables_map optionsMap;
