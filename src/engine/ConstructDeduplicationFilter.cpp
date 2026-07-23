@@ -11,7 +11,7 @@
 namespace qlever::constructExport {
 
 //______________________________________________________________________________
-bool PerTripleFilter::insert(const DeduplicationKey& key) {
+bool TripleDeduplicator::insert(const DeduplicationKey& key) {
   return std::visit(
       OverloadCallOperator{
           [&key](LruDeduplicationCache& lru) { return lru.insert(key); },
@@ -22,27 +22,28 @@ bool PerTripleFilter::insert(const DeduplicationKey& key) {
 }
 
 //______________________________________________________________________________
-PerTripleFilter::Filter PerTripleFilter::makeFilter(
+TripleDeduplicator::Deduplicator TripleDeduplicator::makeDeduplicator(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext) {
   return std::visit(
       OverloadCallOperator{
-          [](const DeduplicationMode::None&) -> Filter {
+          [](const DeduplicationMode::None&) -> Deduplicator {
             AD_CONTRACT_CHECK(false,
                               "No filter is constructed for `None` mode.");
           },
-          [&queryExecutionContext](const DeduplicationMode::Global&) -> Filter {
+          [&queryExecutionContext](
+              const DeduplicationMode::Global&) -> Deduplicator {
             return HashSetWithMemoryLimit<DeduplicationKey>{
                 queryExecutionContext.getAllocator()};
           },
-          [](const DeduplicationMode::BatchWise& batchWise) -> Filter {
+          [](const DeduplicationMode::BatchWise& batchWise) -> Deduplicator {
             return LruDeduplicationCache{batchWise.batchSize_};
           }},
       mode.value_);
 }
 
 //______________________________________________________________________________
-ConstructDeduplicationState::ConstructDeduplicationState(
+ConstructDeduplicator::ConstructDeduplicator(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext,
     std::optional<ad_utility::MemorySize> maxDedupVocabSize)
@@ -53,12 +54,12 @@ ConstructDeduplicationState::ConstructDeduplicationState(
       filter_{mode, queryExecutionContext} {
   AD_CONTRACT_CHECK(
       !std::holds_alternative<DeduplicationMode::None>(mode.value_),
-      "`ConstructDeduplicationState` must not be constructed for `None` mode; "
+      "`ConstructDeduplicator` must not be constructed for `None` mode; "
       "the caller handles `None` by not constructing it.");
 }
 
 //______________________________________________________________________________
-DeduplicationKey ConstructDeduplicationState::makeFullTripleKey(
+DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
     const PreprocessedTriple& triple, size_t rowIdxInIdTable,
     const BatchEvaluationContext& ctx) {
   auto toDedupId = OverloadCallOperator{
@@ -83,10 +84,10 @@ DeduplicationKey ConstructDeduplicationState::makeFullTripleKey(
 }
 
 //______________________________________________________________________________
-bool ConstructDeduplicationState::isNew(
-    size_t templateTripleIdx, size_t rowIdxInIdTable,
-    const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationContext& ctx) {
+bool ConstructDeduplicator::isNew(size_t templateTripleIdx,
+                                  size_t rowIdxInIdTable,
+                                  const PreprocessedConstructTemplate& tmpl,
+                                  const BatchEvaluationContext& ctx) {
   if (tmpl.tripleContainsBlankNode_[templateTripleIdx]) {
     return true;
   }
@@ -96,8 +97,7 @@ bool ConstructDeduplicationState::isNew(
 }
 
 //______________________________________________________________________________
-void ConstructDeduplicationState::seedGroundTriple(
-    const DeduplicationKey& key) {
+void ConstructDeduplicator::seedGroundTriple(const DeduplicationKey& key) {
   filter_.insert(canonicalizeKey(key));
 }
 
@@ -109,7 +109,7 @@ static constexpr size_t bytesPerDedupKey =
 
 // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
 // given, else a mode-dependent default.
-size_t ConstructDeduplicationState::computeMaxDedupVocabBytes(
+size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext,
     std::optional<ad_utility::MemorySize> maxDedupVocabSize) {
@@ -125,7 +125,7 @@ size_t ConstructDeduplicationState::computeMaxDedupVocabBytes(
 }
 
 //______________________________________________________________________________
-ValueId ConstructDeduplicationState::canonicalize(ValueId id) {
+ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   if (id.getDatatype() != Datatype::LocalVocabIndex) return id;  // fast path
   const auto& entry = *id.getLocalVocabIndex();
   size_t sizeBefore = dedupVocab_.size();
@@ -137,8 +137,7 @@ ValueId ConstructDeduplicationState::canonicalize(ValueId id) {
 }
 
 //______________________________________________________________________________
-DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
-    DeduplicationKey key) {
+DeduplicationKey ConstructDeduplicator::canonicalizeKey(DeduplicationKey key) {
   for (ValueId& id : key) {
     id = canonicalize(id);
   }
@@ -146,14 +145,14 @@ DeduplicationKey ConstructDeduplicationState::canonicalizeKey(
 }
 
 //______________________________________________________________________________
-void ConstructDeduplicationState::resetIfVocabTooLarge() {
+void ConstructDeduplicator::resetIfVocabTooLarge() {
   // Only `BatchWise` bounds its vocab here; `Global` must stay exact and is
   // never reset.
   if (!std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_)) {
     return;
   }
   if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
-  filter_ = PerTripleFilter{mode_, queryExecutionContext_};
+  filter_ = TripleDeduplicator{mode_, queryExecutionContext_};
   dedupVocab_ = LocalVocab();
   dedupVocabBytes_ = 0;
 }

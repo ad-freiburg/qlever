@@ -53,7 +53,7 @@ PreprocessedConstructTemplate singleTripleTemplate() {
 // canonicalization fast path leaves them untouched.
 TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
 
   Id id = IntId(42);
   auto table = singleIdTable(id);
@@ -72,7 +72,7 @@ TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 // distinct from both sources (proving they were actually moved).
 TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
 
   LocalVocab v1;
   LocalVocab v2;
@@ -102,7 +102,7 @@ TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
 // to turn a lifetime regression into a detected use-after-free.
 TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
 
   DeduplicationKey key1;
   {
@@ -125,7 +125,7 @@ TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
 // (rather than reading anything from the row).
 TEST(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
 
   PreprocessedTriple constTriple{PrecomputedConstant{{}, IntId(7)},
                                  PrecomputedConstant{{}, IntId(8)},
@@ -141,7 +141,7 @@ TEST(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
 // blank-node triples bypass deduplication and never reach `makeFullTripleKey`.
 TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
 
   PreprocessedTriple bnTriple{PrecomputedBlankNode{"_:g", "_0"},
                               PrecomputedVariable{0}, PrecomputedVariable{0}};
@@ -155,7 +155,7 @@ TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
 // blocks (each with its own, separately-destroyed `LocalVocab`).
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
   auto tmpl = singleTripleTemplate();
 
   {
@@ -174,7 +174,7 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
 // Same as above, but through the `BatchWise` (LRU) filter path.
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::batchWise(10), *qec};
+  ConstructDeduplicator state{DeduplicationMode::batchWise(10), *qec};
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v1;
@@ -193,7 +193,7 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
 // nothing is ever recorded (so a second call is "new" again too).
 TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
   auto tmpl = singleTripleTemplate();
   tmpl.tripleContainsBlankNode_ = {true};
 
@@ -208,7 +208,7 @@ TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
 // (the seed and the non-ground key must agree after reseating).
 TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v1;
@@ -228,8 +228,8 @@ TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
 // which uses the default (large) threshold and deduplicates.
 TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::batchWise(10), *qec,
-                                    ad_utility::MemorySize::bytes(1)};
+  ConstructDeduplicator state{DeduplicationMode::batchWise(10), *qec,
+                              ad_utility::MemorySize::bytes(1)};
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v;
@@ -247,8 +247,8 @@ TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
 // triple is still recognized as a duplicate.
 TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
   auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicationState state{DeduplicationMode::global(), *qec,
-                                    ad_utility::MemorySize::bytes(1)};
+  ConstructDeduplicator state{DeduplicationMode::global(), *qec,
+                              ad_utility::MemorySize::bytes(1)};
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v;
@@ -261,21 +261,20 @@ TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c));
 }
 
-// `PerTripleFilter` must never be constructed for `none`: the caller creates no
-// filter in that mode, so building one is a precondition violation (see the
-// `AD_CONTRACT_CHECK` in `PerTripleFilter::makeFilter`).
+// `TripleDeduplicator` must never be constructed for `none`: the caller creates
+// no filter in that mode, so building one is a precondition violation (see the
+// `AD_CONTRACT_CHECK` in `TripleDeduplicator::makeDeduplicator`).
 TEST(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
   auto qec = getQec("<s> <p> <o>");
-  EXPECT_ANY_THROW(PerTripleFilter(DeduplicationMode::none(), *qec));
+  EXPECT_ANY_THROW(TripleDeduplicator(DeduplicationMode::none(), *qec));
 }
 
-// `None` is not modelled by `ConstructDeduplicationState`: the caller handles
+// `None` is not modelled by `ConstructDeduplicator`: the caller handles
 // it by not constructing the state at all. Constructing it with `None` is a
 // precondition violation.
 TEST(ConstructDeduplicationFilter, noneModeIsRejected) {
   auto qec = getQec("<s> <p> <o>");
-  EXPECT_ANY_THROW(
-      ConstructDeduplicationState(DeduplicationMode::none(), *qec));
+  EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec));
 }
 
 }  // namespace

@@ -28,10 +28,9 @@
 
 namespace qlever::constructExport {
 
-// The deduplication key identifying one instantiated triple: the `ValueId`s at
-// its three positions (subject, predicate, object), in order. Constants
-// contribute their precomputed `dedupId_`, variables their bound `ValueId` from
-// the row (see `makeFullTripleKey`).
+// The cache key used to deduplicate exported CONSTRUCT triples. The key is in
+// the ID-space s.t. we can detect duplicates before expensively materializing
+// them as strings. See `makeFullTripleKey` for how this key is computed.
 using DeduplicationKey = std::array<ValueId, NUM_TRIPLE_POSITIONS>;
 
 using LruDeduplicationCache =
@@ -40,75 +39,75 @@ using ad_utility::DeduplicationMode;
 using ad_utility::HashSetWithMemoryLimit;
 using ad_utility::OverloadCallOperator;
 
-// Per-template-triple dedup filter for the deduplicating modes only.
-// `BatchWise` keeps only the last N unique keys in a bounded LRU cache;
-// `Global` keeps every unique key in an unbounded hash set. `None` never
-// reaches this class: it is handled by the caller.
-class PerTripleFilter {
+// Stores either all unique previously seen CONSTRUCT triples (global mode), or
+// just the N last seen triples (batchwise mode). When a new triple is passed to
+// the filter (via `insert`), it stores it in the cache. For a previously seen
+// triple that is already in the cache, `insert` just informs the caller that
+// the triple is a duplicate.
+class TripleDeduplicator {
  public:
-  explicit PerTripleFilter(const DeduplicationMode& mode,
-                           const QueryExecutionContext& executionContext)
-      : filter_{makeFilter(mode, executionContext)} {}
+  explicit TripleDeduplicator(const DeduplicationMode& mode,
+                              const QueryExecutionContext& executionContext)
+      : filter_{makeDeduplicator(mode, executionContext)} {}
 
   // Return true if `key` is new (not a duplicate), false otherwise.
   bool insert(const DeduplicationKey& key);
 
  private:
-  using Filter = std::variant<LruDeduplicationCache,
-                              HashSetWithMemoryLimit<DeduplicationKey>>;
+  using Deduplicator = std::variant<LruDeduplicationCache,
+                                    HashSetWithMemoryLimit<DeduplicationKey>>;
 
-  Filter filter_;
+  Deduplicator filter_;
 
   // Build the dedup structure for `mode`: an unbounded hash set for `Global`
   // and a bounded LRU cache for `BatchWise` (capacity = batch size).
   //
   // Precondition: `mode` is not `None`. `None` means "no deduplication", so the
-  // caller (`ConstructDeduplicationState`) must not construct a filter for it.
+  // caller (`ConstructDeduplicator`) must not construct a filter for it.
   // This invariant is asserted here rather than handled, to keep it explicit.
-  static Filter makeFilter(const DeduplicationMode& mode,
-                           const QueryExecutionContext& queryExecutionContext);
+  static Deduplicator makeDeduplicator(
+      const DeduplicationMode& mode,
+      const QueryExecutionContext& queryExecutionContext);
 };
 
-// Deduplication state for a whole CONSTRUCT clause. There is one filter, shared
-// by all template triples and keyed on the instantiated triple. This is what
-// makes cross-template-triple duplicates collapse (the same output triple
-// produced by two different template triples is emitted once). The two
-// deduplicating modes differ only in the backing structure of that single
-// filter:
-// - `DeduplicationMode::Global`: an unbounded hash set (exact deduplication).
-// - `DeduplicationMode::BatchWise`: a bounded LRU cache (a bounded
-// approximation that only remembers the most recent keys).
-// `DeduplicationMode::None` is NOT modelled here: for `None` the caller simply
-// does not construct a `ConstructDeduplicationState` (it holds an empty
-// `std::optional<ConstructDeduplicationState>` instead).
-class ConstructDeduplicationState {
+// Deduplicator for a whole CONSTRUCT clause. It internally holds a
+// `TripleDeduplicator` (see above) and only emits triples that are not
+// duplicates according to `TripleDeduplicator::insert`. The actual
+// deduplication semantics depend on the `DeduplicationMode` (see the
+// documentation of `TripleDeduplicator` above).
+
+// NOTE: constructing a deduplicator for `DeduplicationMode::None` will throw,
+// so callers have to handle this mode by not instantiating a
+// `ConstructDeduplicator` at all.
+class ConstructDeduplicator {
  public:
-  // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`: once
-  // the strings added to it exceed this, all dedup state is dropped (which
-  // makes deduplication approximate). Defaults to a quarter of the query's
-  // currently available memory. Tests may pass a tiny value to force a reset.
+  // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`, used
+  // for `LocalVocabIndex`es stored in the deduplication cache: if the strings
+  // added to it exceed this, all dedup state is dropped (which makes
+  // deduplication approximate). Defaults to a quarter of the query's
+  // currently available memory.
   //
   // Precondition: `mode` is not `DeduplicationMode::None`. For `None` the
   // caller must not construct this state at all (see the class comment).
-  ConstructDeduplicationState(
+  ConstructDeduplicator(
       const DeduplicationMode& mode,
       const QueryExecutionContext& queryExecutionContext,
       std::optional<ad_utility::MemorySize> maxDedupVocabSize = std::nullopt);
 
-  // Constructs the deduplication key for the instantiation of `triple` at
-  // `absoluteRow`: the `ValueId` at each of the three positions (subject,
+  // Construct the deduplication key for the instantiation of `triple` at
+  // `absoluteRowIdx`: the `ValueId` at each of the three positions (subject,
   // predicate, object), taken from the constant's `dedupId_` or the variable's
   // bound `ValueId` in the row. Every id is canonicalized into `dedupVocab_` so
   // the key never references a foreign (block/template) `LocalVocab` that may
   // outlive the deduplication filter.
   DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
-                                     size_t absoluteRow,
+                                     size_t absoluteRowIdx,
                                      const BatchEvaluationContext& ctx);
 
   // Returns true if the instantiation of template triple `tripleIdx` at
-  // `absoluteRow` is new (should be emitted), false if it is a duplicate
+  // `absoluteRowIdx` is new (should be emitted), false if it is a duplicate
   // (skip).
-  bool isNew(size_t tripleIdx, size_t absoluteRow,
+  bool isNew(size_t tripleIdx, size_t absoluteRowIdx,
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx);
 
@@ -136,7 +135,7 @@ class ConstructDeduplicationState {
 
   // The single shared filter. Always present: `None` mode is handled by not
   // constructing this state (see the class comment).
-  PerTripleFilter filter_;
+  TripleDeduplicator filter_;
 
   // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
   // given, else a mode-dependent default (batch-size-relative for `BatchWise`,
