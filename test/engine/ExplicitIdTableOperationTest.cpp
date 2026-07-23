@@ -51,15 +51,34 @@ VariableToColumnMap createTestVariableMap(size_t numVars) {
   return map;
 }
 
-// Test fixture for ExplicitIdTableOperation tests
-class ExplicitIdTableOperationTest : public ::testing::Test {
+// Test fixture for ExplicitIdTableOperation tests. Parameterized over
+// whether the `IdTableOrView` passed to the operation should be the owning
+// `shared_ptr<const IdTable>` alternative (`GetParam() == false`) or the
+// non-owning `IdTableView<0>` alternative (`GetParam() == true`), so that
+// every test in this fixture exercises both cases.
+class ExplicitIdTableOperationTest : public ::testing::TestWithParam<bool> {
  protected:
   void SetUp() override {
     qec_ = getTestQec();
     testTable_ = createTestIdTable(3, 2);
     testVariables_ = createTestVariableMap(2);
-    testSortedColumns_ = {ColumnIndex{0}};
+    // Avoid initializer_list assignment to sidestep a GCC 12 false positive
+    // (-Werror=array-bounds).
+    testSortedColumns_ = std::vector<ColumnIndex>(1, ColumnIndex{0});
     testCacheKey_ = "[dummy cache key]";
+  }
+
+  // Wrap `table` as an `ExplicitIdTableOperation::IdTableOrView`, either as
+  // the owning `shared_ptr<const IdTable>` alternative, or as a non-owning
+  // `IdTableView<0>` alternative, depending on `GetParam()`. The caller is
+  // responsible for keeping `table` alive for as long as the returned
+  // `IdTableOrView` (and anything constructed from it) is in use.
+  ExplicitIdTableOperation::IdTableOrView wrapTable(
+      const std::shared_ptr<IdTable>& table) const {
+    if (GetParam()) {
+      return table->asStaticView<0>();
+    }
+    return std::shared_ptr<const IdTable>{table};
   }
 
   QueryExecutionContext* qec_;
@@ -70,9 +89,16 @@ class ExplicitIdTableOperationTest : public ::testing::Test {
   std::string testCacheKey_;
 };
 
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(OwningAndView, ExplicitIdTableOperationTest,
+                         ::testing::Bool(),
+                         [](const ::testing::TestParamInfo<bool>& info) {
+                           return info.param ? "View" : "Owning";
+                         });
+
 // Test trivial member functions
-TEST_F(ExplicitIdTableOperationTest, TrivialGetters) {
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+TEST_P(ExplicitIdTableOperationTest, TrivialGetters) {
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
                               testSortedColumns_, testLocalVocab_.clone(),
                               testCacheKey_);
 
@@ -111,23 +137,31 @@ TEST_F(ExplicitIdTableOperationTest, TrivialGetters) {
   EXPECT_TRUE(varMap.contains(Variable("?var1")));
 }
 
-TEST_F(ExplicitIdTableOperationTest, KnownEmptyResult) {
+// _____________________________________________________________________________
+TEST_P(ExplicitIdTableOperationTest, isDeterministic) {
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
+                              testSortedColumns_, testLocalVocab_.clone(),
+                              testCacheKey_);
+  EXPECT_TRUE(op.isDeterministic());
+}
+
+TEST_P(ExplicitIdTableOperationTest, KnownEmptyResult) {
   {
     auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
-    ExplicitIdTableOperation op(qec_, emptyTable, testVariables_, {},
+    ExplicitIdTableOperation op(qec_, wrapTable(emptyTable), testVariables_, {},
                                 LocalVocab{}, "empty");
     EXPECT_TRUE(op.knownEmptyResult());
   }
   {
-    ExplicitIdTableOperation op(qec_, testTable_, testVariables_, {},
+    ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_, {},
                                 LocalVocab{}, "empty");
     EXPECT_FALSE(op.knownEmptyResult());
   }
 }
 
 // Test computeResult functionality
-TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+TEST_P(ExplicitIdTableOperationTest, ComputeResultBasic) {
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
                               testSortedColumns_, testLocalVocab_.clone(),
                               testCacheKey_);
 
@@ -135,15 +169,15 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultBasic) {
 
   // Check that we get back the same table
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
 
   EXPECT_THAT(resultTable, matchesIdTable(*testTable_));
   // Check sorted columns are preserved
   EXPECT_THAT(result.sortedBy(), ElementsAre(ColumnIndex{0}));
 }
 
-TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
                               testSortedColumns_, testLocalVocab_.clone(),
                               testCacheKey_);
 
@@ -151,20 +185,20 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
   auto result = op.computeResult(true);
 
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
 
   EXPECT_EQ(resultTable.numRows(), 3u);
   EXPECT_EQ(resultTable.numColumns(), 2u);
 }
 
 // _____________________________________________________________________________
-TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
+TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
   LocalVocab localVocab;
   LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
       "\"test_word\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_,
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
                               testSortedColumns_, std::move(localVocab),
                               testCacheKey_);
 
@@ -177,13 +211,13 @@ TEST_F(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 }
 
 // Test cloneImpl functionality
-TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
+TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
   LocalVocab localVocab;
   LocalVocabEntry testEntry = LocalVocabEntry::fromStringRepresentation(
       "\"clone_test\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
 
-  ExplicitIdTableOperation original(qec_, testTable_, testVariables_,
+  ExplicitIdTableOperation original(qec_, wrapTable(testTable_), testVariables_,
                                     testSortedColumns_, std::move(localVocab),
                                     testCacheKey_);
 
@@ -203,7 +237,8 @@ TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   auto originalResult = original.computeResult(false);
   auto clonedResult = clonedOp->computeResult(false);
 
-  EXPECT_THAT(clonedResult.idTable(), matchesIdTable(originalResult.idTable()));
+  EXPECT_THAT(clonedResult.idTableView(),
+              matchesIdTable(originalResult.idTableView()));
 
   // Test that local vocab is cloned properly
   const auto& originalLocalVocab = originalResult.localVocab();
@@ -214,21 +249,21 @@ TEST_F(ExplicitIdTableOperationTest, CloneImpl) {
   EXPECT_TRUE(ad_utility::contains(clonedWords, testEntry));
 }
 
-TEST_F(ExplicitIdTableOperationTest, ConstructionWithSortedColumns) {
+TEST_P(ExplicitIdTableOperationTest, ConstructionWithSortedColumns) {
   std::vector<ColumnIndex> sortedCols = {ColumnIndex{1}, ColumnIndex{0}};
-  ExplicitIdTableOperation op(qec_, testTable_, testVariables_, sortedCols,
-                              LocalVocab{}, testCacheKey_);
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
+                              sortedCols, LocalVocab{}, testCacheKey_);
 
   EXPECT_THAT(op.resultSortedOn(), ElementsAre(ColumnIndex{1}, ColumnIndex{0}));
 }
 
 // Test with different table sizes
-TEST_F(ExplicitIdTableOperationTest, DifferentTableSizes) {
+TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with single row
   auto singleRowTable = createTestIdTable(1, 3);
   auto singleRowVars = createTestVariableMap(3);
-  ExplicitIdTableOperation singleRowOp(qec_, singleRowTable, singleRowVars, {},
-                                       {}, testCacheKey_);
+  ExplicitIdTableOperation singleRowOp(qec_, wrapTable(singleRowTable),
+                                       singleRowVars, {}, {}, testCacheKey_);
 
   EXPECT_EQ(singleRowOp.sizeEstimate(), 1u);
   EXPECT_EQ(singleRowOp.getResultWidth(), 3u);
@@ -237,8 +272,8 @@ TEST_F(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with many rows
   auto largeTable = createTestIdTable(100, 1);
   auto largeTableVars = createTestVariableMap(1);
-  ExplicitIdTableOperation largeOp(qec_, largeTable, largeTableVars, {}, {},
-                                   testCacheKey_);
+  ExplicitIdTableOperation largeOp(qec_, wrapTable(largeTable), largeTableVars,
+                                   {}, {}, testCacheKey_);
 
   EXPECT_EQ(largeOp.sizeEstimate(), 100u);
   EXPECT_EQ(largeOp.getResultWidth(), 1u);
@@ -246,12 +281,12 @@ TEST_F(ExplicitIdTableOperationTest, DifferentTableSizes) {
 }
 
 // Test variable to column mapping
-TEST_F(ExplicitIdTableOperationTest, VariableToColumnMapping) {
+TEST_P(ExplicitIdTableOperationTest, VariableToColumnMapping) {
   VariableToColumnMap customVars;
   customVars[Variable("?subject")] = makeAlwaysDefinedColumn(0);
   customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
 
-  ExplicitIdTableOperation op(qec_, testTable_, customVars, {}, {},
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), customVars, {}, {},
                               testCacheKey_);
 
   auto computedVars = op.computeVariableToColumnMap();

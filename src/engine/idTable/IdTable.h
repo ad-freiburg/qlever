@@ -490,34 +490,43 @@ class IdTable {
   static constexpr bool isCloneable =
       std::is_copy_constructible_v<Storage> &&
       std::is_copy_constructible_v<ColumnStorage>;
+
+  // The type returned by `clone()` and `moveOrClone()`: always the non-view
+  // (owning) variant of this table type.
+  using OwnedTable = IdTable<T, NumColumns, ColumnStorage, IsView::False>;
+
   // Create a deep copy of this `IdTable` that owns its memory. In most cases
   // this behaves exactly like the copy constructor with the following
   // exception: If `this` is a view (because the `isView` template parameter is
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
-  CPP_template(typename = void)(requires(isCloneable))
-      IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const {
+  CPP_template(typename = void)(requires(isCloneable)) OwnedTable
+      clone() const {
     Storage storage;
     for (const auto& column : getColumns()) {
       storage.emplace_back(column.begin(), column.end(), getAllocator());
     }
-    return IdTable<T, NumColumns, ColumnStorage, IsView::False>{
-        std::move(storage), numColumns_, numRows_, allocator_};
+    return OwnedTable{std::move(storage), numColumns_, numRows_, allocator_};
   }
 
-  // Move or clone returns a copied or moved IdTable depending on the value
-  // category of `*this`. The typical usage is
-  // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
-  // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
-  // (which `IdTable` is not.).
-  CPP_member auto moveOrClone() const& -> CPP_ret(IdTable)(
-      requires isCloneable) {
+  // `moveOrClone` always returns an `OwnedTable`. For r-value `IdTables` (no
+  // views), this moves the table. For l-value referenced `IdTable`s and
+  // all `IdTableView`s return a deep copy via `clone()`. The typical usage is
+  // `auto newTable = AD_FWD(oldTable).moveOrClone()` meaning "I want to take
+  // ownership of an `IdTable` that owns its data as efficiently as possible".
+  CPP_member auto moveOrClone() const& -> CPP_ret(OwnedTable)(
+                                           requires isCloneable) {
     return clone();
   }
 
-  CPP_member auto moveOrClone() && -> CPP_ret(IdTable&&)(requires isCloneable) {
-    return std::move(*this);
+  CPP_member auto moveOrClone() && -> CPP_ret(OwnedTable)(
+                                       requires isCloneable) {
+    if constexpr (isView) {
+      return clone();
+    } else {
+      return std::move(*this);
+    }
   }
 
   // Overload of `clone` for `Storage` types that are not copy constructible.
@@ -595,6 +604,40 @@ class IdTable {
         std::move(viewSpans), numColumns_, numRows_, allocator_};
   }
 
+  // Construct a non-owning view directly from a set of column spans, without
+  // requiring an already-existing owning `IdTable`. This is used e.g. to
+  // build a view directly from spans that were obtained via zero-copy
+  // deserialization from a buffer (see `zeroCopyDeserializeToSpan` in
+  // `util/Serializer/SerializeVector.h`). The caller is responsible for
+  // ensuring that the memory backing `columns` outlives the returned view.
+  CPP_template(typename = void)(requires(isView)) static IdTable
+      fromColumns(ViewSpans columns, size_t numColumns, size_t numRows,
+                  Allocator allocator) {
+    if constexpr (!isDynamic) {
+      AD_CONTRACT_CHECK(numColumns == NumColumns);
+    }
+    AD_CONTRACT_CHECK(columns.size() == numColumns);
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
+        columns, [numRows](const auto& col) { return col.size() == numRows; }));
+    return IdTable{std::move(columns), numColumns, numRows,
+                   std::move(allocator)};
+  }
+
+  // Return a non-owning view of the rows [offset, offset + size). Requires
+  // `offset + size <= numRows()`.
+  IdTable<T, NumColumns, ColumnStorage, IsView::True> subView(
+      size_t offset, size_t size) const {
+    AD_CONTRACT_CHECK(offset + size <= numRows_);
+    auto viewSpans = ::ranges::to<ViewSpans>(
+        ad_utility::allView(getColumns()) |
+        ql::views::transform(
+            [offset, size](const auto& col) -> ql::span<const T> {
+              return col.subspan(offset, size);
+            }));
+    return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
+        std::move(viewSpans), numColumns_, size, allocator_};
+  }
+
   // Obtain a dynamic and const view to this IdTable that contains a subset of
   // the columns that may be permuted. The subset of the columns is specified by
   // the argument `columnIndices`.
@@ -666,7 +709,8 @@ class IdTable {
   // `ad_utility::IteratorForAccessOperator` template.
   template <typename ReferenceType>
   struct IteratorHelper {
-    auto operator()(auto&& idTable, size_t rowIdx) const {
+    template <typename Table>
+    auto operator()(Table&& idTable, size_t rowIdx) const {
       return ReferenceType{&idTable, rowIdx};
     }
   };
@@ -927,5 +971,43 @@ template <int COLS>
 using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
+
+// Concept that matches any type that is or inherits from any instantiation of
+// `columnBasedIdTable::IdTable` — including `IdTable`, `IdTableStatic<COLS>`,
+// and `IdTableView<COLS>`.
+namespace detail {
+template <typename ValType, int NumCols, typename Storage,
+          columnBasedIdTable::IsView isView>
+std::true_type isIdTableLike(
+    const columnBasedIdTable::IdTable<ValType, NumCols, Storage, isView>&);
+std::false_type isIdTableLike(...);
+}  // namespace detail
+
+template <typename T>
+CPP_concept IdTableLike =
+    decltype(detail::isIdTableLike(std::declval<const T&>()))::value;
+
+// Free-function `operator==` to allow comparing `IdTableView` with `IdTable`
+// and vice versa. The member `operator==` is only defined for non-view types.
+template <int COLS>
+inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
+  if (table.numColumns() != view.numColumns()) {
+    return table.empty() && view.empty();
+  }
+  if (table.numRows() != view.numRows()) {
+    return false;
+  }
+  return ql::ranges::all_of(
+      ::ranges::views::zip(ad_utility::allView(table.getColumns()),
+                           ad_utility::allView(view.getColumns())),
+      [](const auto& pair) {
+        return ql::ranges::equal(pair.first, pair.second);
+      });
+}
+
+template <int COLS>
+inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
+  return table == view;
+}
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

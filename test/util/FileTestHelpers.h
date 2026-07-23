@@ -12,17 +12,34 @@
 
 #include <absl/cleanup/cleanup.h>
 
-#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
 
+#include "backports/filesystem.h"
 #include "util/Random.h"
 
 namespace ad_utility::testing {
 inline auto filenameForTesting() {
-  auto tmpFile = std::filesystem::temp_directory_path() / UuidGenerator()();
+  auto tmpFile = ql::filesystem::temp_directory_path() / UuidGenerator()();
   // Make sure no file like this exists
-  std::filesystem::remove(tmpFile);
-  absl::Cleanup cleanup{[tmpFile]() { std::filesystem::remove(tmpFile); }};
+  ql::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[tmpFile]() { ql::filesystem::remove(tmpFile); }};
   return std::make_pair(std::move(tmpFile), std::move(cleanup));
+}
+
+// Read every line of a text file into a vector. Intended for tests
+// that need to inspect the contents of a file written by another
+// component (e.g. a background writer thread that has already drained
+// and closed the stream).
+inline std::vector<std::string> readLines(const ql::filesystem::path& path) {
+  std::ifstream in{path.string()};
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(in, line)) {
+    lines.push_back(std::move(line));
+  }
+  return lines;
 }
 }  // namespace ad_utility::testing
 

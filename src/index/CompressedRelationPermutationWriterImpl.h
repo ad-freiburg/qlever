@@ -115,7 +115,7 @@ struct CompressedRelationWriter::PermutationWriter {
       ad_utility::makeUnlimitedAllocator<Id>()};
 
   // TODO<joka921> Use call_fixed_size if there is benefit to it.
-  IdTableStatic<0> relation_{numColumns_, alloc_};
+  IdTable relation_{numColumns_, alloc_};
   size_t numBlocksCurrentRel_ = 0;
 
   using TwinRelationSorter = ad_utility::CompressedExternalIdTableSorter<
@@ -153,6 +153,7 @@ struct CompressedRelationWriter::PermutationWriter {
 
     AD_CORRECTNESS_CHECK(blocksize_ == writer2_->blocksize());
     AD_CORRECTNESS_CHECK(numColumns_ == writer2_->numColumns());
+    AD_CORRECTNESS_CHECK(blocksize_ > 0);
 
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
@@ -172,6 +173,7 @@ struct CompressedRelationWriter::PermutationWriter {
     // This logic only works for permutations that have the graph as the fourth
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
+    AD_CORRECTNESS_CHECK(blocksize_ > 0);
   };
 
   // Write a block of a large relation with `writer1` and also push the block
@@ -221,7 +223,7 @@ struct CompressedRelationWriter::PermutationWriter {
       // Small relations are written in one go.
       [[maybe_unused]] auto md1 = writer1_->addSmallRelation(
           col0IdCurrentRelation_.value(), distinctCol1Counter_.getAndReset(),
-          relation_.asStaticView<0>());
+          relation_);
       // We don't need to do anything for the twin permutation and writer2,
       // because we have set up `writer1.smallBlocksCallback_` to do that work
       // for us (see above).
@@ -261,8 +263,8 @@ struct CompressedRelationWriter::PermutationWriter {
   // 1. The relation buffer is at the block size limit, AND
   // 2. The current triple has different first three columns than the last
   //    triple in the buffer (to ensure equal triples stay in same block)
-  bool isEndOfBlockForLargeRelation(const auto& curRemainingCols) {
-    AD_CORRECTNESS_CHECK(blocksize_ > 0);
+  template <typename CurRemainingCols>
+  bool isEndOfBlockForLargeRelation(const CurRemainingCols& curRemainingCols) {
     if (relation_.size() < blocksize_) {
       return false;
     }
@@ -270,8 +272,10 @@ struct CompressedRelationWriter::PermutationWriter {
     // Compare first three columns of current triple with last buffered
     // triple
     const auto& lastBufferedRow = relation_.back();
-    return compressedRelationHelpers::tieFirstThreeColumns(curRemainingCols) !=
-           compressedRelationHelpers::tieFirstThreeColumns(lastBufferedRow);
+    return compressedRelationHelpers::
+               pickFirstThreeColumnsOfIdsWithoutLocalVocab(curRemainingCols) !=
+           compressedRelationHelpers::
+               pickFirstThreeColumnsOfIdsWithoutLocalVocab(lastBufferedRow);
   }
 
   // ___________________________________________________________________________

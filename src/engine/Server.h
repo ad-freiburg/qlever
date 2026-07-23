@@ -10,9 +10,11 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -21,8 +23,9 @@
 #include "engine/SortPerformanceEstimator.h"
 #include "index/IdTableUtils.h"
 #include "index/Index.h"
+#include "libqlever/Qlever.h"
+#include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -30,6 +33,8 @@
 #include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
+#include "util/metrics/Metrics.h"
+#include "util/metrics/ServerMetrics.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -39,96 +44,49 @@ CPP_concept QueryOrUpdate =
 
 // Forward declaration for testing.
 namespace serverTestHelpers {
-struct SimulateHttpRequest;
+class ServerForTesting;
 }
 
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
+  using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
   FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
-  friend serverTestHelpers::SimulateHttpRequest;
+  friend serverTestHelpers::ServerForTesting;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
-                  ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool noAccessCheck = false, bool usePatternTrick = true);
+                  std::string accessToken, const qlever::EngineConfig& config,
+                  bool noAccessCheck = false,
+                  std::shared_ptr<ad_utility::metrics::MetricsReader>
+                      metricsReader = nullptr);
 
   virtual ~Server() = default;
 
- private:
-  //! Initialize the server.
-  void initialize(const std::string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true,
-                  bool persistUpdates = false,
-                  std::vector<std::string> preloadMaterializedViews = {});
-
- public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const std::string& indexBaseName, bool useText,
-           bool usePatterns = true, bool loadAllPermutations = true,
-           bool persistUpdates = false,
-           std::vector<std::string> preloadMaterializedViews = {});
+  void run();
 
-  Index& index() { return index_; }
-  const Index& index() const { return index_; }
+  // Open `path` and register start/end callbacks on the query registry that
+  // write one JSONL line per query event to it. Call once, after construction.
+  void configureQueryEventLog(const ql::filesystem::path& path);
 
   // Get server statistics.
-  json composeStatsJson() const;
+  static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
-  // Helper struct bundling a parsed query with a query execution tree.
-  // As the `QueryExecutionTree` stores a raw pointer to the
-  // `QueryExecutionContext`, We additionally store the context as a
-  // `shared_ptr`, to avoid lifetime issues especially in the asynchronous
-  // server code.
-  struct PlannedQuery {
-   private:
-    // NOTE: `qec_` must be declared before `queryExecutionTree_` so that it
-    // is destroyed after it. The `QueryExecutionTree` holds operations with
-    // raw `_executionContext` pointers to the QEC, and their lazy result
-    // cleanup accesses the QEC via `signalQueryUpdate`. If `qec_` is the
-    // last `shared_ptr` and is destroyed first, the QEC is freed while the
-    // operations still reference it.
-    std::shared_ptr<const QueryExecutionContext> qec_;
-    ParsedQuery parsedQuery_;
-    QueryExecutionTree queryExecutionTree_;
-
-   public:
-    PlannedQuery(ParsedQuery pq, QueryExecutionTree qet,
-                 const QueryExecutionContext& qec)
-        : qec_{qec.shared_from_this()},
-          parsedQuery_{std::move(pq)},
-          queryExecutionTree_{std::move(qet)} {
-      AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_.getQec());
-    }
-
-    const ParsedQuery& parsedQuery() const { return parsedQuery_; }
-    ParsedQuery& parsedQuery() { return parsedQuery_; }
-    QueryExecutionTree& queryExecutionTree() { return queryExecutionTree_; }
-    const QueryExecutionTree& queryExecutionTree() const {
-      return queryExecutionTree_;
-    }
-  };
-
  private:
+  qlever::Qlever qlever_;
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
   bool noAccessCheck_;
-  QueryResultCache cache_;
-  NamedResultCache namedResultCache_;
-  MaterializedViewsManager materializedViewsManager_;
-  ad_utility::AllocatorWithLimit<Id> allocator_;
-  SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
-
-  bool enablePatternTrick_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
   /// the `WebSocketHandler` created for `HttpServer`.
@@ -147,6 +105,14 @@ class Server {
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
 
+  // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
+  // disabled (--enable-metrics not passed).
+  std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
+
+  // Deregisters callbacks on destruction. Declared after `qlever_` so that it
+  // is destroyed before `qlever_` which the callbacks access.
+  std::unique_ptr<ServerMetrics> metrics_;
+
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
@@ -154,6 +120,7 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
+  using PlannedQuery = qlever::PlannedQuery;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -231,7 +198,7 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& updates,
+          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
@@ -251,12 +218,31 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Prepare the execution of an operation
-  auto prepareOperation(std::string_view operationName,
+  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
+  // meters for the simplification of geometries before indexing) from its
+  // string representation. Return `std::nullopt` if `simplificationStr` is
+  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
+  // floating-point number.
+  static std::optional<double> parsePinGeoIndexSimplification(
+      const std::optional<std::string>& simplificationStr);
+  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
+  // Describe the pinning of a named result (and, if applicable, of its geo
+  // index) for the request log line, e.g. `" [pin result with name
+  // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
+  // string if `pinResultWithName` is `std::nullopt`.
+  static std::string describePinResultWithNameForLog(
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters);
+  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
+  //  Prepare the execution of an operation.
+  auto prepareOperation(SharedIndexAndView indexAndViews,
+                        std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
-                        TimeLimit timeLimit, bool accessTokenOk);
+                        TimeLimit timeLimit, bool accessTokenOk,
+                        std::string_view clientIp);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
   static void adjustParsedQueryLimitOffset(
       PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
@@ -266,28 +252,31 @@ class Server {
   // set, then the `qec` is configured such that the query result will be stored
   // in the named result cache. If `pinNamedGeoIndex` is also set, it is
   // expected to be the variable name of a column (without leading `?`) on which
-  // a geometry index should be built. Throws if named pinning is required, but
-  // the access token is not okay.
+  // a geometry index should be built. If `geoIndexSimplificationInMeters` is
+  // also set, geometries are simplified with the given maximum error in meters
+  // before indexing. Throw if named pinning is required, but the access token
+  // is not okay.
   static void configurePinnedResultWithName(
       const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         const ad_utility::Timer& requestTimer,
-                         TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle, TimeLimit timeLimit,
+                         const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation);
+          const RequestT& request, std::string_view operation,
+          std::string_view clientIp = {});
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
+      const Index& index, const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
@@ -322,7 +311,8 @@ class Server {
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
-      getQueryId(const RequestT& request, std::string_view query);
+      getQueryId(const RequestT& request, std::string_view query,
+                 std::string_view clientIp = {});
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
@@ -373,21 +363,43 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  // Given a name and query, compute the query result and write a new
-  // materialized view of this result to disk. This assumes that the access
-  // token has already been checked.
-  void writeMaterializedView(
-      const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
-      const ad_utility::Timer& requestTimer,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
   // Trigger an index rebuild with `indexBaseName` as the base name for the new
   // index. This assumes that the access token has already been checked and no
   // other build is currently in progress.
   Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+
+  // Getters for the `Qlever` instance, as well as its data members.
+  qlever::Qlever& qlever() { return qlever_; }
+  const qlever::Qlever& qlever() const { return qlever_; }
+
+  QueryResultCache& cache() { return qlever().cache(); }
+  const QueryResultCache& cache() const { return qlever().cache(); }
+  ad_utility::AllocatorWithLimit<Id>& allocator() {
+    return qlever().allocator();
+  }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return qlever().allocator();
+  }
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return qlever().sortPerformanceEstimator();
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return qlever().sortPerformanceEstimator();
+  }
+  NamedResultCache& namedResultCache() { return qlever().namedResultCache(); }
+  const NamedResultCache& namedResultCache() const {
+    return qlever().namedResultCache();
+  }
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  SharedIndexAndView indexAndViewsSnapshot() const {
+    return qlever().indexAndViewsSnapshot();
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_SERVER_H

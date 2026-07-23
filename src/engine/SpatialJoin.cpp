@@ -268,7 +268,7 @@ size_t SpatialJoin::getResultWidth() const {
     // For the right join table we only use the selected columns.
     size_t sizeRight;
     if (config_.payloadVariables_.isAll()) {
-      sizeRight = childRight_->getResultWidth();
+      sizeRight = childRight_->getVariableColumns().size();
     } else {
       // We convert to a set here, because we allow multiple occurrences of
       // variables in payloadVariables_
@@ -278,7 +278,7 @@ size_t SpatialJoin::getResultWidth() const {
       // The payloadVariables_ may contain the right join variable
       sizeRight = pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
     }
-    auto widthChildren = childLeft_->getResultWidth() + sizeRight;
+    auto widthChildren = childLeft_->getVariableColumns().size() + sizeRight;
 
     if (config_.distanceVariable_.has_value()) {
       return widthChildren + 1;
@@ -384,12 +384,17 @@ float SpatialJoin::getMultiplicity(size_t col) {
 
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
+    // `getResultWidth` of the children can't be used here, because
+    // `SpatialJoin` only exports columns that appear in the childrens'
+    // `VariableToColumnMap`, but `getResultWidth` might include further
+    // invisible columns.
+    size_t widthLeft = childLeft_->getVariableColumns().size();
     size_t column = col;
     if (config_.distanceVariable_.has_value() && col == getResultWidth() - 1) {
       // as each distance is very likely to be unique (even if only after
       // a few decimal places), no multiplicities are assumed
       return 1;
-    } else if (col < childLeft_->getResultWidth()) {
+    } else if (col < widthLeft) {
       child = childLeft_;
     } else {
       child = childRight_;
@@ -398,8 +403,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
       // translate the column index on the spatial join to a column index in the
       // right child.
       auto filteredColumns = copySortedByColumnIndex(getVarColMapPayloadVars());
-      column = filteredColumns.at(column - childLeft_->getResultWidth())
-                   .second.columnIndex_;
+      column = filteredColumns.at(column - widthLeft).second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
     return static_cast<float>(childLeft_->getSizeEstimate() *
@@ -463,7 +467,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
-    auto idTablePtr = &resTable->idTable();
+    auto idTablePtr = &resTable->idTableView();
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
@@ -569,10 +573,10 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
       }
     };
 
-    // We add all columns from the left table, but only those from the right
-    // table that are actually selected by the payload variables, plus the join
-    // column
-    auto sizeLeft = childLeft_->getResultWidth();
+    // We add all (named) columns from the left table, but only those from the
+    // right table that are actually selected by the payload variables, plus the
+    // join column
+    auto sizeLeft = childLeft_->getVariableColumns().size();
     auto varColMapLeft = childLeft_->getVariableColumns();
     AD_CONTRACT_CHECK(
         !varColMapLeft.contains(config_.right_),

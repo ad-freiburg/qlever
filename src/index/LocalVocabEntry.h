@@ -66,7 +66,8 @@ class alignas(16) LocalVocabEntry
       : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known.
-  LocalVocabEntry(Base&& base, auto lower, auto upper,
+  template <typename Lower, typename Upper>
+  LocalVocabEntry(Base&& base, Lower lower, Upper upper,
                   const LocalVocabContext& context)
       : Base{std::move(base)},
         context_{&context},
@@ -142,6 +143,9 @@ class alignas(16) LocalVocabEntry
   // performance.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
+
+  // Expose `context_` for testing.
+  const LocalVocabContext& getContextForTesting() const { return *context_; }
 
  private:
   // The expensive case of looking up the position in vocab.

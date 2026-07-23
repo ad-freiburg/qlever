@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <boost/optional.hpp>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -23,6 +25,7 @@
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/Synchronized.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -40,8 +43,7 @@ struct CommonConfig {
   // An upper bound on the amount of memory that QLever will use during index
   // building and query processing. If more memory is required, an exception
   // is thrown.
-  std::optional<ad_utility::MemorySize> memoryLimit_ =
-      ad_utility::MemorySize::gigabytes(1);
+  std::optional<ad_utility::MemorySize> memoryLimit_ = std::nullopt;
 
   // Option to disable the pre-computation of QLever's so-called "patterns". If
   // enabled, QLever pre-computes the set of distinct predicates for each
@@ -190,21 +192,59 @@ struct EngineConfig : CommonConfig {
   // to for each operation query the corresponding runtime parameter.
   QueryExecutionContext::DisableCaching disableCaching_ =
       QueryExecutionContext::DisableCaching::FromRuntimeParameter;
+
+  // Names of materialized views to load from disk during initialization.
+  // If a view doesn't exist, a warning is logged and startup continues.
+  std::vector<std::string> preloadMaterializedViews_ = {};
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
 // `src/engine/LibQleverExample.cpp` for an example use.
 class Qlever {
+ public:
+  // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
+  // so that an index rebuild can atomically swap both in, while other threads
+  // continue to read the previous instances via the `shared_ptr`s they hold.
+  struct IndexAndViews {
+    Index index_;
+    MaterializedViewsManager materializedViewsManager_;
+
+    // Create an instance.
+    IndexAndViews(Index index,
+                  MaterializedViewsManager materializedViewsManager)
+        : index_{std::move(index)},
+          materializedViewsManager_{std::move(materializedViewsManager)} {}
+
+    // Make sue this is only passed around as a shared pointer or reference.
+    IndexAndViews(IndexAndViews&&) noexcept = delete;
+    IndexAndViews& operator=(IndexAndViews&&) noexcept = delete;
+    IndexAndViews(const IndexAndViews&) noexcept = delete;
+    IndexAndViews& operator=(const IndexAndViews&) noexcept = delete;
+
+    // Helper function to decompose `self` into a pair of two shared pointers
+    // pointing to the individual members via aliasing semantics.
+    friend std::pair<std::shared_ptr<Index>,
+                     std::shared_ptr<MaterializedViewsManager>>
+    getPointerPair(std::shared_ptr<IndexAndViews> self) {
+      std::shared_ptr<Index> index{self, &self->index_};
+      auto& viewsManagerRef = self->materializedViewsManager_;
+      return std::pair{std::move(index),
+                       std::shared_ptr<MaterializedViewsManager>{
+                           std::move(self), &viewsManagerRef}};
+    }
+  };
+
  private:
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
-  Index index_;
   mutable NamedResultCache namedResultCache_;
-  mutable MaterializedViewsManager materializedViewsManager_;
+  ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
+  using TimeLimit = std::chrono::milliseconds;
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
@@ -214,11 +254,38 @@ class Qlever {
   // explained above.
   explicit Qlever(const EngineConfig& config);
 
-  // Parse and plan the given `query`.
+  using PlannedQuery = qlever::PlannedQuery;
+
+  // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
+  // is also used to represent SPARQL update operations (see
+  // ParsedQuery::hasUpdateClause()); this function handles both cases
+  // uniformly.
   //
-  // NOTE: This is useful as a separate function for the following reasons.
+  // If `requestTimer` is set, the elapsed time of that timer at the end of
+  // query planning is stored in the query's runtime information as
+  // `timeQueryPlanning`. This information can be accessed via the
+  // query execution tree's root operation.
   //
-  // 1. Using a `QueryPlan`, one can execute a `query` multiple times without
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle,
+                         std::optional<TimeLimit> timeLimit,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
+
+  // Parse and plan the given `query` (see `planQuery` above; despite the
+  // name, `query` may also be a SPARQL update operation).
+  //
+  // NOTES: This is useful as a separate function for the following reasons.
+  //
+  // 1. Using a `PlannedQuery`, one can execute a `query` multiple times without
   // having to parse and plan it again.
   //
   // 2. It helps measuring the time for the parsing and planning separately
@@ -226,8 +293,24 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  using QueryPlan = qlever::QueryPlan;
-  QueryPlan parseAndPlanQuery(std::string query) const;
+  //
+  // TODO<joka921,damekt> The `timeLimit` is currently only used for
+  // non-cancelable operations (in particular sorting). The time limit applies
+  // from the time this function is called until the execution of the query
+  // has finished. This might be very unintuitive when the `PlannedQuery` is
+  // stored for later execution. This is not an issue for now (only the
+  // `Server` actually imposes time limits and then executes the queries right
+  // away), but should be addressed in the future once the timeout management
+  // also is moved into the `QLever` class.
+  PlannedQuery parseAndPlanQuery(
+      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* the default is a noop*/ },
+      bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
   // string; see `src/util/http/MediaTypes.h` for the supported formats.
@@ -235,7 +318,7 @@ class Qlever {
   // NOTE: With `ad_utility::MediaType::qleverJson`, the result also contains
   // detailed information on the query execution, including timings of the
   // various parts of the query plan.
-  std::string query(const QueryPlan& queryPlan,
+  std::string query(const PlannedQuery& plannedQuery,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
 
@@ -266,7 +349,19 @@ class Qlever {
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
-  void writeMaterializedView(std::string name, std::string query) const;
+  //
+  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
+  // (see there for their exact semantics). If omitted, the query is planned
+  // and executed without a timer, without a time limit, and with a fresh,
+  // never-triggered cancellation handle, i.e. it always runs to completion.
+  void writeMaterializedView(
+      std::string name, std::string query,
+      const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
@@ -284,11 +379,54 @@ class Qlever {
   // Read the contents of the `NamedResultCache` from disk.
   template <typename Serializer>
   void readNamedResultCacheFromDisk(Serializer& serializer) {
-    namedResultCache_.readFromSerializer(serializer, allocator_, index_);
+    auto indexAndViews = indexAndViewsSnapshot();
+    namedResultCache_.readFromSerializer(serializer, allocator_,
+                                         indexAndViews->index_);
   }
 
-  // Low-level access to the QLever API, use with care.
-  Index& index() { return index_; }
+  // Create a Query Execution Context needed for execution of single SPARQL
+  // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
+  // consistent state.
+  std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
+      std::shared_ptr<IndexAndViews> indexAndViews,
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* the default is a noop*/ },
+      bool pinSubtrees = false, bool pinResult = false,
+      QueryExecutionContext::DisableCaching disableCaching =
+          QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
+
+  // Atomically snapshot both the `Index` and the `MaterializedViewsManager`
+  // under a single read lock, so that all code paths handling a single request
+  // observe a matching pair even if a concurrent rebuild swaps the pointers
+  // between two reads.
+  std::shared_ptr<IndexAndViews> indexAndViewsSnapshot() const {
+    return *indexAndViews_.rlock();
+  }
+
+  // Atomically swap in a freshly built `IndexAndViews`. The old instance stays
+  // alive as long as some `shared_ptr` (e.g. obtained via
+  // `indexAndViewsSnapshot()`) still references it.
+  void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
+    *indexAndViews_.wlock() = std::move(indexAndViews);
+  }
+
+  QueryResultCache& cache() { return cache_; }
+  const QueryResultCache& cache() const { return cache_; }
+
+  ad_utility::AllocatorWithLimit<Id>& allocator() { return allocator_; }
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return allocator_;
+  }
+
+  SortPerformanceEstimator& sortPerformanceEstimator() {
+    return sortPerformanceEstimator_;
+  }
+  const SortPerformanceEstimator& sortPerformanceEstimator() const {
+    return sortPerformanceEstimator_;
+  }
+
+  NamedResultCache& namedResultCache() { return namedResultCache_; }
+  const NamedResultCache& namedResultCache() const { return namedResultCache_; }
 };
 }  // namespace qlever
 

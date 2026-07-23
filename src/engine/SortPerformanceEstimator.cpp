@@ -62,9 +62,8 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
-auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
-                                                 size_t numCols) const noexcept
-    -> Timer::Duration {
+auto SortPerformanceEstimator::estimatedSortTime(
+    size_t numRows, size_t numCols) const noexcept -> Timer::Duration {
   if (!_estimatesWereCalculated) {
     AD_LOG_WARN
         << "The estimates of the SortPerformanceEstimator were never set "
@@ -211,6 +210,7 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation.
     throw ad_utility::CancellationException(
+        ad_utility::CancellationState::TIMEOUT,
         absl::StrCat(operationDescriptor,
                      " was canceled, because time estimate exceeded "
                      "remaining time by a factor of ",

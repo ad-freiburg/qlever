@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -12,9 +13,11 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 #include "util/File.h"
+#include "util/Generator.h"
+#include "util/IoUringManager.h"
 #include "util/Iterators.h"
-#include "util/MmapVector.h"
 #include "util/Serializer/Serializer.h"
+#include "util/ThreadSafeQueue.h"
 
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
@@ -24,13 +27,22 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The offset of a word in the underlying file.
   using Offset = uint64_t;
   // The file in which the words are stored.
-  mutable ad_utility::File file_;
+  ad_utility::File file_;
 
-  // The IDs and offsets of the words.
-  ad_utility::MmapVectorView<Offset> offsets_;
+  // The file in which the offsets of the words are stored. It contains one
+  // `Offset` per word, plus a final offset that marks the end of the last
+  // word, followed by an `MmapVectorMetaData` trailer at the end of the file
+  // that records the number of offsets. The number of words is therefore the
+  // number of stored offsets minus one.
+  ad_utility::File offsetsFile_;
 
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
+
+  // Pool of persistent `BatchIoManager`s for `lookupBatch`.
+  mutable std::unique_ptr<ad_utility::data_structures::ThreadSafeQueue<
+      std::unique_ptr<ad_utility::BatchManagerBase>>>
+      ioManagers_;
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
@@ -45,8 +57,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   class WordWriter : public WordWriterBase {
    private:
     ad_utility::File file_;
-    ad_utility::MmapVector<Offset> offsets_;
+    ad_utility::File offsetsFile_;
     uint64_t currentOffset_ = 0;
+    uint64_t numWords_ = 0;
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
@@ -61,27 +74,28 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     void finishImpl() override;
   };
 
-  /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
-  /// be contiguous.
-  void buildFromStringsAndIds(
-      const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
-      const std::string& fileName);
-
-  /// Open the vocabulary from file. It must have been previously written to
-  /// this file, for example via `buildFromVector` or `buildFromTextFile`.
+  // Open the vocabulary from file. It must have been previously written to
+  // this file via a `WordWriter`.
   void open(const std::string& filename);
 
   // Return the word that is stored at the index. Throw an exception if `idx >=
   // size`.
   std::string operator[](uint64_t idx) const;
 
-  /// Get the number of words in the vocabulary.
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(
+      VocabLookupInput rangeOfIndexBatches) const;
+
+  // Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 
-  /// Default constructor for an empty vocabulary.
+  // Default constructor for an empty vocabulary.
   VocabularyOnDisk() = default;
 
-  /// `VocabularyOnDisk` is movable, but not copyable.
+  // `VocabularyOnDisk` is movable, but not copyable.
   VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
@@ -128,11 +142,24 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;
 
-  // Build a vocabulary from any type that is forward-iterable and yields
-  // pairs of (string-like, ID). Used as the common implementation for
-  // the `buildFrom...` methods.
-  template <class Iterable>
-  void buildFromIterable(Iterable&& iterable, const std::string& filename);
+  // A word's start offset and the start offset of the following word (which
+  // marks the end of the word), stored contiguously in the `.offsets` file.
+  struct OffsetPair {
+    uint64_t offset_;
+    uint64_t nextOffset_;
+  };
+
+  // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
+  // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
+  std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
+                                          ql::span<const size_t> indices) const;
+
+  // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
+  // string data from `file_` into one contiguous buffer in a single batched
+  // read via `manager`, and return it as a `VocabBatchLookupResult`.
+  VocabBatchLookupResult readStrings(
+      ad_utility::BatchManagerBase& manager,
+      ql::span<const OffsetPair> offsetPairs) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

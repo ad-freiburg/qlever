@@ -13,6 +13,7 @@
 
 #include "./util/IdTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/filesystem.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -22,6 +23,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
+#include "util/GTestHelpers.h"
 
 using namespace ad_utility::vocabulary_merger;
 namespace {
@@ -73,16 +75,16 @@ class MergeVocabularyTest : public ::testing::Test {
     _path0 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
     _path1 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
 
-    // create random subdirectory in /tmp
-    std::string tempPath = "";
-    _basePath = tempPath + _basePath + "/";
-    if (system(("mkdir -p " + _basePath).c_str())) {
-      // system should return 0 on success
-      std::cerr << "Could not create subfolder of tmp for test. this might "
-                   "lead to test failures\n";
+    // Create a subdirectory for the test files in the working directory.
+    _basePath = _basePath + "/";
+    ql::error_code errorCode;
+    ql::filesystem::create_directories(_basePath, errorCode);
+    if (errorCode) {
+      std::cerr << "Could not create the directory for the test files. This "
+                   "might lead to test failures\n";
     }
 
-    // make paths absolute under created tmp directory
+    // Prepend the created directory to the paths.
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
 
@@ -158,8 +160,9 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // __________________________________________________________________
   ~MergeVocabularyTest() {
-    // TODO: shall we delete the tmp files? doing so is cleaner, but makes it
-    // harder to debug test failures
+    // Delete the test files (to debug a test failure, comment this out).
+    ql::error_code errorCode;
+    ql::filesystem::remove_all(_basePath, errorCode);
   }
 
   // read all bytes from a file (e.g. to check equality of small test files)
@@ -203,8 +206,15 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
       }
     };
 
-    res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, 1_GB);
+    TripleComponentComparator comparator;
+    res = mergeVocabulary(
+        _basePath, 2,
+        [&comparator](std::string_view a, bool aIsExternal, std::string_view b,
+                      bool bIsExternal) {
+          return comparator.isLessInTotalWithExternalFlag(a, aIsExternal, b,
+                                                          bIsExternal);
+        },
+        internalVocabularyAction, 1_GB);
   }
 
   EXPECT_THAT(mergeResult,
@@ -227,27 +237,58 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
 }
 
+// _____________________________________________________________________________
+TEST(MergeVocabulary, mergeVocabularyAssertion) {
+  auto callback = [](const auto&, bool) { return uint64_t{0}; };
+
+  std::string basePath = gtestCurrentTestName();
+
+  auto writeUnorderedFile = [](const auto& path) {
+    ad_utility::serialization::FileWriteSerializer partialVocab(path);
+    // Intentionally in wrong order.
+    std::array<std::string_view, 3> strings{"\"c\"", "\"b\"", "\"a\""};
+    partialVocab << strings.size();
+    size_t localIdx = 0;
+    for (auto s : strings) {
+      partialVocab << s;
+      partialVocab << false;
+      partialVocab << localIdx;
+      localIdx++;
+    }
+  };
+
+  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0));
+  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1));
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      mergeVocabulary(
+          basePath, 2,
+          [](std::string_view a, bool, std::string_view b, bool) {
+            return std::less{}(a, b);
+          },
+          callback, 1_GB),
+      ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
+}
+
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
-  using S = LocalVocabIndexAndSplitVal;
-  TripleComponentComparator::SplitValNonOwningWithSortKey
-      d;  // dummy value that is unused in this case.
-  input.emplace_back("alpha", S{5, d});
-  input.emplace_back("beta", S{4, d});
-  input.emplace_back("beta", S{42, d});
-  input.emplace_back("d", S{8, d});
-  input.emplace_back("e", S{9, d});
-  input.emplace_back("e", S{38, d});
-  input.emplace_back("xenon", S{0, d});
+  using S = PartialVocabIndexWithExternalFlag;
+  input.emplace_back("alpha", S{5, false});
+  input.emplace_back("beta", S{4, false});
+  input.emplace_back("beta", S{42, false});
+  input.emplace_back("d", S{8, false});
+  input.emplace_back("e", S{9, false});
+  input.emplace_back("e", S{38, false});
+  input.emplace_back("xenon", S{0, false});
 
   auto res = createInternalMapping(input);
-  ASSERT_EQ(0u, input[0].second.id_);
-  ASSERT_EQ(1u, input[1].second.id_);
-  ASSERT_EQ(1u, input[2].second.id_);
-  ASSERT_EQ(2u, input[3].second.id_);
-  ASSERT_EQ(3u, input[4].second.id_);
-  ASSERT_EQ(3u, input[5].second.id_);
-  ASSERT_EQ(4u, input[6].second.id_);
+  ASSERT_EQ(0u, input[0].second.id());
+  ASSERT_EQ(1u, input[1].second.id());
+  ASSERT_EQ(1u, input[2].second.id());
+  ASSERT_EQ(2u, input[3].second.id());
+  ASSERT_EQ(3u, input[4].second.id());
+  ASSERT_EQ(3u, input[5].second.id());
+  ASSERT_EQ(4u, input[6].second.id());
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);
@@ -256,4 +297,38 @@ TEST(VocabularyGeneratorTest, createInternalMapping) {
   ASSERT_EQ(3u, res[9]);
   ASSERT_EQ(3u, res[38]);
   ASSERT_EQ(4u, res[0]);
+}
+
+// Regression test: previously, `createInternalMapping` left `lastWord` empty
+// for the first iteration, so duplicates of the very first sorted word
+// (which can occur when the same string is stored in two parallel
+// `ItemMap`s with different `isExternal` flags) were assigned a *different*
+// internal id than the first occurrence. The subsequent `std::unique` by id
+// then failed to drop them, and the partial-vocab file ended up with two
+// byte-identical entries for that word.
+TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
+  ItemVec input;
+  using S = PartialVocabIndexWithExternalFlag;
+  // The first word appears three times (e.g., from three parallel item
+  // maps), then a second distinct word appears twice.
+  input.emplace_back("alpha", S{7, true});
+  input.emplace_back("alpha", S{12, false});
+  input.emplace_back("alpha", S{99, false});
+  input.emplace_back("beta", S{3, false});
+  input.emplace_back("beta", S{55, true});
+
+  auto res = createInternalMapping(input);
+  // All three "alpha"s must collapse to the same id (0).
+  EXPECT_EQ(0u, input[0].second.id());
+  EXPECT_EQ(0u, input[1].second.id());
+  EXPECT_EQ(0u, input[2].second.id());
+  // Both "beta"s must collapse to the next id (1).
+  EXPECT_EQ(1u, input[3].second.id());
+  EXPECT_EQ(1u, input[4].second.id());
+
+  EXPECT_EQ(0u, res[7]);
+  EXPECT_EQ(0u, res[12]);
+  EXPECT_EQ(0u, res[99]);
+  EXPECT_EQ(1u, res[3]);
+  EXPECT_EQ(1u, res[55]);
 }

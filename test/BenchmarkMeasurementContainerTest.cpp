@@ -26,8 +26,7 @@ namespace ad_benchmark {
 static auto createWaitLambda(std::chrono::milliseconds waitDuration) {
   return [waitDuration]() {
     auto end = std::chrono::steady_clock::now() + waitDuration;
-    while (std::chrono::steady_clock::now() < end)
-      ;
+    while (std::chrono::steady_clock::now() < end);
   };
 }
 
@@ -99,9 +98,10 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 /*
 Check the content of a `Result` row.
 */
+template <typename... WantedContent>
 static void checkResultTableRow(const ResultTable& table,
                                 const size_t& rowNumber,
-                                const auto&... wantedContent) {
+                                const WantedContent&... wantedContent) {
   // Calls the correct assert function based on type.
   auto assertEqual = [](const auto& a, const auto& b) {
     static_assert(std::is_same_v<decltype(a), decltype(b)>,

@@ -4,21 +4,28 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/filesystem.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/vocabulary/VocabularyType.h"
+#include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -107,12 +114,12 @@ auto makeTemporaryDirectory(std::string_view name) {
   AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
   directory += name;
   // Create directory.
-  std::filesystem::create_directory(directory);
+  ql::filesystem::create_directory(directory);
 
   // Remove all files in directory when done.
   absl::Cleanup cleanup{[directory]() {
-    std::error_code ec;
-    std::filesystem::remove_all(directory, ec);
+    ql::error_code ec;
+    ql::filesystem::remove_all(directory, ec);
     if (ec) {
       AD_LOG(ERROR) << "Could not remove temporary directory " << directory
                     << ": " << ec.message();
@@ -440,16 +447,34 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
-// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
-// `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
-// bool `isExternal`.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/2768
+TEST(IndexTest, emptyTextIndex) {
+  std::array<std::string, 2> inputs = {
+      "<a:> <a:> <a:> .",
+      "<a:> <a:> \"\" .",
+  };
+  for (auto input : inputs) {
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = std::move(input);
+    config.createTextIndex = true;
+    auto* qec = ad_utility::testing::getQec(std::move(config));
+    // Building an empty text index must succeed, and scanning it for any word
+    // must yield no postings.
+    IdTable result =
+        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    EXPECT_EQ(result.size(), 0);
+  }
+}
 
-auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
-  return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
-      ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
-                                ::testing::Eq(content)),
-                       AD_FIELD(PossiblyExternalizedIriOrLiteral, isExternal_,
-                                ::testing::Eq(isExternal))));
+// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
+// `PossiblyExternalizedTripleComponent` that matches `content` and the bool
+// `isExternal`.
+auto IsPossiblyExternalString = [](const TripleComponent& content,
+                                   bool isExternal) {
+  return ::testing::AllOf(AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   tripleComponent_, ::testing::Eq(content)),
+                          AD_FIELD(PossiblyExternalizedTripleComponent,
+                                   isExternal_, ::testing::Eq(isExternal)));
 };
 
 TEST(IndexTest, processTriple) {
@@ -486,7 +511,34 @@ TEST(IndexTest, processTriple) {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
     ProcessedTriple result = index.processTriple(std::move(turtleTriple));
-    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(result.triple_[2]));
+    EXPECT_EQ(Id::makeFromDouble(42.0),
+              result.triple_[2].tripleComponent_.getId());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, ZeroCopyVocabularyBlob) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto& vocab = index.getNonConstVocabForTesting();
+  vocab.resetToType(ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::InMemoryUncompressed});
+  ad_utility::HashSet<std::string> words{"<alpha>", "<beta>", "\"gamma\""};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocab.createFromSet(words, filename);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  index.writeVocabularyToZeroCopyBlob(writeSerializer);
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  IndexImpl otherIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  otherIndex.loadVocabularyFromZeroCopyBlob(readSerializer);
+
+  const auto& readVocab = otherIndex.getVocab();
+  ASSERT_EQ(vocab.size(), readVocab.size());
+  for (size_t i = 0; i < vocab.size(); ++i) {
+    EXPECT_EQ(vocab[VocabIndex::make(i)], readVocab[VocabIndex::make(i)]);
   }
 }
 
@@ -588,7 +640,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -597,6 +649,18 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
 
+  // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
+  // that the assertion is only active when `LOGLEVEL >= INFO`. At
+  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
+  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
+  // `testing::_` (match anything) in that case.
+  auto onlyAtInfoOrAbove = [](auto matcher) {
+    if constexpr (LOGLEVEL < INFO) {
+      return testing::_;
+    } else {
+      return matcher;
+    }
+  };
   // Parallel parsing not specified anywhere. For a single input stream, we then
   // default to `true` for reasons of backwards compatibility, but this is
   // deprecated. For multiple input streams, we default to `false` and this is
@@ -607,7 +671,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -615,9 +680,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -630,9 +695,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
                                                    std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
@@ -642,9 +707,9 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
+                      Not(HasSubstr("deprecated"))));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -657,7 +722,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
+                      HasSubstr("deprecated")));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -788,8 +854,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
@@ -798,8 +864,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
   permutation.loadFromDisk(onDiskBase, true);
   index.deltaTriplesManager().modify<void>(
@@ -848,7 +914,7 @@ TEST(IndexImpl, writePatternsToFile) {
   index.getPatterns() = CompactVectorOfStrings{data};
   index.writePatternsToFile();
 
-  ASSERT_TRUE(std::filesystem::exists(onDiskBase + ".index.patterns"));
+  ASSERT_TRUE(ql::filesystem::exists(onDiskBase + ".index.patterns"));
 
   double avgNumDistinctSubjectsPerPredicate;
   double avgNumDistinctPredicatesPerSubject;
@@ -910,6 +976,43 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuild) {
+  auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records the build date under
+  // `DATE_OF_INDEX_BUILD_KEY` in its configuration, and `dateOfIndexBuild()`
+  // returns exactly that value.
+  ASSERT_TRUE(indexImpl.configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY));
+  auto storedDate =
+      indexImpl.configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  EXPECT_EQ(indexImpl.dateOfIndexBuild(), storedDate);
+
+  // The stored value is a valid UTC timestamp in the expected format.
+  absl::Time parsed;
+  std::string error;
+  EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, storedDate,
+                              absl::UTCTimeZone(), &parsed, &error))
+      << error;
+
+  // For indexes that were built before the build date was recorded in the
+  // configuration, `dateOfIndexBuild()` falls back to the last modification
+  // time of the configuration file, which was just written. Since the format
+  // only has second precision, we don't compare the timestamp exactly, but
+  // check that it lies within the last second + tolerance.
+  indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  absl::Time fallbackTime;
+  std::string parseError;
+  ASSERT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
+                              indexImpl.dateOfIndexBuild(), absl::UTCTimeZone(),
+                              &fallbackTime, &parseError))
+      << parseError;
+  EXPECT_THAT(absl::Now() - fallbackTime,
+              ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
+                               ::testing::Lt(absl::Seconds(2))));
 }
 
 // _____________________________________________________________________________

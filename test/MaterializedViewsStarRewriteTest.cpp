@@ -50,11 +50,11 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
       " <s2> <p1> <o1b> . \n"
       " <s2> <p2> <o2b> . \n"
       " <s2> <p3> <o3a> . \n";
-  const std::string onDiskBase = "_materializedViewRewriteStar";
+  const std::string onDiskBase = gtestCurrentTestName();
   const std::string viewName = "testViewStar";
 
   materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
-  auto cleanUp = absl::MakeCleanup(
+  auto cleanUp = absl::Cleanup(
       [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
   qlever::EngineConfig config;
   config.baseName_ = onDiskBase;

@@ -1028,6 +1028,52 @@ TEST(QueryPlanner, numPathsPerTarget) {
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
+// _____________________________________________________________________________
+TEST(QueryPlanner, maxDepth) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 2};
+  h::expect(
+      R"(
+PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+SELECT ?start ?end ?path ?edge WHERE {
+  SERVICE pathSearch: {
+    _:path pathSearch:algorithm pathSearch:allPaths ;
+           pathSearch:source <x1> ;
+           pathSearch:source <x2> ;
+           pathSearch:target <y> ;
+           pathSearch:target <z> ;
+           pathSearch:pathColumn ?path ;
+           pathSearch:edgeColumn ?edge ;
+           pathSearch:start ?start ;
+           pathSearch:end ?end ;
+           pathSearch:maxDepth 2 ;
+    {
+      SELECT * WHERE {
+        ?start <p> ?end .
+      }
+    }
+  }
+}
+)",
+      h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+}
+
 TEST(QueryPlanner, PathSearchWithEdgeProperties) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join;
@@ -1606,6 +1652,60 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <numPathsPerTarget> expects an integer"),
+      InvalidSparqlQueryException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchWrongArgumentMaxDepth) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:maxDepth <two>;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter <maxDepth> expects an integer"),
+      InvalidSparqlQueryException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchNegativeMaxDepth) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:maxDepth -1;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter <maxDepth> must not be negative"),
       InvalidSparqlQueryException);
 }
 
@@ -2648,6 +2748,21 @@ TEST(QueryPlanner, Exists) {
       "SELECT * FROM <g> FROM NAMED <g2> { ?x ?y ?z FILTER EXISTS {?a ?b ?c. "
       "GRAPH ?g { ?u ?v ?c}}}",
       filter);
+  // Make sure we get the correct permutation.
+  h::expect("SELECT ?s { ?s <p> <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "<p>", "<o>"),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO,
+                                                   Permutation::Enum::SOP}))));
+  h::expect("SELECT ?s { ?s ?p <o> FILTER EXISTS { ?s ?p ?o } }",
+            h::Filter("EXISTS { ?s ?p ?o }",
+                      h::ExistsJoin(
+                          h::IndexScanFromStrings("?s", "?p", "<o>",
+                                                  {Permutation::Enum::OSP}),
+                          h::IndexScanFromStrings("?s", "?p", "?o",
+                                                  {Permutation::Enum::SPO}))));
 }
 
 // _____________________________________________________________________________
@@ -3023,7 +3138,7 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
                   hasLimit({std::nullopt, 3})));
   // Last offset should only be applied by exporter since VALUES does not
-  // support OFFSET natively
+  // handle OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} OFFSET 1 } OFFSET 2 } OFFSET 5",
@@ -3032,8 +3147,8 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
   h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
             AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
-  // Last limit should only be applied by exporter since VALUES does not support
-  // OFFSET natively
+  // Last limit should only be applied by exporter since VALUES does not handle
+  // OFFSET
   h::expect(
       "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
       "} LIMIT 3 } LIMIT 2 } LIMIT 1",
@@ -3961,4 +4076,28 @@ SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
 GROUP BY ?p
 )",
             h::_);
+}
+
+// _____________________________________________________________________________
+// Regression test for the issue mentioned in
+// https://github.com/ad-freiburg/qlever/pull/2782. Joining a `BIND(BNODE(...))`
+// subquery against a UNION must not distribute the non-deterministic BIND over
+// the UNION branches (which would require cloning the BIND and produce
+// different blank-node IDs for each branch).
+TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // This previously triggered an assertion violation because the query planner
+  // tried to clone the BIND(BNODE(...)) subquery to push it into both branches
+  // of the UNION.
+  h::expect(
+      "SELECT * WHERE {"
+      "  { SELECT ?s WHERE { BIND(BNODE(\"1\") AS ?s) VALUES ?x { 1 } } }"
+      "  { ?s ?p ?o } UNION { ?s ?p ?o }"
+      "}",
+      // The non-deterministic BIND must not be distributed into the UNION, so
+      // the join has to be on top!
+      h::Join(::testing::A<const QueryExecutionTree&>(),
+              ::testing::A<const QueryExecutionTree&>()));
 }

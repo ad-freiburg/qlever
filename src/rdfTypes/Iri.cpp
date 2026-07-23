@@ -11,14 +11,24 @@
 
 #include "rdfTypes/Iri.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 
+#include <ctre-unicode.hpp>
 #include <utility>
 
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
 
 using namespace std::string_view_literals;
+
+namespace {
+// CTRE pattern for the SPARQL/Turtle `IRIREF` production used by
+// `Iri::fromIrirefValidated` (see its documentation in `Iri.h` for a full
+// explanation). `\0- ` matches every byte in the range `#x00`-`#x20` (control
+// chars and space).
+constexpr ctll::fixed_string irirefRegex = R"(<[^<>"{}|^\\`\0- ]*>)";
+}  // namespace
 
 namespace ad_utility::triple_component {
 
@@ -62,6 +72,16 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 }
 
 // ____________________________________________________________________________
+Iri Iri::fromIrirefValidated(std::string_view stringWithBrackets) {
+  if (!ctre::match<irirefRegex>(stringWithBrackets)) {
+    AD_THROW(absl::StrCat("The string \"", stringWithBrackets,
+                          "\" is not a valid IRI reference (IRIREF)."
+                          "See https://www.ietf.org/rfc/rfc3987.txt"));
+  }
+  return fromIriref(stringWithBrackets);
+}
+
+// ____________________________________________________________________________
 Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
   AD_CORRECTNESS_CHECK(!ql::starts_with(stringWithoutBrackets, '<') &&
                        !ql::ends_with(stringWithoutBrackets, '>'));
@@ -78,57 +98,18 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                const Iri& basePrefixForRelativeIris,
-                                const Iri& basePrefixForAbsoluteIris) {
+                                const qlever::util::ParsedUri& baseUri) {
   auto iriSv = iriStringWithBrackets;
   AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
-  if (iriSv.find("://") != std::string_view::npos ||
-      basePrefixForAbsoluteIris.empty()) {
-    // Case 1: IRI with scheme (like `<http://...>`) or `BASE_IRI_FOR_TESTING`
-    // (which is `<@>`, and no valid base IRI has length 3).
-    return fromIriref(iriSv);
-  } else if (iriSv[1] == '/') {
-    // Case 2: Absolute IRI without scheme (like `</prosite/PS51927>`).
-    AD_CORRECTNESS_CHECK(!basePrefixForAbsoluteIris.empty());
-    return fromPrefixAndSuffix(basePrefixForAbsoluteIris,
-                               iriSv.substr(2, iriSv.size() - 3));
-  } else {
-    // Case 3: Relative IRI (like `<UPI001AF4585D>`).
-    AD_CORRECTNESS_CHECK(!basePrefixForRelativeIris.empty());
-    return fromPrefixAndSuffix(basePrefixForRelativeIris,
-                               iriSv.substr(1, iriSv.size() - 2));
-  }
+  iriSv.remove_prefix(1);
+  iriSv.remove_suffix(1);
+  return fromUri(baseUri.resolveUri(iriSv));
 }
 
 // ____________________________________________________________________________
-Iri Iri::getBaseIri(bool domainOnly) const {
-  AD_CORRECTNESS_CHECK(ql::starts_with(iri(), '<') && ql::ends_with(iri(), '>'),
-                       iri());
-  // Check if we have a scheme and find the first `/` after that (or the first
-  // `/` at all if there is no scheme).
-  size_t pos = iri().find(schemePattern);
-  if (pos == std::string::npos) {
-    AD_LOG_WARN << "No scheme found in base IRI: \"" << iri() << "\""
-                << " (but we accept it anyway)" << std::endl;
-    pos = 1;
-  } else {
-    pos += schemePattern.size();
-  }
-  pos = iri().find('/', pos);
-  // Return the IRI with `/` appended in the following two cases: the IRI has
-  // the empty path, or `domainOnly` is false and the final `/` is missing.
-  if (pos == std::string::npos ||
-      (!domainOnly && iri()[iri().size() - 2] != '/')) {
-    return fromIrirefWithoutBrackets(
-        absl::StrCat(std::string_view(iri()).substr(1, iri().size() - 2), "/"));
-  }
-  // If `domainOnly` is true, remove the path part.
-  if (domainOnly) {
-    return fromIrirefWithoutBrackets(std::string_view(iri()).substr(1, pos));
-  }
-  // Otherwise, return the IRI as is.
-  return *this;
+Iri Iri::fromUri(const qlever::util::ParsedUri& uri) {
+  return fromStringRepresentation(uri.toIriString());
 }
 
 }  // namespace ad_utility::triple_component

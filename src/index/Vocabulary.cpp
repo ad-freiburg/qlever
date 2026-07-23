@@ -212,18 +212,16 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
 
 // _______________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::upper_bound(const string& word,
-                                      const SortLevel level) const
-    -> IndexType {
+auto Vocabulary<S, C, I>::upper_bound(
+    const string& word, const SortLevel level) const -> IndexType {
   auto wordAndIndex = vocabulary_.upper_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
-                                      const SortLevel level) const
-    -> IndexType {
+auto Vocabulary<S, C, I>::lower_bound(
+    std::string_view word, const SortLevel level) const -> IndexType {
   auto wordAndIndex = vocabulary_.lower_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
@@ -298,6 +296,21 @@ template <typename UnderlyingVocabulary, typename C, typename I>
 auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
     -> AccessReturnType {
   return vocabulary_[idx.get()];
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  return vocabulary_.lookupBatch(indices);
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabLookupOutput Vocabulary<S, C, I>::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return vocabulary_.lookupBatchesStreamed(std::move(input));
 }
 
 // Explicit template instantiations

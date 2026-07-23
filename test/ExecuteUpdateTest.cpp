@@ -75,18 +75,19 @@ TEST(ExecuteUpdate, executeUpdate) {
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
-        Index index = ad_utility::testing::makeTestIndex(
-            "ExecuteUpdate_executeUpdate", indexConfig);
+        auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate", indexConfig));
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
-        expectExecuteUpdateHelper(update, qec, index);
-        index.deltaTriplesManager().modify<void>(
+                                  materializedViewsManager);
+        expectExecuteUpdateHelper(update, qec, *index);
+        index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
               EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
             });
@@ -94,20 +95,21 @@ TEST(ExecuteUpdate, executeUpdate) {
   // Execute the given `update` and check that it fails with the given message.
   auto expectExecuteUpdateFails_ =
       [&expectExecuteUpdateHelper](
-          Index& index, const std::string& update,
+          std::shared_ptr<Index> index, const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
           source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
         auto l = generateLocationTrace(sourceLocation);
         QueryResultCache cache = QueryResultCache();
         NamedResultCache namedResultCache;
-        MaterializedViewsManager materializedViewsManager;
+        auto materializedViewsManager =
+            std::make_shared<MaterializedViewsManager>();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  &materializedViewsManager);
+                                  materializedViewsManager);
         AD_EXPECT_THROW_WITH_MESSAGE(
-            expectExecuteUpdateHelper(update, qec, index), messageMatcher);
+            expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };
   {
     auto expectExecuteUpdateFails =
@@ -115,9 +117,10 @@ TEST(ExecuteUpdate, executeUpdate) {
             const std::string& update,
             const testing::Matcher<const std::string&>& messageMatcher,
             source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate",
-              ad_utility::testing::TestIndexConfig());
+          auto index =
+              std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+                  "ExecuteUpdate_executeUpdate",
+                  ad_utility::testing::TestIndexConfig()));
           expectExecuteUpdateFails_(index, update, messageMatcher,
                                     sourceLocation);
         };
@@ -531,12 +534,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      {{Id("\"foo\""), Id("<bar>"), 0UL, defaultGraphId}});
+      {{Id("\"foo\""), Id("<bar>"), uint64_t{0}, defaultGraphId}});
   expectTransformTriplesTemplate(
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
-      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}});
+      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), uint64_t{0}}});
   expectTransformTriplesTemplate(
       {},
       {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
@@ -553,12 +556,12 @@ TEST(ExecuteUpdate, resolveVariable) {
       makeIdTableFromVector({{V(0), V(1), V(2)},
                              {V(3), V(4), V(5)},
                              {V(6), Id::makeUndefined(), V(8)}});
-  auto resolveVariable =
-      std::bind_front(&ExecuteUpdate::resolveVariable, std::cref(idTable));
+  auto resolveVariable = std::bind_front(&ExecuteUpdate::resolveVariable,
+                                         idTable.asStaticView<0>());
   EXPECT_THAT(resolveVariable(0, V(10)), Eq(V(10)));
-  EXPECT_THAT(resolveVariable(0, 1UL), Eq(V(1)));
-  EXPECT_THAT(resolveVariable(1, 1UL), Eq(V(4)));
-  EXPECT_THAT(resolveVariable(2, 1UL), Eq(std::nullopt));
+  EXPECT_THAT(resolveVariable(0, uint64_t{1}), Eq(V(1)));
+  EXPECT_THAT(resolveVariable(1, uint64_t{1}), Eq(V(4)));
+  EXPECT_THAT(resolveVariable(2, uint64_t{1}), Eq(std::nullopt));
   EXPECT_THAT(resolveVariable(2, Id::makeUndefined()), Eq(std::nullopt));
 }
 
@@ -574,8 +577,8 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
          const IdTable& idTable, uint64_t rowIdx,
          const Matcher<const std::vector<IdTriple<>>&>& expectedQuads) {
         std::vector<IdTriple<>> result;
-        ExecuteUpdate::computeAndAddQuadsForResultRow(templates, result,
-                                                      idTable, rowIdx);
+        ExecuteUpdate::computeAndAddQuadsForResultRow(
+            templates, result, idTable.asStaticView<0>(), rowIdx);
         EXPECT_THAT(result, expectedQuads);
       };
   // Compute the quads for an empty template set yields no quads.
@@ -588,12 +591,13 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
                      ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
   // The variables in templates are resolved to the value of the variable in the
   // specified row of the result.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 0,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}}}));
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 1,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 1,
                      ElementsAreArray({IdTriple{{V(3), V(1), V(4), V(3)}}}));
   // Quads with undefined IDs cannot be stored and are not returned.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 2, IsEmpty());
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)}}, idTable, 2,
+                     IsEmpty());
   expectComputeQuads({{V(0), V(1), Id::makeUndefined(), V(3)}}, idTable, 0,
                      IsEmpty());
   // Some extra cases to cover all branches.
@@ -604,8 +608,9 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
   expectComputeQuads({{V(0), V(1), V(2), Id::makeUndefined()}}, idTable, 0,
                      IsEmpty());
   // All the templates are evaluated for the specified row of the result.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}, {V(0), 1UL, 2UL, V(3)}}, idTable,
-                     0,
+  expectComputeQuads({{uint64_t{0}, V(1), uint64_t{1}, V(3)},
+                      {V(0), uint64_t{1}, uint64_t{2}, V(3)}},
+                     idTable, 0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}},
                                        IdTriple{{V(0), V(1), V(2), V(3)}}}));
 }

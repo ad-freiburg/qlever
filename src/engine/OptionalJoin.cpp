@@ -94,6 +94,27 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+  if (limitOffset._limit.has_value()) {
+    std::optional<uint64_t> safeLimit = std::nullopt;
+    auto limit = limitOffset._limit.value();
+    auto offset = limitOffset._offset;
+    // We have to be careful to not cause an overflow when adding the offset and
+    // the limit.
+    if (limit <= std::numeric_limits<uint64_t>::max() - offset) {
+      safeLimit = limit + offset;
+    }
+    // If we have a limit applied, we can apply limit + offset as a limit to the
+    // left side, since the result of the optional join is at least as large as
+    // the left side. This can significantly speed up the query if the left side
+    // is large and the limit is small. The right side is optional, so reducing
+    // it can drop matches; we leave it untouched.
+    _left = _left->clone();
+    _left->applyLimitOffset(LimitOffsetClause{safeLimit});
+  }
+}
+
+// _____________________________________________________________________________
 string OptionalJoin::getDescriptor() const {
   std::string joinVars;
   for (auto [leftCol, rightCol] : _joinColumns) {
@@ -160,11 +181,11 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
   }
 
   AD_LOG_DEBUG << "Computing optional join between results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
-  optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
-               &idTable, implementation_);
+  optionalJoin(leftResult->idTableView(), rightResult->idTableView(),
+               _joinColumns, &idTable, implementation_);
 
   checkCancellation();
 
@@ -308,7 +329,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 
 // ______________________________________________________________
 auto OptionalJoin::computeImplementationFromIdTables(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
     -> Implementation {
   auto implementation = Implementation::NoUndef;
@@ -352,7 +373,7 @@ bool OptionalJoin::columnOriginatesFromGraphOrUndef(
 
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
     Implementation implementation) {
   // check for trivial cases
@@ -424,7 +445,7 @@ void OptionalJoin::optionalJoin(
       ad_utility::specialOptionalJoin(joinColumns.size(), joinColumnsLeft,
                                       joinColumnsRight, rowAdderOnIterators,
                                       addOptionalRow, checkCancellationLambda);
-      return 0UL;
+      return size_t{0};
     } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
@@ -435,9 +456,9 @@ void OptionalJoin::optionalJoin(
             joinColumnsLeft, joinColumnsRight, lessThanBoth,
             rowAdderOnIterators, ad_utility::noop, ad_utility::noop,
             addOptionalRow, checkCancellationLambda);
-        AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
+        AD_CORRECTNESS_CHECK(shouldBeZero == size_t{0});
       }
-      return 0UL;
+      return size_t{0};
     } else {
       return ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight, lessThanBoth, rowAdderOnIterators,
@@ -533,12 +554,12 @@ Result OptionalJoin::optionalJoinWithIndexScan(
         auto firstJoinColLeft = _joinColumns.at(0).at(0);
         if constexpr (leftIsMaterialized) {
           auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
-              left->idTable().getColumn(firstJoinColLeft));
+              left->idTableView().getColumn(firstJoinColLeft));
           auto rightRange = convertGeneratorFromScan<numJoinCols>(
               std::move(rightBlocksInternal), *rightScan);
           auto permutationIdTable =
               ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
-                  left->idTable().asColumnSubsetView(
+                  left->idTableView().asColumnSubsetView(
                       joinColMap.permutationLeft()),
                   left->getCopyOfLocalVocab()};
           auto leftRange = std::array{std::move(permutationIdTable)};
