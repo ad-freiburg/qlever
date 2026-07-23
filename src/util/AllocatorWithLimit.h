@@ -169,7 +169,23 @@ class AllocatorWithLimit {
   AllocatorWithLimit<U> as() const {
     return AllocatorWithLimit<U>(memoryLeft_);
   }
+  // This allocator has no default constructor, as it always requires a memory
+  // limit. On libstdc++ we can simply delete it. On libc++ we must not: there
+  // `std::vector`'s default constructor is user-provided (rather than
+  // `= default`), so libc++ reports `std::vector<T, AllocatorWithLimit<T>>` as
+  // `default_initializable` even though this allocator is not. That trips up
+  // `std::ranges::owning_view`, whose constrained default constructor then
+  // eagerly instantiates the vector's (and hence this allocator's) default
+  // constructor while merely evaluating `default_initializable`. A deleted
+  // default constructor turns that instantiation into a hard error. Declaring
+  // it without defining it keeps that check well-formed while still making any
+  // actual default construction fail (at link time), so the allocator remains
+  // effectively unusable without a limit.
+#ifdef _LIBCPP_VERSION
+  AllocatorWithLimit();
+#else
   AllocatorWithLimit() = delete;
+#endif
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
       AllocatorWithLimit(const AllocatorWithLimit<U>& other)
