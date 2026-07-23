@@ -17,6 +17,7 @@
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/VectorWithMemoryLimit.h"
 
 namespace joinAlgorithms::indexNestedLoop {
 
@@ -26,7 +27,7 @@ namespace detail {
 struct Filler {
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> matchTracker_;
+  ad_utility::VectorWithMemoryLimit<char> matchTracker_;
 
   explicit Filler(size_t size,
                   const ad_utility::AllocatorWithLimit<char>& allocator)
@@ -42,7 +43,7 @@ struct Filler {
 // Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
 // rows from the right have found a match so far.
 struct RightFiller {
-  std::vector<bool, ad_utility::AllocatorWithLimit<bool>> matchTracker_;
+  ad_utility::VectorWithMemoryLimit<bool> matchTracker_;
 
   explicit RightFiller(size_t size,
                        const ad_utility::AllocatorWithLimit<bool>& allocator)
@@ -61,7 +62,7 @@ struct Adder {
   std::vector<std::array<size_t, 2>> matchingPairs_;
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> missingIndices_;
+  ad_utility::VectorWithMemoryLimit<char> missingIndices_;
   ad_utility::SharedCancellationHandle cancellationHandle_;
   size_t numJoinColumns_;
   bool keepJoinColumns_;
@@ -325,8 +326,7 @@ class IndexNestedLoopJoin {
 
   // Function for MINUS and EXISTS operations when the left side is fully
   // materialized.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>>
-  computeLeftExistance() {
+  ad_utility::VectorWithMemoryLimit<char> computeLeftExistance() {
     AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
     detail::Filler matchTracker{
         leftResult_->idTableView().size(),

@@ -1085,8 +1085,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   }
 
   // query rtree with the other child
-  std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
-      qec_->getAllocator()};
+  ad_utility::VectorWithMemoryLimit<Value> results{qec_->getAllocator()};
   for (size_t i = 0; i < otherResult->numRows(); i++) {
     throwIfCancelled();
 
