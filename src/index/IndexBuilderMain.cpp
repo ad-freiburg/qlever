@@ -293,10 +293,9 @@ int main(int argc, char** argv) {
       "`<https://example.org/statement/42>`. "
       "Only IRIs are affected; a regex that happens to match inside a literal "
       "does not turn that literal into a blank node. NOTE: This is an "
-      "experimental feature. The affected IRIs behave as ordinary blank nodes, "
-      "so they are no longer recognized as those IRIs if used, e.g., in a "
-      "query "
-      "or an update.");
+      "experimental feature. The affected IRIs behave as ordinary blank "
+      "nodes, so they are no longer recognized as those IRIs if used, e.g., "
+      "in a query or an update.");
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
