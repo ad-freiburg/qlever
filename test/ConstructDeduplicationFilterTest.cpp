@@ -34,18 +34,6 @@ BatchEvaluationContext makeFullBatch(const IdTable& table) {
   return BatchEvaluationContext{table.asStaticView<0>(), 0, table.numRows()};
 }
 
-// Owns a `LocalVocab` together with a one-row `IdTable` whose single id points
-// into that vocab, so the vocab always outlives any view of the table. `ctx()`
-// recomputes a full-table `BatchEvaluationContext`; the row must outlive the
-// returned context.
-struct LocalVocabRow {
-  LocalVocab vocab_;
-  IdTable table_;
-  // The sole id in the table (a `LocalVocabIndex` into `vocab_`).
-  Id id() const { return table_(0, 0); }
-  BatchEvaluationContext ctx() const { return makeFullBatch(table_); }
-};
-
 // Make a template triple with the same variable (column 0) in all three
 // positions.
 const PreprocessedTriple allSameVarTriple{
@@ -78,6 +66,18 @@ class ConstructDeduplicationFilter : public ::testing::Test {
         LocalVocabEntry::literalWithoutQuotes(s,
                                               qec_->getLocalVocabContext())));
   }
+
+  // Owns a `LocalVocab` together with a one-row `IdTable` whose single id
+  // points into that vocab, so the vocab always outlives any view of the table.
+  // `ctx()` recomputes a full-table `BatchEvaluationContext`; the
+  // `LocalVocabRow` instance must outlive the returned context.
+  struct LocalVocabRow {
+    LocalVocab vocab_;
+    IdTable table_;
+    // The sole id in the table (a `LocalVocabIndex` into `vocab_`).
+    Id id() const { return table_(0, 0); }
+    BatchEvaluationContext ctx() const { return makeFullBatch(table_); }
+  };
 
   // Build a `LocalVocabRow` for a fresh literal `s` on `qec_`, bundling the
   // owning `LocalVocab` and its one-row `IdTable`.
@@ -306,5 +306,14 @@ TEST_F(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
 TEST_F(ConstructDeduplicationFilter, noneModeIsRejected) {
   EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec_));
 }
+
+//______________________________________________________________________________
+// Gap the reviewer implied: no test actually exercises the multi-string-key
+// -crossing-threshold path — the one that dangled. A good ASan regression test:
+// a triple with three distinct local-vocab strings (needs a 3-column row / 3
+// different variables) under a 1-byte threshold. Old code → reset mid-key →
+// dangling id → ASan UAF on the next compare. New code → safe. That would lock
+// in the fix.
+TEST_F(ConstructDeduplicationFilter, IDONTKNOW) {}
 
 }  // namespace
