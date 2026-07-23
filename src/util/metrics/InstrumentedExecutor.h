@@ -112,8 +112,7 @@ class InstrumentedExecutor {
   template <typename Function>
   auto makeWrapped(Function&& f) const {
     auto postTime = std::chrono::steady_clock::now();
-    return [f = std::forward<Function>(f), postTime,
-            metrics = metrics_]() mutable {
+    return [f = AD_FWD(f), postTime, metrics = metrics_]() mutable {
       double latencyMs = std::chrono::duration<double, std::milli>(
                              std::chrono::steady_clock::now() - postTime)
                              .count();
@@ -121,7 +120,7 @@ class InstrumentedExecutor {
       metrics->runningHandlers_->Add(1);
       absl::Cleanup decrement{
           [&metrics]() noexcept { metrics->runningHandlers_->Add(-1); }};
-      std::invoke(std::move(f));
+      std::invoke(AD_FWD(f));
     };
   }
 
