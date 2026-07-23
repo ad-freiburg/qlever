@@ -14,6 +14,7 @@
 
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
+#include "global/Id.h"
 #include "index/Index.h"
 #include "index/LocalVocab.h"
 #include "util/Exception.h"
@@ -80,7 +81,7 @@ class ConstructBatchEvaluator {
   // in `evaluationContext`. Each entry in `variableColumnIndices` is an
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
-      ql::span<const size_t> variableColumnIndices,
+      ql::span<const ColumnIndex> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
