@@ -50,8 +50,7 @@ ConstructDeduplicator::ConstructDeduplicator(
     std::optional<ad_utility::MemorySize> maxDedupVocabSize)
     : mode_{mode},
       queryExecutionContext_{queryExecutionContext},
-      maxDedupVocabBytes_{computeMaxDedupVocabBytes(mode, queryExecutionContext,
-                                                    maxDedupVocabSize)},
+      maxDedupVocabBytes_{computeMaxDedupVocabBytes(mode, maxDedupVocabSize)},
       filter_{mode, queryExecutionContext} {}
 
 //______________________________________________________________________________
@@ -103,10 +102,9 @@ static constexpr size_t bytesPerDedupKey =
     NUM_TRIPLE_POSITIONS * sizeof(ValueId);
 
 // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
-// given, else a mode-dependent default.
+// given, else default value dependent on `DeduplicationMode`.
 size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
     const DeduplicationMode& mode,
-    const QueryExecutionContext& queryExecutionContext,
     std::optional<ad_utility::MemorySize> maxDedupVocabSize) {
   if (maxDedupVocabSize.has_value()) {
     return maxDedupVocabSize.value().getBytes();
@@ -115,7 +113,9 @@ size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
           std::get_if<DeduplicationMode::BatchWise>(&mode.value_)) {
     return batchWise->batchSize_ * bytesPerDedupKey;
   }
-  // for `DeduplicationMode::Global` there should be no deduplication.
+  // We do not track the memory usage of the `dedupVocab_` for
+  // `DeduplicationMode::Global` explicitly, thus this threshold is unused.
+  // Return a dummy `0`.
   return 0;
 }
 
@@ -125,7 +125,13 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   const auto& entry = *id.getLocalVocabIndex();
   size_t sizeBefore = dedupVocab_.size();
   auto index = dedupVocab_.getIndexAndAddIfNotContained(entry);
-  if (dedupVocab_.size() != sizeBefore) {  // a new string was actually added
+  // Only `BatchWise` bounds the size of `dedupVocab_`, so only there do we
+  // track the vocab's byte size and check the threshold. We do not track the
+  // size of the `dedupVocab_` for `Global` mode, but delegate it in this case
+  // to the `LocalVocab` class itself.
+  bool addedNewString = dedupVocab_.size() != sizeBefore;
+  if (std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_) &&
+      addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
     resetIfVocabTooLarge();
   }

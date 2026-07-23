@@ -121,26 +121,24 @@ class ConstructDeduplicator {
   DeduplicationMode mode_;
   std::reference_wrapper<const QueryExecutionContext> queryExecutionContext_;
   // Approximate total byte size of the strings currently held in `dedupVocab_`.
+  // Only tracked in `BatchWise` mode; stays `0` in `Global` mode.
   size_t dedupVocabBytes_ = 0;
-  // When `dedupVocabBytes_` reaches this, all dedup state is dropped (see
-  // `resetIfVocabTooLarge`) to bound the vocab's memory. Set from the query's
-  // available memory at construction (see the constructor).
+  // Set by `computeMaxDedupVocabBytes` below. Only meaningful in `BatchWise`
+  // mode; `0` (unused) in `Global` mode.
   size_t maxDedupVocabBytes_;
 
   // Owns every local-vocab entry referenced by a stored key
   LocalVocab dedupVocab_;
 
-  // The single shared filter. Always present: `None` mode is handled by not
-  // constructing this state (see the class comment).
+  // The deduplicator that decides whether a triple was already emitted.
   TripleDeduplicator filter_;
 
-  // Compute the byte threshold for `dedupVocab_`: the explicit
-  // `maxDedupVocabSize` if given, else a mode-dependent default (batch-size-
-  // relative for `BatchWise`, a quarter of available memory for `Global`; see
-  // the definition).
+  // Compute the byte threshold that bounds `dedupVocab_` in `BatchWise` mode:
+  // the explicit `maxDedupVocabSize` if given, else a batch-size-relative
+  // default. `Global` mode does no memory accounting, so this returns a dummy
+  // `0` there (see the definition).
   static size_t computeMaxDedupVocabBytes(
       const DeduplicationMode& mode,
-      const QueryExecutionContext& queryExecutionContext,
       std::optional<ad_utility::MemorySize> maxDedupVocabSize);
 
   // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so their lifetime is
