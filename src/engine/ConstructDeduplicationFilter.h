@@ -121,7 +121,7 @@ class ConstructDeduplicator {
   // mode; `0` (unused) in `Global` mode.
   size_t maxDedupVocabBytes_;
 
-  // Owns every local-vocab entry referenced by a stored key.
+  // `dedupVocab_` owns every local-vocab entry referenced by a stored key.
   LocalVocab dedupVocab_;
 
   // The deduplicator that decides whether a triple was already emitted.
