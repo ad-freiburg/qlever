@@ -440,12 +440,11 @@ class DeltaTriplesManager {
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
-
-  // Set the file where the updates are persisted to WITHOUT reading it. Used
-  // when the persistence file of an already loaded index is moved (see
-  // `Qlever::moveRebuiltIndexIntoPlace`).
-  void setFilenameForPersistentUpdates(std::string filename);
+  // Set the file where the updates are persisted to. If `readFromDisk` is
+  // `true`, the already persisted updates are additionally read back from disk;
+  // if `false`, only the filename is set (used when the persistence file of an
+  // already loaded index is moved, see `Qlever::moveRebuiltIndexIntoPlace`).
+  void setFilenameForPersistentUpdates(std::string filename, bool readFromDisk);
 
   // Call `DeltaTriples::persists()`.
   bool persists() const;

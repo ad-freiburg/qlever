@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/VariableToColumnMap.h"
+#include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"

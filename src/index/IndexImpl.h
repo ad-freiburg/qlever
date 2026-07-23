@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
@@ -240,6 +241,13 @@ class IndexImpl {
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
+
+  // Configure the delta triples and the graph name manager to persist their
+  // state to the files derived from the current `onDiskBase_`. If
+  // `readFromDisk` is `true`, the already persisted state is additionally read
+  // back from disk (used when loading an existing index); if `false`, only the
+  // filenames are set (used when re-anchoring an index that was moved on disk).
+  void setFilenamesForPersistentUpdates(bool readFromDisk);
 
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
@@ -485,7 +493,8 @@ class IndexImpl {
   // guards that this list stays exhaustive with respect to the actual index
   // files. This is used to move an index to a different directory after a
   // rebuild.
-  static std::vector<std::string> allIndexFiles(const std::string& onDiskBase);
+  static std::vector<ql::filesystem::path> allIndexFiles(
+      const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
 

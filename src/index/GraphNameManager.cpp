@@ -52,15 +52,12 @@ void GraphNameManager::readFromDisk() {
 }
 
 // _____________________________________________________________________________
-void GraphNameManager::setFilenameForPersistingAndReadFromDisk(
-    ql::filesystem::path filename) {
+void GraphNameManager::setFilenameForPersisting(ql::filesystem::path filename,
+                                                bool readFromDisk) {
   filenameForPersisting_ = std::move(filename);
-  readFromDisk();
-}
-
-// _____________________________________________________________________________
-void GraphNameManager::setFilenameForPersisting(ql::filesystem::path filename) {
-  filenameForPersisting_ = std::move(filename);
+  if (readFromDisk) {
+    this->readFromDisk();
+  }
 }
 
 // _____________________________________________________________________________

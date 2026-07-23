@@ -13,6 +13,7 @@
 
 #include "backports/filesystem.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 

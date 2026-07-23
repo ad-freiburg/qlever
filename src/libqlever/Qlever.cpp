@@ -21,6 +21,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
@@ -333,17 +334,8 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
 }
 
 // ___________________________________________________________________________
-std::string IndexRebuildConfig::tmpBasename() const {
-  return (ql::filesystem::path{tmpDirForRebuild_} / basenameForNewIndex_)
-      .lexically_normal()
-      .string();
-}
-
-// ___________________________________________________________________________
 std::string IndexRebuildConfig::finalBasename() const {
-  return (ql::filesystem::path{dirForNewIndex_} / basenameForNewIndex_)
-      .lexically_normal()
-      .string();
+  return (dirForNewIndex_ / basenameForNewIndex_).lexically_normal().string();
 }
 
 // ___________________________________________________________________________
@@ -360,7 +352,7 @@ void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBase,
   const auto& oldIndexDir = config.dirForOldIndex_;
   fs::create_directories(oldIndexDir);
   auto moveToOldIndexDir = [&oldIndexDir](const fs::path& file) {
-    fs::rename(file, fs::path{oldIndexDir} / file.filename());
+    fs::rename(file, oldIndexDir / file.filename());
   };
   ql::ranges::for_each(IndexImpl::allIndexFiles(originalBase),
                        moveToOldIndexDir);
@@ -377,8 +369,9 @@ void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBase,
 
   // Move the new index's files to their final base name.
   for (const auto& file : IndexImpl::allIndexFiles(rebuildBase)) {
-    AD_CORRECTNESS_CHECK(ql::starts_with(file, rebuildBase));
-    fs::rename(file, absl::StrCat(newBase, std::string_view{file}.substr(
+    std::string fileString = file.string();
+    AD_CORRECTNESS_CHECK(ql::starts_with(fileString, rebuildBase));
+    fs::rename(file, absl::StrCat(newBase, std::string_view{fileString}.substr(
                                                rebuildBase.size())));
   }
   // Move the new index's rebuild log to its final place, next to the index it
@@ -390,12 +383,9 @@ void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBase,
   }
 
   // Re-anchor the path-derived state of the new index.
-  newIndex.getImpl().setOnDiskBase(newBase);
+  newIndex.setOnDiskBase(newBase);
   if (newIndex.deltaTriplesManager().persists()) {
-    newIndex.deltaTriplesManager().setFilenameForPersistentUpdates(
-        absl::StrCat(newBase, UPDATE_TRIPLES_SUFFIX));
-    newIndex.getImpl().graphNameManager().setFilenameForPersisting(
-        absl::StrCat(newBase, ALLOCATED_GRAPHS_SUFFIX));
+    newIndex.getImpl().setFilenamesForPersistentUpdates(false);
   }
   newManager.setOnDiskBase(newBase);
 }

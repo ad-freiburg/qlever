@@ -24,6 +24,7 @@
 #include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -798,14 +799,12 @@ TEST(IndexRebuildConfig, baseNames) {
 
   config.tmpDirForRebuild_ = "rebuild.tmp";
   config.dirForNewIndex_ = "some/dir";
-  EXPECT_EQ(config.tmpBasename(), "rebuild.tmp/wiki");
   EXPECT_EQ(config.finalBasename(), "some/dir/wiki");
 
   // The paths are normalized.
   config.dirForNewIndex_ = ".";
   EXPECT_EQ(config.finalBasename(), "wiki");
   config.tmpDirForRebuild_ = "a/./b";
-  EXPECT_EQ(config.tmpBasename(), "a/b/wiki");
 }
 
 // _____________________________________________________________________________
@@ -841,16 +840,17 @@ TEST(Qlever, moveRebuiltIndexIntoPlace) {
   qlever::Qlever::moveRebuiltIndexIntoPlace(oldBase, indexAndViews, config);
 
   // The old index's files were moved into the directory for the old index.
-  EXPECT_TRUE(ql::filesystem::exists(
-      absl::StrCat(config.dirForOldIndex_, "/index", CONFIGURATION_FILE)));
-  EXPECT_TRUE(ql::filesystem::exists(
-      absl::StrCat(config.dirForOldIndex_, "/index.index.pso")));
+  EXPECT_TRUE(ql::filesystem::exists(config.dirForOldIndex_ /
+                                     ("index"s + CONFIGURATION_FILE)));
+  EXPECT_TRUE(
+      ql::filesystem::exists(config.dirForOldIndex_ / "index.index.pso"));
 
   // The rebuilt index now lives at the final base name (the place of the old
   // index) and no longer in the temporary directory.
+  EXPECT_TRUE(ql::filesystem::exists(config.dirForNewIndex_ /
+                                     ("index"s + CONFIGURATION_FILE)));
   EXPECT_TRUE(
-      ql::filesystem::exists(absl::StrCat(oldBase, CONFIGURATION_FILE)));
-  EXPECT_TRUE(ql::filesystem::exists(absl::StrCat(oldBase, ".index.pso")));
+      ql::filesystem::exists(config.dirForNewIndex_ / "index.index.pso"));
   EXPECT_TRUE(IndexImpl::allIndexFiles(rebuiltBase).empty());
 
   // The in-memory state of the new index was re-anchored to the final base.

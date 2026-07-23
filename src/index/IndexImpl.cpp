@@ -18,12 +18,14 @@
 #include <future>
 #include <numeric>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
@@ -1145,11 +1147,16 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        absl::StrCat(onDiskBase, UPDATE_TRIPLES_SUFFIX));
-    graphNameManager_.setFilenameForPersistingAndReadFromDisk(
-        absl::StrCat(onDiskBase, ALLOCATED_GRAPHS_SUFFIX));
+    setFilenamesForPersistentUpdates(true);
   }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setFilenamesForPersistentUpdates(bool readFromDisk) {
+  deltaTriplesManager().setFilenameForPersistentUpdates(
+      absl::StrCat(onDiskBase_, UPDATE_TRIPLES_SUFFIX), readFromDisk);
+  graphNameManager_.setFilenameForPersisting(
+      absl::StrCat(onDiskBase_, ALLOCATED_GRAPHS_SUFFIX), readFromDisk);
 }
 
 // _____________________________________________________________________________
@@ -1221,9 +1228,9 @@ void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
-std::vector<std::string> IndexImpl::allIndexFiles(
+std::vector<ql::filesystem::path> IndexImpl::allIndexFiles(
     const std::string& onDiskBase) {
-  std::vector<std::string> result;
+  std::vector<ql::filesystem::path> result;
   auto addIfExists = [&result](std::string file) {
     if (ql::filesystem::exists(file)) {
       result.push_back(std::move(file));
@@ -1231,18 +1238,20 @@ std::vector<std::string> IndexImpl::allIndexFiles(
   };
 
   // The six permutations and the two internal permutations, each with their
-  // `.meta` file.
-  for (auto permutation : Permutation::all<false>()) {
-    for (auto& file : Permutation::fileNames(permutation, onDiskBase)) {
-      addIfExists(std::move(file));
+  // `.meta` file. `isInternal` is passed as a `std::bool_constant` (a type that
+  // carries the `bool` value) because C++17 does not support explicitly
+  // templated lambdas.
+  auto addPermutationFiles = [&addIfExists](auto isInternal,
+                                            std::string_view base) {
+    for (auto permutation : Permutation::all<isInternal>()) {
+      for (auto& file : Permutation::fileNames(permutation, base)) {
+        addIfExists(std::move(file));
+      }
     }
-  }
-  auto internalBase = absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX);
-  for (auto permutation : Permutation::all<true>()) {
-    for (auto& file : Permutation::fileNames(permutation, internalBase)) {
-      addIfExists(std::move(file));
-    }
-  }
+  };
+  addPermutationFiles(std::bool_constant<false>{}, onDiskBase);
+  addPermutationFiles(std::bool_constant<true>{},
+                      absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX));
 
   // Files with a fixed name. The optional ones (settings, persisted updates,
   // text index) are simply skipped by `addIfExists` when they do not exist.

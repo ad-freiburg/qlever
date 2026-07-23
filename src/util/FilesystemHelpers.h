@@ -27,7 +27,7 @@ namespace qlever::util {
 // returned. This is used to enumerate the on-disk files of an index whose exact
 // set of names is not known in advance (the vocabulary files and the
 // materialized-view files).
-std::vector<std::string> filesWithBaseNameAndSuffix(
+std::vector<ql::filesystem::path> filesWithBaseNameAndSuffix(
     const ql::filesystem::path& onDiskBase, std::string_view suffix);
 
 // Return `true` if the directory from `path` contains at least one file whose

@@ -15,6 +15,7 @@
 #include <optional>
 #include <vector>
 
+#include "global/FileSuffixConstants.h"
 #include "index/CompressedRelation.h"
 #include "util/File.h"
 

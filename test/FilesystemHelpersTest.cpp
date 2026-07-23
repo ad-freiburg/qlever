@@ -24,7 +24,6 @@ using qlever::util::deleteFilesInDirectory;
 using qlever::util::doesDirectoryContainFileWithBasename;
 using qlever::util::filesWithBaseNameAndSuffix;
 using ::testing::HasSubstr;
-using ::testing::UnorderedElementsAreArray;
 
 namespace {
 
@@ -193,11 +192,10 @@ TEST(FilesWithBaseNameAndSuffix, returnsOnlyFilesWithBaseNameAndSuffix) {
   touch(tmp.path() / "index.vocab");
 
   auto result = filesWithBaseNameAndSuffix(base, ".vocabulary");
-  std::vector<std::string> expected{
-      (tmp.path() / "index.vocabulary").string(),
-      (tmp.path() / "index.vocabulary.words").string(),
-      (tmp.path() / "index.vocabulary.ids").string()};
-  EXPECT_THAT(result, UnorderedElementsAreArray(expected));
+  std::vector expected{tmp.path() / "index.vocabulary",
+                       tmp.path() / "index.vocabulary.words",
+                       tmp.path() / "index.vocabulary.ids"};
+  EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
 }
 
 // _____________________________________________________________________________
@@ -210,8 +208,8 @@ TEST(FilesWithBaseNameAndSuffix, ignoresSubdirectories) {
   fs::create_directory(tmp.path() / "index.view.dir");
 
   auto result = filesWithBaseNameAndSuffix(base, ".view.");
-  EXPECT_THAT(result, UnorderedElementsAreArray(std::vector<std::string>{
-                          (tmp.path() / "index.view.a").string()}));
+  EXPECT_THAT(result,
+              ::testing::UnorderedElementsAre(tmp.path() / "index.view.a"));
 }
 
 // _____________________________________________________________________________

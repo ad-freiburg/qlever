@@ -23,6 +23,7 @@
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
@@ -1103,7 +1104,12 @@ TEST(IndexImpl, allIndexFilesAreListed) {
     touch(f);
   }
 
-  auto listed = IndexImpl::allIndexFiles(base);
+  auto listedPaths = IndexImpl::allIndexFiles(base);
+  std::vector<std::string> listed;
+  listed.reserve(listedPaths.size());
+  for (const auto& path : listedPaths) {
+    listed.push_back(path.string());
+  }
   ad_utility::HashSet<std::string> listedSet(listed.begin(), listed.end());
 
   // No phantom entries.

@@ -297,11 +297,11 @@ class MaterializedViewsManager {
   // the only way to enumerate them is to scan the directory for files with the
   // `<base>.view.` prefix (see `MaterializedView::getFilenameBase`). This is
   // used to move the views together with their index after a rebuild.
-  static std::vector<std::string> viewFilesOnDisk(
+  static std::vector<ql::filesystem::path> viewFilesOnDisk(
       const ql::filesystem::path& onDiskBase);
 
   // Overload of the above for this manager's index base name.
-  std::vector<std::string> viewFilesOnDisk() const {
+  std::vector<ql::filesystem::path> viewFilesOnDisk() const {
     return viewFilesOnDisk(onDiskBase_);
   }
 
