@@ -210,12 +210,15 @@ int main(int argc, char** argv) {
       "prefix are rejected. To disable all federated queries, set this option "
       "to an invalid IRI prefix like `-`. Magic services (for example spatial "
       "search or materialized views) are never affected.");
+  auto logLevelDescription = absl::StrCat(
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (",
+      LogLevel{LOGLEVEL}.toString(),
+      ") applies as an upper bound — messages above it are never emitted "
+      "regardless of this setting.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
-      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
-      "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
-      "as an upper bound — messages above it are never emitted regardless of "
-      "this setting.");
+      logLevelDescription.c_str());
   add("construct-deduplication",
       optionFactory
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
