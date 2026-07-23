@@ -107,6 +107,19 @@ struct IndexBuilderConfig : CommonConfig {
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
 
+  // A list of regexes for IRIs that should be treated as blank nodes. During
+  // index building, an IRI that matches any of these regexes (via
+  // `RE2::PartialMatch`, applied to the full IRI text including the angle
+  // brackets) is not stored in the vocabulary, but converted to a blank node.
+  // This is useful for IRIs that only act as internal connector nodes (e.g.
+  // statement nodes), to save vocabulary memory. Only IRIs are affected;
+  // literals are never converted, even if a regex matches inside them.
+  //
+  // NOTE: This is an experimental feature. The affected IRIs behave as ordinary
+  // blank nodes, so they are no longer recognized as those IRIs if used, e.g.,
+  // in a query or an update. See `TripleComponentWithIndex::isBlankNode`.
+  std::vector<std::string> blankNodeIriRegexes_;
+
   // A list of IRI prefixes (without angle brackets). IRIs that start with one
   // of these prefixes, followed by a sequence of a bounded number of digits
   // are encoded directly in the internal ID. This reduces the size of the

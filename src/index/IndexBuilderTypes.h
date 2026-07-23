@@ -16,8 +16,11 @@
 
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_cat.h>
+#include <re2/re2.h>
 
 #include <atomic>
+#include <memory>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/memory_resource.h"
@@ -46,7 +49,31 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  bool isBlankNode() const { return ql::starts_with(iriOrLiteral_, "_:"); }
+  // Return true if this word is a blank node. A word is a blank node if it
+  // starts with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI
+  // that matches one of those regexes.
+  //
+  // The regexes are matched (via `RE2::PartialMatch`) against the full text of
+  // the word, *including* the surrounding angle brackets of an IRI. For
+  // example the regex `example\.org/statement/` matches the IRI
+  // `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
+  // are ever treated this way: a regex that happens to match inside a literal
+  // does not turn that literal into a blank node. See the
+  // `--iri-as-blank-node-regexes` option of the index builder and
+  // `IndexImpl::blankNodeIriRegexes`.
+  bool isBlankNode(const std::vector<std::unique_ptr<re2::RE2>>&
+                       blankNodeIriRegexes = {}) const {
+    if (ql::starts_with(iriOrLiteral_, "_:")) {
+      return true;
+    }
+    // The regexes only apply to IRIs (which start with `<`).
+    if (!ql::starts_with(iriOrLiteral_, "<")) {
+      return false;
+    }
+    return ql::ranges::any_of(blankNodeIriRegexes, [this](const auto& regex) {
+      return re2::RE2::PartialMatch(iriOrLiteral_, *regex);
+    });
+  }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;

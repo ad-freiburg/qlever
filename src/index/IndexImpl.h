@@ -191,6 +191,11 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // Regexes for IRIs that should be treated as blank nodes during index
+  // building (only relevant during index building); see
+  // `blankNodeIriRegexes()`.
+  std::vector<std::string> blankNodeIriRegexes_;
+
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
@@ -291,6 +296,19 @@ class IndexImpl {
   // the `Id`; see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
+
+  // The regexes for IRIs that should be treated as blank nodes during index
+  // building. Each entry is an `RE2` regex; an IRI matching any of them (via
+  // `RE2::PartialMatch`) is stored as a blank node instead of in the
+  // vocabulary. This is useful for IRIs that only act as internal connector
+  // nodes (e.g. statement nodes), to save vocabulary memory. See
+  // `TripleComponentWithIndex::isBlankNode`.
+  std::vector<std::string>& blankNodeIriRegexes() {
+    return blankNodeIriRegexes_;
+  }
+  const std::vector<std::string>& blankNodeIriRegexes() const {
+    return blankNodeIriRegexes_;
+  }
 
   // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
