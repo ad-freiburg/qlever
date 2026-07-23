@@ -95,8 +95,7 @@ struct Adder {
     ColumnIndex resultColIdx = 0;
     auto numColsToDrop =
         static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
-    for (auto source : ad_utility::OwningView{left.getColumns()} |
-                           ql::views::drop(numColsToDrop)) {
+    for (auto source : left.getColumns() | ql::views::drop(numColsToDrop)) {
       auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
@@ -106,8 +105,7 @@ struct Adder {
       cancellationHandle_->throwIfCancelled();
       ++resultColIdx;
     }
-    for (auto source : ad_utility::OwningView{right.getColumns()} |
-                           ql::views::drop(numJoinColumns_)) {
+    for (auto source : right.getColumns() | ql::views::drop(numJoinColumns_)) {
       auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
@@ -130,8 +128,7 @@ struct Adder {
     ColumnIndex resultColIdx = 0;
     auto numColsToDrop =
         static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
-    for (auto source : ad_utility::OwningView{left.getColumns()} |
-                           ql::views::drop(numColsToDrop)) {
+    for (auto source : left.getColumns() | ql::views::drop(numColsToDrop)) {
       auto target = result.getColumn(resultColIdx);
       size_t targetIndex = originalSize;
       for (size_t i = 0; i < missingIndices_.size(); ++i) {
@@ -143,8 +140,7 @@ struct Adder {
       cancellationHandle_->throwIfCancelled();
       ++resultColIdx;
     }
-    for (auto col : ad_utility::OwningView{result.getColumns()} |
-                        ql::views::drop(resultColIdx)) {
+    for (auto col : result.getColumns() | ql::views::drop(resultColIdx)) {
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
           Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,

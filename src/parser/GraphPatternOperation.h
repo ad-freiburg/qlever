@@ -206,8 +206,7 @@ struct Bind {
   auto containedVariables() const {
     auto result = _expression.containedVariables();
     result.push_back(&_target);
-    return ad_utility::OwningView{std::move(result)} |
-           ql::views::transform(ad_utility::dereference);
+    return std::move(result) | ql::views::transform(ad_utility::dereference);
   }
 
   [[nodiscard]] std::string getDescriptor() const;

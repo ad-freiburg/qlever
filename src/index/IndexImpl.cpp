@@ -111,8 +111,7 @@ static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   };
 
   return ad_utility::CachingTransformInputRange{
-      ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset};
+      sorterPtr->template getSortedBlocks<0>(), setSubset};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and

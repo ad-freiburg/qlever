@@ -919,8 +919,7 @@ class OptionalJoinWithIndexScan
     if (!result.isFullyMaterialized()) {
       IdTable lazyResult{optJoin.getResultWidth(), qec_->getAllocator()};
       for (auto& [idTable, localVocab] : result.idTables()) {
-        for (Id id :
-             ad_utility::OwningView{idTable.getColumns()} | ql::views::join) {
+        for (Id id : idTable.getColumns() | ql::views::join) {
           if (id.getDatatype() == Datatype::LocalVocabIndex) {
             EXPECT_TRUE(
                 localVocab.isLocalVocabIndexContained(id.getLocalVocabIndex()));

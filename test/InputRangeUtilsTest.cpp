@@ -142,7 +142,7 @@ TEST(CachingTransformInputRange, Details) {
   };
 
   auto timesTwo = [](auto el) { return el * 2; };
-  auto r = ad_utility::CachingTransformInputRange<ad_utility::OwningView<Gen>,
+  auto r = ad_utility::CachingTransformInputRange<ad_utility::all_t<Gen>,
                                                   decltype(timesTwo), Details>(
       Gen{}, timesTwo);
   for (auto [a, i] : ::ranges::views::enumerate(r)) {

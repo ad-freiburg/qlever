@@ -229,7 +229,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
   // of the result as possible.
   namespace v = ql::views;
   return InputRangeTypeErased{
-      OwningView{getIdTables(result)} |
+      getIdTables(result) |
       v::transform(tableToState)
       // The caching is required to make the pattern of a modifying transform
       // (where the operator* may be called at most once per element) work with
@@ -343,7 +343,7 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
   AD_CORRECTNESS_CHECK(result != nullptr);
 
   auto rowIndicies = getRowIndices(limitAndOffset, *result, resultSize);
-  return ad_utility::OwningView(std::move(rowIndicies)) |
+  return std::move(rowIndicies) |
          ql::views::transform(
              [&qet, columns = std::move(columns), result = std::move(result),
               cancellationHandle =

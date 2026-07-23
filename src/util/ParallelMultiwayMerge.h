@@ -249,9 +249,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     auto beg = rangeOfRanges.begin();
     auto splitIt = beg + split;
     auto end = rangeOfRanges.end();
-    auto join = [](auto&& view) {
-      return ql::views::join(ad_utility::OwningView{AD_FWD(view)});
-    };
+    auto join = [](auto&& view) { return ql::views::join(AD_FWD(view)); };
 
     auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](
                              auto it, auto end) {
