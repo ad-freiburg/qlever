@@ -16,6 +16,7 @@
 #include <variant>
 #include <vector>
 
+#include "global/Id.h"
 #include "global/ValueId.h"
 #include "index/LocalVocab.h"
 
@@ -96,7 +97,7 @@ struct PreprocessedConstructTemplate {
   std::vector<PreprocessedTriple> preprocessedTriples_;
   // The dedupicated set of `IdTable` column indices that appear in the template
   // triples, in order of first encounter.
-  std::vector<size_t> uniqueVariableColumns_;
+  std::vector<ColumnIndex> uniqueVariableColumns_;
   // For each template triple at index i (parallel to `preprocessedTriples_`),
   // this flag is true if the triple contains at least one blank node term
   // (either a user-defined blank-node term like `_:a` or an anonymous blank
