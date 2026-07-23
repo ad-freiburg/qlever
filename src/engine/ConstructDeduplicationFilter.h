@@ -139,9 +139,10 @@ class ConstructDeduplicator {
       const DeduplicationMode& mode,
       std::optional<ad_utility::MemorySize> maxDedupVocabSize);
 
-  // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`, so their lifetime is
-  // extended as appropriate.
-  // All other IDs are returned unchanged.
+  // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`: this ensures that the
+  // `DeduplicationKey`s stored in `TripleDeduplicator` stay valid even after
+  // the `LocalVocab` the id came from is free. All other IDs are returned
+  // unchanged.
   ValueId canonicalize(ValueId id);
 
   // Canonicalize every element of the `key` using `canonicalize` above .
