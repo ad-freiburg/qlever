@@ -11,6 +11,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
+#include "global/Id.h"
 
 namespace {
 
@@ -66,8 +67,8 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   // Evaluate all rows of the `IdTable` with the given variable columns in
   // one single batch.
   BatchEvaluationResult evaluateIdTable(
-      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
-      IdCache& idCache) {
+      const std::vector<ColumnIndex>& variableColumnIndices,
+      const IdTable& idTable, IdCache& idCache) {
     BatchEvaluationContext ctx{idTable.asStaticView<0>(), 0, idTable.numRows()};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
                                                   localVocab_, index_, idCache);
