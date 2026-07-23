@@ -1,4 +1,5 @@
 // Copyright 2026 The QLever Authors, in particular:
+//
 // 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -121,7 +122,9 @@ size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
 
 //______________________________________________________________________________
 ValueId ConstructDeduplicator::canonicalize(ValueId id) {
-  if (id.getDatatype() != Datatype::LocalVocabIndex) return id;  // fast path
+  if (id.getDatatype() != Datatype::LocalVocabIndex) {
+    return id;
+  }  // fast path
   const auto& entry = *id.getLocalVocabIndex();
   size_t sizeBefore = dedupVocab_.size();
   auto index = dedupVocab_.getIndexAndAddIfNotContained(entry);
@@ -130,8 +133,7 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   // size of the `dedupVocab_` for `Global` mode, but delegate it in this case
   // to the `LocalVocab` class itself.
   bool addedNewString = dedupVocab_.size() != sizeBefore;
-  if (std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_) &&
-      addedNewString) {
+  if (isBatchWise() && addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
     resetIfVocabTooLarge();
   }
@@ -150,10 +152,12 @@ DeduplicationKey ConstructDeduplicator::canonicalizeKey(DeduplicationKey key) {
 void ConstructDeduplicator::resetIfVocabTooLarge() {
   // Only `BatchWise` bounds its vocab here; `Global` must stay exact and is
   // never reset.
-  if (!std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_)) {
+  if (!isBatchWise()) {
     return;
   }
-  if (dedupVocabBytes_ < maxDedupVocabBytes_) return;
+  if (dedupVocabBytes_ < maxDedupVocabBytes_) {
+    return;
+  }
   filter_ = TripleDeduplicator{mode_, queryExecutionContext_};
   dedupVocab_ = LocalVocab();
   dedupVocabBytes_ = 0;

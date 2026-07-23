@@ -9,12 +9,9 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
 
-#include <absl/container/inlined_vector.h>
-
 #include <functional>
 #include <optional>
 #include <variant>
-#include <vector>
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
@@ -39,11 +36,11 @@ using ad_utility::DeduplicationMode;
 using ad_utility::HashSetWithMemoryLimit;
 using ad_utility::OverloadCallOperator;
 
-// Stores either all unique previously seen CONSTRUCT triples (global mode), or
-// just the N last seen triples (batchwise mode). When a new triple is passed to
-// the filter (via `insert`), it stores it in the cache. For a previously seen
-// triple that is already in the cache, `insert` just informs the caller that
-// the triple is a duplicate.
+// `TripleDeduplicator` stores either all unique previously seen CONSTRUCT
+// triples (global mode), or just the N last seen triples (batchwise mode). When
+// a new triple is passed to the filter (via `insert`), it stores it in the
+// cache. For a previously seen triple that is already in the cache, `insert`
+// just informs the caller that the triple is a duplicate.
 class TripleDeduplicator {
  public:
   explicit TripleDeduplicator(const DeduplicationMode& mode,
@@ -152,6 +149,12 @@ class ConstructDeduplicator {
   // string bytes reach the threshold, drop all dedup state and start fresh. The
   // filter's keys reference `dedupVocab_`, so both are reset together.
   void resetIfVocabTooLarge();
+
+  // Whether the deduplication mode is `BatchWise`, i.e. the mode that bounds
+  // its `dedupVocab_` and may reset its state (see `resetIfVocabTooLarge`).
+  bool isBatchWise() const {
+    return std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_);
+  }
 };
 
 }  // namespace qlever::constructExport
