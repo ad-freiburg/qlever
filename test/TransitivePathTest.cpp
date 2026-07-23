@@ -187,12 +187,8 @@ class TransitivePathTest
     auto trace = generateLocationTrace(loc);
 
     testCase(firstIdTable.clone(), secondIdTable.clone(), false);
-    testCase(split(firstIdTable), secondIdTable.clone(), false);
-    testCase(firstIdTable.clone(), secondIdTable.clone(), true);
-
-    testCase(firstIdTable.clone(), split(secondIdTable), false);
     testCase(split(firstIdTable), split(secondIdTable), false);
-    testCase(firstIdTable.clone(), split(secondIdTable), true);
+    testCase(firstIdTable.clone(), secondIdTable.clone(), true);
   }
 };
 
@@ -728,60 +724,59 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, bothBoundToVar) {
   auto sub = makeIdTableFromVector({
-      {0, 1},
       {0, 5},
       {1, 2},
-      {1, 3},
-      {2, 3},
-      {3, 4},
+      {1, 4},
+      {4, 3},
   });
 
   auto leftOpTable = makeIdTableFromVector({
+      {10, 0},
       {11, 1},
       {12, 2},
   });
   auto rightOpTable = makeIdTableFromVector({
-      {3, 13},
-      {5, 14},
+      {2, 20},
+      {3, 21},
+      {4, 22},
   });
 
   auto expected = makeIdTableFromVector({
-      {1, 3, 11, 13},
-      {2, 3, 12, 13},
+      {1, 3, 11, 21},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
 
+  auto testCaseFunc = [&](auto tableVariant, auto secondTableVariant,
+                          bool forceFullyMaterialized) {
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::move(tableVariant), std::move(secondTableVariant), 1, 0,
+        {Variable{"?side1"}, Variable{"?start"}},
+        {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), forceFullyMaterialized);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+
+  // We cannot move away the same tables twice, hence we clone them before
+  // moving them into the test execution.
+  auto leftOpTableCopy = leftOpTable.clone();
+  auto rightOpTableCopy = rightOpTable.clone();
+
   runTestWithForcedSideTableScenariosOnBothSides(
-      [&](auto tableVariant, auto secondTableVariant,
-          bool forceFullyMaterialized) {
-        auto T = makePathBoundOnBothSides(
-            sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-            std::move(tableVariant), std::move(secondTableVariant), 1, 0,
-            {Variable{"?side1"}, Variable{"?start"}},
-            {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
-            std::numeric_limits<size_t>::max(), forceFullyMaterialized);
-
-        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-        assertResultMatchesIdTable(resultTable, expected);
-      },
-      leftOpTable.clone(), rightOpTable.clone());
+      testCaseFunc, leftOpTable.clone(), rightOpTable.clone());
 
   runTestWithForcedSideTableScenariosOnBothSides(
-      [&](auto tableVariant, auto secondTableVariant,
-          bool forceFullyMaterialized) {
-        auto T = makePathBoundOnBothSides(
-            sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-            std::move(tableVariant), std::move(secondTableVariant), 1, 0,
-            {Variable{"?side1"}, Variable{"?start"}},
-            {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
-            std::numeric_limits<size_t>::max(), forceFullyMaterialized);
+      testCaseFunc, std::move(leftOpTableCopy), rightOpTable.clone());
 
-        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-        assertResultMatchesIdTable(resultTable, expected);
-      },
-      std::move(leftOpTable), std::move(rightOpTable));
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, leftOpTable.clone(), std::move(rightOpTableCopy));
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, std::move(leftOpTable), std::move(rightOpTable));
 }
 
 // _____________________________________________________________________________

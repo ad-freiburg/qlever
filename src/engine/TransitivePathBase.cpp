@@ -5,8 +5,6 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#include "engine/TransitivePathBase.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <limits>
@@ -216,7 +214,8 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
   LocalVocab mergedVocab{};
-  for (auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] : hull) {
+  for (auto& [node, graph, linkedNodes, localVocab, idTable, targetIdTable,
+              inputRow] : hull) {
     timer.cont();
     // As an optimization nodes without any linked nodes should not get yielded
     // in the first place.
@@ -224,19 +223,32 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     if (!yieldOnce) {
       table.reserve(linkedNodes.size());
     }
-    std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-    if (idTable.has_value()) {
-      inputView = idTable->template asStaticView<INPUT_WIDTH>();
-    }
     for (Id linkedNode : linkedNodes) {
       table.emplace_back();
       table(outputRow, startSideCol) = node;
       table(outputRow, targetSideCol) = linkedNode;
 
-      if (inputView.has_value()) {
-        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow);
+      size_t inputColsCount = 0;
+      if (idTable.has_value()) {
+        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(idTable, table, inputRow,
+                                               outputRow, inputColsCount);
+        inputColsCount += idTable->numColumns();
       }
+      if (targetIdTable.has_value()) {
+        copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(targetIdTable, table, inputRow,
+                                               outputRow, inputColsCount);
+        inputColsCount += targetIdTable->numColumns();
+      }
+      // Ensure the correct amount of columns is kept throughout copying them to
+      // the result.
+      // (This was previously implemented in copyColumns but had to
+      // be moved in order to accomodate of multiple input tables of which only
+      // the total number of columns must match).
+      AD_CORRECTNESS_CHECK(inputColsCount == INPUT_WIDTH);
+      AD_CORRECTNESS_CHECK(inputColsCount +
+                               (graphVariable_.has_value() ? 3 : 2) ==
+                           table.numColumns());
+
       if (graphVariable_.has_value()) {
         table(outputRow, table.numColumns() - 1) = graph;
       }
@@ -621,10 +633,17 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     // of the `variable` to keep the code simpler.
     for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
       ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-      if (columnIndex == col || variable == graphVariable_ ||
-          (otherOpAndCol.has_value() && (otherOpAndCol->second == columnIndex ||
-                                         otherOpAndCol->second == col))) {
+      if (columnIndex == col || variable == graphVariable_) {
         continue;
+      }
+
+      // Don't add the same payload column twice if it is present on both sides.
+      if (otherOpAndCol.has_value()) {
+        const auto& [otherOp, otherCol] = otherOpAndCol.value();
+        if (otherOp->getVariableColumns().contains(variable) &&
+            plan->variableColumns_.contains(variable)) {
+          continue;
+        }
       }
 
       columnIndexWithType.columnIndex_ += columnIndex > col ? 1 : 2;
@@ -639,9 +658,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
           columnIndexWithType.columnIndex_ -= 1;
         }
       }
-      // Ensure all "payload columns" (columns that come with the transitive
-      // path but are irrelevant for the join) are appended to the
-      // `variableColumns_` list.
+      // Ensure all payload columns are appended to the `variableColumns_`.
       AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
       plan->variableColumns_[variable] = columnIndexWithType;
     }
@@ -672,20 +689,19 @@ bool TransitivePathBase::isBoundOrId() const {
 
 // _____________________________________________________________________________
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+void TransitivePathBase::copyColumns(const PayloadTable& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                                     size_t inputRow, size_t outputRow) const {
+                                     size_t inputRow, size_t outputRow,
+                                     size_t outputColOffset) const {
+  // Since there might be multiple payload tables we can only say that the size
+  // of every one of them may not be greater than their total amount of columns.
+  AD_CORRECTNESS_CHECK(inputTable->numColumns() <= INPUT_WIDTH);
+
   size_t inCol = 0;
-  // The first two columns are both sides of the transitive path, then they
-  // are followed by the payload columns (if present) and then the (optional)
-  // graph column follows (but it is not written in this function).
-  size_t outCol = 2;
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() +
-                           (graphVariable_.has_value() ? 3 : 2) ==
-                       outputTable.numColumns());
-  while (inCol < inputTable.numColumns()) {
+  size_t outCol = 2 + outputColOffset;
+  while (inCol < inputTable->numColumns()) {
     AD_CORRECTNESS_CHECK(outCol < outputTable.numColumns());
-    outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
+    outputTable.at(outputRow, outCol) = inputTable->at(inputRow, inCol);
     inCol++;
     outCol++;
   }
