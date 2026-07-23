@@ -1420,8 +1420,7 @@ void QueryPlanner::applyFiltersIfPossible(
       const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
                                     mode == FilterMode::ReplaceUnfiltered;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
-          (filterAndSubst.deduplicator_.expression_.containedVariables()
-               .empty() ||
+          (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
                filterAndSubst.filter_.expression_.containedVariables(),
                [&plan](const auto& variable) {
@@ -1444,13 +1443,13 @@ void QueryPlanner::applyFiltersIfPossible(
           mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
       if (applyAll ||
           ql::ranges::all_of(
-              filterAndSubst.deduplicator_.expression_.containedVariables(),
+              filterAndSubst.filter_.expression_.containedVariables(),
               [&plan](const auto& variable) {
                 return plan._qet->isVariableCovered(*variable);
               })) {
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filterAndSubst.deduplicator_.expression_);
+            _qec, plan._qet, filterAndSubst.filter_.expression_);
         mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan.type = plan.type;
