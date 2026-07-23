@@ -390,9 +390,11 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           permutation, isInternal);
     };
   };
-  auto [resultA, resultB] =
-      co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
-                asCoroutine(makeTaskForPermutation(permutationB)));
+  // Workaround for the bug at
+  // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
+  auto results = co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
+                           asCoroutine(makeTaskForPermutation(permutationB)));
+  auto& [resultA, resultB] = results;
   auto& [_, metaA] = resultA;
   auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);

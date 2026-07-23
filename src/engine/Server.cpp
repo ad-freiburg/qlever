@@ -718,10 +718,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
+    // Workaround for the bug at
+    // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
+    auto preparedOp = prepareOperation(
+        indexAndViews, operationName, operationString, std::move(messageSender),
+        parameters, timeLimit.value(), accessTokenOk, clientIp);
+    auto& [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] = preparedOp;
     auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
