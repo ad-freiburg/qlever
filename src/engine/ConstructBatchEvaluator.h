@@ -52,6 +52,11 @@ using IdCache =
 // Identifies a contiguous sub-range of rows of an `IdTable` that forms one
 // batch.
 struct BatchEvaluationContext {
+  // A non-owning view over the batch's `IdTable`. Stored by value: an
+  // `IdTableView` is a lightweight handle (like `string_view`), so copying it
+  // is cheap, and every caller already hands us a view
+  // (`TableWithVocab::idTable()` returns `const IdTableView<0>&`). The viewed
+  // table must outlive the context.
   IdTableView<0> idTable_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
@@ -80,7 +85,7 @@ class ConstructBatchEvaluator {
   // in `evaluationContext`. Each entry in `variableColumnIndices` is an
   // `IdTable` column index representing a variable in the CONSTRUCT template.
   static BatchEvaluationResult evaluateBatch(
-      ql::span<const size_t> variableColumnIndices,
+      ql::span<const ColumnIndex> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
 
