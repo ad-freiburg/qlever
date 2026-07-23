@@ -16,6 +16,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "engine/CartesianProductJoin.h"
+#include "engine/Distinct.h"
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 
 using namespace ad_utility::testing;
@@ -806,4 +808,103 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_THROW(join.clone(), ad_utility::Exception);
     EXPECT_THROW(join.computeResultOnlyForTesting(), ad_utility::Exception);
   }
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, distinctIsPushedDownIntoChildren) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {0}, {1}}), Vars{Variable{"?a"}});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{5}, {5}}), Vars{Variable{"?b"}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{left, right});
+
+  // A `DISTINCT` over all columns is pushed into the children: the root stays a
+  // `CartesianProductJoin`, each child is made distinct, and no `Distinct` is
+  // added on top.
+  auto tree = QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1});
+  ASSERT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+      tree->getRootOperation()));
+  for (auto* child : tree->getRootOperation()->getChildren()) {
+    EXPECT_TRUE(std::dynamic_pointer_cast<Distinct>(child->getRootOperation()));
+  }
+
+  // `right` (size 2) sorts before `left` (size 3), so the result columns are
+  // `(?b, ?a)` with `?b` deduplicated to `5` and `?a` to `{0, 1}`.
+  EXPECT_EQ(tree->getResult(false)->idTableView(),
+            makeIdTableFromVector({{5, 0}, {5, 1}}));
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, distinctIsNoOpWhenChildrenAlreadyDistinct) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  // Each full index scan is distinct over its own three columns, so the
+  // Cartesian product is distinct over all six columns.
+  auto left = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  auto right = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?a"}}, TC{Variable{"?b"}},
+                         TC{Variable{"?c"}}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{left, right});
+  ASSERT_EQ(cartesian->getResultWidth(), 6u);
+
+  // `DISTINCT *` is a no-op and returns the tree unchanged.
+  EXPECT_EQ(
+      QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1, 2, 3, 4, 5}),
+      cartesian);
+
+  // If only some columns are covered, the product is not distinct, so the
+  // `DISTINCT` is pushed down (the root stays a `CartesianProductJoin`).
+  auto tree = QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1, 2});
+  EXPECT_NE(tree, cartesian);
+  EXPECT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+      tree->getRootOperation()));
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, distinctCollapsesChildWithoutSelectedColumn) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {0}, {1}}), Vars{Variable{"?a"}});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{5}, {6}}), Vars{Variable{"?b"}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{left, right});
+
+  // Only `?a` is selected, so the `?b` child contributes no column. It is
+  // collapsed to a single row via `LIMIT 1`, while the `?a` child is made
+  // distinct; no `Distinct` is added on top.
+  SC distinctIndices{cartesian->getVariableColumn(Variable{"?a"})};
+  auto tree =
+      QueryExecutionTree::createDistinctTree(cartesian, distinctIndices);
+  auto cpj =
+      std::dynamic_pointer_cast<CartesianProductJoin>(tree->getRootOperation());
+  ASSERT_TRUE(cpj);
+  for (auto* child : cpj->getChildren()) {
+    if (child->isVariableCovered(Variable{"?a"})) {
+      EXPECT_TRUE(
+          std::dynamic_pointer_cast<Distinct>(child->getRootOperation()));
+    } else {
+      EXPECT_EQ(child->getRootOperation()->getLimitOffset()._limit, 1u);
+    }
+  }
+
+  // `?b` is collapsed to its first row `5`; `?a` is deduplicated to `{0, 1}`.
+  // The collapsed child (size 1) sorts first, so the columns are `(?b, ?a)`.
+  EXPECT_EQ(tree->getResult(false)->idTableView(),
+            makeIdTableFromVector({{5, 0}, {5, 1}}));
 }

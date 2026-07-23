@@ -214,6 +214,56 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+bool IndexScan::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // The result of an index scan contains every matching triple (or quad, if a
+  // graph column is present) exactly once: duplicate triples are removed during
+  // scanning. The columns that uniquely identify a result row are the triple's
+  // variable columns plus the graph column (if the scan carries one); all other
+  // (payload) columns, e.g. the `pattern` column, are functionally determined
+  // by them. The result is therefore distinct wrt `distinctIndices` iff all of
+  // these identifying columns are still present in the (possibly stripped)
+  // result and are contained in `distinctIndices`.
+
+  // The identifying columns (in the original, unstripped column layout): the
+  // triple's variable columns plus the graph column, if the scan carries one.
+  // This is exactly `resultSortedOn()` of the unstripped scan.
+  std::vector<ColumnIndex> identifyingColumns;
+  for (ColumnIndex col = 0; col < numVariables_; ++col) {
+    identifyingColumns.push_back(col);
+  }
+  for (const auto& [i, column] :
+       ::ranges::views::enumerate(additionalColumns_)) {
+    if (column == ADDITIONAL_COLUMN_GRAPH_ID) {
+      identifyingColumns.push_back(numVariables_ + i);
+    }
+  }
+
+  // Map a result column back to its column index in the unstripped scan.
+  // Without stripping this is the identity, otherwise
+  // `getSubsetForStrippedColumns` maps result column `i` to its original column
+  // index. Because the graph filtering and duplicate removal happen on the full
+  // triple/quad *before* columns are stripped, an identifying column that was
+  // stripped away is simply absent from this mapping, which correctly makes the
+  // scan non-distinct.
+  std::optional<std::vector<ColumnIndex>> strippedSubset =
+      varsToKeep_.has_value() ? std::optional{getSubsetForStrippedColumns()}
+                              : std::nullopt;
+  auto toOriginalColumn = [&strippedSubset](ColumnIndex resultColumn) {
+    return strippedSubset.has_value() ? strippedSubset.value().at(resultColumn)
+                                      : resultColumn;
+  };
+
+  // Distinct iff every identifying column is among the (original) columns that
+  // `distinctIndices` selects.
+  return ql::ranges::all_of(identifyingColumns, [&](ColumnIndex identifying) {
+    return ql::ranges::any_of(distinctIndices, [&](ColumnIndex resultColumn) {
+      return toOriginalColumn(resultColumn) == identifying;
+    });
+  });
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {

@@ -29,6 +29,17 @@ Distinct::Distinct(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
+bool Distinct::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // The result is distinct wrt `distinctIndices` iff `keepIndices_` is a subset
+  // of `distinctIndices` (a superset of the deduplicated columns cannot
+  // reintroduce duplicates).
+  return ql::ranges::all_of(keepIndices_, [&distinctIndices](ColumnIndex col) {
+    return ad_utility::contains(distinctIndices, col);
+  });
+}
+
+// _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {
   return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
                       absl::StrJoin(keepIndices_, ","), ")");

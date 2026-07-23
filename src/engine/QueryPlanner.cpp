@@ -340,7 +340,7 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
       }
     }
     distinctPlan._qet =
-        makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
+        QueryExecutionTree::createDistinctTree(parent._qet, keepIndices);
     added.push_back(distinctPlan);
   }
   return added;

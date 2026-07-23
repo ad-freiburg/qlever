@@ -182,6 +182,23 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qet,
       const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
 
+  // Create a `QueryExecutionTree` that produces the same set of results as
+  // applying a `DISTINCT` on the columns `distinctIndices` to `qet`. In order
+  // of preference:
+  //  - If `qet` is already distinct wrt `distinctIndices` (e.g. a full index
+  //    scan `?s ?p ?o`), `qet` is returned unchanged.
+  //  - If `distinctIndices` is empty, the `DISTINCT` keeps at most one row and
+  //    is realized as a `LIMIT 1` on (a clone of) `qet`.
+  //  - If the root operation can push the `DISTINCT` down into its subtree(s)
+  //    more efficiently (e.g. a `CartesianProductJoin`), that rewritten tree is
+  //    returned.
+  //  - Otherwise a `Distinct` operation is added on top.
+  // The returned tree always exposes the same set of variables as `qet`, but
+  // the column order may differ.
+  static std::shared_ptr<QueryExecutionTree> createDistinctTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::vector<ColumnIndex>& distinctIndices);
+
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
   // a vector of two-dimensional arrays. This format often appears in

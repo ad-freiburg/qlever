@@ -951,3 +951,45 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
       qec, randBindTree, std::vector<ColumnIndex>{});
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }
+
+// _____________________________________________________________________________
+TEST(Operation, isDistinctByRecognizesLimitOne) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 1}}),
+      Vars{Variable{"?x"}, Variable{"?y"}});
+
+  // Without a limit, `ValuesForTesting` is not known to be distinct.
+  EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
+
+  // With `LIMIT 1` the result has at most one row, so it is trivially distinct
+  // wrt any set of columns.
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+  EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{0}));
+  EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{}));
+}
+
+// _____________________________________________________________________________
+TEST(Operation, makeDistinctTreeDefaultRequiresNotAlreadyDistinct) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // `IndexScan` overrides `isDistinctByImpl` but uses the default
+  // `makeDistinctTree` (which returns `nullopt`). The default implementation
+  // asserts that it is only called on operations that are not already distinct.
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  const auto& scanOp = *scan->getRootOperation();
+
+  ASSERT_TRUE(scanOp.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_THROW(scanOp.makeDistinctTree(SC{0, 1, 2}), ad_utility::Exception);
+
+  ASSERT_FALSE(scanOp.isDistinctBy(SC{0}));
+  EXPECT_EQ(scanOp.makeDistinctTree(SC{0}), std::nullopt);
+}
