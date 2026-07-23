@@ -43,15 +43,15 @@ const PreprocessedTriple allSameVarTriple{
     PrecomputedVariable{0}, PrecomputedVariable{0}, PrecomputedVariable{0}};
 
 // Build a minimal template wrapping a single, non-blank-node triple.
-PreprocessedConstructTemplate MakeSingleTripleTemplate() {
+PreprocessedConstructTemplate makeSingleTripleTemplate() {
   PreprocessedConstructTemplate tmpl;
   tmpl.preprocessedTriples_ = {allSameVarTriple};
   tmpl.tripleContainsBlankNode_ = {false};
   return tmpl;
 }
 
-// Non-local-vocab ids (here: an encoded integer) pass through unchanged; the
-// canonicalization fast path leaves them untouched.
+// `makeFullTripleKey` copies an encoded (non-local-vocab) id into the key
+// unchanged, since `canonicalize` only re-anchors `LocalVocabIndex` ids.
 TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
@@ -159,7 +159,7 @@ TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
-  auto tmpl = MakeSingleTripleTemplate();
+  auto tmpl = makeSingleTripleTemplate();
 
   {
     LocalVocab v1;
@@ -178,7 +178,7 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
 TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec};
-  auto tmpl = MakeSingleTripleTemplate();
+  auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v1;
   auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x", *qec));
@@ -197,7 +197,7 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
 TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator state{DeduplicationMode::global(), *qec};
-  auto tmpl = MakeSingleTripleTemplate();
+  auto tmpl = makeSingleTripleTemplate();
   tmpl.tripleContainsBlankNode_ = {true};
 
   auto table = makeIdTable(IntId(1));
@@ -212,7 +212,7 @@ TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
 TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator state{DeduplicationMode::global(), *qec};
-  auto tmpl = MakeSingleTripleTemplate();
+  auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v1;
   Id x = makeLocalVocabIndex(v1, "x", *qec);
@@ -233,7 +233,7 @@ TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator state{DeduplicationMode::batchWise(10), *qec,
                               ad_utility::MemorySize::bytes(1)};
-  auto tmpl = MakeSingleTripleTemplate();
+  auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v;
   auto t = makeIdTable(makeLocalVocabIndex(v, "x", *qec));
@@ -252,7 +252,7 @@ TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
   auto qec = getQec("<s> <p> <o>");
   ConstructDeduplicator state{DeduplicationMode::global(), *qec,
                               ad_utility::MemorySize::bytes(1)};
-  auto tmpl = MakeSingleTripleTemplate();
+  auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v;
   auto t = makeIdTable(makeLocalVocabIndex(v, "x", *qec));
