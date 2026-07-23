@@ -10,14 +10,12 @@
 #include <ctime>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <string>
 
 #include "./util/IdTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
 #include "index/Vocabulary.h"
@@ -320,7 +318,7 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
       [](std::string_view a, bool, std::string_view b, bool) {
         return std::less{}(a, b);
       },
-      wordCallback, 1_GB, &blankNodeIriRegexes);
+      wordCallback, 1_GB, blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
   // (regex-matching but non-IRI) literal remain in the vocabulary, in sorted
@@ -343,15 +341,6 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
                          {V(2), BN(0)},    // <http://ex/bn_1>
                          {V(3), BN(1)},    // <http://ex/bn_2>
                          {V(4), V(2)}}));  // <http://ex/cherry>
-
-  // The blank node ids are distinct from each other.
-  std::set<Id> blankNodeIds;
-  for (const auto& [localId, globalId] : idMap) {
-    if (globalId.getDatatype() == Datatype::BlankNodeIndex) {
-      blankNodeIds.insert(globalId);
-    }
-  }
-  EXPECT_EQ(blankNodeIds.size(), 2);
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {

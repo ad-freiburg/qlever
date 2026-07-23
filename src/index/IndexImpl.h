@@ -192,7 +192,8 @@ class IndexImpl {
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
   // Regexes for IRIs that should be treated as blank nodes during index
-  // building (only relevant during index building); see `blankNodeIriRegexes`.
+  // building (only relevant during index building); see
+  // `blankNodeIriRegexes()`.
   std::vector<std::string> blankNodeIriRegexes_;
 
   // BlankNodeManager, initialized during `readConfiguration`

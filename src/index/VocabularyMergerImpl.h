@@ -30,7 +30,7 @@ template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
                      C& internalWordCallback,
                      ad_utility::MemorySize memoryToUse,
-                     const std::vector<std::string>* blankNodeIriRegexes)
+                     const std::vector<std::string>& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
@@ -44,14 +44,12 @@ template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
     ad_utility::MemorySize memoryToUse,
-    const std::vector<std::string>* blankNodeIriRegexes)
+    const std::vector<std::string>& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   // Compile the regexes for the IRIs that should be treated as blank nodes.
-  if (blankNodeIriRegexes != nullptr) {
-    for (const auto& regex : *blankNodeIriRegexes) {
-      blankNodeIriRegexes_.push_back(std::make_unique<re2::RE2>(regex));
-    }
+  for (const auto& regex : blankNodeIriRegexes) {
+    blankNodeIriRegexes_.push_back(std::make_unique<re2::RE2>(regex));
   }
 
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -135,6 +133,8 @@ CPP_template_def(typename C, typename L)(
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
                                    top.isExternal(), metaData_.numWordsTotal()};
+      lastTripleComponentIsBlankNode_ =
+          lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes_);
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -142,8 +142,6 @@ CPP_template_def(typename C, typename L)(
 
       // Write the new word to the vocabulary.
       auto& nextWord = lastTripleComponent_.value();
-      lastTripleComponentIsBlankNode_ =
-          nextWord.isBlankNode(&blankNodeIriRegexes_);
       if (lastTripleComponentIsBlankNode_) {
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {

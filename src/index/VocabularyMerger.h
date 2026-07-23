@@ -63,7 +63,6 @@ template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
                                              bool>;
-
 // Concept for a callable that compares two `string_view`s with respective
 // `isExternal` flags.
 template <typename T>
@@ -178,14 +177,13 @@ struct VocabularyMetaData {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
-// appearance. Argument `blankNodeIriRegexes` is an optional pointer to a list
-// of regexes; IRIs matching any of them are treated as blank nodes (see
+// appearance. Argument `blankNodeIriRegexes` is a (possibly empty) list of
+// regexes; IRIs matching any of them are treated as blank nodes (see
 // `TripleComponentWithIndex::isBlankNode`).
 template <typename W, typename C>
-auto mergeVocabulary(
-    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
-    ad_utility::MemorySize memoryToUse,
-    const std::vector<std::string>* blankNodeIriRegexes = nullptr)
+auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
+                     C& wordCallback, ad_utility::MemorySize memoryToUse,
+                     const std::vector<std::string>& blankNodeIriRegexes = {})
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
@@ -214,7 +212,7 @@ class VocabularyMerger {
   friend auto mergeVocabulary(
       const std::string& basename, size_t numFiles, W comparator,
       C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::string>* blankNodeIriRegexes)
+      const std::vector<std::string>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -226,7 +224,7 @@ class VocabularyMerger {
   auto mergeVocabulary(const std::string& basename, size_t numFiles,
                        W comparator, C& wordCallback,
                        ad_utility::MemorySize memoryToUse,
-                       const std::vector<std::string>* blankNodeIriRegexes)
+                       const std::vector<std::string>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 

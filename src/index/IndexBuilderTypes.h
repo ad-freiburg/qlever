@@ -61,17 +61,16 @@ struct TripleComponentWithIndex {
   // does not turn that literal into a blank node. See the
   // `--iri-as-blank-node-regexes` option of the index builder and
   // `IndexImpl::blankNodeIriRegexes`.
-  bool isBlankNode(const std::vector<std::unique_ptr<re2::RE2>>*
-                       blankNodeIriRegexes = nullptr) const {
+  bool isBlankNode(const std::vector<std::unique_ptr<re2::RE2>>&
+                       blankNodeIriRegexes = {}) const {
     if (ql::starts_with(iriOrLiteral_, "_:")) {
       return true;
     }
     // The regexes only apply to IRIs (which start with `<`).
-    if (blankNodeIriRegexes == nullptr ||
-        !ql::starts_with(iriOrLiteral_, "<")) {
+    if (!ql::starts_with(iriOrLiteral_, "<")) {
       return false;
     }
-    return ql::ranges::any_of(*blankNodeIriRegexes, [this](const auto& regex) {
+    return ql::ranges::any_of(blankNodeIriRegexes, [this](const auto& regex) {
       return re2::RE2::PartialMatch(iriOrLiteral_, *regex);
     });
   }
