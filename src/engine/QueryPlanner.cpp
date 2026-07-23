@@ -1423,7 +1423,7 @@ void QueryPlanner::applyFiltersIfPossible(
           (filterAndSubst.deduplicator_.expression_.containedVariables()
                .empty() ||
            ql::ranges::any_of(
-               filterAndSubst.deduplicator_.expression_.containedVariables(),
+               filterAndSubst.filter_.expression_.containedVariables(),
                [&plan](const auto& variable) {
                  return plan._qet->isVariableCovered(*variable);
                }))) {
