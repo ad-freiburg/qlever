@@ -13,6 +13,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/Distinct.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
@@ -198,6 +199,66 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   return ad_utility::makeExecutionTree<Sort>(
       rootOperation->getExecutionContext(), std::move(qet), sortColumns,
       explicitSort);
+}
+
+// ________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const std::vector<ColumnIndex>& distinctIndices) {
+  const auto& rootOperation = qet->getRootOperation();
+  // If the result is already distinct wrt the `distinctIndices`, the `DISTINCT`
+  // would be a no-op and we can simply return the tree unchanged.
+  if (rootOperation->isDistinctBy(distinctIndices)) {
+    return qet;
+  }
+
+  // A `DISTINCT` on zero columns keeps at most one row, which is exactly a
+  // `LIMIT 1`. This is much cheaper than a `Distinct` (no sorting or
+  // deduplication, and the limit can terminate the subtree early). We clone
+  // before applying the limit, because `qet` (and its root operation) may be
+  // shared with other query execution trees and `applyLimitOffset` mutates the
+  // operation in place.
+  if (distinctIndices.empty()) {
+    auto limitedQet = qet->clone();
+    limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1});
+    return limitedQet;
+  }
+
+  // Give the root operation the chance to push the `DISTINCT` down into its
+  // subtree(s) more efficiently (e.g. `CartesianProductJoin`).
+  auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
+  if (distinctQet.has_value()) {
+    AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
+    // Pushing the `DISTINCT` down must preserve the set of visible variables,
+    // but the exact column layout may change: e.g. pushing into a
+    // `CartesianProductJoin` can collapse a child to a single row, which
+    // changes its size estimate and thus the order in which the product sorts
+    // its children. This is harmless because `DISTINCT` has set semantics and
+    // variables are accessed by name.
+    const auto& before = qet->getVariableColumns();
+    const auto& after = distinctQet.value()->getVariableColumns();
+    AD_CORRECTNESS_CHECK(before.size() == after.size() &&
+                         ql::ranges::all_of(before | ql::views::keys,
+                                            [&after](const Variable& v) {
+                                              return after.contains(v);
+                                            }));
+    // The rewritten tree must actually be distinct wrt the same columns. Since
+    // the column layout may have changed, translate `distinctIndices` into the
+    // layout of the rewritten tree via the variable names before checking.
+    std::vector<ColumnIndex> translatedIndices;
+    for (const auto& [variable, info] : before) {
+      if (ad_utility::contains(distinctIndices, info.columnIndex_)) {
+        translatedIndices.push_back(after.at(variable).columnIndex_);
+      }
+    }
+    AD_CORRECTNESS_CHECK(translatedIndices.size() == distinctIndices.size());
+    AD_CORRECTNESS_CHECK(distinctQet.value()->getRootOperation()->isDistinctBy(
+        translatedIndices));
+    return std::move(distinctQet).value();
+  }
+
+  return ad_utility::makeExecutionTree<Distinct>(
+      rootOperation->getExecutionContext(), std::move(qet), distinctIndices);
 }
 
 // _____________________________________________________________________________
