@@ -67,6 +67,11 @@ class GraphNameManager {
   // Set the file where the state is persisted to and try to read the state.
   void setFilenameForPersistingAndReadFromDisk(ql::filesystem::path filename);
 
+  // Set the file where the state is persisted to WITHOUT reading the state.
+  // Used when the persistence file of an already loaded index is moved (see
+  // `Qlever::swapInRebuiltIndex`).
+  void setFilenameForPersisting(std::filesystem::path filename);
+
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
     serializer | arg.prefixWithoutBraces_;
     serializer | arg.nextUnallocatedGraph_;

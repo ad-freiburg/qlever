@@ -12,6 +12,8 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
 #include <string>
 #include <variant>
@@ -30,7 +32,6 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
-#include "index/IndexRebuilder.h"
 #include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
@@ -84,6 +85,12 @@ Server::Server(
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
       config.memoryLimit_);
   metrics_->registerCallbacks();
+
+  // Remember the base name of the initially loaded index. A later index rebuild
+  // requires the new index to live in the same directory (see `rebuildIndex`).
+  // The actual index loading (including preloading of materialized views) is
+  // performed by the `Qlever` instance `qlever_`.
+  originalBasename_ = config.baseName_;
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
@@ -321,8 +328,7 @@ std::string Server::describePinResultWithNameForLog(
 
 // ____________________________________________________________________________
 auto Server::prepareOperation(
-    SharedIndexAndView indexAndViews, std::string_view operationName,
-    std::string_view operationSPARQL,
+    std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk, std::string_view clientIp) {
@@ -357,16 +363,27 @@ auto Server::prepareOperation(
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  auto qec = qlever().createQueryExecutionContext(
-      std::move(indexAndViews),
-      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
-        (*sharedMessageSender)(std::move(json));
-      },
-      pinSubtrees, pinResult);
-  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
-                                geoIndexSimplificationInMeters, accessTokenOk,
-                                *qec);
-  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
+  // Return a factory rather than a ready-made context, so the caller can bind
+  // it to whichever snapshot is current when the operation runs (see
+  // `processUpdate`).
+  MakeQueryExecutionContext makeQec =
+      [this, sharedMessageSender = std::move(sharedMessageSender), pinSubtrees,
+       pinResult, pinResultWithName = std::move(pinResultWithName),
+       pinNamedGeoIndex = std::move(pinNamedGeoIndex),
+       geoIndexSimplificationInMeters,
+       accessTokenOk](SharedIndexAndView indexAndViews) {
+        auto qec = qlever().createQueryExecutionContext(
+            std::move(indexAndViews),
+            [sharedMessageSender](std::string json) {
+              (*sharedMessageSender)(std::move(json));
+            },
+            pinSubtrees, pinResult);
+        configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                      geoIndexSimplificationInMeters,
+                                      accessTokenOk, *qec);
+        return qec;
+      };
+  return std::make_tuple(std::move(makeQec), std::move(cancellationHandle),
                          std::move(cancelTimeoutOnDestruction));
 }
 
@@ -489,15 +506,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Conan setup.
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [&index] {
-          // Use `this` explicitly to silence false-positive errors on the
-          // captured `this` being unused.
-          auto counts = index.deltaTriplesManager().modify<DeltaTriplesCount>(
-              [](auto& deltaTriples) {
+        [this] {
+          // Snapshot here, on the (single-threaded) `updateThreadPool_`, so we
+          // modify the currently active index and not a stale one that a
+          // concurrent rebuild may have swapped out (whose changes would be
+          // lost).
+          auto snapshot = indexAndViewsSnapshot();
+          return snapshot->index_.deltaTriplesManager()
+              .modify<DeltaTriplesCount>([](auto& deltaTriples) {
                 deltaTriples.clear();
                 return deltaTriples.getCounts();
               });
-          return counts;
         },
         handle);
     auto countAfterClear = co_await std::move(coroutine);
@@ -521,10 +540,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [&index, handle] {
-          // Use `this` explicitly to silence false-positive errors on the
-          // captured `this` being unused.
-          return index.deltaTriplesManager().modify<nlohmann::json>(
+        [this, handle] {
+          // Snapshot on the update thread (see `clear-delta-triples` above).
+          auto snapshot = indexAndViewsSnapshot();
+          return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
               [handle](auto& deltaTriples) {
                 return deltaTriples.vacuum(handle);
               });
@@ -558,11 +577,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     } else {
       absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
       logCommand(cmd, "rebuilding index");
-      auto fileName =
-          checkParameter("index-name", std::nullopt).value_or("new_index");
-      co_await rebuildIndex(fileName);
-      response =
-          createOkResponse("Done writing", request, MediaType::textPlain);
+      auto config = co_await rebuildIndex(
+          checkParameter("tmp-dir-for-rebuild", std::nullopt),
+          checkParameter("dir-for-old-index", std::nullopt));
+      nlohmann::json json;
+      json["message"] = "Index successfully rebuilt and swapped in";
+      json["dir-for-old-index"] = config.dirForOldIndex_;
+      json["new-index-basename"] = config.finalBasename();
+      response = createJsonResponse(json, request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
@@ -718,11 +740,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
+    auto [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
+        prepareOperation(operationName, operationString,
                          std::move(messageSender), parameters,
                          timeLimit.value(), accessTokenOk, clientIp);
-    auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
         throw std::runtime_error(absl::StrCat(
@@ -730,8 +751,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       }
       if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
         metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
-        co_await processUpdate(indexAndViews, std::move(operations),
-                               requestTimer, tracer, cancellationHandle, qec,
+        co_await processUpdate(std::move(makeQec), std::move(operations),
+                               requestTimer, tracer, cancellationHandle,
                                std::move(request), send, timeLimit.value(),
                                plannedQuery);
       } else {
@@ -740,9 +761,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                              query.hasConstructClause());
         metrics_->startedSparqlOperations_->Add(1, {OperationType::query});
+        // Queries run against a consistent snapshot taken at the start of the
+        // request, so build the execution context from that snapshot here.
+        auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
-                              cancellationHandle, qec, std::move(request), send,
-                              timeLimit.value(), plannedQuery);
+                              cancellationHandle, *qecPtr, std::move(request),
+                              send, timeLimit.value(), plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -1264,12 +1288,11 @@ UpdateMetadata Server::processUpdateImpl(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
+        MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  auto& index = indexAndViews->index_;
+        const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+        std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
       *metrics_->runningSparqlOperations_, "update"};
@@ -1291,9 +1314,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &index, &requestTimer, &cancellationHandle, &updates, &qec,
-       &timeLimit, &plannedUpdate, outerTracer, &metadatas]() {
+      [this, &makeQec, &requestTimer, &cancellationHandle, &updates, &timeLimit,
+       &plannedUpdate, outerTracer, &metadatas]() {
         outerTracer->endTrace("waitingForUpdateThread");
+        // Snapshot and build the context on the update thread (see
+        // `clear-delta-triples`), so the update sees and modifies the currently
+        // active index. The resulting `plannedUpdate` keeps the context alive
+        // past this lambda via `PlannedQuery`'s shared ownership.
+        auto indexAndViews = indexAndViewsSnapshot();
+        auto& index = indexAndViews->index_;
+        auto qecPtr = makeQec(indexAndViews);
+        auto& qec = *qecPtr;
         return index.deltaTriplesManager().modify<json>(
             [this, &index, &cancellationHandle, &plannedUpdate, &updates,
              &requestTimer, &timeLimit, &qec,
@@ -1564,38 +1595,129 @@ Server::createMessageSender<http::request<http::string_body>>(
     std::string_view);
 
 // _____________________________________________________________________________
-Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
-  auto indexAndViews = indexAndViewsSnapshot();
-  auto& index = indexAndViews->index_;
-  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
-    throw std::runtime_error{absl::StrCat(
-        "Can't build index with base name \"", indexBaseName,
-        "\" because there are already files with the same base name "
-        "in the same directory")};
-  }
-  if (!qlever::util::isSubdirectoryOf(indexBaseName, index.getOnDiskBase())) {
-    throw std::runtime_error{absl::StrCat(
-        "Can't build index with base name \"", indexBaseName,
-        "\" because it is not located in the same directory as the "
-        "current index")};
-  }
+Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
+    std::optional<std::string> tmpDirForRebuild,
+    std::optional<std::string> dirForOldIndex) {
+  namespace fs = std::filesystem;
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto& [index, oldManager] = *indexAndViews;
+
+  // Assemble the full rebuild configuration. The defaults are: build the new
+  // index in `rebuild.<current datetime>.tmp`, move the old index to
+  // `previous.<datetime of the build of the current index>`, and serve the
+  // new index from the place of the old one.
+  qlever::IndexRebuildConfig config;
+  config.tmpDirForRebuild_ =
+      std::move(tmpDirForRebuild)
+          .value_or(
+              absl::StrCat("rebuild.",
+                           absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
+                                            absl::Now(), absl::UTCTimeZone()),
+                           ".tmp"));
+  config.dirForOldIndex_ =
+      std::move(dirForOldIndex)
+          .value_or(
+              absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
+  fs::path originalPath{originalBasename_};
+  config.dirForNewIndex_ = originalPath.has_parent_path()
+                               ? originalPath.parent_path().string()
+                               : std::string{"."};
+  config.basenameForNewIndex_ = originalPath.filename().string();
+
+  // Check the two directories that can be set via command parameters: they
+  // must be relative paths (they are resolved against the working directory
+  // of the server, like the base name of the current index), they must be
+  // empty or not exist yet, and they must be subdirectories of the directory
+  // of the current index. The appended dummy file name makes
+  // `isSubdirectoryOf` (which compares the PARENT directories of its
+  // arguments) applicable to a directory.
+  for (const auto& dir : {config.tmpDirForRebuild_, config.dirForOldIndex_}) {
+    fs::path path{dir};
+    if (!path.is_relative()) {
+      throw std::runtime_error{
+          absl::StrCat("The directory \"", dir, "\" must be a relative path")};
+    }
+    if (fs::exists(path) && !fs::is_empty(path)) {
+      throw std::runtime_error{absl::StrCat(
+          "The directory \"", dir, "\" already exists and is not empty")};
+    }
+    if (!qlever::util::isSubdirectoryOf((path / "x").string(),
+                                        originalBasename_)) {
+      throw std::runtime_error{absl::StrCat(
+          "The directory \"", dir,
+          "\" is not a subdirectory of the directory of the current index")};
+    }
+  }
+  // When the old index and the new index end up in the same directory, the
+  // base name of the new index must differ from the current one, otherwise
+  // the renames during the swap would collide.
+  if (fs::path{config.dirForOldIndex_}.lexically_normal() ==
+          fs::path{config.dirForNewIndex_}.lexically_normal() &&
+      config.basenameForNewIndex_ == originalPath.filename().string()) {
+    throw std::runtime_error{absl::StrCat(
+        "The old index cannot be moved to \"", config.dirForOldIndex_,
+        "\" because the new index is served from that directory under the "
+        "same base name")};
+  }
+  // Warn if state that won't carry over to the rebuilt index was previously
+  // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
+  // with a fresh, empty `MaterializedViewsManager`.
+  if (index.getNofTextRecords() > 0) {
+    AD_LOG_WARN << "A text index was loaded for the current index, but text "
+                   "search will no longer work after the rebuild completes. "
+                   "Restart the server using the original index to re-enable "
+                   "text search."
+                << std::endl;
+  }
+  if (oldManager.hasLoadedViews()) {
+    AD_LOG_WARN
+        << "Materialized views were loaded for the current index, but they "
+           "will no longer be available after the rebuild completes. You'll "
+           "have to recompute them on the rebuilt index."
+        << std::endl;
+  }
+  // NOTE: We deliberately use the plain `runFunctionOnExecutor` and not
+  // `computeInNewThread` here: the latter wraps the awaitable in
+  // `ad_utility::interruptible`, whose cancellation-check timer is useless on
+  // this path (the `handle` above can never be cancelled) and whose
+  // timer/parallel-group machinery was the prime suspect in a rare, hard to
+  // reproduce case where a completed rebuild never resumed this coroutine
+  // (all rebuild work done, all threads idle, "Registered ..." never logged).
+  //
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
-  auto coroutine = computeInNewThread(
-      queryThreadPool_,
-      [&index, &handle, &indexBaseName] {
-        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
-        auto [currentSnapshot, localVocabCopy, ownedBlocks] =
-            index.deltaTriplesManager()
-                .getCurrentLocatedTriplesSharedStateWithVocab();
-        qlever::materializeToIndex(index.getImpl(), indexBaseName,
-                                   currentSnapshot, localVocabCopy, ownedBlocks,
-                                   handle, logFileName);
+  auto coroutine = ad_utility::runFunctionOnExecutor(
+      queryThreadPool_.get_executor(),
+      [this, &index, &handle, &config] {
+        return qlever().rebuildIndexToDisk(index, config, handle);
       },
-      handle);
-  co_await std::move(coroutine);
+      net::use_awaitable);
+  auto rebuildResult = co_await std::move(coroutine);
+  // It is important that the swap is done in the update thread pool, because it
+  // prevents other updates from being applied while the diff is computed for
+  // the new index. Otherwise, the new index would be out of sync with the
+  // current index.
+  auto swapRoutine = ad_utility::runFunctionOnExecutor(
+      updateThreadPool_.get_executor(),
+      [this, &index, rebuildResult = std::move(rebuildResult), &handle,
+       &config]() mutable {
+        qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
+                                    config);
+      },
+      net::use_awaitable);
+  co_await std::move(swapRoutine);
+
+  // The swap moved the new index and its rebuild log out of the temporary
+  // directory (see `moveRebuiltIndexIntoPlace`), so it is now empty and can be
+  // removed.
+  std::error_code errorCode;
+  if (!fs::remove(config.tmpDirForRebuild_, errorCode) || errorCode) {
+    AD_LOG_WARN << "Could not remove the temporary directory \""
+                << config.tmpDirForRebuild_ << "\"" << std::endl;
+  }
+  co_return config;
 }
 
 // For helper function `Server::onlyForTestingProcess`

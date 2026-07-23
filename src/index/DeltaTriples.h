@@ -267,6 +267,10 @@ class DeltaTriples {
   // `writeToDisk` will be a nullop.
   void setPersists(std::optional<std::string> filename);
 
+  // Return true if `setPersists()` has been called with a non-nullopt filename,
+  // false otherwise.
+  bool persists() const;
+
   // Write the delta triples to disk to persist them between restarts.
   void writeToDisk() const;
 
@@ -438,6 +442,11 @@ class DeltaTriplesManager {
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 
+  // Set the file where the updates are persisted to WITHOUT reading it. Used
+  // when the persistence file of an already loaded index is moved (see
+  // `Qlever::swapInRebuiltIndex`).
+  void setFilenameForPersistentUpdates(std::string filename);
+
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.
   void clear();
@@ -457,6 +466,9 @@ class DeltaTriplesManager {
              std::vector<ad_utility::BlankNodeManager::LocalBlankNodeManager::
                              OwnedBlocksEntry>>
   getCurrentLocatedTriplesSharedStateWithVocab() const;
+
+  // Call `DeltaTriples::persists()`.
+  bool persists() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

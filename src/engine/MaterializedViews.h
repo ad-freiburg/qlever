@@ -291,6 +291,21 @@ class MaterializedViewsManager {
   // Check if a materialized view is currently loaded.
   bool isViewLoaded(const std::string& name) const;
 
+  // Check if any materialized view is currently loaded.
+  bool hasLoadedViews() const;
+
+  // Return the names of all view files (of all views, loaded or not) that
+  // exist on disk for the given index basename. Views are loaded lazily by
+  // name, so the only way to enumerate them is to scan the directory for
+  // files with the `<basename>.view.` prefix.
+  static std::vector<std::string> viewFilesOnDisk(
+      const std::string& onDiskBase);
+
+  // Overload of the above for this manager's index basename.
+  std::vector<std::string> viewFilesOnDisk() const {
+    return viewFilesOnDisk(onDiskBase_);
+  }
+
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).

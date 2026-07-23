@@ -639,6 +639,34 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(std::as_const(index).parserBufferSize(), 8_kB);
 }
 
+// _____________________________________________________________________________
+TEST(IndexTest, destructorLogsUnloading) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  // An `Index` that still owns its `IndexImpl` logs on destruction.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Index at someIndexBase was unloaded"));
+  }
+  // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
+  // silent on destruction. We reset it while `movedInto` is still alive, so no
+  // unload message may be logged at that point.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    Index movedInto{std::move(index).value()};
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
+  }
+}
+
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using enum qlever::Filetype;

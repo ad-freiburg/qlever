@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <future>
 #include <numeric>
@@ -1143,9 +1144,9 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
   }
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        onDiskBase + ".update-triples");
+        absl::StrCat(onDiskBase, UPDATE_TRIPLES_SUFFIX));
     graphNameManager_.setFilenameForPersistingAndReadFromDisk(
-        onDiskBase + ".allocated-graphs-state");
+        absl::StrCat(onDiskBase, ALLOCATED_GRAPHS_SUFFIX));
   }
 }
 
@@ -1215,6 +1216,59 @@ void IndexImpl::setKbName(const std::string& name) {
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   onDiskBase_ = onDiskBase;
+}
+
+// ____________________________________________________________________________
+std::vector<std::string> IndexImpl::allIndexFiles(
+    const std::string& onDiskBase) {
+  std::vector<std::string> candidates;
+
+  // The six permutations and the two internal permutations, each with their
+  // `.meta` file.
+  for (auto permutation : Permutation::all<false>()) {
+    ql::ranges::move(Permutation::fileNames(permutation, onDiskBase),
+                     std::back_inserter(candidates));
+  }
+  auto internalBase = absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX);
+  for (auto permutation : Permutation::all<true>()) {
+    ql::ranges::move(Permutation::fileNames(permutation, internalBase),
+                     std::back_inserter(candidates));
+  }
+
+  // Files with a fixed name.
+  candidates.push_back(onDiskBase + ".index.patterns");
+  candidates.push_back(onDiskBase + CONFIGURATION_FILE);
+  candidates.push_back(onDiskBase + ".settings.json");
+  candidates.push_back(absl::StrCat(onDiskBase, UPDATE_TRIPLES_SUFFIX));
+  candidates.push_back(absl::StrCat(onDiskBase, ALLOCATED_GRAPHS_SUFFIX));
+  candidates.push_back(onDiskBase + ".text.index");
+  candidates.push_back(onDiskBase + ".text.vocabulary");
+  candidates.push_back(onDiskBase + ".text.docsDB");
+
+  // Not all of the above exist for every index (e.g. the text index or the
+  // persisted updates are optional), so filter by existence.
+  std::erase_if(candidates, [](const std::string& filename) {
+    return !std::filesystem::exists(filename);
+  });
+
+  // The set of vocabulary files depends on the vocabulary type, but they all
+  // start with `<onDiskBase>.vocabulary`, so enumerate them via that prefix.
+  namespace fs = std::filesystem;
+  fs::path base{onDiskBase};
+  auto directory = base.parent_path();
+  if (directory.empty()) {
+    directory = ".";
+  }
+  std::string vocabPrefix =
+      absl::StrCat(std::string{base.filename()}, VOCAB_SUFFIX);
+  for (const auto& entry : fs::directory_iterator{directory}) {
+    if (entry.is_regular_file() &&
+        ql::starts_with(std::string{entry.path().filename()}, vocabPrefix)) {
+      candidates.push_back(entry.path().string());
+    }
+  }
+
+  return candidates;
 }
 
 // ____________________________________________________________________________

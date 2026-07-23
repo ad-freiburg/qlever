@@ -59,6 +59,12 @@ void GraphNameManager::setFilenameForPersistingAndReadFromDisk(
 }
 
 // _____________________________________________________________________________
+void GraphNameManager::setFilenameForPersisting(
+    std::filesystem::path filename) {
+  filenameForPersisting_ = std::move(filename);
+}
+
+// _____________________________________________________________________________
 void to_json(nlohmann::json& j, const GraphNameManager& namespaceManager) {
   j["prefix"] = namespaceManager.prefixWithoutBraces_;
   j["allocatedGraphs"] = namespaceManager.nextUnallocatedGraph_.load();

@@ -480,6 +480,31 @@ bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
 }
 
 // _____________________________________________________________________________
+bool MaterializedViewsManager::hasLoadedViews() const {
+  return !loadedViews_.rlock()->views_.empty();
+}
+
+// _____________________________________________________________________________
+std::vector<std::string> MaterializedViewsManager::viewFilesOnDisk(
+    const std::string& onDiskBase) {
+  namespace fs = std::filesystem;
+  fs::path base{onDiskBase};
+  auto directory = base.parent_path();
+  if (directory.empty()) {
+    directory = ".";
+  }
+  std::string prefix = absl::StrCat(std::string{base.filename()}, ".view.");
+  std::vector<std::string> result;
+  for (const auto& entry : fs::directory_iterator{directory}) {
+    if (entry.is_regular_file() &&
+        ql::starts_with(std::string{entry.path().filename()}, prefix)) {
+      result.push_back(entry.path().string());
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
 void MaterializedView::throwIfScanColumnMissing(
     const std::optional<TripleComponent>& s) const {
   // The scan column must be set.
@@ -634,8 +659,8 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
   AD_CORRECTNESS_CHECK(
-      onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
-      "Changing the on disk basename is not allowed.");
+      loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed once views are loaded.");
   onDiskBase_ = onDiskBase;
 }
 

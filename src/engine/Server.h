@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
+#include <absl/functional/any_invocable.h>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -51,12 +53,20 @@ class ServerForTesting;
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
+  // Build a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
+  // capturing the request-specific settings (message sender, pinning). This
+  // lets the caller bind the context to whichever snapshot is current when the
+  // operation actually runs (see `processUpdate`).
+  using MakeQueryExecutionContext =
+      absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
+          SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
   friend serverTestHelpers::ServerForTesting;
 
  public:
@@ -104,6 +114,12 @@ class Server {
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
+
+  // Store the basename of the original index that was loaded when the server
+  // started. This is used to check that any rebuilt index is stored in the same
+  // directory, because any new index will have a different basename and we
+  // don't want to infinitely nest the index directories.
+  std::string originalBasename_;
 
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
@@ -198,11 +214,11 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
+          MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
+          const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+          std::optional<PlannedQuery>& plannedUpdate);
 
   // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
@@ -236,8 +252,7 @@ class Server {
       std::optional<double> geoIndexSimplificationInMeters);
   FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
-  auto prepareOperation(SharedIndexAndView indexAndViews,
-                        std::string_view operationName,
+  auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
@@ -365,10 +380,17 @@ class Server {
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
-  // Trigger an index rebuild with `indexBaseName` as the base name for the new
-  // index. This assumes that the access token has already been checked and no
-  // other build is currently in progress.
-  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+  // Trigger an index rebuild: build a new index from the current state
+  // (including updates) in a temporary directory, swap it in, move the old
+  // index to the directory for the old index, and move the new index to the
+  // place of the old one (see `Qlever::swapInRebuiltIndex`). The two optional
+  // arguments override the defaults for the temporary directory and the
+  // directory for the old index; the full resolved configuration is returned.
+  // This assumes that the access token has already been checked and no other
+  // rebuild is currently in progress.
+  Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
+      std::optional<std::string> tmpDirForRebuild,
+      std::optional<std::string> dirForOldIndex);
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }

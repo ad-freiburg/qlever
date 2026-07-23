@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -20,7 +21,9 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/IndexRebuilderTypes.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
@@ -69,6 +72,31 @@ struct CommonConfig {
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
   // word in the literal. This is useful for keyword search in literals.
   bool addHasWordTriples_ = false;
+};
+
+// Configuration for a runtime index rebuild (see `Qlever::rebuildIndexToDisk`
+// and `Qlever::swapInRebuiltIndex`). All paths are relative to the working
+// directory of the engine.
+struct IndexRebuildConfig {
+  // The temporary directory in which the new index is built. After the new
+  // index has been moved to its final place, the directory is removed again.
+  std::string tmpDirForRebuild_;
+
+  // The directory to which the files of the old index are moved when the new
+  // index is swapped in. That directory is then a complete index that a
+  // server can be started on.
+  std::string dirForOldIndex_;
+
+  // The directory and base name under which the new index is served after
+  // the swap (and from which a later restart loads it).
+  std::string dirForNewIndex_ = ".";
+  std::string basenameForNewIndex_;
+
+  // The base name of the new index during the rebuild.
+  std::string tmpBasename() const;
+
+  // The base name of the new index after the swap.
+  std::string finalBasename() const;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -409,6 +437,53 @@ class Qlever {
   void swapIndexAndViews(std::shared_ptr<IndexAndViews> indexAndViews) {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
+
+  // The result of the first phase of an index rebuild (see
+  // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
+  // of the rebuild, the mapping from the old vocabulary `Id`s to the new ones,
+  // and the freshly built index (loaded from disk) paired with a fresh, empty
+  // `MaterializedViewsManager`.
+  using RebuildResult =
+      std::tuple<LocatedTriplesSharedState, indexRebuilder::IndexRebuildMapping,
+                 std::shared_ptr<IndexAndViews>>;
+
+  // The two functions below implement an index rebuild. They are only available
+  // in the C++20 build. They rely on `materializeToIndex` and
+  // `DeltaTriples::addFromSnapshotDiff`, which are excluded from the reduced
+  // C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+  // Build a new index from the current state of `index` and write it to disk
+  // in the temporary directory given by `config` (the directory is created if
+  // it does not exist), then load it into a fresh `IndexAndViews`. This is
+  // the expensive, read-only first phase of an index rebuild. It returns the
+  // data required by `swapInRebuiltIndex` to atomically switch over to the
+  // new index. `handle` can be used to cancel the rebuild. The reason why
+  // `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
+  [[nodiscard]] RebuildResult rebuildIndexToDisk(
+      Index& index, const IndexRebuildConfig& config,
+      const ad_utility::SharedCancellationHandle& handle) const;
+
+  // Remap the delta triples that accumulated on the old `index` (which has to
+  // be the exact same index that was used to create `rebuildResult`) onto the
+  // freshly built index (using the `rebuildResult` produced by
+  // `rebuildIndexToDisk`) and atomically swap the new index in. Calling this
+  // also persists the remapped delta triples to disk so that they are not lost
+  // if the engine is later restarted on the rebuilt index. The reason why
+  // `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs. It is crucial
+  // that this function is only called when you can guarantee no updates are
+  // added during the duration of this function call.
+  //
+  // Before the swap, the files of the old index are moved to the directory
+  // for the old index given by `config`, and the files of the new index are
+  // moved from the temporary directory to their final place (also given by
+  // `config`, by default the place of the old index).
+  void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
+                          const ad_utility::SharedCancellationHandle& handle,
+                          const IndexRebuildConfig& config);
+#endif
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }

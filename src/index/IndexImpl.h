@@ -470,6 +470,18 @@ class IndexImpl {
 
   void setOnDiskBase(const std::string& onDiskBase);
 
+  // Return the names of all files that belong to the index with the given
+  // base name and currently exist on disk (permutations and their metadata,
+  // vocabulary, patterns, configuration, text index, persisted updates,
+  // etc.). Files that merely share the base name but belong to the server
+  // (e.g. the metrics log) are NOT included. This is used to move an index to
+  // a different directory after an index rebuild.
+  //
+  // NOTE: The files of the materialized views are not included either; they
+  // are enumerated by `MaterializedViewsManager::viewFilesOnDisk`, which
+  // lives on the level of the `Qlever` class.
+  static std::vector<std::string> allIndexFiles(const std::string& onDiskBase);
+
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
