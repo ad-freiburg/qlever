@@ -169,6 +169,12 @@ class AllocatorWithLimit {
   AllocatorWithLimit<U> as() const {
     return AllocatorWithLimit<U>(memoryLeft_);
   }
+  // This allocator has no default constructor, as it always requires a memory
+  // limit. Note: never store a `std::vector<T, AllocatorWithLimit<T>>`
+  // directly; use `ad_utility::VectorWithMemoryLimit<T>` instead. The latter is
+  // not `default_initializable`, which avoids hard compile errors with the
+  // ranges library on standard-library implementations (e.g. libc++) that
+  // wrongly consider such a `std::vector` default-constructible.
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
