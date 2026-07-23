@@ -30,18 +30,19 @@ Id lvId(LocalVocab& vocab, std::string_view s,
       LocalVocabEntry::literalWithoutQuotes(s, qec.getLocalVocabContext())));
 }
 
-// A one-column, one-row `IdTable` holding `id`.
+// Build a one-column, one-row `IdTable` holding `id`.
 IdTable singleIdTable(Id id) {
   IdTable t{1, ad_utility::testing::makeAllocator()};
   t.push_back({id});
   return t;
 }
 
-// A template triple with the same variable (column 0) in all three positions.
+// Make a template triple with the same variable (column 0) in all three
+// positions.
 const PreprocessedTriple kVarTriple{
     PrecomputedVariable{0}, PrecomputedVariable{0}, PrecomputedVariable{0}};
 
-// A minimal template wrapping a single, non-blank-node triple.
+// Build a minimal template wrapping a single, non-blank-node triple.
 PreprocessedConstructTemplate singleTripleTemplate() {
   PreprocessedConstructTemplate tmpl;
   tmpl.preprocessedTriples_ = {kVarTriple};

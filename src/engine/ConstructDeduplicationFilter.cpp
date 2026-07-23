@@ -18,7 +18,7 @@ bool TripleDeduplicator::insert(const DeduplicationKey& key) {
           [&key](HashSetWithMemoryLimit<DeduplicationKey>& set) {
             return set.insert(key).second;
           }},
-      filter_);
+      deduplicator_);
 }
 
 //______________________________________________________________________________

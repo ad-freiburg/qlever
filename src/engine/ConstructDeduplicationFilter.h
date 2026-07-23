@@ -48,7 +48,7 @@ class TripleDeduplicator {
  public:
   explicit TripleDeduplicator(const DeduplicationMode& mode,
                               const QueryExecutionContext& executionContext)
-      : filter_{makeDeduplicator(mode, executionContext)} {}
+      : deduplicator_{makeDeduplicator(mode, executionContext)} {}
 
   // Return true if `key` is new (not a duplicate), false otherwise.
   bool insert(const DeduplicationKey& key);
@@ -57,7 +57,7 @@ class TripleDeduplicator {
   using Deduplicator = std::variant<LruDeduplicationCache,
                                     HashSetWithMemoryLimit<DeduplicationKey>>;
 
-  Deduplicator filter_;
+  Deduplicator deduplicator_;
 
   // Build the dedup structure for `mode`: an unbounded hash set for `Global`
   // and a bounded LRU cache for `BatchWise` (capacity = batch size).
@@ -104,14 +104,14 @@ class ConstructDeduplicator {
                                      size_t absoluteRowIdx,
                                      const BatchEvaluationContext& ctx);
 
-  // Returns true if the instantiation of template triple `tripleIdx` at
+  // Return true if the instantiation of template triple `tripleIdx` at
   // `absoluteRowIdx` is new (should be emitted), false if it is a duplicate
   // (skip).
   bool isNew(size_t tripleIdx, size_t absoluteRowIdx,
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx);
 
-  // Inserts a ground triple's full-triple `key` into the shared filter, so that
+  // Insert a ground triple's full-triple `key` into the shared filter, so that
   // a later non-ground instantiation of the same triple is suppressed. The key
   // is canonicalized into `dedupVocab_` first, so it matches the keys built by
   // `makeFullTripleKey` (otherwise a ground triple with a local-vocab constant
@@ -137,9 +137,10 @@ class ConstructDeduplicator {
   // constructing this state (see the class comment).
   TripleDeduplicator filter_;
 
-  // The byte threshold for `dedupVocab_`: the explicit `maxDedupVocabSize` if
-  // given, else a mode-dependent default (batch-size-relative for `BatchWise`,
-  // a quarter of available memory for `Global`; see the definition).
+  // Compute the byte threshold for `dedupVocab_`: the explicit
+  // `maxDedupVocabSize` if given, else a mode-dependent default (batch-size-
+  // relative for `BatchWise`, a quarter of available memory for `Global`; see
+  // the definition).
   static size_t computeMaxDedupVocabBytes(
       const DeduplicationMode& mode,
       const QueryExecutionContext& queryExecutionContext,
