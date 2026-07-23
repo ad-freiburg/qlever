@@ -124,7 +124,7 @@ class ConstructDeduplicator {
   // mode; `0` (unused) in `Global` mode.
   size_t maxDedupVocabBytes_;
 
-  // Owns every local-vocab entry referenced by a stored key
+  // Owns every local-vocab entry referenced by a stored key.
   LocalVocab dedupVocab_;
 
   // The deduplicator that decides whether a triple was already emitted.
@@ -141,11 +141,11 @@ class ConstructDeduplicator {
 
   // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`: this ensures that the
   // `DeduplicationKey`s stored in `TripleDeduplicator` stay valid even after
-  // the `LocalVocab` the id came from is free. All other IDs are returned
+  // the `LocalVocab` the id came from is freed. All other IDs are returned
   // unchanged.
   ValueId canonicalize(ValueId id);
 
-  // Canonicalize every element of the `key` using `canonicalize` above .
+  // Canonicalize every element of the `key` using `canonicalize` above.
   DeduplicationKey canonicalizeKey(DeduplicationKey key);
 
   // Bound `dedupVocab_`s memory in `BatchWise` mode: once the accumulated

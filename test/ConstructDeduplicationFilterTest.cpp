@@ -23,13 +23,6 @@ using ad_utility::DeduplicationMode;
 using ad_utility::testing::getQec;
 using ad_utility::testing::IntId;
 
-// Add `s` as a literal to `vocab` and return its `Id` (a `LocalVocabIndex`).
-Id makeLocalVocabIndex(LocalVocab& vocab, std::string_view s,
-                       const QueryExecutionContext& qec) {
-  return Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::literalWithoutQuotes(s, qec.getLocalVocabContext())));
-}
-
 // Build a one-column, one-row `IdTable` holding `id`.
 IdTable makeIdTable(Id id) {
   IdTable t{1, ad_utility::testing::makeAllocator()};
@@ -50,11 +43,31 @@ PreprocessedConstructTemplate makeSingleTripleTemplate() {
   return tmpl;
 }
 
+// Shared fixture: holds the `QueryExecutionContext` every test needs and offers
+// helpers to build a `Global`-mode deduplicator and local-vocab ids on it.
+class ConstructDeduplicationFilter : public ::testing::Test {
+ protected:
+  QueryExecutionContext* qec_ = getQec("<s> <p> <o>");
+
+  // Build a `ConstructDeduplicator` in `Global` mode on `qec_`.
+  ConstructDeduplicator makeGlobalDeduplicator(
+      std::optional<ad_utility::MemorySize> maxDedupVocabSize = std::nullopt) {
+    return ConstructDeduplicator{DeduplicationMode::global(), *qec_,
+                                 maxDedupVocabSize};
+  }
+
+  // Add `s` as a literal to `vocab` and return its `Id` (a `LocalVocabIndex`).
+  Id makeLocalVocabIndex(LocalVocab& vocab, std::string_view s) {
+    return Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(s,
+                                              qec_->getLocalVocabContext())));
+  }
+};
+
 // `makeFullTripleKey` copies an encoded (non-local-vocab) id into the key
 // unchanged, since `canonicalize` only re-anchors `LocalVocabIndex` ids.
-TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   Id id = IntId(42);
   auto table = makeIdTable(id);
@@ -72,14 +85,13 @@ TEST(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 // pass even without any reseating. Instead, we require that the reseated ids
 // are bitwise identical to each other (same `dedupVocab_` entry) yet bitwise
 // distinct from both sources (proving they were actually moved).
-TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, crossVocabCollapse) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   LocalVocab v1;
   LocalVocab v2;
-  Id src1 = makeLocalVocabIndex(v1, "x", *qec);
-  Id src2 = makeLocalVocabIndex(v2, "x", *qec);
+  Id src1 = makeLocalVocabIndex(v1, "x");
+  Id src2 = makeLocalVocabIndex(v2, "x");
   auto t1 = makeIdTable(src1);
   auto t2 = makeIdTable(src2);
   BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
@@ -102,20 +114,19 @@ TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
 // A key built from a `LocalVocab` that is then destroyed must not dangle: the
 // reseated ids live in `dedupVocab_`, which outlives the source. Run under ASan
 // to turn a lifetime regression into a detected use-after-free.
-TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   DeduplicationKey key1;
   {
     LocalVocab tmp;  // destroyed at the end of this scope
-    auto table = makeIdTable(makeLocalVocabIndex(tmp, "x", *qec));
+    auto table = makeIdTable(makeLocalVocabIndex(tmp, "x"));
     BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
     key1 = deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
   }  // `tmp` (and its entries) gone; `key1` must still be valid.
 
   LocalVocab fresh;
-  auto table = makeIdTable(makeLocalVocabIndex(fresh, "x", *qec));
+  auto table = makeIdTable(makeLocalVocabIndex(fresh, "x"));
   BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
   // Comparing/hashing `key1` here dereferences its ids; so it must not read
   // freed memory, and `key1` must still equal the equal-string key from a fresh
@@ -125,9 +136,8 @@ TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
 
 // A constant position contributes its precomputed `dedupId_` to the key
 // (rather than reading anything from the row).
-TEST(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   PreprocessedTriple constTriple{PrecomputedConstant{{}, IntId(7)},
                                  PrecomputedConstant{{}, IntId(8)},
@@ -141,9 +151,8 @@ TEST(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
 
 // Building a key for a blank-node position is a precondition violation:
 // blank-node triples bypass deduplication and never reach `makeFullTripleKey`.
-TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   PreprocessedTriple blankNodeTriple{PrecomputedBlankNode{"_:g", "_0"},
                                      PrecomputedVariable{0},
@@ -156,37 +165,35 @@ TEST(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
 
 // `global` dedup collapses the same local-vocab triple across two result
 // blocks (each with its own, separately-destroyed `LocalVocab`).
-TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
 
   {
     LocalVocab v1;
-    auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x", *qec));
+    auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x"));
     BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
     EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));  // first occurrence
   }  // block-1 vocab freed before block-2 is seen
 
   LocalVocab v2;
-  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x", *qec));
+  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x"));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c2));  // duplicate across blocks
 }
 
 // Same as above, but through the `BatchWise` (LRU) filter path.
-TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec};
+TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
+  ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_};
   auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v1;
-  auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x", *qec));
+  auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x"));
   BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
   EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));
 
   LocalVocab v2;
-  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x", *qec));
+  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x"));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c2));
 }
@@ -194,9 +201,8 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
 // A template triple flagged as containing a blank node is always reported
 // "new": blank-node triples bypass deduplication, so no key is built and
 // nothing is ever recorded (so a second call is "new" again too).
-TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
+  ConstructDeduplicator state = makeGlobalDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
   tmpl.tripleContainsBlankNode_ = {true};
 
@@ -209,17 +215,16 @@ TEST(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
 // A ground triple seeded with a local-vocab constant suppresses a later
 // non-ground instantiation of the same triple. This exercises `canonicalizeKey`
 // (the seed and the non-ground key must agree after reseating).
-TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator state{DeduplicationMode::global(), *qec};
+TEST_F(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
+  ConstructDeduplicator state = makeGlobalDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v1;
-  Id x = makeLocalVocabIndex(v1, "x", *qec);
+  Id x = makeLocalVocabIndex(v1, "x");
   state.seedGroundTriple(DeduplicationKey{x, x, x});
 
   LocalVocab v2;
-  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x", *qec));
+  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x"));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // suppressed by the ground seed
 }
@@ -229,14 +234,13 @@ TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
 // approximate: the same local-vocab triple is reported "new" again after the
 // reset (rather than a duplicate). Contrast with `dedupAcrossBlocksBatchWise`,
 // which uses the default (large) threshold and deduplicates.
-TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator state{DeduplicationMode::batchWise(10), *qec,
+TEST_F(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
+  ConstructDeduplicator state{DeduplicationMode::batchWise(10), *qec_,
                               ad_utility::MemorySize::bytes(1)};
   auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v;
-  auto t = makeIdTable(makeLocalVocabIndex(v, "x", *qec));
+  auto t = makeIdTable(makeLocalVocabIndex(v, "x"));
   BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
@@ -248,14 +252,13 @@ TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
 // `global` dedup is exact and is never reset on memory pressure: the vocab
 // threshold does not apply to it. So even with a 1-byte threshold the identical
 // triple is still recognized as a duplicate.
-TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
-  auto qec = getQec("<s> <p> <o>");
-  ConstructDeduplicator state{DeduplicationMode::global(), *qec,
-                              ad_utility::MemorySize::bytes(1)};
+TEST_F(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
+  ConstructDeduplicator state =
+      makeGlobalDeduplicator(ad_utility::MemorySize::bytes(1));
   auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v;
-  auto t = makeIdTable(makeLocalVocabIndex(v, "x", *qec));
+  auto t = makeIdTable(makeLocalVocabIndex(v, "x"));
   BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
@@ -267,17 +270,15 @@ TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
 // `TripleDeduplicator` must never be constructed for `none`: the caller creates
 // no filter in that mode, so building one is a precondition violation (see the
 // `AD_CONTRACT_CHECK` in `TripleDeduplicator::makeDeduplicator`).
-TEST(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
-  auto qec = getQec("<s> <p> <o>");
-  EXPECT_ANY_THROW(TripleDeduplicator(DeduplicationMode::none(), *qec));
+TEST_F(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
+  EXPECT_ANY_THROW(TripleDeduplicator(DeduplicationMode::none(), *qec_));
 }
 
 // `None` is not modelled by `ConstructDeduplicator`: the caller handles
 // it by not constructing the state at all. Constructing it with `None` is a
 // precondition violation.
-TEST(ConstructDeduplicationFilter, noneModeIsRejected) {
-  auto qec = getQec("<s> <p> <o>");
-  EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec));
+TEST_F(ConstructDeduplicationFilter, noneModeIsRejected) {
+  EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec_));
 }
 
 }  // namespace
