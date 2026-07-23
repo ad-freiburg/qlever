@@ -52,12 +52,7 @@ ConstructDeduplicator::ConstructDeduplicator(
       queryExecutionContext_{queryExecutionContext},
       maxDedupVocabBytes_{computeMaxDedupVocabBytes(mode, queryExecutionContext,
                                                     maxDedupVocabSize)},
-      filter_{mode, queryExecutionContext} {
-  AD_CONTRACT_CHECK(
-      !std::holds_alternative<DeduplicationMode::None>(mode.value_),
-      "`ConstructDeduplicator` must not be constructed for `None` mode; "
-      "the caller handles `None` by not constructing it.");
-}
+      filter_{mode, queryExecutionContext} {}
 
 //______________________________________________________________________________
 DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
@@ -92,7 +87,6 @@ bool ConstructDeduplicator::isNew(size_t templateTripleIdx,
   if (tmpl.tripleContainsBlankNode_[templateTripleIdx]) {
     return true;
   }
-  resetIfVocabTooLarge();
   return filter_.insert(makeFullTripleKey(
       tmpl.preprocessedTriples_[templateTripleIdx], rowIdxInIdTable, ctx));
 }
@@ -121,8 +115,8 @@ size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
           std::get_if<DeduplicationMode::BatchWise>(&mode.value_)) {
     return batchWise->batchSize_ * bytesPerDedupKey;
   }
-  return (queryExecutionContext.getAllocator().amountMemoryLeft() / 4)
-      .getBytes();
+  // for `DeduplicationMode::Global` there should be no deduplication.
+  return 0;
 }
 
 //______________________________________________________________________________
@@ -133,6 +127,7 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   auto index = dedupVocab_.getIndexAndAddIfNotContained(entry);
   if (dedupVocab_.size() != sizeBefore) {  // a new string was actually added
     dedupVocabBytes_ += entry.toStringRepresentation().size();
+    resetIfVocabTooLarge();
   }
   return ValueId::makeFromLocalVocabIndex(index);
 }

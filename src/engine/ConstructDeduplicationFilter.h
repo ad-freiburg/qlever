@@ -95,19 +95,19 @@ class ConstructDeduplicator {
       std::optional<ad_utility::MemorySize> maxDedupVocabSize = std::nullopt);
 
   // Construct the deduplication key for the instantiation of `triple` at
-  // `absoluteRowIdx`: the `ValueId` at each of the three positions (subject,
+  // `rowIdxInIdTable`: the `ValueId` at each of the three positions (subject,
   // predicate, object), taken from the constant's `dedupId_` or the variable's
   // bound `ValueId` in the row. Every id is canonicalized into `dedupVocab_` so
   // the key never references a foreign (block/template) `LocalVocab` that may
   // outlive the deduplication filter.
   DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
-                                     size_t absoluteRowIdx,
+                                     size_t rowIdxInIdTable,
                                      const BatchEvaluationContext& ctx);
 
   // Return true if the instantiation of template triple `tripleIdx` at
-  // `absoluteRowIdx` is new (should be emitted), false if it is a duplicate
+  // `rowIdxInIdTable` is new (should be emitted), false if it is a duplicate
   // (skip).
-  bool isNew(size_t tripleIdx, size_t absoluteRowIdx,
+  bool isNew(size_t tripleIdx, size_t rowIdxInIdTable,
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx);
 
