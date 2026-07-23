@@ -60,7 +60,13 @@ class VectorWithMemoryLimit
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
               CPP_and concepts::constructible_from<Base, Args&&...>)
       QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
-      : Base{AD_FWD(args)...} {}
+      // NOTE: We deliberately use parentheses (not braces) to forward to the
+      // `Base` constructor, matching the constraint above
+      // (`constructible_from`) and the behavior of a plain `std::vector`.
+      // Braces would additionally forbid narrowing conversions (e.g. filling a
+      // `VectorWithMemoryLimit<char>` with an `int` value), which `std::vector`
+      // itself allows.
+      : Base(AD_FWD(args)...) {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
