@@ -242,7 +242,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       // Ensure the correct amount of columns is kept throughout copying them to
       // the result.
       // (This was previously implemented in copyColumns but had to
-      // be moved in order to accomodate of multiple input tables of which only
+      // be moved in order to accommodate of multiple input tables of which only
       // the total number of columns must match).
       AD_CORRECTNESS_CHECK(inputColsCount == INPUT_WIDTH);
       AD_CORRECTNESS_CHECK(inputColsCount +

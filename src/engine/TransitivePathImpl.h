@@ -100,7 +100,7 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> targetSideResult, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
 
     auto startNodes = setupNodes(startSide, std::move(startSideResult));
 
@@ -159,9 +159,9 @@ class TransitivePathImpl : public TransitivePathBase {
                                           bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
-    auto startNodes = setupNodes(sub->idTable(), startSide, edges);
-    auto targetNodes = setupNodes(sub->idTable(), targetSide, edges);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
+    auto startNodes = setupNodes(sub->idTableView(), startSide, edges);
+    auto targetNodes = setupNodes(sub->idTableView(), targetSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
