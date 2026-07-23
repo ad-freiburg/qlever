@@ -38,6 +38,13 @@ class Filter : public Operation {
     return _subtree->resultSortedOn();
   }
 
+  // A `Filter` preserves both the columns and the sort order of its child, so a
+  // requested sort order can be pushed down to the child (e.g. an `IndexScan`
+  // that can re-sort itself by changing its permutation). This avoids an
+  // explicit `Sort` on top of the `Filter`.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const std::vector<ColumnIndex>& sortColumns) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 

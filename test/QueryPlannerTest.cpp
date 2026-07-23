@@ -779,8 +779,8 @@ TEST(QueryPlanner, TransitivePathRightId) {
 
   using ad_utility::triple_component::Iri;
 
-  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 0, Iri::fromIriref("<o>"), 1};
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Iri::fromIriref("<o>"), 1};
   h::expect(
       "SELECT ?y WHERE { ?x <p>+ <o> }",
       h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
@@ -803,8 +803,8 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
 
 TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 0, Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>* ?y."
@@ -3469,8 +3469,8 @@ TEST(QueryPlanner, negatedPaths) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, transitivePathWithoutVariables) {
-  TransitivePathSide left{std::nullopt, 1, 1, 0};
-  TransitivePathSide right{std::nullopt, 0, 1, 1};
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, 1, 1};
   h::expect(
       "SELECT * { 1 <a>+ 1 }",
       h::transitivePath(
@@ -3518,8 +3518,8 @@ TEST(QueryPlanner, emptyPathWithLiterals) {
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
-  TransitivePathSide left2{std::nullopt, 1, 1, 0};
-  TransitivePathSide right2{std::nullopt, 0, 1, 1};
+  TransitivePathSide left2{std::nullopt, 0, 1, 0};
+  TransitivePathSide right2{std::nullopt, 1, 1, 1};
   h::expect(
       "SELECT * { 1 <a>* 1 }",
       h::transitivePath(
@@ -3574,8 +3574,8 @@ TEST(QueryPlanner, emptyPathWithLiterals) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithMismatchingLiterals) {
-  TransitivePathSide left{std::nullopt, 1, 1, 0};
-  TransitivePathSide right{std::nullopt, 0, 2, 1};
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, 2, 1};
   // If the literals mismatch, we don't need to evaluate the empty path!
   h::expect(
       "SELECT * { 1 <a>* 2 }",
@@ -3619,8 +3619,8 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1")))));
 
-  TransitivePathSide left2{std::nullopt, 1, Variable{"?var"}, 0};
-  TransitivePathSide right2{std::nullopt, 0, 1, 1};
+  TransitivePathSide left2{std::nullopt, 0, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 1, 1, 1};
   h::expect(
       "SELECT * { ?var <a>* 1 . VALUES ?var { 2 } }",
       h::Join(
@@ -3654,8 +3654,8 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
-  TransitivePathSide left{std::nullopt, 1, Variable{"?x"}, 0};
-  TransitivePathSide right{std::nullopt, 0, Variable{"?x"}, 1};
+  TransitivePathSide left{std::nullopt, 0, Variable{"?x"}, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?x"}, 1};
   h::expect("SELECT * { ?x <a>+ ?x . ?x <b> <c> }",
             h::transitivePath(std::move(left), std::move(right), 1,
                               std::numeric_limits<size_t>::max(),
@@ -3735,8 +3735,8 @@ TEST(QueryPlanner, correctFiltersHandling) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, emptyPathWithJoinOptimization) {
-  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
-  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  TransitivePathSide left{std::nullopt, 0, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
   h::expect(
       "SELECT * { ?other <a>* ?var . VALUES ?var { 2 } }",
       h::transitivePath(

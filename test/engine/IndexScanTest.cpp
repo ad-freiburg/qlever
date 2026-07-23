@@ -658,8 +658,13 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
     resultTable.insertAtEnd(pair.idTable_);
   }
 
+  // The `IndexScan` presents its columns in a canonical (subject, predicate,
+  // object) order, independent of the permutation. Here `?x` is the subject,
+  // `?y` the predicate and `?z` the object. The rows are still sorted by the
+  // permutation's key order (here `POS`, i.e. by predicate, then object, then
+  // subject).
   EXPECT_EQ(resultTable,
-            makeIdTableFromVector({{p, s1, x}, {p, s2, x}, {p2, s1, x}}));
+            makeIdTableFromVector({{x, p, s1}, {x, p, s2}, {x, p2, s1}}));
 }
 
 // _____________________________________________________________________________

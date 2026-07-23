@@ -322,7 +322,9 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
   auto valuesTree =
       makeValuesForSingleVariable(qec, "?p", {iri("<o>"), iri("<a>")});
 
-  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
+  // The `IndexScan` presents its columns in canonical (subject, predicate,
+  // object) order independent of the permutation, so `?p` is column 1.
+  auto join = Join{qec, fullScanPSO, valuesTree, 1, 0, keepJoinCol};
 
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
 
@@ -344,7 +346,7 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
 
   testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
 
-  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0, keepJoinCol};
+  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 1, keepJoinCol};
   testJoinOperation(joinSwitched,
                     makeExpectedColumns(expectedVariables, expected));
 
@@ -355,15 +357,18 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
     auto fullScanOPS = ad_utility::makeExecutionTree<IndexScan>(
         qec, OPS, SparqlTripleSimple{Var{"?s2"}, Var{"?p2"}, Var{"?s"}});
     // The knowledge graph is "<x> <p> 1 . <x> <o> <x> . <x> <a> 3 ."
+    // Both scans present their columns in canonical (subject, predicate, object)
+    // order. For `fullScanOPS` (?s2 ?p2 ?s) that means `?s2`=0, `?p2`=1, `?s`=2,
+    // so the join column `?s` is column 2. The result keeps `?s2` before `?p2`.
     auto expected = makeIdTableFromVector(
-        {{x, a, I(3), o, x}, {x, o, x, o, x}, {x, p, I(1), o, x}});
+        {{x, a, I(3), x, o}, {x, o, x, x, o}, {x, p, I(1), x, o}});
     VariableToColumnMap expectedVariables{
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?p"}, makeAlwaysDefinedColumn(1)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(2)},
-        {Variable{"?p2"}, makeAlwaysDefinedColumn(3)},
-        {Variable{"?s2"}, makeAlwaysDefinedColumn(4)}};
-    auto join = Join{qec, fullScanSPO, fullScanOPS, 0, 0, keepJoinCol};
+        {Variable{"?s2"}, makeAlwaysDefinedColumn(3)},
+        {Variable{"?p2"}, makeAlwaysDefinedColumn(4)}};
+    auto join = Join{qec, fullScanSPO, fullScanOPS, 0, 2, keepJoinCol};
 
     if (!keepJoinCol) {
       removeJoinColFromVarColMap(Variable{"?s"}, expectedVariables);

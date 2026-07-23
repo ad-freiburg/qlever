@@ -536,6 +536,10 @@ Result OptionalJoin::optionalJoinWithIndexScan(
   AD_CORRECTNESS_CHECK(_joinColumns.size() == 1 ||
                        implementation_ ==
                            Implementation::OnlyUndefInLastJoinColumnOfLeft);
+  // The block-skipping lazy scan joins on the primary (physical) sort column of
+  // the scan, which must be the (primary) join column.
+  AD_CORRECTNESS_CHECK(rightScan->resultSortedOn().front() ==
+                       _joinColumns.at(0).at(1));
   ad_utility::JoinColumnMapping joinColMap{
       _joinColumns, _left->getResultWidth(), _right->getResultWidth(),
       keepJoinColumns_};
@@ -555,8 +559,11 @@ Result OptionalJoin::optionalJoinWithIndexScan(
         if constexpr (leftIsMaterialized) {
           auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
               left->idTableView().getColumn(firstJoinColLeft));
+          // Reorder the scan columns so that the join column comes first, as
+          // expected by the join algorithm below.
           auto rightRange = convertGeneratorFromScan<numJoinCols>(
-              std::move(rightBlocksInternal), *rightScan);
+              std::move(rightBlocksInternal), *rightScan,
+              joinColMap.permutationRight());
           auto permutationIdTable =
               ad_utility::IdTableAndFirstCols<numJoinCols, IdTableView<0>>{
                   left->idTableView().asColumnSubsetView(

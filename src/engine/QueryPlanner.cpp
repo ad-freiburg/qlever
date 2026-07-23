@@ -680,19 +680,23 @@ void QueryPlanner::indexScanTwoVarsCase(
 
   using Tr = SparqlTripleSimple;
 
+  // Note: We only add a single index scan (in a canonical permutation) per
+  // triple. If a different sort order is required later on (e.g. for a join),
+  // the `IndexScan` can re-sort itself by changing its permutation (see
+  // `IndexScan::makeSortedTree`), while keeping its (permutation-independent)
+  // `VariableToColumnMap`. This makes it unnecessary to create a separate plan
+  // candidate for each applicable permutation.
   if (!s.isVariable()) {
     if (p == o) {
       handleRepeatedVariables({{SPO}}, &Tr::o_);
     } else {
       addIndexScan(SPO);
-      addIndexScan(SOP);
     }
   } else if (!p.isVariable()) {
     if (s == o) {
       handleRepeatedVariables({{PSO}}, &Tr::o_);
     } else {
       addIndexScan(PSO);
-      addIndexScan(POS);
     }
   } else {
     AD_CORRECTNESS_CHECK(!o.isVariable());
@@ -700,7 +704,6 @@ void QueryPlanner::indexScanTwoVarsCase(
       handleRepeatedVariables({{OPS}}, &Tr::s_);
     } else {
       addIndexScan(OSP);
-      addIndexScan(OPS);
     }
   }
 }
@@ -734,25 +737,25 @@ void QueryPlanner::indexScanThreeVarsCase(
   using Tr = SparqlTripleSimple;
   const auto& [s, p, o, _] = triple;
 
+  // Note: We only add a single index scan (in a canonical permutation) per
+  // triple. If a different sort order is required later on (e.g. for a join),
+  // the `IndexScan` can re-sort itself by changing its permutation (see
+  // `IndexScan::makeSortedTree`), while keeping its (permutation-independent)
+  // `VariableToColumnMap`. This makes it unnecessary to create a separate plan
+  // candidate for each of the six permutations.
   if (s == o) {
     if (s == p) {
       handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
     } else {
-      handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
+      handleRepeatedVariables({{POS}}, &Tr::s_);
     }
   } else if (s == p) {
-    handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
+    handleRepeatedVariables({{OPS}}, &Tr::s_);
   } else if (o == p) {
-    handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
+    handleRepeatedVariables({{PSO}}, &Tr::o_);
   } else {
-    // Three distinct variables
-    // Add plans for all six permutations.
-    addIndexScan(OPS);
-    addIndexScan(OSP);
-    addIndexScan(PSO);
-    addIndexScan(POS);
+    // Three distinct variables. A single (canonical `SPO`) scan suffices.
     addIndexScan(SPO);
-    addIndexScan(SOP);
   }
 }
 

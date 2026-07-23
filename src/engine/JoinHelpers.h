@@ -81,7 +81,8 @@ using IteratorWithSingleCol =
 // the passed `IndexScan` is updated properly as the range is consumed.
 template <size_t numJoinColumns = 1>
 IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
-    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
+    CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan,
+    OptionalPermutation permutation = {}) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
       std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
@@ -91,11 +92,14 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
 
   auto range = CachingTransformInputRange(
       *generatorStorage,
-      [generatorStorage, &scan,
+      [generatorStorage, &scan, permutation = std::move(permutation),
        sendPriority = SendPriority::Always](auto& table) mutable {
         scan.updateRuntimeInfoForLazyScan(generatorStorage->details(),
                                           sendPriority);
         sendPriority = SendPriority::IfDue;
+        // Reorder the columns of the scan result so that the join column(s) come
+        // first, as expected by the join algorithms below.
+        applyPermutation(table, permutation);
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
         return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),

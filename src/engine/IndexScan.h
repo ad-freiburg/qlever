@@ -279,29 +279,37 @@ class IndexScan final : public Operation {
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 
-  // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
-  // returns a subset of this actual columns, return the subset of columns that
-  // has to be applied to the "full" result (without any columns stripped) to
-  // get the final result. Throws if `varsToKee_` is `nullopt`.
-  std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
+  // Return the column index in the raw result of the underlying permutation
+  // scan (i.e. the physical scan output, whose columns are in the order of the
+  // `permutation_`) that holds the variable at the given triple `position`
+  // (0 = subject, 1 = predicate, 2 = object). The component at `position` must
+  // be a variable.
+  ColumnIndex physicalColumnOfTriplePosition(size_t position) const;
 
-  // Return a lambda that takes an `idTable` that has the result without any
-  // columns stripped, and applies the column subset that leads to the correct
-  // stripping of the columns. This function can also be used if no columns are
-  // stripped and hence `varsToKeep_` is `nullopt`.
+  // Return the column subset (a permutation, possibly reducing the number of
+  // columns) that has to be applied to the raw result of the underlying
+  // permutation scan to obtain the final result of this `IndexScan`. The raw
+  // scan output has its columns in the physical order of the `permutation_`.
+  // The final result presents the variables in a canonical, permutation-
+  // independent order (subject, predicate, object, followed by the additional
+  // columns), with stripped columns (see `varsToKeep_`) removed. This decouples
+  // the physical scan order from the logical column layout, which allows an
+  // `IndexScan` to change its `permutation_` (and hence its sort order) without
+  // changing its `VariableToColumnMap` (see `makeSortedTree`).
+  std::vector<ColumnIndex> getColumnPermutationForResult() const;
+
+  // Return a lambda that takes an `idTable` that is the raw result of the
+  // permutation scan (columns in physical order, no columns stripped), and
+  // reorders and strips its columns to obtain the final result (see
+  // `getColumnPermutationForResult`).
   // Note: In theory, we could inform the underlying `CompressedRelationReader`
   // of the required columns to not read the stripped columns at all. But in
   // practice the effect would be limited, because the reader has to read all
   // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
   // filtering etc.)
   auto makeApplyColumnSubset() const {
-    bool hasSubset = varsToKeep_.has_value();
-    auto cols =
-        hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
-    return [cols = std::move(cols)](auto&& table) {
-      if (cols.has_value()) {
-        table.setColumnSubset(cols.value());
-      }
+    return [cols = getColumnPermutationForResult()](auto&& table) {
+      table.setColumnSubset(cols);
       return std::move(table);
     };
   }

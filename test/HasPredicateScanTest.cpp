@@ -158,8 +158,11 @@ TEST_F(HasPredicateScanTest, subtree) {
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::OPS,
       SparqlTripleSimple{V{"?x"}, V{"?y"}, iri("<o4>")});
-  auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
-  runTest(scan, {{p3, y, p}, {p3, y, p3}});
+  // The `IndexScan` presents its columns in canonical (subject, predicate,
+  // object) order independent of the permutation, so the subject `?x` is column
+  // 0 and the predicate `?y` is column 1.
+  auto scan = HasPredicateScan{qec, indexScan, 0, V{"?predicate"}};
+  runTest(scan, {{y, p3, p}, {y, p3, p3}});
 }
 
 // ____________________________________________________________

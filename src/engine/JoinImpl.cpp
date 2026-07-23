@@ -560,18 +560,27 @@ void JoinImpl::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 
 // ______________________________________________________________________________________________________
 Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
+  // The block-skipping lazy scans below join on the primary (physical) sort
+  // column of each scan, which must be the join column. The columns are then
+  // reordered so that the join column comes first (via the `JoinColumnMapping`),
+  // and the result is reordered back into the expected layout via
+  // `permutationResult()`. This works for any join column, not just column 0.
+  ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
+  auto resultPermutation = joinColMap.permutationResult();
   return createResultFromAction(
       requestLaziness,
-      [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+      [this, joinColMap = std::move(joinColMap)](
+          std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto leftScan =
             std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation());
         auto rightScan =
             std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation());
         AD_CORRECTNESS_CHECK(leftScan && rightScan);
-        // The join column already is the first column in both inputs, so we
-        // don't have to permute the inputs and results for the
-        // `AddCombinedRowToIdTable` class to work correctly.
-        AD_CORRECTNESS_CHECK(leftJoinCol_ == 0 && rightJoinCol_ == 0);
+        // The join has to be on the primary (physical) sort column of both
+        // scans for the block-skipping to be correct.
+        AD_CORRECTNESS_CHECK(leftScan->resultSortedOn().front() == leftJoinCol_);
+        AD_CORRECTNESS_CHECK(rightScan->resultSortedOn().front() ==
+                             rightJoinCol_);
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
         ad_utility::Timer timer{
@@ -583,10 +592,11 @@ Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
         // If requestLaziness, we don't need to serialize json for every update
         // of the child. If we serialize it whenever the join operation yields a
         // table that's frequent enough and reduces the overhead.
-        auto leftBlocks =
-            convertGeneratorFromScan(std::move(leftBlocksInternal), *leftScan);
-        auto rightBlocks = convertGeneratorFromScan(
-            std::move(rightBlocksInternal), *rightScan);
+        auto leftBlocks = convertGeneratorFromScan(
+            std::move(leftBlocksInternal), *leftScan, joinColMap.permutationLeft());
+        auto rightBlocks =
+            convertGeneratorFromScan(std::move(rightBlocksInternal), *rightScan,
+                                     joinColMap.permutationRight());
 
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
@@ -595,7 +605,7 @@ Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
       },
-      resultSortedOn(), {});
+      resultSortedOn(), std::move(resultPermutation));
 }
 
 // ______________________________________________________________________________________________________
@@ -603,8 +613,14 @@ template <bool idTableIsRightInput>
 Result JoinImpl::computeResultForIndexScanAndIdTable(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     std::shared_ptr<IndexScan> scan) const {
-  AD_CORRECTNESS_CHECK((idTableIsRightInput ? leftJoinCol_ : rightJoinCol_) ==
-                       0);
+  // The scan is the left input iff the `idTable` is the right input. The
+  // block-skipping requires that the scan is sorted primarily on the join
+  // column. The columns are then reordered so that the join column comes first
+  // (via the `JoinColumnMapping`), and the result is reordered back into the
+  // expected layout via `permutationResult()`. This works for any join column,
+  // not just column 0.
+  ColumnIndex scanJoinCol = idTableIsRightInput ? leftJoinCol_ : rightJoinCol_;
+  AD_CORRECTNESS_CHECK(scan->resultSortedOn().front() == scanJoinCol);
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
   return createResultFromAction(
@@ -615,6 +631,12 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         const IdTableView<0>& idTable = resultWithIdTable->idTableView();
         auto rowAdder = makeRowAdder(std::move(yieldTable));
+
+        // The permutation to apply to the scan side so that the join column
+        // comes first.
+        const auto& scanPermutation = idTableIsRightInput
+                                          ? joinColMap.permutationLeft()
+                                          : joinColMap.permutationRight();
 
         auto permutationIdTable =
             ad_utility::IdTableAndFirstCols<1, IdTableView<0>>{
@@ -632,18 +654,19 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
         auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
-                            &indexScanResult]() {
+                            &indexScanResult, &scanPermutation]() {
           if (idTableHasUndef) {
             indexScanResult =
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
             AD_CORRECTNESS_CHECK(
                 !indexScanResult.value()->isFullyMaterialized());
-            return convertGenerator(indexScanResult.value()->idTables());
+            return convertGenerator(indexScanResult.value()->idTables(),
+                                    scanPermutation);
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
             return convertGeneratorFromScan(std::move(rightBlocksInternal),
-                                            *scan);
+                                            *scan, scanPermutation);
           }
         }();
 
@@ -674,7 +697,10 @@ Result JoinImpl::computeResultForIndexScanAndIdTable(
 Result JoinImpl::computeResultForIndexScanAndLazyOperation(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     std::shared_ptr<IndexScan> scan) const {
-  AD_CORRECTNESS_CHECK(rightJoinCol_ == 0);
+  // The scan is the right input. The block-skipping requires that the scan is
+  // sorted primarily on the join column. The scan side is reordered so that the
+  // join column comes first via `joinColMap.permutationRight()` (see below).
+  AD_CORRECTNESS_CHECK(scan->resultSortedOn().front() == rightJoinCol_);
 
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
