@@ -470,9 +470,8 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       cancellationHandle_, locatedTriplesState(), getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
-      ad_utility::CachingTransformInputRange{
-          std::move(lazyScanAllCols), makeApplyColumnSubset(),
-          ql::type_identity<LazyScanMetadata>{}}};
+      ad_utility::CachingTransformInputRange{std::move(lazyScanAllCols),
+                                             makeApplyColumnSubset()}};
 };
 
 // _____________________________________________________________________________

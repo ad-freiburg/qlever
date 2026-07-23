@@ -16,6 +16,27 @@
 // typical abstractions for input ranges.
 
 namespace ad_utility {
+
+namespace detail {
+// Helper for `DetailsOf` below: yield the nested `Details` typedef of `R` if it
+// has one, and `NoDetails` otherwise.
+template <typename R, typename = void>
+struct DetailsOfImpl {
+  using type = NoDetails;
+};
+template <typename R>
+struct DetailsOfImpl<R, std::void_t<typename R::Details>> {
+  using type = typename R::Details;
+};
+}  // namespace detail
+
+// The `Details` type carried by a range `R`. Ranges that inherit from
+// `DetailsProvider` (e.g. `InputRangeFromGet` and `InputRangeTypeErased`)
+// expose it via a nested `Details` typedef; all other ranges (the typical case)
+// yield `NoDetails`.
+template <typename R>
+using DetailsOf = typename detail::DetailsOfImpl<ql::remove_cvref_t<R>>::type;
+
 // This class is similar to `ql::views::transform` with the following
 // differences:
 // 1. The new values are computed when the iterators are advanced, not when they
@@ -29,12 +50,14 @@ namespace ad_utility {
 // optimization (RVO).
 // 3. This class only yields an input range, independent of the range category
 // of the input.
-// 4. Optionally, this class can propagate the `Details` of an underlying view.
-//    To make this work, pass the desired details type as a
-//    `ql::type_identity<Details>` tag to the constructor (which selects it via
-//    the deduction guide), and let the underlying view inherit from the
-//    `DetailsProvider`. See `InputRangeUtilsTest.cpp` for an example, and
-//    `IndexScan.cpp` for a real-life usage.
+// 4. Optionally, this class can propagate the `Details` of the wrapped range.
+//    This happens automatically: the deduction guide below deduces the
+//    `Details` type from the wrapped range (via `DetailsOf`). Ranges that
+//    inherit from `DetailsProvider` (e.g. `InputRangeFromGet` and
+//    `InputRangeTypeErased`) have their details propagated by pointer; all
+//    other ranges yield `NoDetails` and nothing is propagated (the typical
+//    case). See `InputRangeUtilsTest.cpp` for an example, and `IndexScan.cpp`
+//    for a real-life usage.
 CPP_class_template(typename View, typename F,
                    typename Details = NoDetails)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
@@ -68,11 +91,10 @@ CPP_class_template(typename View, typename F,
   std::optional<ql::ranges::iterator_t<View>> it_;
 
  public:
-  // Constructor. The unused `ql::type_identity<Details>` tag lets a call site
-  // select the `Details` type via the deduction guide below without having to
-  // spell out all the template arguments explicitly.
-  explicit CachingTransformInputRange(View view, F transformation = {},
-                                      ql::type_identity<Details> = {})
+  // Constructor. The `Details` type is deduced from the wrapped range by the
+  // deduction guide below (via `DetailsOf`); it defaults to `NoDetails`. When
+  // it is not `NoDetails`, the range's details are propagated by pointer.
+  explicit CachingTransformInputRange(View view, F transformation = {})
       : transformation_(std::move(transformation)), view_{std::move(view)} {
     if constexpr (!std::is_same_v<Details, NoDetails>) {
       static_cast<Base*>(this)->setDetailsPointer(&view_.base().details());
@@ -104,13 +126,13 @@ CPP_class_template(typename View, typename F,
   friend class InputRangeFromGet<Res>;
 };
 
-// Deduction guides to correctly propagate the input as a value or reference.
-// This is the exact same way `std::ranges` and `range-v3` behave. The optional
-// `ql::type_identity<Details>` tag selects the `Details` type to propagate; it
-// defaults to `NoDetails`, so ordinary two-argument usages are unaffected.
-template <typename Range, typename F, typename Details = NoDetails>
-CachingTransformInputRange(Range&&, F, ql::type_identity<Details> = {})
-    -> CachingTransformInputRange<all_t<Range>, F, Details>;
+// Deduction guide to correctly propagate the input as a value or reference
+// (the exact same way `std::ranges` and `range-v3` behave), and to deduce the
+// `Details` type to propagate directly from the wrapped range (via
+// `DetailsOf`, typically `NoDetails`).
+template <typename Range, typename F>
+CachingTransformInputRange(Range&&, F)
+    -> CachingTransformInputRange<all_t<Range>, F, DetailsOf<Range>>;
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
