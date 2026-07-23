@@ -89,6 +89,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.0.0")
+        # GCC 11's libstdc++ doesn't yet provide `std::ranges::owning_view`, on
+        # which we now rely, so we fall back to `range-v3` for that compiler.
+        MESSAGE(STATUS "range-v3 is used for GCC 11 because its libstdc++ doesn't yet provide `std::ranges::owning_view`")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
@@ -197,7 +203,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        GIT_TAG 835e40c442bcb4910d348c4495ea95503bbb51f8 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )

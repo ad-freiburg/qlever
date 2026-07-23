@@ -14,6 +14,7 @@
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/VectorWithMemoryLimit.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
@@ -32,7 +33,7 @@ struct Edge {
   size_t edgeRow_;
 };
 
-using EdgesLimited = std::vector<Edge, ad_utility::AllocatorWithLimit<Edge>>;
+using EdgesLimited = ad_utility::VectorWithMemoryLimit<Edge>;
 
 struct Path {
   EdgesLimited edges_;
@@ -48,7 +49,7 @@ struct Path {
   const Id& end() { return edges_.back().end_; }
 };
 
-using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
+using PathsLimited = ad_utility::VectorWithMemoryLimit<Path>;
 
 /**
  * @class BinSearchWrapper

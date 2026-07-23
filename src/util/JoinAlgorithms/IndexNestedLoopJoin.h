@@ -17,6 +17,7 @@
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/VectorWithMemoryLimit.h"
 
 namespace joinAlgorithms::indexNestedLoop {
 
@@ -26,7 +27,7 @@ namespace detail {
 struct Filler {
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> matchTracker_;
+  ad_utility::VectorWithMemoryLimit<char> matchTracker_;
 
   explicit Filler(size_t size,
                   const ad_utility::AllocatorWithLimit<char>& allocator)
@@ -42,7 +43,7 @@ struct Filler {
 // Helper class for `IndexNestedLoopJoin::matchLeft` that simply tracks which
 // rows from the right have found a match so far.
 struct RightFiller {
-  std::vector<bool, ad_utility::AllocatorWithLimit<bool>> matchTracker_;
+  ad_utility::VectorWithMemoryLimit<bool> matchTracker_;
 
   explicit RightFiller(size_t size,
                        const ad_utility::AllocatorWithLimit<bool>& allocator)
@@ -61,7 +62,7 @@ struct Adder {
   std::vector<std::array<size_t, 2>> matchingPairs_;
   // Should conceptually be bool, but doesn't allow the compiler to use
   // memset in `matchLeft`.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> missingIndices_;
+  ad_utility::VectorWithMemoryLimit<char> missingIndices_;
   ad_utility::SharedCancellationHandle cancellationHandle_;
   size_t numJoinColumns_;
   bool keepJoinColumns_;
@@ -95,8 +96,7 @@ struct Adder {
     ColumnIndex resultColIdx = 0;
     auto numColsToDrop =
         static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
-    for (auto source : ad_utility::OwningView{left.getColumns()} |
-                           ql::views::drop(numColsToDrop)) {
+    for (auto source : left.getColumns() | ql::views::drop(numColsToDrop)) {
       auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
@@ -106,8 +106,7 @@ struct Adder {
       cancellationHandle_->throwIfCancelled();
       ++resultColIdx;
     }
-    for (auto source : ad_utility::OwningView{right.getColumns()} |
-                           ql::views::drop(numJoinColumns_)) {
+    for (auto source : right.getColumns() | ql::views::drop(numJoinColumns_)) {
       auto target = result.getColumn(resultColIdx);
       size_t offset = originalSize;
       for (const auto& [leftIdx, rightIdx] : matchingPairs_) {
@@ -130,8 +129,7 @@ struct Adder {
     ColumnIndex resultColIdx = 0;
     auto numColsToDrop =
         static_cast<size_t>(!keepJoinColumns_) * numJoinColumns_;
-    for (auto source : ad_utility::OwningView{left.getColumns()} |
-                           ql::views::drop(numColsToDrop)) {
+    for (auto source : left.getColumns() | ql::views::drop(numColsToDrop)) {
       auto target = result.getColumn(resultColIdx);
       size_t targetIndex = originalSize;
       for (size_t i = 0; i < missingIndices_.size(); ++i) {
@@ -143,8 +141,7 @@ struct Adder {
       cancellationHandle_->throwIfCancelled();
       ++resultColIdx;
     }
-    for (auto col : ad_utility::OwningView{result.getColumns()} |
-                        ql::views::drop(resultColIdx)) {
+    for (auto col : result.getColumns() | ql::views::drop(resultColIdx)) {
       ad_utility::chunkedFill(
           ql::ranges::subrange{col.begin() + originalSize, col.end()},
           Id::makeUndefined(), qlever::joinHelpers::CHUNK_SIZE,
@@ -329,8 +326,7 @@ class IndexNestedLoopJoin {
 
   // Function for MINUS and EXISTS operations when the left side is fully
   // materialized.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>>
-  computeLeftExistance() {
+  ad_utility::VectorWithMemoryLimit<char> computeLeftExistance() {
     AD_CONTRACT_CHECK(leftResult_->isFullyMaterialized());
     detail::Filler matchTracker{
         leftResult_->idTableView().size(),

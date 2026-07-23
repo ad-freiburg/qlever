@@ -379,7 +379,8 @@ PathsLimited PathSearch::findPaths(const Id& source,
     currentPath.push_back(edge);
 
     if (targets.empty() || ad_utility::contains(targets, edgeEnd)) {
-      result.push_back(currentPath);
+      // `currentPath` keeps being extended below, so store an independent copy.
+      result.push_back(Path{currentPath.edges_.clone()});
     }
 
     // Only expand the frontier if we are still allowed to grow the spine.
@@ -413,17 +414,16 @@ PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
       targetSet.insert(target.getBits());
     }
     for (auto source : sources) {
-      for (const auto& path : findPaths(source, targetSet, binSearch,
-                                        numPathsPerTarget, maxDepth)) {
-        paths.push_back(path);
+      for (auto& path : findPaths(source, targetSet, binSearch,
+                                  numPathsPerTarget, maxDepth)) {
+        paths.push_back(std::move(path));
       }
     }
   } else {
     for (size_t i = 0; i < sources.size(); i++) {
-      for (const auto& path :
-           findPaths(sources[i], {targets[i].getBits()}, binSearch,
-                     numPathsPerTarget, maxDepth)) {
-        paths.push_back(path);
+      for (auto& path : findPaths(sources[i], {targets[i].getBits()}, binSearch,
+                                  numPathsPerTarget, maxDepth)) {
+        paths.push_back(std::move(path));
       }
     }
   }
@@ -444,7 +444,7 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn, PathsLimited& paths,
 
   size_t rowIndex = 0;
   for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
-    auto path = paths[pathIndex];
+    const auto& path = paths[pathIndex];
 
     std::optional<Id> sourceId = std::nullopt;
     if (config_.sourceIsVariable()) {

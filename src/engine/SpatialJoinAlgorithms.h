@@ -25,6 +25,7 @@
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/VectorWithMemoryLimit.h"
 
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
@@ -326,8 +327,7 @@ class SpatialJoinAlgorithms {
   size_t numFailedParsedGeometries_ = 0;
 
   // this vector stores the geometries, which have already been parsed
-  std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>
-      geometries_;
+  ad_utility::VectorWithMemoryLimit<AnyGeometry> geometries_;
 
   // After adding the given amount of rows to the WKT parser, it will be checked
   // if the user has cancelled their query.
