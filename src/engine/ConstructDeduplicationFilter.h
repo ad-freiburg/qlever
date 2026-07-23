@@ -81,11 +81,9 @@ class TripleDeduplicator {
 // `ConstructDeduplicator` at all.
 class ConstructDeduplicator {
  public:
-  // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`, used
-  // for `LocalVocabIndex`es stored in the deduplication cache: if the strings
-  // added to it exceed this, all dedup state is dropped (which makes
-  // deduplication approximate). Defaults to a quarter of the query's
-  // currently available memory.
+  // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_`.
+  // `BatchWise` mode we enforce this limit ourselves; in `Global` we shift the
+  // burden of enforcing it to the `dedupVocab_` itself.
   //
   // Precondition: `mode` is not `DeduplicationMode::None`. For `None` the
   // caller must not construct this state at all (see the class comment).
