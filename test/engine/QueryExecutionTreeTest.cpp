@@ -7,6 +7,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Sort.h"
@@ -90,6 +91,63 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
     ASSERT_TRUE(castTree);
     EXPECT_EQ(castTree->getResultSortedOn(), (SC{0, 1}));
   }
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeReturnsInputWhenAlreadyDistinct) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // When the root operation is already distinct wrt `distinctIndices`, the
+  // `DISTINCT` is a no-op and `createDistinctTree` returns the tree unchanged.
+  // A `LIMIT 1` makes any operation distinct wrt any columns.
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {1}}), Vars{Variable{"?x"}});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+
+  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{0}), values);
+  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{}), values);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeFallbackAddsDistinct) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // A generic operation that is not known to be distinct (and cannot push the
+  // `DISTINCT` down) simply gets a `Distinct` on top.
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 1}, {2, 3}}),
+      Vars{Variable{"?x"}, Variable{"?y"}});
+
+  auto tree = QueryExecutionTree::createDistinctTree(values, SC{0, 1});
+  auto distinct = std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
+  ASSERT_TRUE(distinct);
+  EXPECT_EQ(distinct->getDistinctColumns(), (SC{0, 1}));
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {1}, {2}}), Vars{Variable{"?x"}});
+
+  // `DISTINCT` over zero columns keeps at most one row and is realized as a
+  // `LIMIT 1`, not as a `Distinct`.
+  auto tree = QueryExecutionTree::createDistinctTree(values, SC{});
+  EXPECT_FALSE(std::dynamic_pointer_cast<Distinct>(tree->getRootOperation()));
+  EXPECT_EQ(tree->getRootOperation()->getLimitOffset()._limit, 1u);
+
+  // The input tree is cloned, not mutated.
+  EXPECT_FALSE(values->getRootOperation()->getLimitOffset()._limit.has_value());
+
+  EXPECT_EQ(tree->getResult(false)->idTableView(),
+            makeIdTableFromVector({{0}}));
 }
 
 // _____________________________________________________________________________

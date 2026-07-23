@@ -2242,3 +2242,31 @@ TEST(IndexScan, additionalVariablesInDescriptor) {
           Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
   EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, isDistinctBy) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  // A full scan `?s ?p ?o` yields each triple exactly once, so it is distinct
+  // exactly when all of its columns are covered (in any order).
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  const auto& scanOp = *scan->getRootOperation();
+  EXPECT_TRUE(scanOp.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_TRUE(scanOp.isDistinctBy(SC{2, 0, 1}));
+  EXPECT_FALSE(scanOp.isDistinctBy(SC{0}));
+  EXPECT_FALSE(scanOp.isDistinctBy(SC{0, 1}));
+
+  // If an identifying column (`?o`) is stripped away, the remaining columns no
+  // longer identify a row uniquely, so the scan is not distinct even over all
+  // of them.
+  auto stripped = QueryExecutionTree::makeTreeWithStrippedColumns(
+      scan, {Variable{"?s"}, Variable{"?p"}});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<IndexScan>(stripped->getRootOperation()));
+  EXPECT_FALSE(stripped->getRootOperation()->isDistinctBy(SC{0, 1}));
+}

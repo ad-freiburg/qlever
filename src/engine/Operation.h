@@ -443,6 +443,44 @@ class Operation {
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const std::vector<ColumnIndex>& sortColumns) const;
 
+  // Return true iff the result of this operation is guaranteed to contain no
+  // two rows that agree on all columns in `distinctIndices`. In other words,
+  // applying a `DISTINCT` on `distinctIndices` to this operation would be a
+  // no-op. Any result with at most one row is trivially distinct wrt any
+  // columns; beyond that, the per-class `isDistinctByImpl` decides.
+  virtual bool isDistinctBy(
+      const std::vector<ColumnIndex>& distinctIndices) const final {
+    const auto& limit = getLimitOffset()._limit;
+    if (limit.has_value() && limit.value() <= 1) {
+      return true;
+    }
+    return isDistinctByImpl(distinctIndices);
+  }
+
+  // Per-class component of `isDistinctBy` (see above). The default
+  // conservatively returns `false`. Subclasses that can guarantee distinctness
+  // (e.g. a full `IndexScan` for `?s ?p ?o`) should override this.
+  virtual bool isDistinctByImpl(
+      [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
+    return false;
+  }
+
+  // Try to create a version of this operation with a `DISTINCT` over the given
+  // `distinctIndices` pushed down into the tree, if that makes the operation
+  // more efficient. The returned tree must already be distinct wrt
+  // `distinctIndices`, so that no external `Distinct` has to be applied on top
+  // of it. The default implementation returns `std::nullopt`, meaning that the
+  // `DISTINCT` cannot be pushed down and has to be applied externally
+  // (typically via a `Distinct` operation). Subclasses may override this to
+  // provide more optimal ways to ensure distinct values.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
+      const std::vector<ColumnIndex>& distinctIndices) const {
+    // This function should only be called on operations that do not already
+    // fulfill this criteria.
+    AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
+    return std::nullopt;
+  }
+
   // Try to create a version of this operation that only contains the given
   // `variables`, and therefore strips away all other columns. The default
   // implementation returns `std::nullopt`.

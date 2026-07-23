@@ -37,6 +37,12 @@ class Distinct : public Operation {
     return keepIndices_;
   }
 
+  // The result of a `Distinct` contains no two rows that agree on all columns
+  // in `keepIndices_`, hence it is also distinct wrt any superset of
+  // `keepIndices_`.
+  bool isDistinctByImpl(
+      const std::vector<ColumnIndex>& distinctIndices) const override;
+
   // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
   // Dispatches to the right WIDTH via `callFixedSizeVi`.
   IdTable outOfPlaceDistinctForTesting(const IdTable& input) const;
