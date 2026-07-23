@@ -58,7 +58,7 @@ struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
   // The `ValueId` for this constant, used for the CONSTRUCT result
   // deduplication. It is set to the correct value by
-  // `ConstructTemplatePreprocessor::resolveConstantDedupId`
+  // `ConstructTemplatePreprocessor::resolveConstantDedupId`.
   std::optional<ValueId> dedupId_ = std::nullopt;
 };
 
@@ -107,8 +107,8 @@ struct PreprocessedConstructTemplate {
   // Deduplicated `IdTable` column indices of all variables that occur in the
   // template triples, in order of first encounter.
   std::vector<ColumnIndex> uniqueVariableColumns_;
-  // `tripleContainsBlankNode[i]` is true iff `preprocessedTriples[i]` contains
-  // a blank node constant.
+  // `tripleContainsBlankNode_[i]` is true iff `preprocessedTriples_[i]`
+  // contains a blank node constant.
   std::vector<bool> tripleContainsBlankNode_;
   // Owns and keeps alive the `LocalVocabEntry`s created while resolving literal
   // and IRI constants to their `PrecomputedConstant::dedupId_`.

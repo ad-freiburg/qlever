@@ -54,8 +54,8 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
   // instantiation yielding a literal in subject/predicate position produces no
   // RDF triple, so we return `nullopt` to drop the triple. For the object we
   // use the full Turtle object parser to handle all cases correctly, in
-  // particular IRIs with datatypes like `xsd:integer` which are folded into the
-  // ID.
+  // particular Literals with datatypes like `xsd:integer` which are folded into
+  // the ID.
   if (role != PositionInTriple::OBJECT) {
     return std::nullopt;
   }
