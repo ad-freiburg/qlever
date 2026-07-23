@@ -16,6 +16,7 @@
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
+#include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/GroupByImpl.h"
@@ -1875,4 +1876,26 @@ TEST_F(MaterializedViewsTest,
   // Sort by object: same reasoning as predicate.
   AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
       *scanTree, V{"?o"}, V{"?s"}));
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsManager, viewFilesOnDisk) {
+  auto [directory, cleanup] = makeTemporaryDirectory("viewFilesOnDisk");
+  std::string base = directory + "/index";
+  auto touch = [](const std::string& f) {
+    std::ofstream out{f};
+    out << "x";
+  };
+  // Two view files for the index, plus files that must be ignored: index files
+  // that are not view files, and a view file of a different index.
+  touch(MaterializedView::getFilenameBase(base, "viewA"));
+  touch(MaterializedView::getFilenameBase(base, "viewB") + ".spo");
+  touch(base + ".vocabulary");
+  touch(base + ".index.pso");
+  touch(directory + "/other.view.x");
+
+  EXPECT_THAT(MaterializedViewsManager::viewFilesOnDisk(base),
+              ::testing::UnorderedElementsAre(
+                  MaterializedView::getFilenameBase(base, "viewA"),
+                  MaterializedView::getFilenameBase(base, "viewB") + ".spo"));
 }

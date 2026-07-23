@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -109,31 +110,6 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
-
-// Create a temporary directory inside the Google Test temporary directory
-// with the given `name`. The directory and all its contents are deleted when
-// the returned `absl::Cleanup` is destroyed.
-auto makeTemporaryDirectory(std::string_view name) {
-  std::string directory = ::testing::TempDir();
-  if (!ql::ends_with(directory, "/")) {
-    directory.push_back('/');
-  }
-  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
-  directory += name;
-  // Create directory.
-  ql::filesystem::create_directory(directory);
-
-  // Remove all files in directory when done.
-  absl::Cleanup cleanup{[directory]() {
-    ql::error_code ec;
-    ql::filesystem::remove_all(directory, ec);
-    if (ec) {
-      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
-                    << ": " << ec.message();
-    }
-  }};
-  return std::make_pair(std::move(directory), std::move(cleanup));
-}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -1034,43 +1010,6 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
-}
-
-// _____________________________________________________________________________
-TEST(Permutation, fileNames) {
-  using enum Permutation::Enum;
-  EXPECT_THAT(Permutation::fileNames(PSO, "foo/index"),
-              ::testing::ElementsAre("foo/index.index.pso",
-                                     "foo/index.index.pso.meta"));
-  EXPECT_THAT(Permutation::fileNames(OSP, "base"),
-              ::testing::ElementsAre("base.index.osp", "base.index.osp.meta"));
-  // For an internal permutation, the caller appends the infix to the base name.
-  EXPECT_THAT(Permutation::fileNames(
-                  POS, absl::StrCat("index", QLEVER_INTERNAL_INDEX_INFIX)),
-              ::testing::ElementsAre("index.internal.index.pos",
-                                     "index.internal.index.pos.meta"));
-}
-
-// _____________________________________________________________________________
-TEST(MaterializedViewsManager, viewFilesOnDisk) {
-  auto [directory, cleanup] = makeTemporaryDirectory("viewFilesOnDisk");
-  std::string base = directory + "/index";
-  auto touch = [](const std::string& f) {
-    std::ofstream out{f};
-    out << "x";
-  };
-  // Two view files for the index, plus files that must be ignored: index files
-  // that are not view files, and a view file of a different index.
-  touch(MaterializedView::getFilenameBase(base, "viewA"));
-  touch(MaterializedView::getFilenameBase(base, "viewB") + ".spo");
-  touch(base + ".vocabulary");
-  touch(base + ".index.pso");
-  touch(directory + "/other.view.x");
-
-  EXPECT_THAT(MaterializedViewsManager::viewFilesOnDisk(base),
-              ::testing::UnorderedElementsAre(
-                  MaterializedView::getFilenameBase(base, "viewA"),
-                  MaterializedView::getFilenameBase(base, "viewB") + ".spo"));
 }
 
 // _____________________________________________________________________________
