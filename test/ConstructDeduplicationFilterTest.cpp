@@ -24,8 +24,8 @@ using ad_utility::testing::getQec;
 using ad_utility::testing::IntId;
 
 // Add `s` as a literal to `vocab` and return its `Id` (a `LocalVocabIndex`).
-Id lvId(LocalVocab& vocab, std::string_view s,
-        const QueryExecutionContext& qec) {
+Id localVocabId(LocalVocab& vocab, std::string_view s,
+                const QueryExecutionContext& qec) {
   return Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithoutQuotes(s, qec.getLocalVocabContext())));
 }
@@ -77,8 +77,8 @@ TEST(ConstructDeduplicationFilter, crossVocabCollapse) {
 
   LocalVocab v1;
   LocalVocab v2;
-  Id src1 = lvId(v1, "x", *qec);
-  Id src2 = lvId(v2, "x", *qec);
+  Id src1 = localVocabId(v1, "x", *qec);
+  Id src2 = localVocabId(v2, "x", *qec);
   auto t1 = singleIdTable(src1);
   auto t2 = singleIdTable(src2);
   BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
@@ -108,13 +108,13 @@ TEST(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
   DeduplicationKey key1;
   {
     LocalVocab tmp;  // destroyed at the end of this scope
-    auto table = singleIdTable(lvId(tmp, "x", *qec));
+    auto table = singleIdTable(localVocabId(tmp, "x", *qec));
     BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
     key1 = state.makeFullTripleKey(kVarTriple, 0, ctx);
   }  // `tmp` (and its entries) gone; `key1` must still be valid.
 
   LocalVocab fresh;
-  auto table = singleIdTable(lvId(fresh, "x", *qec));
+  auto table = singleIdTable(localVocabId(fresh, "x", *qec));
   BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
   // Comparing/hashing `key1` here dereferences its ids; so it must not read
   // freed memory, and `key1` must still equal the equal-string key from a fresh
@@ -161,13 +161,13 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
 
   {
     LocalVocab v1;
-    auto t1 = singleIdTable(lvId(v1, "x", *qec));
+    auto t1 = singleIdTable(localVocabId(v1, "x", *qec));
     BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
     EXPECT_TRUE(state.isNew(0, 0, tmpl, c1));  // first occurrence
   }  // block-1 vocab freed before block-2 is seen
 
   LocalVocab v2;
-  auto t2 = singleIdTable(lvId(v2, "x", *qec));
+  auto t2 = singleIdTable(localVocabId(v2, "x", *qec));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // duplicate across blocks
 }
@@ -179,12 +179,12 @@ TEST(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v1;
-  auto t1 = singleIdTable(lvId(v1, "x", *qec));
+  auto t1 = singleIdTable(localVocabId(v1, "x", *qec));
   BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c1));
 
   LocalVocab v2;
-  auto t2 = singleIdTable(lvId(v2, "x", *qec));
+  auto t2 = singleIdTable(localVocabId(v2, "x", *qec));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));
 }
@@ -213,11 +213,11 @@ TEST(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v1;
-  Id x = lvId(v1, "x", *qec);
+  Id x = localVocabId(v1, "x", *qec);
   state.seedGroundTriple(DeduplicationKey{x, x, x});
 
   LocalVocab v2;
-  auto t2 = singleIdTable(lvId(v2, "x", *qec));
+  auto t2 = singleIdTable(localVocabId(v2, "x", *qec));
   BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
   EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // suppressed by the ground seed
 }
@@ -234,7 +234,7 @@ TEST(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v;
-  auto t = singleIdTable(lvId(v, "x", *qec));
+  auto t = singleIdTable(localVocabId(v, "x", *qec));
   BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
@@ -253,7 +253,7 @@ TEST(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
   auto tmpl = singleTripleTemplate();
 
   LocalVocab v;
-  auto t = singleIdTable(lvId(v, "x", *qec));
+  auto t = singleIdTable(localVocabId(v, "x", *qec));
   BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
 
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
