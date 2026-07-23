@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master]
 
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -26,7 +30,7 @@ jobs:
         echo ${GITHUB_REF} > ./sonarcloud-report/github_ref
     - name: Upload sonarcloud artifact
       if: github.event_name == 'pull_request'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: sonarcloud-report
         path: sonarcloud-report/

@@ -3,7 +3,7 @@ add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
 qlever_target_link_libraries(SortPerformanceEstimator parser)
 add_library(engine
         QueryExecutionTree.cpp Operation.cpp Result.cpp
-        IndexScan.cpp Join.cpp Sort.cpp
+        IndexScan.cpp Join.cpp JoinImpl.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
@@ -28,7 +28,7 @@ add_library(engine
 # too makes the engine PCH inherit `BOOST_PROGRAM_OPTIONS_DYN_LINK` (when
 # Boost is shared) so the PCH matches qlever-server's compile flags and is
 # not silently discarded by GCC with a `-Winvalid-pch` warning.
-qlever_target_link_libraries(engine util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams Boost::program_options s2 spatialjoin-dev pb_util pb_util_geo)
+qlever_target_link_libraries(engine qlever_util index parser global sparqlExpressions SortPerformanceEstimator Boost::iostreams Boost::program_options s2 spatialjoin-dev pb_util pb_util_geo mediaTypes)
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
 # `http` library (which requires C++20). This works because `http` is only used
@@ -39,4 +39,5 @@ if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
 endif()
 
 add_library(server Server.cpp)
-qlever_target_link_libraries(server engine util index parser global http SortPerformanceEstimator)
+qlever_target_link_libraries(server engine qlever_util index parser global http
+SortPerformanceEstimator qlever metrics)

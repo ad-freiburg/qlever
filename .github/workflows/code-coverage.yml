@@ -22,6 +22,10 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
 
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     env:
@@ -84,7 +88,7 @@ jobs:
 # case we are on the master branch and have access to the Codecov token.
     - name: "Submit coverage data to codecov.io"
       if: github.event_name != 'pull_request'
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v6
       with:
         file: ${{github.workspace}}/build/test/coverage.lcov
         # Note: technically, a `token` is not required for codecov.io when
@@ -109,7 +113,7 @@ jobs:
         mv ${{ github.workspace}}/build/test/coverage.lcov coverage-report
     - name: Upload coverage artifact
       if: github.event_name == 'pull_request'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: coverage-report
         path: coverage-report/

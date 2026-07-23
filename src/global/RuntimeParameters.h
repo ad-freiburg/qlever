@@ -24,6 +24,9 @@ struct RuntimeParameters {
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
   using SpaceSeparatedStrings =
       ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
+  using DeduplicationModeParameter =
+      ad_utility::detail::parameterShortNames::DeduplicationModeParameter;
 
   using LogLevelParameter =
       ad_utility::Parameter<LogLevel, LogLevel::FromString, LogLevel::ToString>;
@@ -53,6 +56,15 @@ struct RuntimeParameters {
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
   SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of threads used to read and decompress blocks when scanning
+  // permutations during a runtime index rebuild (see `IndexRebuilder`), both
+  // for the main scan of the old permutations and for the statistics
+  // recomputation. This read/decompress work dominates the rebuild's CPU
+  // usage, so lowering it reduces the rebuild's peak CPU without affecting
+  // query scans. A value of 0 (the default) falls back to
+  // `lazy-index-scan-num-threads`, the same value as for query scans, which is
+  // the historical behavior.
+  SizeT rebuildIndexScanNumThreads_{0, "rebuild-index-scan-num-threads"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
@@ -177,6 +189,14 @@ struct RuntimeParameters {
   // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
   LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
                               "log-level"};
+
+  // Controls deduplication of triples in CONSTRUCT query results.
+  // "false" (default): no deduplication, every triple is emitted.
+  // "global": a triple is emitted at most once across the entire result.
+  // N (positive integer): deduplicate against the N most recently seen unique
+  // triples (per template triple); bounded memory, partial deduplication.
+  DeduplicationModeParameter constructDeduplication_{
+      DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE

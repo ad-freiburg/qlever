@@ -22,13 +22,14 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
   sparqlExpression::EvaluationContext context_{
       *qec_,
       varToColMap_,
-      table_,
+      table_.asStaticView<0>(),
       qec_->getAllocator(),
       localVocab_,
       std::make_shared<ad_utility::CancellationHandle<>>(),
       sparqlExpression::EvaluationContext::TimePoint::max()};
 
-  Id calculate(const auto& data) {
+  template <typename Data>
+  Id calculate(const Data& data) {
     return data.calculateResult(qec_->getIndex(), &localVocab_);
   }
 

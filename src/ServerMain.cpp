@@ -6,6 +6,7 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -15,10 +16,13 @@
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "libqlever/Qlever.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
+#include "util/metrics/Metrics.h"
 
 using std::size_t;
 using std::string;
@@ -44,18 +48,15 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   using ad_utility::NonNegative;
 
-  std::string indexBasename;
+  qlever::EngineConfig config;
   std::string accessToken;
   bool noAccessCheck = false;
-  bool text = false;
   unsigned short port;
+  bool metricsEnabled = false;
   NonNegative numSimultaneousQueries = 1;
-  bool noPatterns;
-  bool onlyPsoAndPosPermutations;
-  bool persistUpdates;
-  std::vector<std::string> preloadMaterializedViews;
-
-  ad_utility::MemorySize memoryMaxSize;
+  bool noMetricsLog = false;
+  bool noResourceUsageLog = false;
+  uint32_t resourceUsageIntervalS = 2;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -67,7 +68,7 @@ int main(int argc, char** argv) {
   add("help,h", "Produce this help message.");
   add("version,v", "Print version information.");
   // TODO<joka921> Can we output the "required" automatically?
-  add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
+  add("index-basename,i", po::value<std::string>(&config.baseName_)->required(),
       "The basename of the index files (required).");
   add("port,p", po::value<unsigned short>(&port)->required(),
       "The port on which HTTP requests are served (required).");
@@ -81,8 +82,9 @@ int main(int argc, char** argv) {
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
   add("memory-max-size,m",
-      po::value<ad_utility::MemorySize>(&memoryMaxSize)
-          ->default_value(DEFAULT_MEM_FOR_QUERIES),
+      po::value<ad_utility::MemorySize>()
+          ->default_value(DEFAULT_MEM_FOR_QUERIES)
+          ->notifier([&config](auto v) { config.memoryLimit_ = v; }),
       "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
@@ -108,14 +110,25 @@ int main(int argc, char** argv) {
       "least-recently used non-pinned entries from the cache. Note that "
       "this condition and the size limit specified via --cache-max-size "
       "both have to hold (logical AND).");
-  add("no-patterns,P", po::bool_switch(&noPatterns),
+  add("no-patterns,P", po::bool_switch(&config.noPatterns_),
       "Disable the use of patterns. If disabled, the special predicate "
       "`ql:has-predicate` is not available.");
-  add("text,t", po::bool_switch(&text),
+  add("no-metrics-log", po::bool_switch(&noMetricsLog),
+      "Disable the per-query metrics log. By default a JSONL log of query "
+      "start/end events is written next to the index files "
+      "(`<index-basename>.metrics-log.jsonl`).");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS and "
+      "CPU usage of the server is written next to the index files "
+      "(`<index-basename>.server.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(2),
+      "The sampling interval of the resource-usage log in seconds.");
+  add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
   add("only-pso-and-pos-permutations,o",
-      po::bool_switch(&onlyPsoAndPosPermutations),
+      po::bool_switch(&config.onlyPsoAndPos_),
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
   add("default-query-timeout,s",
@@ -146,7 +159,7 @@ int main(int argc, char** argv) {
       "endpoint might change at any point in time. If you control the "
       "endpoints, you can override this setting. This will disable the sibling "
       "optimization where VALUES are dynamically pushed into `SERVICE`.");
-  add("persist-updates", po::bool_switch(&persistUpdates),
+  add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
   add("syntax-test-mode",
@@ -178,7 +191,7 @@ int main(int argc, char** argv) {
       "Memory limit for sorting rows during the writing of materialized "
       "views.");
   add("preload-materialized-views,l",
-      po::value<std::vector<std::string>>(&preloadMaterializedViews)
+      po::value<std::vector<std::string>>(&config.preloadMaterializedViews_)
           ->multitoken(),
       "The names of materialized views to be loaded automatically on server "
       "start (this option takes an arbitrary number of arguments).");
@@ -203,6 +216,19 @@ int main(int argc, char** argv) {
       "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
       "as an upper bound — messages above it are never emitted regardless of "
       "this setting.");
+  add("construct-deduplication",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
+      R"("Controls deduplication of triples in CONSTRUCT query results. "
+      "\"none\" (default): no deduplication, every triple is emitted. "
+      "\"global\": a triple is emitted at most once across the entire result. "
+      "\"batchwise:N\" (positive integer N): deduplicate against the N most "
+      "recently seen unique triples per template triple (bounded memory, "
+      "partial deduplication).")");
+  add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
+      "Enable metrics collection and expose a Prometheus /metrics endpoint on "
+      "the main server port. Accessing the endpoint requires a valid access "
+      "token.");
   po::variables_map optionsMap;
 
   try {
@@ -228,13 +254,25 @@ int main(int argc, char** argv) {
               << std::endl;
 
   try {
-    Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), noAccessCheck, !noPatterns);
-    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
-               persistUpdates, preloadMaterializedViews);
+    // Samples RSS and CPU usage, starting before the index is loaded.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Append,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
+    auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
+    Server server(port, numSimultaneousQueries, std::move(accessToken), config,
+                  noAccessCheck, std::move(metricsReader));
+    // Per-query jsonl metrics log, written next to the index files. On by
+    // default; `--no-metrics-log` opts out.
+    if (!noMetricsLog) {
+      server.configureQueryEventLog(config.baseName_ + ".metrics-log.jsonl");
+    }
+    server.run();
   } catch (const std::exception& e) {
-    // This code should never be reached as all exceptions should be handled
-    // within server.run()
+    // Reached if opening the metrics log fails; server.run() otherwise
+    // handles its own exceptions.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }

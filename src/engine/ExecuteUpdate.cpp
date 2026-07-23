@@ -28,16 +28,19 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   // Update 3.1.3)
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
-    deltaTriples.deleteTriples(cancellationHandle,
-                               std::move(toDelete.idTriples_), tracer);
+    deltaTriples.deleteTriples<DeltaTriples::Consolidate::No>(
+        cancellationHandle, std::move(toDelete.idTriples_), tracer);
   }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
   if (!toInsert.idTriples_.empty()) {
-    deltaTriples.insertTriples(cancellationHandle,
-                               std::move(toInsert.idTriples_), tracer);
+    deltaTriples.insertTriples<DeltaTriples::Consolidate::No>(
+        cancellationHandle, std::move(toInsert.idTriples_), tracer);
   }
   tracer.endTrace("insertTriples");
+  tracer.beginTrace("consolidateSortedDeltaTriples");
+  deltaTriples.consolidateAll();
+  tracer.endTrace("consolidateSortedDeltaTriples");
   return metadata;
 }
 
@@ -180,7 +183,7 @@ ExecuteUpdate::transformTriplesTemplate(
 }
 
 // _____________________________________________________________________________
-std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
+std::optional<Id> ExecuteUpdate::resolveVariable(const IdTableView<0>& idTable,
                                                  const uint64_t& rowIdx,
                                                  IdOrVariableIndex idOrVar) {
   auto visitId = [](const Id& id) {
@@ -198,7 +201,7 @@ std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
 // _____________________________________________________________________________
 void ExecuteUpdate::computeAndAddQuadsForResultRow(
     const std::vector<TransformedTriple>& templates,
-    std::vector<IdTriple<>>& result, const IdTable& idTable,
+    std::vector<IdTriple<>>& result, const IdTableView<0>& idTable,
     const uint64_t rowIdx) {
   for (const auto& [s, p, o, g] : templates) {
     auto subject = resolveVariable(idTable, rowIdx, s);
@@ -238,7 +241,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with
         // variables for which a result row does not have a value.
-        updateTriples.reserve(result.idTable().size() *
+        updateTriples.reserve(result.idTableView().size() *
                               transformedTripleTemplates.size());
 
         return std::make_tuple(std::move(transformedTripleTemplates),
@@ -258,10 +261,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
            query._limitOffset, result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (const uint64_t i : range) {
-      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert, idTable, i);
+      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert,
+                                     idTable.asStaticView<0>(), i);
       cancellationHandle->throwIfCancelled();
 
-      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete, idTable, i);
+      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete,
+                                     idTable.asStaticView<0>(), i);
       cancellationHandle->throwIfCancelled();
     }
   }

@@ -50,7 +50,9 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+  CPP_template(typename IdTableT)(
+      requires IdTableLike<IdTableT>) static ad_utility::MemorySize
+      getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          sizeof(Id));
   }
@@ -59,7 +61,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& resultPtr = cacheValue.result_; resultPtr) {
-        return getSize(resultPtr->idTable());
+        return getSize(resultPtr->idTableView());
       } else {
         return 0_B;
       }
@@ -194,11 +196,14 @@ class QueryExecutionContext
   // executed using this context will be stored in the `namedQueryCache()` using
   // the string given in `PinResultWithName` as the query name. If
   // `geoIndexVar_` is also set, a geo index is built and cached in-memory on
-  // the column of this variable. If `pinResultWithName_` is `nullopt`, no
-  // pinning is done.
+  // the column of this variable. If `geoIndexSimplificationInMeters_` is also
+  // set, the indexed geometries are simplified before indexing using the
+  // Douglas-Peucker algorithm with the given maximum error in meters.
+  // If `pinResultWithName_` is `nullopt`, no pinning is done.
   struct PinResultWithName {
     std::string name_;
     std::optional<Variable> geoIndexVar_ = std::nullopt;
+    std::optional<double> geoIndexSimplificationInMeters_ = std::nullopt;
   };
 
   // Accessors; see `pinResultWithName_` for an explanation.

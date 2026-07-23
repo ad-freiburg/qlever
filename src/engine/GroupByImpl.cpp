@@ -449,15 +449,11 @@ void GroupByImpl::processGroup(
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
-    } else if constexpr (sparqlExpression::isVectorResult<T>) {
-      AD_CORRECTNESS_CHECK(singleResult.size() == 1,
-                           "An expression returned a vector expression result "
-                           "that contained an unexpected amount of entries.");
-      resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          std::move(singleResult.at(0)), *localVocab);
     } else {
-      // This should never happen since aggregates always return constants or
-      // vectors.
+      // Inside a GROUP BY, every expression that operates on grouped variables
+      // and/or aggregates has to produce a constant result, because all such
+      // inputs are identical within a group. Every `SparqlExpression` is
+      // implemented so it returns a constant if all its inputs are constant.
       AD_THROW(absl::StrCat("An expression returned an invalid type ",
                             typeid(T).name(),
                             " as the result of an aggregation step."));
@@ -652,7 +648,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
                         resultSortedOn()};
   }
 
-  AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
+  AD_CORRECTNESS_CHECK(subresult->idTableView().numColumns() == inWidth);
 
   // Make a copy of the local vocab. Note: the LocalVocab has reference
   // semantics via `shared_ptr`, so no actual strings are copied here.
@@ -812,7 +808,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
           locatedTriplesState());
-  bool hasLocatedTriples = locTriples.numTriples() > 0;
+  bool hasLocatedTriples = !locTriples.isEmpty();
   bool isMaterializedView = indexScan->permutation().permutationType() ==
                             Permutation::Type::MATERIALIZED_VIEW;
 
@@ -1071,7 +1067,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       {subtree.getRootOperation()->getRuntimeInfoPointer(),
        threeVarSubtree.getRootOperation()->getRuntimeInfoPointer()});
   IdTable result{2, getExecutionContext()->getAllocator()};
-  if (subresult->idTable().size() == 0) {
+  if (subresult->idTableView().size() == 0) {
     return result;
   }
 
@@ -1093,7 +1089,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
   // input iterators.
 
   // Take care of duplicate values in the input.
-  Id currentId = subresult->idTable()(0, columnIndex);
+  Id currentId = subresult->idTableView()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality = getExactCardinality(currentId);
 
@@ -1108,8 +1104,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
-  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
-    auto id = subresult->idTable()(i, columnIndex);
+  for (size_t i = 0; i < subresult->idTableView().size(); ++i) {
+    auto id = subresult->idTableView()(i, columnIndex);
     if (id != currentId) {
       pushRow();
       currentId = id;
@@ -1916,7 +1912,7 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   // Compute the result as a single `size_t`.
   auto res = [&input = *childRes]() -> size_t {
     if (input.isFullyMaterialized()) {
-      return input.idTable().size();
+      return input.idTableView().size();
     } else {
       auto gen = input.idTables();
       auto sz = gen | ql::views::transform([](const auto& pair) {

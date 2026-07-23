@@ -13,6 +13,7 @@
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
@@ -26,6 +27,10 @@
 #include "util/Serializer/Serializer.h"
 
 using namespace ad_utility;
+using namespace memory_literals;
+using ad_utility::serialization::AlignedByteBufferReadSerializer;
+using ad_utility::serialization::AlignedByteBufferWriteSerializer;
+using ad_utility::serialization::BufferedWriteSerializer;
 using ad_utility::serialization::ByteBufferReadSerializer;
 using ad_utility::serialization::ByteBufferWriteSerializer;
 using ad_utility::serialization::CompressedReadSerializer;
@@ -319,7 +324,8 @@ auto testWithCallableSerializer = [](auto testFunction) {
 
   WriteViaCallableSerializer writer{write};
   auto makeReaderFromWriter = [&buffer]() {
-    auto read = [pos = 0ul, &buffer](char* target, size_t numBytes) mutable {
+    auto read = [pos = size_t{0}, &buffer](char* target,
+                                           size_t numBytes) mutable {
       std::copy(buffer.begin() + pos, buffer.begin() + pos + numBytes, target);
       pos += numBytes;
     };
@@ -883,4 +889,360 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
     reader >> read;
     EXPECT_EQ(original, read);
   }
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferReadSerializer, ThrowsWhenReadingPastEnd) {
+  ByteBufferWriteSerializer writer;
+  int x = 42;
+  writer << x;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  // Reading the value succeeds.
+  int y;
+  reader >> y;
+  EXPECT_EQ(y, 42);
+
+  // Any further read past the end throws a contract-check failure.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader >> y, ::testing::HasSubstr("iterator_ + numBytes <= data_.end()"));
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferReadSerializer, ThrowsOnSkipPastEnd) {
+  ByteBufferWriteSerializer writer;
+  char c = 'Q';
+  writer << c;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader.skip(100),
+      ::testing::HasSubstr(
+          "Tried to read/access bytes in ByteBufferReadSerializer but not "
+          "enough bytes available"));
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferReadSerializer, ThrowsOnGetSpanPastEnd) {
+  ByteBufferWriteSerializer writer;
+  char c = 'Q';
+  writer << c;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader.getSpanToBytes(100),
+      ::testing::HasSubstr(
+          "Tried to read/access bytes in ByteBufferReadSerializer but not "
+          "enough bytes available"));
+}
+
+// _____________________________________________________________________________
+// Tests for `alignSerializerForType` directly.
+// _____________________________________________________________________________
+
+// _____________________________________________________________________________
+TEST(AlignedSerializer, AlignSerializerForType) {
+  using ad_utility::serialization::alignSerializerForType;
+
+  // Write: an already-aligned position (0 % 8 == 0) must not add any padding.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    ASSERT_EQ(writer.getCurrentPosition(), 0u);
+    alignSerializerForType<int64_t>(writer);
+    EXPECT_EQ(writer.getCurrentPosition(), 0u);
+  }
+  // Write: an unaligned position adds the correct number of padding bytes.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    char c = 'X';
+    writer << c;
+    alignSerializerForType<int64_t>(writer);
+    // 1 byte (char) + 7 bytes padding = position 8.
+    EXPECT_EQ(writer.getCurrentPosition(), 8u);
+  }
+
+  // Read: an already-aligned position (0 % 8 == 0) must not skip any bytes.
+  {
+    AlignedByteBufferWriteSerializer tmpWriter;
+    for (int i = 0; i < 16; ++i) {
+      tmpWriter << char{0};
+    }
+    AlignedByteBufferReadSerializer reader{std::move(tmpWriter).data()};
+    ASSERT_EQ(reader.getCurrentPosition(), 0u);
+    alignSerializerForType<int64_t>(reader);
+    EXPECT_EQ(reader.getCurrentPosition(), 0u);
+  }
+  // Read: an unaligned position skips the correct number of bytes.
+  {
+    AlignedByteBufferWriteSerializer tmpWriter;
+    for (int i = 0; i < 16; ++i) {
+      tmpWriter << char{0};
+    }
+    AlignedByteBufferReadSerializer reader{std::move(tmpWriter).data()};
+    char c;
+    reader >> c;
+    alignSerializerForType<int64_t>(reader);
+    // 1 byte (char) read + 7 bytes skipped = position 8.
+    EXPECT_EQ(reader.getCurrentPosition(), 8u);
+  }
+}
+
+// _____________________________________________________________________________
+// Tests for the UsesAlignedSerialization trait and aligned serializers.
+// _____________________________________________________________________________
+
+// Test that the trait is correctly detected.
+TEST(AlignedSerializer, TraitDetection) {
+  using ad_utility::serialization::usesAlignedSerialization;
+  // Default (unaligned) serializers.
+  static_assert(!usesAlignedSerialization<ByteBufferWriteSerializer>);
+  static_assert(!usesAlignedSerialization<ByteBufferReadSerializer>);
+  static_assert(!usesAlignedSerialization<FileWriteSerializer>);
+  static_assert(!usesAlignedSerialization<FileReadSerializer>);
+  // Aligned serializers.
+  static_assert(usesAlignedSerialization<AlignedByteBufferWriteSerializer>);
+  static_assert(usesAlignedSerialization<AlignedByteBufferReadSerializer>);
+  // CopyableFileReadSerializer has no trait.
+  static_assert(!usesAlignedSerialization<CopyableFileReadSerializer>);
+}
+
+// Test that the aligned serializers fulfill the Serializer concepts.
+TEST(AlignedSerializer, Concepts) {
+  static_assert(WriteSerializer<AlignedByteBufferWriteSerializer>);
+  static_assert(!ReadSerializer<AlignedByteBufferWriteSerializer>);
+  static_assert(ReadSerializer<AlignedByteBufferReadSerializer>);
+  static_assert(!WriteSerializer<AlignedByteBufferReadSerializer>);
+}
+
+// Test that alignment padding is correctly inserted. We write a single char
+// followed by a vector<int64_t>. The vector serialization writes a size_t (8
+// bytes) then aligns to alignof(int64_t) == 8. After writing 1 byte (char) + 8
+// bytes (size), the position is 9, so 7 bytes of padding should be inserted
+// to reach position 16 before the data.
+TEST(AlignedSerializer, AlignmentPaddingInserted) {
+  AlignedByteBufferWriteSerializer writer;
+  char c = 'X';
+  writer << c;
+  // Position is now 1.
+  EXPECT_EQ(writer.getCurrentPosition(), 1u);
+
+  std::vector<int64_t> v = {100, 200, 300};
+  writer << v;
+
+  // The total size should be: 1 (char) + 8 (size_t for vector length) + 7
+  // (padding to align to 8) + 24 (3 * int64_t) = 40.
+  EXPECT_EQ(writer.getCurrentPosition(), 40u);
+
+  // Verify round-trip.
+  AlignedByteBufferReadSerializer reader{std::move(writer).data()};
+  char cRead;
+  reader >> cRead;
+  EXPECT_EQ(cRead, 'X');
+  std::vector<int64_t> vRead;
+  reader >> vRead;
+  EXPECT_EQ(v, vRead);
+}
+
+// Test that unaligned serializers do NOT insert padding.
+TEST(AlignedSerializer, NoPaddingWithoutAlignment) {
+  ByteBufferWriteSerializer writer;
+  char c = 'X';
+  writer << c;
+
+  std::vector<int64_t> v = {100, 200, 300};
+  writer << v;
+
+  // Without alignment: 1 (char) + 8 (size_t) + 24 (3 * int64_t) = 33.
+  EXPECT_EQ(writer.getCurrentPosition(), 33u);
+
+  // Verify round-trip.
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  char cRead;
+  reader >> cRead;
+  EXPECT_EQ(cRead, 'X');
+  std::vector<int64_t> vRead;
+  reader >> vRead;
+  EXPECT_EQ(v, vRead);
+}
+
+// Test round-trip with matching alignment specifications for byte buffers.
+// While doing so, also test the zero copy serialization via a
+// `ByteBufferReadSerializer` that takes a span.
+TEST(AlignedSerializer, MatchingAlignmentByteBuffer) {
+  // Aligned write + aligned read.
+
+  using namespace ad_utility::use_type_identity;
+  auto test = [&]<typename Writer, typename Reader>(TI<Writer>, TI<Reader>) {
+    Writer writer;
+    char c = 'A';
+    writer << c;
+    std::vector<int64_t> v = {1, 2, 3, 4, 5};
+    writer << v;
+    std::string s = "hello";
+    writer << s;
+
+    auto data = std::move(writer).data();
+
+    Reader reader{data};
+    char cRead;
+    reader >> cRead;
+    auto vRead = [&reader]() {
+      if constexpr (serialization::ZeroCopyReadSerializer<Reader>) {
+        return serialization::zeroCopyDeserializeToSpan<int64_t>(reader);
+      } else {
+        std::vector<int64_t> vRead;
+        reader >> vRead;
+        return vRead;
+      }
+    }();
+    std::string sRead;
+    reader >> sRead;
+    EXPECT_EQ(cRead, 'A');
+    EXPECT_THAT(vRead, ::testing::ElementsAreArray(v));
+    EXPECT_EQ(s, sRead);
+  };
+
+  auto alignedWriter = ti<AlignedByteBufferWriteSerializer>;
+  auto alignedReader = ti<AlignedByteBufferReadSerializer>;
+  auto alignedZeroCopyReader =
+      ti<ad_utility::serialization::ByteBufferReadSerializerT<
+          true, ql::span<const char>>>;
+  test(alignedWriter, alignedReader);
+  test(alignedWriter, alignedZeroCopyReader);
+
+  // Test the unaligned reading and writing.
+  test(ti<ByteBufferWriteSerializer>, ti<ByteBufferReadSerializer>);
+}
+
+// Test that mismatched alignment specifications produce incorrect results.
+// Writing with alignment inserts padding that the unaligned reader doesn't
+// skip, and vice versa.
+TEST(AlignedSerializer, MismatchedAlignmentProducesWrongResults) {
+  // Aligned write + unaligned read: the reader doesn't skip alignment padding,
+  // so it reads garbage.
+  {
+    AlignedByteBufferWriteSerializer writer;
+    char c = 'X';
+    writer << c;
+    std::vector<int64_t> v = {100, 200, 300};
+    writer << v;
+
+    // Read the raw buffer with an unaligned reader. An explicit copy is needed
+    // because the aligned writer's storage uses a different allocator type.
+    auto d = std::move(writer).data();
+    ByteBufferReadSerializer reader{std::vector<char>(d.begin(), d.end())};
+    char cRead;
+    reader >> cRead;
+    EXPECT_EQ(cRead, 'X');
+    std::vector<int64_t> vRead;
+    reader >> vRead;
+    // The unaligned reader doesn't skip the 7 padding bytes, so the data is
+    // misinterpreted.
+    EXPECT_NE(v, vRead);
+  }
+
+  // Unaligned write + aligned read: the reader tries to skip padding that
+  // doesn't exist, reading into the data region.
+  {
+    ByteBufferWriteSerializer writer;
+    char c = 'X';
+    writer << c;
+    std::vector<int64_t> v = {100, 200, 300};
+    writer << v;
+
+    // Read with an aligned reader. An explicit copy is needed because the
+    // aligned reader's storage uses a different allocator type.
+    auto d = std::move(writer).data();
+    using AlignedVec = std::vector<char, ad_utility::AlignedAllocator<char>>;
+    AlignedByteBufferReadSerializer reader{AlignedVec(d.begin(), d.end())};
+    char cRead;
+    reader >> cRead;
+    EXPECT_EQ(cRead, 'X');
+    std::vector<int64_t> vRead;
+    // The aligned reader skips bytes that weren't padding, so the data is
+    // misinterpreted. This may throw or produce wrong results.
+    EXPECT_ANY_THROW(reader >> vRead);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, TransparentPassthrough) {
+  std::array<std::string_view, 4> strings{"alpha", "beta", "gamma", "delta"};
+
+  ByteBufferWriteSerializer expectedWriter;
+  expectedWriter << strings;
+  auto expected = std::move(expectedWriter).data();
+
+  for (MemorySize blockSize : {1_B, 7_B, 64_B, 1024_B}) {
+    BufferedWriteSerializer writer{ByteBufferWriteSerializer{}, blockSize};
+    writer << strings;
+    auto actual = std::move(writer).underlyingSerializer().data();
+    EXPECT_EQ(actual, expected) << "block size was " << blockSize;
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, RoundtripWithByteBuffer) {
+  std::vector<int> original;
+  for (int i = 0; i < 10'000; ++i) {
+    original.push_back(i);
+  }
+
+  BufferedWriteSerializer writer{ByteBufferWriteSerializer{}, 7_B};
+  writer << original;
+  auto buffer = std::move(writer).underlyingSerializer();
+
+  ByteBufferReadSerializer reader{std::move(buffer).data()};
+  std::vector<int> read;
+  reader >> read;
+  EXPECT_EQ(original, read);
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, RoundtripWithFileSerializerViaClose) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto blockSize = 13_B;
+
+  std::vector<std::string> original{"alpha", "beta", "gamma", "delta"};
+
+  {
+    BufferedWriteSerializer writer{FileWriteSerializer{filename}, blockSize};
+    writer << original;
+    // `close` flushes the remaining buffered data to the file.
+    writer.close();
+  }
+
+  {
+    FileReadSerializer reader{filename};
+    std::vector<std::string> read;
+    reader >> read;
+    EXPECT_EQ(original, read);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, FlushOnDestruction) {
+  // The remaining, incomplete block is flushed on destruction, even if neither
+  // `close` nor `underlyingSerializer` is called explicitly.
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+
+  std::vector<int> original = {1, 2, 3, 4, 5};
+  {
+    BufferedWriteSerializer writer{FileWriteSerializer{filename}, 1_MB};
+    writer << original;
+  }
+
+  FileReadSerializer reader{filename};
+  std::vector<int> read;
+  reader >> read;
+  EXPECT_EQ(original, read);
+}
+
+// _____________________________________________________________________________
+TEST(BufferedWriteSerializer, IsWriteSerializer) {
+  static_assert(WriteSerializer<BufferedWriteSerializer<FileWriteSerializer>>);
+  static_assert(
+      WriteSerializer<BufferedWriteSerializer<ByteBufferWriteSerializer>>);
 }

@@ -10,11 +10,11 @@ addLinkAndDiscoverTestNoLibs(VocabularyInternalExternalTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(VocabularyInMemoryBinSearchTest vocabulary)
 
-addLinkAndDiscoverTestNoLibs(PolymorphicVocabularyTest vocabulary parser util)
+addLinkAndDiscoverTestNoLibs(PolymorphicVocabularyTest vocabulary parser qlever_util)
 
 addLinkAndDiscoverTestNoLibs(VocabularyTypeTest)
 
-addLinkAndDiscoverTest(GeoVocabularyTest vocabulary parser util)
+addLinkAndDiscoverTest(GeoVocabularyTest vocabulary parser qlever_util)
 
 addLinkAndDiscoverTest(SplitVocabularyTest index)
 

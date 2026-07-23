@@ -298,6 +298,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"envelopeLowerLeft", &makeEnvelopeLowerLeftExpression},
       {"envelopeUpperRight", &makeEnvelopeUpperRightExpression},
       {"isGeoPoint", &makeIsGeoPointExpression},
+      {"isEncodedIri", &makeIsEncodedIriExpression},
       {"toEpoch", &makeToEpochExpression},
   };
   if (checkPrefix(QL_PREFIX)) {
@@ -305,6 +306,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(unaryInternalFuncs.at(functionName));
     } else if (functionName == "prefix-match") {
       return createBinary(&makePrefixMatchExpression);
+    } else if (functionName == "simplifyGeometry") {
+      return createBinary(&makeSimplifyGeometryExpression);
     }
   }
 

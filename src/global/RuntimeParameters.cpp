@@ -27,6 +27,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanQueueSize_);
   add(lazyIndexScanNumThreads_);
+  add(rebuildIndexScanNumThreads_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
@@ -59,6 +60,7 @@ RuntimeParameters::RuntimeParameters() {
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
+  add(constructDeduplication_);
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is

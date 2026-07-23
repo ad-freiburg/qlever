@@ -16,6 +16,7 @@
 #include "engine/IndexScan.h"
 #include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
+#include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
@@ -48,14 +49,14 @@ class HasPredicateScanTest : public ::testing::Test {
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
     auto res = operation.computeResultOnlyForTesting();
-    EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(expected));
+    EXPECT_THAT(res.idTableView(), ::testing::ElementsAreArray(expected));
   }
 
   // Expect that the result of the `operation` matches the `expectedElements`,
   // but without taking the order into account.
   void runTestUnordered(Operation& op, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    EXPECT_THAT(op.computeResultOnlyForTesting().idTable(),
+    EXPECT_THAT(op.computeResultOnlyForTesting().idTableView(),
                 ::testing::UnorderedElementsAreArray(expected));
   }
 };
