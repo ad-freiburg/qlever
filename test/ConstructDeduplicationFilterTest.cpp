@@ -30,6 +30,22 @@ IdTable makeIdTable(Id id) {
   return t;
 }
 
+BatchEvaluationContext makeFullBatch(const IdTable& table) {
+  return BatchEvaluationContext{table.asStaticView<0>(), 0, table.numRows()};
+}
+
+// Owns a `LocalVocab` together with a one-row `IdTable` whose single id points
+// into that vocab, so the vocab always outlives any view of the table. `ctx()`
+// recomputes a full-table `BatchEvaluationContext`; the row must outlive the
+// returned context.
+struct LocalVocabRow {
+  LocalVocab vocab_;
+  IdTable table_;
+  // The sole id in the table (a `LocalVocabIndex` into `vocab_`).
+  Id id() const { return table_(0, 0); }
+  BatchEvaluationContext ctx() const { return makeFullBatch(table_); }
+};
+
 // Make a template triple with the same variable (column 0) in all three
 // positions.
 const PreprocessedTriple allSameVarTriple{
@@ -62,6 +78,14 @@ class ConstructDeduplicationFilter : public ::testing::Test {
         LocalVocabEntry::literalWithoutQuotes(s,
                                               qec_->getLocalVocabContext())));
   }
+
+  // Build a `LocalVocabRow` for a fresh literal `s` on `qec_`, bundling the
+  // owning `LocalVocab` and its one-row `IdTable`.
+  LocalVocabRow makeLocalVocabRow(std::string_view s) {
+    LocalVocab vocab;
+    Id id = makeLocalVocabIndex(vocab, s);
+    return LocalVocabRow{std::move(vocab), makeIdTable(id)};
+  }
 };
 
 // `makeFullTripleKey` copies an encoded (non-local-vocab) id into the key
@@ -71,7 +95,7 @@ TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 
   Id id = IntId(42);
   auto table = makeIdTable(id);
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
+  auto ctx = makeFullBatch(table);
 
   DeduplicationKey key =
       deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
@@ -88,14 +112,12 @@ TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 TEST_F(ConstructDeduplicationFilter, crossVocabCollapse) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
-  LocalVocab v1;
-  LocalVocab v2;
-  Id src1 = makeLocalVocabIndex(v1, "x");
-  Id src2 = makeLocalVocabIndex(v2, "x");
-  auto t1 = makeIdTable(src1);
-  auto t2 = makeIdTable(src2);
-  BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
+  LocalVocabRow row1 = makeLocalVocabRow("x");
+  LocalVocabRow row2 = makeLocalVocabRow("x");
+  Id src1 = row1.id();
+  Id src2 = row2.id();
+  auto c1 = row1.ctx();
+  auto c2 = row2.ctx();
 
   // The two sources are genuinely different ids (distinct vocab entries), even
   // though they encode equal strings.
@@ -119,15 +141,13 @@ TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
 
   DeduplicationKey key1;
   {
-    LocalVocab tmp;  // destroyed at the end of this scope
-    auto table = makeIdTable(makeLocalVocabIndex(tmp, "x"));
-    BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
+    LocalVocabRow tmp = makeLocalVocabRow("x");  // destroyed at end of scope
+    auto ctx = tmp.ctx();
     key1 = deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
   }  // `tmp` (and its entries) gone; `key1` must still be valid.
 
-  LocalVocab fresh;
-  auto table = makeIdTable(makeLocalVocabIndex(fresh, "x"));
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
+  LocalVocabRow fresh = makeLocalVocabRow("x");
+  auto ctx = fresh.ctx();
   // Comparing/hashing `key1` here dereferences its ids; so it must not read
   // freed memory, and `key1` must still equal the equal-string key from a fresh
   // vocab.
@@ -143,7 +163,7 @@ TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
                                  PrecomputedConstant{{}, IntId(8)},
                                  PrecomputedConstant{{}, IntId(9)}};
   auto table = makeIdTable(IntId(0));  // no variable positions: row unused
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
+  auto ctx = makeFullBatch(table);
 
   DeduplicationKey key = deduplicator.makeFullTripleKey(constTriple, 0, ctx);
   EXPECT_EQ(key, (DeduplicationKey{IntId(7), IntId(8), IntId(9)}));
@@ -158,7 +178,7 @@ TEST_F(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
                                      PrecomputedVariable{0},
                                      PrecomputedVariable{0}};
   auto table = makeIdTable(IntId(1));
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
+  auto ctx = makeFullBatch(table);
 
   EXPECT_ANY_THROW(deduplicator.makeFullTripleKey(blankNodeTriple, 0, ctx));
 }
@@ -170,15 +190,13 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
   auto tmpl = makeSingleTripleTemplate();
 
   {
-    LocalVocab v1;
-    auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x"));
-    BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
+    LocalVocabRow block1 = makeLocalVocabRow("x");
+    auto c1 = block1.ctx();
     EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));  // first occurrence
   }  // block-1 vocab freed before block-2 is seen
 
-  LocalVocab v2;
-  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x"));
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
+  LocalVocabRow block2 = makeLocalVocabRow("x");
+  auto c2 = block2.ctx();
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c2));  // duplicate across blocks
 }
 
@@ -187,14 +205,12 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_};
   auto tmpl = makeSingleTripleTemplate();
 
-  LocalVocab v1;
-  auto t1 = makeIdTable(makeLocalVocabIndex(v1, "x"));
-  BatchEvaluationContext c1{t1.asStaticView<0>(), 0, t1.numRows()};
+  LocalVocabRow block1 = makeLocalVocabRow("x");
+  auto c1 = block1.ctx();
   EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));
 
-  LocalVocab v2;
-  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x"));
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
+  LocalVocabRow block2 = makeLocalVocabRow("x");
+  auto c2 = block2.ctx();
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c2));
 }
 
@@ -207,7 +223,7 @@ TEST_F(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
   tmpl.tripleContainsBlankNode_ = {true};
 
   auto table = makeIdTable(IntId(1));
-  BatchEvaluationContext ctx{table.asStaticView<0>(), 0, table.numRows()};
+  auto ctx = makeFullBatch(table);
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
   EXPECT_TRUE(state.isNew(0, 0, tmpl, ctx));
 }
@@ -223,10 +239,9 @@ TEST_F(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   Id x = makeLocalVocabIndex(v1, "x");
   state.seedGroundTriple(DeduplicationKey{x, x, x});
 
-  LocalVocab v2;
-  auto t2 = makeIdTable(makeLocalVocabIndex(v2, "x"));
-  BatchEvaluationContext c2{t2.asStaticView<0>(), 0, t2.numRows()};
-  EXPECT_FALSE(state.isNew(0, 0, tmpl, c2));  // suppressed by the ground seed
+  LocalVocabRow row = makeLocalVocabRow("x");
+  auto c = row.ctx();
+  EXPECT_FALSE(state.isNew(0, 0, tmpl, c));  // suppressed by the ground seed
 }
 
 // In `batchWise` mode a tiny memory threshold forces the filter to drop all
@@ -239,10 +254,8 @@ TEST_F(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
                               ad_utility::MemorySize::bytes(1)};
   auto tmpl = makeSingleTripleTemplate();
 
-  LocalVocab v;
-  auto t = makeIdTable(makeLocalVocabIndex(v, "x"));
-  BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
-
+  LocalVocabRow row = makeLocalVocabRow("x");
+  auto c = row.ctx();
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
   // The 1-byte threshold was exceeded, so the next call resets the dedup state
   // and the identical triple is treated as new again.
@@ -257,10 +270,8 @@ TEST_F(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
       makeGlobalDeduplicator(ad_utility::MemorySize::bytes(1));
   auto tmpl = makeSingleTripleTemplate();
 
-  LocalVocab v;
-  auto t = makeIdTable(makeLocalVocabIndex(v, "x"));
-  BatchEvaluationContext c{t.asStaticView<0>(), 0, t.numRows()};
-
+  LocalVocabRow row = makeLocalVocabRow("x");
+  auto c = row.ctx();
   EXPECT_TRUE(state.isNew(0, 0, tmpl, c));  // first occurrence
   // The tiny threshold is ignored for `global`: no reset, so the identical
   // triple is still a duplicate.
