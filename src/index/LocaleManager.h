@@ -20,6 +20,7 @@
 #include <unicode/utypes.h>
 #endif  // QLEVER_NO_UNICODE
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -384,9 +385,7 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level /*level*/) const {
-    int res = a.compare(b);
-    int nonNegative = (res > 0) ? 1 : 0;
-    return (res < 0) ? -1 : nonNegative;
+    return std::clamp(a.compare(b), -1, 1);
   }
 
   static int compare(const SortKey& a, const SortKey& b,
