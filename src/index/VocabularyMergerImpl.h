@@ -27,10 +27,10 @@
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& internalWordCallback,
-                     ad_utility::MemorySize memoryToUse,
-                     const std::vector<std::string>& blankNodeIriRegexes)
+auto mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator,
+    C& internalWordCallback, ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
@@ -44,14 +44,9 @@ template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
     ad_utility::MemorySize memoryToUse,
-    const std::vector<std::string>& blankNodeIriRegexes)
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
-  // Compile the regexes for the IRIs that should be treated as blank nodes.
-  for (const auto& regex : blankNodeIriRegexes) {
-    blankNodeIriRegexes_.push_back(std::make_unique<re2::RE2>(regex));
-  }
-
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -99,7 +94,8 @@ auto VocabularyMerger::mergeVocabulary(
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
   for (std::vector<QueueWord>& currentWords : mergedWords) {
-    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
+    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan,
+                           blankNodeIriRegexes, progressBar);
   }
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
@@ -115,9 +111,10 @@ CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
-                           const L& lessThan,
-                           ad_utility::ProgressBar& progressBar) {
+    writeQueueWordsToIdMap(
+        std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+        const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
+        ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // Iterate (avoid duplicates).
@@ -134,7 +131,7 @@ CPP_template_def(typename C, typename L)(
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
                                    top.isExternal(), metaData_.numWordsTotal()};
       lastTripleComponentIsBlankNode_ =
-          lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes_);
+          lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes);
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the

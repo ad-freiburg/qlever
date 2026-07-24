@@ -5,11 +5,13 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
+#include <re2/re2.h>
 
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "./util/IdTestHelpers.h"
@@ -310,14 +312,16 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
     return vocabularyWords.size() - 1;
   };
 
-  // Two regexes:
+  // Two (compiled) regexes:
   // - `<http://ex/bn_.*>` fully matches the two `bn_` IRIs (and neither the
   //   `"bn_lit"` literal, which is not an IRI, nor the other IRIs).
   // - `<http://ex/apple` only matches a prefix of `<http://ex/apple>` (the
   //   closing `>` is missing), so with *full* match it converts nothing. With a
   //   partial match it would have wrongly converted `<http://ex/apple>`.
-  std::vector<std::string> blankNodeIriRegexes{"<http://ex/bn_.*>",
-                                               "<http://ex/apple"};
+  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes;
+  for (const char* pattern : {"<http://ex/bn_.*>", "<http://ex/apple"}) {
+    blankNodeIriRegexes.push_back(std::make_unique<re2::RE2>(pattern));
+  }
   mergeVocabulary(
       basePath, 1,
       [](std::string_view a, bool, std::string_view b, bool) {

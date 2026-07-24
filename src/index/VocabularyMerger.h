@@ -178,12 +178,14 @@ struct VocabularyMetaData {
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
 // appearance. Argument `blankNodeIriRegexes` is a (possibly empty) list of
-// regexes; IRIs matching any of them are treated as blank nodes (see
-// `TripleComponentWithIndex::isBlankNode`).
+// compiled regexes; IRIs that are fully matched by any of them are treated as
+// blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
+// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& wordCallback, ad_utility::MemorySize memoryToUse,
-                     const std::vector<std::string>& blankNodeIriRegexes = {})
+auto mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
+    ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes = {})
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
@@ -203,16 +205,13 @@ class VocabularyMerger {
   bool lastTripleComponentIsBlankNode_ = false;
   // we will store pairs of <partialId, globalId>
   std::vector<IdMapWriter> idMaps_;
-  // Compiled regexes for IRIs that should be treated as blank nodes (see
-  // `mergeVocabulary`). Empty if no such regexes were specified.
-  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes_;
 
   // Friend declaration for the publicly available function.
   template <typename W, typename C>
   friend auto mergeVocabulary(
       const std::string& basename, size_t numFiles, W comparator,
       C& wordCallback, ad_utility::MemorySize memoryToUse,
-      const std::vector<std::string>& blankNodeIriRegexes)
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
@@ -221,10 +220,10 @@ class VocabularyMerger {
   // The function that performs the actual merge. See the static global
   // `mergeVocabulary` function for details.
   template <typename W, typename C>
-  auto mergeVocabulary(const std::string& basename, size_t numFiles,
-                       W comparator, C& wordCallback,
-                       ad_utility::MemorySize memoryToUse,
-                       const std::vector<std::string>& blankNodeIriRegexes)
+  auto mergeVocabulary(
+      const std::string& basename, size_t numFiles, W comparator,
+      C& wordCallback, ad_utility::MemorySize memoryToUse,
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
 
@@ -265,9 +264,10 @@ class VocabularyMerger {
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
-      void writeQueueWordsToIdMap(std::vector<QueueWord>& buffer,
-                                  C& wordCallback, const L& lessThan,
-                                  ad_utility::ProgressBar& progressBar);
+      void writeQueueWordsToIdMap(
+          std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+          const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
+          ad_utility::ProgressBar& progressBar);
 
   // Close all associated files and file-based vectors and reset all internal
   // variables.
@@ -276,7 +276,6 @@ class VocabularyMerger {
     lastTripleComponent_ = std::nullopt;
     lastTripleComponentIsBlankNode_ = false;
     idMaps_.clear();
-    blankNodeIriRegexes_.clear();
   }
 };
 

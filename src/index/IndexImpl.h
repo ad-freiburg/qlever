@@ -9,6 +9,7 @@
 
 #include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
+#include <re2/re2.h>
 
 #include <memory>
 #include <optional>
@@ -191,10 +192,10 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
-  // Regexes for IRIs that should be treated as blank nodes during index
-  // building (only relevant during index building); see
-  // `setBlankNodeIriRegexes`.
-  std::vector<std::string> blankNodeIriRegexes_;
+  // Compiled regexes for IRIs that should be treated as blank nodes during
+  // index building (only relevant during index building). Set (and compiled
+  // from their string representation) via `setBlankNodeIriRegexes`.
+  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes_;
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -301,11 +302,14 @@ class IndexImpl {
   // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
   // of them (via `RE2::FullMatch`) is stored as a blank node instead of in the
   // vocabulary. This is useful for IRIs that only act as internal connector
-  // nodes (e.g. statement nodes), to save vocabulary memory. Each regex has to
-  // match a full IRI and must therefore start with `<`; this is checked with an
-  // `AD_CONTRACT_CHECK`. See `TripleComponentWithIndex::isBlankNode`.
-  void setBlankNodeIriRegexes(std::vector<std::string> blankNodeIriRegexes);
-  const std::vector<std::string>& getBlankNodeIriRegexes() const {
+  // nodes (e.g. statement nodes), to save vocabulary memory. The regexes are
+  // compiled here and stored in their compiled form. Each regex has to match a
+  // full IRI and must therefore start with `<` (checked with an
+  // `AD_CONTRACT_CHECK`); an invalid regex is reported with a user-readable
+  // error. See `TripleComponentWithIndex::isBlankNode`.
+  void setBlankNodeIriRegexes(
+      const std::vector<std::string>& blankNodeIriRegexes);
+  const std::vector<std::unique_ptr<re2::RE2>>& getBlankNodeIriRegexes() const {
     return blankNodeIriRegexes_;
   }
 

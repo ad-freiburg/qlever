@@ -6,6 +6,7 @@
 #include "index/IndexImpl.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
@@ -2007,18 +2008,40 @@ void IndexImpl::setPrefixesForEncodedValues(
 
 // _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
-    std::vector<std::string> blankNodeIriRegexes) {
+    const std::vector<std::string>& blankNodeIriRegexes) {
   // The regexes are matched against the full IRI text (including the angle
   // brackets), so each of them has to describe an IRI and must therefore start
   // with `<`.
-  for (const auto& regex : blankNodeIriRegexes) {
+  ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
     AD_CONTRACT_CHECK(
         ql::starts_with(regex, '<'),
         "A regex for treating IRIs as blank nodes has to match a full IRI and "
         "must therefore start with `<`, but got: ",
         regex);
+  });
+
+  // Compile the regexes. `RE2` does not throw for an invalid pattern but stores
+  // an error state, which we turn into a user-readable exception here.
+  std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
+  try {
+    ql::ranges::for_each(
+        blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
+          auto compiledRegex =
+              std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
+          if (!compiledRegex->ok()) {
+            throw std::runtime_error{
+                absl::StrCat("\"", regex, "\": ", compiledRegex->error())};
+          }
+          compiledRegexes.push_back(std::move(compiledRegex));
+        });
+  } catch (const std::exception& e) {
+    throw std::runtime_error{
+        absl::StrCat("A regex passed to `--iri-as-blank-node-regexes` is not a "
+                     "valid regular "
+                     "expression (as understood by Google's RE2 library): ",
+                     e.what())};
   }
-  blankNodeIriRegexes_ = std::move(blankNodeIriRegexes);
+  blankNodeIriRegexes_ = std::move(compiledRegexes);
 }
 
 // _____________________________________________________________________________
