@@ -134,8 +134,14 @@ option(USE_CPP_17_BACKPORTS "Use the C++17 backports (range-v3 and enable_if_t i
 if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} OR (CMAKE_CXX_STANDARD LESS 20))
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
+    # In the C++17 backports mode, `ql::filesystem` (see `backports/filesystem.h`)
+    # aliases `boost::filesystem` instead of `std::filesystem`, so we then need
+    # `Boost::filesystem` as a dependency. Without the backports we use
+    # `std::filesystem` and must not depend on `boost::filesystem` at all.
+    set(QLEVER_CPP_17_BACKPORTS_ENABLED ON)
 else ()
     add_compile_definitions(RANGE_V3_COMBINE_WITH_STD)
+    set(QLEVER_CPP_17_BACKPORTS_ENABLED OFF)
 endif ()
 
 ###############################################################################
@@ -202,7 +208,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 2d2a6d74ddf28447afabb75943913a6445a27d4f
+        GIT_TAG 344a3fa41e96db38ac775cc78224847255d0152f
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -278,12 +284,21 @@ endif ()
 ######################################
 # BOOST
 ######################################
+# `Boost::filesystem` is only needed in the C++17 backports mode, where
+# `ql::filesystem` aliases `boost::filesystem` (see `backports/filesystem.h`).
+# Without the backports we use `std::filesystem` and must not depend on
+# `boost::filesystem`, so only request the component when the backports are on.
+if (QLEVER_CPP_17_BACKPORTS_ENABLED)
+  set(QLEVER_BOOST_FILESYSTEM_COMPONENT filesystem)
+else()
+  set(QLEVER_BOOST_FILESYSTEM_COMPONENT "")
+endif()
 if (REDUCED_FEATURE_SET_FOR_CPP17)
   # The reduced feature set (which also implies compatibility with older Boost versions) doesn't use `Boost::url`
   # which is only available in Boost versions >= 1.81
-  find_package(Boost 1.71 COMPONENTS iostreams program_options container REQUIRED CONFIG)
+  find_package(Boost 1.71 COMPONENTS iostreams program_options container ${QLEVER_BOOST_FILESYSTEM_COMPONENT} REQUIRED CONFIG)
 else()
-  find_package(Boost 1.81 COMPONENTS iostreams program_options url container REQUIRED CONFIG)
+  find_package(Boost 1.81 COMPONENTS iostreams program_options url container ${QLEVER_BOOST_FILESYSTEM_COMPONENT} REQUIRED CONFIG)
 endif()
 include_directories(${Boost_INCLUDE_DIR})
 
@@ -301,9 +316,17 @@ find_package(OpenSSL REQUIRED)
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
 function(qlever_target_link_libraries target)
+    # Only link `Boost::filesystem` in the C++17 backports mode (see the `BOOST`
+    # section above); without the backports `ql::filesystem` is `std::filesystem`
+    # and `boost::filesystem` must not be a dependency.
+    if (QLEVER_CPP_17_BACKPORTS_ENABLED)
+        set(QLEVER_BOOST_FILESYSTEM_LIB Boost::filesystem)
+    else()
+        set(QLEVER_BOOST_FILESYSTEM_LIB "")
+    endif()
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container uriparser)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -478,6 +501,32 @@ set(URIPARSER_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 
 ################################
+# OpenTelemetry C++ SDK
+################################
+set(WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
+set(WITH_OTLP_GRPC OFF CACHE BOOL "" FORCE)
+set(WITH_PROMETHEUS ON CACHE BOOL "" FORCE)
+# Disable gzip compression of the builtin `/metrics` which we don't use.
+# Removes the need for zlib as a dependency.
+set(ENABLE_COMPRESSION OFF CACHE BOOL "" FORCE)
+set(WITH_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(WITH_FUNC_TESTS OFF CACHE BOOL "" FORCE)
+set(WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
+set(WITH_STL ON CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_2 ON CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_1 OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        opentelemetry-cpp
+        GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
+        GIT_TAG 2d80af1b1d26e300d9c0f7f51fa360f22c773523 # v1.26.0
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL
+        SYSTEM
+)
+
+################################
 # Apply FetchContent
 ################################
 # On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
@@ -486,7 +535,7 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
@@ -501,6 +550,7 @@ include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
+target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -613,7 +663,7 @@ if (USE_PRECOMPILED_HEADERS)
     # Note: index TUs that include `Operation.h` transitively pull in `beast.h`
     # and `boost::iostreams` via `ResponseMiddleware.h` / `CompressorStream.h`.
     target_precompile_headers(index PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
-    target_precompile_headers(util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(qlever_util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
     target_precompile_headers(mediaTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
     if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
         target_precompile_headers(http PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
@@ -647,13 +697,13 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain util)
+qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS

@@ -10,6 +10,9 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "index/IndexRebuilder.h"
 
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+
 #include <array>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -28,6 +31,7 @@
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/LocalVocabEntry.h"
@@ -252,9 +256,18 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
+  // A value of 0 means "fall back to `lazy-index-scan-num-threads`" (the same
+  // thread count as query scans); a positive value throttles the rebuild's
+  // read/decompress parallelism only, reducing its peak CPU without touching
+  // queries.
+  auto rebuildScanThreads =
+      getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+  std::optional<size_t> numThreadsOverride =
+      rebuildScanThreads == 0 ? std::nullopt
+                              : std::optional<size_t>{rebuildScanThreads};
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState);
+      *locatedTriplesSharedState, numThreadsOverride);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -408,6 +421,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
+  // The rebuilt index gets its own build date, namely the time when the
+  // rebuild started (the statistics below are derived from the configuration
+  // of the old index and hence contain the old date).
+  auto dateOfIndexBuild = IndexImpl::formatIndexBuildTime(absl::Now());
+
   auto logFile = ad_utility::makeOfstream(logFileName);
 
   // Macro for rebuild-specific logging with the same syntax as AD_LOG_INFO
@@ -426,6 +444,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
 
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
+  newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
   auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
 

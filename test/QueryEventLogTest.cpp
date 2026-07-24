@@ -10,7 +10,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <fstream>
 #include <set>
 #include <string>
@@ -19,10 +18,11 @@
 #include <vector>
 
 #include "./util/FileTestHelpers.h"
+#include "backports/filesystem.h"
 #include "util/QueryEventLog.h"
 
 namespace {
-namespace fs = std::filesystem;
+namespace fs = ql::filesystem;
 using ad_utility::QueryEventLog;
 using ad_utility::testing::readLines;
 }  // namespace
