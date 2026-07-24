@@ -127,11 +127,10 @@ class LocaleManagerICU : public LocaleManagerBase {
   // `std::runtime_error` if the locale cannot be constructed from `lang` and
   // `country`. \todo(joka921): make the exact punctuation level configurable.
   LocaleManagerICU(const std::string& lang, const std::string& country,
-                   bool ignorePunctuationAtFirstLevel) {
-    icuLocale_ = icu::Locale(lang.c_str(), country.c_str());
-    ignorePunctuationStatus_ =
-        ignorePunctuationAtFirstLevel ? UCOL_SHIFTED : UCOL_NON_IGNORABLE;
-
+                   bool ignorePunctuationAtFirstLevel)
+      : icuLocale_(lang.c_str(), country.c_str()),
+        ignorePunctuationStatus_(
+            ignorePunctuationAtFirstLevel ? UCOL_SHIFTED : UCOL_NON_IGNORABLE) {
     if (icuLocale_.isBogus()) {
       throw std::runtime_error("Could not create locale with language " + lang +
                                " and Country " + country);
@@ -200,7 +199,7 @@ class LocaleManagerICU : public LocaleManagerBase {
   // compare(getSortKey(s, level), getSortKey(t, level)).
   SortKey getSortKey(std::string_view s, const Level level) const {
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
-    auto& col = *collators_[static_cast<uint8_t>(level)];
+    const auto& col = *collators_[static_cast<uint8_t>(level)];
     std::vector<uint8_t> sortKeyBuffer;
     // The actual computation of the sort key is very expensive, so we first
     // allocate a buffer that is typically large enough to store the sort key.
@@ -386,7 +385,8 @@ class LocaleManagerNoICU : public LocaleManagerBase {
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level /*level*/) const {
     int res = a.compare(b);
-    return (res < 0) ? -1 : (res > 0) ? 1 : 0;
+    int nonNegative = (res > 0) ? 1 : 0;
+    return (res < 0) ? -1 : nonNegative;
   }
 
   static int compare(const SortKey& a, const SortKey& b,
