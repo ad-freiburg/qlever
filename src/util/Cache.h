@@ -213,6 +213,8 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
     makeRoomIfFits(0_B);
   }
 
+  MemorySize getMaxSize() const noexcept { return _maxSize; }
+
   //! Set or change the maximum size of a single Entry
   void setMaxSizeSingleEntry(const MemorySize maxSizeSingleEntry) {
     _maxSizeSingleEntry = maxSizeSingleEntry;

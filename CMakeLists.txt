@@ -501,6 +501,32 @@ set(URIPARSER_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 
 ################################
+# OpenTelemetry C++ SDK
+################################
+set(WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
+set(WITH_OTLP_GRPC OFF CACHE BOOL "" FORCE)
+set(WITH_PROMETHEUS ON CACHE BOOL "" FORCE)
+# Disable gzip compression of the builtin `/metrics` which we don't use.
+# Removes the need for zlib as a dependency.
+set(ENABLE_COMPRESSION OFF CACHE BOOL "" FORCE)
+set(WITH_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(WITH_FUNC_TESTS OFF CACHE BOOL "" FORCE)
+set(WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
+set(WITH_STL ON CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_2 ON CACHE BOOL "" FORCE)
+set(WITH_ABI_VERSION_1 OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        opentelemetry-cpp
+        GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp
+        GIT_TAG 2d80af1b1d26e300d9c0f7f51fa360f22c773523 # v1.26.0
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL
+        SYSTEM
+)
+
+################################
 # Apply FetchContent
 ################################
 # On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
@@ -509,7 +535,7 @@ set(URIPARSER_BUILD_WCHAR_T OFF CACHE BOOL "" FORCE)
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser)
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp)
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
@@ -524,6 +550,7 @@ include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
+target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -636,7 +663,7 @@ if (USE_PRECOMPILED_HEADERS)
     # Note: index TUs that include `Operation.h` transitively pull in `beast.h`
     # and `boost::iostreams` via `ResponseMiddleware.h` / `CompressorStream.h`.
     target_precompile_headers(index PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
-    target_precompile_headers(util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
+    target_precompile_headers(qlever_util PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
     target_precompile_headers(mediaTypes PRIVATE ${PRECOMPILED_HEADER_FILES_EXTERNAL})
     if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
         target_precompile_headers(http PRIVATE ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
@@ -670,13 +697,13 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain util)
+qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     install(TARGETS

@@ -27,6 +27,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanQueueSize_);
   add(lazyIndexScanNumThreads_);
+  add(rebuildIndexScanNumThreads_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);

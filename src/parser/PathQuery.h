@@ -42,6 +42,7 @@ struct PathQuery : MagicServiceQuery {
 
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
+  std::optional<uint64_t> maxDepth_ = std::nullopt;
 
   PathQuery() = default;
   PathQuery(PathQuery&& other) noexcept = default;

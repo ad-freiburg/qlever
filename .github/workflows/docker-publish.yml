@@ -33,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         # Generate metadata for the docker image based on the GH Actions environment.
       - name: Generate image metadata
         id: meta
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v6

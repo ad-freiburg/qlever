@@ -33,6 +33,8 @@
 #include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
+#include "util/metrics/Metrics.h"
+#include "util/metrics/ServerMetrics.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -60,7 +62,9 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   std::string accessToken, const qlever::EngineConfig& config,
-                  bool noAccessCheck = false);
+                  bool noAccessCheck = false,
+                  std::shared_ptr<ad_utility::metrics::MetricsReader>
+                      metricsReader = nullptr);
 
   virtual ~Server() = default;
 
@@ -100,6 +104,14 @@ class Server {
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
+
+  // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
+  // disabled (--enable-metrics not passed).
+  std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
+
+  // Deregisters callbacks on destruction. Declared after `qlever_` so that it
+  // is destroyed before `qlever_` which the callbacks access.
+  std::unique_ptr<ServerMetrics> metrics_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
