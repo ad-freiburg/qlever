@@ -2023,24 +2023,18 @@ void IndexImpl::setBlankNodeIriRegexes(
   // Compile the regexes. `RE2` does not throw for an invalid pattern but stores
   // an error state, which we turn into a user-readable exception here.
   std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
-  try {
-    ql::ranges::for_each(
-        blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
-          auto compiledRegex =
-              std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
-          if (!compiledRegex->ok()) {
-            throw std::runtime_error{
-                absl::StrCat("\"", regex, "\": ", compiledRegex->error())};
-          }
-          compiledRegexes.push_back(std::move(compiledRegex));
-        });
-  } catch (const std::exception& e) {
-    throw std::runtime_error{
-        absl::StrCat("A regex passed to `--iri-as-blank-node-regexes` is not a "
-                     "valid regular "
-                     "expression (as understood by Google's RE2 library): ",
-                     e.what())};
-  }
+  ql::ranges::for_each(
+      blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
+        auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
+        if (!compiledRegex->ok()) {
+          throw std::runtime_error{absl::StrCat(
+              "The regex \"", regex,
+              "\" passed to `--iri-as-blank-node-regexes` is not a valid "
+              "regular expression (as understood by Google's RE2 library): ",
+              compiledRegex->error())};
+        }
+        compiledRegexes.push_back(std::move(compiledRegex));
+      });
   blankNodeIriRegexes_ = std::move(compiledRegexes);
 }
 
