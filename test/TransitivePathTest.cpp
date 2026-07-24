@@ -83,17 +83,53 @@ class TransitivePathTest
     auto [T, qec] =
         makePath(std::move(input), vars, std::move(left), std::move(right),
                  minDist, maxDist, std::move(turtleInput), graphVariable);
-    auto operation =
-        std::holds_alternative<IdTable>(sideTable)
-            ? ad_utility::makeExecutionTree<ValuesForTesting>(
-                  qec, std::move(std::get<IdTable>(sideTable)), sideVars, false,
-                  std::vector<ColumnIndex>{sideTableCol}, LocalVocab{},
-                  std::nullopt, forceFullyMaterialized)
-            : ad_utility::makeExecutionTree<ValuesForTesting>(
-                  qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
-                  sideVars, false, std::vector<ColumnIndex>{sideTableCol});
+    auto operation = getOperation(qec, sideTable, sideVars, sideTableCol,
+                                  forceFullyMaterialized);
     auto boundPath = isLeft ? T->bindLeftSide(operation, sideTableCol)
                             : T->bindRightSide(operation, sideTableCol);
+
+    EXPECT_TRUE(boundPath->isBoundOrId());
+    return boundPath;
+  }
+
+  // Get the `operation` element for a side of a transitive path.
+  [[nodiscard]] static std::shared_ptr<QueryExecutionTree> getOperation(
+      QueryExecutionContext* qec,
+      std::variant<IdTable, std::vector<IdTable>>& sideTable, Vars sideVars,
+      size_t sideTableCol, bool forceFullyMaterialized) {
+    return std::holds_alternative<IdTable>(sideTable)
+               ? ad_utility::makeExecutionTree<ValuesForTesting>(
+                     qec, std::move(std::get<IdTable>(sideTable)), sideVars,
+                     false, std::vector<ColumnIndex>{sideTableCol},
+                     LocalVocab{}, std::nullopt, forceFullyMaterialized)
+               : ad_utility::makeExecutionTree<ValuesForTesting>(
+                     qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
+                     sideVars, false, std::vector<ColumnIndex>{sideTableCol});
+  }
+
+  // Same as `makePathBound` but binds two columns at once.
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase>
+  makePathBoundOnBothSides(
+      IdTable input, Vars vars,
+      std::variant<IdTable, std::vector<IdTable>> leftSideTable,
+      std::variant<IdTable, std::vector<IdTable>> rightSideTable,
+      size_t leftSideTableCol, size_t rightSideTableCol, Vars leftSideVars,
+      Vars rightSideVars, TransitivePathSide left, TransitivePathSide right,
+      size_t minDist, size_t maxDist, bool forceFullyMaterialized = false,
+      const std::optional<Variable>& graphVariable = std::nullopt,
+      std::optional<std::string> turtleInput = std::nullopt) {
+    auto [T, qec] =
+        makePath(std::move(input), vars, std::move(left), std::move(right),
+                 minDist, maxDist, std::move(turtleInput), graphVariable);
+
+    auto leftOperation = getOperation(qec, leftSideTable, leftSideVars,
+                                      leftSideTableCol, forceFullyMaterialized);
+    auto rightOperation =
+        getOperation(qec, rightSideTable, rightSideVars, rightSideTableCol,
+                     forceFullyMaterialized);
+
+    auto boundPath = T->bindBothSides(leftOperation, leftSideTableCol,
+                                      rightOperation, rightSideTableCol);
 
     EXPECT_TRUE(boundPath->isBoundOrId());
     return boundPath;
@@ -140,6 +176,19 @@ class TransitivePathTest
     testCase(idTable.clone(), false);
     testCase(split(idTable), false);
     testCase(idTable.clone(), true);
+  }
+
+  static void runTestWithForcedSideTableScenariosOnBothSides(
+      const std::invocable<std::variant<IdTable, std::vector<IdTable>>,
+                           std::variant<IdTable, std::vector<IdTable>>,
+                           bool> auto& testCase,
+      IdTable firstIdTable, IdTable secondIdTable,
+      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+
+    testCase(firstIdTable.clone(), secondIdTable.clone(), false);
+    testCase(split(firstIdTable), split(secondIdTable), false);
+    testCase(firstIdTable.clone(), secondIdTable.clone(), true);
   }
 };
 
@@ -670,6 +719,64 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
         assertResultMatchesIdTable(resultTable, expected);
       },
       std::move(rightOpTable));
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVar) {
+  auto sub = makeIdTableFromVector({
+      {0, 5},
+      {1, 2},
+      {1, 4},
+      {4, 3},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {10, 0},
+      {11, 1},
+      {12, 2},
+  });
+  auto rightOpTable = makeIdTableFromVector({
+      {2, 20},
+      {3, 21},
+      {4, 22},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 3, 11, 21},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  auto testCaseFunc = [&](auto tableVariant, auto secondTableVariant,
+                          bool forceFullyMaterialized) {
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::move(tableVariant), std::move(secondTableVariant), 1, 0,
+        {Variable{"?side1"}, Variable{"?start"}},
+        {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), forceFullyMaterialized);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+
+  // We cannot move away the same tables twice, hence we clone them before
+  // moving them into the test execution.
+  auto leftOpTableCopy = leftOpTable.clone();
+  auto rightOpTableCopy = rightOpTable.clone();
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, leftOpTable.clone(), rightOpTable.clone());
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, std::move(leftOpTableCopy), rightOpTable.clone());
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, leftOpTable.clone(), std::move(rightOpTableCopy));
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, std::move(leftOpTable), std::move(rightOpTable));
 }
 
 // _____________________________________________________________________________
