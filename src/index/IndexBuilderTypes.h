@@ -63,8 +63,8 @@ struct TripleComponentWithIndex {
   // required to describe IRIs (i.e. to start with `<`), which is enforced by
   // `IndexImpl::setBlankNodeIriRegexes`. See also the
   // `--iri-as-blank-node-regexes` option of the index builder.
-  bool isBlankNode(const std::vector<std::unique_ptr<re2::RE2>>&
-                       blankNodeIriRegexes = {}) const {
+  bool isBlankNode(
+      const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes) const {
     if (ql::starts_with(iriOrLiteral_, "_:")) {
       return true;
     }

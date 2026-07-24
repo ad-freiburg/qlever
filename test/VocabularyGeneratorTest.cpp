@@ -157,7 +157,7 @@ class MergeVocabularyTest : public ::testing::Test {
             w.index_ = localIdx;
             partialVocab << w;
             if (mapping) {
-              if (w.isBlankNode()) {
+              if (w.isBlankNode({})) {
                 mapping->emplace_back(
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));

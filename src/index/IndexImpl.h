@@ -304,9 +304,9 @@ class IndexImpl {
   // vocabulary. This is useful for IRIs that only act as internal connector
   // nodes (e.g. statement nodes), to save vocabulary memory. The regexes are
   // compiled here and stored in their compiled form. Each regex has to match a
-  // full IRI and must therefore start with `<` (checked with an
-  // `AD_CONTRACT_CHECK`); an invalid regex is reported with a user-readable
-  // error. See `TripleComponentWithIndex::isBlankNode`.
+  // full IRI and must therefore start with `<`; a regex that violates this or
+  // is not a valid regular expression is reported with a user-readable
+  // exception. See `TripleComponentWithIndex::isBlankNode`.
   void setBlankNodeIriRegexes(
       const std::vector<std::string>& blankNodeIriRegexes);
   const std::vector<std::unique_ptr<re2::RE2>>& getBlankNodeIriRegexes() const {
