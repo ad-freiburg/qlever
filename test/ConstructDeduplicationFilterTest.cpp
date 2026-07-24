@@ -333,13 +333,4 @@ TEST_F(ConstructDeduplicationFilter, noneModeIsRejected) {
   EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec_));
 }
 
-//______________________________________________________________________________
-// Gap the reviewer implied: no test actually exercises the multi-string-key
-// -crossing-threshold path — the one that dangled. A good ASan regression test:
-// a triple with three distinct local-vocab strings (needs a 3-column row / 3
-// different variables) under a 1-byte threshold. Old code → reset mid-key →
-// dangling id → ASan UAF on the next compare. New code → safe. That would lock
-// in the fix.
-TEST_F(ConstructDeduplicationFilter, IDONTKNOW) {}
-
 }  // namespace

@@ -79,7 +79,7 @@ class TripleDeduplicator {
 class ConstructDeduplicator {
  public:
   // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_` in the
-  // `BatchWise` mode, and ignored for the `Global` mode.
+  // `BatchWise` mode, and is ignored in the `Global` mode.
   //
   // Precondition: `mode` is not `DeduplicationMode::None`. For `None` the
   // caller must not construct this state at all (see the class comment).
@@ -128,7 +128,7 @@ class ConstructDeduplicator {
   TripleDeduplicator filter_;
 
   // Compute the byte threshold that bounds `dedupVocab_` in `BatchWise` mode:
-  // the explicit `maxDedupVocabSize` if given, else a default value that is
+  // The explicit `maxDedupVocabSize` if given, else a default value that is
   // roughly equal to the size of the batch-wise triple cache in the
   // `deduplicator_`. `Global` mode does no memory accounting, so this returns a
   // dummy `0` there (see the definition).
@@ -150,8 +150,9 @@ class ConstructDeduplicator {
   // filter's keys reference `dedupVocab_`, so both are reset together.
   void resetIfVocabTooLarge();
 
-  // Whether the deduplication mode is `BatchWise`, i.e. the mode that bounds
-  // its `dedupVocab_` and may reset its state (see `resetIfVocabTooLarge`).
+  // Return true iff the deduplication mode is `BatchWise`, i.e. the mode that
+  // bounds its `dedupVocab_` and may reset its state (see
+  // `resetIfVocabTooLarge`).
   bool isBatchWise() const {
     return std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_);
   }
