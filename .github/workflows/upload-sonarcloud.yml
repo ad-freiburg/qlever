@@ -98,14 +98,33 @@ jobs:
           full_name: ${{ github.event.repository.full_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # SECURITY: This workflow runs on the `workflow_run` trigger and therefore
+      # has access to the repository secrets (see the note at the top of this
+      # file). Here we check out the (possibly forked) PR's head code, which is
+      # subsequently *built* below in order to run the SonarCloud analysis.
+      # Since `actions/checkout` v6.1.0/v7 checking out fork PR code is refused
+      # by default for `pull_request_target`/`workflow_run` to prevent "pwn
+      # requests" (https://gh.io/securely-using-pull_request_target), so we opt
+      # in explicitly via `allow-unsafe-pr-checkout`.
+      #
+      # Building untrusted PR code with secrets available is an inherent
+      # requirement of SonarCloud's C/C++ PR analysis (the code must be compiled
+      # to be analyzed) and cannot be avoided. The residual risk is contained as
+      # follows: `SONAR_TOKEN` and `GITHUB_TOKEN` are NOT exposed to the build
+      # step (they are set as step-level `env:` only on the API/scanner steps),
+      # the workflow's `GITHUB_TOKEN` is read-only (see `permissions:` above),
+      # and `persist-credentials: false` keeps that token out of `.git/config`
+      # so the build cannot read it from there.
       - name: "Checkout"
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.event.workflow_run.head_repository.full_name }}
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
           submodules: "recursive"
           path: qlever-source
+          allow-unsafe-pr-checkout: true
+          persist-credentials: false
       - name: Checkout base branch
         working-directory: qlever-source
         if: github.event.workflow_run.event == 'pull_request'
