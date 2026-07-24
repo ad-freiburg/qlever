@@ -58,13 +58,13 @@ using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
  *
  */
 class BinSearchWrapper {
-  const IdTable& table_;
+  const IdTableView<0>& table_;
   size_t startCol_;
   size_t endCol_;
   std::vector<size_t> edgeCols_;
 
  public:
-  BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
+  BinSearchWrapper(const IdTableView<0>& table, size_t startCol, size_t endCol,
                    std::vector<size_t> edgeCols);
 
   /**
@@ -100,6 +100,9 @@ struct PathSearchConfiguration {
   std::vector<Variable> edgeProperties_;
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
+  // Cap on the number of edges in any recorded path. An edge directly
+  // out of the source counts as depth 1.
+  std::optional<uint64_t> maxDepth_ = std::nullopt;
 
   bool sourceIsVariable() const {
     return std::holds_alternative<Variable>(sources_);
@@ -136,6 +139,10 @@ struct PathSearchConfiguration {
     os << "EdgeProperties:" << '\n';
     for (const auto& edgeProperty : edgeProperties_) {
       os << "  " << edgeProperty.toSparql() << '\n';
+    }
+
+    if (maxDepth_.has_value()) {
+      os << "MaxDepth: " << maxDepth_.value() << '\n';
     }
 
     return std::move(os).str();
@@ -254,6 +261,8 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
@@ -265,7 +274,8 @@ class PathSearch : public Operation {
   pathSearch::PathsLimited findPaths(
       const Id& source, const std::unordered_set<uint64_t>& targets,
       const pathSearch::BinSearchWrapper& binSearch,
-      std::optional<uint64_t> numPathsPerTarget) const;
+      std::optional<uint64_t> numPathsPerTarget,
+      std::optional<uint64_t> maxDepth) const;
 
   /**
    * @brief Finds all paths in the graph.
@@ -274,7 +284,8 @@ class PathSearch : public Operation {
   pathSearch::PathsLimited allPaths(
       ql::span<const Id> sources, ql::span<const Id> targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
-      std::optional<uint64_t> numPathsPerTarget) const;
+      std::optional<uint64_t> numPathsPerTarget,
+      std::optional<uint64_t> maxDepth) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.

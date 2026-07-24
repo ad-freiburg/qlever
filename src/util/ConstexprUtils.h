@@ -298,8 +298,8 @@ constexpr void forEachTypeInParameterPack(const F& lambda) {
 
 // Same as the function above, but the types are passed to the lambda as a first
 // argument `ql::type_identity<T>{}`.
-template <typename... Ts>
-constexpr void forEachTypeInParameterPackWithTI(const auto& lambda) {
+template <typename... Ts, typename Lambda>
+constexpr void forEachTypeInParameterPackWithTI(const Lambda& lambda) {
   (lambda(use_type_identity::ti<Ts>), ...);
 }
 
@@ -326,7 +326,8 @@ struct forEachTypeInTemplateTypeWithTIImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
-  constexpr void operator()(const auto& lambda) const {
+  template <typename Lambda>
+  constexpr void operator()(const Lambda& lambda) const {
     forEachTypeInParameterPackWithTI<Ts...>(lambda);
   }
 };
@@ -343,9 +344,9 @@ constexpr void forEachTypeInTemplateType(const F& lambda) {
 
 // Same as the function above, but the template type is passed in as a
 // `ql::type_identity<TemplateType>`.
-template <typename TemplateType>
+template <typename TemplateType, typename Lambda>
 constexpr void forEachTypeInTemplateTypeWithTI(
-    use_type_identity::TI<TemplateType>, const auto& lambda) {
+    use_type_identity::TI<TemplateType>, const Lambda& lambda) {
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 

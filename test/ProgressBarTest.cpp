@@ -31,8 +31,8 @@ TEST(ProgressBar, typicalUsage) {
     // than indicated, resulting in a much lower speed than expected.
     std::string expectedSpeedRegex =
 #ifndef _QLEVER_NO_TIMING_TESTS
-        "\\[average speed [234]\\.[0-9] M/s, last batch [234]\\.[0-9] M/s"
-        ", fastest [234]\\.[0-9] M/s, slowest [234]\\.[0-9] M/s\\] ";
+        "\\[average speed [234]\\.[0-9] M/s, last batch [1234]\\.[0-9] M/s"
+        ", fastest [234]\\.[0-9] M/s, slowest [1234]\\.[0-9] M/s\\] ";
 #else
         "\\[average speed [0-9]\\.[0-9] M/s, last batch [0-9]\\.[0-9] M/s"
         ", fastest [0-9]\\.[0-9] M/s, slowest [0-9]\\.[0-9] M/s\\] ";

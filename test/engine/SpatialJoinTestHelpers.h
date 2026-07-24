@@ -294,11 +294,11 @@ const std::string approximatedAreaGermany = makeAreaLiteral(
 inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
                                            const Result* table) {
   std::vector<std::string> output;
-  for (size_t i = 0; i < table->idTable().numRows(); i++) {
+  for (size_t i = 0; i < table->idTableView().numRows(); i++) {
     std::string line = "";
-    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
+    for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
       auto test = ql::exportIds::idToStringAndType(
-          qec->getIndex(), table->idTable().at(i, k), {});
+          qec->getIndex(), table->idTableView().at(i, k), {});
       line += test.value().first;
       line += " ";
     }

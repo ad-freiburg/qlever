@@ -174,7 +174,7 @@ void runSelectQueryTestCase(
 
   // Test the interaction of normal limit (the LIMIT of the query) and export
   // limit (the value of the `send` parameter).
-  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+  for (uint64_t exportLimit{0}; exportLimit < uint64_t{4}; ++exportLimit) {
     auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
         testCase.kg, testCase.query, qleverJson, useTextIndex, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSize);
@@ -206,7 +206,7 @@ void runConstructQueryTestCase(
 
   // Test the interaction of normal limit (the LIMIT of the query) and export
   // limit (the value of the `send` parameter).
-  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+  for (uint64_t exportLimit{0}; exportLimit < uint64_t{4}; ++exportLimit) {
     auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
         testCase.kg, testCase.query, qleverJson, false, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
@@ -1413,10 +1413,10 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
   <result>
     <binding name="s"><uri>g</uri></binding>
   </result>)" + xmlTrailer;
-  // The `OrderBy` operation doesn't support the limit natively.
+  // The `OrderBy` operation does not handle the limit.
   std::string_view objectQuery0 =
       "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
-  // The `IndexScan` operation does support the limit natively.
+  // The `IndexScan` operation handles the limit.
   std::string_view objectQuery1 =
       "SELECT ?s WHERE { ?s ?p ?o } INTERNAL SORT BY ?s LIMIT 2 OFFSET 1";
   for (auto objectQuery : {objectQuery0, objectQuery1}) {
@@ -1880,7 +1880,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   };
   AD_EXPECT_THROW_WITH_MESSAGE(call(throwEarly()), std::string_view("failed"));
   auto throwLate = [](bool throwProperException) -> S {
-    size_t largerThanBufferSize = (1ul << 20) + 4;
+    size_t largerThanBufferSize = (size_t{1} << 20) + 4;
     std::string largerThanBuffer;
     largerThanBuffer.resize(largerThanBufferSize);
     co_yield largerThanBuffer;

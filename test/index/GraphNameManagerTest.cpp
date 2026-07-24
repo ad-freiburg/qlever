@@ -43,12 +43,12 @@ TEST(GraphNameManager, storeAndRestoreData) {
   {
     auto allocatedGraphs = 13;
     auto nsm = GraphNameManager("http://example.org/g/", allocatedGraphs);
-    ad_utility::serialization::FileWriteSerializer serializer{tmpFile.c_str()};
+    ad_utility::serialization::FileWriteSerializer serializer{tmpFile.string()};
     serializer << nsm;
   }
   {
     auto nsm = GraphNameManager();
-    ad_utility::serialization::FileReadSerializer serializer{tmpFile.c_str()};
+    ad_utility::serialization::FileReadSerializer serializer{tmpFile.string()};
     serializer >> nsm;
     EXPECT_THAT(nsm.prefixWithoutBraces_,
                 testing::StrEq("http://example.org/g/"));
@@ -76,4 +76,30 @@ TEST(GraphNameManager, toString) {
               InsertIntoStream(
                   testing::StrEq("GraphNameManager(prefix=\"http://"
                                  "example.org/ns/\", allocatedGraphs=42)")));
+}
+
+// _____________________________________________________________________________
+TEST(GraphNameManager, readFromDisk) {
+  const auto manager = GraphNameManager("http://example.org/other/", 3);
+  {
+    auto readManager = manager;
+    readManager.readFromDisk();
+    EXPECT_EQ(readManager, manager);
+  }
+  {
+    auto readManager = manager;
+    readManager.setFilenameForPersistingAndReadFromDisk("nonexistent_file");
+    EXPECT_EQ(readManager.prefixWithoutBraces_, manager.prefixWithoutBraces_);
+    EXPECT_EQ(readManager.nextUnallocatedGraph_, manager.nextUnallocatedGraph_);
+    ad_utility::deleteFile("nonexistent_file");
+  }
+  {
+    auto otherManager = GraphNameManager("http://example.org/ns/", 42);
+    otherManager.setFilenameForPersistingAndReadFromDisk("state_file");
+    otherManager.writeToDisk();
+    auto readManager = manager;
+    readManager.setFilenameForPersistingAndReadFromDisk("state_file");
+    EXPECT_EQ(readManager, otherManager);
+    ad_utility::deleteFile("state_file");
+  }
 }

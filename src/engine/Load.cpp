@@ -15,9 +15,7 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
            SendRequestType getResultFunction)
     : Operation(qec),
       loadClause_(std::move(loadClause)),
-      getResultFunction_(std::move(getResultFunction)),
-      loadResultCachingEnabled_(
-          getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {}
+      getResultFunction_(std::move(getResultFunction)) {}
 
 // _____________________________________________________________________________
 std::string Load::getCacheKeyImpl() const {
@@ -184,7 +182,9 @@ void Load::throwErrorWithContext(std::string_view msg,
 }
 
 // _____________________________________________________________________________
-bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
+bool Load::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>();
+}
 
 // _____________________________________________________________________________
 void Load::resetGetResultFunctionForTesting(SendRequestType func) {

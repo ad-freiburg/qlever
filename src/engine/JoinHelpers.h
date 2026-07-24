@@ -115,7 +115,7 @@ using MaterializedInputView =
 inline MaterializedInputView asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
   return {makeIdTableAndFirstCols<1>(
-      result.idTable().asColumnSubsetView(permutation),
+      result.idTableView().asColumnSubsetView(permutation),
       result.getCopyOfLocalVocab())};
 }
 

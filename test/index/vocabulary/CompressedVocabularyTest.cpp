@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
@@ -98,9 +99,10 @@ struct CompressedVocabularyF : public testing::Test {
   static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
-  static constexpr auto createCompressedVocabulary(
-      const std::string& filename) {
-    return [filename](const std::vector<std::string>& words) {
+  static auto createCompressedVocabulary() {
+    std::string filename = gtestCurrentTestName();
+    return [filename =
+                std::move(filename)](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
       CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
@@ -118,25 +120,23 @@ TYPED_TEST_SUITE(CompressedVocabularyF, Compressors);
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundStdLess) {
-  testUpperAndLowerBoundWithStdLess(
-      this->createCompressedVocabulary("lowerUpperBoundStdLessFsst"));
+  testUpperAndLowerBoundWithStdLess(this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
-      this->createCompressedVocabulary("lowerUpperBoundNumericFsst"));
+      this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(
-      this->createCompressedVocabulary("accessOperatorFsst"));
+  testAccessOperatorForUnorderedVocabulary(this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
-  testEmptyVocabulary(this->createCompressedVocabulary("accessOperatorFsst"));
+  testEmptyVocabulary(this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
@@ -147,7 +147,7 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   // Create vocabulary with small block size (4 words per block).
   // Use VocabularyInMemory as the underlying vocabulary.
   CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
-  const std::string filename = "compressedVocabSerializerTest";
+  std::string filename = gtestCurrentTestName();
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
   for (const auto& word : words) {

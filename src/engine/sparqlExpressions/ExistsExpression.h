@@ -97,6 +97,9 @@ class ExistsExpression : public SparqlExpression {
     return true;
   }
 
+  // EXISTS reads from a column computed by ExistsJoin and is deterministic.
+  [[nodiscard]] bool isDeterministic() const override { return true; }
+
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }
 };

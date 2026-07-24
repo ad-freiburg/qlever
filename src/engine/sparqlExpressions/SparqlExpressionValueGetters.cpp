@@ -17,6 +17,7 @@
 #include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/ParsedUri.h"
 
 using namespace sparqlExpression::detail;
 
@@ -536,6 +537,26 @@ sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
+[[noreturn]] std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+    ValueId, const EvaluationContext*) const {
+  // The base IRI argument of `IriOrUriExpression` is always an `IriExpression`
+  // which evaluates to a `LocalVocabEntry`, never a `ValueId`. This overload
+  // is required by the `Mixin` interface but is logically unreachable.
+  AD_FAIL();
+}
+
+//______________________________________________________________________________
+std::optional<qlever::util::ParsedUri> ParsedUriGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  AD_CORRECTNESS_CHECK(litOrIri.isIri());
+  const auto& iri = litOrIri.getIri();
+  if (iri.empty()) {
+    return std::nullopt;
+  }
+  return qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
+}
+
+//______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
     requires ad_utility::RequestedInfoT<RequestedInfo>)
     std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter<
@@ -662,6 +683,8 @@ template struct TypeErasedValueGetter<LiteralValueGetterWithoutStrFunction>;
 template struct TypeErasedValueGetter<
     IsValueIdValueGetter<Datatype::BlankNodeIndex>>;
 template struct TypeErasedValueGetter<IsValueIdValueGetter<Datatype::GeoPoint>>;
+template struct TypeErasedValueGetter<
+    IsValueIdValueGetter<Datatype::EncodedVal>>;
 template struct TypeErasedValueGetter<IsNumericValueGetter>;
 template struct TypeErasedValueGetter<IsIriValueGetter>;
 template struct TypeErasedValueGetter<IsLiteralValueGetter>;
@@ -676,6 +699,7 @@ template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
 template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
+template struct TypeErasedValueGetter<ParsedUriGetter>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::GeometryInfo>>;
 template struct TypeErasedValueGetter<

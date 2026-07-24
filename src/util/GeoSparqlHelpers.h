@@ -8,9 +8,12 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <string_view>
+#include <type_traits>
+#include <variant>
 
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
@@ -42,6 +45,10 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
+
+// Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
+// quotation marks nor a datatype yet.
+std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
 
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
@@ -219,6 +226,44 @@ class WktGeometryN {
 
     auto resultWkt = detail::geometryNAsWkt(wkt.value(), n.value());
 
+    if (!resultWkt.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{std::move(lit)}};
+  }
+};
+
+// Simplify a WKT geometry using `pb_util`. Tolerance, interpreted in the
+// coordinate units of the geometry.
+class WktSimplify {
+ public:
+  template <typename NumericVariant>
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& geom,
+      const NumericVariant& tolerance) const {
+    using namespace triple_component;
+    if (!geom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // Extract the tolerance as a `double`.
+    auto tol = std::visit(
+        [](const auto& value) -> std::optional<double> {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_arithmetic_v<T>) {
+            return static_cast<double>(value);
+          } else {
+            return std::nullopt;
+          }
+        },
+        tolerance);
+    if (!tol.has_value() || tol.value() <= 0 || !std::isfinite(tol.value())) {
+      return ValueId::makeUndefined();
+    }
+
+    auto resultWkt = detail::simplifyWkt(geom.value(), tol.value());
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }

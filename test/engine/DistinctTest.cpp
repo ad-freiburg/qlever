@@ -59,7 +59,7 @@ TEST(Distinct, distinct) {
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
   Distinct distinct = makeDistinct({1, 2});
-  IdTable result = distinct.outOfPlaceDistinct<4>(input);
+  IdTable result = distinct.outOfPlaceDistinctForTesting(input);
 
   IdTable expectedResult{
       makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
@@ -76,7 +76,7 @@ TEST(Distinct, testChunkEdgeCases) {
     input.resize(1);
     row[0] = Id::makeFromInt(0);
     ql::ranges::fill(input, row);
-    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+    IdTable result = distinct.outOfPlaceDistinctForTesting(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
   }
@@ -85,7 +85,7 @@ TEST(Distinct, testChunkEdgeCases) {
     input.resize(Distinct::CHUNK_SIZE + 1);
     row[0] = Id::makeFromInt(0);
     ql::ranges::fill(input, row);
-    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+    IdTable result = distinct.outOfPlaceDistinctForTesting(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
   }
@@ -95,7 +95,7 @@ TEST(Distinct, testChunkEdgeCases) {
     row[0] = Id::makeFromInt(0);
     ql::ranges::fill(input, row);
     input.at(Distinct::CHUNK_SIZE, 0) = Id::makeFromInt(1);
-    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+    IdTable result = distinct.outOfPlaceDistinctForTesting(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}, {1}}, &Id::makeFromInt), result);
   }
@@ -104,7 +104,7 @@ TEST(Distinct, testChunkEdgeCases) {
     input.resize(2 * Distinct::CHUNK_SIZE);
     row[0] = Id::makeFromInt(0);
     ql::ranges::fill(input, row);
-    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+    IdTable result = distinct.outOfPlaceDistinctForTesting(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
   }
@@ -114,7 +114,7 @@ TEST(Distinct, testChunkEdgeCases) {
     row[0] = Id::makeFromInt(0);
     ql::ranges::fill(input, row);
     input.at(2 * Distinct::CHUNK_SIZE + 1, 0) = Id::makeFromInt(1);
-    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+    IdTable result = distinct.outOfPlaceDistinctForTesting(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}, {1}}, &Id::makeFromInt), result);
   }
@@ -124,7 +124,7 @@ TEST(Distinct, testChunkEdgeCases) {
 TEST(Distinct, distinctWithEmptyInput) {
   IdTable input{1, makeAllocator()};
   Distinct distinct = makeDistinct({});
-  IdTable result = distinct.outOfPlaceDistinct<1>(input);
+  IdTable result = distinct.outOfPlaceDistinctForTesting(input);
   ASSERT_EQ(input, result);
 }
 
@@ -149,7 +149,7 @@ TEST(Distinct, nonLazy) {
         distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
     ASSERT_TRUE(result->isFullyMaterialized());
     EXPECT_EQ(
-        result->idTable(),
+        result->idTableView(),
         makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
   }
 
@@ -157,7 +157,7 @@ TEST(Distinct, nonLazy) {
     auto result = distinct.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
     ASSERT_TRUE(result->isFullyMaterialized());
     EXPECT_EQ(
-        result->idTable(),
+        result->idTableView(),
         makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
   }
 }
@@ -182,7 +182,7 @@ TEST(Distinct, nonLazyWithLazyInputs) {
 
   auto result = distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
-  EXPECT_EQ(result->idTable(),
+  EXPECT_EQ(result->idTableView(),
             makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
 }
 

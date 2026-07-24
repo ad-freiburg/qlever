@@ -210,6 +210,7 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation.
     throw ad_utility::CancellationException(
+        ad_utility::CancellationState::TIMEOUT,
         absl::StrCat(operationDescriptor,
                      " was canceled, because time estimate exceeded "
                      "remaining time by a factor of ",

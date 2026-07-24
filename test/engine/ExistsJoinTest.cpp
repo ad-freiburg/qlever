@@ -75,7 +75,7 @@ void testExistsFromIdTable(
       ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
   auto res = exists.computeResultOnlyForTesting();
-  const auto& table = res.idTable();
+  const auto& table = res.idTableView();
   ASSERT_EQ(table.numRows(), left.size());
   expected.addEmptyColumn();
   ql::ranges::transform(expectedAsBool, expected.getColumn(2).begin(),
@@ -148,7 +148,7 @@ void testExistsJoin(
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 
@@ -240,7 +240,7 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
         Variable{"?result"}};
     auto result = existsJoin.computeResultOnlyForTesting(true);
     ASSERT_TRUE(result.isFullyMaterialized());
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA));
     const auto& runtimeInfo =
@@ -301,7 +301,7 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
     auto result = existsJoin.computeResultOnlyForTesting(requestLaziness);
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness);
     if (result.isFullyMaterialized()) {
-      EXPECT_EQ(result.idTable(), expected);
+      EXPECT_EQ(result.idTableView(), expected);
       EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                   ::testing::UnorderedElementsAre(entryA));
     } else {
@@ -464,6 +464,32 @@ TEST(ExistsJoin, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
             makeIdTableFromVector({{V(0), V(1), Id::makeFromBool(false)}}));
 
   EXPECT_EQ(++it, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, originalTreesAreNotOverwrittenWhenJoinColumnsEmpty) {
+  auto* qec = getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{2, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{2, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}});
+
+  ExistsJoin existsJoin{qec, leftTree, rightTree, Variable{"?z"}};
+
+  EXPECT_TRUE(existsJoin.getChildren()
+                  .at(0)
+                  ->getRootOperation()
+                  ->getLimitOffset()
+                  .isUnconstrained());
+  EXPECT_EQ(
+      existsJoin.getChildren().at(1)->getRootOperation()->getLimitOffset(),
+      LimitOffsetClause(1, 0));
+  EXPECT_TRUE(leftTree->getRootOperation()->getLimitOffset().isUnconstrained());
+  EXPECT_TRUE(
+      rightTree->getRootOperation()->getLimitOffset().isUnconstrained());
 }
 
 // _____________________________________________________________________________

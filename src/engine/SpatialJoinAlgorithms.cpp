@@ -25,6 +25,7 @@
 #include <cmath>
 #include <set>
 
+#include "backports/filesystem.h"
 #include "backports/three_way_comparison.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
@@ -152,8 +153,8 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 // ____________________________________________________________________________
 std::optional<ad_utility::BoundingBox>
 SpatialJoinAlgorithms::getBoundingBoxFromIdTable(
-    const IdTable* idTable, const SpatialJoinBoundingBoxColumns& boundingBoxes,
-    size_t row) {
+    const IdTableView<0>* idTable,
+    const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
   if (!boundingBoxes.has_value()) {
     return std::nullopt;
   }
@@ -179,9 +180,8 @@ size_t SpatialJoinAlgorithms::getNumThreads() {
 }
 
 // ____________________________________________________________________________
-std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
-                                                        size_t row,
-                                                        ColumnIndex col) {
+std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
+    const IdTableView<0>* restable, size_t row, ColumnIndex col) {
   auto id = restable->at(row, col);
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
@@ -190,7 +190,8 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
-    const IdTable& restable, size_t row, ColumnIndex col, const Index& index) {
+    const IdTableView<0>& restable, size_t row, ColumnIndex col,
+    const Index& index) {
   using namespace util::geo;
   auto id = restable.at(row, col);
   auto str = ql::exportIds::idToStringAndType(index, id, {});
@@ -219,7 +220,7 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
 }
 
 std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
-    const IdTable* idtable, size_t row, size_t col) {
+    const IdTableView<0>* idtable, size_t row, size_t col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
@@ -308,18 +309,17 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
 }
 
 // ____________________________________________________________________________
-void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
-                                                const IdTable* idTableLeft,
-                                                const IdTable* idTableRight,
-                                                size_t rowLeft, size_t rowRight,
-                                                Id distance) const {
+void SpatialJoinAlgorithms::addResultTableEntry(
+    IdTable* result, const IdTableView<0>* idTableLeft,
+    const IdTableView<0>* idTableRight, size_t rowLeft, size_t rowRight,
+    Id distance) const {
   // this lambda function copies values from copyFrom into the table res only if
   // the column of the value is specified in sourceColumns. If sourceColumns is
   // nullopt, all columns are added. It copies them into the row rowIndRes and
   // column column colIndRes. It returns the column number until which elements
   // were copied
-  auto addColumns = [](IdTable* res, const IdTable* copyFrom, size_t rowIndRes,
-                       size_t colIndRes, size_t rowIndCopy,
+  auto addColumns = [](IdTable* res, const IdTableView<0>* copyFrom,
+                       size_t rowIndRes, size_t colIndRes, size_t rowIndCopy,
                        std::optional<std::vector<ColumnIndex>> sourceColumns =
                            std::nullopt) {
     size_t nCols = sourceColumns.has_value() ? sourceColumns.value().size()
@@ -459,6 +459,11 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
   cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
   cfg.computeDE9IM = false;
+  // Never let `libspatialjoin` fall back to a self-join when it considers one
+  // side to be empty; QLever's callbacks rely on the first geometry of each
+  // result pair coming from the left side and the second one from the right
+  // side (see #3068).
+  cfg.forceTwoSided = true;
   cfg.writeRelCb = {};
   cfg.logCb = {};
   cfg.statsCb = {};
@@ -512,8 +517,25 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   };
   sweeperCfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
 
-  std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
+  auto basePath = ql::filesystem::path(qec_->getIndex().getOnDiskBase());
+
+  std::string sweeperTmpPath = basePath.parent_path().string();
+
+  // `parent_path()` returns `""` if the parent path is empty, not `"."`.
+  if (sweeperTmpPath.empty()) {
+    sweeperTmpPath = ".";
+  }
+
+  std::string baseName = ql::pathFilename(basePath).string();
+
+  // The prefix added before each spatialjoin file.
+  //
+  // NOTE: If `getOnDiskBase()` ends with `/` or is empty, `baseName` is empty
+  // and the spatialjoin files end up named `.spatialjoin`. We should consider
+  // disallowing empty index base names at the engine boundary.
+  std::string sweeperPrefix = baseName + ".spatialjoin";
+
+  sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
@@ -529,6 +551,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-smaller-side", threadsSmall);
+    auto numValidGeomsSmall = sweeper.numElements();
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
@@ -542,17 +565,22 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
         libspatialjoinParse(!smallerIsRight, larger, sweeper, NUM_THREADS,
                             sweeper.getPaddedBoundingBox(boxSmall));
+    auto numValidGeomsTotal = sweeper.numElements();
+    AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
+    auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
 
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-larger-side", threadsLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
                                                   countSmall + countLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
+                                                  numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-geoms-dropped-by-prefilter", droppedLarge);
 
     // If we have filtered out all geometries or one side is otherwise empty,
     // bail out early.
-    return countSmall > 0 && countLarge > 0;
+    return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
   LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol, bbLeft};
@@ -959,7 +987,7 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 
 // ____________________________________________________________________________
 std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
-    const IdTable* idTable, const size_t row, const ColumnIndex col) {
+    const IdTableView<0>* idTable, const size_t row, const ColumnIndex col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("getRtreeEntry is not supported in this build");
 #else

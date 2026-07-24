@@ -47,6 +47,10 @@ class DeviationExpression : public SparqlExpression {
     return absl::StrCat("[ SQ.DEVIATION ]", child_->getCacheKey(varColMap));
   }
 
+  [[nodiscard]] bool isDeterministic() const override {
+    return child_->isDeterministic();
+  }
+
  private:
   // _________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override {
