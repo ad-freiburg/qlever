@@ -121,9 +121,72 @@ TEST(LocaleManager, PrefixSortKey) {
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
 }
 
-// The following test exercises the ICU-free (bytewise) `LocaleManagerNoICU`.
-// It is always compiled and run, regardless of whether QLever is built with
+#ifndef QLEVER_NO_UNICODE
+// The following tests are specific to the ICU-based `LocaleManagerICU`.
+
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, BogusLocaleThrows) {
+  // A language string that is too long for ICU yields a "bogus" locale, which
+  // the constructor must reject.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      LocaleManagerICU(std::string(1000, 'a'), "US", false),
+      ::testing::HasSubstr("Could not create locale"));
+}
+
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, CopyAssignment) {
+  using L = LocaleManager::Level;
+  LocaleManagerICU ignorePunct("en", "US", true);
+  LocaleManagerICU respectPunct("en", "US", false);
+  // Precondition: the two managers disagree on punctuation handling.
+  ASSERT_EQ(ignorePunct.compare(".a", "a", L::PRIMARY), 0);
+  ASSERT_LT(respectPunct.compare(".a", "a", L::PRIMARY), 0);
+  // Copy-assignment transfers the locale settings.
+  respectPunct = ignorePunct;
+  EXPECT_EQ(respectPunct.compare(".a", "a", L::PRIMARY), 0);
+  // Self-assignment is a no-op (via a reference to avoid `-Wself-assign`).
+  LocaleManagerICU& ref = respectPunct;
+  respectPunct = ref;
+  EXPECT_EQ(respectPunct.compare(".a", "a", L::PRIMARY), 0);
+}
+
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, RaiseThrowsOnIcuError) {
+  // Force an ICU error through the public `compare`: a `string_view` with null
+  // data but nonzero size makes `compareUTF8` fail with
+  // `U_ILLEGAL_ARGUMENT_ERROR`, which `raise` turns into an exception. The null
+  // pointer is never dereferenced, as ICU reports the error first.
+  LocaleManagerICU loc;
+  std::string_view nullView{static_cast<const char*>(nullptr), 5};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)loc.compare(nullView, "a", LocaleManager::Level::PRIMARY),
+      ::testing::HasSubstr("U_ILLEGAL_ARGUMENT_ERROR"));
+}
+#endif  // QLEVER_NO_UNICODE
+
+// The following tests exercise the ICU-free (bytewise) `LocaleManagerNoICU`.
+// They are always compiled and run, regardless of whether QLever is built with
 // ICU, so that the ICU-free code path is covered.
+
+// _____________________________________________________________________________
+TEST(LocaleManager, NoICUPrefixSortKey) {
+  using L = LocaleManagerNoICU::Level;
+  LocaleManagerNoICU loc;
+  // The bytewise prefix sort key is the first `min(prefixLength, size)` bytes.
+  auto expectPrefix = [&loc](std::string_view s, size_t prefixLength,
+                             size_t expectedNum,
+                             std::string_view expectedBytes) {
+    auto [num, key] = loc.getPrefixSortKey(s, prefixLength);
+    EXPECT_EQ(num, expectedNum);
+    EXPECT_EQ(key.get(), loc.getSortKey(expectedBytes, L::PRIMARY).get());
+  };
+  // Prefix shorter than the string.
+  expectPrefix("abcdef", 3, 3, "abc");
+  // Prefix length exceeding the string: the whole string is returned.
+  expectPrefix("abc", 10, 3, "abc");
+  // Empty string.
+  expectPrefix("", 5, 0, "");
+}
 
 // _____________________________________________________________________________
 TEST(LocaleManager, NoICU) {
