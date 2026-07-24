@@ -51,27 +51,30 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
   // Return true if this word is a blank node. A word is a blank node if it
   // starts with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI
-  // that matches one of those regexes.
+  // that is fully matched by one of those regexes.
   //
-  // The regexes are matched (via `RE2::PartialMatch`) against the full text of
-  // the word, *including* the surrounding angle brackets of an IRI. For
-  // example the regex `example\.org/statement/` matches the IRI
+  // The regexes are matched (via `RE2::FullMatch`) against the full text of the
+  // word, *including* the surrounding angle brackets of an IRI. The match has
+  // to cover the entire word, so a regex must describe the whole IRI; to allow
+  // an arbitrary suffix, end it with `.*`. For example the regex
+  // `<https://example\.org/statement/.*>` matches the IRI
   // `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
-  // are ever treated this way: a regex that happens to match inside a literal
-  // does not turn that literal into a blank node. See the
-  // `--iri-as-blank-node-regexes` option of the index builder and
-  // `IndexImpl::blankNodeIriRegexes`.
+  // are ever treated this way; literals are never converted. The regexes are
+  // required to describe IRIs (i.e. to start with `<`), which is enforced by
+  // `IndexImpl::setBlankNodeIriRegexes`. See also the
+  // `--iri-as-blank-node-regexes` option of the index builder.
   bool isBlankNode(const std::vector<std::unique_ptr<re2::RE2>>&
                        blankNodeIriRegexes = {}) const {
     if (ql::starts_with(iriOrLiteral_, "_:")) {
       return true;
     }
-    // The regexes only apply to IRIs (which start with `<`).
+    // Only IRIs (which start with `<`) can be treated as blank nodes; this also
+    // avoids running the regexes for the common case of a literal.
     if (!ql::starts_with(iriOrLiteral_, "<")) {
       return false;
     }
     return ql::ranges::any_of(blankNodeIriRegexes, [this](const auto& regex) {
-      return re2::RE2::PartialMatch(iriOrLiteral_, *regex);
+      return re2::RE2::FullMatch(iriOrLiteral_, *regex);
     });
   }
 

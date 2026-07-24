@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "global/RuntimeParameters.h"
@@ -2003,6 +2004,23 @@ void IndexImpl::setPrefixesForEncodedValues(
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
+
+// _____________________________________________________________________________
+void IndexImpl::setBlankNodeIriRegexes(
+    std::vector<std::string> blankNodeIriRegexes) {
+  // The regexes are matched against the full IRI text (including the angle
+  // brackets), so each of them has to describe an IRI and must therefore start
+  // with `<`.
+  for (const auto& regex : blankNodeIriRegexes) {
+    AD_CONTRACT_CHECK(
+        ql::starts_with(regex, '<'),
+        "A regex for treating IRIs as blank nodes has to match a full IRI and "
+        "must therefore start with `<`, but got: ",
+        regex);
+  }
+  blankNodeIriRegexes_ = std::move(blankNodeIriRegexes);
+}
+
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {
   PatternStatistics statistics;

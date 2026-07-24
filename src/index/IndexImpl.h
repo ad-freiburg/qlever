@@ -193,7 +193,7 @@ class IndexImpl {
 
   // Regexes for IRIs that should be treated as blank nodes during index
   // building (only relevant during index building); see
-  // `blankNodeIriRegexes()`.
+  // `setBlankNodeIriRegexes`.
   std::vector<std::string> blankNodeIriRegexes_;
 
   // BlankNodeManager, initialized during `readConfiguration`
@@ -297,16 +297,15 @@ class IndexImpl {
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
 
-  // The regexes for IRIs that should be treated as blank nodes during index
-  // building. Each entry is an `RE2` regex; an IRI matching any of them (via
-  // `RE2::PartialMatch`) is stored as a blank node instead of in the
+  // Set the regexes for IRIs that should be treated as blank nodes during index
+  // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
+  // of them (via `RE2::FullMatch`) is stored as a blank node instead of in the
   // vocabulary. This is useful for IRIs that only act as internal connector
-  // nodes (e.g. statement nodes), to save vocabulary memory. See
-  // `TripleComponentWithIndex::isBlankNode`.
-  std::vector<std::string>& blankNodeIriRegexes() {
-    return blankNodeIriRegexes_;
-  }
-  const std::vector<std::string>& blankNodeIriRegexes() const {
+  // nodes (e.g. statement nodes), to save vocabulary memory. Each regex has to
+  // match a full IRI and must therefore start with `<`; this is checked with an
+  // `AD_CONTRACT_CHECK`. See `TripleComponentWithIndex::isBlankNode`.
+  void setBlankNodeIriRegexes(std::vector<std::string> blankNodeIriRegexes);
+  const std::vector<std::string>& getBlankNodeIriRegexes() const {
     return blankNodeIriRegexes_;
   }
 

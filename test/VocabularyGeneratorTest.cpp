@@ -279,10 +279,11 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
 }
 
 // _____________________________________________________________________________
-// Test that IRIs matching one of the `blankNodeIriRegexes` are treated as blank
-// nodes during `mergeVocabulary` (not passed to the vocabulary word callback,
-// and mapped to blank node `Id`s), while other IRIs and, in particular,
-// literals that match a regex are left untouched.
+// Test that IRIs fully matched by one of the `blankNodeIriRegexes` are treated
+// as blank nodes during `mergeVocabulary` (not passed to the vocabulary word
+// callback, and mapped to blank node `Id`s), while non-matching IRIs and
+// literals are left untouched. In particular, matching is a *full* match, so a
+// regex that only matches a prefix of an IRI does not convert it.
 TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   std::string basePath = gtestCurrentTestName();
   std::string wordsFile = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0);
@@ -294,9 +295,7 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
 
   // A single partial vocabulary. The words must be in ascending order according
   // to the comparator used below (plain `std::less`); note that literals (which
-  // start with `"`) sort before IRIs (which start with `<`). The literal
-  // `"bn_lit"` also matches the regex below, but must NOT be treated as a blank
-  // node because only IRIs are.
+  // start with `"`) sort before IRIs (which start with `<`).
   std::array<std::string_view, 5> words{"\"bn_lit\"", "<http://ex/apple>",
                                         "<http://ex/bn_1>", "<http://ex/bn_2>",
                                         "<http://ex/cherry>"};
@@ -311,8 +310,14 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
     return vocabularyWords.size() - 1;
   };
 
-  // Treat all IRIs that contain `bn_` as blank nodes.
-  std::vector<std::string> blankNodeIriRegexes{"bn_"};
+  // Two regexes:
+  // - `<http://ex/bn_.*>` fully matches the two `bn_` IRIs (and neither the
+  //   `"bn_lit"` literal, which is not an IRI, nor the other IRIs).
+  // - `<http://ex/apple` only matches a prefix of `<http://ex/apple>` (the
+  //   closing `>` is missing), so with *full* match it converts nothing. With a
+  //   partial match it would have wrongly converted `<http://ex/apple>`.
+  std::vector<std::string> blankNodeIriRegexes{"<http://ex/bn_.*>",
+                                               "<http://ex/apple"};
   mergeVocabulary(
       basePath, 1,
       [](std::string_view a, bool, std::string_view b, bool) {
@@ -321,8 +326,7 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
       wordCallback, 1_GB, blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
-  // (regex-matching but non-IRI) literal remain in the vocabulary, in sorted
-  // order.
+  // literal remain in the vocabulary, in sorted order.
   EXPECT_THAT(vocabularyWords,
               ::testing::ElementsAre("\"bn_lit\"", "<http://ex/apple>",
                                      "<http://ex/cherry>"));

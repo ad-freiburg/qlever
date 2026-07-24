@@ -284,18 +284,19 @@ int main(int argc, char** argv) {
 
   add("iri-as-blank-node-regexes",
       po::value(&config.blankNodeIriRegexes_)->composing()->multitoken(),
-      "Space-separated list of regexes. An IRI that matches one of these "
-      "regexes (via RE2 partial match) is not stored in the vocabulary, but "
+      "Space-separated list of regexes. An IRI that is fully matched by one of "
+      "these regexes (via RE2 full match) is not stored in the vocabulary, but "
       "converted to a blank node. This saves memory for IRIs that only act as "
       "internal connector nodes (e.g. statement nodes). The regex is matched "
-      "against the full IRI text including the angle brackets, e.g. the regex "
-      "`example\\.org/statement/` matches "
-      "`<https://example.org/statement/42>`. "
-      "Only IRIs are affected; a regex that happens to match inside a literal "
-      "does not turn that literal into a blank node. NOTE: This is an "
-      "experimental feature. The affected IRIs behave as ordinary blank "
-      "nodes, so they are no longer recognized as those IRIs if used, e.g., "
-      "in a query or an update.");
+      "against the full IRI text including the angle brackets and has to cover "
+      "the entire IRI, so each regex must start with `<`; to allow an "
+      "arbitrary "
+      "suffix, end it with `.*`, e.g. the regex "
+      "`<https://example\\.org/statement/.*>` matches "
+      "`<https://example.org/statement/42>`. Only IRIs are affected. NOTE: "
+      "This is an experimental feature. The affected IRIs behave as ordinary "
+      "blank nodes, so they are no longer recognized as those IRIs if used, "
+      "e.g., in a query or an update.");
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
