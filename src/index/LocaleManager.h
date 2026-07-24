@@ -383,9 +383,6 @@ class LocaleManagerNoICU : public LocaleManagerBase {
                      const std::string& /*country*/,
                      bool /*ignorePunctuationAtFirstLevel*/) {}
 
-  LocaleManagerNoICU(const LocaleManagerNoICU&) = default;
-  LocaleManagerNoICU& operator=(const LocaleManagerNoICU&) = default;
-
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level /*level*/) const {
     int res = a.compare(b);
