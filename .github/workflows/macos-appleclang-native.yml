@@ -27,7 +27,7 @@ jobs:
         build-type: [Release]
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install dependencies via Homebrew
         run: |
@@ -48,7 +48,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: ${{ github.workspace }}/build
-        run: cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DLOGLEVEL=INFO -DUSE_PARALLEL=false -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DICU_ROOT=$(brew --prefix icu4c) -GNinja ..
+        run: cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DLOGLEVEL=INFO -DUSE_PARALLEL=false -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -DICU_ROOT=$(brew --prefix icu4c) -GNinja -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST ..
 
       - name: Build
         # Build your program with the given configuration
@@ -59,7 +59,10 @@ jobs:
       - name: Test
         id: complete_tests
         working-directory: ${{github.workspace}}/build/test
-        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -j $(sysctl -n hw.ncpu) .
+        # With `PRE_TEST` discovery, the tests are only discovered here, so make
+        # sure that an (unlikely) complete failure of the discovery fails the
+        # job instead of silently running zero tests.
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest --no-tests=error -C ${{matrix.build-type}} -j $(sysctl -n hw.ncpu) .
 
       - name: Running and printing the benchmark examples.
         working-directory: ${{github.workspace}}/build
