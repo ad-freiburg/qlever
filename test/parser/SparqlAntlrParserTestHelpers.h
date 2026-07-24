@@ -742,27 +742,32 @@ inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
 
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFilters {
+  template <typename... ChildMatchers>
   Matcher<const p::GraphPatternOperation&> operator()(
-      std::vector<std::string>&& filters, const auto&... childMatchers) {
+      std::vector<std::string>&& filters,
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda(std::move(filters), childMatchers...);
   }
 
+  template <typename... ChildMatchers>
   Matcher<const p::GraphPatternOperation&> operator()(
-      const auto&... childMatchers) {
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda({}, childMatchers...);
   }
 };
 
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFiltersAndOptional {
+  template <typename... ChildMatchers>
   Matcher<const ParsedQuery::GraphPattern&> operator()(
       bool optional, std::vector<std::string>&& filters,
-      const auto&... childMatchers) {
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda(optional, std::move(filters), childMatchers...);
   }
 
+  template <typename... ChildMatchers>
   Matcher<const ParsedQuery::GraphPattern&> operator()(
-      const auto&... childMatchers) {
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda(false, {}, childMatchers...);
   }
 };
@@ -1059,8 +1064,9 @@ CPP_template(typename Expression, typename... Children)(requires(
 // (via `dynamic_cast`) to an object of the same type that a call to the
 // `makeFunction` yields. The matcher also checks that the expression's children
 // match the `childrenMatchers`.
-auto matchNaryWithChildrenMatchers(auto makeFunction,
-                                   auto&&... childrenMatchers)
+template <typename MakeFunction, typename... ChildrenMatchers>
+auto matchNaryWithChildrenMatchers(MakeFunction makeFunction,
+                                   ChildrenMatchers&&... childrenMatchers)
     -> Matcher<const SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   auto typeIdLambda = [](const auto& ptr) {
@@ -1089,9 +1095,10 @@ inline auto idExpressionMatcher = [](Id id) {
 // (via `dynamic_cast`) to an object of the same type that a call to the
 // `makeFunction` yields. The matcher also checks that the expression's children
 // are the `variables`.
-auto matchNary(auto makeFunction,
-               QL_CONCEPT_OR_NOTHING(
-                   ad_utility::SimilarTo<::Variable>) auto&&... variables)
+template <
+    typename MakeFunction,
+    QL_CONCEPT_OR_TYPENAME(ad_utility::SimilarTo<::Variable>)... Variables>
+auto matchNary(MakeFunction makeFunction, Variables&&... variables)
     -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   return matchNaryWithChildrenMatchers(makeFunction,

@@ -237,7 +237,8 @@ void testLessThanGreaterThanEqual(std::pair<L, R> lessThanPair,
 // Test that all comparisons between `leftValue` and `rightValue` result in a
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
-void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
+template <typename LeftValueIn, typename RightValueIn>
+void testNotEqualHelper(LeftValueIn leftValueIn, RightValueIn rightValueIn,
                         source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
@@ -260,7 +261,8 @@ void testNotEqualHelper(auto leftValueIn, auto rightValueIn,
   False(makeExpression<GE>(makeCopy(rightValue), makeCopy(leftValue)));
 }
 
-void testUndefHelper(auto leftValueIn, auto rightValueIn,
+template <typename LeftValueIn, typename RightValueIn>
+void testUndefHelper(LeftValueIn leftValueIn, RightValueIn rightValueIn,
                      source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto leftValue = liftToValueId(leftValueIn);
   auto rightValue = liftToValueId(rightValueIn);
@@ -286,7 +288,8 @@ void testUndefHelper(auto leftValueIn, auto rightValueIn,
 // following combinations: `leftValue` is converted to a ValueID before the
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
 // `rightValue` are numeric constants.
-void testNotEqual(auto leftValue, auto rightValue,
+template <typename LeftValue, typename RightValue>
+void testNotEqual(LeftValue leftValue, RightValue rightValue,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));

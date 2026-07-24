@@ -42,7 +42,9 @@ auto toBuffer(std::string_view view) {
 // server logic. Note that the client logic and the server logic are run
 // separately, meaning that they can't be cancelled and both have to run to
 // completion on their own.
-net::awaitable<void> runTest(auto executor, net::awaitable<void> serverLogic,
+template <typename Executor>
+net::awaitable<void> runTest(Executor executor,
+                             net::awaitable<void> serverLogic,
                              net::awaitable<void> clientLogic) {
   auto fut = std::async(std::launch::async, [&]() {
     net::co_spawn(executor, std::move(clientLogic), net::use_future).get();

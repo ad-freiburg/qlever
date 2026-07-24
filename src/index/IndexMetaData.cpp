@@ -92,7 +92,14 @@ std::string IndexMetaData::statistics() const {
 // __________________________________________________________________
 void IndexMetaData::calculateStatistics(size_t numDistinctCol0) {
   numDistinctCol0_ = numDistinctCol0;
-  totalElements_ = ::ranges::accumulate(blockData(), 0, {},
+  // NOTE: The accumulator must be a `size_t`. With the literal `0` the
+  // accumulator was an `int`, which overflows once a permutation has more than
+  // ~2^31 rows and wraps `totalElements_` to a garbage value. Since
+  // `totalElements_` is `Permutation::numTriples()`, which feeds the query
+  // planner's size estimates, such a wrapped value (e.g. a large count that
+  // wraps to a huge `size_t` near 2^64) leads to catastrophically wrong plans,
+  // not just a wrong number in the log.
+  totalElements_ = ::ranges::accumulate(blockData(), size_t{0}, {},
                                         &CompressedBlockMetadata::numRows_);
 }
 

@@ -298,6 +298,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"envelopeLowerLeft", &makeEnvelopeLowerLeftExpression},
       {"envelopeUpperRight", &makeEnvelopeUpperRightExpression},
       {"isGeoPoint", &makeIsGeoPointExpression},
+      {"isEncodedIri", &makeIsEncodedIriExpression},
       {"toEpoch", &makeToEpochExpression},
   };
   if (checkPrefix(QL_PREFIX)) {

@@ -16,12 +16,15 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "../util/GTestHelpers.h"
 #include "parser/AsyncBlockSource.h"
+#include "util/Exception.h"
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -60,10 +63,46 @@ std::optional<size_t> findXToZ(std::string_view sv) {
                                        : std::optional<size_t>{pos + 1};
 }
 
+// Never find a boundary. Used to force `AsyncStatementBoundaryBlockSource`
+// into its "no boundary found, peek at the next block" code path.
+std::optional<size_t> findNever([[maybe_unused]] std::string_view sv) {
+  return std::nullopt;
+}
+
+// A `BlockingBlockSource` whose `getNextBlockImpl` results are scripted in
+// advance, one `Step` per call. A `Step` holding a `qp::ByteBlock` is
+// returned as-is; a `Step` holding a `std::string` is thrown as a
+// `std::runtime_error` with that message. This is used to exercise the
+// error-forwarding paths (`if (ep) ...` checks and the `catch` clause in
+// `BlockingBlockSource::asyncGetNextBlockImpl`) that a real `FileBlockSource`
+// cannot trigger, because reading from a file never throws in practice.
+class ScriptedBlockSource : public qp::BlockingBlockSource {
+ public:
+  using Step = std::variant<qp::ByteBlock, std::string>;
+
+  ScriptedBlockSource(const boost::asio::any_io_executor& exec,
+                      ad_utility::MemorySize blocksize, std::vector<Step> steps)
+      : qp::BlockingBlockSource{exec, blocksize}, steps_{std::move(steps)} {}
+
+ protected:
+  std::optional<qp::ByteBlock> getNextBlockImpl() override {
+    AD_CORRECTNESS_CHECK(nextStep_ < steps_.size());
+    Step& step = steps_[nextStep_++];
+    if (auto* message = std::get_if<std::string>(&step)) {
+      throw std::runtime_error{*message};
+    }
+    return std::move(std::get<qp::ByteBlock>(step));
+  }
+
+ private:
+  std::vector<Step> steps_;
+  size_t nextStep_ = 0;
+};
+
 }  // namespace
 
 // ________________________________________________________
-TEST(AsyncFileBlockSource, ReadsInBlocks) {
+TEST(FileBlockSource, ReadsInBlocks) {
   std::string filename = gtestCurrentTestName();
   auto of = ad_utility::makeOfstream(filename);
   of << "abcdefghij";
@@ -72,7 +111,7 @@ TEST(AsyncFileBlockSource, ReadsInBlocks) {
 
   boost::asio::thread_pool pool{1};
   ad_utility::MemorySize blocksize = 4_B;
-  qp::AsyncFileBlockSource buf(pool.get_executor(), blocksize, filename);
+  qp::FileBlockSource buf(pool.get_executor(), blocksize, filename);
   EXPECT_EQ(buf.getBlocksize(), blocksize);
   std::vector<qp::ByteBlock> expected{
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};
@@ -97,8 +136,8 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // precedes a letter, as determined by `findDigitFollowedByLetter`.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
-                                                   blocksize, filename),
+        std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
+                                              filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1'}, {'c', 'd', 'e', '2', '3'}, {'f', 'g', 'h'}};
@@ -110,8 +149,8 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // large for one block, so the parsing fails.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
-                                                   blocksize, filename),
+        std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
+                                              filename),
         findXToZ, "a letter from x to z");
     AD_EXPECT_THROW_WITH_MESSAGE(
         drainAllBlocks(buf), ::testing::ContainsRegex("No statement boundary"));
@@ -122,8 +161,8 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
     // can never be found.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(), 100_B,
-                                                   filename),
+        std::make_unique<qp::FileBlockSource>(pool.get_executor(), 100_B,
+                                              filename),
         findXToZ, "a letter from x to z");
     std::vector<qp::ByteBlock> expected{
         {'a', 'b', '1', 'c', 'd', 'e', '2', '3', 'f', 'g', 'h'}};
@@ -150,8 +189,8 @@ TEST(AsyncStatementBoundaryBlockSource, LongLookahead) {
     // so the manual scan has to look back across many bytes.
     qp::AsyncStatementBoundaryBlockSource buf(
         pool.get_executor(),
-        std::make_unique<qp::AsyncFileBlockSource>(pool.get_executor(),
-                                                   blocksize, filename),
+        std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
+                                              filename),
         findDigitFollowedByLetter, "a digit followed by a letter");
     std::vector<qp::ByteBlock> expected{{'a', 'b', 'c', 'd', 'e', 'f', '1'}};
     expected.emplace_back(2000, 'x');
@@ -169,7 +208,7 @@ TEST(AsyncBlockSource, UseFutureToken) {
   absl::Cleanup fileCleanup{[&] { ad_utility::deleteFile(filename); }};
 
   boost::asio::thread_pool pool{1};
-  qp::AsyncFileBlockSource buf(pool.get_executor(), 3_B, filename);
+  qp::FileBlockSource buf(pool.get_executor(), 3_B, filename);
 
   // Retrieve blocks via `use_future` and verify success and EOF paths.
   EXPECT_THAT(buf.asyncGetNextBlock(boost::asio::use_future).get(),
@@ -177,4 +216,77 @@ TEST(AsyncBlockSource, UseFutureToken) {
   EXPECT_THAT(buf.asyncGetNextBlock(boost::asio::use_future).get(),
               ::testing::Optional(::testing::ElementsAre('c', 'd')));
   EXPECT_EQ(buf.asyncGetNextBlock(boost::asio::use_future).get(), std::nullopt);
+}
+
+// ________________________________________________________
+TEST(BlockingBlockSource, ForwardsExceptionFromGetNextBlockImpl) {
+  boost::asio::thread_pool pool{1};
+  // The `catch (...)` clause in `BlockingBlockSource::asyncGetNextBlockImpl`
+  // must turn this exception into an `exception_ptr` that is forwarded to the
+  // handler, and from there all the way through `asyncGetNextBlock`'s
+  // dispatch to the `use_future` completion token.
+  ScriptedBlockSource buf(
+      pool.get_executor(), 4_B,
+      {ScriptedBlockSource::Step{std::string{"boom from getNextBlockImpl"}}});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      drainAllBlocks(buf), ::testing::HasSubstr("boom from getNextBlockImpl"));
+}
+
+// ________________________________________________________
+TEST(AsyncStatementBoundaryBlockSource,
+     ForwardsExceptionFromInitialInnerFetch) {
+  boost::asio::thread_pool pool{1};
+  // The very first `callAsyncGetNextBlockImpl` call on `inner_` (in
+  // `asyncGetNextBlockImpl`) fails. This must be forwarded via the `if (ep)`
+  // branch of `forwardErrors`, without ever calling `findEndPosition_`.
+  auto inner = std::make_unique<ScriptedBlockSource>(
+      pool.get_executor(), 4_B,
+      std::vector<ScriptedBlockSource::Step>{
+          ScriptedBlockSource::Step{std::string{"boom from initial fetch"}}});
+  qp::AsyncStatementBoundaryBlockSource buf(
+      pool.get_executor(), std::move(inner), findXToZ, "a letter from x to z");
+  AD_EXPECT_THROW_WITH_MESSAGE(drainAllBlocks(buf),
+                               ::testing::HasSubstr("boom from initial fetch"));
+}
+
+// ________________________________________________________
+TEST(AsyncStatementBoundaryBlockSource, ForwardsExceptionFromPeek) {
+  boost::asio::thread_pool pool{1};
+  // The first block from `inner_` contains no boundary (because
+  // `findNever` never finds one), so `handleMissingBoundary` peeks at a
+  // second block from `inner_`, which fails. This must be forwarded via the
+  // `if (ep)` branch of `forwardErrors` inside `handleMissingBoundary`, as a
+  // plain forwarded exception rather than being turned into a "no statement
+  // boundary" error.
+  auto inner = std::make_unique<ScriptedBlockSource>(
+      pool.get_executor(), 4_B,
+      std::vector<ScriptedBlockSource::Step>{
+          ScriptedBlockSource::Step{qp::ByteBlock{'a', 'b', 'c', 'd'}},
+          ScriptedBlockSource::Step{std::string{"boom from peek"}}});
+  qp::AsyncStatementBoundaryBlockSource buf(
+      pool.get_executor(), std::move(inner), findNever, "never found");
+  AD_EXPECT_THROW_WITH_MESSAGE(drainAllBlocks(buf),
+                               ::testing::HasSubstr("boom from peek"));
+}
+
+// ________________________________________________________
+TEST(AsyncStatementBoundaryBlockSource,
+     ForwardsExceptionFromEndPositionFinder) {
+  boost::asio::thread_pool pool{1};
+  // `findEndPosition_` is user-supplied code and runs inline in the handler
+  // chain of the inner source. An exception from it must be delivered via
+  // the completion handler like any other error: exactly once (the handler
+  // is one-shot, see `BlockingBlockSource::asyncGetNextBlockImpl`) and
+  // without escaping into the inner source's executor.
+  auto inner = std::make_unique<ScriptedBlockSource>(
+      pool.get_executor(), 4_B,
+      std::vector<ScriptedBlockSource::Step>{
+          ScriptedBlockSource::Step{qp::ByteBlock{'a', 'b', 'c', 'd'}}});
+  auto findThrows = [](std::string_view) -> std::optional<size_t> {
+    throw std::runtime_error{"boom from findEndPosition"};
+  };
+  qp::AsyncStatementBoundaryBlockSource buf(
+      pool.get_executor(), std::move(inner), findThrows, "throwing finder");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      drainAllBlocks(buf), ::testing::HasSubstr("boom from findEndPosition"));
 }

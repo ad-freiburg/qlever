@@ -372,7 +372,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // Create entries of first column
     decltype(auto) groupValues = table.getColumn(0);
     size_t numGroups = numInputRows / multiplicity;
-    std::vector<unsigned long> firstColumn;
+    std::vector<size_t> firstColumn;
     if (sorted) {
       firstColumn = generateSortedGroupVec(numInputRows, numGroups);
     } else {

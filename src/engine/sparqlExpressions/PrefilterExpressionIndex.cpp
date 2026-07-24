@@ -3,6 +3,7 @@
 // 2024 - 2025 Hannes Baumann <baumannh@cs.uni-freiburg.de>, UFR
 // 2026        Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 // 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -258,6 +259,21 @@ BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
                                           const BlockMetadataRanges& r2) {
   return mergeRelevantBlockItRanges<true>(r1, r2);
 }
+
+// Combine `r1` and `r2`, which represent a semantic *disjunction* (`r1 || r2`)
+// of two sub-prefilters that have both already been evaluated with the same
+// `isNegated` flag. Without negation this is simply the union. Under negation,
+// De Morgan's law turns the disjunction into a conjunction of the (already
+// complemented) operands (`!(A || B) == !A && !B`), so the intersection is
+// returned instead. This is used by prefilters that keep the blocks of a
+// disjunction of datatype/value ranges, e.g. `isIri` (vocabulary IRIs *or*
+// encoded IRIs) and `isLiteral` (inlined *or* non-inlined literals).
+static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
+    const BlockMetadataRanges& r1, const BlockMetadataRanges& r2,
+    bool isNegated) {
+  return isNegated ? getIntersectionOfBlockRanges(r1, r2)
+                   : getUnionOfBlockRanges(r1, r2);
+}
 }  // namespace logicalOps
 }  // namespace detail
 
@@ -330,6 +346,8 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
       return "Literal";
     case NUMERIC:
       return "Numeric";
+    case ENCODED_IRI:
+      return "EncodedIri";
     default:
       AD_FAIL();
   }
@@ -682,12 +700,39 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const LocalVocabContext& context, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  // Remark: Ids containing LITERAL values precede IRI related Ids
-  // in order. The smallest possible IRI is represented by "<>", we
-  // use its corresponding ValueId later on as a lower bound.
-  return make<GreaterThanExpression>(
-             LVE::fromStringRepresentation("<>", context))
-      ->evaluateImpl(context, idRange, blockRange, isNegated_);
+  // IRIs are represented in one of two disjoint `ValueId` ranges: regular
+  // vocabulary IRIs (datatype `VocabIndex`/`LocalVocabIndex`) and encoded IRIs
+  // (datatype `EncodedVal`). We therefore have to keep the blocks for *both*
+  // representations.
+  //
+  // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
+  // in order. The smallest possible IRI is represented by "<>", we use its
+  // corresponding ValueId later on as a lower bound.
+  auto vocabIriRanges =
+      make<GreaterThanExpression>(LVE::fromStringRepresentation("<>", context))
+          ->evaluateImpl(context, idRange, blockRange, isNegated_);
+  // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
+  // prefilter above does not cover them and we have to add their datatype range
+  // explicitly. Otherwise, blocks that consist entirely of encoded IRIs would
+  // be incorrectly pruned.
+  std::array datatypes{Datatype::EncodedVal};
+  auto encodedIriRanges =
+      getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+  // `IRI = vocabIri || encodedIri` (an intersection under negation, see the
+  // helper for details).
+  return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
+      vocabIriRanges, encodedIriRanges, isNegated_);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
+    [[maybe_unused]] const LocalVocabContext& context,
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
+  std::array datatypes{Datatype::EncodedVal};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
 //______________________________________________________________________________
@@ -707,13 +752,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
       make<LessThanExpression>(LVE::fromStringRepresentation("<>", context))
           ->evaluateImpl(context, idRange, blockRange, isNegated_);
 
-  if (isNegated_) {
-    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        inlinedRanges, nonInlinedRanges);
-  } else {
-    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        inlinedRanges, nonInlinedRanges);
-  }
+  // `LITERAL = inlined || nonInlined` (an intersection under negation, see the
+  // helper for details).
+  return detail::logicalOps::getNegationAwareUnionOfBlockRanges(
+      inlinedRanges, nonInlinedRanges, isNegated_);
 }
 
 // SECTION IS-IN-EXPRESSION (and NOT-IS-IN-EXPRESSION)
@@ -901,6 +943,7 @@ template class IsDatatypeExpression<IsDatatype::IRI>;
 template class IsDatatypeExpression<IsDatatype::BLANK>;
 template class IsDatatypeExpression<IsDatatype::LITERAL>;
 template class IsDatatypeExpression<IsDatatype::NUMERIC>;
+template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
 
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;

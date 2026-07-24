@@ -5,16 +5,20 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/filesystem.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
@@ -110,12 +114,12 @@ auto makeTemporaryDirectory(std::string_view name) {
   AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
   directory += name;
   // Create directory.
-  std::filesystem::create_directory(directory);
+  ql::filesystem::create_directory(directory);
 
   // Remove all files in directory when done.
   absl::Cleanup cleanup{[directory]() {
-    std::error_code ec;
-    std::filesystem::remove_all(directory, ec);
+    ql::error_code ec;
+    ql::filesystem::remove_all(directory, ec);
     if (ec) {
       AD_LOG(ERROR) << "Could not remove temporary directory " << directory
                     << ": " << ec.message();
@@ -850,8 +854,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
@@ -860,8 +864,8 @@ TEST(IndexImpl, createPermutation) {
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso"));
-  EXPECT_TRUE(std::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".internal.index.pso.meta"));
 
   permutation.loadFromDisk(onDiskBase, true);
   index.deltaTriplesManager().modify<void>(
@@ -910,7 +914,7 @@ TEST(IndexImpl, writePatternsToFile) {
   index.getPatterns() = CompactVectorOfStrings{data};
   index.writePatternsToFile();
 
-  ASSERT_TRUE(std::filesystem::exists(onDiskBase + ".index.patterns"));
+  ASSERT_TRUE(ql::filesystem::exists(onDiskBase + ".index.patterns"));
 
   double avgNumDistinctSubjectsPerPredicate;
   double avgNumDistinctPredicatesPerSubject;
@@ -972,6 +976,43 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuild) {
+  auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records the build date under
+  // `DATE_OF_INDEX_BUILD_KEY` in its configuration, and `dateOfIndexBuild()`
+  // returns exactly that value.
+  ASSERT_TRUE(indexImpl.configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY));
+  auto storedDate =
+      indexImpl.configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  EXPECT_EQ(indexImpl.dateOfIndexBuild(), storedDate);
+
+  // The stored value is a valid UTC timestamp in the expected format.
+  absl::Time parsed;
+  std::string error;
+  EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, storedDate,
+                              absl::UTCTimeZone(), &parsed, &error))
+      << error;
+
+  // For indexes that were built before the build date was recorded in the
+  // configuration, `dateOfIndexBuild()` falls back to the last modification
+  // time of the configuration file, which was just written. Since the format
+  // only has second precision, we don't compare the timestamp exactly, but
+  // check that it lies within the last second + tolerance.
+  indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  absl::Time fallbackTime;
+  std::string parseError;
+  ASSERT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
+                              indexImpl.dateOfIndexBuild(), absl::UTCTimeZone(),
+                              &fallbackTime, &parseError))
+      << parseError;
+  EXPECT_THAT(absl::Now() - fallbackTime,
+              ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
+                               ::testing::Lt(absl::Seconds(2))));
 }
 
 // _____________________________________________________________________________
