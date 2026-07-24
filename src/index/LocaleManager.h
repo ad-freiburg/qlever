@@ -20,6 +20,7 @@
 #include <unicode/utypes.h>
 #endif  // QLEVER_NO_UNICODE
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -34,6 +35,7 @@
 #include "util/Exception.h"
 #include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
+#include "util/TransparentFunctors.h"
 
 // Base class holding the types shared by both the ICU and the NoICU variants of
 // the `LocaleManager` (see below). None of these types depend on ICU.
@@ -63,6 +65,9 @@ class LocaleManagerBase {
   using U8String = std::basic_string<uint8_t, U8CharTraits>;
 
   class SortKey {
+   private:
+    U8String sortKey_;
+
    public:
     SortKey() = default;
     explicit SortKey(U8String sortKey) : sortKey_(std::move(sortKey)) {}
@@ -87,9 +92,6 @@ class LocaleManagerBase {
 
     // Return the number of bytes in the `SortKey`.
     std::string::size_type size() const noexcept { return get().size(); }
-
-   private:
-    U8String sortKey_;
   };
 };
 
@@ -98,16 +100,20 @@ class LocaleManagerBase {
 // This class wraps all calls to the ICU library that are required by QLever
 // when comparing strings according to a Locale.
 class LocaleManagerICU : public LocaleManagerBase {
- public:
-  // Copy constructor.
-  LocaleManagerICU(const LocaleManagerICU& rhs)
-      : LocaleManagerBase(),
-        _icuLocale(rhs._icuLocale),
-        _ignorePunctuationStatus(rhs._ignorePunctuationStatus) {
-    setupCollators();
-    setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
-  }
+ private:
+  icu::Locale icuLocale_;  // the held locale
+  /* One collator for each collation Level to make this class threadsafe.
+   * Needed because setting the collation level and comparing strings are 2
+   * different steps in icu. */
+  std::array<std::unique_ptr<icu::Collator>, 6> collators_;
+  UColAttributeValue ignorePunctuationStatus_ =
+      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
+  // Actually locale-independent, but useful to place here since it wraps ICU.
+  // Initialized by the `setupCollators()` method.
+  const icu::Normalizer2* normalizer_ = nullptr;
+
+ public:
   // Default constructor. Use the settings from "../global/Constants.h"
   LocaleManagerICU()
       : LocaleManagerICU(std::string{LOCALE_DEFAULT_LANG},
@@ -122,27 +128,45 @@ class LocaleManagerICU : public LocaleManagerBase {
   // `country`. \todo(joka921): make the exact punctuation level configurable.
   LocaleManagerICU(const std::string& lang, const std::string& country,
                    bool ignorePunctuationAtFirstLevel) {
-    _icuLocale = icu::Locale(lang.c_str(), country.c_str());
-    _ignorePunctuationStatus =
+    icuLocale_ = icu::Locale(lang.c_str(), country.c_str());
+    ignorePunctuationStatus_ =
         ignorePunctuationAtFirstLevel ? UCOL_SHIFTED : UCOL_NON_IGNORABLE;
 
-    if (_icuLocale.isBogus()) {
+    if (icuLocale_.isBogus()) {
       throw std::runtime_error("Could not create locale with language " + lang +
                                " and Country " + country);
     }
     setupCollators();
-    setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
+    setIgnorePunctuationOnFirstLevels(ignorePunctuationStatus_);
+  }
+
+  // Copy constructor.
+  LocaleManagerICU(const LocaleManagerICU& rhs)
+      : LocaleManagerBase(),
+        icuLocale_(rhs.icuLocale_),
+        ignorePunctuationStatus_(rhs.ignorePunctuationStatus_) {
+    setupCollators();
+    setIgnorePunctuationOnFirstLevels(ignorePunctuationStatus_);
   }
 
   // Assign from another LocaleManagerICU.
   LocaleManagerICU& operator=(const LocaleManagerICU& other) {
     if (this == &other) return *this;
-    _icuLocale = other._icuLocale;
-    _ignorePunctuationStatus = other._ignorePunctuationStatus;
+    icuLocale_ = other.icuLocale_;
+    ignorePunctuationStatus_ = other.ignorePunctuationStatus_;
     setupCollators();
-    setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
+    setIgnorePunctuationOnFirstLevels(ignorePunctuationStatus_);
     return *this;
   }
+
+  // Move operations and destructor. Moving simply transfers the owned
+  // collators (unique pointers), the movable `icu::Locale`, and the non-owning
+  // `normalizer_`. All of these move without throwing, so a defaulted move is
+  // genuinely `noexcept`. The moved-from object is left with null collators,
+  // which is a valid but unspecified state that must not be used afterwards.
+  LocaleManagerICU(LocaleManagerICU&&) noexcept = default;
+  LocaleManagerICU& operator=(LocaleManagerICU&&) noexcept = default;
+  ~LocaleManagerICU() = default;
 
   // Compare two UTF-8 encoded string_views according to the held Locale.
   // Compare according to the collation Level `level`. Return <0 iff a<b, >0 iff
@@ -152,7 +176,7 @@ class LocaleManagerICU : public LocaleManagerBase {
     UErrorCode err = U_ZERO_ERROR;
     auto idx = static_cast<uint8_t>(level);
     auto res = compToInd(
-        _collator[idx]->compareUTF8(toStringPiece(a), toStringPiece(b), err));
+        collators_[idx]->compareUTF8(toStringPiece(a), toStringPiece(b), err));
     raise(err);
     return res;
   }
@@ -176,7 +200,7 @@ class LocaleManagerICU : public LocaleManagerBase {
   // compare(getSortKey(s, level), getSortKey(t, level)).
   SortKey getSortKey(std::string_view s, const Level level) const {
     auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
-    auto& col = *_collator[static_cast<uint8_t>(level)];
+    auto& col = *collators_[static_cast<uint8_t>(level)];
     std::vector<uint8_t> sortKeyBuffer;
     // The actual computation of the sort key is very expensive, so we first
     // allocate a buffer that is typically large enough to store the sort key.
@@ -255,7 +279,7 @@ class LocaleManagerICU : public LocaleManagerBase {
   // UTF-8 encoded string; return the lowercase version of s, also encoded as
   // UTF-8.
   [[nodiscard]] std::string getLowercaseUtf8(std::string_view s) const {
-    return ad_utility::utf8ToLower(s, _icuLocale.getName());
+    return ad_utility::utf8ToLower(s, icuLocale_.getName());
   }
 
   // Normalize a Utf8 string to a canonical representation.
@@ -267,24 +291,12 @@ class LocaleManagerICU : public LocaleManagerBase {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);
     UErrorCode err = U_ZERO_ERROR;
-    _normalizer->normalizeUTF8(0, toStringPiece(input), sink, nullptr, err);
+    normalizer_->normalizeUTF8(0, toStringPiece(input), sink, nullptr, err);
     raise(err);
     return res;
   }
 
  private:
-  icu::Locale _icuLocale;  // the held locale
-  /* One collator for each collation Level to make this class threadsafe.
-   * Needed because setting the collation level and comparing strings are 2
-   * different steps in icu. */
-  std::unique_ptr<icu::Collator> _collator[6];
-  UColAttributeValue _ignorePunctuationStatus =
-      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
-
-  // Actually locale-independent, but useful to place here since it wraps ICU.
-  // Initialized by the `setupCollators()` method.
-  const icu::Normalizer2* _normalizer = nullptr;
-
   // raise an exception if the error code holds an error.
   static void raise(const UErrorCode& err) {
     if (U_FAILURE(err)) {
@@ -295,42 +307,43 @@ class LocaleManagerICU : public LocaleManagerBase {
   /* create one collator for each of the possible collation levels.
    * has to be called each time the locale is changed. */
   void setupCollators() {
-    for (auto& col : _collator) {
+    for (auto& col : collators_) {
       UErrorCode err = U_ZERO_ERROR;
-      col.reset(icu::Collator::createInstance(_icuLocale, err));
+      col.reset(icu::Collator::createInstance(icuLocale_, err));
       raise(err);
     }
-    _collator[static_cast<uint8_t>(Level::PRIMARY)]->setStrength(
+    collators_[static_cast<uint8_t>(Level::PRIMARY)]->setStrength(
         icu::Collator::PRIMARY);
-    _collator[static_cast<uint8_t>(Level::SECONDARY)]->setStrength(
+    collators_[static_cast<uint8_t>(Level::SECONDARY)]->setStrength(
         icu::Collator::SECONDARY);
-    _collator[static_cast<uint8_t>(Level::TERTIARY)]->setStrength(
+    collators_[static_cast<uint8_t>(Level::TERTIARY)]->setStrength(
         icu::Collator::TERTIARY);
-    _collator[static_cast<uint8_t>(Level::QUARTERNARY)]->setStrength(
+    collators_[static_cast<uint8_t>(Level::QUARTERNARY)]->setStrength(
         icu::Collator::QUATERNARY);
-    _collator[static_cast<uint8_t>(Level::IDENTICAL)]->setStrength(
+    collators_[static_cast<uint8_t>(Level::IDENTICAL)]->setStrength(
         icu::Collator::IDENTICAL);
     // as far as the locale is concerned, the total and the identical level are
     // equivalent.
-    _collator[static_cast<uint8_t>(Level::TOTAL)]->setStrength(
+    collators_[static_cast<uint8_t>(Level::TOTAL)]->setStrength(
         icu::Collator::IDENTICAL);
 
     // also setup the normalizer
     UErrorCode err = U_ZERO_ERROR;
-    _normalizer =
+    normalizer_ =
         icu::Normalizer2::getInstance(nullptr, "nfc", UNORM2_COMPOSE, err);
     raise(err);
   }
 
   // ______________________________________________________________________________
   void setIgnorePunctuationOnFirstLevels(UColAttributeValue val) {
-    _ignorePunctuationStatus = val;
+    ignorePunctuationStatus_ = val;
     UErrorCode err = U_ZERO_ERROR;
-    for (auto& col : _collator) {
-      col->setAttribute(UCOL_ALTERNATE_HANDLING, val, err);
+    for (auto& col :
+         collators_ | ql::views::transform(ad_utility::dereference)) {
+      col.setAttribute(UCOL_ALTERNATE_HANDLING, val, err);
       raise(err);
       // todo<joka921> : make this customizable for future versions
-      col->setMaxVariable(UCOL_REORDER_CODE_SYMBOL, err);
+      col.setMaxVariable(UCOL_REORDER_CODE_SYMBOL, err);
       raise(err);
     }
   }
@@ -353,7 +366,7 @@ class LocaleManagerICU : public LocaleManagerBase {
   /* This conversion is needed for "older" versions of ICU, e.g. ICU60 which is
    * contained in Ubuntu's LTS repositories */
   static icu::StringPiece toStringPiece(std::string_view s) {
-    return icu::StringPiece(s.data(), s.size());
+    return icu::StringPiece(s.data(), static_cast<int32_t>(s.size()));
   }
 };
 
@@ -365,12 +378,13 @@ class LocaleManagerICU : public LocaleManagerBase {
 class LocaleManagerNoICU : public LocaleManagerBase {
  public:
   LocaleManagerNoICU() = default;
-  LocaleManagerNoICU(const LocaleManagerNoICU&) = default;
-  LocaleManagerNoICU& operator=(const LocaleManagerNoICU&) = default;
 
   LocaleManagerNoICU(const std::string& /*lang*/,
                      const std::string& /*country*/,
                      bool /*ignorePunctuationAtFirstLevel*/) {}
+
+  LocaleManagerNoICU(const LocaleManagerNoICU&) = default;
+  LocaleManagerNoICU& operator=(const LocaleManagerNoICU&) = default;
 
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level /*level*/) const {

@@ -46,7 +46,7 @@ class SimpleStringComparatorImpl {
   SimpleStringComparatorImpl(const std::string& lang,
                              const std::string& country,
                              bool ignorePunctuationAtFirstLevel)
-      : _locManager(lang, country, ignorePunctuationAtFirstLevel) {}
+      : locManager_(lang, country, ignorePunctuationAtFirstLevel) {}
 
   /// Construct according to the default locale specified in
   /// ../global/Constants.h
@@ -67,7 +67,7 @@ class SimpleStringComparatorImpl {
    */
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level = Level::QUARTERNARY) const {
-    auto cmpRes = _locManager.compare(a, b, level);
+    auto cmpRes = locManager_.compare(a, b, level);
     if (cmpRes != 0 || level != Level::TOTAL) {
       return cmpRes;
     }
@@ -91,7 +91,7 @@ class SimpleStringComparatorImpl {
    */
   bool operator()(std::string_view a, const LocaleManagerBase::SortKey& b,
                   [[maybe_unused]] const Level l) const {
-    auto aTrans = _locManager.getSortKey(a, Level::PRIMARY);
+    auto aTrans = locManager_.getSortKey(a, Level::PRIMARY);
     auto cmp = LocaleManagerT::compare(aTrans, b, Level::PRIMARY);
     return cmp < 0;
   }
@@ -124,7 +124,7 @@ class SimpleStringComparatorImpl {
   [[nodiscard]] LocaleManagerBase::SortKey transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
     AD_CONTRACT_CHECK(level == Level::PRIMARY);
-    auto transformed = _locManager.getSortKey(s, Level::PRIMARY);
+    auto transformed = locManager_.getSortKey(s, Level::PRIMARY);
     unsigned char last = transformed.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
       transformed.get().back() += 1;
@@ -136,11 +136,11 @@ class SimpleStringComparatorImpl {
 
   /// Obtain access to the held `LocaleManagerT`
   [[nodiscard]] const LocaleManagerT& getLocaleManager() const {
-    return _locManager;
+    return locManager_;
   }
 
  private:
-  LocaleManagerT _locManager;
+  LocaleManagerT locManager_;
 };
 
 /**
@@ -172,7 +172,7 @@ class TripleComponentComparatorImpl {
   TripleComponentComparatorImpl(const std::string& lang,
                                 const std::string& country,
                                 bool ignorePunctuationAtFirstLevel)
-      : _locManager(lang, country, ignorePunctuationAtFirstLevel) {}
+      : locManager_(lang, country, ignorePunctuationAtFirstLevel) {}
 
   /// Construct according to the default locale in "../global/Constants.h"
   TripleComponentComparatorImpl() = default;
@@ -317,7 +317,7 @@ class TripleComponentComparatorImpl {
     if (int res =
             // this correctly dispatches between SortKeys (already transformed)
             // and string_views (not-transformed, perform unicode collation)
-        _locManager.compare(a.transformedVal_, b.transformedVal_, level);
+        locManager_.compare(a.transformedVal_, b.transformedVal_, level);
         res != 0 || level != Level::TOTAL) {
       return res;  // actual value differs
     }
@@ -372,7 +372,7 @@ class TripleComponentComparatorImpl {
 
   /// obtain const access to the held `LocaleManagerT`
   [[nodiscard]] const LocaleManagerT& getLocaleManager() const {
-    return _locManager;
+    return locManager_;
   }
 
   /**
@@ -380,16 +380,16 @@ class TripleComponentComparatorImpl {
    * documentation
    */
   [[nodiscard]] std::string normalizeUtf8(std::string_view sv) const {
-    return _locManager.normalizeUtf8(sv);
+    return locManager_.normalizeUtf8(sv);
   }
 
   /// handle to the default collation level
-  Level& defaultLevel() { return _defaultLevel; }
-  [[nodiscard]] const Level& defaultLevel() const { return _defaultLevel; }
+  Level& defaultLevel() { return defaultLevel_; }
+  [[nodiscard]] const Level& defaultLevel() const { return defaultLevel_; }
 
  private:
-  LocaleManagerT _locManager;
-  Level _defaultLevel = Level::IDENTICAL;
+  LocaleManagerT locManager_;
+  Level defaultLevel_ = Level::IDENTICAL;
 
   /* Split a string into its components to prepare collation.
    * SplitValType = SplitVal will transform the inner string according to the
@@ -419,7 +419,7 @@ class TripleComponentComparatorImpl {
       }
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, _locManager.getSortKey(res, level), std::string{langtag},
+      return {first, locManager_.getSortKey(res, level), std::string{langtag},
               std::string{a}};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
       return {first, res, langtag, a};
