@@ -25,7 +25,7 @@
 #include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
-#define LOGLEVEL INFO
+#define LOGLEVEL DEBUG
 #endif
 
 namespace ad_utility {
