@@ -10,56 +10,6 @@
 using namespace std::literals;
 using ad_utility::source_location;
 
-TEST(LocaleManagerTest, Levels) {
-  using L = LocaleManager::Level;
-  LocaleManager loc;
-
-  ASSERT_EQ(loc.compare("alpha", "ALPHA", L::SECONDARY), 0);
-  ASSERT_LT(loc.compare("alpha", "ALPHA", L::TERTIARY), 0);
-  ASSERT_EQ(loc.compare("älpha", "ALPHA", L::PRIMARY), 0);
-  ASSERT_GT(loc.compare("älpha", "ALPHA", L::SECONDARY), 0);
-}
-
-TEST(LocaleManagerTest, getLowercaseUtf8) {
-  LocaleManager loc;
-  ASSERT_EQ("schindler's list", loc.getLowercaseUtf8("Schindler's List"));
-  ASSERT_EQ("#+-_foo__bar++", loc.getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ("fôéßaéé", loc.getLowercaseUtf8("FÔÉßaéÉ"));
-}
-
-TEST(LocaleManagerTest, Punctuation) {
-  using L = LocaleManager::Level;
-  {
-    LocaleManager loc("en", "US", false);
-    ASSERT_LT(loc.compare("a.c", "ab", L::IDENTICAL), 0);
-    ASSERT_LT(loc.compare(".a", "a", L::IDENTICAL), 0);
-    ASSERT_LT(loc.compare(".a", "a", L::PRIMARY), 0);
-  }
-  {
-    LocaleManager loc("en", "US", true);
-    ASSERT_GT(loc.compare("a.c", "ab", L::IDENTICAL), 0);
-    ASSERT_LT(loc.compare(".a", "a", L::IDENTICAL), 0);
-    ASSERT_EQ(loc.compare(".a", "a", L::PRIMARY), 0);
-    ASSERT_EQ(loc.compare(".a", "#?a", L::PRIMARY), 0);
-    ASSERT_EQ(loc.compare(".a", "#?a", L::TERTIARY), 0);
-    ASSERT_LT(loc.compare(".a", "#?a", L::QUARTERNARY), 0);
-  }
-}
-
-TEST(LocaleManagerTest, Normalization) {
-  // é as single codepoints
-  std::string as = "\xc3\xa9"s;
-  // é as e + accent aigu
-  std::string bs = "e\xcc\x81"s;
-  ASSERT_EQ(2u, as.size());
-  ASSERT_EQ(3u, bs.size());
-  LocaleManager loc;
-  auto resA = loc.normalizeUtf8(as);
-  auto resB = loc.normalizeUtf8(bs);
-  ASSERT_EQ(resA, resB);
-  ASSERT_EQ(resA, as);
-}
-
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
   TripleComponentComparator comp("en", "US", false);
@@ -268,64 +218,58 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
   ASSERT_FALSE(comp("@u2", "\"@u2"));
 }
 
-TEST(LocaleManager, PrefixSortKey) {
-  SimpleStringComparator comp("en", "US", true);
-  LocaleManager locIgnorePunct = comp.getLocaleManager();
-  LocaleManager locRespectPunct("en", "US", false);
+// The following tests exercise the ICU-free (bytewise) comparators. They are
+// always compiled and run, regardless of whether QLever is built with ICU, so
+// that the ICU-free code paths are covered.
 
-  auto print = []([[maybe_unused]] const auto& s) {
-    // The following code can be used for convenient debug output.
-    /*
-    for (const auto& ch : s) {
-      std::cout << int(ch) << ' ';
-    }
-    std::cout << std::endl;
-     */
-  };
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, SimpleStringComparator) {
+  SimpleStringComparatorNoICU comp("en", "US", true);
 
-  // Assert that all possible prefix sort keys of `s` are indeed prefixes
-  // of the `SortKey` of `s`.
-  auto testSortKeysForLocale = [print](std::string_view s,
-                                       const LocaleManager& loc) {
-    auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
-    print(complete);
-    for (size_t i = 0; i < s.size(); ++i) {
-      auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
-      (void)numCodepoints;
-      ASSERT_TRUE(ql::starts_with(complete, partial.get()));
-      print(partial.get());
-    }
-  };
+  // Bytewise ordering: uppercase letters come before lowercase ones.
+  EXPECT_TRUE(comp("ALPHA", "alpha"));
+  EXPECT_FALSE(comp("alpha", "ALPHA"));
+  EXPECT_TRUE(comp("alpha", "beta"));
+  EXPECT_FALSE(comp("beta", "alpha"));
 
-  auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
-                       &locRespectPunct](std::string_view s) {
-    testSortKeysForLocale(s, locIgnorePunct);
-    testSortKeysForLocale(s, locRespectPunct);
-  };
+  // Something is not smaller than itself.
+  EXPECT_FALSE(comp("beta", "beta"));
 
-  testSortKeys("original");
-  testSortKeys("Häll!!ö.ö");
+  // Consistency with the `SortKey`-based overload on the PRIMARY level.
+  using L = SimpleStringComparatorNoICU::Level;
+  auto sortKeyBeta = comp.getLocaleManager().getSortKey("beta", L::PRIMARY);
+  EXPECT_TRUE(comp("alpha", sortKeyBeta, L::PRIMARY));
+  EXPECT_FALSE(comp("gamma", sortKeyBeta, L::PRIMARY));
+}
 
-  testSortKeys("vivæ");
-  testSortKeys("vivae");
-  testSortKeys("vivaret");
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, TripleComponentComparator) {
+  TripleComponentComparatorNoICU comp("en", "US", false);
+  using L = TripleComponentComparatorNoICU::Level;
 
-  testSortKeys("viɡorous");
-  testSortKeys("vigorous");
+  // The inner value is compared bytewise, so casing DOES affect the order
+  // (in contrast to the ICU-based comparator).
+  EXPECT_TRUE(comp("\"ALPHA\"", "\"beta\""));   // 'A' (65) < 'b' (98)
+  EXPECT_TRUE(comp("\"ALPHA\"", "\"alpha\""));  // 'A' (65) < 'a' (97)
+  EXPECT_FALSE(comp("\"alpha\"", "\"ALPHA\""));
+  EXPECT_TRUE(comp("\"alpha\"", "\"beta\""));
 
-  // Show the current limitations:
-  // The words vivæ and vivae compare equal on the primary level, but they
-  // get different prefixSortKeys for prefix length 4, because "ae" are two
-  // codepoints, whereas "æ" is one.
-  auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
-  auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
+  // Something is not smaller than itself.
+  EXPECT_FALSE(comp("\"beta\"", "\"beta\""));
 
-  ASSERT_GT(a.size(), b.size());
-  ASSERT_TRUE(a.starts_with(b));
-  // Also test the defaulted consistent comparison.
-  ASSERT_GT(a, b);
-  ASSERT_EQ(a, a);
-  ASSERT_NE(a, b);
-  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
-  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
+  // The datatype (first character) is compared first.
+  EXPECT_TRUE(comp("\"zzz\"", "<aaa>"));  // '"' (34) < '<' (60)
+
+  // On the TOTAL level the language tag is a tiebreaker.
+  EXPECT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en", L::TOTAL));
+  EXPECT_FALSE(comp("\"Hannibal\"@en", "\"Hannibal\"@af", L::TOTAL));
+
+  // `isLessInTotalWithExternalFlag` breaks ties on equal values by the flag.
+  EXPECT_TRUE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", false));
+  EXPECT_FALSE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", true));
+
+  // `normalizeUtf8` is a no-op in the ICU-free variant.
+  EXPECT_EQ(comp.normalizeUtf8("\xc3\xa9"), "\xc3\xa9");
 }

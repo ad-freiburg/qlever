@@ -101,11 +101,12 @@ namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
 template <typename F>
-std::string utf8StringTransform(std::string_view s, F transformation) {
+std::string utf8StringTransform(std::string_view s, const char* localeName,
+                                F transformation) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
-  transformation("", 0,
+  transformation(localeName, 0,
                  icu::StringPiece{s.data(), static_cast<int32_t>(s.size())},
                  sink, nullptr, err);
   if (U_FAILURE(err)) {
@@ -116,15 +117,15 @@ std::string utf8StringTransform(std::string_view s, F transformation) {
 }  // namespace detail
 
 // ____________________________________________________________________________
-std::string utf8ToLower(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
+std::string utf8ToLower(std::string_view s, const char* localeName) {
+  return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
     return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
   });
 }
 
 // ____________________________________________________________________________
 std::string utf8ToUpper(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
+  return detail::utf8StringTransform(s, "", [](auto&&... args) {
     return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
   });
 }
