@@ -2009,22 +2009,20 @@ void IndexImpl::setPrefixesForEncodedValues(
 // _____________________________________________________________________________
 void IndexImpl::setBlankNodeIriRegexes(
     const std::vector<std::string>& blankNodeIriRegexes) {
-  // The regexes are matched against the full IRI text (including the angle
-  // brackets), so each of them has to describe an IRI and must therefore start
-  // with `<`.
-  ql::ranges::for_each(blankNodeIriRegexes, [](const std::string& regex) {
-    AD_CONTRACT_CHECK(
-        ql::starts_with(regex, '<'),
-        "A regex for treating IRIs as blank nodes has to match a full IRI and "
-        "must therefore start with `<`, but got: ",
-        regex);
-  });
-
-  // Compile the regexes. `RE2` does not throw for an invalid pattern but stores
-  // an error state, which we turn into a user-readable exception here.
   std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
   ql::ranges::for_each(
       blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
+        // The regexes are matched against the full IRI text (including the
+        // angle brackets), so each of them has to describe an IRI and must
+        // therefore start with `<`.
+        if (!ql::starts_with(regex, '<')) {
+          throw std::runtime_error{absl::StrCat(
+              "A regex for treating IRIs as blank nodes has to match a full "
+              "IRI and must therefore start with `<`, but got: ",
+              regex)};
+        }
+        // `RE2` does not throw for an invalid pattern but stores an error
+        // state, which we turn into a user-readable exception here.
         auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
         if (!compiledRegex->ok()) {
           throw std::runtime_error{absl::StrCat(
