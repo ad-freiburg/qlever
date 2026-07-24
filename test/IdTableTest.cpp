@@ -17,6 +17,7 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
@@ -345,7 +346,15 @@ TEST(IdTable, at) {
     constexpr size_t NUM_COLS = 4;
 
     Table t1{NUM_COLS, std::move(additionalArgs.at(0))...};
+    // GCC 12 emits a spurious `-Wstringop-overflow` for the `__builtin_memmove`
+    // in libstdc++'s bitwise-relocate path of `std::vector` growth when the
+    // column storage is instantiated with `ValueId`: it derives a bogus
+    // `[2^63, 2^64)` size range for the (unreachable) copy and treats it as an
+    // overflow. This only surfaces here in the test, so we suppress it locally
+    // instead of in `IdTable::resize` itself.
+    DISABLE_STRINGOP_OVERFLOW_WARNINGS
     t1.resize(1);
+    GCC_REENABLE_WARNINGS
     t1.at(0, 0) = make(42);
     ASSERT_EQ(t1.at(0, 0), make(42));
     ASSERT_EQ(std::as_const(t1).at(0, 0), make(42));
