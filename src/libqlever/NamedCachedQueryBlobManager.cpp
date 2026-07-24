@@ -60,7 +60,7 @@ NamedCachedQueryBlobManager::compressBlobAndAddTrailingSizeInfo(
   std::vector<char> compressed =
       ZstdWrapper::compress(uncompressedBlob.data(), uncompressedBlob.size());
   uint64_t uncompressedSize = uncompressedBlob.size();
-  const char* sizeBytes = reinterpret_cast<const char*>(&uncompressedSize);
+  auto sizeBytes = reinterpret_cast<const char*>(&uncompressedSize);
   compressed.insert(compressed.end(), sizeBytes,
                     sizeBytes + sizeof(uncompressedSize));
   return compressed;

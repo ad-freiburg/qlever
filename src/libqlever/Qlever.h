@@ -410,7 +410,9 @@ class Qlever {
   void deserializeVocabAndNamedCacheFromCompressedBlob(
       ql::span<const char> blob,
       ql::pmr::polymorphic_allocator<char> allocator = {}) {
-    blobManager_.deserialize(*this, blob, std::move(allocator));
+    // Note: `polymorphic_allocator` is cheap to copy and has no
+    // dedicated move operations.
+    blobManager_.deserialize(*this, blob, allocator);
   }
 
   // Create a Query Execution Context needed for execution of single SPARQL
