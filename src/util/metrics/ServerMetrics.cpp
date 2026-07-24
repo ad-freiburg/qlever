@@ -21,11 +21,13 @@ ServerMetrics::ServerMetrics(
     absl::AnyInvocable<int64_t() const> getMemoryLeft,
     absl::AnyInvocable<int64_t() const> getCacheUsed,
     absl::AnyInvocable<int64_t() const> getCacheLimit,
+    absl::AnyInvocable<int64_t() const> getRebuildInProgress,
     std::optional<ad_utility::MemorySize> maxMem)
     : getDeltaTriples_(std::move(getDeltaTriples)),
       getMemoryLeft_(std::move(getMemoryLeft)),
       getCacheUsed_(std::move(getCacheUsed)),
-      getCacheLimit_(std::move(getCacheLimit)) {
+      getCacheLimit_(std::move(getCacheLimit)),
+      getRebuildInProgress_(std::move(getRebuildInProgress)) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
   startTimeMetric_ = meter->CreateInt64Gauge(
@@ -65,6 +67,9 @@ ServerMetrics::ServerMetrics(
       "qlever.memory_cache_used", "Memory used for caching", "By");
   memoryCacheLimit_ = meter->CreateInt64ObservableGauge(
       "qlever.memory_cache_limit", "Memory allocated for caching", "By");
+  rebuildInProgressMetric_ = meter->CreateInt64ObservableGauge(
+      "qlever.index.rebuild_in_progress",
+      "Whether an index rebuild is currently in progress (1) or not (0)");
 
   auto now = std::chrono::duration_cast<std::chrono::seconds>(
                  std::chrono::system_clock::now().time_since_epoch())
@@ -100,6 +105,8 @@ ServerMetrics::~ServerMetrics() {
       &observeCallback<&ServerMetrics::getCacheUsed_>, this);
   memoryCacheLimit_->RemoveCallback(
       &observeCallback<&ServerMetrics::getCacheLimit_>, this);
+  rebuildInProgressMetric_->RemoveCallback(
+      &observeCallback<&ServerMetrics::getRebuildInProgress_>, this);
 }
 
 // _____________________________________________________________________________
@@ -112,6 +119,8 @@ void ServerMetrics::registerCallbacks() {
                                 this);
   memoryCacheLimit_->AddCallback(
       &observeCallback<&ServerMetrics::getCacheLimit_>, this);
+  rebuildInProgressMetric_->AddCallback(
+      &observeCallback<&ServerMetrics::getRebuildInProgress_>, this);
 }
 
 // _____________________________________________________________________________
