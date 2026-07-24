@@ -42,7 +42,7 @@ class VectorWithMemoryLimit
   // standard library. In particular, the type trait
   // `std::default_initializable<std::vector<T, Alloc>>` will be true on
   // `libc++`, even if the `Alloc` is not default-initializable, which leads to
-  // hard compile errors with the `ql::ranges` library. For this reason we
+  // hard compiler errors with the `ql::ranges` library. For this reason we
   // cannot simply inherit all the constructors from `Base`, but explicitly
   // have to forward all but the default constructor. In particular, we only
   // forward constructors that have
