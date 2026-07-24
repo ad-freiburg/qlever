@@ -19,7 +19,7 @@ using ::testing::Pointee;
 
 ASYNC_TEST(UpdateFetcher, checkIndexIncrements) {
   QueryId queryId = QueryId::idFromString("abc");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{ioContext.get_executor()};
   UpdateFetcher updateFetcher{queryHub, queryId};
 
   auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);

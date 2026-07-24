@@ -10,8 +10,9 @@ namespace ad_utility::websocket {
 
 // _____________________________________________________________________________
 QueryToSocketDistributor::QueryToSocketDistributor(
-    net::io_context& ioContext, const std::function<void(bool)>& cleanupCall)
-    : strand_{net::make_strand(ioContext)},
+    const net::any_io_executor& executor,
+    const std::function<void(bool)>& cleanupCall)
+    : strand_{net::make_strand(executor)},
       infiniteTimer_{strand_, net::steady_timer::time_point::max()},
       cleanupCall_{
           cleanupCall,

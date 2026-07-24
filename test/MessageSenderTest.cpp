@@ -31,7 +31,7 @@ using ::testing::VariantWith;
 ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{ioContext.get_executor()};
 
   auto distributor =
       queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
@@ -57,7 +57,7 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{ioContext.get_executor()};
 
   {
     auto distributor =
@@ -97,7 +97,7 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
   QueryId reference = queryId.toQueryId();
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{ioContext.get_executor()};
 
   {
     MessageSender messageSender{std::move(queryId), queryHub};
@@ -116,7 +116,7 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
 ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
   QueryRegistry queryRegistry;
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{ioContext.get_executor()};
 
   {
     MessageSender messageSender{std::move(queryId), queryHub};

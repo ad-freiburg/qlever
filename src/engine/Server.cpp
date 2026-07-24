@@ -169,11 +169,11 @@ void Server::run() {
     }
   };
 
-  auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
+  auto webSocketSessionSupplier = [this](net::any_io_executor& ioExecutor) {
     // This must only be called once
     AD_CONTRACT_CHECK(queryHub_.expired());
     auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(ioContext);
+        std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
     // Make sure the `queryHub` does not outlive the ioContext it has a
     // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
     // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
