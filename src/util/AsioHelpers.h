@@ -150,8 +150,9 @@ inline net::awaitable<T> interruptible(
     while (running->test()) {
       handle->throwIfCancelled(loc);
       timer->expires_after(timeout);
-      // Workaround for the bug at
-      // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
+      // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+      // structured binding is not destroyed when the coroutine frame is
+      // destroyed while suspended (gcc.gnu.org bug 124584).
       auto waitResult =
           co_await timer->async_wait(net::as_tuple(net::deferred));
       auto& [ec] = waitResult;

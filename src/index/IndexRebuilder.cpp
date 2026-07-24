@@ -390,8 +390,9 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           permutation, isInternal);
     };
   };
-  // Workaround for the bug at
-  // `https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124584`
+  // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+  // structured binding is not destroyed when the coroutine frame is
+  // destroyed while suspended (gcc.gnu.org bug 124584).
   auto results = co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
                            asCoroutine(makeTaskForPermutation(permutationB)));
   auto& [resultA, resultB] = results;
