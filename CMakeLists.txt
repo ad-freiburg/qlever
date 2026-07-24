@@ -203,10 +203,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        # TEMPORARY: points at the tip of `owning-view-conditional-value-init`
-        # (joka921/range-v3 PR #8). Set back to a `fork-for-qlever` commit once
-        # that PR is merged.
-        GIT_TAG 2ca980d20ad71d4b93f930deb9760fdfd9e8fe78 # branch owning-view-conditional-value-init
+        GIT_TAG 0e2a41b61694e823df1b7d77174b139253c7ac39 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
