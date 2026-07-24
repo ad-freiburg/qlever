@@ -69,7 +69,6 @@ class VectorWithMemoryLimit
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
- public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
   // Moving is fine.
