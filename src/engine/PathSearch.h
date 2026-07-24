@@ -47,6 +47,11 @@ struct Path {
   void pop_back() { edges_.pop_back(); }
 
   const Id& end() { return edges_.back().end_; }
+
+  // `Path` is not copyable because its `edges_` are stored in a
+  // `VectorWithMemoryLimit`, which is not copyable (see there). Explicit copies
+  // can be made via `clone()`.
+  [[nodiscard]] Path clone() const { return Path{edges_.clone()}; }
 };
 
 using PathsLimited = ad_utility::VectorWithMemoryLimit<Path>;
