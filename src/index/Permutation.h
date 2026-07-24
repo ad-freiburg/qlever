@@ -78,6 +78,13 @@ class Permutation {
   // to "PSO".
   static std::string_view toString(Enum permutation);
 
+  // Return the names of the files that store `permutation` for the index with
+  // the given `onDiskBase` (the permutation file and its `.meta` file). For the
+  // files of an internal permutation, pass the base name with the
+  // `QLEVER_INTERNAL_INDEX_INFIX` already appended.
+  static std::vector<std::string> fileNames(Enum permutation,
+                                            std::string_view onDiskBase);
+
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
   static KeyOrder toKeyOrder(Enum permutation);

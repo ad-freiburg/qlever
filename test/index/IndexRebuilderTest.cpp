@@ -24,6 +24,7 @@
 #include "backports/filesystem.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -789,4 +790,69 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
   EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuildConfig, baseNames) {
+  qlever::IndexRebuildConfig config;
+  config.basenameForNewIndex_ = "wiki";
+
+  config.tmpDirForRebuild_ = "rebuild.tmp";
+  config.dirForNewIndex_ = "some/dir";
+  EXPECT_EQ(config.finalBasename(), "some/dir/wiki");
+
+  // The paths are normalized.
+  config.dirForNewIndex_ = ".";
+  EXPECT_EQ(config.finalBasename(), "wiki");
+  config.tmpDirForRebuild_ = "a/./b";
+}
+
+// _____________________________________________________________________________
+// Build an "old" index and a freshly "rebuilt" index (in a temporary
+// directory), then move the rebuilt index into the place of the old one and
+// check the resulting on-disk layout and the re-anchored in-memory state.
+TEST(Qlever, moveRebuiltIndexIntoPlace) {
+  std::string baseFolder = gtestCurrentTestName();
+  ql::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+
+  std::string oldBase = baseFolder + "/index";
+  std::string tmpDir = baseFolder + "/rebuild.tmp";
+  ql::filesystem::create_directory(tmpDir);
+  std::string rebuiltBase = tmpDir + "/index";
+
+  ad_utility::testing::makeTestIndex(oldBase, "<a> <b> <c> .");
+  Index rebuilt = ad_utility::testing::makeTestIndex(
+      rebuiltBase, "<a> <b> <c> . <d> <e> <f> .");
+
+  qlever::IndexRebuildConfig config;
+  config.tmpDirForRebuild_ = tmpDir;
+  config.dirForOldIndex_ = baseFolder + "/previous";
+  config.dirForNewIndex_ = baseFolder;
+  config.basenameForNewIndex_ = "index";
+  // The new index is served from the place of the old index.
+  ASSERT_EQ(config.finalBasename(),
+            ql::filesystem::path{oldBase}.lexically_normal().string());
+
+  qlever::Qlever::IndexAndViews indexAndViews{
+      std::move(rebuilt), MaterializedViewsManager{rebuiltBase}};
+  qlever::Qlever::moveRebuiltIndexIntoPlace(oldBase, indexAndViews, config);
+
+  // The old index's files were moved into the directory for the old index.
+  EXPECT_TRUE(ql::filesystem::exists(config.dirForOldIndex_ /
+                                     ("index"s + CONFIGURATION_FILE)));
+  EXPECT_TRUE(
+      ql::filesystem::exists(config.dirForOldIndex_ / "index.index.pso"));
+
+  // The rebuilt index now lives at the final base name (the place of the old
+  // index) and no longer in the temporary directory.
+  EXPECT_TRUE(ql::filesystem::exists(config.dirForNewIndex_ /
+                                     ("index"s + CONFIGURATION_FILE)));
+  EXPECT_TRUE(
+      ql::filesystem::exists(config.dirForNewIndex_ / "index.index.pso"));
+  EXPECT_TRUE(IndexImpl::allIndexFiles(rebuiltBase).empty());
+
+  // The in-memory state of the new index was re-anchored to the final base.
+  EXPECT_EQ(indexAndViews.index_.getOnDiskBase(), config.finalBasename());
 }

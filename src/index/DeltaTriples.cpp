@@ -712,14 +712,26 @@ void DeltaTriples::setPersists(std::optional<std::string> filename) {
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
-    std::string filename) {
+bool DeltaTriples::persists() const {
+  return filenameForPersisting_.has_value();
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdates(std::string filename,
+                                                          bool readFromDisk) {
   modify<void>(
-      [&filename](DeltaTriples& deltaTriples) {
+      [&filename, readFromDisk](DeltaTriples& deltaTriples) {
         deltaTriples.setPersists(std::move(filename));
-        deltaTriples.readFromDisk();
+        if (readFromDisk) {
+          deltaTriples.readFromDisk();
+        }
       },
       false);
+}
+
+// _____________________________________________________________________________
+bool DeltaTriplesManager::persists() const {
+  return deltaTriples_.rlock()->persists();
 }
 
 // _____________________________________________________________________________

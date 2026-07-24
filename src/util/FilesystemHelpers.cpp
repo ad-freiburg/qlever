@@ -9,7 +9,10 @@
 
 #include "util/FilesystemHelpers.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -19,6 +22,30 @@
 
 namespace qlever::util {
 namespace fs = ql::filesystem;
+
+// _____________________________________________________________________________
+std::vector<fs::path> filesWithBaseNameAndSuffix(const fs::path& onDiskBase,
+                                                 std::string_view suffix) {
+  fs::path directory = onDiskBase.parent_path();
+  if (directory.empty()) {
+    directory = ".";
+  }
+  std::string prefix =
+      absl::StrCat(ql::pathFilename(onDiskBase).string(), suffix);
+  // NOTE: We deliberately use an explicit loop instead of a `filter`/
+  // `transform`/`to_vector` range pipeline: `directoryRange` is a single-pass
+  // input range that is neither a view nor borrowed, so it is not a
+  // `viewable_range` and cannot be piped into `range-v3` view adaptors (this is
+  // also why the other functions in this file loop over it explicitly).
+  std::vector<fs::path> result;
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (entry.is_regular_file() &&
+        ql::starts_with(entry.path().filename().string(), prefix)) {
+      result.push_back(entry.path());
+    }
+  }
+  return result;
+}
 
 // _____________________________________________________________________________
 bool doesDirectoryContainFileWithBasename(const std::string& baseName) {

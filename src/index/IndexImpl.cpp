@@ -6,6 +6,7 @@
 #include "index/IndexImpl.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
@@ -17,11 +18,14 @@
 #include <future>
 #include <numeric>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
@@ -30,6 +34,7 @@
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -1142,11 +1147,16 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        onDiskBase + ".update-triples");
-    graphNameManager_.setFilenameForPersistingAndReadFromDisk(
-        onDiskBase + ".allocated-graphs-state");
+    setFilenamesForPersistentUpdates(true);
   }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setFilenamesForPersistentUpdates(bool readFromDisk) {
+  deltaTriplesManager().setFilenameForPersistentUpdates(
+      absl::StrCat(onDiskBase_, UPDATE_TRIPLES_SUFFIX), readFromDisk);
+  graphNameManager_.setFilenameForPersisting(
+      absl::StrCat(onDiskBase_, ALLOCATED_GRAPHS_SUFFIX), readFromDisk);
 }
 
 // _____________________________________________________________________________
@@ -1215,6 +1225,53 @@ void IndexImpl::setKbName(const std::string& name) {
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   onDiskBase_ = onDiskBase;
+}
+
+// ____________________________________________________________________________
+std::vector<ql::filesystem::path> IndexImpl::allIndexFiles(
+    const std::string& onDiskBase) {
+  std::vector<ql::filesystem::path> result;
+  auto addIfExists = [&result](std::string file) {
+    if (ql::filesystem::exists(file)) {
+      result.push_back(std::move(file));
+    }
+  };
+
+  // The six permutations and the two internal permutations, each with their
+  // `.meta` file. `isInternal` is passed as a `std::bool_constant` (a type that
+  // carries the `bool` value) because C++17 does not support explicitly
+  // templated lambdas.
+  auto addPermutationFiles = [&addIfExists](auto isInternal,
+                                            std::string_view base) {
+    for (auto permutation : Permutation::all<isInternal>()) {
+      for (auto& file : Permutation::fileNames(permutation, base)) {
+        addIfExists(std::move(file));
+      }
+    }
+  };
+  addPermutationFiles(std::bool_constant<false>{}, onDiskBase);
+  addPermutationFiles(std::bool_constant<true>{},
+                      absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX));
+
+  // Files with a fixed name. The optional ones (settings, persisted updates,
+  // text index) are simply skipped by `addIfExists` when they do not exist.
+  for (auto suffix :
+       {PATTERNS_FILE_SUFFIX, CONFIGURATION_FILE, SETTINGS_FILE_SUFFIX,
+        UPDATE_TRIPLES_SUFFIX, ALLOCATED_GRAPHS_SUFFIX, TEXT_INDEX_FILE_SUFFIX,
+        TEXT_VOCAB_FILE_SUFFIX, TEXT_DOCS_DB_FILE_SUFFIX}) {
+    addIfExists(absl::StrCat(onDiskBase, suffix));
+  }
+
+  // The set of vocabulary files depends on the vocabulary type, but they all
+  // start with `<onDiskBase>.vocabulary`, so enumerate them via that prefix
+  // (the same mechanism as `MaterializedViewsManager::viewFilesOnDisk`). The
+  // helper only returns files that exist, so no extra existence check is
+  // needed here.
+  ql::ranges::move(
+      qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VOCAB_SUFFIX),
+      std::back_inserter(result));
+
+  return result;
 }
 
 // ____________________________________________________________________________
@@ -1847,7 +1904,7 @@ void IndexImpl::deleteTemporaryFile(const std::string& path) {
 
 // _____________________________________________________________________________
 std::string IndexImpl::getPatternFilename() const {
-  return onDiskBase_ + ".index.patterns";
+  return absl::StrCat(onDiskBase_, PATTERNS_FILE_SUFFIX);
 }
 
 // _____________________________________________________________________________

@@ -223,10 +223,6 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
 
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
 
-constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
-constexpr inline std::string_view META_FILE_SUFFIX = ".meta";
-constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
-
 // The key under which the datetime when the index build started is stored in
 // the index configuration.
 constexpr inline std::string_view DATE_OF_INDEX_BUILD_KEY =

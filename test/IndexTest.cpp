@@ -14,15 +14,23 @@
 #include <filesystem>
 #include <fstream>
 
+#include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "engine/MaterializedViews.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -102,31 +110,6 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
-
-// Create a temporary directory inside the Google Test temporary directory
-// with the given `name`. The directory and all its contents are deleted when
-// the returned `absl::Cleanup` is destroyed.
-auto makeTemporaryDirectory(std::string_view name) {
-  std::string directory = ::testing::TempDir();
-  if (!ql::ends_with(directory, "/")) {
-    directory.push_back('/');
-  }
-  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
-  directory += name;
-  // Create directory.
-  ql::filesystem::create_directory(directory);
-
-  // Remove all files in directory when done.
-  absl::Cleanup cleanup{[directory]() {
-    ql::error_code ec;
-    ql::filesystem::remove_all(directory, ec);
-    if (ec) {
-      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
-                    << ": " << ec.message();
-    }
-  }};
-  return std::make_pair(std::move(directory), std::move(cleanup));
-}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -1027,4 +1010,96 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}
+
+// _____________________________________________________________________________
+// Checks that `IndexImpl::allIndexFiles` lists exactly the on-disk files that
+// belong to an index: no phantom entries, all components (including the
+// optional ones) present, and no file that shares the base name but is not an
+// index file (build logs, materialized-view files, input files).
+TEST(IndexImpl, allIndexFilesAreListed) {
+  auto [directory, cleanup] = makeTemporaryDirectory("allIndexFilesAreListed");
+  std::string base = directory + "/index";
+  makeTestIndex(base, "<a> <b> <c> . <a> <b> <d> . <d> <e> <f> .");
+
+  auto touch = [](const std::string& f) {
+    std::ofstream out{f};
+    out << "x";
+  };
+  // Optional index files that a plain build does not create; once present, they
+  // must be listed.
+  std::string settings = absl::StrCat(base, SETTINGS_FILE_SUFFIX);
+  std::string updates = absl::StrCat(base, UPDATE_TRIPLES_SUFFIX);
+  std::string graphs = absl::StrCat(base, ALLOCATED_GRAPHS_SUFFIX);
+  for (const auto& f : {settings, updates, graphs}) {
+    touch(f);
+  }
+  // Files that share the base name but are NOT index files; they must not be
+  // listed.
+  std::string indexLog = absl::StrCat(base, INDEX_LOG_SUFFIX);
+  std::string rebuildLog = absl::StrCat(base, REBUILD_INDEX_LOG_SUFFIX);
+  std::string viewFile = MaterializedView::getFilenameBase(base, "myView");
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    touch(f);
+  }
+
+  auto listedPaths = IndexImpl::allIndexFiles(base);
+  std::vector<std::string> listed;
+  listed.reserve(listedPaths.size());
+  for (const auto& path : listedPaths) {
+    listed.push_back(path.string());
+  }
+  ad_utility::HashSet<std::string> listedSet(listed.begin(), listed.end());
+
+  // No phantom entries.
+  for (const auto& f : listed) {
+    EXPECT_TRUE(ql::filesystem::exists(f)) << f;
+  }
+
+  // All core components and the optional files we created are listed.
+  EXPECT_THAT(
+      listedSet,
+      ::testing::IsSupersetOf(
+          {absl::StrCat(base, CONFIGURATION_FILE),
+           absl::StrCat(base, PATTERNS_FILE_SUFFIX),
+           absl::StrCat(base, ".index.pso"),
+           absl::StrCat(base, ".index.pso.meta"),
+           absl::StrCat(base, QLEVER_INTERNAL_INDEX_INFIX, ".index.pso"),
+           settings, updates, graphs}));
+  // At least one vocabulary file is listed (the exact set depends on the
+  // vocabulary type).
+  EXPECT_TRUE(ql::ranges::any_of(listed, [](const std::string& f) {
+    return ql::starts_with(ql::pathFilename(f).string(),
+                           absl::StrCat("index", VOCAB_SUFFIX));
+  }));
+
+  // The non-index files are not listed.
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    EXPECT_FALSE(listedSet.contains(f)) << f;
+  }
+
+  // Exhaustiveness: every regular file in the directory that shares the base
+  // name is either listed as an index file or one of the files that are
+  // deliberately left out: the build/rebuild logs, the materialized-view files
+  // (`.view.` infix), and the input files left over from the build
+  // (`<base>.ttl` and the settings input `<base>.ttl.settings.json`).
+  std::string baseName = ql::pathFilename(base).string();
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    std::string name = entry.path().filename().string();
+    if (!ql::starts_with(name, baseName) ||
+        listedSet.contains(entry.path().string())) {
+      continue;
+    }
+    std::string_view rest{name};
+    rest.remove_prefix(baseName.size());
+    bool isAllowedNonIndexFile =
+        rest == INDEX_LOG_SUFFIX || rest == REBUILD_INDEX_LOG_SUFFIX ||
+        ql::starts_with(rest, ".view.") || ql::starts_with(rest, ".ttl");
+    EXPECT_TRUE(isAllowedNonIndexFile)
+        << "File is neither an index file nor an allowed exclusion: "
+        << entry.path().string();
+  }
 }
