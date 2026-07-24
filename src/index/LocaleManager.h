@@ -411,9 +411,12 @@ class LocaleManagerNoICU : public LocaleManagerBase {
   }
 };
 
-// Select the ICU or the NoICU locale manager depending on the build
-// configuration (the `QLEVER_NO_UNICODE` macro is defined via the `NO_UNICODE`
-// CMake option).
+// Select the ICU or the NoICU locale manager depending on whether the
+// `QLEVER_NO_UNICODE` macro is defined. Currently there is deliberately no
+// build option that defines this macro (the unit tests use the `NoICU` class
+// directly); a CMake option will follow together with the check that a loaded
+// index matches the binary in this respect, because the two variants produce
+// different sort orders.
 #ifdef QLEVER_NO_UNICODE
 using LocaleManager = LocaleManagerNoICU;
 #else
