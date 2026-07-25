@@ -39,6 +39,12 @@ BatchEvaluationContext makeFullBatch(const IdTable& table) {
 const PreprocessedTriple allSameVarTriple{
     PrecomputedVariable{0}, PrecomputedVariable{0}, PrecomputedVariable{0}};
 
+// Build a `PrecomputedConstant` that only carries a deduplication id; the
+// evaluated term is irrelevant for key building.
+PrecomputedConstant makeConstant(Id dedupId) {
+  return PrecomputedConstant{.evaluatedTerm_ = {}, .dedupId_ = dedupId};
+}
+
 // Build a minimal template wrapping a single, non-blank-node triple.
 PreprocessedConstructTemplate makeSingleTripleTemplate() {
   PreprocessedConstructTemplate tmpl;
@@ -83,8 +89,8 @@ class ConstructDeduplicationFilter : public ::testing::Test {
   // owning `LocalVocab` and its one-row `IdTable`.
   LocalVocabRow makeLocalVocabRow(std::string_view s) {
     LocalVocab vocab;
-    Id id = makeLocalVocabIndex(vocab, s);
-    return LocalVocabRow{std::move(vocab), makeIdTable(id)};
+    const Id id = makeLocalVocabIndex(vocab, s);
+    return LocalVocabRow{.vocab_ = std::move(vocab), .table_ = makeIdTable(id)};
   }
 };
 
@@ -94,11 +100,11 @@ class ConstructDeduplicationFilter : public ::testing::Test {
 TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
-  Id id = IntId(42);
+  const Id id = IntId(42);
   auto table = makeIdTable(id);
   auto ctx = makeFullBatch(table);
 
-  DeduplicationKey key =
+  const DeduplicationKey key =
       deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
   EXPECT_EQ(key, (DeduplicationKey{id, id, id}));
 }
@@ -114,10 +120,10 @@ TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 TEST_F(ConstructDeduplicationFilter, crossVocabCollapse) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
-  LocalVocabRow row1 = makeLocalVocabRow("x");
-  LocalVocabRow row2 = makeLocalVocabRow("x");
-  Id src1 = row1.id();
-  Id src2 = row2.id();
+  const LocalVocabRow row1 = makeLocalVocabRow("x");
+  const LocalVocabRow row2 = makeLocalVocabRow("x");
+  const Id src1 = row1.id();
+  const Id src2 = row2.id();
   auto c1 = row1.ctx();
   auto c2 = row2.ctx();
 
@@ -125,8 +131,10 @@ TEST_F(ConstructDeduplicationFilter, crossVocabCollapse) {
   // though they encode equal strings.
   ASSERT_NE(src1.getBits(), src2.getBits());
 
-  Id reseated1 = deduplicator.makeFullTripleKey(allSameVarTriple, 0, c1)[0];
-  Id reseated2 = deduplicator.makeFullTripleKey(allSameVarTriple, 0, c2)[0];
+  const Id reseated1 =
+      deduplicator.makeFullTripleKey(allSameVarTriple, 0, c1)[0];
+  const Id reseated2 =
+      deduplicator.makeFullTripleKey(allSameVarTriple, 0, c2)[0];
 
   // Collapsed: both keys hold the same `dedupVocab_` entry, so bitwise equal.
   EXPECT_EQ(reseated1.getBits(), reseated2.getBits());
@@ -149,7 +157,7 @@ TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
     key1 = deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
   }  // `tmp` (and its entries) gone; `key1` must still be valid.
 
-  LocalVocabRow fresh = makeLocalVocabRow("x");
+  const LocalVocabRow fresh = makeLocalVocabRow("x");
   auto ctx = fresh.ctx();
   // Comparing/hashing `key1` here dereferences its ids; so it must not read
   // freed memory, and `key1` must still equal the equal-string key from a fresh
@@ -163,14 +171,14 @@ TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
 TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
-  PreprocessedTriple constTriple{PrecomputedConstant{{}, IntId(7)},
-                                 PrecomputedConstant{{}, IntId(8)},
-                                 PrecomputedConstant{{}, IntId(9)}};
+  const PreprocessedTriple constTriple{
+      makeConstant(IntId(7)), makeConstant(IntId(8)), makeConstant(IntId(9))};
   // no variable positions: row unused.
   auto table = makeIdTable(IntId(0));
   auto ctx = makeFullBatch(table);
 
-  DeduplicationKey key = deduplicator.makeFullTripleKey(constTriple, 0, ctx);
+  const DeduplicationKey key =
+      deduplicator.makeFullTripleKey(constTriple, 0, ctx);
   EXPECT_EQ(key, (DeduplicationKey{IntId(7), IntId(8), IntId(9)}));
 }
 

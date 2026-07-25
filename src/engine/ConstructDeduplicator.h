@@ -18,7 +18,6 @@
 #include "engine/QueryExecutionContext.h"
 #include "global/ValueId.h"
 #include "util/ConstructDeduplicationMode.h"
-#include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/LruCache.h"
 #include "util/OverloadCallOperator.h"
