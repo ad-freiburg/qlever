@@ -131,7 +131,7 @@ auto VocabularyOnDisk::readOffsetsInBatches() const {
       [this,
        buffer =
            std::array<uint64_t, VOCABULARY_SCAN_MAX_WORDS_PER_BATCH + 1>{}](
-          size_t chunkStart) mutable -> ql::span<const uint64_t> {
+          size_t chunkStart) mutable {
         size_t numWords = std::min<size_t>(VOCABULARY_SCAN_MAX_WORDS_PER_BATCH,
                                            size() - chunkStart);
         size_t numWordsPlusOne = numWords + 1;
