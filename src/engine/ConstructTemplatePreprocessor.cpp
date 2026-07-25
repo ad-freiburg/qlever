@@ -29,21 +29,24 @@ ValueId ConstructTemplatePreprocessor::resolveConstantDedupId(
   return std::move(tripleComponent).toValueId(index_, localVocab_);
 }
 
+namespace {
 // True if any of the triple's three positions is a blank node. Such triples are
 // excluded from deduplication: their per-row blank node ids make every
 // instantiation distinct.
-static bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
+bool tripleContainsBlankNode(const PreprocessedTriple& triple) {
   return ql::ranges::any_of(triple,
                             ad_utility::holdsAlternative<PrecomputedBlankNode>);
-};
+}
+}  // namespace
 
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
   ValueId dedupId = resolveConstantDedupId(TripleComponent{iri});
   return PrecomputedConstant{
-      std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
-      dedupId};
+      .evaluatedTerm_ =
+          std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
+      .dedupId_ = dedupId};
 }
 
 // _____________________________________________________________________________
@@ -65,8 +68,9 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
           literal.toSparql());
   ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
   return PrecomputedConstant{
-      std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
-      dedupId};
+      .evaluatedTerm_ =
+          std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
+      .dedupId_ = dedupId};
 }
 
 // _____________________________________________________________________________
@@ -81,8 +85,9 @@ ConstructTemplatePreprocessor::preprocessVariable(const Variable& variable) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
-  return PrecomputedBlankNode{blankNode.isGenerated() ? "_:g" : "_:u",
-                              absl::StrCat("_", blankNode.label())};
+  return PrecomputedBlankNode{
+      .prefix_ = blankNode.isGenerated() ? "_:g" : "_:u",
+      .suffix_ = absl::StrCat("_", blankNode.label())};
 }
 
 // _____________________________________________________________________________
@@ -113,9 +118,9 @@ ConstructTemplatePreprocessor::preprocessTriple(
   PreprocessedTriple preprocessedTriple;
   for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
     auto role = static_cast<PositionInTriple>(pos);
-    auto preprocessed = preprocessTermImpl(triple[pos], role);
+    auto preprocessed = preprocessTermImpl(triple.at(pos), role);
     if (!preprocessed) return std::nullopt;
-    preprocessedTriple[pos] = std::move(*preprocessed);
+    preprocessedTriple.at(pos) = std::move(*preprocessed);
   }
   return preprocessedTriple;
 }

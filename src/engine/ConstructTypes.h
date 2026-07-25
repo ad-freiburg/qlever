@@ -62,13 +62,14 @@ struct PrecomputedConstant {
   std::optional<ValueId> dedupId_ = std::nullopt;
 };
 
-// After preprocessing (via `ConstructTemplatePreprocessor::preprocess`),
-// `columnIndex_` is the position of this variable in the
-// `BatchEvaluationResult::variablesByColumn_` vector. The mapping from position
-// to column is recorded in
+// A variable in a CONSTRUCT template. `columnIndex_` is the index of the
+// column in the `IdTable` of the `Result` that holds this variable's values.
+// It is used directly as the key into
+// `BatchEvaluationResult::variablesByColumn_`. The set of distinct column
+// indices used by the whole template is collected in
 // `PreprocessedConstructTemplate::uniqueVariableColumns_`.
 struct PrecomputedVariable {
-  size_t columnIndex_;
+  ColumnIndex columnIndex_;
 };
 
 // A blank node with precomputed prefix and suffix for fast evaluation. The

@@ -37,10 +37,10 @@ struct BatchEvaluationResult {
   // set of evaluated columns may be sparse: some variables in the WHERE-clause
   // (in the `IdTable`) may not appear in the CONSTRUCT template and are thus
   // not evaluated.
-  ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  ad_utility::HashMap<ColumnIndex, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
-  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+  const std::optional<EvaluatedTerm>& getVariable(ColumnIndex columnIndex,
                                                   size_t rowInBatch) const {
     return variablesByColumn_.at(columnIndex).at(rowInBatch);
   }

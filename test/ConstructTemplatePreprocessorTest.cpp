@@ -7,7 +7,6 @@
 
 #include <gmock/gmock.h>
 
-#include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -17,6 +16,7 @@
 
 namespace qlever::constructExport {
 
+namespace {
 // `PrintTo` overloads so gmock shows human-readable output instead of raw
 // bytes.
 void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
@@ -29,22 +29,25 @@ void PrintTo(const PrecomputedBlankNode& b, std::ostream* os) {
   *os << "PrecomputedBlankNode{\"" << b.prefix_ << "\", \"" << b.suffix_
       << "\"}";
 }
+}  // namespace
 }  // namespace qlever::constructExport
 
 namespace {
 
 using namespace std::string_literals;
-using ::testing::Optional;
 using enum PositionInTriple;
 using namespace qlever::constructExport;
 using Triples = ad_utility::sparql_types::Triples;
 using ::testing::ElementsAre;
+using ::testing::Eq;
+using ::testing::Ne;
+using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
 auto iriV = ad_utility::testing::iriV;
 
 // Composable matchers for `PreprocessedTerm` variants.
 // see https://github.com/google/googletest/blob/main/docs/reference/matchers.md
-static constexpr auto matchesPrecomputedConstant = [](const auto& value) {
+constexpr auto matchesPrecomputedConstant = [](const auto& value) {
   // only match the string, not the type field.
   return ::testing::VariantWith<PrecomputedConstant>(
       AD_FIELD(PrecomputedConstant, evaluatedTerm_,
@@ -53,22 +56,22 @@ static constexpr auto matchesPrecomputedConstant = [](const auto& value) {
 };
 
 // _____________________________________________________________________________
-static constexpr auto matchesPrecomputedVariable = [](const auto& columnIdx) {
+constexpr auto matchesPrecomputedVariable = [](const auto& columnIdx) {
   return ::testing::VariantWith<PrecomputedVariable>(
       AD_FIELD(PrecomputedVariable, columnIndex_, columnIdx));
 };
 
 // _____________________________________________________________________________
-static constexpr auto matchesPrecomputedBlankNode = [](const auto& prefix,
-                                                       const auto& suffix) {
+constexpr auto matchesPrecomputedBlankNode = [](const auto& prefix,
+                                                const auto& suffix) {
   return ::testing::VariantWith<PrecomputedBlankNode>(::testing::AllOf(
       AD_FIELD(PrecomputedBlankNode, prefix_, std::string(prefix)),
       AD_FIELD(PrecomputedBlankNode, suffix_, std::string(suffix))));
 };
 
 // _____________________________________________________________________________
-static constexpr auto matchSingleTriple = [](const auto& s, const auto& p,
-                                             const auto& o) {
+constexpr auto matchSingleTriple = [](const auto& s, const auto& p,
+                                      const auto& o) {
   return ElementsAre(ElementsAre(s, p, o));
 };
 
@@ -115,11 +118,11 @@ auto expectEmptyResult = [](const PreprocessedConstructTemplate& result) {
 
 // Return the resolved deduplication `ValueId` of the constant at position
 // `pos` of the preprocessed triple at index `tripleIdx`.
-ValueId dedupIdAt(const PreprocessedConstructTemplate& result, size_t tripleIdx,
-                  size_t pos) {
+std::optional<ValueId> dedupIdAt(const PreprocessedConstructTemplate& result,
+                                 size_t tripleIdx, size_t pos) {
   return std::get<PrecomputedConstant>(
              result.preprocessedTriples_.at(tripleIdx).at(pos))
-      .dedupId_.value();
+      .dedupId_;
 }
 
 // _____________________________________________________________________________
@@ -129,7 +132,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -146,7 +149,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{Literal{"\"hello\""}}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -166,7 +169,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -176,7 +179,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
 // RDF term receives when it is read from the input knowledge graph during index
 // building. This is the property the shared full-triple deduplication filter
 // relies on: only if equal terms have equal ids can a constant-bearing template
-// triple be recognized as equal to a data-bearing one. We veriy this for all
+// triple be recognized as equal to a data-bearing one. We verify this for all
 // three id-assignment paths:
 //   (a) a vocabulary IRI,
 //   (b) a vocabulary (language-tagged) literal,
@@ -197,7 +200,7 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
     Triples triples;
     triples.push_back({GraphTerm{iriV("<http://s>")},
                        GraphTerm{iriV("<http://p>")}, std::move(object)});
-    VariableToColumnMap varMap;
+    const VariableToColumnMap varMap;
     auto result =
         ConstructTemplatePreprocessor::preprocess(triples, varMap, index);
 
@@ -205,17 +208,18 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
   };
 
   // (a) IRI constant vs. the same IRI from the data (vocabulary lookup).
-  EXPECT_EQ(objectDedupId(GraphTerm{iriV("<http://o>")}), getId("<http://o>"));
+  EXPECT_THAT(objectDedupId(GraphTerm{iriV("<http://o>")}),
+              Optional(Eq(getId("<http://o>"))));
 
   // (b) Non-encoded (language-tagged) literal vs. the same literal from data.
-  EXPECT_EQ(objectDedupId(GraphTerm{Literal{"\"foo\"@en"}}),
-            getId("\"foo\"@en"));
+  EXPECT_THAT(objectDedupId(GraphTerm{Literal{"\"foo\"@en"}}),
+              Optional(Eq(getId("\"foo\"@en"))));
 
   // (c) Inline-encoded literal: its `ValueId` is a pure function of the value,
   // independent of the vocabulary.
-  EXPECT_EQ(objectDedupId(GraphTerm{
-                Literal{"\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>"}}),
-            Id::makeFromInt(1));
+  EXPECT_THAT(objectDedupId(GraphTerm{Literal{
+                  "\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>"}}),
+              Optional(Eq(Id::makeFromInt(1))));
 }
 
 // _____________________________________________________________________________
@@ -246,7 +250,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;  // ?unbound is not in the map
+  const VariableToColumnMap varMap;  // ?unbound is not in the map
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -259,7 +263,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -276,7 +280,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -288,8 +292,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
-  Triples triples;
-  VariableToColumnMap varMap;
+  const Triples triples;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -435,7 +439,7 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
                      GraphTerm{iriV("<http://p2>")},
                      GraphTerm{iriV("<http://o2>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -480,27 +484,25 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocessTerm(GraphTerm{iriV("<http://s>")}, SUBJECT, varMap);
-  ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), Const("<http://s>"));
+  EXPECT_THAT(result, Optional(Const("<http://s>")));
 }
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocessTerm(GraphTerm{Literal{"\"hello\""}}, OBJECT, varMap);
-  ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), Const("\"hello\""));
+  EXPECT_THAT(result, Optional(Const("\"hello\"")));
 }
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
   // Literals in subject position are invalid; evaluate returns empty string,
   // so preprocessTerm returns nullopt.
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocessTerm(GraphTerm{Literal{"invalid"}}, SUBJECT, varMap);
   EXPECT_EQ(result, std::nullopt);
 }
@@ -510,14 +512,13 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableBound) {
   VariableToColumnMap varMap;
   varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
   auto result = preprocessTerm(GraphTerm{Variable{"?x"}}, SUBJECT, varMap);
-  ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), Var(3));
+  EXPECT_THAT(result, Optional(Var(3)));
 }
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result =
       preprocessTerm(GraphTerm{Variable{"?unbound"}}, SUBJECT, varMap);
   EXPECT_EQ(result, std::nullopt);
@@ -525,21 +526,19 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result =
       preprocessTerm(GraphTerm{BlankNode{false, "myNode"}}, SUBJECT, varMap);
-  ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), Bnode("_:u", "_myNode"));
+  EXPECT_THAT(result, Optional(Bnode("_:u", "_myNode")));
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result =
       preprocessTerm(GraphTerm{BlankNode{true, "gen"}}, SUBJECT, varMap);
-  ASSERT_TRUE(result.has_value());
 
-  EXPECT_THAT(result.value(), Bnode("_:g", "_gen"));
+  EXPECT_THAT(result, Optional(Bnode("_:g", "_gen")));
 }
 
 // Every constant term (IRI or object literal) is resolved to a defined
@@ -550,12 +549,13 @@ TEST(ConstructTemplatePreprocessorTest, dedupIdIsResolvedForConstants) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{Literal{"\"hello\""}}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
   for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-    EXPECT_FALSE(dedupIdAt(result, 0, pos).isUndefined());
+    EXPECT_THAT(dedupIdAt(result, 0, pos),
+                Optional(Ne(ValueId::makeUndefined())));
   }
 }
 
@@ -570,10 +570,17 @@ TEST(ConstructTemplatePreprocessorTest, dedupIdIsStableAndDistinct) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://b>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 2);
+  // All constants must be resolved, else the comparisons below would trivially
+  // hold for two `std::nullopt`s.
+  for (size_t tripleIdx = 0; tripleIdx < 2; ++tripleIdx) {
+    for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
+      ASSERT_TRUE(dedupIdAt(result, tripleIdx, pos).has_value());
+    }
+  }
   // The same IRI `<http://a>` in subject and object position of triple 0.
   EXPECT_EQ(dedupIdAt(result, 0, 0), dedupIdAt(result, 0, 2));
   // The shared predicate `<http://p>` across both triples.
@@ -595,7 +602,7 @@ TEST(ConstructTemplatePreprocessorTest, tripleContainsBlankNodeFlag) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
+  const VariableToColumnMap varMap;
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.tripleContainsBlankNode_, ElementsAre(false, true));

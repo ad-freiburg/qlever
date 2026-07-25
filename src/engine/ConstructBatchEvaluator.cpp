@@ -9,7 +9,6 @@
 #include "engine/ConstructBatchEvaluator.h"
 
 #include "index/ExportIds.h"
-#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -100,11 +99,11 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
     };
-    std::optional<EvaluatedTerm> evaluated =
+    const std::optional<EvaluatedTerm> evaluated =
         id.getDatatype() == Datatype::LocalVocabIndex
             ? evaluate(id)
             : idCache.getOrCompute(id, evaluate);
-    for (size_t row : rows) {
+    for (const size_t row : rows) {
       result[row] = evaluated;
     }
   }

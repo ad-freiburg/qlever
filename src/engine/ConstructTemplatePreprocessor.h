@@ -7,8 +7,6 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTEMPLATEPREPROCESSOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTEMPLATEPREPROCESSOR_H
 
-#include <vector>
-
 #include "engine/ConstructTypes.h"
 #include "engine/VariableToColumnMap.h"
 #include "index/Index.h"
@@ -29,13 +27,22 @@ class ConstructTemplatePreprocessor {
   using Triples = ad_utility::sparql_types::Triples;
   using Iri = ad_utility::triple_component::Iri;
 
+  // Single-use builder: constructed as a temporary by the static entry points
+  // below, run exactly once, then discarded.
+  ConstructTemplatePreprocessor(const ConstructTemplatePreprocessor&) = delete;
+  ConstructTemplatePreprocessor& operator=(
+      const ConstructTemplatePreprocessor&) = delete;
+  ConstructTemplatePreprocessor(ConstructTemplatePreprocessor&&) = delete;
+  ConstructTemplatePreprocessor& operator=(ConstructTemplatePreprocessor&&) =
+      delete;
+  ~ConstructTemplatePreprocessor() = default;
+
   // Preprocess the template triples. Returns the preprocessed triples together
   // with the unique variable column indices needed when evaluating the template
   // triples for specific result-table rows. Constant terms (IRIs/literals) are
   // resolved to a stable `ValueId` (their full-triple deduplication key
-  // component) using `index`; literals not present in the vocabulary are
-  // assigned a fresh id in the returned template's
-  // `localVocabForConstants_`.
+  // component) using `index`; constants not present in the vocabulary are
+  // assigned a fresh id in the returned template's `localVocabForConstants_`.
   //
   // This is a thin factory over the internal single-use builder: it constructs
   // a `ConstructTemplatePreprocessor` and runs it once.
@@ -97,7 +104,7 @@ class ConstructTemplatePreprocessor {
   std::optional<PreprocessedTerm> preprocessLiteral(const Literal& literal,
                                                     PositionInTriple role);
   std::optional<PreprocessedTerm> preprocessVariable(const Variable& variable);
-  std::optional<PreprocessedTerm> preprocessBlankNode(
+  static std::optional<PreprocessedTerm> preprocessBlankNode(
       const BlankNode& blankNode);
 
   // Preprocess all three terms of a single template triple. Returns
