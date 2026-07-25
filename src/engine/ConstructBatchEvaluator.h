@@ -98,7 +98,7 @@ class ConstructBatchEvaluator {
 
   // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
   static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
-      std::optional<std::pair<std::string, const char*>> optStringAndType);
+      std::optional<std::pair<std::string, const char*>>&& optStringAndType);
 };
 
 }  // namespace qlever::constructExport
