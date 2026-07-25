@@ -18,13 +18,13 @@ namespace qlever::constructExport {
 
 // `PrintTo` overloads so gmock shows human-readable output instead of raw
 // bytes.
-void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
+static void PrintTo(const PrecomputedConstant& c, std::ostream* os) {
   *os << "PrecomputedConstant{\"" << c.evaluatedTerm_ << "\"}";
 }
-void PrintTo(const PrecomputedVariable& v, std::ostream* os) {
+static void PrintTo(const PrecomputedVariable& v, std::ostream* os) {
   *os << "PrecomputedVariable{" << v.columnIndex_ << "}";
 }
-void PrintTo(const PrecomputedBlankNode& b, std::ostream* os) {
+static void PrintTo(const PrecomputedBlankNode& b, std::ostream* os) {
   *os << "PrecomputedBlankNode{\"" << b.prefix_ << "\", \"" << b.suffix_
       << "\"}";
 }
