@@ -27,7 +27,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
-        CancellationHandle cancellationHandle) {
+        const CancellationHandle& cancellationHandle) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 

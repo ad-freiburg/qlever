@@ -131,7 +131,7 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   }  // fast path
   const auto& entry = *id.getLocalVocabIndex();
   const size_t sizeBefore = dedupVocab_.size();
-  auto index = dedupVocab_.getIndexAndAddIfNotContained(entry);
+  const auto* index = dedupVocab_.getIndexAndAddIfNotContained(entry);
   // Only `BatchWise` bounds the size of `dedupVocab_`, so only there do we
   // track the vocab's byte size and check the threshold. We do not track the
   // size of the `dedupVocab_` for `Global` mode, but delegate it in this case

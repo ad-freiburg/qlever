@@ -152,7 +152,7 @@ TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
   DeduplicationKey key1;
   {
     // destroyed at end of this scope.
-    LocalVocabRow tmp = makeLocalVocabRow("x");
+    const LocalVocabRow tmp = makeLocalVocabRow("x");
     auto ctx = tmp.ctx();
     key1 = deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
   }  // `tmp` (and its entries) gone; `key1` must still be valid.
@@ -188,9 +188,9 @@ TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
 TEST_F(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
-  PreprocessedTriple blankNodeTriple{PrecomputedBlankNode{"_:g", "_0"},
-                                     PrecomputedVariable{0},
-                                     PrecomputedVariable{0}};
+  const PreprocessedTriple blankNodeTriple{
+      PrecomputedBlankNode{.prefix_ = "_:g", .suffix_ = "_0"},
+      PrecomputedVariable{0}, PrecomputedVariable{0}};
   auto table = makeIdTable(IntId(1));
   auto ctx = makeFullBatch(table);
 
@@ -210,7 +210,7 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
     EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));  // first occurrence.
   }  // block-1 vocab freed before block-2 is seen.
 
-  LocalVocabRow block2 = makeLocalVocabRow("x");
+  const LocalVocabRow block2 = makeLocalVocabRow("x");
   auto c2 = block2.ctx();
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c2));  // duplicate across blocks.
 }
@@ -221,11 +221,11 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
   ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_};
   auto tmpl = makeSingleTripleTemplate();
 
-  LocalVocabRow block1 = makeLocalVocabRow("x");
+  const LocalVocabRow block1 = makeLocalVocabRow("x");
   auto c1 = block1.ctx();
   EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));
 
-  LocalVocabRow block2 = makeLocalVocabRow("x");
+  const LocalVocabRow block2 = makeLocalVocabRow("x");
   auto c2 = block2.ctx();
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c2));
 }
@@ -254,10 +254,10 @@ TEST_F(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
   auto tmpl = makeSingleTripleTemplate();
 
   LocalVocab v1;
-  Id x = makeLocalVocabIndex(v1, "x");
+  const Id x = makeLocalVocabIndex(v1, "x");
   deduplicator.seedGroundTriple(DeduplicationKey{x, x, x});
 
-  LocalVocabRow row = makeLocalVocabRow("x");
+  const LocalVocabRow row = makeLocalVocabRow("x");
   auto c = row.ctx();
   EXPECT_FALSE(
       deduplicator.isNew(0, 0, tmpl, c));  // suppressed by the ground seed
@@ -274,7 +274,7 @@ TEST_F(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
                                      ad_utility::MemorySize::bytes(1)};
   auto tmpl = makeSingleTripleTemplate();
 
-  LocalVocabRow row = makeLocalVocabRow("x");
+  const LocalVocabRow row = makeLocalVocabRow("x");
   auto c = row.ctx();
   EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c));  // first occurrence
   // The 1-byte threshold was exceeded, so the next call resets the dedup state
@@ -317,7 +317,7 @@ TEST_F(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
       makeGlobalDeduplicator(ad_utility::MemorySize::bytes(1));
   auto tmpl = makeSingleTripleTemplate();
 
-  LocalVocabRow row = makeLocalVocabRow("x");
+  const LocalVocabRow row = makeLocalVocabRow("x");
   auto c = row.ctx();
   EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c));  // first occurrence
   // The tiny threshold is ignored for `global`: no reset, so the identical
