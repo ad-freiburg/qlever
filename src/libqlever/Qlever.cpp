@@ -23,7 +23,7 @@
 namespace qlever {
 
 // _____________________________________________________________________________
-Qlever::Qlever(const EngineConfig& config)
+Qlever::Qlever(const EngineConfig& config, bool skipLoading)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
@@ -45,6 +45,13 @@ Qlever::Qlever(const EngineConfig& config)
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
+
+  // If `skipLoading` is set, we do not touch the on-disk index at all; the
+  // instance is expected to be populated later from a blob (see
+  // `deserializeVocabAndNamedCacheFromCompressedBlob`).
+  if (skipLoading) {
+    return;
+  }
 
   // Grab the freshly constructed `Index` and `MaterializedViewsManager` once.
   // No other thread can observe them yet, so reading the snapshot here is safe.
@@ -310,6 +317,12 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 void Qlever::loadMaterializedView(std::string name) const {
   const auto indexAndViews = indexAndViewsSnapshot();
   indexAndViews->materializedViewsManager_.loadView(name);
+}
+
+// ___________________________________________________________________________
+void Qlever::deleteMaterializedView(std::string name) const {
+  const auto indexAndViews = indexAndViewsSnapshot();
+  indexAndViews->materializedViewsManager_.deleteView(name);
 }
 
 // ___________________________________________________________________________

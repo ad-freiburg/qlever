@@ -4,7 +4,6 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <cstdio>
 #include <vector>
@@ -320,6 +319,32 @@ TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
   vocabulary.resetToType(VocabularyType{OnDiskCompressed});
   ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
   EXPECT_ANY_THROW(vocabulary.writeAsZeroCopyBlob(writeSerializer));
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ScanAll) {
+  using ad_utility::VocabularyType;
+  using enum VocabularyType::Enum;
+  // `scanAll` delegates to the underlying vocabulary and must yield all words
+  // in order, matching `operator[]`.
+  RdfsVocabulary vocabulary;
+  vocabulary.resetToType(VocabularyType{OnDiskCompressed});
+  ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
+  auto filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  vocabulary.createFromSet(words, filename);
+
+  std::vector<std::string> scanned;
+  for (const IndexAndWord& indexAndWord : vocabulary.scanAll()) {
+    // For a non-split vocabulary the indices are contiguous and `scanAll` must
+    // agree with `operator[]`.
+    EXPECT_EQ(indexAndWord.word_,
+              vocabulary[VocabIndex::make(indexAndWord.index_)])
+        << "at index " << indexAndWord.index_;
+    scanned.emplace_back(indexAndWord.word_);
+  }
+  ASSERT_EQ(scanned.size(), vocabulary.size());
+  EXPECT_THAT(scanned, ::testing::ElementsAre("alpha", "beta", "car", "delta"));
 }
 
 // _____________________________________________________________________________

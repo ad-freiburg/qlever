@@ -10,7 +10,7 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
@@ -124,6 +124,24 @@ VocabularyOnDiskHandle createExampleVocabulary() {
   return createVocabularyFromWords({"alpha", "delta", "beta", "42", "gamma"});
 }
 
+// Create a `VocabularyOnDisk` from `words` and assert that `scanAll` yields
+// exactly those words in order: both as bare words and as `IndexAndWord`s with
+// contiguous indices `0, 1, 2, ...` (also across batch boundaries).
+void expectScanAllYields(const std::vector<std::string>& words) {
+  VocabularyCreator creator{gtestCurrentTestName()};
+  auto vocabulary = creator.createVocabulary(words);
+
+  EXPECT_THAT(scanAllToVector(vocabulary.scanAll()),
+              ::testing::ElementsAreArray(words));
+
+  auto indexAndWords = scanAllToIndexAndWordVector(vocabulary.scanAll());
+  ASSERT_EQ(indexAndWords.size(), words.size());
+  for (size_t i = 0; i < words.size(); ++i) {
+    EXPECT_EQ(indexAndWords[i].first, i) << "at index " << i;
+    EXPECT_EQ(indexAndWords[i].second, words[i]) << "at index " << i;
+  }
+}
+
 }  // namespace
 
 TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
@@ -205,6 +223,43 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
   for (size_t i = 0; i < words.size(); ++i) {
     EXPECT_EQ(vocabulary[i], words[i]) << "at index " << i;
   }
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyOnDisk, ScanAll) {
+  // A basic scan over many small words (fits into a single batch).
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 3000; ++i) {
+    words.push_back(absl::StrCat("word", i, std::string(i % 7, 'x')));
+  }
+  expectScanAllYields(words);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyOnDisk, ScanAllEmptyVocabulary) {
+  VocabularyCreator creator{gtestCurrentTestName()};
+  auto vocabulary = creator.createVocabulary({});
+  auto range = vocabulary.scanAll();
+  EXPECT_FALSE(range.get().has_value());
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyOnDisk, ScanAllByteLimitForcesMultipleBatches) {
+  // `scanAll` caps a batch's word data at
+  // `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` (10 MB). Four words of 3 MB each
+  // (12 MB total) therefore don't fit into a single batch: the byte limit (not
+  // the word-count limit) forces a batch boundary after three words.
+  constexpr size_t wordSize = 3'000'000;
+  expectScanAllYields({std::string(wordSize, 'a'), std::string(wordSize, 'b'),
+                       std::string(wordSize, 'c'), std::string(wordSize, 'd')});
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyOnDisk, ScanAllSingleWordExceedsLimit) {
+  // A single word larger than `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` (10 MB)
+  // must still be scanned; it is returned in a batch of its own even though it
+  // exceeds the limit, and the surrounding small words are unaffected.
+  expectScanAllYields({"before", std::string(11'000'000, 'x'), "after"});
 }
 
 // A `lookupBatch` result must equal the individual `vocab[]` lookups for the

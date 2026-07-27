@@ -19,6 +19,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
@@ -30,22 +31,39 @@
 // consumption of large JSON exports and to make this interface even simpler.
 class ExportQueryExecutionTrees {
  public:
-  using MediaType = ad_utility::MediaType;
+  using enum ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
+
+  // The media types QLever can serialize for each SPARQL query form. These are
+  // the per-query-form runtime contract.
+  // `qleverJson` is supported for every query form (it is special-cased in
+  // `computeResult` via `computeResultAsQLeverJSON`), so it appears in all
+  // three.
+  static constexpr std::array supportedMediaTypesForConstructQueries{
+      turtle, csv, tsv, ntriples, qleverJson};
+  static constexpr std::array supportedMediaTypesForAskQueries{
+      qleverJson, sparqlJson, sparqlXml};
+  static constexpr std::array supportedMediaTypesForSelectQueries{
+      octetStream, csv, tsv, sparqlXml, sparqlJson, qleverJson};
+  // The media types the result-serialization templates may be instantiated
+  // with.
+  static constexpr std::array staticallySupportedMediaTypes{
+      csv,        tsv,        octetStream,       turtle, ntriples, sparqlXml,
+      sparqlJson, qleverJson, binaryQleverExport};
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
   // created by the `QueryPlanner`. The result is converted into a sequence of
   // bytes that represents the result of the computed query in the format
   // specified by the `mediaType`. Supported formats for this function are CSV,
-  // TSV, Turtle, Binary, SparqlJSON, QLeverJSON. Note that the Binary format
-  // can only be used with SELECT queries and the Turtle format can only be used
-  // with CONSTRUCT queries. Invalid `mediaType`s and invalid combinations of
-  // `mediaType` and the query type will throw. The result is returned as a
-  // `generator` that lazily computes the serialized result in large chunks of
-  // bytes.
+  // TSV, Turtle, NTriples, Binary, SparqlJSON, QLeverJSON. Note that the Binary
+  // format can only be used with SELECT queries and the Turtle and NTriples
+  // formats can only be used with CONSTRUCT queries. Invalid `mediaType`s and
+  // invalid combinations of `mediaType` and the query type will throw. The
+  // result is returned as a `generator` that lazily computes the serialized
+  // result in large chunks of bytes.
   using ComputeResultReturnType =
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       cppcoro::generator<std::string>;
@@ -54,7 +72,7 @@ class ExportQueryExecutionTrees {
 #endif
   static ComputeResultReturnType computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      MediaType mediaType, const ad_utility::Timer& requestTimer,
+      ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Convert a `stream_generator` to an "ordinary" `InputRange<string>` that
@@ -132,7 +150,7 @@ class ExportQueryExecutionTrees {
 
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
-  template <MediaType format>
+  template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
@@ -140,7 +158,7 @@ class ExportQueryExecutionTrees {
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 
   // Generate the result of a SELECT query as a CSV or TSV or binary stream.
-  template <MediaType format>
+  template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,

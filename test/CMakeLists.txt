@@ -545,6 +545,8 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
+addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
+
 addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 
 addLinkAndDiscoverTest(LogTest)
