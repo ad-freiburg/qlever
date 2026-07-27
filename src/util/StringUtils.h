@@ -38,9 +38,9 @@ bool strIsLangTag(const std::string& strLangTag);
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
 // Encode the single Unicode `codepoint` as UTF-8 and append the resulting bytes
-// to `output`. Codepoints outside the valid Unicode range (> 0x10FFFF) are
-// encoded as the Unicode replacement character U+FFFD. This function does not
-// depend on ICU.
+// to `output`. Codepoints that are not valid Unicode scalar values (larger than
+// 0x10FFFF, or in the surrogate range 0xD800-0xDFFF) are encoded as the Unicode
+// replacement character U+FFFD. This function does not depend on ICU.
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
 
 // Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used

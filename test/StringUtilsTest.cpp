@@ -135,8 +135,21 @@ TEST(StringUtils, utf8EncodeCodepoint) {
   EXPECT_EQ(encode(0x00E9), "é");            // two bytes (U+00E9)
   EXPECT_EQ(encode(0x2702), "✂");            // three bytes
   EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
+  // The boundaries between the one-, two-, three- and four-byte encodings.
+  EXPECT_EQ(encode(0x7F), "\x7F");
+  EXPECT_EQ(encode(0x80), "\xC2\x80");
+  EXPECT_EQ(encode(0x7FF), "\xDF\xBF");
+  EXPECT_EQ(encode(0x800), "\xE0\xA0\x80");
+  EXPECT_EQ(encode(0xFFFF), "\xEF\xBF\xBF");
+  EXPECT_EQ(encode(0x10000), "\xF0\x90\x80\x80");
   // Out-of-range codepoints are replaced by U+FFFD.
   EXPECT_EQ(encode(0x110000), "�");
+  // Surrogates (reserved for UTF-16, not valid Unicode scalar values) are also
+  // replaced by U+FFFD; their direct neighbors are encoded normally.
+  EXPECT_EQ(encode(0xD800), "�");
+  EXPECT_EQ(encode(0xDFFF), "�");
+  EXPECT_EQ(encode(0xD7FF), "\xED\x9F\xBF");
+  EXPECT_EQ(encode(0xE000), "\xEE\x80\x80");
 }
 
 // _____________________________________________________________________________

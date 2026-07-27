@@ -84,10 +84,15 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
 
 // ___________________________________________________________________________
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
-  // Encode `codepoint` according to the UTF-8 standard. Codepoints outside of
-  // the valid Unicode range are replaced by U+FFFD (the replacement character).
+  // Encode `codepoint` according to the UTF-8 standard. Codepoints that are
+  // not valid Unicode scalar values (larger than U+10FFFF, or in the surrogate
+  // range U+D800..U+DFFF, which is reserved for UTF-16 and must never appear
+  // in valid UTF-8) are replaced by U+FFFD (the replacement character).
   static constexpr uint32_t maxValidCodepoint = 0x10FFFF;
-  if (codepoint > maxValidCodepoint) {
+  static constexpr uint32_t firstSurrogate = 0xD800;
+  static constexpr uint32_t lastSurrogate = 0xDFFF;
+  if (codepoint > maxValidCodepoint ||
+      (codepoint >= firstSurrogate && codepoint <= lastSurrogate)) {
     codepoint = 0xFFFD;
   }
   // A UTF-8 continuation byte has the two-bit header `10` followed by the next
