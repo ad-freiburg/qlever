@@ -110,6 +110,25 @@ else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
+# Additionally fall back to `range-v3` whenever the C++ standard library is
+# libstdc++ older than version 12, independent of the compiler. Such versions
+# (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
+# on which we now rely. Detecting the standard library directly (rather than the
+# compiler version) also covers Clang paired with an old libstdc++, e.g. in the
+# `using enum` rewriter container.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("
+#include <cstddef>
+#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE < 12
+#error libstdc++ older than 12 does not provide std::ranges::owning_view
+#endif
+int main() { return 0; }
+" QLEVER_STDLIB_PROVIDES_OWNING_VIEW)
+if (NOT QLEVER_STDLIB_PROVIDES_OWNING_VIEW)
+    MESSAGE(STATUS "range-v3 is used because the C++ standard library is libstdc++ older than version 12, which doesn't provide `std::ranges::owning_view`")
+    set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+endif ()
+
 ## Build targets for address sanitizer
 
 set(CMAKE_C_FLAGS_ASAN
