@@ -78,6 +78,10 @@ class PolymorphicVocabulary {
   // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
+  // Iterate over all words. The ranges of the different possible
+  // underlying vocabularies are wrapped in type-erased `VocabularyScanRange`s.
+  VocabularyScanRange scanAll() const;
+
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 

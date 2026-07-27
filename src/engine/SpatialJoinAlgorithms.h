@@ -25,6 +25,7 @@
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/VectorWithMemoryLimit.h"
 
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
@@ -239,12 +240,13 @@ class SpatialJoinAlgorithms {
   // contain two quotes, the string is returned as a whole
   std::string_view betweenQuotes(std::string_view extractFrom) const;
 
-  // Helper function, which adds a row, which belongs to the result to the
-  // result table. As inputs it uses a row of the left and a row of the right
-  // child result table.
+  // Helper to add a row to the result table. Combines the selected columns
+  // (given in `params_`) from the given row in each input table respectively.
+  // Input tables are swapped if requested (required for the `WITHIN` join).
   void addResultTableEntry(IdTable* result, const IdTableView<0>* resultLeft,
                            const IdTableView<0>* resultRight, size_t rowLeft,
-                           size_t rowRight, Id distance) const;
+                           size_t rowRight, Id distance,
+                           bool swapLeftAndRight = false) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -326,8 +328,7 @@ class SpatialJoinAlgorithms {
   size_t numFailedParsedGeometries_ = 0;
 
   // this vector stores the geometries, which have already been parsed
-  std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>
-      geometries_;
+  ad_utility::VectorWithMemoryLimit<AnyGeometry> geometries_;
 
   // After adding the given amount of rows to the WKT parser, it will be checked
   // if the user has cancelled their query.
