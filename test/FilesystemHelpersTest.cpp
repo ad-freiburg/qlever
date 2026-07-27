@@ -7,6 +7,7 @@
 //  You may not use this file except in compliance with the Apache 2.0 License,
 //  which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
@@ -196,6 +197,27 @@ TEST(FilesWithBaseNameAndSuffix, returnsOnlyFilesWithBaseNameAndSuffix) {
                        tmp.path() / "index.vocabulary.words",
                        tmp.path() / "index.vocabulary.ids"};
   EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(FilesWithBaseNameAndSuffix, baseNameWithoutDirectoryUsesCwd) {
+  TempDir tmp;
+  auto oldCwd = fs::current_path();
+  fs::current_path(tmp.path());
+  // Restore the working directory before `tmp` is removed (cleanups run in
+  // reverse order of declaration).
+  absl::Cleanup restoreCwd{[&oldCwd] { fs::current_path(oldCwd); }};
+
+  touch("index.vocabulary");
+  touch("index.vocabulary.words");
+  touch("other.vocabulary");  // must NOT match (different base name)
+
+  // A base name without a directory component, so `parent_path()` is empty.
+  auto result = filesWithBaseNameAndSuffix("index", ".vocabulary");
+  auto cwd = fs::current_path();
+  EXPECT_THAT(result,
+              ::testing::UnorderedElementsAre(cwd / "index.vocabulary",
+                                              cwd / "index.vocabulary.words"));
 }
 
 // _____________________________________________________________________________

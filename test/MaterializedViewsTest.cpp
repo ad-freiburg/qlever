@@ -1990,10 +1990,7 @@ TEST_F(MaterializedViewsTest,
 TEST(MaterializedViewsManager, viewFilesOnDisk) {
   auto [directory, cleanup] = makeTemporaryDirectory("viewFilesOnDisk");
   std::string base = directory + "/index";
-  auto touch = [](const std::string& f) {
-    std::ofstream out{f};
-    out << "x";
-  };
+  auto touch = [](const std::string& f) { ad_utility::makeOfsteam(f) << "x"; };
   // Two view files for the index, plus files that must be ignored: index files
   // that are not view files, and a view file of a different index.
   touch(MaterializedView::getFilenameBase(base, "viewA"));

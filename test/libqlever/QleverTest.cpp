@@ -432,21 +432,42 @@ TEST(Qlever, moveRebuiltIndexIntoPlace) {
   qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_,
                                     oldIndexBackup, newBase};
 
+  // The old index carries a build log, and the rebuilt index a rebuild log;
+  // both must travel with their respective index (exercising the log-moving
+  // branches).
+  auto touch = [](const std::string& path) {
+    ad_utility::makeOfstream(path) << "log";
+  };
+  touch(setup.oldBase_ + INDEX_LOG_SUFFIX);
+  touch(setup.rebuiltBase_ + REBUILD_INDEX_LOG_SUFFIX);
+
+  // Enable persistence of updates for the rebuilt index, so that the re-anchor
+  // of the persisted-updates filenames is exercised.
+  setup.indexAndViews_->index_.getImpl().setFilenamesForPersistentUpdates(
+      false);
+  ASSERT_TRUE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
+
   qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
 
   // The old index's files were moved to the base name for the old index, with
-  // their file-name prefix changed to match that base name.
+  // their file-name prefix changed to match that base name. This includes the
+  // build log.
   EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + CONFIGURATION_FILE));
   EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + ".index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + INDEX_LOG_SUFFIX));
 
   // The rebuilt index now lives at the final base name (the place of the old
-  // index) and no longer in the temporary directory.
+  // index) and no longer in the temporary directory. Its rebuild log traveled
+  // with it to the final base name.
   EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
   EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
+  EXPECT_TRUE(ql::filesystem::exists(newBase + REBUILD_INDEX_LOG_SUFFIX));
   EXPECT_TRUE(IndexImpl::allIndexFiles(setup.rebuiltBase_).empty());
 
-  // The in-memory state of the new index was re-anchored to the final base.
+  // The in-memory state of the new index was re-anchored to the final base, and
+  // it still persists its updates (now under the new base name).
   EXPECT_EQ(setup.indexAndViews_->index_.getOnDiskBase(), newBase);
+  EXPECT_TRUE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
 }
 
 // _____________________________________________________________________________
@@ -465,6 +486,11 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
   qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_, oldDir,
                                     newBase};
 
+  // Complementary to `moveRebuiltIndexIntoPlace` above: here neither index has
+  // a log file and the rebuilt index does not persist its updates, so this test
+  // covers the "no log file to move" and "index does not persist" branches
+  // (whereas the other test covers their counterparts). Do not add log files or
+  // enable persistence here, or that negative coverage is lost.
   qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
 
   // The (previously non-existent) directory was created and the old index's
@@ -473,9 +499,12 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
   EXPECT_TRUE(ql::filesystem::exists(oldDir + CONFIGURATION_FILE));
   EXPECT_TRUE(ql::filesystem::exists(oldDir + ".index.pso"));
 
-  // The new index is installed at its final base name as usual.
+  // The new index is installed at its final base name as usual, and no rebuild
+  // log was created for it.
   EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
   EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
+  EXPECT_FALSE(ql::filesystem::exists(newBase + REBUILD_INDEX_LOG_SUFFIX));
+  EXPECT_FALSE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
 }
 
 // _____________________________________________________________________________

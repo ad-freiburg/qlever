@@ -322,11 +322,6 @@ class MaterializedViewsManager {
   static std::vector<ql::filesystem::path> viewFilesOnDisk(
       const ql::filesystem::path& onDiskBase);
 
-  // Overload of the above for this manager's index base name.
-  std::vector<ql::filesystem::path> viewFilesOnDisk() const {
-    return viewFilesOnDisk(onDiskBase_);
-  }
-
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).
