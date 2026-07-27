@@ -111,6 +111,11 @@ struct PmrVocabBatchLookupData : VocabLookupDataCommonBase<BufferType> {};
 // index in the vocabulary. For most vocabularies the indices are simply
 // `0, 1, 2, ...`, but e.g. a `SplitVocabulary` yields the (non-contiguous)
 // marker-encoded indices that its `operator[]` expects.
+//
+// IMPORTANT: `word_` is in general a view into a buffer that is reused when
+// the range is advanced (e.g. for the on-disk and compressed vocabularies).
+// It is therefore only valid until the next element is pulled from the range;
+// consume each entry (or copy the word) before advancing.
 struct IndexAndWord {
   uint64_t index_;
   std::string_view word_;
