@@ -2036,3 +2036,59 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
     ASSERT_FALSE(result.contains("meta"));
   }
 }
+
+// _____________________________________________________________________________
+// Regression test for the `Global` deduplication of CONSTRUCT results: the same
+// RDF term may reach the CONSTRUCT template through two different kinds of
+// `Id`. A term that comes straight from the data is a `VocabIndex` `Id`, while
+// a term computed by an expression such as `STR` is materialized in the query's
+// `LocalVocab` and is therefore a `LocalVocabIndex` `Id`.
+//
+// Both branches of the `UNION` below instantiate the identical triple
+// `<s> <p> "Alice"`, once via `?o` bound directly from the data and once via
+// `BIND(STR(?l) AS ?o)`. Deduplication keys are compared bitwise, so unless
+// `ConstructDeduplicator::canonicalize` maps the `LocalVocabIndex` `Id` back
+// onto the index vocabulary's `VocabIndex` `Id`, the two keys differ and the
+// duplicate survives.
+//
+// DISABLED: this test can only pass once the `ConstructDeduplicator` is wired
+// into the CONSTRUCT export, which happens in the next PR of this series.
+// Enable it there.
+TEST(ExportQueryExecutionTrees,
+     DISABLED_ConstructGlobalDeduplicationAcrossLocalVocab) {
+  const std::string kg =
+      "<http://example.org/x> <http://example.org/name> \"Alice\" . "
+      "<http://example.org/y> <http://example.org/label> \"Alice\" .";
+  const std::string query =
+      "PREFIX ex: <http://example.org/>\n"
+      "CONSTRUCT { ex:s ex:p ?o }\n"
+      "WHERE {\n"
+      "  { ?x ex:name ?o }\n"
+      "  UNION\n"
+      "  { ?y ex:label ?l  BIND(STR(?l) AS ?o) }\n"
+      "}";
+
+  using ad_utility::DeduplicationMode;
+  const std::string expected =
+      "<http://example.org/s> <http://example.org/p> \"Alice\" .\n";
+
+  // Without deduplication both branches emit the triple.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::none());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        absl::StrCat(expected, expected));
+  }
+
+  // With `Global` deduplication the triple is emitted exactly once.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::global());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        expected);
+  }
+}

@@ -18,9 +18,7 @@
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
-#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
@@ -38,7 +36,10 @@ namespace ad_utility {
 // overhead and no deduplication cost.
 // `Global` is the strictly spec-compliant mode, but requires memory
 // proportional to the number of unique triples in the result, which can be
-// prohibitive for large result sets.
+// prohibitive for large result sets. Triples containing a blank node are
+// exempt from deduplication, which is not an approximation: every solution
+// instantiates a template blank node as a fresh blank node, so two such
+// triples are never duplicates of each other.
 // `BatchWise` keeps a single LRU cache of the `batchSize_` most recently seen
 // unique triple keys (shared across all template triples and keyed on the full
 // instantiated triple), and suppresses a triple only if its key is still in
