@@ -107,6 +107,22 @@ struct IndexBuilderConfig : CommonConfig {
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles_ = false;
 
+  // A list of regexes for IRIs that should be treated as blank nodes. During
+  // index building, an IRI that is fully matched by one of these regexes (via
+  // `RE2::FullMatch`, applied to the full IRI text including the angle
+  // brackets) is not stored in the vocabulary, but converted to a blank node.
+  // The match has to cover the entire IRI, so each regex must describe a full
+  // IRI and therefore has to start with `<`; to allow an arbitrary suffix, end
+  // it with `.*` (e.g. `<https://example\.org/statement/.*>`). This is useful
+  // for IRIs that only act as internal connector nodes (e.g. statement nodes),
+  // to save vocabulary memory. Only IRIs are affected; literals are never
+  // converted.
+  //
+  // NOTE: This is an experimental feature. The affected IRIs behave as ordinary
+  // blank nodes, so they are no longer recognized as those IRIs if used, e.g.,
+  // in a query or an update. See `TripleComponentWithIndex::isBlankNode`.
+  std::vector<std::string> blankNodeIriRegexes_;
+
   // A list of IRI prefixes (without angle brackets). IRIs that start with one
   // of these prefixes, followed by a sequence of a bounded number of digits
   // are encoded directly in the internal ID. This reduces the size of the
@@ -274,11 +290,11 @@ class Qlever {
   // `Server` actually imposes time limits and then executes the queries right
   // away), but should be addressed in the future once the timeout management
   // also is moved into the `QLever` class.
-  PlannedQuery planQuery(
-      ParsedQuery&& parsedQuery, std::optional<TimeLimit> timeLimit,
-      QueryExecutionContext& qec, SharedCancellationHandle handle,
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
+  PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle,
+                         std::optional<TimeLimit> timeLimit,
+                         boost::optional<const ad_utility::Timer&>
+                             requestTimer = boost::none) const;
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
   // name, `query` may also be a SPARQL update operation).
@@ -304,9 +320,10 @@ class Qlever {
   // also is moved into the `QLever` class.
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
-      ad_utility::SharedCancellationHandle handle =
+      SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false) const;
@@ -348,7 +365,19 @@ class Qlever {
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
-  void writeMaterializedView(std::string name, std::string query) const;
+  //
+  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
+  // (see there for their exact semantics). If omitted, the query is planned
+  // and executed without a timer, without a time limit, and with a fresh,
+  // never-triggered cancellation handle, i.e. it always runs to completion.
+  void writeMaterializedView(
+      std::string name, std::string query,
+      const std::vector<DatasetClause>& datasetClauses = {},
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
 
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
@@ -414,12 +443,6 @@ class Qlever {
 
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
-
-  std::shared_ptr<MaterializedViewsManager> materializedViewsManager() const {
-    auto snapshot = *indexAndViews_.rlock();
-    MaterializedViewsManager* manager = &snapshot->materializedViewsManager_;
-    return {std::move(snapshot), manager};
-  }
 };
 }  // namespace qlever
 

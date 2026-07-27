@@ -34,8 +34,9 @@ TEST_F(ValueIdTest, makeFromDouble) {
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
       // The if is needed for the case of += infinity.
-      ASSERT_NEAR(id.getDouble(), d,
-                  std::abs(d / (1ul << (52 - ValueId::numDatatypeBits))));
+      ASSERT_NEAR(
+          id.getDouble(), d,
+          std::abs(d / (uint64_t{1} << (52 - ValueId::numDatatypeBits))));
     }
   };
 

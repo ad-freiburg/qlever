@@ -145,11 +145,12 @@ namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
 template <typename F>
-std::string utf8StringTransform(std::string_view s, F transformation) {
+std::string utf8StringTransform(std::string_view s, const char* localeName,
+                                F transformation) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
-  transformation("", 0,
+  transformation(localeName, 0,
                  icu::StringPiece{s.data(), static_cast<int32_t>(s.size())},
                  sink, nullptr, err);
   if (U_FAILURE(err)) {
@@ -162,14 +163,15 @@ std::string utf8StringTransform(std::string_view s, F transformation) {
 
 // ____________________________________________________________________________
 template <bool useICU>
-std::string utf8ToLower(std::string_view s) {
+std::string utf8ToLower(std::string_view s, const char* localeName) {
   if constexpr (useICU) {
     QLEVER_UNICODE_ONLY("utf8ToLower", {
-      return detail::utf8StringTransform(s, [](auto&&... args) {
+      return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
         return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
       });
     });
   } else {
+    (void)localeName;
     return ::ranges::to<std::string>(
         s | ql::views::transform([](unsigned char c) {
           return static_cast<char>(std::tolower(c));
@@ -177,15 +179,15 @@ std::string utf8ToLower(std::string_view s) {
   }
 }
 // Explicit instantiations for both configurations.
-template std::string utf8ToLower<true>(std::string_view);
-template std::string utf8ToLower<false>(std::string_view);
+template std::string utf8ToLower<true>(std::string_view, const char*);
+template std::string utf8ToLower<false>(std::string_view, const char*);
 
 // ____________________________________________________________________________
 template <bool useICU>
 std::string utf8ToUpper(std::string_view s) {
   if constexpr (useICU) {
     QLEVER_UNICODE_ONLY("utf8ToUpper", {
-      return detail::utf8StringTransform(s, [](auto&&... args) {
+      return detail::utf8StringTransform(s, "", [](auto&&... args) {
         return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
       });
     });

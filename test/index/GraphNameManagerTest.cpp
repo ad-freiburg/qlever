@@ -43,12 +43,12 @@ TEST(GraphNameManager, storeAndRestoreData) {
   {
     auto allocatedGraphs = 13;
     auto nsm = GraphNameManager("http://example.org/g/", allocatedGraphs);
-    ad_utility::serialization::FileWriteSerializer serializer{tmpFile.c_str()};
+    ad_utility::serialization::FileWriteSerializer serializer{tmpFile.string()};
     serializer << nsm;
   }
   {
     auto nsm = GraphNameManager();
-    ad_utility::serialization::FileReadSerializer serializer{tmpFile.c_str()};
+    ad_utility::serialization::FileReadSerializer serializer{tmpFile.string()};
     serializer >> nsm;
     EXPECT_THAT(nsm.prefixWithoutBraces_,
                 testing::StrEq("http://example.org/g/"));

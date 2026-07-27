@@ -19,12 +19,16 @@ env:
   # `conanprofiles/emscripten.profile` when changing this!
   EMSDK_VERSION: "6.0.2"
 
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
