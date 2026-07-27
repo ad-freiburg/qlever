@@ -55,7 +55,7 @@ PreprocessedConstructTemplate makeSingleTripleTemplate() {
 
 // Shared fixture: holds the `QueryExecutionContext` every test needs and offers
 // helpers to build a `Global`-mode deduplicator and local-vocab ids on it.
-class ConstructDeduplicationFilter : public ::testing::Test {
+class ConstructDeduplicatorTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = getQec("<s> <p> <o>");
 
@@ -97,7 +97,7 @@ class ConstructDeduplicationFilter : public ::testing::Test {
 //______________________________________________________________________________
 // `makeFullTripleKey` copies an encoded (non-local-vocab) id into the key
 // unchanged, since `canonicalize` only re-anchors `LocalVocabIndex` ids.
-TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
+TEST_F(ConstructDeduplicatorTest, passThroughForNonLocalVocab) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   const Id id = IntId(42);
@@ -117,7 +117,7 @@ TEST_F(ConstructDeduplicationFilter, passThroughForNonLocalVocab) {
 // pass even without any reseating. Instead, we require that the reseated ids
 // are bitwise identical to each other (same `dedupVocab_` entry) yet bitwise
 // distinct from both sources (proving they were actually moved).
-TEST_F(ConstructDeduplicationFilter, crossVocabCollapse) {
+TEST_F(ConstructDeduplicatorTest, crossVocabCollapse) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   const LocalVocabRow row1 = makeLocalVocabRow("x");
@@ -146,7 +146,7 @@ TEST_F(ConstructDeduplicationFilter, crossVocabCollapse) {
 //______________________________________________________________________________
 // A key built from a `LocalVocab` that is then destroyed must not dangle: the
 // reseated ids live in `dedupVocab_`, which outlives the source.
-TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
+TEST_F(ConstructDeduplicatorTest, keySurvivesSourceVocabDestruction) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   DeduplicationKey key1;
@@ -168,7 +168,7 @@ TEST_F(ConstructDeduplicationFilter, keySurvivesSourceVocabDestruction) {
 //______________________________________________________________________________
 // A constant position contributes its precomputed `dedupId_` to the key
 // (rather than reading anything from the row).
-TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
+TEST_F(ConstructDeduplicatorTest, constantPositionUsesDedupId) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   const PreprocessedTriple constTriple{
@@ -188,7 +188,7 @@ TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
 // the index vocabulary's `VocabIndex` id, not a freshly reseated
 // `LocalVocabIndex` id. Otherwise it would never compare bitwise equal to the
 // same term coming from the data, and the duplicate would be missed.
-TEST_F(ConstructDeduplicationFilter, localVocabTermInIndexVocabUsesVocabIndex) {
+TEST_F(ConstructDeduplicatorTest, localVocabTermInIndexVocabUsesVocabIndex) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   // `<s>` is part of the index built by the fixture, so it is in the index
@@ -213,7 +213,7 @@ TEST_F(ConstructDeduplicationFilter, localVocabTermInIndexVocabUsesVocabIndex) {
 //______________________________________________________________________________
 // Building a key for a blank-node position is a precondition violation:
 // blank-node triples bypass deduplication and never reach `makeFullTripleKey`.
-TEST_F(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
+TEST_F(ConstructDeduplicatorTest, blankNodePositionInKeyFails) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
 
   const PreprocessedTriple blankNodeTriple{
@@ -228,7 +228,7 @@ TEST_F(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
 //______________________________________________________________________________
 // `global` dedup collapses the same local-vocab triple across two result
 // blocks (each with its own, separately-destroyed `LocalVocab`).
-TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
+TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksGlobal) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
 
@@ -245,7 +245,7 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
 
 //______________________________________________________________________________
 // Same as above, but through the `BatchWise` (LRU) filter path.
-TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
+TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksBatchWise) {
   ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_};
   auto tmpl = makeSingleTripleTemplate();
 
@@ -262,7 +262,7 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksBatchWise) {
 // A template triple flagged as containing a blank node is always reported
 // "new": blank-node triples bypass deduplication, so no key is built and
 // nothing is ever recorded (so a second call is "new" again too).
-TEST_F(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
+TEST_F(ConstructDeduplicatorTest, blankNodeTripleAlwaysNew) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
   tmpl.tripleContainsBlankNode_ = {true};
@@ -277,7 +277,7 @@ TEST_F(ConstructDeduplicationFilter, blankNodeTripleAlwaysNew) {
 // A ground triple seeded with a local-vocab constant suppresses a later
 // non-ground instantiation of the same triple. This exercises `canonicalizeKey`
 // (the seed and the non-ground key must agree after reseating).
-TEST_F(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
+TEST_F(ConstructDeduplicatorTest, seedGroundTripleSuppressesNonGround) {
   ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
 
@@ -297,7 +297,7 @@ TEST_F(ConstructDeduplicationFilter, seedGroundTripleSuppressesNonGround) {
 // approximate: the same local-vocab triple is reported "new" again after the
 // reset (rather than a duplicate). Contrast with `dedupAcrossBlocksBatchWise`,
 // which uses the default (large) threshold and deduplicates.
-TEST_F(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
+TEST_F(ConstructDeduplicatorTest, batchWiseResetsWhenVocabExceedsThreshold) {
   ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_,
                                      ad_utility::MemorySize::bytes(1)};
   auto tmpl = makeSingleTripleTemplate();
@@ -316,7 +316,7 @@ TEST_F(ConstructDeduplicationFilter, batchWiseResetsWhenVocabExceedsThreshold) {
 // under a 1-byte threshold canonicalizes its positions one at a time; if the
 // reset fired between positions it would free the entries the already-
 // canonicalized positions point to, leaving the key with dangling ids.
-TEST_F(ConstructDeduplicationFilter, batchWiseDoesNotResetMidKey) {
+TEST_F(ConstructDeduplicatorTest, batchWiseDoesNotResetMidKey) {
   ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_,
                                      ad_utility::MemorySize::bytes(1)};
 
@@ -340,7 +340,7 @@ TEST_F(ConstructDeduplicationFilter, batchWiseDoesNotResetMidKey) {
 // `global` dedup is exact and is never reset on memory pressure: the vocab
 // threshold does not apply to it. So even with a 1-byte threshold the identical
 // triple is still recognized as a duplicate.
-TEST_F(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
+TEST_F(ConstructDeduplicatorTest, globalIgnoresVocabThreshold) {
   ConstructDeduplicator deduplicator =
       makeGlobalDeduplicator(ad_utility::MemorySize::bytes(1));
   auto tmpl = makeSingleTripleTemplate();
@@ -357,7 +357,7 @@ TEST_F(ConstructDeduplicationFilter, globalIgnoresVocabThreshold) {
 // `TripleDeduplicator` must never be constructed for `none`: the caller creates
 // no filter in that mode, so building one is a precondition violation (see the
 // `AD_CONTRACT_CHECK` in `TripleDeduplicator::makeDeduplicator`).
-TEST_F(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
+TEST_F(ConstructDeduplicatorTest, perTripleFilterRejectsNone) {
   EXPECT_ANY_THROW(TripleDeduplicator(DeduplicationMode::none(), *qec_));
 }
 
@@ -365,7 +365,7 @@ TEST_F(ConstructDeduplicationFilter, perTripleFilterRejectsNone) {
 // `None` is not modelled by `ConstructDeduplicator`: the caller handles
 // it by not constructing the state at all. Constructing it with `None` is a
 // precondition violation.
-TEST_F(ConstructDeduplicationFilter, noneModeIsRejected) {
+TEST_F(ConstructDeduplicatorTest, noneModeIsRejected) {
   EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec_));
 }
 
