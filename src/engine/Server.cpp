@@ -83,6 +83,9 @@ Server::Server(
         return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
       },
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
+      [this]() -> int64_t {
+        return static_cast<int64_t>(rebuildInProgress_.load());
+      },
       config.memoryLimit_);
   metrics_->registerCallbacks();
 
@@ -740,10 +743,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
+    // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+    // structured binding is not destroyed when the coroutine frame is
+    // destroyed while suspended (gcc.gnu.org bug 124584).
+    auto preparedOp = prepareOperation(
+        operationName, operationString, std::move(messageSender), parameters,
+        timeLimit.value(), accessTokenOk, clientIp);
+    auto& [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
+        preparedOp;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
         throw std::runtime_error(absl::StrCat(

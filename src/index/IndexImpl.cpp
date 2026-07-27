@@ -6,6 +6,7 @@
 #include "index/IndexImpl.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
@@ -21,6 +22,7 @@
 #include <utility>
 
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "global/RuntimeParameters.h"
@@ -709,7 +711,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
-        memoryLimitIndexBuilding());
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
@@ -2057,6 +2059,37 @@ void IndexImpl::setPrefixesForEncodedValues(
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
+
+// _____________________________________________________________________________
+void IndexImpl::setBlankNodeIriRegexes(
+    const std::vector<std::string>& blankNodeIriRegexes) {
+  std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
+  ql::ranges::for_each(
+      blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
+        // The regexes are matched against the full IRI text (including the
+        // angle brackets), so each of them has to describe an IRI and must
+        // therefore start with `<`.
+        if (!ql::starts_with(regex, '<')) {
+          throw std::runtime_error{absl::StrCat(
+              "A regex for treating IRIs as blank nodes has to match a full "
+              "IRI and must therefore start with `<`, but got: ",
+              regex)};
+        }
+        // `RE2` does not throw for an invalid pattern but stores an error
+        // state, which we turn into a user-readable exception here.
+        auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
+        if (!compiledRegex->ok()) {
+          throw std::runtime_error{absl::StrCat(
+              "The regex \"", regex,
+              "\" passed to `--iri-as-blank-node-regexes` is not a valid "
+              "regular expression (as understood by Google's RE2 library): ",
+              compiledRegex->error())};
+        }
+        compiledRegexes.push_back(std::move(compiledRegex));
+      });
+  blankNodeIriRegexes_ = std::move(compiledRegexes);
+}
+
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {
   PatternStatistics statistics;
