@@ -477,10 +477,6 @@ class InputRangeTypeErased
  public:
   // Add value_type definition to make compatible with range-based functions
   using value_type = ValueType;
-  // Expose the `Details` type (like `InputRangeFromGet` does), so that it can
-  // be detected by traits (e.g. to deduce the `Details` of a
-  // `CachingTransformInputRange` that wraps this range).
-  using Details = DetailsType;
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   CPP_template(typename Range)(
