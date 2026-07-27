@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_HTTP_INSTRUMENTEDEXECUTOR_H
-#define QLEVER_SRC_UTIL_HTTP_INSTRUMENTEDEXECUTOR_H
+#ifndef QLEVER_SRC_UTIL_METRICS_INSTRUMENTEDEXECUTOR_H
+#define QLEVER_SRC_UTIL_METRICS_INSTRUMENTEDEXECUTOR_H
 
 #include <absl/cleanup/cleanup.h>
 #include <opentelemetry/metrics/sync_instruments.h>
@@ -132,4 +132,4 @@ class InstrumentedExecutor {
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_HTTP_INSTRUMENTEDEXECUTOR_H
+#endif  // QLEVER_SRC_UTIL_METRICS_INSTRUMENTEDEXECUTOR_H

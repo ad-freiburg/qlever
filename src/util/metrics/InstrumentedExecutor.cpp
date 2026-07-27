@@ -20,6 +20,7 @@ IoContextMetrics makeIoContextMetrics() {
   m.runningHandlers_ = meter->CreateInt64UpDownCounter(
       "qlever.io_context.running_handlers",
       "Number of ASIO handlers currently executing in the io_context");
+  m.runningHandlers_->Add(0);
   m.maxHandlers_ = meter->CreateInt64Gauge(
       "qlever.io_context.max_handlers",
       "Maximum number of ASIO handlers in the io_context");
