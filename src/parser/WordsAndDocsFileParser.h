@@ -105,9 +105,6 @@ struct DocsFileLine {
 // `pos` or an empty substring if there is no next delimiter.
 // This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
-  // Find the next delimiter (a maximal run of non-alphanumeric characters). If
-  // `useICU == false`, alphanumeric detection uses the ASCII `std::isalnum`
-  // instead of the Unicode-aware `u_isalnum`.
   template <bool useICU = ad_utility::useICUDefault>
   absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
     if constexpr (!useICU) {
@@ -123,6 +120,10 @@ struct LiteralsTokenizationDelimiter {
       QLEVER_UNICODE_ONLY("LiteralsTokenizationDelimiter::Find", {
         auto pos = static_cast<int64_t>(unsignedPos);
         auto size = static_cast<int64_t>(text.size());
+        // Note: If the Unicode handling ever becomes a bottleneck for ASCII
+        // only words, we can integrate a fast path here that handles the ascii
+        // characters. But before tackling such microoptimizations, the text
+        // index builder should first be parallelized.
         while (pos < size) {
           size_t oldPos = pos;
           UChar32 codePoint;

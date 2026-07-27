@@ -86,23 +86,35 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
   // Encode `codepoint` according to the UTF-8 standard. Codepoints outside of
   // the valid Unicode range are replaced by U+FFFD (the replacement character).
-  if (codepoint > 0x10FFFF) {
+  static constexpr uint32_t maxValidCodepoint = 0x10FFFF;
+  if (codepoint > maxValidCodepoint) {
     codepoint = 0xFFFD;
   }
+  // A UTF-8 continuation byte has the two-bit header `10` followed by the next
+  // six bits of the codepoint.
+  static constexpr uint32_t continuationHeader = 0b1000'0000;
+  static constexpr uint32_t lowestSixBits = 0b0011'1111;
+  auto continuationByte = [](uint32_t bits) {
+    return static_cast<char>(continuationHeader | (bits & lowestSixBits));
+  };
   if (codepoint <= 0x7F) {
+    // Single byte: `0xxxxxxx`.
     output += static_cast<char>(codepoint);
   } else if (codepoint <= 0x7FF) {
-    output += static_cast<char>(0xC0 | (codepoint >> 6));
-    output += static_cast<char>(0x80 | (codepoint & 0x3F));
+    // Two bytes: `110xxxxx 10xxxxxx`.
+    output += static_cast<char>(0b1100'0000 | (codepoint >> 6));
+    output += continuationByte(codepoint);
   } else if (codepoint <= 0xFFFF) {
-    output += static_cast<char>(0xE0 | (codepoint >> 12));
-    output += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-    output += static_cast<char>(0x80 | (codepoint & 0x3F));
+    // Three bytes: `1110xxxx 10xxxxxx 10xxxxxx`.
+    output += static_cast<char>(0b1110'0000 | (codepoint >> 12));
+    output += continuationByte(codepoint >> 6);
+    output += continuationByte(codepoint);
   } else {
-    output += static_cast<char>(0xF0 | (codepoint >> 18));
-    output += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
-    output += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-    output += static_cast<char>(0x80 | (codepoint & 0x3F));
+    // Four bytes: `11110xxx 10xxxxxx 10xxxxxx 10xxxxxx`.
+    output += static_cast<char>(0b1111'0000 | (codepoint >> 18));
+    output += continuationByte(codepoint >> 12);
+    output += continuationByte(codepoint >> 6);
+    output += continuationByte(codepoint);
   }
 }
 

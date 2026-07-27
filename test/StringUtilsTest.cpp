@@ -7,6 +7,7 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 #include <unicode/unistr.h>
+#include <unicode/utf16.h>
 
 #include <ranges>
 #include <sstream>
@@ -122,6 +123,28 @@ TEST(StringUtils, utf8EncodeCodepoint) {
   EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
   // Out-of-range codepoints are replaced by U+FFFD.
   EXPECT_EQ(encode(0x110000), "�");
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free UTF-16 surrogate helpers against ICU's `U16_IS_LEAD`,
+// `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY`.
+TEST(StringUtils, surrogateHelpers) {
+  using ad_utility::combineSurrogates;
+  using ad_utility::isHighSurrogate;
+  using ad_utility::isLowSurrogate;
+  // The predicates match ICU over the whole codepoint range (this includes the
+  // corner cases at the boundaries of the two surrogate blocks).
+  for (uint32_t c = 0; c <= 0x10FFFF; ++c) {
+    ASSERT_EQ(isHighSurrogate(c), static_cast<bool>(U16_IS_LEAD(c))) << c;
+    ASSERT_EQ(isLowSurrogate(c), static_cast<bool>(U16_IS_TRAIL(c))) << c;
+  }
+  // Combining matches ICU for every valid (high, low) surrogate pair.
+  for (uint32_t high = 0xD800; high <= 0xDBFF; ++high) {
+    for (uint32_t low = 0xDC00; low <= 0xDFFF; ++low) {
+      ASSERT_EQ(combineSurrogates(high, low),
+                static_cast<uint32_t>(U16_GET_SUPPLEMENTARY(high, low)));
+    }
+  }
 }
 
 // _____________________________________________________________________________

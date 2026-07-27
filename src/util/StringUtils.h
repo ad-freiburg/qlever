@@ -43,6 +43,24 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 // depend on ICU.
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
 
+// UTF-16 surrogate helpers. These are ICU-free equivalents of ICU's
+// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY` macros; they are
+// used when decoding `\uXXXX` escape sequences.
+
+// Return true iff `c` is a high (leading) surrogate code unit.
+constexpr bool isHighSurrogate(uint32_t c) {
+  return c >= 0xD800 && c <= 0xDBFF;
+}
+
+// Return true iff `c` is a low (trailing) surrogate code unit.
+constexpr bool isLowSurrogate(uint32_t c) { return c >= 0xDC00 && c <= 0xDFFF; }
+
+// Combine a high and a low surrogate into the corresponding supplementary
+// Unicode codepoint.
+constexpr uint32_t combineSurrogates(uint32_t high, uint32_t low) {
+  return 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+}
+
 // Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used
 // for locale-specific case folding (e.g. "tr" for Turkish); the default empty
 // string uses the locale-independent root rules. If `useICU == false`, only

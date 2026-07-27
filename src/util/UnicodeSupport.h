@@ -1,6 +1,5 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
