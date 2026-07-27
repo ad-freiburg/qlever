@@ -443,7 +443,7 @@ TEST(MemorySize, ArithmeticOperatorsOverAndUnderFlow) {
   // Floating point multiplication.
   ASSERT_THROW(ad_utility::MemorySize::max() * 1.5, std::overflow_error);
   ASSERT_NO_THROW(ad_utility::MemorySize::bytes(static_cast<size_t>(
-                      static_cast<float>(ad_utility::size_t_max) / 2.5)) *
+                      static_cast<float>(ad_utility::size_t_max) / 2.3)) *
                   2.3);
   ad_utility::MemorySize memFloatingPointMultiplication{
       ad_utility::MemorySize::max()};

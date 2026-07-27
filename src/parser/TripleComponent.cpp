@@ -9,7 +9,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/GeoPoint.h"

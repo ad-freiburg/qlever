@@ -16,17 +16,29 @@ function(addTest basename)
     add_executable(${basename} "${basename}.cpp")
 endfunction()
 
+# Choose how `ctest` addresses the test cases of a test binary. When `OFF` (the
+# default), `gtest_discover_tests` registers every single gtest case as its own
+# `ctest` test. When `ON`, each test binary becomes a single `ctest` test that
+# runs all of its cases at once.
+# Note: `ON` is much faster together with `BUILD_SHARED_LIBS=ON`, because the
+# per-case regime starts one subprocess per case, and each of those subprocesses
+# has to load all the shared libraries again.
+option(QLEVER_ONE_TEST_CASE_PER_FILE "Register one `ctest` test per test binary instead of one per gtest case" OFF)
+
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
 # Link the executable `basename` against `gmock_main`,threading library,
 # and all `additionLibraries` which are passed as arguments.
-# Then run `gtest_discover_tests` to add the tests cases from the executable.
+# Then register the test cases from the executable with `ctest` (see
+# `QLEVER_ONE_TEST_CASE_PER_FILE` above for the two possible regimes).
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    #TODO<joka921> hide this behind a flag for cmake/ctest.
-    add_test(NAME ${basename} COMMAND ${basename})
-    #gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    endif ()
 endfunction()
 
 # Same as `linkAndDiscoverTest`, but marks the discovered tests as
@@ -37,16 +49,15 @@ endfunction()
 # issues should be fixed via per-test unique filenames instead.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
-    #gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-    #        TRUE LABELS "${basename}")
-    #TODO<joka921> hide this behind a flag for cmake/ctest.
-    add_test(NAME ${basename} COMMAND ${basename} PROPERTIES RUN_SERIAL)
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+        set_tests_properties(${basename} PROPERTIES RUN_SERIAL TRUE)
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
+                TRUE LABELS "${basename}")
+    endif ()
 endfunction()
 
-# Note: with BUILD_SHARED_LIBS=ON, shared library loading overhead makes
-# individual gtest-case discovery via CTest significantly slower because every
-# subprocess invocation triggers shared-library loading. No solution is known at
-# this time.
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
