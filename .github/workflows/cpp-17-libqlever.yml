@@ -66,12 +66,6 @@ jobs:
           docker pull ghcr.io/joka921/llvm-enum-rewriter:latest
 
           # Generate compile_commands.json using the container's clang-21.
-          # Always enable the C++17 backports (`-DUSE_CPP_17_BACKPORTS=ON`), so
-          # that the rewriter analyzes the same `ql::ranges` (range-v3) code
-          # paths that the gcc-8 build below actually compiles; otherwise
-          # `using enum` occurrences inside `#ifdef QLEVER_CPP_17` branches
-          # would not be rewritten. The C++ standard stays at its default
-          # (C++20) here so that clang-21 can still parse `using enum`.
           docker run --user "$(id -u):$(id -g)" --rm \
             -v ${{github.workspace}}:/src \
             -w /src \
@@ -86,8 +80,7 @@ jobs:
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                 -DUSE_PARALLEL=true \
                 -DUSE_PRECOMPILED_HEADERS=OFF \
-                -DREDUCED_FEATURE_SET_FOR_CPP17=ON \
-                -DUSE_CPP_17_BACKPORTS=ON
+                -DREDUCED_FEATURE_SET_FOR_CPP17=ON
             "
 
           # Run backport-using-enum on all src/ files containing 'using enum'.
