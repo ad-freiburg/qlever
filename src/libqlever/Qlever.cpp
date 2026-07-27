@@ -343,7 +343,9 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
 namespace {
 // Two base names "collide" if, after purely lexical normalization, they denote
 // the same on-disk prefix. It is not problematic if one if a prefix of another,
-// since the suffixes that are attached to the basenames all start with a ".".
+// since the suffixes that are attached to the basenames all start with a ".",
+// unless you start using suffixes like ".view" that are used by qlever
+// internally.
 bool baseNamesCollide(const std::string& a, const std::string& b) {
   return ql::filesystem::path{a}.lexically_normal() ==
          ql::filesystem::path{b}.lexically_normal();
@@ -389,12 +391,6 @@ IndexRebuildConfig::IndexRebuildConfig(std::string oldIndexSource,
 void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                        const IndexRebuildConfig& config) {
   namespace fs = ql::filesystem;
-  auto& [newIndex, newManager] = newIndexAndViews;
-  const std::string& oldIndexSource = config.oldIndexSource();
-  const std::string& newIndexSource = config.newIndexSource();
-  AD_CORRECTNESS_CHECK(newIndex.getOnDiskBase() == newIndexSource);
-  const std::string& newIndexTarget = config.newIndexTarget();
-  const std::string& oldIndexTarget = config.oldIndexTarget();
 
   // Move a `file` whose name starts with `fromBasename` so that its base-name
   // prefix becomes `toBasename` while the file-specific suffix is preserved
@@ -416,13 +412,21 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
   // materialized views yet, and only one of the two build-log variants ever
   // exists for a given index).
   auto moveIndex = [&moveByBasename](std::string_view source,
-                                     std::string_view target) {
+                                     const std::string& target) {
+    // Move the index to `target`. Create the containing directory first (the
+    // base name may point into a directory that does not exist yet).
+    fs::path oldDir = target;
+    if (!oldDir.filename().empty() && oldDir.has_parent_path()) {
+      oldDir = oldDir.parent_path();
+    }
+    fs::create_directories(oldDir);
     auto move = [&](const fs::path& file) {
       moveByBasename(file, source, target);
     };
     ql::ranges::for_each(IndexImpl::allIndexFiles(source), move);
     ql::ranges::for_each(MaterializedViewsManager::viewFilesOnDisk(source),
                          move);
+    // Move the log files along with all the actual index files.
     for (auto suffix : {INDEX_LOG_SUFFIX, REBUILD_INDEX_LOG_SUFFIX}) {
       fs::path logFile = absl::StrCat(source, suffix);
       if (fs::exists(logFile)) {
@@ -431,26 +435,16 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
     }
   };
 
-  // Move the old index to `oldIndexTarget`. Create the containing directory
-  // first (the base name may point into a directory that does not exist yet).
-  fs::path oldDir = oldIndexTarget;
-  if (!oldDir.filename().empty() && oldDir.has_parent_path()) {
-    oldDir = oldDir.parent_path();
-  }
-  fs::create_directories(oldDir);
-  moveIndex(oldIndexSource, oldIndexTarget);
-
-  // Move the new index to its final base name. Its rebuild log travels to its
-  // final place next to the index it describes (from where it will later move
-  // into the directory of the old index, when this index is in turn retired by
-  // a future rebuild).
-  moveIndex(newIndexSource, newIndexTarget);
+  auto& [newIndex, newManager] = newIndexAndViews;
+  AD_CORRECTNESS_CHECK(newIndex.getOnDiskBase() == config.newIndexSource());
+  moveIndex(config.oldIndexSource(), config.oldIndexTarget());
+  moveIndex(config.newIndexSource(), config.newIndexTarget());
 
   // Re-anchor the path-derived state of the new index.
-  newIndex.setOnDiskBase(newIndexTarget);
+  newIndex.setOnDiskBase(config.newIndexTarget());
   if (newIndex.deltaTriplesManager().persists()) {
     newIndex.getImpl().setFilenamesForPersistentUpdates(false);
   }
-  newManager.setOnDiskBase(newIndexTarget);
+  newManager.setOnDiskBase(config.newIndexTarget());
 }
 }  // namespace qlever

@@ -491,7 +491,7 @@ class Qlever {
   //    base name, files for persisted updates and graph names, and the views
   //    manager) to `config.newIndexTarget()`.
   //
-  // By default `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
+  // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
   // restart loads the latest index); this works because step 1 has already
   // freed that place. Existing files that may still exist at

@@ -33,12 +33,9 @@ std::vector<fs::path> filesWithBaseNameAndSuffix(const fs::path& onDiskBase,
   }
   std::string prefix =
       absl::StrCat(ql::pathFilename(onDiskBase).string(), suffix);
-  // `directoryRange` returns a type that is not working well together with
-  // ranges, so we wrap it inside `::ranges::to_vector`. This has the benefit
-  // that it also makes sure the differences between `boost::filesystem` and
-  // `std::filesystem` disappear, since the boost variant returns a mutable
-  // reference that should not be tampered with.
   namespace v = ql::views;
+  // With an InputRangeTypeErased (instead of `to_vector`), `ql::directoryRange`
+  // backed by the boost filesystem library doesn't work.
   return ad_utility::OwningView{
              ::ranges::to_vector(ql::directoryRange(directory))} |
          v::filter([](const auto& entry) { return entry.is_regular_file(); }) |
