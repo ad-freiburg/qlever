@@ -380,7 +380,7 @@ PathsLimited PathSearch::findPaths(const Id& source,
 
     if (targets.empty() || ad_utility::contains(targets, edgeEnd)) {
       // `currentPath` keeps being extended below, so store an independent copy.
-      result.push_back(Path{currentPath.edges_.clone()});
+      result.push_back(currentPath.clone());
     }
 
     // Only expand the frontier if we are still allowed to grow the spine.

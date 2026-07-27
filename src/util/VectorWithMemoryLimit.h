@@ -25,8 +25,7 @@ namespace ad_utility {
 
 // A `std::vector<T, AllocatorWithLimit>` with deleted copy constructor and copy
 // assignment. Used whenever we want no accidental copies of large intermediate
-// results (originally in the `SparqlExpression` module). Copying is only
-// possible via the explicit `clone()` member function.
+// results. Copying is only possible via the explicit `clone()` member function.
 template <typename T>
 class VectorWithMemoryLimit
     : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
@@ -41,12 +40,12 @@ class VectorWithMemoryLimit
   // The `AllocatorWithLimit` is not default-constructible (on purpose).
   // Unfortunately, the support for such allocators is not really great in the
   // standard library. In particular, the type trait
-  // `std::default_initializable<std::vector<T, Alloc>>` will be true, even if
-  // the `Alloc` is not default-initializable, which leads to hard compile
-  // errors with the ranges library. For this reason we cannot simply inherit
-  // all the constructors from `Base`, but explicitly have to forward all but
-  // the default constructor. In particular, we only forward constructors that
-  // have
+  // `std::default_initializable<std::vector<T, Alloc>>` will be true on
+  // `libc++`, even if the `Alloc` is not default-initializable, which leads to
+  // hard compiler errors with the `ql::ranges` library. For this reason we
+  // cannot simply inherit all the constructors from `Base`, but explicitly
+  // have to forward all but the default constructor. In particular, we only
+  // forward constructors that have
   // * at least one argument
   // * the first argument must not be similar to `std::vector` or
   // `VectorWithMemoryLimit` to not hide copy or move constructors
@@ -60,12 +59,6 @@ class VectorWithMemoryLimit
           CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
               CPP_and concepts::constructible_from<Base, Args&&...>)
       QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
-      // NOTE: We deliberately use parentheses (not braces) to forward to the
-      // `Base` constructor, matching the constraint above
-      // (`constructible_from`) and the behavior of a plain `std::vector`.
-      // Braces would additionally forbid narrowing conversions (e.g. filling a
-      // `VectorWithMemoryLimit<char>` with an `int` value), which `std::vector`
-      // itself allows.
       : Base(AD_FWD(args)...) {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
@@ -76,7 +69,6 @@ class VectorWithMemoryLimit
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
- public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
   // Moving is fine.
