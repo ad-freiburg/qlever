@@ -1,15 +1,14 @@
 # Image for the source-rewriting steps (currently only the rewriting of
 # `using enum`) of the `CPP17 libQLever` CI workflow.
 #
-# The base image `ghcr.io/joka921/llvm-cpp-17-rewriter` (built from the
+# The base image `ghcr.io/joka921/llvm-cpp-17-rewriter`, which is built from the
 # Dockerfile at
-# https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile,
-# which will be moved to a more stable location) contains a custom clang
-# build together with the `backport-using-enum` tool in `/opt/llvm/bin`. We only
-# rely on those LLVM tools and install everything that is needed to configure
-# QLever (in particular to generate a `compile_commands.json`) on top of it.
-# That way a new QLever dependency only requires a change in this file and not a
-# rebuild of the base image.
+# https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile ,
+# contains a custom clang build together with the `backport-using-enum` tool in
+# `/opt/llvm/bin`. We only rely on those LLVM tools and install everything that
+# is needed to configure QLever (in particular to generate a
+# `compile_commands.json`) on top of it. That way a new QLever dependency only
+# requires a change in this file and not a rebuild of the base image.
 FROM ghcr.io/joka921/llvm-cpp-17-rewriter:0.0.1
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,7 +18,7 @@ ENV LC_CTYPE=C.UTF-8
 
 # All the dependencies of QLever. Keep this in sync with the `Dockerfile` in the
 # root directory and with `.github/workflows/install-dependencies-ubuntu`. The
-# Ubuntu version of the base image is recent enough that all of them (in
+# Ubuntu version of the base image (26.04) is recent enough that all of them (in
 # particular CMake and Boost) can be installed directly from the standard
 # repositories.
 RUN apt-get update && apt-get install -y --no-install-recommends \

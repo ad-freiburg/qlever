@@ -60,9 +60,8 @@ jobs:
           # The base image ghcr.io/joka921/llvm-cpp-17-rewriter contains a custom
           # clang build with the `backport-using-enum` tool at /opt/llvm/bin/. It
           # is built using the Dockerfile at
-          # https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile
-          # and will be moved to a more stable location in the future. All the
-          # dependencies that QLever needs are installed on top of it by
+          # https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile .
+          # All the dependencies that QLever needs are installed on top of it by
           # `Dockerfiles/Dockerfile.cpp-17-rewriter`, so a new dependency only
           # requires a change in that Dockerfile. The build context is the
           # `Dockerfiles` directory (the Dockerfile copies nothing, so we don't
