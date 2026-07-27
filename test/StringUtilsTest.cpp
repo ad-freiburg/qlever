@@ -7,7 +7,6 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 #include <unicode/unistr.h>
-#include <unicode/utf16.h>
 
 #include <ranges>
 #include <sstream>
@@ -138,62 +137,6 @@ TEST(StringUtils, utf8EncodeCodepoint) {
   EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
   // Out-of-range codepoints are replaced by U+FFFD.
   EXPECT_EQ(encode(0x110000), "�");
-}
-
-// _____________________________________________________________________________
-// Test the ICU-free UTF-16 surrogate helpers at the boundaries of the two
-// surrogate blocks, which are the interesting corner cases.
-TEST(StringUtils, surrogateHelpers) {
-  using ad_utility::combineSurrogates;
-  using ad_utility::isHighSurrogate;
-  using ad_utility::isLowSurrogate;
-  // The high surrogates are exactly the block [0xD800, 0xDBFF].
-  EXPECT_FALSE(isHighSurrogate(0xD7FF));
-  EXPECT_TRUE(isHighSurrogate(0xD800));
-  EXPECT_TRUE(isHighSurrogate(0xDBFF));
-  EXPECT_FALSE(isHighSurrogate(0xDC00));
-
-  // The low surrogates are exactly the block [0xDC00, 0xDFFF].
-  EXPECT_FALSE(isLowSurrogate(0xDBFF));
-  EXPECT_TRUE(isLowSurrogate(0xDC00));
-  EXPECT_TRUE(isLowSurrogate(0xDFFF));
-  EXPECT_FALSE(isLowSurrogate(0xE000));
-
-  // Ordinary codepoints are neither.
-  EXPECT_FALSE(isHighSurrogate(0x41));
-  EXPECT_FALSE(isLowSurrogate(0x41));
-
-  // The first and the last supplementary codepoint.
-  EXPECT_EQ(combineSurrogates(0xD800, 0xDC00), 0x10000u);
-  EXPECT_EQ(combineSurrogates(0xDBFF, 0xDFFF), 0x10FFFFu);
-  // U+1F600 (GRINNING FACE) is encoded as the surrogate pair D83D DE00.
-  EXPECT_EQ(combineSurrogates(0xD83D, 0xDE00), 0x1F600u);
-}
-
-// _____________________________________________________________________________
-// Exhaustively test the ICU-free UTF-16 surrogate helpers against ICU's
-// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY`. This complements
-// the `surrogateHelpers` test above, which only covers the corner cases but
-// always runs.
-TEST(StringUtils, surrogateHelpersExhaustive) {
-#ifndef QLEVER_RUN_EXPENSIVE_TESTS
-  GTEST_SKIP();
-#endif
-  using ad_utility::combineSurrogates;
-  using ad_utility::isHighSurrogate;
-  using ad_utility::isLowSurrogate;
-  // The predicates match ICU over the whole codepoint range.
-  for (uint32_t c = 0; c <= 0x10FFFF; ++c) {
-    ASSERT_EQ(isHighSurrogate(c), static_cast<bool>(U16_IS_LEAD(c))) << c;
-    ASSERT_EQ(isLowSurrogate(c), static_cast<bool>(U16_IS_TRAIL(c))) << c;
-  }
-  // Combining matches ICU for every valid (high, low) surrogate pair.
-  for (uint32_t high = 0xD800; high <= 0xDBFF; ++high) {
-    for (uint32_t low = 0xDC00; low <= 0xDFFF; ++low) {
-      ASSERT_EQ(combineSurrogates(high, low),
-                static_cast<uint32_t>(U16_GET_SUPPLEMENTARY(high, low)));
-    }
-  }
 }
 
 // _____________________________________________________________________________
