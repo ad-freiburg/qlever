@@ -4,13 +4,20 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
+
+#include <memory>
 
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
+#include "engine/MaterializedViews.h"
+#include "global/FileSuffixConstants.h"
+#include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
 
 using namespace qlever;
@@ -374,4 +381,146 @@ TEST(LibQlever, externallySpecifiedValues) {
     }
     EXPECT_THAT(res->idTableView(), matchesIdTable(expected));
   }
+}
+
+namespace {
+// The pieces produced by `setUpRebuild` below: the base name of the "old"
+// index, the base name of the freshly "rebuilt" index (in a temporary
+// directory), and the in-memory `IndexAndViews` for the rebuilt index. The
+// latter is owned via a `shared_ptr` because `IndexAndViews` is neither
+// copyable nor movable.
+struct RebuildSetup {
+  std::string oldBase_;
+  std::string rebuiltBase_;
+  std::shared_ptr<qlever::Qlever::IndexAndViews> indexAndViews_;
+};
+
+// Build an "old" index at `<baseFolder>/index` and a freshly "rebuilt" index at
+// `<baseFolder>/rebuild.tmp/index` (a distinct temporary directory), and return
+// them for use with `Qlever::moveRebuiltIndexIntoPlace`.
+RebuildSetup setUpRebuild(const std::string& baseFolder) {
+  ql::filesystem::create_directory(baseFolder);
+  std::string oldBase = baseFolder + "/index";
+  std::string tmpDir = baseFolder + "/rebuild.tmp";
+  ql::filesystem::create_directory(tmpDir);
+  std::string rebuiltBase = tmpDir + "/index";
+
+  ad_utility::testing::makeTestIndex(oldBase, "<a> <b> <c> .");
+  Index rebuilt = ad_utility::testing::makeTestIndex(
+      rebuiltBase, "<a> <b> <c> . <d> <e> <f> .");
+  auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
+      std::move(rebuilt), MaterializedViewsManager{rebuiltBase});
+  return {std::move(oldBase), std::move(rebuiltBase), std::move(indexAndViews)};
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Build an "old" index and a freshly "rebuilt" index (in a temporary
+// directory), then move the rebuilt index into the place of the old one and
+// check the resulting on-disk layout and the re-anchored in-memory state.
+TEST(Qlever, moveRebuiltIndexIntoPlace) {
+  std::string baseFolder = gtestCurrentTestName();
+  absl::Cleanup removeFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  auto setup = setUpRebuild(baseFolder);
+
+  // Use a base name for the old index that lives in a not-yet-existing
+  // directory AND uses a different file-name prefix than the original index.
+  // This exercises that the individual files are re-prefixed, not just moved.
+  std::string oldIndexBackup = baseFolder + "/previous/old-index";
+  std::string newBase = baseFolder + "/index";
+  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_,
+                                    oldIndexBackup, newBase};
+
+  qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
+
+  // The old index's files were moved to the base name for the old index, with
+  // their file-name prefix changed to match that base name.
+  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + CONFIGURATION_FILE));
+  EXPECT_TRUE(ql::filesystem::exists(oldIndexBackup + ".index.pso"));
+
+  // The rebuilt index now lives at the final base name (the place of the old
+  // index) and no longer in the temporary directory.
+  EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
+  EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
+  EXPECT_TRUE(IndexImpl::allIndexFiles(setup.rebuiltBase_).empty());
+
+  // The in-memory state of the new index was re-anchored to the final base.
+  EXPECT_EQ(setup.indexAndViews_->index_.getOnDiskBase(), newBase);
+}
+
+// _____________________________________________________________________________
+// The base name for the retired old index may also be a plain directory (given
+// with a trailing separator). The directory does not exist yet and has to be
+// created; the old index's files then live directly inside it, with an empty
+// file-name prefix (e.g. `<dir>/.index.pso`).
+TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
+  std::string baseFolder = gtestCurrentTestName();
+  absl::Cleanup removeFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  auto setup = setUpRebuild(baseFolder);
+
+  std::string oldDir = baseFolder + "/previous/";
+  std::string newBase = baseFolder + "/index";
+  qlever::IndexRebuildConfig config{setup.oldBase_, setup.rebuiltBase_, oldDir,
+                                    newBase};
+
+  qlever::Qlever::moveRebuiltIndexIntoPlace(*setup.indexAndViews_, config);
+
+  // The (previously non-existent) directory was created and the old index's
+  // files now live inside it (with an empty base-name prefix).
+  EXPECT_TRUE(ql::filesystem::is_directory(oldDir));
+  EXPECT_TRUE(ql::filesystem::exists(oldDir + CONFIGURATION_FILE));
+  EXPECT_TRUE(ql::filesystem::exists(oldDir + ".index.pso"));
+
+  // The new index is installed at its final base name as usual.
+  EXPECT_TRUE(ql::filesystem::exists(newBase + CONFIGURATION_FILE));
+  EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
+}
+
+// _____________________________________________________________________________
+// The `IndexRebuildConfig` constructor rejects base-name combinations that
+// would collide destructively. Because the validation lives in the constructor,
+// this needs no index on disk at all.
+TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
+  using qlever::IndexRebuildConfig;
+  // The four positional arguments are: current index, rebuilt index, retired
+  // old index, new index. The common (valid) case has the new index served
+  // from the place of the current index.
+  EXPECT_NO_THROW(
+      IndexRebuildConfig("index", "tmp/index", "previous/old", "index"));
+
+  // The currently served index and the freshly rebuilt index must differ.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "index", "previous/old", "index"),
+      ::testing::HasSubstr(
+          "currently served index and the freshly rebuilt index"));
+
+  // The retired-old-index base name must differ from the currently served
+  // index, ...
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "tmp/index", "index", "index"),
+      ::testing::HasSubstr("differ from the currently served index"));
+
+  // ... from the freshly rebuilt index, ...
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "tmp/index", "tmp/index", "index"),
+      ::testing::HasSubstr("differ from the freshly rebuilt index"));
+
+  // ... and from the new index.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "tmp/index", "shared", "shared"),
+      ::testing::HasSubstr("retired old index and the new index must differ"));
+
+  // Collisions are detected up to lexical path normalization, so `abc/../index`
+  // (which denotes `index`) collides with the currently served index `index`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "tmp/index", "abc/../index", "index"),
+      ::testing::HasSubstr("differ from the currently served index"));
+
+  // Base names that merely share a string prefix (e.g. `index` and `indexdata`)
+  // do NOT collide: the `.`-delimited file-name suffixes keep the two indexes'
+  // files apart, so such a configuration is valid.
+  EXPECT_NO_THROW(
+      IndexRebuildConfig("index", "tmp/index", "indexdata", "index"));
 }

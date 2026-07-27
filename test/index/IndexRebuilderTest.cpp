@@ -28,7 +28,6 @@
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
-#include "libqlever/Qlever.h"
 #include "util/FilesystemHelpers.h"
 
 using namespace qlever::indexRebuilder;
@@ -790,54 +789,4 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
   EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
-}
-
-// _____________________________________________________________________________
-// Build an "old" index and a freshly "rebuilt" index (in a temporary
-// directory), then move the rebuilt index into the place of the old one and
-// check the resulting on-disk layout and the re-anchored in-memory state.
-TEST(Qlever, moveRebuiltIndexIntoPlace) {
-  std::string baseFolder = gtestCurrentTestName();
-  ql::filesystem::create_directory(baseFolder);
-  absl::Cleanup removeFiles{
-      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
-
-  std::string oldBase = baseFolder + "/index";
-  std::string tmpDir = baseFolder + "/rebuild.tmp";
-  ql::filesystem::create_directory(tmpDir);
-  std::string rebuiltBase = tmpDir + "/index";
-
-  ad_utility::testing::makeTestIndex(oldBase, "<a> <b> <c> .");
-  Index rebuilt = ad_utility::testing::makeTestIndex(
-      rebuiltBase, "<a> <b> <c> . <d> <e> <f> .");
-
-  qlever::IndexRebuildConfig config;
-  config.basenameForRebuild_ = rebuiltBase;
-  // Use a base name for the old index that lives in a not-yet-existing
-  // directory AND uses a different file-name prefix than the original index.
-  // This exercises that the individual files are re-prefixed, not just moved.
-  config.basenameForOldIndex_ = baseFolder + "/previous/old-index";
-  config.basenameForNewIndex_ = baseFolder + "/index";
-
-  qlever::Qlever::IndexAndViews indexAndViews{
-      std::move(rebuilt), MaterializedViewsManager{rebuiltBase}};
-  qlever::Qlever::moveRebuiltIndexIntoPlace(oldBase, indexAndViews, config);
-
-  // The old index's files were moved to the base name for the old index, with
-  // their file-name prefix changed to match that base name.
-  EXPECT_TRUE(
-      ql::filesystem::exists(config.basenameForOldIndex_ + CONFIGURATION_FILE));
-  EXPECT_TRUE(
-      ql::filesystem::exists(config.basenameForOldIndex_ + ".index.pso"));
-
-  // The rebuilt index now lives at the final base name (the place of the old
-  // index) and no longer in the temporary directory.
-  EXPECT_TRUE(
-      ql::filesystem::exists(config.basenameForNewIndex_ + CONFIGURATION_FILE));
-  EXPECT_TRUE(
-      ql::filesystem::exists(config.basenameForNewIndex_ + ".index.pso"));
-  EXPECT_TRUE(IndexImpl::allIndexFiles(rebuiltBase).empty());
-
-  // The in-memory state of the new index was re-anchored to the final base.
-  EXPECT_EQ(indexAndViews.index_.getOnDiskBase(), config.basenameForNewIndex_);
 }

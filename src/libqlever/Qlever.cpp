@@ -334,16 +334,60 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
       pinSubtrees, pinResult, disableCaching);
 }
 
+namespace {
+// Two base names "collide" if, after purely lexical normalization, they denote
+// the same on-disk prefix.
+bool baseNamesCollide(const std::string& a, const std::string& b) {
+  return ql::filesystem::path{a}.lexically_normal() ==
+         ql::filesystem::path{b}.lexically_normal();
+}
+}  // namespace
+
 // ___________________________________________________________________________
-void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBasename,
-                                       IndexAndViews& newIndexAndViews,
+IndexRebuildConfig::IndexRebuildConfig(std::string basenameForCurrentIndex,
+                                       std::string basenameForRebuild,
+                                       std::string basenameForOldIndex,
+                                       std::string basenameForNewIndex)
+    : basenameForCurrentIndex_{std::move(basenameForCurrentIndex)},
+      basenameForRebuild_{std::move(basenameForRebuild)},
+      basenameForOldIndex_{std::move(basenameForOldIndex)},
+      basenameForNewIndex_{std::move(basenameForNewIndex)} {
+  // Both the relocation of the old index and the installation of the new index
+  // are implemented (in `Qlever::moveRebuiltIndexIntoPlace`) as "replace the
+  // base-name prefix of each file". For this to be well-defined and
+  // non-destructive, the involved base names must not collide in ways that
+  // would overwrite files that are still needed, or that would turn a move into
+  // a (potentially partial) self-overwrite. Note that `basenameForNewIndex_ ==
+  // basenameForCurrentIndex_` is the common (and intended) case: the old index
+  // is moved away first, so its place is free for the new index.
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(basenameForCurrentIndex_, basenameForRebuild_),
+      "The currently served index and the freshly rebuilt index must not share "
+      "a base name.");
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(basenameForOldIndex_, basenameForCurrentIndex_),
+      "The base name for the retired old index must differ from the currently "
+      "served index.");
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(basenameForOldIndex_, basenameForRebuild_),
+      "The base name for the retired old index must differ from the freshly "
+      "rebuilt index.");
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(basenameForOldIndex_, basenameForNewIndex_),
+      "The base names for the retired old index and the new index must "
+      "differ.");
+}
+
+// ___________________________________________________________________________
+void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                        const IndexRebuildConfig& config) {
   namespace fs = ql::filesystem;
   auto& [newIndex, newManager] = newIndexAndViews;
-  const std::string& rebuildBase = config.basenameForRebuild_;
+  const std::string& originalBasename = config.basenameForCurrentIndex();
+  const std::string& rebuildBase = config.basenameForRebuild();
   AD_CORRECTNESS_CHECK(newIndex.getOnDiskBase() == rebuildBase);
-  const std::string& targetBasenameForNewIndex = config.basenameForNewIndex_;
-  const std::string& targetBasenameForOldIndex = config.basenameForOldIndex_;
+  const std::string& targetBasenameForNewIndex = config.basenameForNewIndex();
+  const std::string& targetBasenameForOldIndex = config.basenameForOldIndex();
 
   // Move a `file` whose name starts with `fromBasename` so that its base-name
   // prefix becomes `toBasename` while the file-specific suffix is preserved
