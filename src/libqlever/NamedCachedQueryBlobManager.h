@@ -75,10 +75,7 @@ class NamedCachedQueryBlobManager {
   // format. They are exposed publicly so that they can be unit-tested in
   // isolation.
 
-  // Compress `uncompressedBlob` into a single ZSTD frame. The size of the
-  // uncompressed data needs no separate bookkeeping, because it is already
-  // stored in the header of that frame (see
-  // `ZstdWrapper::getUncompressedSize`).
+  // Compress `uncompressedBlob` into a single ZSTD frame.
   static std::vector<char> compressBlob(ql::span<const char> uncompressedBlob);
 
   // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
