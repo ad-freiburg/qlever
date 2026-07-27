@@ -17,6 +17,7 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "util/InputRangeUtils.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
@@ -30,7 +31,14 @@ namespace ad_utility {
 namespace joinAlgorithms::detail {
 template <typename T, typename U>
 CPP_requires(HasMinus, requires(T&& a, U&& b)(a - b));
-}
+
+// Block types exposing `getLocalVocab()` (e.g. `IdTableAndFirstCols`); gates
+// the fast path out for generic block containers that lack it.
+template <typename T>
+CPP_requires(HasGetLocalVocabRequires, requires(const T& t)(t.getLocalVocab()));
+template <typename T>
+CPP_concept HasGetLocalVocab = CPP_requires_ref(HasGetLocalVocabRequires, T);
+}  // namespace joinAlgorithms::detail
 
 // A  function `F` fulfills `UnaryIteratorFunction` if it can be called with a
 // single argument of the `Range`'s iterator type (NOT value type).
@@ -345,6 +353,74 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   size_t numOutOfOrder =
       outOfOrderFound ? std::numeric_limits<size_t>::max() : numOutOfOrderAtEnd;
   return numOutOfOrder;
+}
+
+// Merge-join two sorted, UNDEF-free, bitwise-comparable `Id` ranges via
+// `ValueId::compareWithoutLocalVocab`, matching `zipperJoinWithUndef` but
+// skipping its datatype-dispatching `compareThreeWay`.
+CPP_template(typename Range1, typename Range2, typename EmitRun,
+             typename CheckCancellation = decltype(noop))(
+    requires ql::ranges::random_access_range<Range1> CPP_and
+        ql::ranges::random_access_range<
+            Range2>) void zipperJoinWithoutUndefOrLocalVocab(const Range1& left,
+                                                             const Range2&
+                                                                 right,
+                                                             const EmitRun&
+                                                                 emitRun,
+                                                             CheckCancellation
+                                                                 checkCancellation =
+                                                                     {}) {
+  const size_t n = ql::ranges::size(left);
+  const size_t m = ql::ranges::size(right);
+  auto l = ql::ranges::begin(left);
+  auto r = ql::ranges::begin(right);
+
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(left));
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(right));
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+      left, [](Id id) { return id.canBeComparedBitwise(); }));
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+      right, [](Id id) { return id.canBeComparedBitwise(); }));
+  // UNDEF is bitwise comparable but needs the general join's UNDEF handling.
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::none_of(left, [](Id id) { return id.isUndefined(); }));
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::none_of(right, [](Id id) { return id.isUndefined(); }));
+
+  constexpr size_t CANCELLATION_STRIDE = size_t{1} << 16;
+  size_t sinceCancellation = 0;
+
+  size_t i = 0;
+  size_t j = 0;
+  while (i < n && j < m) {
+    const size_t rowsBefore = i + j;
+    const Id a = l[i];
+    const Id b = r[j];
+    const auto c = a.compareWithoutLocalVocab(b);
+    if (c < 0) {
+      ++i;
+    } else if (c > 0) {
+      ++j;
+    } else {
+      size_t iEnd = i + 1;
+      while (iEnd < n && l[iEnd].compareWithoutLocalVocab(a) == 0) {
+        ++iEnd;
+      }
+      size_t jEnd = j + 1;
+      while (jEnd < m && r[jEnd].compareWithoutLocalVocab(b) == 0) {
+        ++jEnd;
+      }
+      emitRun(i, iEnd, j, jEnd);
+      i = iEnd;
+      j = jEnd;
+    }
+    // Count rows consumed, not iterations (a duplicate run advances by many).
+    sinceCancellation += (i + j) - rowsBefore;
+    if (sinceCancellation >= CANCELLATION_STRIDE) {
+      checkCancellation();
+      sinceCancellation = 0;
+    }
+  }
 }
 
 /**
@@ -907,6 +983,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
   // The callback that is called for each pair of matching rows.
   CompatibleRowAction& compatibleRowAction_;
   [[no_unique_address]] IsUndef isUndefined_{};
+  // The bit fast-path flag, read once per join instead of per block pair.
+  bool enableBitComparison_ =
+      getRuntimeParameter<&RuntimeParameters::enableJoinBitComparison_>();
 
   // Constructor.
   BlockZipperJoinImplCRTP(LeftSide leftSide, RightSide rightSide,
@@ -1242,6 +1321,35 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
           ql::ranges::subrange{subrangeRight.begin(), currentElItR},
           RowIndexAdder{addRowIndex, addRowIndices}, AD_FWD(args)...);
     };
+    // Fast path for a plain inner JOIN on one `Id` column, `std::less`, and no
+    // local vocab (always true for index-scan blocks). Emits via the same
+    // `addRowIndices` as `doJoin`; returns whether it handled the join.
+    auto tryFastPath = [&]() -> bool {
+      // Only `std::less` agrees with raw bit order (excludes e.g. the special
+      // optional join's `CompareAllButLast`).
+      if constexpr (!DoOptionalJoinOrMinus &&
+                    ql::concepts::same_as<ProjectedEl, Id> &&
+                    std::is_same_v<LessThan, std::less<>> &&
+                    joinAlgorithms::detail::HasGetLocalVocab<
+                        std::decay_t<decltype(fullBlockLeft)>> &&
+                    joinAlgorithms::detail::HasGetLocalVocab<
+                        std::decay_t<decltype(fullBlockRight)>>) {
+        if (enableBitComparison_ && fullBlockLeft.getLocalVocab().empty() &&
+            fullBlockRight.getLocalVocab().empty()) {
+          auto subLBegin = subrangeLeft.begin();
+          auto subRBegin = subrangeRight.begin();
+          auto emitRun = [&](size_t i, size_t iEnd, size_t j, size_t jEnd) {
+            addRowIndices(subLBegin + i, subLBegin + iEnd, subRBegin + j,
+                          subRBegin + jEnd);
+          };
+          ad_utility::zipperJoinWithoutUndefOrLocalVocab(
+              ql::ranges::subrange{subLBegin, currentElItL},
+              ql::ranges::subrange{subRBegin, currentElItR}, emitRun);
+          return true;
+        }
+      }
+      return false;
+    };
     // If we have undefined values stored, we need to provide a generator that
     // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
@@ -1249,7 +1357,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
       // use the simpler code path (with std::true_type for coverage).
       if (!hasUndef(leftSide_) && !hasUndef(rightSide_)) {
         // No UNDEFs found at runtime, use the simpler code path.
-        doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+        if (!tryFastPath()) {
+          doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+        }
       } else {
         // We pass `std::false_type`, to disable coverage checks for the
         // undefined values that are stored in `side.undefBlocks_`, which we
@@ -1261,7 +1371,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
             addNotFoundRowIndex, noop, std::false_type{});
       }
     } else {
-      doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+      if (!tryFastPath()) {
+        doJoin(noop, noop, addNotFoundRowIndex, noop, std::true_type{});
+      }
     }
     compatibleRowAction_.flush();
 

@@ -93,8 +93,8 @@ class JoinImpl : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  void join(const IdTableView<0>& a, const IdTableView<0>& b,
-            IdTable* result) const;
+  void join(const IdTableView<0>& a, const IdTableView<0>& b, IdTable* result,
+            bool joinColumnsAreBitComparable) const;
 
  public:
   // Fallback implementation of a join that is used when at least one of the two
