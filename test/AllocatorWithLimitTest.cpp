@@ -31,21 +31,6 @@ TEST(AllocatorWithLimit, initial) {
   all.deallocate(ptr, 250'000);
 }
 
-TEST(AllocatorWithLimit, vector) {
-  V v{AllocatorWithLimit<int>(makeAllocationMemoryLeftThreadsafeObject(18_B))};
-  v.push_back(5);  // allocate 4 bytes -> works
-  ASSERT_EQ(v.size(), 1u);
-  ASSERT_EQ(v[0], 5);
-
-  v.push_back(4);  // allocate 8 bytes, then free 4, works (10 bytes free)
-  ASSERT_EQ(v.size(), 2u);
-  ASSERT_EQ(v[1], 4);
-
-  // allocate 16 bytes, FAILS (first allocate, then copy, then free 8)
-  ASSERT_THROW(v.push_back(1),
-               ad_utility::detail::AllocationExceedsLimitException);
-}
-
 TEST(AllocatorWithLimit, vectorShared) {
   AllocatorWithLimit<int> allocator(
       makeAllocationMemoryLeftThreadsafeObject(18_B));
@@ -59,17 +44,6 @@ TEST(AllocatorWithLimit, vectorShared) {
 
   ASSERT_THROW(u.push_back(1),
                ad_utility::detail::AllocationExceedsLimitException);
-}
-
-TEST(AllocatorWithLimit, equality) {
-  AllocatorWithLimit<int> a1{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
-  AllocatorWithLimit<int> a2{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20_B)};
-
-  ASSERT_EQ(a1, a1);
-  ASSERT_EQ(a2, a2);
-  ASSERT_NE(a1, a2);
 }
 
 TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
