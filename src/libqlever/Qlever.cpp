@@ -440,11 +440,10 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                      const std::string& target) {
     // Move the index to `target`. Create the containing directory first (the
     // base name may point into a directory that does not exist yet).
-    fs::path oldDir = target;
-    if (!oldDir.filename().empty() && oldDir.has_parent_path()) {
-      oldDir = oldDir.parent_path();
+    fs::path targetDir = fs::path{target}.parent_path();
+    if (!targetDir.empty()) {
+      fs::create_directories(targetDir);
     }
-    fs::create_directories(oldDir);
     auto move = [&](const fs::path& file) {
       moveByBasename(file, source, target);
     };

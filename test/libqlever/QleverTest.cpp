@@ -553,7 +553,7 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
   // Restore the working directory before `baseFolder` is removed (cleanups run
   // in reverse order of declaration).
   absl::Cleanup removeFiles{
-      [&baseFolder, &oldCwd] { ql::filesystem::remove_all(baseFolder); }};
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
   absl::Cleanup restoreCwd{[&oldCwd] { ql::filesystem::current_path(oldCwd); }};
 
   ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
@@ -580,6 +580,10 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
       qlever::util::filesWithBaseNameAndSuffix("index", VOCAB_SUFFIX).empty());
   EXPECT_TRUE(IndexImpl::allIndexFiles("rebuild.tmp/index").empty());
   EXPECT_EQ(indexAndViews->index_.getOnDiskBase(), "index");
+  // A bare base name has no directory component, so nothing has to be created
+  // for it. In particular, the base name itself must not be mistaken for a
+  // directory to create.
+  EXPECT_FALSE(ql::filesystem::exists("index"));
 }
 
 // _____________________________________________________________________________
