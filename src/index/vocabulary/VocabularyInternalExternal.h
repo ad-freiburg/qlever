@@ -49,6 +49,11 @@ class VocabularyInternalExternal {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 
+  // Delegate to `scanAll` of the underlying vocabulary. All words that are
+  // stored in the internal vocabulary, can also be found in the external
+  // vocabulary.
+  auto scanAll() const { return externalVocab_.scanAll(); }
+
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
