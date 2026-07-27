@@ -82,6 +82,9 @@ Server::Server(
         return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
       },
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
+      [this]() -> int64_t {
+        return static_cast<int64_t>(rebuildInProgress_.load());
+      },
       config.memoryLimit_);
   metrics_->registerCallbacks();
 

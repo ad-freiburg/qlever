@@ -621,6 +621,8 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_running";
   std::string_view qleverSparqlOperationErrorsTotal =
       "qlever_sparql_operation_errors_total";
+  std::string_view qleverIndexRebuildInProgress =
+      "qlever_index_rebuild_in_progress";
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -645,6 +647,11 @@ TEST(ServerTest, metricsEndpoint) {
                      MetricIs(qleverSparqlOperationStartedTotal, "1", query),
                      IsZero(qleverSparqlOperationRunning, update),
                      IsZero(qleverSparqlOperationRunning, query)));
+  // No rebuild is running during a normal query, so the rebuild-in-progress
+  // gauge reads 0 both before and after.
+  ExpectMetricsChange(IsZero(qleverIndexRebuildInProgress),
+                      QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
+                      IsZero(qleverIndexRebuildInProgress));
   ExpectMetricsChange(
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       QueryRequest("Foo"),
