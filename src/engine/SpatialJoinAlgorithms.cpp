@@ -312,32 +312,30 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
 void SpatialJoinAlgorithms::addResultTableEntry(
     IdTable* result, const IdTableView<0>* idTableLeft,
     const IdTableView<0>* idTableRight, size_t rowLeft, size_t rowRight,
-    Id distance) const {
-  // this lambda function copies values from copyFrom into the table res only if
-  // the column of the value is specified in sourceColumns. If sourceColumns is
-  // nullopt, all columns are added. It copies them into the row rowIndRes and
-  // column column colIndRes. It returns the column number until which elements
-  // were copied
-  auto addColumns = [](IdTable* res, const IdTableView<0>* copyFrom,
-                       size_t rowIndRes, size_t colIndRes, size_t rowIndCopy,
-                       std::optional<std::vector<ColumnIndex>> sourceColumns =
-                           std::nullopt) {
-    size_t nCols = sourceColumns.has_value() ? sourceColumns.value().size()
-                                             : copyFrom->numColumns();
-    for (size_t i = 0; i < nCols; i++) {
-      auto col = sourceColumns.has_value() ? sourceColumns.value()[i] : i;
-      res->at(rowIndRes, colIndRes + i) = (*copyFrom).at(rowIndCopy, col);
-    }
-    return colIndRes + nCols;
-  };
-
+    Id distance, bool swapLeftAndRight) const {
   auto resrow = result->numRows();
   result->emplace_back();
-  // add columns to result table
   size_t rescol = 0;
-  rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
-  rescol = addColumns(result, idTableRight, resrow, rescol, rowRight,
-                      params_.rightSelectedCols_);
+
+  // This helper copies values from `copyFrom` into the table `res` for all
+  // columns given in `sourceColumns`.
+  auto addColumns = [&resrow, &rescol, &result](
+                        const IdTableView<0>* copyFrom, size_t rowIndCopy,
+                        const std::vector<ColumnIndex>& sourceColumns) {
+    for (size_t col : sourceColumns) {
+      result->at(resrow, rescol) = copyFrom->at(rowIndCopy, col);
+      ++rescol;
+    }
+  };
+
+  if (swapLeftAndRight) {
+    // Swap back the tables from a `SpatialJoinType::WITHIN` join.
+    addColumns(idTableRight, rowRight, params_.leftSelectedCols_);
+    addColumns(idTableLeft, rowLeft, params_.rightSelectedCols_);
+  } else {
+    addColumns(idTableLeft, rowLeft, params_.leftSelectedCols_);
+    addColumns(idTableRight, rowRight, params_.rightSelectedCols_);
+  }
 
   if (config_.distanceVariable_.has_value()) {
     result->at(resrow, rescol) = distance;
@@ -356,8 +354,9 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -475,8 +474,9 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -620,13 +620,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         dist = resultDists[t][i];
       }
-      if (swapBack) {
-        addResultTableEntry(&result, idTableRight, idTableLeft, res.second,
-                            res.first, Id::makeFromDouble(dist));
-      } else {
-        addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
-                            res.second, Id::makeFromDouble(dist));
-      }
+      addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
+                          res.second, Id::makeFromDouble(dist), swapBack);
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
@@ -640,8 +635,9 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   S2PointIndex<size_t> s2index;
@@ -706,8 +702,9 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
@@ -769,8 +766,9 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -849,8 +847,9 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
 std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -1047,8 +1046,9 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
-              joinType, rightCacheName, bbLeft, bbRight] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
