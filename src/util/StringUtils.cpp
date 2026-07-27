@@ -7,8 +7,13 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
+#ifndef QLEVER_NO_UNICODE
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
+#endif
+
+#include <cctype>
+#include <iterator>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
@@ -78,25 +83,76 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange) {
 }
 
 // ___________________________________________________________________________
-std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
-                                                  size_t prefixLength) {
-  const char* s = sv.data();
-  int32_t length = sv.length();
-  size_t numCodepoints = 0;
-  int32_t i = 0;
-  for (i = 0; i < length && numCodepoints < prefixLength;) {
-    UChar32 c;
-    U8_NEXT(s, i, length, c);
-    if (c >= 0) {
-      ++numCodepoints;
-    } else {
-      throw std::runtime_error(
-          "Illegal UTF sequence in ad_utility::getUTF8Prefix");
-    }
+void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
+  // Encode `codepoint` according to the UTF-8 standard. Codepoints outside of
+  // the valid Unicode range are replaced by U+FFFD (the replacement character).
+  static constexpr uint32_t maxValidCodepoint = 0x10FFFF;
+  if (codepoint > maxValidCodepoint) {
+    codepoint = 0xFFFD;
   }
-  return {numCodepoints, sv.substr(0, i)};
+  // A UTF-8 continuation byte has the two-bit header `10` followed by the next
+  // six bits of the codepoint.
+  static constexpr uint32_t continuationHeader = 0b1000'0000;
+  static constexpr uint32_t lowestSixBits = 0b0011'1111;
+  auto continuationByte = [](uint32_t bits) {
+    return static_cast<char>(continuationHeader | (bits & lowestSixBits));
+  };
+  if (codepoint <= 0x7F) {
+    // Single byte: `0xxxxxxx`.
+    output += static_cast<char>(codepoint);
+  } else if (codepoint <= 0x7FF) {
+    // Two bytes: `110xxxxx 10xxxxxx`.
+    output += static_cast<char>(0b1100'0000 | (codepoint >> 6));
+    output += continuationByte(codepoint);
+  } else if (codepoint <= 0xFFFF) {
+    // Three bytes: `1110xxxx 10xxxxxx 10xxxxxx`.
+    output += static_cast<char>(0b1110'0000 | (codepoint >> 12));
+    output += continuationByte(codepoint >> 6);
+    output += continuationByte(codepoint);
+  } else {
+    // Four bytes: `11110xxx 10xxxxxx 10xxxxxx 10xxxxxx`.
+    output += static_cast<char>(0b1111'0000 | (codepoint >> 18));
+    output += continuationByte(codepoint >> 12);
+    output += continuationByte(codepoint >> 6);
+    output += continuationByte(codepoint);
+  }
 }
 
+// ___________________________________________________________________________
+template <bool useICU>
+std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
+                                                  size_t prefixLength) {
+  if constexpr (useICU) {
+    QLEVER_UNICODE_ONLY("getUTF8Prefix", {
+      const char* s = sv.data();
+      int32_t length = sv.length();
+      size_t numCodepoints = 0;
+      int32_t i = 0;
+      for (i = 0; i < length && numCodepoints < prefixLength;) {
+        UChar32 c;
+        U8_NEXT(s, i, length, c);
+        if (c >= 0) {
+          ++numCodepoints;
+        } else {
+          throw std::runtime_error(
+              "Illegal UTF sequence in ad_utility::getUTF8Prefix");
+        }
+      }
+      return {numCodepoints, sv.substr(0, i)};
+    });
+  } else {
+    // Without ICU we treat every byte as a single codepoint.
+    auto length = std::min(prefixLength, sv.size());
+    return {length, sv.substr(0, length)};
+  }
+}
+// Explicit instantiations for both configurations.
+template std::pair<size_t, std::string_view> getUTF8Prefix<true>(
+    std::string_view, size_t);
+template std::pair<size_t, std::string_view> getUTF8Prefix<false>(
+    std::string_view, size_t);
+
+#ifndef QLEVER_NO_UNICODE
 namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
@@ -115,20 +171,48 @@ std::string utf8StringTransform(std::string_view s, const char* localeName,
   return result;
 }
 }  // namespace detail
+#endif  // QLEVER_NO_UNICODE
 
 // ____________________________________________________________________________
+template <bool useICU>
 std::string utf8ToLower(std::string_view s, const char* localeName) {
-  return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
-    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-  });
+  if constexpr (useICU) {
+    QLEVER_UNICODE_ONLY("utf8ToLower", {
+      return detail::utf8StringTransform(s, localeName, [](auto&&... args) {
+        return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+      });
+    });
+  } else {
+    (void)localeName;
+    return ::ranges::to<std::string>(
+        s | ql::views::transform([](unsigned char c) {
+          return static_cast<char>(std::tolower(c));
+        }));
+  }
 }
+// Explicit instantiations for both configurations.
+template std::string utf8ToLower<true>(std::string_view, const char*);
+template std::string utf8ToLower<false>(std::string_view, const char*);
 
 // ____________________________________________________________________________
+template <bool useICU>
 std::string utf8ToUpper(std::string_view s) {
-  return detail::utf8StringTransform(s, "", [](auto&&... args) {
-    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-  });
+  if constexpr (useICU) {
+    QLEVER_UNICODE_ONLY("utf8ToUpper", {
+      return detail::utf8StringTransform(s, "", [](auto&&... args) {
+        return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+      });
+    });
+  } else {
+    return ::ranges::to<std::string>(
+        s | ql::views::transform([](unsigned char c) {
+          return static_cast<char>(std::toupper(c));
+        }));
+  }
 }
+// Explicit instantiations for both configurations.
+template std::string utf8ToUpper<true>(std::string_view);
+template std::string utf8ToUpper<false>(std::string_view);
 
 // ____________________________________________________________________________
 std::string_view getUTF8Substring(const std::string_view str, size_t start,

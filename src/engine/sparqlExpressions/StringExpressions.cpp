@@ -172,7 +172,7 @@ inline std::string utf8ToLowerRootLocale(std::string_view s) {
 }
 
 using UppercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper<>>>;
 using LowercaseExpression =
     LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&utf8ToLowerRootLocale>>;
 

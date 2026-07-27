@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
 #define QLEVER_SRC_UTIL_STRINGUTILS_H
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -14,6 +15,7 @@
 #include "backports/span.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
+#include "util/UnicodeSupport.h"
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -35,17 +37,40 @@ bool strIsLangTag(const std::string& strLangTag);
 // Implements a case insensitive `language-range` to `language-tag`comparison.
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
-/*
- * @brief convert a UTF-8 String to lowercase
- * @param s UTF-8 encoded string
- * @param localeName The ICU locale name used for locale-specific case folding
- * (e.g. "tr" for Turkish). The default empty string uses the locale-independent
- * root rules.
- * @return The lowercase version of s, also encoded as UTF-8
- */
+// Encode the single Unicode `codepoint` as UTF-8 and append the resulting bytes
+// to `output`. Codepoints outside the valid Unicode range (> 0x10FFFF) are
+// encoded as the Unicode replacement character U+FFFD. This function does not
+// depend on ICU.
+void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
+
+// UTF-16 surrogate helpers. These are ICU-free equivalents of ICU's
+// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY` macros; they are
+// used when decoding `\uXXXX` escape sequences.
+
+// Return true iff `c` is a high (leading) surrogate code unit.
+constexpr bool isHighSurrogate(uint32_t c) {
+  return c >= 0xD800 && c <= 0xDBFF;
+}
+
+// Return true iff `c` is a low (trailing) surrogate code unit.
+constexpr bool isLowSurrogate(uint32_t c) { return c >= 0xDC00 && c <= 0xDFFF; }
+
+// Combine a high and a low surrogate into the corresponding supplementary
+// Unicode codepoint.
+constexpr uint32_t combineSurrogates(uint32_t high, uint32_t low) {
+  return 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+}
+
+// Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used
+// for locale-specific case folding (e.g. "tr" for Turkish); the default empty
+// string uses the locale-independent root rules. If `useICU == false`, only
+// ASCII characters are lowercased (each byte is treated individually) and
+// `localeName` is ignored.
+template <bool useICU = useICUDefault>
 std::string utf8ToLower(std::string_view s, const char* localeName = "");
 
-// Get the uppercase value. For details see `utf8ToLower` above
+// Get the uppercase value. For details see `utf8ToLower` above.
+template <bool useICU = useICUDefault>
 std::string utf8ToUpper(std::string_view s);
 
 /**
@@ -78,7 +103,11 @@ std::string_view getUTF8Substring(const std::string_view str, size_t start);
  * @param prefixLength The number of Unicode codepoints we want to extract.
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
  * codepoints of sv, encoded as UTF-8
+ *
+ * If `useICU == false`, only an ASCII prefix is formed (each byte is treated as
+ * a codepoint).
  */
+template <bool useICU = useICUDefault>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
                                                   size_t prefixLength);
 
