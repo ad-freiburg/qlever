@@ -53,6 +53,106 @@ TEST(StringUtils, utf8ToUpper) {
 }
 
 // _____________________________________________________________________________
+TEST(StringUtils, utf8ToUpperWithLocale) {
+  // With the default (root) locale, ASCII `i` uppercases to `I`.
+  EXPECT_EQ("I", utf8ToUpper("i"));
+  EXPECT_EQ("I", utf8ToUpper("i", ""));
+  // The Turkish locale instead uppercases `i` to the dotted `İ` (U+0130).
+  EXPECT_EQ("İ", utf8ToUpper("i", "tr"));
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free (`useICU == false`) implementations of `utf8ToLower` and
+// `utf8ToUpper`. These only fold ASCII characters; all other bytes (including
+// the bytes of multibyte UTF-8 characters) are passed through unchanged.
+TEST(StringUtils, utf8ToLowerUpperNoICU) {
+  // For pure ASCII the result is identical to the ICU-based version.
+  EXPECT_EQ("schindler's list", utf8ToLower<false>("Schindler's List"));
+  EXPECT_EQ("#+-_foo__bar++", utf8ToLower<false>("#+-_foo__Bar++"));
+  EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper<false>("Schindler's List"));
+  EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper<false>("#+-_bImM__baMm++"));
+
+  // Non-ASCII characters are left untouched (no Unicode-aware case folding);
+  // only the ASCII letters are folded.
+  EXPECT_EQ("cafÉ", utf8ToLower<false>("CAFÉ"));
+  EXPECT_EQ("CAFé", utf8ToUpper<false>("café"));
+  EXPECT_EQ("aÔb", utf8ToLower<false>("AÔB"));
+  EXPECT_EQ("AÔB", utf8ToUpper<false>("aÔb"));
+
+  // The `localeName` is ignored, as locale-specific case folding requires ICU.
+  // Compare the `utf8ToLowerWithLocale` and `utf8ToUpperWithLocale` tests
+  // above, where the Turkish locale yields `ı` and `İ` respectively.
+  EXPECT_EQ("i", utf8ToLower<false>("I", "tr"));
+  EXPECT_EQ("I", utf8ToUpper<false>("i", "tr"));
+
+  // The `useICU == true` instantiation exists and behaves like the default.
+  EXPECT_EQ(utf8ToLower<true>("Schindler's List"),
+            utf8ToLower("Schindler's List"));
+  EXPECT_EQ(utf8ToUpper<true>("Schindler's List"),
+            utf8ToUpper("Schindler's List"));
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free (`useICU == false`) implementation of `getUTF8Prefix`,
+// which treats every byte as a single codepoint.
+TEST(StringUtils, getUTF8PrefixNoICU) {
+  using ad_utility::getUTF8Prefix;
+  // Pure ASCII: identical to the ICU-based version.
+  {
+    auto [num, prefix] = getUTF8Prefix<false>("Apfelsaft", 3);
+    EXPECT_EQ(num, 3u);
+    EXPECT_EQ(prefix, "Apf");
+  }
+  // "Flöhe" where 'ö' occupies two bytes (0xC3 0xB6).
+  {
+    // The ICU-free version cuts after two bytes ("Fl").
+    auto [num, prefix] = getUTF8Prefix<false>("Flöhe", 2);
+    EXPECT_EQ(num, 2u);
+    EXPECT_EQ(prefix, "Fl");
+    // The ICU-based version counts three codepoints ("Flö", four bytes).
+    auto [numIcu, prefixIcu] = getUTF8Prefix<true>("Flöhe", 3);
+    EXPECT_EQ(numIcu, 3u);
+    EXPECT_EQ(prefixIcu, "Flö");
+  }
+  // Requesting more bytes than available returns the whole string.
+  {
+    auto [num, prefix] = getUTF8Prefix<false>("ab", 100);
+    EXPECT_EQ(num, 2u);
+    EXPECT_EQ(prefix, "ab");
+  }
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free `utf8EncodeCodepoint` for one-, two-, three- and four-byte
+// codepoints as well as the replacement of out-of-range codepoints.
+TEST(StringUtils, utf8EncodeCodepoint) {
+  auto encode = [](uint32_t cp) {
+    std::string out;
+    ad_utility::utf8EncodeCodepoint(cp, out);
+    return out;
+  };
+  EXPECT_EQ(encode(0x41), "A");              // one byte
+  EXPECT_EQ(encode(0x00E9), "é");            // two bytes (U+00E9)
+  EXPECT_EQ(encode(0x2702), "✂");            // three bytes
+  EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
+  // The boundaries between the one-, two-, three- and four-byte encodings.
+  EXPECT_EQ(encode(0x7F), "\x7F");
+  EXPECT_EQ(encode(0x80), "\xC2\x80");
+  EXPECT_EQ(encode(0x7FF), "\xDF\xBF");
+  EXPECT_EQ(encode(0x800), "\xE0\xA0\x80");
+  EXPECT_EQ(encode(0xFFFF), "\xEF\xBF\xBF");
+  EXPECT_EQ(encode(0x10000), "\xF0\x90\x80\x80");
+  // Out-of-range codepoints are replaced by U+FFFD.
+  EXPECT_EQ(encode(0x110000), "�");
+  // Surrogates (reserved for UTF-16, not valid Unicode scalar values) are also
+  // replaced by U+FFFD; their direct neighbors are encoded normally.
+  EXPECT_EQ(encode(0xD800), "�");
+  EXPECT_EQ(encode(0xDFFF), "�");
+  EXPECT_EQ(encode(0xD7FF), "\xED\x9F\xBF");
+  EXPECT_EQ(encode(0xE000), "\xEE\x80\x80");
+}
+
+// _____________________________________________________________________________
 TEST(StringUtils, getUTF8Substring) {
   // Works normally for strings with only single byte characters.
   ASSERT_EQ("fel", getUTF8Substring("Apfelsaft", 2, 3));
