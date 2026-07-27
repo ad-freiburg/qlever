@@ -134,6 +134,12 @@ inline ClearOnAllocation noClearOnAllocation = [](MemorySize) {};
  * // now the total amount of memory allocated by limitedIntVec and
  * limitedStringVec may never exceed limitInBytes
  *
+ * NOTE: For `std::vector` in particular, prefer the wrapper
+ * `ad_utility::VectorWithMemoryLimit` (see `VectorWithMemoryLimit.h`) over
+ * using this allocator directly as in the example above: it works around a
+ * libc++ problem with the deleted default constructor and prevents accidental
+ * copies.
+ *
  * @tparam T the type of Elements that this allocator allocates
  */
 template <typename T>
