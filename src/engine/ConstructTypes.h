@@ -16,6 +16,10 @@
 #include <variant>
 #include <vector>
 
+#include "global/Id.h"
+#include "global/ValueId.h"
+#include "index/LocalVocab.h"
+
 namespace qlever::constructExport {
 
 // Canonical representation of a resolved RDF term stored in the LRU cache.
@@ -36,6 +40,11 @@ namespace qlever::constructExport {
 struct EvaluatedTermData {
   std::string rdfTermString_;
   const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
+
+  //____________________________________________________________________________
+  EvaluatedTermData(std::string rdfTermString, const char* rdfTermDataType)
+      : rdfTermString_{std::move(rdfTermString)},
+        rdfTermDataType_{rdfTermDataType} {}
 };
 
 // Shared ownership of `EvaluatedTermData`. The shared_ptr allows cheap copying
@@ -47,15 +56,20 @@ using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
 // shared across all rows, avoiding per-row heap allocation.
 struct PrecomputedConstant {
   EvaluatedTerm evaluatedTerm_;
+  // The `ValueId` for this constant, used for the CONSTRUCT result
+  // deduplication. It is set to the correct value by
+  // `ConstructTemplatePreprocessor::resolveConstantDedupId`.
+  std::optional<ValueId> dedupId_ = std::nullopt;
 };
 
-// After preprocessing (via `ConstructTemplatePreprocessor::preprocess`),
-// `columnIndex_` is the position of this variable in the
-// `BatchEvaluationResult::variablesByColumn_` vector. The mapping from position
-// to column is recorded in
+// A variable in a CONSTRUCT template. `columnIndex_` is the index of the
+// column in the `IdTable` of the `Result` that holds this variable's values.
+// It is used directly as the key into
+// `BatchEvaluationResult::variablesByColumn_`. The set of distinct column
+// indices used by the whole template is collected in
 // `PreprocessedConstructTemplate::uniqueVariableColumns_`.
 struct PrecomputedVariable {
-  size_t columnIndex_;
+  ColumnIndex columnIndex_;
 };
 
 // A blank node with precomputed prefix and suffix for fast evaluation. The
@@ -79,22 +93,27 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 // A single preprocessed CONSTRUCT template triple.
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
-// Result of preprocessing all CONSTRUCT template triples. Contains the
-// preprocessed triples and the unique variable column indices (indices into the
-// `IdTable` that the variables in the construct template correspond to).
-struct PreprocessedConstructTemplate {
-  std::vector<PreprocessedTriple> preprocessedTriples_;
-  // The dedupicated set of `IdTable` column indices that appear in the template
-  // triples, in order of first encounter.
-  std::vector<size_t> uniqueVariableColumns_;
-};
-
 // Result of instantiating a single template triple for a specific result table
 // row.
 struct EvaluatedTriple {
   EvaluatedTerm subject_;
   EvaluatedTerm predicate_;
   EvaluatedTerm object_;
+};
+
+// Result of preprocessing all CONSTRUCT template triples.
+struct PreprocessedConstructTemplate {
+  // The (non-ground) template triples, in template order.
+  std::vector<PreprocessedTriple> preprocessedTriples_;
+  // Deduplicated `IdTable` column indices of all variables that occur in the
+  // template triples, in order of first encounter.
+  std::vector<ColumnIndex> uniqueVariableColumns_;
+  // `tripleContainsBlankNode_[i]` is true iff `preprocessedTriples_[i]`
+  // contains a blank node constant.
+  std::vector<bool> tripleContainsBlankNode_;
+  // Owns and keeps alive the `LocalVocabEntry`s created while resolving literal
+  // and IRI constants to their `PrecomputedConstant::dedupId_`.
+  LocalVocab localVocabForConstants_;
 };
 
 }  // namespace qlever::constructExport
