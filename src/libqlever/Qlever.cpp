@@ -32,6 +32,16 @@
 namespace qlever {
 
 // _____________________________________________________________________________
+Qlever::Qlever(const EngineConfig& config, bool skipLoading)
+    : Qlever(config, skipLoading,
+             qlever::makeAllocatorWithLimit<Id>(
+                 config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
+                 [this](ad_utility::MemorySize numMemoryToAllocate) {
+                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                                   numMemoryToAllocate);
+                 })) {}
+
+// _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator)
     : allocator_{std::move(allocator)},

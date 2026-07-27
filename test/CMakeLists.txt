@@ -255,6 +255,8 @@ addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
+addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
+
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)

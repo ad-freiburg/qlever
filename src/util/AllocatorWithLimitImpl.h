@@ -1,18 +1,21 @@
-// Copyright 2020, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach (April of 2020,
-// kalmbach@informatik.uni-freiburg.de)
+// Copyright 2020 - 2026 The QLever Authors, in particular:
+//
+// 2020 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2026 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_ALLOCATORWITHLIMITIMPL_H
 #define QLEVER_SRC_UTIL_ALLOCATORWITHLIMITIMPL_H
 
-#include <absl/strings/str_cat.h>
-
 #include <memory>
 
 #include "backports/functional.h"
+#include "util/MemoryLimitTracker.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Synchronized.h"
 
 // This header contains the *implementation* of the historical, memory-limit
 // enforcing allocator. It used to live directly in `util/AllocatorWithLimit.h`
@@ -24,108 +27,13 @@
 // while the concrete backend (this class or the `std::pmr`-based one) is chosen
 // at compile time.
 //
-// The shared helper types (`detail::AllocationMemoryLeft` etc.),
-// `ClearOnAllocation`, and `makeAllocationMemoryLeftThreadsafeObject` remain in
-// their original namespaces because they are part of the public API used across
-// the code base (and by the PMR backend).
+// The shared helper types (`detail::AllocationMemoryLeft`,
+// `detail::MemoryLimitTracker`, `ClearOnAllocation`,
+// `makeAllocationMemoryLeftThreadsafeObject`, ...) live in
+// `util/MemoryLimitTracker.h` because they are part of the public API used
+// across the code base.
 
 namespace ad_utility {
-
-namespace detail {
-
-// This exception is supposed to be thrown when an allocation is requested that
-// exceeds the limit of the allocator.
-class AllocationExceedsLimitException : public std::exception {
- public:
-  AllocationExceedsLimitException(MemorySize requestedMemory,
-                                  MemorySize freeMemory)
-      : _message{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
-                              ", but only ", freeMemory.asString(),
-                              " were available")} {};
-
-  const char* what() const noexcept override { return _message.c_str(); }
-
- private:
-  const std::string _message;
-};
-
-// Class to keep track of the amount of memory that is left for allocation. When
-// not enough memory is left, an AllocationExceedsLimitException is thrown. Note
-// that need a separate class for this because there can be many Allocation
-// objects at the same time (hence the wrapper class and the synchronization
-// below).
-class AllocationMemoryLeft {
-  // Remaining free memory.
-  MemorySize free_;
-
- public:
-  AllocationMemoryLeft(MemorySize n) : free_(n) {}
-
-  // Called before memory is allocated.
-  bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
-    if (n <= free_) {
-      free_ -= n;
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  // Called before memory is allocated.
-  void decrease_if_enough_left_or_throw(MemorySize n) {
-    if (!decrease_if_enough_left_or_return_false(n)) {
-      throw AllocationExceedsLimitException{n, free_};
-    }
-  }
-
-  // Called after memory is deallocated.
-  void increase(MemorySize n) { free_ += n; }
-  [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
-};
-
-// Threadsafe Wrapper around `AllocationMemoryLeft`.
-// Copies of objects of this class will refer to the same `AllocationMemoryLeft`
-// object. Concurrent access is handled via `ad_utility::Synchronized`.
-class AllocationMemoryLeftThreadsafe {
- public:
-  AllocationMemoryLeftThreadsafe() = delete;
-  using T =
-      std::shared_ptr<ad_utility::Synchronized<AllocationMemoryLeft, SpinLock>>;
-  explicit AllocationMemoryLeftThreadsafe(T ptr) : ptr_{std::move(ptr)} {}
-  T& ptr() { return ptr_; }
-  const T& ptr() const { return ptr_; }
-
-  friend bool operator==(const AllocationMemoryLeftThreadsafe& a,
-                         const AllocationMemoryLeftThreadsafe& b) {
-    return a.ptr_ == b.ptr_;
-  }
-
- private:
-  T ptr_;
-};
-}  // namespace detail
-
-// Set up a shared allocation state. For the usage see documentation of the
-// Limited Allocator class.
-inline detail::AllocationMemoryLeftThreadsafe
-makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
-  return detail::AllocationMemoryLeftThreadsafe{std::make_shared<
-      ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
-}
-
-/*
-A lambda for use with `AllocatorWithLimit`.
-
-Called, when there is not enough memory left for an allocation and is supposed
-to try to free the given amount of memory.
-
-The lambda is given at construction.
-*/
-using ClearOnAllocation = std::function<void(MemorySize)>;
-
-/// A Noop lambda that will be used as a template default parameter
-/// in the `AllocatorWithLimit` class.
-inline ClearOnAllocation noClearOnAllocation = [](MemorySize) {};
 
 // The concrete memory-limit enforcing allocator. See the file-level comment for
 // why it lives in this dedicated namespace rather than directly in
@@ -175,9 +83,7 @@ class AllocatorWithLimit {
   using propagate_on_container_swap = std::true_type;
 
  private:
-  detail::AllocationMemoryLeftThreadsafe
-      memoryLeft_;                       // shared number of free bytes
-  ClearOnAllocation clearOnAllocation_;  // TODO<joka921> comment
+  detail::MemoryLimitTracker tracker_;
   std::allocator<T> allocator_;
 
  public:
@@ -186,14 +92,12 @@ class AllocatorWithLimit {
   explicit AllocatorWithLimit(
       detail::AllocationMemoryLeftThreadsafe ml,
       ClearOnAllocation clearOnAllocation = noClearOnAllocation)
-      : memoryLeft_{std::move(ml)},
-        clearOnAllocation_{std::move(clearOnAllocation)} {}
+      : tracker_{std::move(ml), std::move(clearOnAllocation)} {}
 
-  /// Obtain an AllocatorWithLimit<OtherType> that refers to the
-  /// same limit.
+  /// Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
   template <typename U>
   AllocatorWithLimit<U> as() const {
-    return AllocatorWithLimit<U>(memoryLeft_);
+    return AllocatorWithLimit<U>(getMemoryLeft(), clearOnAllocation());
   }
 
   // This allocator has no default constructor, as it always requires a memory
@@ -206,8 +110,7 @@ class AllocatorWithLimit {
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
       AllocatorWithLimit(const AllocatorWithLimit<U>& other)
-      : memoryLeft_{other.getMemoryLeft()},
-        clearOnAllocation_(other.clearOnAllocation()) {}
+      : tracker_{other.getMemoryLeft(), other.clearOnAllocation()} {}
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
@@ -250,66 +153,64 @@ class AllocatorWithLimit {
   // An allocator must have a function "allocate" with exactly this signature.
   // TODO<C++20> : the exact signature of allocate changes
   T* allocate(std::size_t n) {
-    // Subtract the amount of memory we want to allocate from the amount of
-    // memory left. This will throw an exception if not enough memory is left.
-    const auto bytesNeeded = MemorySize::bytes(n * sizeof(T));
-    const bool wasEnoughLeft =
-        memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
-            bytesNeeded);
-    if (!wasEnoughLeft) {
-      AD_CORRECTNESS_CHECK(clearOnAllocation_);
-      clearOnAllocation_(bytesNeeded);
-      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
+    const auto bytes = MemorySize::bytes(n * sizeof(T));
+    tracker_.reserveOrThrow(bytes);
+    // If the underlying allocator fails (e.g. an injected bounded upstream that
+    // throws when exhausted), release the bytes we just reserved so the tracker
+    // does not stay permanently over-counted.
+    try {
+      return allocator_.allocate(n);
+    } catch (...) {
+      tracker_.release(bytes);
+      throw;
     }
-    // the actual allocation
-    return allocator_.allocate(n);
   }
 
   // An allocator must have a function "deallocate" with exactly this signature.
   void deallocate(T* p, std::size_t n) {
-    // free the memory
     allocator_.deallocate(p, n);
-    // Update the amount of memory left.
-    memoryLeft_.ptr()->wlock()->increase(MemorySize::bytes(n * sizeof(T)));
+    tracker_.release(MemorySize::bytes(n * sizeof(T)));
   }
 
   /// Return the number of bytes, that this allocator and all of its copies
   /// currently have available
   [[nodiscard]] MemorySize amountMemoryLeft() const {
-    // casting is ok, because the actual numFreeBytes call
-    // is const, and everything else is locking
-    return const_cast<AllocatorWithLimit*>(this)
-        ->memoryLeft_.ptr()
-        ->wlock()
-        ->amountMemoryLeft();
+    return tracker_.amountMemoryLeft();
   }
 
-  const auto& getMemoryLeft() const { return memoryLeft_; }
-  const auto& clearOnAllocation() const { return clearOnAllocation_; }
+  const auto& getMemoryLeft() const { return tracker_.memoryLeft(); }
+  const auto& clearOnAllocation() const { return tracker_.clearOnAllocation(); }
 
-  // The STL needs two allocators to be equal if and only they refer to the same
-  // memory pool. For us, they are hence equal if they use the same
-  // AllocationMemoryLeft object.00
   template <typename V>
   bool operator==(const AllocatorWithLimit<V>& v) const {
-    return memoryLeft_ == v.memoryLeft_;
+    return getMemoryLeft() == v.getMemoryLeft();
   }
   template <typename V>
   bool operator!=(const AllocatorWithLimit<V>& v) const {
     return !(*this == v);
+  }
+
+  static AllocatorWithLimit makeUnlimited() {
+    return makeLimited(MemorySize::max());
+  }
+  static AllocatorWithLimit makeLimited(
+      MemorySize limit,
+      ClearOnAllocation clearOnAllocation = noClearOnAllocation) {
+    return AllocatorWithLimit{makeAllocationMemoryLeftThreadsafeObject(limit),
+                               std::move(clearOnAllocation)};
   }
 };
 
 // Return a new allocator with the specified limit.
 template <typename T>
 AllocatorWithLimit<T> makeAllocatorWithLimit(MemorySize limit) {
-  return AllocatorWithLimit<T>{makeAllocationMemoryLeftThreadsafeObject(limit)};
+  return AllocatorWithLimit<T>::makeLimited(limit);
 }
 
 // Return a new allocator with the maximal possible limit.
 template <typename T>
 AllocatorWithLimit<T> makeUnlimitedAllocator() {
-  return allocatorImpl::makeAllocatorWithLimit<T>(MemorySize::max());
+  return AllocatorWithLimit<T>::makeUnlimited();
 }
 
 }  // namespace allocatorImpl

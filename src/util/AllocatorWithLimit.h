@@ -1,7 +1,12 @@
-// Copyright 2020, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach (April of 2020,
-// kalmbach@informatik.uni-freiburg.de)
+// Copyright 2020 - 2026 The QLever Authors, in particular:
+//
+// 2020 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2026 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_UTIL_ALLOCATORWITHLIMIT_H
 #define QLEVER_SRC_UTIL_ALLOCATORWITHLIMIT_H
@@ -46,7 +51,7 @@ AllocatorWithLimit<T> makeAllocatorWithLimit(MemorySize limit) {
 // seam's default, unlimited allocator).
 template <typename T>
 AllocatorWithLimit<T> makeUnlimitedAllocator() {
-  return qlever::makeDefaultAllocator<T>();
+  return qlever::makeUnlimitedAllocator<T>();
 }
 
 }  // namespace ad_utility

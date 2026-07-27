@@ -331,9 +331,14 @@ class Qlever {
   // (in particular, none of the on-disk index files, not even the vocabulary
   // or the `.meta-data.json`, need to exist); the instance must then be
   // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
-  // before it can answer queries.
-  explicit Qlever(const EngineConfig& config, bool skipLoading = false,
-                  Allocator<Id> allocator = makeDefaultAllocator<Id>());
+  // before it can answer queries. The memory limit from `config` is enforced
+  // and cache eviction is wired into the allocator.
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
+
+  // Same as above, but with a caller-provided allocator (e.g. a
+  // platform-injected memory pool). The allocator is used as-is; the memory
+  // limit from `config` is *not* applied on top of it.
+  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator);
 
   using PlannedQuery = qlever::PlannedQuery;
 
