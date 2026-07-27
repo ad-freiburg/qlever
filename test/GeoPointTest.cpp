@@ -9,8 +9,8 @@
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/GTestHelpers.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/HashSet.h"
 
 // _____________________________________________________________________________
@@ -131,7 +131,7 @@ TEST(GeoPoint, parseFromLiteral) {
     auto value =
         ad_utility::triple_component::Literal::fromStringRepresentation(
             content);
-    auto g = ad_utility::parseGeoPointFromLiteral(value);
+    auto g = GeoPoint::parseFromLiteral(value);
     ASSERT_EQ(g.has_value(), hasVal);
     if (g.has_value()) {
       ASSERT_DOUBLE_EQ(g.value().getLat(), lat);
@@ -162,12 +162,12 @@ TEST(GeoPoint, parseFromLiteral) {
 
   // Literals of different type
   ASSERT_FALSE(
-      ad_utility::parseGeoPointFromLiteral(
+      GeoPoint::parseFromLiteral(
           ad_utility::triple_component::Literal::fromStringRepresentation(
               "\"123\"^^xsd:integer"))
           .has_value());
   ASSERT_FALSE(
-      ad_utility::parseGeoPointFromLiteral(
+      GeoPoint::parseFromLiteral(
           ad_utility::triple_component::Literal::fromStringRepresentation(
               "\"hi\"@en"))
           .has_value());

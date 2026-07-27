@@ -3,8 +3,8 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>,
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#ifndef QLEVER_GEOSPARQLHELPERS_H
-#define QLEVER_GEOSPARQLHELPERS_H
+#ifndef QLEVER_SRC_RDFTYPES_GEOSPARQLHELPERS_H
+#define QLEVER_SRC_RDFTYPES_GEOSPARQLHELPERS_H
 
 #include <absl/strings/str_cat.h>
 
@@ -28,12 +28,6 @@
 #include "util/UnitOfMeasurement.h"
 
 namespace ad_utility {
-
-// Parse a GeoPoint from a WKT literal. Returns nullopt if the literal is not a
-// valid WKT point, or if checkDatatype is true and the datatype is not
-// geo:wktLiteral.
-std::optional<GeoPoint> parseGeoPointFromLiteral(
-    const triple_component::Literal& value, bool checkDatatype = true);
 
 namespace detail {
 
@@ -338,4 +332,4 @@ class WktMetricArea {
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_GEOSPARQLHELPERS_H
+#endif  // QLEVER_SRC_RDFTYPES_GEOSPARQLHELPERS_H

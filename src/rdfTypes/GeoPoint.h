@@ -82,6 +82,12 @@ class GeoPoint {
   // `numDataBits`)
   static GeoPoint fromBitRepresentation(T bits);
 
+  // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
+  // otherwise return nothing.
+  static std::optional<GeoPoint> parseFromLiteral(
+      const ad_utility::triple_component::Literal& value,
+      bool checkDatatype = true);
+
   std::string toStringRepresentation() const;
 
   std::pair<std::string, const char*> toStringAndType() const;

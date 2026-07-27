@@ -9,6 +9,7 @@
 
 #include "global/Constants.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 
@@ -56,6 +57,21 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
   // Ensure the highest 4 bits are 0
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
+};
+
+// _____________________________________________________________________________
+std::optional<GeoPoint> GeoPoint::parseFromLiteral(
+    const ad_utility::triple_component::Literal& value, bool checkDatatype) {
+  if (!checkDatatype ||
+      (value.hasDatatype() &&
+       value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {
+    auto [lng, lat] = ad_utility::detail::parseWktPoint(
+        asStringViewUnsafe(value.getContent()));
+    if (!std::isnan(lng) && !std::isnan(lat)) {
+      return GeoPoint{lat, lng};
+    }
+  }
+  return std::nullopt;
 };
 
 // _____________________________________________________________________________

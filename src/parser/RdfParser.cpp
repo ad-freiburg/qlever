@@ -28,7 +28,6 @@
 #include "parser/TokenizerCtre.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -606,7 +605,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
           DateYearOrDuration::parseXsdDayTimeDuration(normalizedLiteralContent);
     } else if (type == GEO_WKT_LITERAL) {
       // Not all WKT literals represent points (we can only fold points)
-      auto geopoint = ad_utility::parseGeoPointFromLiteral(literal, false);
+      auto geopoint = GeoPoint::parseFromLiteral(literal, false);
       if (geopoint.has_value()) {
         lastParseResult_ = geopoint.value();
       } else {

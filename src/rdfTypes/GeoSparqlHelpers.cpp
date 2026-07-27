@@ -3,7 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>,
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "util/GeoSparqlHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 
 #include <absl/strings/charconv.h>
 #include <s2/s2earth.h>
@@ -75,20 +75,5 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
 }
 
 }  // namespace detail
-
-// _____________________________________________________________________________
-std::optional<GeoPoint> parseGeoPointFromLiteral(
-    const triple_component::Literal& value, bool checkDatatype) {
-  if (!checkDatatype ||
-      (value.hasDatatype() &&
-       value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {
-    auto [lng, lat] =
-        detail::parseWktPoint(asStringViewUnsafe(value.getContent()));
-    if (!std::isnan(lng) && !std::isnan(lat)) {
-      return GeoPoint{lat, lng};
-    }
-  }
-  return std::nullopt;
-}
 
 }  // namespace ad_utility
