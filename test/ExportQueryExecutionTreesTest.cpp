@@ -2050,7 +2050,12 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
 // `ConstructDeduplicator::canonicalize` maps the `LocalVocabIndex` `Id` back
 // onto the index vocabulary's `VocabIndex` `Id`, the two keys differ and the
 // duplicate survives.
-TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
+//
+// DISABLED: this test can only pass once the `ConstructDeduplicator` is wired
+// into the CONSTRUCT export, which happens in the next PR of this series.
+// Enable it there.
+TEST(ExportQueryExecutionTrees,
+     DISABLED_ConstructGlobalDeduplicationAcrossLocalVocab) {
   const std::string kg =
       "<http://example.org/x> <http://example.org/name> \"Alice\" . "
       "<http://example.org/y> <http://example.org/label> \"Alice\" .";

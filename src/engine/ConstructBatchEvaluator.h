@@ -14,7 +14,6 @@
 
 #include "engine/ConstructTypes.h"
 #include "engine/idTable/IdTable.h"
-#include "global/Id.h"
 #include "index/Index.h"
 #include "index/LocalVocab.h"
 #include "util/Exception.h"

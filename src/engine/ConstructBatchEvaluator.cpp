@@ -8,7 +8,6 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
-#include "global/Id.h"
 #include "index/ExportIds.h"
 
 namespace qlever::constructExport {
@@ -35,11 +34,10 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm>
 ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-    std::optional<std::pair<std::string, const char*>> optStringAndType) {
+    std::optional<std::pair<std::string, const char*>>&& optStringAndType) {
   if (!optStringAndType.has_value()) return std::nullopt;
   auto& [str, type] = optStringAndType.value();
-  return std::make_shared<const EvaluatedTermData>(EvaluatedTermData{
-      .rdfTermString_ = std::move(str), .rdfTermDataType_ = type});
+  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
 
 // _____________________________________________________________________________
