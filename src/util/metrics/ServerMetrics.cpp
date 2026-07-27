@@ -82,8 +82,6 @@ ServerMetrics::ServerMetrics(
   startTimeMetric_->Record(now);
   indexLoadMetric_->Record(now);
 
-  // Record the static build information once. The value is always 1; all data
-  // is carried in the labels (the idiomatic Prometheus "info metric" pattern).
   buildInfoMetric_->Record(
       1,
       {{"compiler", *qlever::version::compilerWithoutLinking.rlock()},

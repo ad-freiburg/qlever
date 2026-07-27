@@ -133,7 +133,7 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
-    addLinkAndDiscoverTest(ServerTest engine server compilationInfo)
+    addLinkAndDiscoverTest(ServerTest engine server)
 
     addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
