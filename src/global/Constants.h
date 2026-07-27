@@ -34,6 +34,19 @@ constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
+// Batching parameters for `VocabularyOnDisk::scanAll`, which reads the whole
+// vocabulary sequentially in two nested batches (one large read each), instead
+// of two small `pread`s per word.
+// The maximum number of words whose offsets are read into memory at once (they
+// are small: 8 bytes per word). Chosen to comfortably fit within
+// `VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH` for regular datasets.
+constexpr inline size_t VOCABULARY_SCAN_MAX_WORDS_PER_BATCH = 10'000;
+// The maximum number of bytes of word data read into memory at once. If a
+// single word is larger than this, that word alone is read and the limit is
+// necessarily exceeded (a word must not be split).
+constexpr inline ad_utility::MemorySize
+    VOCABULARY_SCAN_MAX_WORD_DATA_PER_BATCH = 10_MB;
+
 constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_URL =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";

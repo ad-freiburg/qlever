@@ -9,6 +9,7 @@
 
 #include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
+#include <re2/re2.h>
 
 #include <memory>
 #include <optional>
@@ -192,6 +193,11 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // Compiled regexes for IRIs that should be treated as blank nodes during
+  // index building (only relevant during index building). Set (and compiled
+  // from their string representation) via `setBlankNodeIriRegexes`.
+  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes_;
+
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
@@ -299,6 +305,21 @@ class IndexImpl {
   // the `Id`; see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
+
+  // Set the regexes for IRIs that should be treated as blank nodes during index
+  // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
+  // of them (via `RE2::FullMatch`) is stored as a blank node instead of in the
+  // vocabulary. This is useful for IRIs that only act as internal connector
+  // nodes (e.g. statement nodes), to save vocabulary memory. The regexes are
+  // compiled here and stored in their compiled form. Each regex has to match a
+  // full IRI and must therefore start with `<`; a regex that violates this or
+  // is not a valid regular expression is reported with a user-readable
+  // exception. See `TripleComponentWithIndex::isBlankNode`.
+  void setBlankNodeIriRegexes(
+      const std::vector<std::string>& blankNodeIriRegexes);
+  const std::vector<std::unique_ptr<re2::RE2>>& getBlankNodeIriRegexes() const {
+    return blankNodeIriRegexes_;
+  }
 
   // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
