@@ -50,7 +50,9 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+  CPP_template(typename IdTableT)(
+      requires IdTableLike<IdTableT>) static ad_utility::MemorySize
+      getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          sizeof(Id));
   }
@@ -59,7 +61,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& resultPtr = cacheValue.result_; resultPtr) {
-        return getSize(resultPtr->idTable());
+        return getSize(resultPtr->idTableView());
       } else {
         return 0_B;
       }
@@ -96,18 +98,19 @@ using QueryResultCache = ad_utility::ConcurrentCache<
 class NamedResultCache;
 class MaterializedViewsManager;
 
-// Execution context for queries.
-// Holds references to index and engine, implements caching.
+// Execution context for queries. Holds a `std::shared_ptr` to the `Index`
+// and `MaterializedViewsManager` to ensure that they stay alive as long as
+// this context is alive.
 class QueryExecutionContext
     : public std::enable_shared_from_this<QueryExecutionContext> {
  public:
   enum struct DisableCaching { True, False, FromRuntimeParameter };
   QueryExecutionContext(
-      const Index& index, QueryResultCache* const cache,
+      std::shared_ptr<const Index> index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
-      MaterializedViewsManager* materializedViewsManager,
+      std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
@@ -115,7 +118,7 @@ class QueryExecutionContext
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
-  [[nodiscard]] const Index& getIndex() const { return _index; }
+  [[nodiscard]] const Index& getIndex() const { return *_index; }
 
   const LocatedTriplesState& locatedTriplesState() const {
     AD_CORRECTNESS_CHECK(locatedTriplesSharedState_ != nullptr);
@@ -193,11 +196,14 @@ class QueryExecutionContext
   // executed using this context will be stored in the `namedQueryCache()` using
   // the string given in `PinResultWithName` as the query name. If
   // `geoIndexVar_` is also set, a geo index is built and cached in-memory on
-  // the column of this variable. If `pinResultWithName_` is `nullopt`, no
-  // pinning is done.
+  // the column of this variable. If `geoIndexSimplificationInMeters_` is also
+  // set, the indexed geometries are simplified before indexing using the
+  // Douglas-Peucker algorithm with the given maximum error in meters.
+  // If `pinResultWithName_` is `nullopt`, no pinning is done.
   struct PinResultWithName {
     std::string name_;
     std::optional<Variable> geoIndexVar_ = std::nullopt;
+    std::optional<double> geoIndexSimplificationInMeters_ = std::nullopt;
   };
 
   // Accessors; see `pinResultWithName_` for an explanation.
@@ -213,14 +219,17 @@ class QueryExecutionContext
   // header.
   static bool areWebSocketUpdatesEnabled();
   static std::chrono::milliseconds websocketUpdateInterval();
-  const Index& _index;
+
+  // Shared pointer to the `Index` to ensure that it stays alive as long as
+  // this context is alive.
+  std::shared_ptr<const Index> _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
   LocatedTriplesSharedState locatedTriplesSharedState_{
-      _index.deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
+      _index->deltaTriplesManager().getCurrentLocatedTriplesSharedState()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -251,7 +260,9 @@ class QueryExecutionContext
   // `std::nullopt`, the result is not cached.
   std::optional<PinResultWithName> pinResultWithName_ = std::nullopt;
 
-  MaterializedViewsManager* materializedViewsManager_;
+  // Shared pointer to the `MaterializedViewsManager` to ensure that it stays
+  // alive as long as this context is alive.
+  std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
 
   // See the documentation for the getter with the same name above;
   bool disableCaching_ = false;

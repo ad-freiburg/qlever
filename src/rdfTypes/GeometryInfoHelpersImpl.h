@@ -557,6 +557,24 @@ struct GeometryNVisitor {
 
 static constexpr GeometryNVisitor getGeometryN;
 
+// Simplify a parsed geometry using the Douglas-Peucker algorithm provided by
+// `pb_util`. The `tolerance` is interpreted in the coordinate units of the
+// geometry (that is, degrees for WGS84 `geo:wktLiteral`s). Points and
+// multipoints are returned unchanged, while lines and polygons (including their
+// multi-variants and geometry collections) are simplified. Returns
+// `std::nullopt` if the given geometry could not be parsed.
+inline std::optional<ParsedWkt> simplifyGeometry(
+    const std::optional<ParsedWkt>& geometry, double tolerance) {
+  if (!geometry.has_value()) {
+    return std::nullopt;
+  }
+  return std::visit(
+      [tolerance](const auto& geom) -> ParsedWkt {
+        return ParsedWkt{::util::geo::simplify(geom, tolerance)};
+      },
+      geometry.value());
+}
+
 // Implements the web mercator projection for points. Use together via
 // `ProjectionVisitor<WebMercatorProjection>` for other geometry types.
 struct WebMercatorProjection {

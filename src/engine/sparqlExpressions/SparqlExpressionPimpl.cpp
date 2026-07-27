@@ -22,8 +22,9 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
 
 // ___________________________________________________________________________
-std::vector<const Variable*> SparqlExpressionPimpl::containedVariables() const {
-  return _pimpl->containedVariables();
+std::vector<const Variable*> SparqlExpressionPimpl::containedVariables(
+    bool excludeExists) const {
+  return _pimpl->containedVariables(excludeExists);
 }
 
 // ____________________________________________________________________________
@@ -66,6 +67,11 @@ std::string SparqlExpressionPimpl::getCacheKey(
 bool SparqlExpressionPimpl::isResultAlwaysDefined(
     const VariableToColumnMap& variableToColumnMap) const {
   return _pimpl->isResultAlwaysDefined(variableToColumnMap);
+}
+
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isDeterministic() const {
+  return _pimpl->isDeterministic();
 }
 
 // ____________________________________________________________________________

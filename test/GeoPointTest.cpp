@@ -131,7 +131,7 @@ TEST(GeoPoint, parseFromLiteral) {
     auto value =
         ad_utility::triple_component::Literal::fromStringRepresentation(
             content);
-    auto g = GeoPoint::parseFromLiteral(value);
+    auto g = ad_utility::parseGeoPointFromLiteral(value);
     ASSERT_EQ(g.has_value(), hasVal);
     if (g.has_value()) {
       ASSERT_DOUBLE_EQ(g.value().getLat(), lat);
@@ -162,12 +162,12 @@ TEST(GeoPoint, parseFromLiteral) {
 
   // Literals of different type
   ASSERT_FALSE(
-      GeoPoint::parseFromLiteral(
+      ad_utility::parseGeoPointFromLiteral(
           ad_utility::triple_component::Literal::fromStringRepresentation(
               "\"123\"^^xsd:integer"))
           .has_value());
   ASSERT_FALSE(
-      GeoPoint::parseFromLiteral(
+      ad_utility::parseGeoPointFromLiteral(
           ad_utility::triple_component::Literal::fromStringRepresentation(
               "\"hi\"@en"))
           .has_value());

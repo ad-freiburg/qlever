@@ -12,8 +12,8 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "global/Pattern.h"
 #include "parser/ParsedQuery.h"
+#include "util/CompactStringVector.h"
 
 class HasPredicateScan : public Operation {
  public:
@@ -113,6 +113,8 @@ class HasPredicateScan : public Operation {
                           const CompactVectorOfStrings<Id>& patterns);
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;

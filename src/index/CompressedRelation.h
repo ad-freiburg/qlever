@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -187,7 +188,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
-  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+  template <typename SequenceOfBlocks>
+  static bool checkInvariantsForSortedBlocks(
+      const SequenceOfBlocks& sequenceOfBlocks) {
     return ::ranges::all_of(
         ::ranges::views::sliding(sequenceOfBlocks, 2),
         [](const auto& adjacent) {
@@ -488,7 +491,7 @@ class CompressedRelationWriter {
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.
   CompressedRelationMetadata addSmallRelation(Id col0Id, size_t numDistinctC1,
-                                              IdTableView<0> relation);
+                                              const IdTable& relation);
 
   // Add a new block for a large relation that is to be stored in multiple
   // blocks. This function may only be called if one of the following holds:
@@ -545,6 +548,15 @@ class CompressedRelationReader {
   using ColumnIndicesRef = ql::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+
+  // Optional override for the number of threads used to read and decompress
+  // blocks in `asyncParallelBlockGenerator`. When set, it takes precedence over
+  // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
+  // runtime index rebuild, which scans the old permutations through a dedicated
+  // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
+  // read/decompress parallelism without affecting query scans (which use the
+  // permutation's shared reader, where this stays `nullopt`).
+  std::optional<size_t> lazyScanNumThreadsOverride_ = std::nullopt;
 
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
@@ -824,18 +836,10 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
-  // For a given relation, determine the `col1Id`s and their counts. This is
-  // used for `computeGroupByObjectWithCount`.
-  IdTable getDistinctCol1IdsAndCounts(
-      const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const LimitOffsetClause& limitOffset) const;
-
-  // For all `col0Ids` determine their counts. This is
-  // used for `computeGroupByForFullScan`.
-  IdTable getDistinctCol0IdsAndCounts(
-      const ScanSpecAndBlocks& scanSpecAndBlocks,
+  // Determine the distinct values and their counts for the column at
+  // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
+  IdTable getDistinctColIdsAndCounts(
+      ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset) const;
@@ -877,6 +881,17 @@ class CompressedRelationReader {
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
+
+  // Allow to construct a `CompressedRelationReader` using a different
+  // allocator. The underlying file descriptor is duplicated (instead of
+  // opening the file again by name), so this also works when the file has
+  // been renamed since it was opened (see `File::duplicateForReading`).
+  CompressedRelationReader makeReaderWithReboundAllocator(
+      Allocator allocator) const {
+    return CompressedRelationReader{std::move(allocator),
+                                    file_.duplicateForReading(),
+                                    useGraphPostProcessing_};
+  }
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -961,17 +976,6 @@ class CompressedRelationReader {
   static ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
       const LocatedTriplesPerBlock& locatedTriples);
-
-  // The common implementation for `getDistinctCol0IdsAndCounts` and
-  // `getCol1IdsAndCounts`.
-  CPP_template(typename IdGetter)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
-      getDistinctColIdsAndCountsImpl(
-          IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
-          const CancellationHandle& cancellationHandle,
-          const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-          const LimitOffsetClause& limitOffset) const;
 };
 
 // TODO<joka921>

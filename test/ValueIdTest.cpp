@@ -34,8 +34,9 @@ TEST_F(ValueIdTest, makeFromDouble) {
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
       // The if is needed for the case of += infinity.
-      ASSERT_NEAR(id.getDouble(), d,
-                  std::abs(d / (1ul << (52 - ValueId::numDatatypeBits))));
+      ASSERT_NEAR(
+          id.getDouble(), d,
+          std::abs(d / (uint64_t{1} << (52 - ValueId::numDatatypeBits))));
     }
   };
 
@@ -464,4 +465,25 @@ TEST(ValueId, isTrivial) {
   EXPECT_FALSE(
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
+}
+
+// _____________________________________________________________________________
+TEST(ValueId, canBeComparedBitwise) {
+  EXPECT_TRUE(Id::makeUndefined().canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromBool(true).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromInt(1337).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromDouble(3.14).canBeComparedBitwise());
+  EXPECT_TRUE(
+      Id::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
+  EXPECT_FALSE(Id::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromTextRecordIndex(TextRecordIndex::make(0))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromWordVocabIndex(WordVocabIndex::make(0))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+                  .canBeComparedBitwise());
+  EXPECT_TRUE(Id::makeFromEncodedVal(738).canBeComparedBitwise());
 }

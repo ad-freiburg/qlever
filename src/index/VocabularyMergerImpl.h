@@ -19,7 +19,7 @@
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Timer.h"
@@ -27,22 +27,24 @@
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
 template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& internalWordCallback,
-                     ad_utility::MemorySize memoryToUse)
+auto mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator,
+    C& internalWordCallback, ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, memoryToUse);
+                                internalWordCallback, memoryToUse,
+                                blankNodeIriRegexes);
 }
 
 // _________________________________________________________________
 template <typename W, typename C>
-auto VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                       size_t numFiles, W comparator,
-                                       C& wordCallback,
-                                       ad_utility::MemorySize memoryToUse)
+auto VocabularyMerger::mergeVocabulary(
+    const std::string& basename, size_t numFiles, W comparator, C& wordCallback,
+    ad_utility::MemorySize memoryToUse,
+    const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -92,7 +94,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
   for (std::vector<QueueWord>& currentWords : mergedWords) {
-    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan, progressBar);
+    writeQueueWordsToIdMap(currentWords, wordCallback, lessThan,
+                           blankNodeIriRegexes, progressBar);
   }
 
   AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
@@ -108,24 +111,27 @@ CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(std::vector<QueueWord>& buffer, C& wordCallback,
-                           const L& lessThan,
-                           ad_utility::ProgressBar& progressBar) {
+    writeQueueWordsToIdMap(
+        std::vector<QueueWord>& buffer, C& wordCallback, const L& lessThan,
+        const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes,
+        ad_utility::ProgressBar& progressBar) {
   AD_LOG_TIMING << "Start writing a batch of merged words\n";
 
   // Iterate (avoid duplicates).
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        AD_LOG_WARN << "Total vocabulary order violated for "
-                    << lastTripleComponent_->iriOrLiteral() << " and "
-                    << top.iriOrLiteral() << std::endl;
+      if (lastTripleComponent_.has_value()) {
+        AD_CORRECTNESS_CHECK(lessThan(lastTripleComponent_.value(), top.entry_),
+                             "Total vocabulary order violated for ",
+                             lastTripleComponent_->iriOrLiteral(), " and ",
+                             top.iriOrLiteral());
       }
       lastTripleComponent_ =
           TripleComponentWithIndex{std::move(top.iriOrLiteral()),
                                    top.isExternal(), metaData_.numWordsTotal()};
+      lastTripleComponentIsBlankNode_ =
+          lastTripleComponent_.value().isBlankNode(blankNodeIriRegexes);
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -133,7 +139,7 @@ CPP_template_def(typename C, typename L)(
 
       // Write the new word to the vocabulary.
       auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
+      if (lastTripleComponentIsBlankNode_) {
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
         nextWord.index_ =
@@ -151,7 +157,7 @@ CPP_template_def(typename C, typename L)(
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =
-        word.isBlankNode()
+        lastTripleComponentIsBlankNode_
             ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
             : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write pair of local and global ID to buffer.
@@ -164,12 +170,12 @@ CPP_template_def(typename C, typename L)(
 inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
   HashMap<uint64_t, uint64_t> res;
   res.reserve(els.size());
-  bool first = true;
-  std::string_view lastWord;
-  size_t nextWordId = 0;
+  std::optional<std::string_view> lastWord;
+  // This value will overflow on the first entry.
+  size_t nextWordId = -1;
   for (auto& [word, idAndExternal] : els) {
     auto id = idAndExternal.id();
-    if (!first && lastWord != word) {
+    if (lastWord != word) {
       nextWordId++;
       lastWord = word;
     }
@@ -177,7 +183,6 @@ inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
     AD_CORRECTNESS_CHECK(inserted);
     idAndExternal = PartialVocabIndexWithExternalFlag{
         nextWordId, idAndExternal.isExternal()};
-    first = false;
   }
   return res;
 }
@@ -214,27 +219,16 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
 
-  static constexpr size_t flushThreshold = 16ULL * 1024 * 1024;  // 16 MB
-
-  ad_utility::serialization::FileWriteSerializer serializer{fileName};
-  // TODO<RobinTF> Ideally the `FileWriteSerializer` should come with its own
-  // buffer to avoid having to implement this logic here. Despite `fwrite`
-  // (which is called by `FileWriteSerializer::serializeBytes`) buffering data
-  // on its own it is faster to buffer with our own buffer, presumably because
-  // `fwrite` is thread-safe and therefore has to acquire a mutex for every
-  // call.
-  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
-  byteBuffer.reserve(flushThreshold + 1024);  // + slack for the last item
+  // We buffer the data with our own buffer before passing it to the file in
+  // large chunks. Despite `fwrite` (which is ultimately called by
+  // `FileWriteSerializer::serializeBytes`) buffering data on its own, it is
+  // faster to buffer with our own buffer, presumably because `fwrite` is
+  // thread-safe and therefore has to acquire a mutex for every call.
+  serialization::BufferedWriteSerializer serializer{
+      serialization::FileWriteSerializer{fileName}, 16_MB};
 
   uint64_t size = els.size();
-  byteBuffer << size;
-
-  auto flush = [&]() {
-    ad_utility::TimeBlockAndLog t{"performing the actual write"};
-    serializer.serializeBytes(byteBuffer.data().data(),
-                              byteBuffer.data().size());
-    byteBuffer.clear();
-  };
+  serializer << size;
 
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
@@ -243,17 +237,11 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
-    byteBuffer << word;
-    byteBuffer << idAndExternal.isExternal();
-    byteBuffer << idAndExternal.id();
-
-    if (byteBuffer.data().size() >= flushThreshold) {
-      flush();
-    }
+    serializer << word;
+    serializer << idAndExternal.isExternal();
+    serializer << idAndExternal.id();
   }
 
-  // Flush remaining data.
-  flush();
   serializer.close();
 
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";

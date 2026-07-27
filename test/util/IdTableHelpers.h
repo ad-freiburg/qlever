@@ -58,7 +58,7 @@ using VectorTable = std::vector<std::vector<IntOrId>>;
 
 // Helper: construct a single-column VectorTable containing the exclusive
 // integer range [a, b). If a >= b, returns an empty table.
-static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
+inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
   VectorTable vt;
   if (a >= b) return vt;
   for (size_t i = a; i < b; ++i) {
@@ -75,7 +75,7 @@ static inline VectorTable makeRangeVectorTable(size_t a, size_t b) {
 template <typename Transformation = decltype(ad_utility::testing::VocabId)>
 IdTable makeIdTableFromVector(const VectorTable& content,
                               Transformation transformation = {}) {
-  size_t numCols = content.empty() ? 0UL : content.at(0).size();
+  size_t numCols = content.empty() ? size_t{0} : content.at(0).size();
   IdTable result{numCols, ad_utility::testing::makeAllocator()};
   result.reserve(content.size());
   for (const auto& row : content) {
@@ -134,8 +134,29 @@ struct MatchesIdTable {
     // gets rid of all possibly lifetime and mutability issues.
     return operator()(table.clone());
   }
+
+  // Overload for `IdTableView<0>`, which uses a `Truly` matcher to compare
+  // via the free `operator==(IdTableView, IdTable)`. Uses `shared_ptr`
+  // to keep `IdTable` alive since `IdTable` is non-copyable.
+  template <int N>
+  auto operator()(const IdTableView<N>& view) const {
+    auto expected = std::make_shared<IdTable>(IdTable{view.clone()});
+    return ::testing::Truly(
+        [expected = std::move(expected)](const auto& actual) {
+          return actual == *expected;
+        });
+  }
 };
 static constexpr MatchesIdTable matchesIdTable;
+
+// Allow comparing `IdTableView<N>` with `CopyShield<IdTable>` in gtest
+// matchers. The actual comparison clones the view into an `IdTable`.
+template <int N>
+inline bool operator==(const IdTableView<N>& view,
+                       const CopyShield<IdTable>& shield) {
+  IdTable viewAsTable{view.clone()};
+  return shield == viewAsTable;
+}
 
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample

@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
@@ -98,9 +99,10 @@ struct CompressedVocabularyF : public testing::Test {
   static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
-  static constexpr auto createCompressedVocabulary(
-      const std::string& filename) {
-    return [filename](const std::vector<std::string>& words) {
+  static auto createCompressedVocabulary() {
+    std::string filename = gtestCurrentTestName();
+    return [filename =
+                std::move(filename)](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
       CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
@@ -118,25 +120,23 @@ TYPED_TEST_SUITE(CompressedVocabularyF, Compressors);
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundStdLess) {
-  testUpperAndLowerBoundWithStdLess(
-      this->createCompressedVocabulary("lowerUpperBoundStdLessFsst"));
+  testUpperAndLowerBoundWithStdLess(this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
-      this->createCompressedVocabulary("lowerUpperBoundNumericFsst"));
+      this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(
-      this->createCompressedVocabulary("accessOperatorFsst"));
+  testAccessOperatorForUnorderedVocabulary(this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
-  testEmptyVocabulary(this->createCompressedVocabulary("accessOperatorFsst"));
+  testEmptyVocabulary(this->createCompressedVocabulary());
 }
 
 // _______________________________________________________
@@ -147,7 +147,7 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   // Create vocabulary with small block size (4 words per block).
   // Use VocabularyInMemory as the underlying vocabulary.
   CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
-  const std::string filename = "compressedVocabSerializerTest";
+  std::string filename = gtestCurrentTestName();
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
   for (const auto& word : words) {
@@ -173,3 +173,35 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
 }
 
 }  // namespace
+
+// _____________________________________________________________________________
+TYPED_TEST(CompressedVocabularyF, ScanAll) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 111; ++i) {
+    words.push_back(absl::StrCat("someWord", i, std::string(i % 13, 'y')));
+  }
+  // NOTE: The fixture uses a decoder block size of 4, so this vocabulary has
+  // many decoder blocks that the scan has to span.
+  auto vocab = createVocab(words);
+
+  using ::testing::ElementsAreArray;
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()), ElementsAreArray(words));
+  // Abandon a scan early; the destructor has to clean up properly.
+  {
+    auto range = vocab.scanAll();
+    auto it = ql::ranges::begin(range);
+    ASSERT_NE(it, ql::ranges::end(range));
+    IndexAndWord indexAndWord = *it;
+    EXPECT_EQ(indexAndWord.index_, 0);
+    EXPECT_EQ(indexAndWord.word_, words.at(0));
+  }
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompressedVocabularyF, ScanAllEmptyVocabulary) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  auto vocab = createVocab({});
+  auto range = vocab.scanAll();
+  EXPECT_EQ(ql::ranges::begin(range), ql::ranges::end(range));
+}

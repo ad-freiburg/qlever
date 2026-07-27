@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
@@ -243,6 +244,11 @@ using DurationParameter = Parameter<ParseableDuration<DurationType>,
 using SpaceSeparatedStrings =
     Parameter<std::vector<std::string>, n::SpaceSeparatedStringsToVector,
               n::VectorToSpaceSeparatedStrings>;
+
+using DeduplicationModeParameter =
+    Parameter<DeduplicationMode, DeduplicationModeFromString,
+              DeduplicationModeToString>;
+
 }  // namespace detail::parameterShortNames
 }  // namespace ad_utility
 

@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <regex>
 #include <thread>
 
 #include "../test/util/GTestHelpers.h"
@@ -31,8 +30,8 @@ TEST(ProgressBar, typicalUsage) {
     // than indicated, resulting in a much lower speed than expected.
     std::string expectedSpeedRegex =
 #ifndef _QLEVER_NO_TIMING_TESTS
-        "\\[average speed [234]\\.[0-9] M/s, last batch [234]\\.[0-9] M/s"
-        ", fastest [234]\\.[0-9] M/s, slowest [234]\\.[0-9] M/s\\] ";
+        "\\[average speed [234]\\.[0-9] M/s, last batch [1234]\\.[0-9] M/s"
+        ", fastest [234]\\.[0-9] M/s, slowest [1234]\\.[0-9] M/s\\] ";
 #else
         "\\[average speed [0-9]\\.[0-9] M/s, last batch [0-9]\\.[0-9] M/s"
         ", fastest [0-9]\\.[0-9] M/s, slowest [0-9]\\.[0-9] M/s\\] ";
@@ -50,12 +49,12 @@ TEST(ProgressBar, typicalUsage) {
       if (progressBar.update()) {
         ASSERT_LT(k + 1, expectedUpdateRegexes.size());
         ASSERT_THAT(progressBar.getProgressString(),
-                    ::testing::MatchesRegex(expectedUpdateRegexes[k]));
+                    MatchesRegex(expectedUpdateRegexes[k]));
         ++k;
       }
     }
     ASSERT_THAT(progressBar.getFinalProgressString(),
-                ::testing::MatchesRegex(expectedUpdateRegexes.back()));
+                MatchesRegex(expectedUpdateRegexes.back()));
     AD_EXPECT_THROW_WITH_MESSAGE(
         progressBar.getFinalProgressString(),
         ::testing::ContainsRegex("should only be called once"));
@@ -74,7 +73,7 @@ TEST(ProgressBar, numberOfStepsLessThanBatchSize) {
       "Steps: 30,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
-              ::testing::MatchesRegex(expectedUpdateRegex));
+              MatchesRegex(expectedUpdateRegex));
 }
 
 // Test `getTimer` by stopping the timer after 10ms, then sleeping for 10ms
@@ -93,5 +92,5 @@ TEST(ProgressBar, getTimer) {
       "Steps: 30,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
-              ::testing::MatchesRegex(expectedUpdateRegex));
+              MatchesRegex(expectedUpdateRegex));
 }

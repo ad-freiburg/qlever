@@ -78,7 +78,7 @@ void testMinus(std::vector<IdTable> leftTables,
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 }  // namespace
@@ -106,14 +106,14 @@ TEST(Minus, computeMinus) {
               qec, b.clone(),
               std::vector<std::optional<Variable>>{
                   Variable{"?b"}, Variable{"?a"}, std::nullopt, std::nullopt})};
-  IdTable res = m.computeMinus(a, b, jcls);
+  IdTable res = m.computeMinus(a.asStaticView<0>(), b.asStaticView<0>(), jcls);
 
   EXPECT_EQ(res, makeIdTableFromVector({{1, 2, 1}, {5, 4, 1}, {8, 2, 3}}));
 
   // Test subtracting without matching columns
   res.clear();
   jcls.clear();
-  res = m.computeMinus(a, b, jcls);
+  res = m.computeMinus(a.asStaticView<0>(), b.asStaticView<0>(), jcls);
   EXPECT_EQ(res, a);
 
   // Test minus with variable sized data.
@@ -137,7 +137,8 @@ TEST(Minus, computeMinus) {
                std::vector<std::optional<Variable>>{
                    Variable{"?a"}, Variable{"?b"}, std::nullopt})};
 
-  IdTable vres = vm.computeMinus(va, vb, jcls);
+  IdTable vres =
+      vm.computeMinus(va.asStaticView<0>(), vb.asStaticView<0>(), jcls);
 
   EXPECT_EQ(vres, makeIdTableFromVector({{7, 6, 5, 4, 3, 2}}));
 }
@@ -216,7 +217,7 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
                 std::nullopt, forceFullyMaterialized)};
     auto result = m.computeResultOnlyForTesting(true);
     ASSERT_TRUE(result.isFullyMaterialized());
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA));
     const auto& runtimeInfo =
@@ -272,7 +273,7 @@ TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
     auto result = m.computeResultOnlyForTesting(requestLaziness);
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness);
     if (result.isFullyMaterialized()) {
-      EXPECT_EQ(result.idTable(), expected);
+      EXPECT_EQ(result.idTableView(), expected);
       EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                   ::testing::UnorderedElementsAre(entryA));
     } else {
@@ -378,12 +379,14 @@ TEST(Minus, computeMinusWithEmptyTables) {
           std::vector<std::optional<Variable>>{Variable{"?a"}, std::nullopt})};
 
   {
-    IdTable res = m.computeMinus(empty, nonEmpty, jcls);
+    IdTable res = m.computeMinus(empty.asStaticView<0>(),
+                                 nonEmpty.asStaticView<0>(), jcls);
 
     EXPECT_EQ(res, empty);
   }
   {
-    IdTable res = m.computeMinus(nonEmpty, empty, jcls);
+    IdTable res = m.computeMinus(nonEmpty.asStaticView<0>(),
+                                 empty.asStaticView<0>(), jcls);
 
     EXPECT_EQ(res, nonEmpty);
   }
@@ -411,7 +414,7 @@ TEST(Minus, computeMinusWithUndefined) {
               std::vector<std::optional<Variable>>{
                   Variable{"?b"}, Variable{"?a"}, std::nullopt})};
 
-  IdTable res = m.computeMinus(a, b, jcls);
+  IdTable res = m.computeMinus(a.asStaticView<0>(), b.asStaticView<0>(), jcls);
   EXPECT_EQ(res, makeIdTableFromVector({{U, U, 10}, {1, U, 12}, {5, 4, 13}}));
 }
 

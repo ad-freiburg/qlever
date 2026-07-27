@@ -80,6 +80,8 @@ class ExistsJoin : public Operation {
       const Variable& variable) const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Return true if the size estimate for the right side is smaller or equal

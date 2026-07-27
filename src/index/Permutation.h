@@ -63,7 +63,7 @@ class Permutation {
     }
   }
 
-  using MetaData = IndexMetaDataMmapView;
+  using MetaData = IndexMetaData;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
@@ -138,6 +138,7 @@ class Permutation {
   //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
   //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
   //   join-specific prefiltered block metadata.
+  //
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
@@ -148,6 +149,31 @@ class Permutation {
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset = {}) const;
+
+  // A lazy scan together with the independent `CompressedRelationReader` it
+  // reads from. The `reader_` owns the file handle and allocator that `blocks_`
+  // borrows from, so it must be kept alive for as long as `blocks_` is used.
+  struct LazyScanWithReader {
+    std::unique_ptr<CompressedRelationReader> reader_;
+    CompressedRelationReader::IdTableGeneratorInputRange blocks_;
+  };
+
+  // Like `lazyScan` above, but the scan is performed through a freshly created
+  // `CompressedRelationReader` with an unlimited-memory allocator instead of
+  // this permutation's shared reader. This allows the scan to run independently
+  // of memory constraints imposed on most queries.
+  //
+  // `numThreadsOverride`, if set, overrides the number of block read/decompress
+  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
+  // parameter is used, as for query scans). The runtime index rebuild uses this
+  // to throttle its read parallelism (and hence peak CPU) without affecting
+  // queries.
+  LazyScanWithReader lazyScanWithUnlimitedReader(
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      ColumnIndicesRef additionalColumns,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesState& locatedTriplesState,
+      std::optional<size_t> numThreadsOverride = std::nullopt) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
@@ -211,7 +237,10 @@ class Permutation {
   // triples).
   size_t numTriples() const { return metaData().totalElements(); }
 
-  // From the given snapshot, get the located triples for this permutation.
+  // From the given snapshot, get the located triples for this permutation. Note
+  // that for materialized views, this must not be the global
+  // `LocatedTriplesState`, instead they must use their own
+  // `LocatedTriplesState` provided by the `MaterializedView` object.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
 
@@ -242,6 +271,18 @@ class Permutation {
       ColumnIndex col) const;
 
  private:
+  // Common implementation of the two `lazyScan` overloads above. Performs the
+  // scan through the given `reader`, which may either be this permutation's
+  // shared reader or an independently created one.
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScanImpl(
+      const CompressedRelationReader& reader,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+      ColumnIndicesRef additionalColumns,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesState& locatedTriplesState,
+      const LimitOffsetClause& limitOffset) const;
+
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;
   // Readable name for this permutation, e.g., `POS`.

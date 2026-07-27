@@ -11,6 +11,7 @@
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/keywords.h"
+#include "backports/span.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 
@@ -35,11 +36,14 @@ bool strIsLangTag(const std::string& strLangTag);
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
 /*
- * @brief convert a UTF-8 String to lowercase according to the held locale
+ * @brief convert a UTF-8 String to lowercase
  * @param s UTF-8 encoded string
+ * @param localeName The ICU locale name used for locale-specific case folding
+ * (e.g. "tr" for Turkish). The default empty string uses the locale-independent
+ * root rules.
  * @return The lowercase version of s, also encoded as UTF-8
  */
-std::string utf8ToLower(std::string_view s);
+std::string utf8ToLower(std::string_view s, const char* localeName = "");
 
 // Get the uppercase value. For details see `utf8ToLower` above
 std::string utf8ToUpper(std::string_view s);
@@ -161,13 +165,13 @@ std::string insertThousandSeparator(const std::string_view str,
 // and compare the hashes instead of the actual strings.
 inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
                                             std::string_view view2) {
-  using byte_view = std::basic_string_view<volatile std::byte>;
+  using byte_view = ql::span<const volatile std::byte>;
   auto impl = [](byte_view str1, byte_view str2) {
-    if (str1.length() != str2.length()) {
+    if (str1.size() != str2.size()) {
       return false;
     }
     volatile std::byte mismatchFound{0};
-    for (size_t i = 0; i < str1.length(); ++i) {
+    for (size_t i = 0; i < str1.size(); ++i) {
       // In C++20 compound assignment of volatile variables causes a warning,
       // so we can't use 'mismatchFound |=' until compiling with C++23 where it
       // is fine again. mismatchFound can be interpreted as bool and "is false"
@@ -177,12 +181,12 @@ inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
     return !static_cast<bool>(mismatchFound);
   };
   auto toVolatile = [](std::string_view view) constexpr -> byte_view {
-    // Casting is safe because both types have the same size
+    // Casting is safe because both types have the same size.
     static_assert(sizeof(std::string_view::value_type) ==
                   sizeof(byte_view::value_type));
-    return {
-        static_cast<const std::byte*>(static_cast<const void*>(view.data())),
-        view.size()};
+    return byte_view(static_cast<const volatile std::byte*>(
+                         static_cast<const void*>(view.data())),
+                     view.size());
   };
   return impl(toVolatile(view1), toVolatile(view2));
 }

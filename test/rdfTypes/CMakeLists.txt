@@ -1,2 +1,2 @@
-addLinkAndDiscoverTestNoLibs(VariableTest rdfTypes util)
+addLinkAndDiscoverTestNoLibs(VariableTest rdfTypes qlever_util)
 addLinkAndDiscoverTestNoLibs(RdfEscapingTest rdfTypes)

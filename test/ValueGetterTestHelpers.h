@@ -42,7 +42,7 @@ struct TestContextWithGivenTTl {
   sparqlExpression::EvaluationContext context{
       *qec,
       varToColMap,
-      table,
+      table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
       std::make_shared<ad_utility::CancellationHandle<>>(),

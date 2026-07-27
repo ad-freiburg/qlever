@@ -133,13 +133,13 @@ TEST(NeutralOptional, knownEmptyResult) {
 }
 
 // _____________________________________________________________________________
-TEST(NeutralOptional, supportsLimit) {
+TEST(NeutralOptional, handlesLimit) {
   auto* qec = ad_utility::testing::getQec();
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
-  EXPECT_TRUE(no.supportsLimitOffset());
+  EXPECT_EQ(no.handlesLimitOffset(), LimitOffsetHandling::FULL);
 }
 
 // _____________________________________________________________________________
@@ -196,7 +196,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_TRUE(result.idTable().empty());
+    EXPECT_TRUE(result.idTableView().empty());
     EXPECT_TRUE(result.localVocab().empty());
   }
 
@@ -221,7 +221,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_TRUE(result.idTable().empty());
+    EXPECT_TRUE(result.idTableView().empty());
     EXPECT_TRUE(result.localVocab().empty());
   }
 
@@ -250,7 +250,8 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
   {
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeUndefined()}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeUndefined()}}));
     EXPECT_TRUE(result.localVocab().empty());
   }
 
@@ -292,7 +293,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     {
       qec->getQueryTreeCache().clearAll();
       auto result = no.computeResultOnlyForTesting(false);
-      EXPECT_EQ(result.idTable(), makeIdTableFromVector({{1}, {2}, {3}}));
+      EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{1}, {2}, {3}}));
       EXPECT_EQ(result.localVocab().getAllWordsForTesting(),
                 localVocab.getAllWordsForTesting());
     }
@@ -324,7 +325,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{2}, {3}}));
+    EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{2}, {3}}));
     EXPECT_EQ(result.localVocab().getAllWordsForTesting(),
               localVocab.getAllWordsForTesting());
   }
@@ -364,7 +365,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{1}, {2}}));
+    EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{1}, {2}}));
     EXPECT_EQ(result.localVocab().getAllWordsForTesting(),
               localVocab.getAllWordsForTesting());
   }

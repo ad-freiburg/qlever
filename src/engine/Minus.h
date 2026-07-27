@@ -10,6 +10,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/VectorWithMemoryLimit.h"
 
 class Minus : public Operation {
  private:
@@ -52,14 +53,14 @@ class Minus : public Operation {
   // `std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>` to
   // avoid including expensive headers that are only relevant for the
   // implementation of this function.
-  auto makeUndefRangesChecker(bool left, const IdTable& idTable) const;
+  auto makeUndefRangesChecker(bool left, const IdTableView<0>& idTable) const;
 
   // Helper function to copy all rows from `left` that have a corresponding
   // value of `reference` in `keepEntry`.
-  template <typename T>
+  template <typename IdTableT, typename T>
   IdTable copyMatchingRows(
-      const IdTable& left, T reference,
-      const std::vector<T, ad_utility::AllocatorWithLimit<T>>& keepEntry) const;
+      const IdTableT& left, T reference,
+      const ad_utility::VectorWithMemoryLimit<T>& keepEntry) const;
 
  public:
   size_t getCostEstimate() override;
@@ -78,10 +79,12 @@ class Minus : public Operation {
    *        This method is made public here for unit testing purposes.
    **/
   IdTable computeMinus(
-      const IdTable& a, const IdTable& b,
+      const IdTableView<0>& a, const IdTableView<0>& b,
       const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Return true if the size estimate for the right side is smaller or equal

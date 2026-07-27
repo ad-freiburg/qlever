@@ -309,8 +309,10 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
 
 namespace {
 // _____________________________________________________________________________
+template <typename Children>
 SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
-    uint64_t inputSizeEstimate, uint64_t reductionFactor, const auto& children,
+    uint64_t inputSizeEstimate, uint64_t reductionFactor,
+    const Children& children,
     const std::optional<Variable>& firstSortedVariable) {
   AD_CORRECTNESS_CHECK(children.size() >= 1);
   // Prevent division by zero.

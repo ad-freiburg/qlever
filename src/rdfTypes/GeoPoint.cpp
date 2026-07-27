@@ -7,6 +7,7 @@
 #include <cmath>
 #include <optional>
 
+#include "global/Constants.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
