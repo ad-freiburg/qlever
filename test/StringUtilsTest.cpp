@@ -54,6 +54,15 @@ TEST(StringUtils, utf8ToUpper) {
 }
 
 // _____________________________________________________________________________
+TEST(StringUtils, utf8ToUpperWithLocale) {
+  // With the default (root) locale, ASCII `i` uppercases to `I`.
+  EXPECT_EQ("I", utf8ToUpper("i"));
+  EXPECT_EQ("I", utf8ToUpper("i", ""));
+  // The Turkish locale instead uppercases `i` to the dotted `İ` (U+0130).
+  EXPECT_EQ("İ", utf8ToUpper("i", "tr"));
+}
+
+// _____________________________________________________________________________
 // Test the ICU-free (`useICU == false`) implementations of `utf8ToLower` and
 // `utf8ToUpper`. These only fold ASCII characters; all other bytes (including
 // the bytes of multibyte UTF-8 characters) are passed through unchanged.
@@ -70,6 +79,12 @@ TEST(StringUtils, utf8ToLowerUpperNoICU) {
   EXPECT_EQ("CAFé", utf8ToUpper<false>("café"));
   EXPECT_EQ("aÔb", utf8ToLower<false>("AÔB"));
   EXPECT_EQ("AÔB", utf8ToUpper<false>("aÔb"));
+
+  // The `localeName` is ignored, as locale-specific case folding requires ICU.
+  // Compare the `utf8ToLowerWithLocale` and `utf8ToUpperWithLocale` tests
+  // above, where the Turkish locale yields `ı` and `İ` respectively.
+  EXPECT_EQ("i", utf8ToLower<false>("I", "tr"));
+  EXPECT_EQ("I", utf8ToUpper<false>("i", "tr"));
 
   // The `useICU == true` instantiation exists and behaves like the default.
   EXPECT_EQ(utf8ToLower<true>("Schindler's List"),
@@ -126,14 +141,48 @@ TEST(StringUtils, utf8EncodeCodepoint) {
 }
 
 // _____________________________________________________________________________
-// Test the ICU-free UTF-16 surrogate helpers against ICU's `U16_IS_LEAD`,
-// `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY`.
+// Test the ICU-free UTF-16 surrogate helpers at the boundaries of the two
+// surrogate blocks, which are the interesting corner cases.
 TEST(StringUtils, surrogateHelpers) {
   using ad_utility::combineSurrogates;
   using ad_utility::isHighSurrogate;
   using ad_utility::isLowSurrogate;
-  // The predicates match ICU over the whole codepoint range (this includes the
-  // corner cases at the boundaries of the two surrogate blocks).
+  // The high surrogates are exactly the block [0xD800, 0xDBFF].
+  EXPECT_FALSE(isHighSurrogate(0xD7FF));
+  EXPECT_TRUE(isHighSurrogate(0xD800));
+  EXPECT_TRUE(isHighSurrogate(0xDBFF));
+  EXPECT_FALSE(isHighSurrogate(0xDC00));
+
+  // The low surrogates are exactly the block [0xDC00, 0xDFFF].
+  EXPECT_FALSE(isLowSurrogate(0xDBFF));
+  EXPECT_TRUE(isLowSurrogate(0xDC00));
+  EXPECT_TRUE(isLowSurrogate(0xDFFF));
+  EXPECT_FALSE(isLowSurrogate(0xE000));
+
+  // Ordinary codepoints are neither.
+  EXPECT_FALSE(isHighSurrogate(0x41));
+  EXPECT_FALSE(isLowSurrogate(0x41));
+
+  // The first and the last supplementary codepoint.
+  EXPECT_EQ(combineSurrogates(0xD800, 0xDC00), 0x10000u);
+  EXPECT_EQ(combineSurrogates(0xDBFF, 0xDFFF), 0x10FFFFu);
+  // U+1F600 (GRINNING FACE) is encoded as the surrogate pair D83D DE00.
+  EXPECT_EQ(combineSurrogates(0xD83D, 0xDE00), 0x1F600u);
+}
+
+// _____________________________________________________________________________
+// Exhaustively test the ICU-free UTF-16 surrogate helpers against ICU's
+// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY`. This complements
+// the `surrogateHelpers` test above, which only covers the corner cases but
+// always runs.
+TEST(StringUtils, surrogateHelpersExhaustive) {
+#ifndef QLEVER_RUN_EXPENSIVE_TESTS
+  GTEST_SKIP();
+#endif
+  using ad_utility::combineSurrogates;
+  using ad_utility::isHighSurrogate;
+  using ad_utility::isLowSurrogate;
+  // The predicates match ICU over the whole codepoint range.
   for (uint32_t c = 0; c <= 0x10FFFF; ++c) {
     ASSERT_EQ(isHighSurrogate(c), static_cast<bool>(U16_IS_LEAD(c))) << c;
     ASSERT_EQ(isLowSurrogate(c), static_cast<bool>(U16_IS_TRAIL(c))) << c;

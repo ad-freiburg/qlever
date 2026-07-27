@@ -44,8 +44,7 @@ bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
 
 // UTF-16 surrogate helpers. These are ICU-free equivalents of ICU's
-// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY` macros; they are
-// used when decoding `\uXXXX` escape sequences.
+// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY` macros.
 
 // Return true iff `c` is a high (leading) surrogate code unit.
 constexpr bool isHighSurrogate(uint32_t c) {
@@ -71,7 +70,7 @@ std::string utf8ToLower(std::string_view s, const char* localeName = "");
 
 // Get the uppercase value. For details see `utf8ToLower` above.
 template <bool useICU = useICUDefault>
-std::string utf8ToUpper(std::string_view s);
+std::string utf8ToUpper(std::string_view s, const char* localeName = "");
 
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
