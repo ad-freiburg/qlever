@@ -644,3 +644,194 @@ TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
       IndexRebuildConfig("index", "index.view", "previous/old", "newidx"),
       ::testing::HasSubstr("currently served index and the freshly rebuilt"));
 }
+
+// _____________________________________________________________________________
+// Test `parseQuery` + `planParsedQuery` + `PlannedQuery::cloneQetInPlace`,
+// which together make it possible to plan a query once and then execute it
+// repeatedly with varying values: copying the resulting `PlannedQuery` shares
+// its `QueryExecutionTree`, and `cloneQetInPlace` gives the copy a tree of its
+// own, which can then be modified without affecting the original.
+TEST(LibQlever, planParsedQueryAndCloneQetInPlace) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .";
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = gtestCurrentTestName();
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  EngineConfig ec{c};
+  // Caching must be disabled for externally specified values.
+  ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
+  Qlever engine{ec};
+
+  std::string query = R"(
+    SELECT ?x ?o WHERE {
+      ?x <p> ?o .
+      SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
+        [] <name> "myValues" .
+        [] <variable> ?x .
+      }
+    } ORDER BY ?o
+  )";
+
+  // Parsing is instance-independent, planning is not, so the same
+  // `ParsedQuery` can be planned more than once.
+  // `parseQuery` returns the `ParsedQuery` together with the
+  // `QueryExecutionContext` it was parsed against, and `planParsedQuery` plans
+  // it against exactly that context.
+  ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
+  EXPECT_EQ(&parsedQuery.queryExecutionContext(),
+            parsedQuery.sharedQueryExecutionContext().get());
+  PlannedQuery plan = engine.planParsedQuery(parsedQuery);
+  EXPECT_EQ(&plan.queryExecutionContext(),
+            &parsedQuery.queryExecutionContext());
+
+  // Inject `iris` into the single `ExternalValues` placeholder of `plan`,
+  // execute it, and return the objects that it yields (ordered by `?o`).
+  auto runWith = [](PlannedQuery& plan, const std::vector<std::string>& iris) {
+    std::vector<ExternalValues*> values;
+    plan.queryExecutionTree().getRootOperation()->getExternalValues(values);
+    AD_CONTRACT_CHECK(values.size() == 1);
+    parsedQuery::SparqlValues newValues;
+    newValues._variables = {Variable{"?x"}};
+    for (const auto& iri : iris) {
+      newValues._values.push_back({TripleComponent::Iri::fromIriref(iri)});
+    }
+    values.at(0)->updateValues(std::move(newValues));
+
+    const auto& qet = plan.queryExecutionTree();
+    auto result = qet.getResult();
+    auto objectColumn = qet.getVariableColumn(Variable{"?o"});
+    std::vector<int64_t> objects;
+    for (size_t i = 0; i < result->idTableView().numRows(); ++i) {
+      objects.push_back(result->idTableView()(i, objectColumn).getInt());
+    }
+    return objects;
+  };
+
+  // A copy of a `PlannedQuery` shares the `QueryExecutionTree`, so modifying
+  // the copy would also modify `plan`.
+  PlannedQuery firstCopy = plan;
+  EXPECT_EQ(&firstCopy.queryExecutionTree(), &plan.queryExecutionTree());
+
+  // `cloneQetInPlace` gives the copy its own tree, while the
+  // `QueryExecutionContext` stays shared.
+  firstCopy.cloneQetInPlace();
+  EXPECT_NE(&firstCopy.queryExecutionTree(), &plan.queryExecutionTree());
+  EXPECT_EQ(&firstCopy.queryExecutionContext(), &plan.queryExecutionContext());
+
+  PlannedQuery secondCopy = plan;
+  secondCopy.cloneQetInPlace();
+  EXPECT_NE(&secondCopy.queryExecutionTree(), &firstCopy.queryExecutionTree());
+
+  // The two copies can be given different values and executed independently.
+  EXPECT_THAT(runWith(firstCopy, {"<s1>", "<s3>"}), ElementsAre(1, 3));
+  EXPECT_THAT(runWith(secondCopy, {"<s2>"}), ElementsAre(2));
+
+  // `firstCopy` still has its own tree, so it can be given new values again,
+  // without `secondCopy` interfering.
+  EXPECT_THAT(runWith(firstCopy, {"<s1>", "<s2>"}), ElementsAre(1, 2));
+  EXPECT_THAT(runWith(secondCopy, {"<s3>"}), ElementsAre(3));
+}
+
+// _____________________________________________________________________________
+// Test that `parseAndPlanQuery` is exactly `parseQuery` followed by
+// `planParsedQuery`, and that all the arguments of the former reach the two
+// halves.
+TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o> . <s2> <p> <o2> .";
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = gtestCurrentTestName();
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  Qlever engine{EngineConfig{c}};
+
+  std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
+
+  // Both paths produce the same result.
+  auto viaCombined =
+      engine.query(engine.parseAndPlanQuery(query), ad_utility::MediaType::tsv);
+  auto viaSplit = engine.query(engine.planParsedQuery(engine.parseQuery(query)),
+                               ad_utility::MediaType::tsv);
+  EXPECT_EQ(viaCombined, viaSplit);
+  EXPECT_EQ(viaCombined, "?s\n<s>\n<s2>\n");
+
+  // `requestTimer` reaches `planQuery` through `planParsedQuery` and ends up in
+  // the runtime information, just as it does via `parseAndPlanQuery`.
+  ad_utility::Timer requestTimer{ad_utility::Timer::Started};
+  auto plan = engine.planParsedQuery(
+      engine.parseQuery(query),
+      std::make_shared<ad_utility::CancellationHandle<>>(), std::nullopt,
+      requestTimer);
+  EXPECT_GT(plan.queryExecutionTree()
+                .getRootOperation()
+                ->getRuntimeInfoWholeQuery()
+                .timeQueryPlanning.count(),
+            -1);
+
+  // A cancellation handle that is already cancelled makes planning fail, which
+  // shows that the handle reaches `planQuery` as well.
+  auto cancelledHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+  cancelledHandle->cancel(ad_utility::CancellationState::MANUAL);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      engine.planParsedQuery(engine.parseQuery(query), cancelledHandle),
+      HasSubstr("manually cancelled"));
+}
+
+// _____________________________________________________________________________
+// Test `bindParsedQuery`: a query that was parsed once can be planned on a
+// second `Qlever` instance, as long as that instance has an equivalent
+// `EncodedIriManager` (see the note on reusing a parsed query in `parseQuery`).
+TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o> . <s2> <p> <o2> .";
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // Two indexes over the same data and with the same configuration, so their
+  // `EncodedIriManager`s are equivalent.
+  IndexBuilderConfig c1;
+  c1.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c1.baseName_ = absl::StrCat(gtestCurrentTestName(), ".first");
+  EXPECT_NO_THROW(Qlever::buildIndex(c1));
+  IndexBuilderConfig c2 = c1;
+  c2.baseName_ = absl::StrCat(gtestCurrentTestName(), ".second");
+  EXPECT_NO_THROW(Qlever::buildIndex(c2));
+
+  Qlever first{EngineConfig{c1}};
+  Qlever second{EngineConfig{c2}};
+
+  std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
+  std::string expected = "?s\n<s>\n<s2>\n";
+
+  // Parse once on `first`, then plan on both instances.
+  ParsedQueryAndContext parsedOnFirst = first.parseQuery(query);
+  EXPECT_EQ(first.query(first.planParsedQuery(parsedOnFirst),
+                        ad_utility::MediaType::tsv),
+            expected);
+
+  // `bindParsedQuery` pairs the parsed query with a context of `second`, so the
+  // parsing is not repeated. The context of the plan is one of `second`, not
+  // the one the query was parsed with.
+  ParsedQueryAndContext boundToSecond =
+      second.bindParsedQuery(parsedOnFirst.parsedQuery());
+  EXPECT_NE(&boundToSecond.queryExecutionContext(),
+            &parsedOnFirst.queryExecutionContext());
+  PlannedQuery planOnSecond = second.planParsedQuery(boundToSecond);
+  EXPECT_EQ(&planOnSecond.queryExecutionContext(),
+            &boundToSecond.queryExecutionContext());
+  EXPECT_EQ(second.query(planOnSecond, ad_utility::MediaType::tsv), expected);
+}
