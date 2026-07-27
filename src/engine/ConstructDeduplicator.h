@@ -90,9 +90,11 @@ class ConstructDeduplicator {
   // Construct the deduplication key for the instantiation of `triple` at
   // `rowIdxInIdTable`: the `ValueId` at each of the three positions (subject,
   // predicate, object), taken from the constant's `dedupId_` or the variable's
-  // bound `ValueId` in the row. Every id is canonicalized into `dedupVocab_` so
-  // the key never references a foreign (block/template) `LocalVocab` that may
-  // outlive the deduplication filter.
+  // bound `ValueId` in the row. Every id is canonicalized (see `canonicalize`
+  // below): the id of a term that also exists in the index vocabulary becomes
+  // the corresponding `VocabIndex` id, all other `LocalVocab` ids are
+  // re-anchored into `dedupVocab_`, so the key never references a foreign
+  // (block/template) `LocalVocab` that may outlive the deduplication filter.
   DeduplicationKey makeFullTripleKey(const PreprocessedTriple& triple,
                                      size_t rowIdxInIdTable,
                                      const BatchEvaluationContext& ctx);
@@ -135,10 +137,15 @@ class ConstructDeduplicator {
       const DeduplicationMode& mode,
       std::optional<ad_utility::MemorySize> maxDedupVocabSize);
 
-  // Re-anchor a `LocalVocabIndex` into the `dedupVocab_`: this ensures that the
+  // Canonicalize `id` for use in a `DeduplicationKey` (keys are compared
+  // bitwise): a `LocalVocabIndex` id whose term also exists in the index
+  // vocabulary becomes the corresponding `VocabIndex` id, so that a term
+  // computed by an expression (e.g. via `STR`) and the same term coming from
+  // the data yield the same key. All other `LocalVocabIndex` ids are
+  // re-anchored into the `dedupVocab_`, which ensures that the
   // `DeduplicationKey`s stored in `TripleDeduplicator` stay valid even after
-  // the `LocalVocab` the id came from is freed. All other IDs are returned
-  // unchanged.
+  // the `LocalVocab` the id came from is freed. Ids of all other datatypes are
+  // returned unchanged.
   ValueId canonicalize(ValueId id);
 
   // Canonicalize every element of the `key` using `canonicalize` above.
