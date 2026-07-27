@@ -165,9 +165,10 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 // _____________________________________________________________________
 std::vector<ql::filesystem::path> Permutation::fileNames(
     Enum permutation, std::string_view onDiskBase) {
-  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
-                               ad_utility::utf8ToLower(toString(permutation)));
-  return {filename, absl::StrCat(filename, META_FILE_SUFFIX)};
+  ql::filesystem::path filename =
+      absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
+                   ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename.string(), META_FILE_SUFFIX)};
 }
 
 // _____________________________________________________________________

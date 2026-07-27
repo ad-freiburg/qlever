@@ -359,7 +359,7 @@ void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBasename,
   // Move the old index's build log with it (it was either built originally or
   // by a previous rebuild, so exactly one of the two variants exists).
   for (auto suffix : {INDEX_LOG_SUFFIX, REBUILD_INDEX_LOG_SUFFIX}) {
-    auto logFile = absl::StrCat(originalBasename, suffix);
+    fs::path logFile = absl::StrCat(originalBasename, suffix);
     if (fs::exists(logFile)) {
       moveToTargetDirForOldIndex(logFile);
     }
@@ -377,7 +377,7 @@ void Qlever::moveRebuiltIndexIntoPlace(const std::string& originalBasename,
   // Move the new index's rebuild log to its final place, next to the index it
   // describes (from where it will later travel into the directory of the old
   // index, when this index is in turn retired by a future rebuild).
-  auto rebuildLog = absl::StrCat(rebuildBase, REBUILD_INDEX_LOG_SUFFIX);
+  fs::path rebuildLog = absl::StrCat(rebuildBase, REBUILD_INDEX_LOG_SUFFIX);
   if (fs::exists(rebuildLog)) {
     fs::rename(rebuildLog, absl::StrCat(targetBasenameForNewIndex,
                                         REBUILD_INDEX_LOG_SUFFIX));
