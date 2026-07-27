@@ -10,7 +10,6 @@
 
 #include "global/Id.h"
 #include "index/ExportIds.h"
-#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -36,11 +35,10 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm>
 ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-    std::optional<std::pair<std::string, const char*>> optStringAndType) {
+    std::optional<std::pair<std::string, const char*>>&& optStringAndType) {
   if (!optStringAndType.has_value()) return std::nullopt;
   auto& [str, type] = optStringAndType.value();
-  return std::make_shared<const EvaluatedTermData>(
-      EvaluatedTermData{std::move(str), type});
+  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
 
 // _____________________________________________________________________________
@@ -102,11 +100,11 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
     };
-    std::optional<EvaluatedTerm> evaluated =
+    const std::optional<EvaluatedTerm> evaluated =
         id.getDatatype() == Datatype::LocalVocabIndex
             ? evaluate(id)
             : idCache.getOrCompute(id, evaluate);
-    for (size_t row : rows) {
+    for (const size_t row : rows) {
       result[row] = evaluated;
     }
   }

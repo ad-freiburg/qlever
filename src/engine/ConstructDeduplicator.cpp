@@ -60,8 +60,8 @@ DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
     const BatchEvaluationContext& ctx) {
   auto toDedupId = OverloadCallOperator{
       [](const PrecomputedConstant& c) {
-        AD_CORRECTNESS_CHECK(!c.dedupId_.isUndefined());
-        return c.dedupId_;
+        AD_CORRECTNESS_CHECK(c.dedupId_.has_value());
+        return c.dedupId_.value();
       },
       [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) {
         return ctx.idTable_[rowIdxInIdTable][v.columnIndex_];

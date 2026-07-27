@@ -38,10 +38,10 @@ struct BatchEvaluationResult {
   // set of evaluated columns may be sparse: some variables in the WHERE-clause
   // (in the `IdTable`) may not appear in the CONSTRUCT template and are thus
   // not evaluated.
-  ad_utility::HashMap<size_t, EvaluatedVariableValues> variablesByColumn_;
+  ad_utility::HashMap<ColumnIndex, EvaluatedVariableValues> variablesByColumn_;
   size_t numRows_ = 0;
 
-  const std::optional<EvaluatedTerm>& getVariable(size_t columnIndex,
+  const std::optional<EvaluatedTerm>& getVariable(ColumnIndex columnIndex,
                                                   size_t rowInBatch) const {
     return variablesByColumn_.at(columnIndex).at(rowInBatch);
   }
@@ -53,6 +53,11 @@ using IdCache =
 // Identifies a contiguous sub-range of rows of an `IdTable` that forms one
 // batch.
 struct BatchEvaluationContext {
+  // A non-owning view over the batch's `IdTable`. Stored by value: an
+  // `IdTableView` is a lightweight handle (like `string_view`), so copying it
+  // is cheap, and every caller already hands us a view
+  // (`TableWithVocab::idTable()` returns `const IdTableView<0>&`). The viewed
+  // table must outlive the context.
   IdTableView<0> idTable_;
   size_t firstRow_;
   size_t endRow_;  // exclusive
@@ -94,7 +99,7 @@ class ConstructBatchEvaluator {
 
   // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
   static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
-      std::optional<std::pair<std::string, const char*>> optStringAndType);
+      std::optional<std::pair<std::string, const char*>>&& optStringAndType);
 };
 
 }  // namespace qlever::constructExport
