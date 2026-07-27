@@ -76,16 +76,17 @@ struct CommonConfig {
 // `Qlever::moveRebuiltIndexIntoPlace`). All paths are relative to the working
 // directory of the engine.
 struct IndexRebuildConfig {
-  // The temporary directory in which the new index is built. After the new
-  // index has been moved to its final place, the directory is removed again.
-  ql::filesystem::path tmpDirForRebuild_;
+  // The basename under which the freshly rebuilt index is built in a temporary
+  // location. After the new index has been moved to its final place, the
+  // containing directory is removed again.
+  std::string basenameForRebuild_;
 
-  // The directory to which the files of the old index are moved when the new
-  // index is swapped in. That directory is then a complete index that a server
-  // can be started on.
-  ql::filesystem::path dirForOldIndex_;
+  // The basename to which the files of the old index are moved when the new
+  // index is swapped in. The resulting files form a complete index that a
+  // server can be started on in case something is wrong with the new index.
+  std::string basenameForOldIndex_;
 
-  // The directory and base name under which the new index is served after the
+  // The basename under which the new index is served after the
   // swap (and from which a later restart loads it). Typically the same location
   // as the existing index, so that the "current" index has a stable location.
   std::string basenameForNewIndex_;

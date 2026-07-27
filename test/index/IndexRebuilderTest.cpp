@@ -812,19 +812,23 @@ TEST(Qlever, moveRebuiltIndexIntoPlace) {
       rebuiltBase, "<a> <b> <c> . <d> <e> <f> .");
 
   qlever::IndexRebuildConfig config;
-  config.tmpDirForRebuild_ = tmpDir;
-  config.dirForOldIndex_ = baseFolder + "/previous";
+  config.basenameForRebuild_ = rebuiltBase;
+  // Use a base name for the old index that lives in a not-yet-existing
+  // directory AND uses a different file-name prefix than the original index.
+  // This exercises that the individual files are re-prefixed, not just moved.
+  config.basenameForOldIndex_ = baseFolder + "/previous/old-index";
   config.basenameForNewIndex_ = baseFolder + "/index";
 
   qlever::Qlever::IndexAndViews indexAndViews{
       std::move(rebuilt), MaterializedViewsManager{rebuiltBase}};
   qlever::Qlever::moveRebuiltIndexIntoPlace(oldBase, indexAndViews, config);
 
-  // The old index's files were moved into the directory for the old index.
-  EXPECT_TRUE(ql::filesystem::exists(config.dirForOldIndex_ /
-                                     ("index"s + CONFIGURATION_FILE)));
+  // The old index's files were moved to the base name for the old index, with
+  // their file-name prefix changed to match that base name.
   EXPECT_TRUE(
-      ql::filesystem::exists(config.dirForOldIndex_ / "index.index.pso"));
+      ql::filesystem::exists(config.basenameForOldIndex_ + CONFIGURATION_FILE));
+  EXPECT_TRUE(
+      ql::filesystem::exists(config.basenameForOldIndex_ + ".index.pso"));
 
   // The rebuilt index now lives at the final base name (the place of the old
   // index) and no longer in the temporary directory.
