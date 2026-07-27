@@ -6,8 +6,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
-#define QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
+#ifndef QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATOR_H
+#define QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATOR_H
 
 #include <functional>
 #include <optional>
@@ -159,4 +159,4 @@ class ConstructDeduplicator {
 
 }  // namespace qlever::constructExport
 
-#endif  // QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATIONFILTER_H
+#endif  // QLEVER_SRC_ENGINE_CONSTRUCTDEDUPLICATOR_H

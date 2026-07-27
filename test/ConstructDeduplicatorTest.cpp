@@ -183,6 +183,34 @@ TEST_F(ConstructDeduplicationFilter, constantPositionUsesDedupId) {
 }
 
 //______________________________________________________________________________
+// Regression test: a term that reaches the key via a `LocalVocab` (e.g.
+// produced by `STR`) but also exists in the index vocabulary must contribute
+// the index vocabulary's `VocabIndex` id, not a freshly reseated
+// `LocalVocabIndex` id. Otherwise it would never compare bitwise equal to the
+// same term coming from the data, and the duplicate would be missed.
+TEST_F(ConstructDeduplicationFilter, localVocabTermInIndexVocabUsesVocabIndex) {
+  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+
+  // `<s>` is part of the index built by the fixture, so it is in the index
+  // vocabulary.
+  LocalVocab vocab;
+  const Id localId =
+      Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(
+          LocalVocabEntry::fromIriref("<s>", qec_->getLocalVocabContext())));
+  ASSERT_EQ(localId.getDatatype(), Datatype::LocalVocabIndex);
+
+  const IdTable table = makeIdTable(localId);
+  auto ctx = makeFullBatch(table);
+
+  const DeduplicationKey key =
+      deduplicator.makeFullTripleKey(allSameVarTriple, 0, ctx);
+
+  const Id expected = ad_utility::testing::makeGetId(qec_->getIndex())("<s>");
+  ASSERT_EQ(expected.getDatatype(), Datatype::VocabIndex);
+  EXPECT_EQ(key, (DeduplicationKey{expected, expected, expected}));
+}
+
+//______________________________________________________________________________
 // Building a key for a blank-node position is a precondition violation:
 // blank-node triples bypass deduplication and never reach `makeFullTripleKey`.
 TEST_F(ConstructDeduplicationFilter, blankNodePositionInKeyFails) {
@@ -205,7 +233,7 @@ TEST_F(ConstructDeduplicationFilter, dedupAcrossBlocksGlobal) {
   auto tmpl = makeSingleTripleTemplate();
 
   {
-    LocalVocabRow block1 = makeLocalVocabRow("x");
+    const LocalVocabRow block1 = makeLocalVocabRow("x");
     auto c1 = block1.ctx();
     EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c1));  // first occurrence.
   }  // block-1 vocab freed before block-2 is seen.
