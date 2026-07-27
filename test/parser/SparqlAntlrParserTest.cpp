@@ -1433,6 +1433,18 @@ TEST(SparqlParser, Query) {
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 
+  // An `EXISTS` introduces its own scope: variables that occur only inside its
+  // body (here `?x`) must not trigger an "unbound variable" warning, neither in
+  // a `SELECT` alias nor in a `BIND`.
+  expectQuery("SELECT (EXISTS { ?a <p> ?x } AS ?e) { ?a <q> ?b }",
+              m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT * { ?a <q> ?b BIND(EXISTS { ?a <p> ?x } AS ?e) }",
+              m::WarningsOfParsedQuery({}));
+  // Variables used directly (i.e. outside an `EXISTS`) are still checked: here
+  // `?unbound` is reported, but the `EXISTS`-internal `?x` is not.
+  expectQuery("SELECT (EXISTS { ?a <p> ?x } || ?unbound AS ?e) { ?a <q> ?b }",
+              m::WarningsOfParsedQuery({"?unbound was used by SELECT"}));
+
   // Now test the same queries with exceptions instead of warnings.
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::throwOnUnboundVariables_>(
@@ -1443,6 +1455,13 @@ TEST(SparqlParser, Query) {
                    contains("?a was used in the expression of a BIND clause"));
   expectQueryFails("SELECT * { } ORDER BY ?s",
                    contains("?s was used by ORDER BY"));
+  // An `EXISTS`-internal variable must not throw either, but a variable used
+  // directly outside the `EXISTS` still does.
+  expectQuery("SELECT (EXISTS { ?a <p> ?x } AS ?e) { ?a <q> ?b }",
+              m::WarningsOfParsedQuery({}));
+  expectQueryFails(
+      "SELECT (EXISTS { ?a <p> ?x } || ?unbound AS ?e) { ?a <q> ?b }",
+      contains("?unbound was used by SELECT"));
 }
 
 // _____________________________________________________________________________
