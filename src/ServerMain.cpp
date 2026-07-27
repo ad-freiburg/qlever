@@ -232,6 +232,11 @@ int main(int argc, char** argv) {
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
       "token.");
+  add("service-max-redirects",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::serviceMaxRedirects_>(),
+      "The maximum number of redirects that will be done for query "
+      "federation.");
   po::variables_map optionsMap;
 
   try {
