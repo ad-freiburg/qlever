@@ -1,39 +1,38 @@
 # Image for the source-rewriting steps (currently only the rewriting of
 # `using enum`) of the `CPP17 libQLever` CI workflow.
 #
-# The base image `ghcr.io/joka921/llvm-enum-rewriter` (built from the Dockerfile
-# at https://github.com/joka921/llvm-project) contains a custom clang-21 build
-# together with the `backport-using-enum` tool in `/opt/llvm/bin`. We only rely
-# on those LLVM tools and install everything that is needed to configure QLever
-# (in particular to generate a `compile_commands.json`) on top of it. That way a
-# new QLever dependency only requires a change in this file and not a rebuild of
-# the base image.
-FROM ghcr.io/joka921/llvm-enum-rewriter:latest
+# The base image `ghcr.io/joka921/llvm-cpp-17-rewriter` (built from the
+# Dockerfile at
+# https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile,
+# which will be moved to a more stable location) contains a custom clang
+# build together with the `backport-using-enum` tool in `/opt/llvm/bin`. We only
+# rely on those LLVM tools and install everything that is needed to configure
+# QLever (in particular to generate a `compile_commands.json`) on top of it.
+# That way a new QLever dependency only requires a change in this file and not a
+# rebuild of the base image.
+FROM ghcr.io/joka921/llvm-cpp-17-rewriter:0.0.1
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV LC_CTYPE=C.UTF-8
 
-# The tools that are needed to add the additional apt repositories below.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates gnupg software-properties-common wget
-
-# QLever requires a CMake version that is newer than the one shipped with the
-# base image's Ubuntu release, so we use the official Kitware repository. The
-# Boost version in the Ubuntu repositories is too old, so we use the PPA that
-# provides the recent versions.
-RUN wget -O kitware-archive.sh https://apt.kitware.com/kitware-archive.sh \
-    && chmod +x kitware-archive.sh && ./kitware-archive.sh \
-    && rm kitware-archive.sh
-RUN add-apt-repository -y ppa:mhier/libboost-latest
-
 # All the dependencies of QLever. Keep this in sync with the `Dockerfile` in the
-# root directory and with `.github/workflows/install-dependencies-ubuntu`.
-RUN apt-get update && apt-get install -y \
+# root directory and with `.github/workflows/install-dependencies-ubuntu`. The
+# Ubuntu version of the base image is recent enough that all of them (in
+# particular CMake and Boost) can be installed directly from the standard
+# repositories.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     cmake \
     git \
+    libboost-container-dev \
+    libboost-dev \
+    libboost-filesystem-dev \
+    libboost-iostreams-dev \
+    libboost-program-options-dev \
+    libboost-url-dev \
     libicu-dev \
     libjemalloc-dev \
     libssl-dev \
@@ -49,12 +48,6 @@ RUN apt-get update && apt-get install -y \
     unzip \
     uuid-dev \
     uuid-runtime \
-    libboost1.83-dev \
-    libboost-container1.83-dev \
-    libboost-filesystem1.83-dev \
-    libboost-iostreams1.83-dev \
-    libboost-program-options1.83-dev \
-    libboost-url1.83-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # The base image sets these already, but we repeat them such that this image
