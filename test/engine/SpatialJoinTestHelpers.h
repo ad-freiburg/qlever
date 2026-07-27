@@ -530,6 +530,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    0,
                                    0,
                                    std::vector<ColumnIndex>{},
+                                   std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),
                                    std::nullopt,

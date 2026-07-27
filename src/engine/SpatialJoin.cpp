@@ -491,6 +491,17 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto bbLeft = getBoundingBoxColumnIndices(childLeft, joinVarLeft);
   auto bbRight = getBoundingBoxColumnIndices(childRight, joinVarRight);
 
+  // Filtering the left side is not possible through payload cols but there may
+  // be invisible columns, for example from a transitive path, that need to be
+  // taken into account. Also note that here `childLeft_` not `childLeft` is
+  // used, because `leftSelectedCols` and `rightSelectedCols` are applied after
+  // swapping tables back in case of a `WITHIN` join.
+  std::vector<ColumnIndex> leftSelectedCols;
+  for (auto [var, colInfo] :
+       copySortedByColumnIndex(childLeft_->getVariableColumns())) {
+    leftSelectedCols.push_back(colInfo.columnIndex_);
+  }
+
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
@@ -506,7 +517,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    std::move(resultRight),
                                    leftJoinCol,
                                    rightJoinCol,
-                                   rightSelectedCols,
+                                   std::move(leftSelectedCols),
+                                   std::move(rightSelectedCols),
                                    numColumns,
                                    getMaxDist(),
                                    getMaxResults(),
