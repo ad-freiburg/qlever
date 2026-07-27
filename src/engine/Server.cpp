@@ -634,6 +634,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
     requireValidAccessToken("delete-materialized-view");
     logCommand(cmd, "delete materialized view");
@@ -650,6 +653,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-deleted", name.value()}};
     response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
   }
 

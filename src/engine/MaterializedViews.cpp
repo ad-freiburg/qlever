@@ -480,21 +480,25 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 void MaterializedViewsManager::deleteView(const std::string& name) const {
   MaterializedView::throwIfInvalidName(name);
   auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
+
+  // Hold the lock for the whole check-unload-delete sequence below, so that a
+  // concurrent `loadView`/`getView` call for the same view can not reload it
+  // in between, and so that of two concurrent `deleteView` calls for the same
+  // view exactly one succeeds and the other throws.
+  auto lock = loadedViews_.wlock();
   if (!ql::filesystem::exists(absl::StrCat(filenameBase, VIEW_INFO_SUFFIX))) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name, "' does not exist."));
   }
-
-  // Hold the lock for the whole unload-and-delete sequence below, so that a
-  // concurrent `loadView`/`getView` call for the same view can not reload it
-  // in between.
-  auto lock = loadedViews_.wlock();
   if (auto it = lock->views_.find(name); it != lock->views_.end()) {
     lock->queryPatternCache_.removeView(it->second);
     lock->views_.erase(it);
   }
 
-  // Delete all files belonging to the view from disk.
+  // Delete all files belonging to the view from disk. NOTE: This is safe even
+  // if a running query still scans the view: the files are unlinked, but live
+  // on until the last open file handle is closed, and the query's shared
+  // pointer keeps the `MaterializedView` (and its open file) alive.
   for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
     ql::error_code ec;
     ql::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
