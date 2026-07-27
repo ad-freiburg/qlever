@@ -571,17 +571,20 @@ include_directories(src)
 # `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
 # never updated. This is useful during development to avoid a relinking of the binaries for
 # every compilation.
+# The first output which is never created is necessary s.t. the command is never cached and
+# always rerun. It is omitted when `DONT_UPDATE_COMPILATION_INFO` is set, so the command is
+# cached and the compilation info is not regenerated on every build.
+set(COMPILATION_INFO_EXTRA_OUTPUT "")
 if (NOT DONT_UPDATE_COMPILATION_INFO)
-    # The first output which is never created is necessary s.t. the command is never cached and
-    # always rerun.
-    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
-            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
-else ()
-    add_custom_command(OUTPUT
-            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+    set(COMPILATION_INFO_EXTRA_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp")
 endif ()
+add_custom_command(OUTPUT ${COMPILATION_INFO_EXTRA_OUTPUT}
+        "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+        COMMAND cmake
+        -DCXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}
+        -DCXX_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION}
+        -DCXX_STANDARD=${CMAKE_CXX_STANDARD}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)

@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "./util/FileTestHelpers.h"
+#include "CompilationInfo.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -610,6 +611,23 @@ TEST(ServerTest, metricsEndpoint) {
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
     expectRequiresAccessToken(server);
+  }
+  {
+    // `copyVersionInfo()` sets the values. In production, this called by
+    // `qlever-server` or `qlever-index`.
+    qlever::version::copyVersionInfo();
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    // `qlever_build_info` is always present with a value of 1 and carries the
+    // build metadata in its labels.
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
+                  testing::HasSubstr(absl::StrCat(
+                      "qlever_build_info{compile_time=\"",
+                      qlever::version::TimeOfCompilationUnix, "\",compiler=\"",
+                      qlever::version::Compiler, "\",compiler_version=\"",
+                      qlever::version::CompilerVersion, "\",cxx_standard=\"",
+                      qlever::version::CxxStandard, "\",git_hash=\"",
+                      qlever::version::GitShortHash, "\",version=\"",
+                      qlever::version::ProjectVersion, "\"} 1")));
   }
   Label update{"operation", "update"};
   Label query{"operation", "query"};
