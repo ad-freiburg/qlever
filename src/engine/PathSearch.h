@@ -14,6 +14,7 @@
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/VectorWithMemoryLimit.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
@@ -32,7 +33,7 @@ struct Edge {
   size_t edgeRow_;
 };
 
-using EdgesLimited = std::vector<Edge, ad_utility::AllocatorWithLimit<Edge>>;
+using EdgesLimited = ad_utility::VectorWithMemoryLimit<Edge>;
 
 struct Path {
   EdgesLimited edges_;
@@ -46,9 +47,14 @@ struct Path {
   void pop_back() { edges_.pop_back(); }
 
   const Id& end() { return edges_.back().end_; }
+
+  // `Path` is not copyable because its `edges_` are stored in a
+  // `VectorWithMemoryLimit`, which is not copyable (see there). Explicit copies
+  // can be made via `clone()`.
+  [[nodiscard]] Path clone() const { return Path{edges_.clone()}; }
 };
 
-using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
+using PathsLimited = ad_utility::VectorWithMemoryLimit<Path>;
 
 /**
  * @class BinSearchWrapper
