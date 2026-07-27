@@ -24,8 +24,11 @@ namespace qlever::util {
 // `onDiskBase` whose file name starts with the file name of `onDiskBase`
 // immediately followed by `suffix`. For example, for `onDiskBase = "dir/wiki"`
 // and `suffix = ".vocabulary"`, all files matching `dir/wiki.vocabulary*` are
-// returned. This is used to enumerate the on-disk files of an index whose exact
-// set of names is not known in advance (the vocabulary files and the
+// returned. The returned paths have the same directory part as `onDiskBase`
+// (in particular, for a base name without a directory component, the bare file
+// names are returned), so that each returned path textually starts with
+// `onDiskBase`. This is used to enumerate the on-disk files of an index whose
+// exact set of names is not known in advance (the vocabulary files and the
 // materialized-view files).
 std::vector<ql::filesystem::path> filesWithBaseNameAndSuffix(
     const ql::filesystem::path& onDiskBase, std::string_view suffix);

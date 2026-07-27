@@ -19,6 +19,7 @@
 #include "global/FileSuffixConstants.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
+#include "util/FilesystemHelpers.h"
 
 using namespace qlever;
 using namespace testing;
@@ -536,6 +537,49 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
   EXPECT_TRUE(ql::filesystem::exists(newBase + ".index.pso"));
   EXPECT_FALSE(ql::filesystem::exists(newBase + REBUILD_INDEX_LOG_SUFFIX));
   EXPECT_FALSE(setup.indexAndViews_->index_.deltaTriplesManager().persists());
+}
+
+// _____________________________________________________________________________
+// The standard production layout: the index is served with a BARE base name
+// (no directory component) from the current working directory, which is how
+// `qlever-control` starts the server. The file enumeration must then return
+// bare file names as well, otherwise the base-name prefix substitution of the
+// move fails on the globbed files (vocabulary, views).
+TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
+  std::string baseFolder = gtestCurrentTestName();
+  auto oldCwd = ql::filesystem::current_path();
+  ql::filesystem::create_directory(baseFolder);
+  ql::filesystem::current_path(baseFolder);
+  // Restore the working directory before `baseFolder` is removed (cleanups run
+  // in reverse order of declaration).
+  absl::Cleanup removeFiles{
+      [&baseFolder, &oldCwd] { ql::filesystem::remove_all(baseFolder); }};
+  absl::Cleanup restoreCwd{[&oldCwd] { ql::filesystem::current_path(oldCwd); }};
+
+  ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
+  ql::filesystem::create_directory("rebuild.tmp");
+  Index rebuilt = ad_utility::testing::makeTestIndex(
+      "rebuild.tmp/index", "<a> <b> <c> . <d> <e> <f> .");
+  auto indexAndViews = std::make_shared<qlever::Qlever::IndexAndViews>(
+      std::move(rebuilt), MaterializedViewsManager{"rebuild.tmp/index"});
+
+  qlever::IndexRebuildConfig config{"index", "rebuild.tmp/index",
+                                    "previous/index", "index"};
+  qlever::Qlever::moveRebuiltIndexIntoPlace(*indexAndViews, config);
+
+  // The old index (including its vocabulary, which is enumerated via the glob)
+  // was moved away completely, and the new index is installed in its place.
+  EXPECT_TRUE(ql::filesystem::exists(std::string{"previous/index"} +
+                                     std::string{CONFIGURATION_FILE}));
+  EXPECT_FALSE(
+      qlever::util::filesWithBaseNameAndSuffix("previous/index", VOCAB_SUFFIX)
+          .empty());
+  EXPECT_TRUE(ql::filesystem::exists(std::string{"index"} +
+                                     std::string{CONFIGURATION_FILE}));
+  EXPECT_FALSE(
+      qlever::util::filesWithBaseNameAndSuffix("index", VOCAB_SUFFIX).empty());
+  EXPECT_TRUE(IndexImpl::allIndexFiles("rebuild.tmp/index").empty());
+  EXPECT_EQ(indexAndViews->index_.getOnDiskBase(), "index");
 }
 
 // _____________________________________________________________________________

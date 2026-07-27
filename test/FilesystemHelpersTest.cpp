@@ -213,11 +213,12 @@ TEST(FilesWithBaseNameAndSuffix, baseNameWithoutDirectoryUsesCwd) {
   touch("other.vocabulary");  // must NOT match (different base name)
 
   // A base name without a directory component, so `parent_path()` is empty.
+  // The returned paths must be bare file names (same form as the base name),
+  // so that they textually start with the base name.
   auto result = filesWithBaseNameAndSuffix("index", ".vocabulary");
-  auto cwd = fs::current_path();
-  EXPECT_THAT(result,
-              ::testing::UnorderedElementsAre(cwd / "index.vocabulary",
-                                              cwd / "index.vocabulary.words"));
+  EXPECT_THAT(result, ::testing::UnorderedElementsAre(
+                          fs::path{"index.vocabulary"},
+                          fs::path{"index.vocabulary.words"}));
 }
 
 // _____________________________________________________________________________
