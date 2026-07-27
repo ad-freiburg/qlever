@@ -38,12 +38,12 @@ std::vector<fs::path> filesWithBaseNameAndSuffix(const fs::path& onDiskBase,
   // that it also makes sure the differences between `boost::filesystem` and
   // `std::filesystem` disappear, since the boost variant returns a mutable
   // reference that should not be tampered with.
+  namespace v = ql::views;
   return ad_utility::OwningView{
              ::ranges::to_vector(ql::directoryRange(directory))} |
-         ql::views::filter(
-             [](const auto& entry) { return entry.is_regular_file(); }) |
-         ql::views::transform([](const auto& entry) { return entry.path(); }) |
-         ql::views::filter([&prefix](const auto& path) {
+         v::filter([](const auto& entry) { return entry.is_regular_file(); }) |
+         v::transform([](const auto& entry) { return entry.path(); }) |
+         v::filter([&prefix](const auto& path) {
            return ql::starts_with(path.filename().string(), prefix);
          }) |
          ::ranges::to_vector;
