@@ -359,6 +359,13 @@ function(qlever_target_link_libraries target)
     if (NOT ${target} STREQUAL "memorySize")
         target_link_libraries(${target} PUBLIC memorySize)
     endif ()
+
+    # If this is a shared library, then require that all of its symbols can
+    # already be resolved when it is linked, see `QLEVER_NO_UNDEFINED_SYMBOLS`.
+    if (QLEVER_NO_UNDEFINED_SYMBOLS)
+        target_link_options(${target} PRIVATE
+                $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>:-Wl,--no-undefined>)
+    endif ()
 endfunction()
 
 
@@ -391,6 +398,30 @@ endif ()
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+
+# Link QLever's shared libraries with `--no-undefined`, such that a library that
+# is missing one of its dependencies fails to link right away. Without this, such
+# a library links successfully and the missing dependency only shows up (much
+# later) when an executable is linked against it, and only with those linkers
+# that reject undefined symbols from shared libraries. In particular `mold`,
+# which we use in the CI, silently accepts them, so without this check a missing
+# dependency can pass the CI and still break the build for everyone who uses the
+# default linker.
+# The default is `ON`, except in the following cases:
+# - The Apple linker doesn't know `--no-undefined` (its default behavior already
+#   is to report undefined symbols).
+# - Emscripten resolves symbols differently and doesn't support this.
+# - The sanitizer runtimes are linked into the executable and not into the
+#   individual shared libraries, so instrumented shared libraries legitimately
+#   have undefined `__asan_*`, `__ubsan_*`, or `__tsan_*` symbols.
+if (BUILD_SHARED_LIBS AND NOT APPLE AND NOT EMSCRIPTEN AND
+        NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")
+    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT ON)
+else ()
+    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT OFF)
+endif ()
+option(QLEVER_NO_UNDEFINED_SYMBOLS "Require that all symbols of a shared library can be resolved when it is linked" ${QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT})
+message(STATUS "QLEVER_NO_UNDEFINED_SYMBOLS is ${QLEVER_NO_UNDEFINED_SYMBOLS}")
 
 
 if (${PERFTOOLS_PROFILER})
