@@ -7,10 +7,13 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
@@ -20,6 +23,7 @@
 #include "util/HashSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
@@ -101,6 +105,22 @@ class SplitVocabulary {
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
+  // Implementation of `scanAll`, written separately because in C++17, lambdas
+  // can't have explicit template parameters.
+  template <size_t... Is>
+  auto scanAllImpl(std::index_sequence<Is...>) const {
+    return ::ranges::views::concat(
+        (ad_utility::OwningView{std::visit(
+             [](const auto& vocab) {
+               return VocabularyScanRange{vocab.scanAll()};
+             },
+             underlying_[Is])} |
+         ql::views::transform([](const IndexAndWord& indexAndWord) {
+           return IndexAndWord{addMarker(indexAndWord.index_, Is),
+                               indexAndWord.word_};
+         }))...);
+  }
+
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
   // that contains the marker and vocabIndex. The result is guaranteed to be
@@ -164,6 +184,12 @@ class SplitVocabulary {
           return vocab[unmarkedIdx];
         },
         underlying_[marker]);
+  }
+
+  // Iterate over all words of all underlying vocabularies, one after the other,
+  // together with their global (marker-encoded) index.
+  auto scanAll() const {
+    return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
   //____________________________________________________________________________

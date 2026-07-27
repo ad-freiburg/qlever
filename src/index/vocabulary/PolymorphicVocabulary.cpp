@@ -39,6 +39,13 @@ std::string PolymorphicVocabulary::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
+VocabularyScanRange PolymorphicVocabulary::scanAll() const {
+  return std::visit(
+      [](const auto& vocab) { return VocabularyScanRange{vocab.scanAll()}; },
+      vocab_);
+}
+
+// _____________________________________________________________________________
 VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
     ql::span<const size_t> indices) const {
   return std::visit(

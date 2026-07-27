@@ -31,6 +31,9 @@ class UnicodeVocabulary {
 
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
 
+  // Delegate to `scanAll` of the underlying vocabulary.
+  auto scanAll() const { return _underlyingVocabulary.scanAll(); }
+
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return _underlyingVocabulary.lookupBatch(indices);
