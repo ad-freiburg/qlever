@@ -552,4 +552,16 @@ TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
   // files apart, so such a configuration is valid.
   EXPECT_NO_THROW(
       IndexRebuildConfig("index", "tmp/index", "indexdata", "index"));
+
+  // But a base name that is another base name followed by a '.' DOES collide:
+  // `index.view` sits inside the `index.view.*` glob that enumerates `index`'s
+  // materialized views, so retiring the old index to `index.view` would sweep
+  // up the current index's view files.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "tmp/index", "index.view", "index"),
+      ::testing::HasSubstr("differ from the currently served index"));
+  // The same holds regardless of which of the two base names is the longer one.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexRebuildConfig("index", "index.view", "previous/old", "newidx"),
+      ::testing::HasSubstr("currently served index and the freshly rebuilt"));
 }

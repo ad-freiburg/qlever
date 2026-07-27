@@ -341,14 +341,32 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
 }
 
 namespace {
-// Two base names "collide" if, after purely lexical normalization, they denote
-// the same on-disk prefix. It is not problematic if one if a prefix of another,
-// since the suffixes that are attached to the basenames all start with a ".",
-// unless you start using suffixes like ".view" that are used by qlever
-// internally.
+// Two base names "collide" if the prefix-based file enumerators
+// (`allIndexFiles`, `viewFilesOnDisk`, `filesWithBaseNameAndSuffix`) could
+// confuse the files belonging to one with the files belonging to the other.
+// Everything QLever appends to a base name starts with a '.' (`.index.pso`,
+// `.meta`, `.vocabulary`, `.internal`, `.view.<name>`, the log suffixes, ...),
+// so a merely shared textual prefix is harmless: base names `foo` and `foobar`
+// never clash, because `foobar.index...` does not fall inside the `foo.` glob.
+// The two dangerous cases are that the (lexically normalized) base names are
+// equal, or that one is the other followed by a '.', e.g. `foo` and `foo.view`:
+// there `foo.view`'s own index files sit inside the `foo.view.*` glob that
+// enumerates `foo`'s materialized views, so moving/replacing one base name
+// would sweep up the other's files.
+//
+// Both cases collapse into a single check once we append the separating '.' to
+// each normalized name: they collide iff one dotted form is a prefix of the
+// other. Equal names give identical dotted forms; `foo` vs `foo.view` is caught
+// because `foo.` is a prefix of `foo.view.`; and `foo` vs `foobar` is not,
+// because `foo.` is not a prefix of `foobar.`.
 bool baseNamesCollide(const std::string& a, const std::string& b) {
-  return ql::filesystem::path{a}.lexically_normal() ==
-         ql::filesystem::path{b}.lexically_normal();
+  auto normalizedWithSeparator = [](const std::string& s) {
+    return absl::StrCat(ql::filesystem::path{s}.lexically_normal().string(),
+                        ".");
+  };
+  std::string na = normalizedWithSeparator(a);
+  std::string nb = normalizedWithSeparator(b);
+  return ql::starts_with(na, nb) || ql::starts_with(nb, na);
 }
 }  // namespace
 
