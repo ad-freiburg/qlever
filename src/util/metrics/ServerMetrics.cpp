@@ -85,14 +85,15 @@ ServerMetrics::ServerMetrics(
   // Record the static build information once. The value is always 1; all data
   // is carried in the labels (the idiomatic Prometheus "info metric" pattern).
   buildInfoMetric_->Record(
-      1, {{"compiler", *qlever::version::compilerWithoutLinking.rlock()},
-          {"compiler_version",
-           *qlever::version::compilerVersionWithoutLinking.rlock()},
-          {"version", *qlever::version::projectVersionWithoutLinking.rlock()},
-          {"git_hash", *qlever::version::gitShortHashWithoutLinking.rlock()},
-          {"compile_time",
-           *qlever::version::timeOfCompilationUnixWithoutLinking.rlock()},
-          {"cxx_standard", *qlever::version::cxxStandardWithoutLinking.rlock()}});
+      1,
+      {{"compiler", *qlever::version::compilerWithoutLinking.rlock()},
+       {"compiler_version",
+        *qlever::version::compilerVersionWithoutLinking.rlock()},
+       {"version", *qlever::version::projectVersionWithoutLinking.rlock()},
+       {"git_hash", *qlever::version::gitShortHashWithoutLinking.rlock()},
+       {"compile_time",
+        *qlever::version::timeOfCompilationUnixWithoutLinking.rlock()},
+       {"cxx_standard", *qlever::version::cxxStandardWithoutLinking.rlock()}});
   if (maxMem.has_value()) {
     memoryQueryTotal_->Record(maxMem.value().getBytes());
   }
