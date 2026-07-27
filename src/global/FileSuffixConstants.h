@@ -43,11 +43,13 @@ constexpr inline std::string_view ALLOCATED_GRAPHS_SUFFIX =
     ".allocated-graphs-state";
 
 // The build log of an index. QLever does not write this directly, but
-// `qlever-control` creates this file to persist QLever's stdout. To preserve
-// that is has to move alongside the index.
+// `qlever-control` creates this file to persist QLever's `stdout` during the
+// index building. If it is present, we still move it alongside the index that
+// was built.
 constexpr inline std::string_view INDEX_LOG_SUFFIX = ".index-log.txt";
 
-// The build log of an index rebuild, in the same directory as the index.
+// The build log of an index rebuild, it is created whenever a rebuild is
+// triggered, in the same directory as the index.
 constexpr inline std::string_view REBUILD_INDEX_LOG_SUFFIX =
     ".rebuild-index-log.txt";
 
