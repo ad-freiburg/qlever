@@ -245,6 +245,37 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 }
 
 // _____________________________________________________________________________
+// Test that `swapIndexAndViews` refuses to swap the index snapshot while the
+// named result cache is not empty (its entries are only valid for one specific
+// snapshot). Uses `FRIEND_TEST` to reach the otherwise private method.
+TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
+  std::string filename = "libQleverSwapIndexAndViews.ttl";
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o>.";
+  }
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = "LibQlever.swapIndexAndViews";
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  Qlever qlever{EngineConfig{c}};
+
+  // With an empty named result cache, swapping (here: with the current
+  // snapshot) is allowed.
+  EXPECT_NO_THROW(qlever.swapIndexAndViews(qlever.indexAndViewsSnapshot()));
+
+  // Pin a named result, so the named result cache is no longer empty.
+  qlever.queryAndPinResultWithName("swapPin",
+                                   "SELECT ?s ?o WHERE { ?s <p> ?o }");
+
+  // Now swapping the index snapshot must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.swapIndexAndViews(qlever.indexAndViewsSnapshot()),
+      HasSubstr("named result cache is not empty"));
+}
+
+// _____________________________________________________________________________
 TEST(LibQlever, disableCaching) {
   std::string filename = "libQleverDisableCaching.ttl";
   {
