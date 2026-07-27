@@ -56,17 +56,19 @@ class CountingMemoryResource : public ql::pmr::memory_resource {
 // _____________________________________________________________________________
 // Test the compression utility and its inverse in isolation, for several
 // buffer sizes (including the empty buffer).
-TEST(NamedCachedQueryBlobManager, compressAndDecompressWithTrailingSizeInfo) {
+TEST(NamedCachedQueryBlobManager, compressAndDecompressBlob) {
   for (const std::string& original :
        {std::string{}, std::string{"x"}, std::string{"a short blob"},
         std::string(100'000, 'q')}) {
-    std::vector<char> compressed = Manager::compressBlobAndAddTrailingSizeInfo(
-        ql::span<const char>{original});
-    // The trailing `uint64_t` with the uncompressed size is always present.
-    ASSERT_GE(compressed.size(), sizeof(uint64_t));
+    std::vector<char> compressed =
+        Manager::compressBlob(ql::span<const char>{original});
+    // The size of the uncompressed data is stored in the ZSTD frame header, so
+    // the compressed blob is a plain ZSTD frame without any extra bookkeeping.
+    EXPECT_EQ(
+        ZstdWrapper::getUncompressedSize(compressed.data(), compressed.size()),
+        original.size());
 
-    auto roundTripped =
-        Manager::decompressBlobWithTrailingSizeInfo(compressed, {});
+    auto roundTripped = Manager::decompressBlob(compressed, {});
     EXPECT_THAT(roundTripped, ::testing::ElementsAreArray(original));
   }
 }
@@ -121,14 +123,60 @@ TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsWrongVersion) {
 }
 
 // _____________________________________________________________________________
-// Test that a (nonempty) blob that is too short to even contain the trailing
-// `uint64_t` size info is rejected.
-TEST(NamedCachedQueryBlobManager,
-     decompressBlobWithTrailingSizeInfoRejectsTooShortInput) {
+// Test that a blob with the correct magic bytes but a truncated header is
+// rejected with our own message, instead of with a cryptic message from the
+// serializer.
+TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsShortInput) {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  writer << std::array<char, 4>{'Q', 'L', 'V', 'R'};
+  auto data = std::move(writer).data();
+
+  ad_utility::serialization::ByteBufferReadSerializerT<true,
+                                                       ql::span<const char>>
+      reader{ql::span<const char>{data}};
+  AD_EXPECT_THROW_WITH_MESSAGE(Manager::skipAndVerifyBlobHeader(reader),
+                               HasSubstr("was not written by"));
+}
+
+// _____________________________________________________________________________
+// Test that input which is not a ZSTD frame at all is rejected with our own
+// message, rather than with a cryptic ZSTD error, and that in particular no
+// attempt is made to allocate a buffer of an arbitrary size read from garbage.
+TEST(NamedCachedQueryBlobManager, decompressBlobRejectsNonZstdInput) {
+  // Input that is too short to even hold a ZSTD frame header.
   std::vector<char> tooShort(3, 'x');
-  ASSERT_LT(tooShort.size(), sizeof(uint64_t));
-  EXPECT_THROW(Manager::decompressBlobWithTrailingSizeInfo(tooShort, {}),
-               ad_utility::Exception);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(Manager::decompressBlob(tooShort, {}),
+                                        HasSubstr("was not written by"),
+                                        ad_utility::Exception);
+
+  // Longer input that does not start with the ZSTD magic number. Note that
+  // interpreting any eight of its bytes as the size of the uncompressed data
+  // would yield about 18 exabytes.
+  std::vector<char> garbage(1024, '\xFF');
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(Manager::decompressBlob(garbage, {}),
+                                        HasSubstr("was not written by"),
+                                        ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+// Test that a truncated blob (the typical result of an incomplete download) is
+// rejected with our own message, rather than with a cryptic ZSTD error. Note
+// that the frame header of such a blob is intact, so the size of the
+// uncompressed data can be read, and the failure only occurs during the actual
+// decompression.
+TEST(NamedCachedQueryBlobManager, decompressBlobRejectsTruncatedInput) {
+  const std::string original(10'000, 'q');
+  std::vector<char> compressed =
+      Manager::compressBlob(ql::span<const char>{original});
+  ASSERT_GT(compressed.size(), 1u);
+  EXPECT_EQ(ZstdWrapper::getUncompressedSize(compressed.data(),
+                                             compressed.size() - 1),
+            original.size());
+
+  compressed.pop_back();
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(Manager::decompressBlob(compressed, {}),
+                                        HasSubstr("was not written by"),
+                                        ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -254,16 +302,34 @@ TEST(NamedCachedQueryBlobManager, blobUsesProvidedAllocator) {
 // _____________________________________________________________________________
 // Test that loading a blob that does not carry a valid header is rejected.
 TEST(NamedCachedQueryBlobManager, deserializeRejectsInvalidBlob) {
-  // A validly ZSTD-compressed blob (with a correct trailing uncompressed size)
-  // whose decompressed content does not start with the expected magic header.
+  // A validly ZSTD-compressed blob whose decompressed content does not start
+  // with the expected magic header.
   std::vector<char> bogus(64, 'X');
-  std::vector<char> compressedBlob =
-      Manager::compressBlobAndAddTrailingSizeInfo(bogus);
+  std::vector<char> compressedBlob = Manager::compressBlob(bogus);
 
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   AD_EXPECT_THROW_WITH_MESSAGE(
       target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
       HasSubstr("was not written by"));
+}
+
+// _____________________________________________________________________________
+// Test that a blob with a valid header, but with contents that cannot be read,
+// is rejected with our own message, rather than with a cryptic message from
+// deep inside the deserialization.
+TEST(NamedCachedQueryBlobManager, deserializeRejectsBlobWithInvalidContents) {
+  // A blob that consists of nothing but a valid header, so that reading the
+  // index metadata JSON that is expected to follow it fails.
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  Manager::writeBlobHeader(writer);
+  auto headerOnly = std::move(writer).data();
+  std::vector<char> compressedBlob =
+      Manager::compressBlob(ql::span<const char>{headerOnly});
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
+      HasSubstr("Error while reading the contents of a blob"));
 }
 
 // _____________________________________________________________________________

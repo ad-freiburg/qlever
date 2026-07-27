@@ -9,7 +9,9 @@
 
 #include "libqlever/NamedCachedQueryBlobManager.h"
 
-#include <cstring>
+#include <absl/strings/str_cat.h>
+
+#include <string_view>
 
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
@@ -25,6 +27,40 @@ namespace {
 constexpr std::array<char, 8> blobMagicBytes{'Q', 'L', 'V', 'R',
                                              'B', 'L', 'O', 'B'};
 constexpr uint16_t blobFormatVersion = 1;
+
+// The number of bytes written by `writeBlobHeader`. Note that no alignment
+// padding is inserted between the two members, because `blobMagicBytes` has an
+// alignment of one and its size is a multiple of the alignment of
+// `blobFormatVersion`.
+constexpr size_t blobHeaderSize =
+    sizeof(blobMagicBytes) + sizeof(blobFormatVersion);
+static_assert(sizeof(blobMagicBytes) % alignof(uint16_t) == 0);
+
+// The message that is reported for any input that is not a blob written by
+// `NamedCachedQueryBlobManager::serialize`.
+constexpr std::string_view blobNotReadableMessage =
+    "The given blob was not written by "
+    "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`, or is corrupted";
+
+// The message that is reported when the contents of a blob cannot be read, even
+// though its header is valid.
+constexpr std::string_view blobContentsNotReadableMessage =
+    "Error while reading the contents of a blob written by "
+    "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`; the blob is "
+    "probably corrupted";
+
+// Run `function` and, if it throws, rethrow with `message` prepended. That way,
+// the rather cryptic low-level error messages (in particular those of ZSTD)
+// never reach the user unadorned.
+template <typename Function>
+decltype(auto) rethrowWithContext(std::string_view message,
+                                  const Function& function) {
+  try {
+    return function();
+  } catch (const std::exception& e) {
+    AD_THROW(absl::StrCat(message, ". Details: ", e.what()));
+  }
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -38,12 +74,16 @@ void NamedCachedQueryBlobManager::writeBlobHeader(
 void NamedCachedQueryBlobManager::skipAndVerifyBlobHeader(
     ad_utility::serialization::ByteBufferReadSerializerT<
         true, ql::span<const char>>& serializer) {
+  // Explicitly check that the header is complete, so that a truncated blob is
+  // reported with the message below instead of with the rather cryptic message
+  // of the serializer.
+  AD_CONTRACT_CHECK(
+      serializer.data().size() - serializer.getCurrentPosition() >=
+          blobHeaderSize,
+      blobNotReadableMessage);
   std::decay_t<decltype(blobMagicBytes)> magicBytes{};
   serializer >> magicBytes;
-  AD_CONTRACT_CHECK(
-      magicBytes == blobMagicBytes,
-      "The given blob was not written by "
-      "`Qlever::serializeVocabAndNamedCacheToCompressedBlob`, or is corrupted");
+  AD_CONTRACT_CHECK(magicBytes == blobMagicBytes, blobNotReadableMessage);
   uint16_t version;
   serializer >> version;
   AD_CONTRACT_CHECK(
@@ -54,48 +94,44 @@ void NamedCachedQueryBlobManager::skipAndVerifyBlobHeader(
 }
 
 // _____________________________________________________________________________
-std::vector<char>
-NamedCachedQueryBlobManager::compressBlobAndAddTrailingSizeInfo(
+std::vector<char> NamedCachedQueryBlobManager::compressBlob(
     ql::span<const char> uncompressedBlob) {
-  std::vector<char> compressed =
-      ZstdWrapper::compress(uncompressedBlob.data(), uncompressedBlob.size());
-  uint64_t uncompressedSize = uncompressedBlob.size();
-  auto sizeBytes = reinterpret_cast<const char*>(&uncompressedSize);
-  compressed.insert(compressed.end(), sizeBytes,
-                    sizeBytes + sizeof(uncompressedSize));
-  return compressed;
+  return ZstdWrapper::compress(uncompressedBlob.data(),
+                               uncompressedBlob.size());
 }
 
 // _____________________________________________________________________________
 std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>
-NamedCachedQueryBlobManager::decompressBlobWithTrailingSizeInfo(
+NamedCachedQueryBlobManager::decompressBlob(
     ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
-  // The size of the uncompressed buffer is stored as a trailing `uint64_t` at
-  // the very end of the whole compressed block (see
-  // `compressBlobAndAddTrailingSizeInfo`). Read it off first, then strip it
-  // from the span that is passed to the decompression.
-  uint64_t originalUncompressedSize;
-  AD_CONTRACT_CHECK(compressedBlob.size() >= sizeof(originalUncompressedSize));
-  std::memcpy(&originalUncompressedSize,
-              compressedBlob.data() + compressedBlob.size() -
-                  sizeof(originalUncompressedSize),
-              sizeof(originalUncompressedSize));
-  compressedBlob = compressedBlob.subspan(
-      0, compressedBlob.size() - sizeof(originalUncompressedSize));
+  // Read the size of the uncompressed data from the ZSTD frame header (which
+  // always stores it, because `compressBlob` uses the one-shot
+  // `ZSTD_compress`). This also validates that `compressedBlob` starts with a
+  // ZSTD frame at all, so that arbitrary garbage is rejected right here,
+  // instead of being misinterpreted as an (arbitrarily large) size for the
+  // allocation below.
+  size_t uncompressedSize =
+      rethrowWithContext(blobNotReadableMessage, [&compressedBlob]() {
+        return ZstdWrapper::getUncompressedSize(compressedBlob.data(),
+                                                compressedBlob.size());
+      });
 
   // Decompress into a buffer that is 1. allocated via the caller-provided
   // `allocator`, 2. aligned to the maximal possible alignment (required for the
   // zero-copy deserialization), and 3. not needlessly zero-initialized before
   // the decompression overwrites it (see `BlobAllocator`).
   std::vector<char, BlobAllocator> uncompressed(
-      originalUncompressedSize,
+      uncompressedSize,
       BlobAllocator{ad_utility::AlignedAllocator<
           char, ql::pmr::polymorphic_allocator<char>>{allocator}});
-  auto actualUncompressedSize = ZstdWrapper::decompressToBuffer(
-      compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
-      uncompressed.size());
-  AD_CORRECTNESS_CHECK(actualUncompressedSize == originalUncompressedSize);
+  auto actualUncompressedSize = rethrowWithContext(
+      blobNotReadableMessage, [&compressedBlob, &uncompressed]() {
+        return ZstdWrapper::decompressToBuffer(
+            compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
+            uncompressed.size());
+      });
+  AD_CORRECTNESS_CHECK(actualUncompressedSize == uncompressedSize);
   return uncompressed;
 }
 
@@ -119,7 +155,7 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   qlever.namedResultCache_.writeToSerializer(serializer);
   auto uncompressed = std::move(serializer).data();
 
-  return compressBlobAndAddTrailingSizeInfo(uncompressed);
+  return compressBlob(uncompressed);
 }
 
 // _____________________________________________________________________________
@@ -135,7 +171,7 @@ void NamedCachedQueryBlobManager::deserialize(
   // for the lifetime of this manager because the vocabulary and named result
   // cache entries loaded below are zero-copy views directly into it.
   deserializedBlobLifetimeExtender_.emplace(
-      decompressBlobWithTrailingSizeInfo(compressedBlob, allocator));
+      decompressBlob(compressedBlob, allocator));
 
   // Use a serializer that only borrows a view of
   // `deserializedBlobLifetimeExtender_`, rather than one that owns/moves it, so
@@ -149,15 +185,23 @@ void NamedCachedQueryBlobManager::deserialize(
 
   auto indexAndViews = qlever.indexAndViewsSnapshot();
   auto& indexImpl = indexAndViews->index_.getImpl();
-  // Read and apply the index metadata JSON before loading the vocabulary, so
-  // that the vocabulary is set up with the correct configuration (locale,
-  // comparator, etc.).
-  std::string metadataJson;
-  reader >> metadataJson;
-  indexImpl.applyConfiguration(nlohmann::json::parse(metadataJson));
-  indexImpl.loadVocabularyFromZeroCopyBlob(reader);
-  qlever.namedResultCache_.readFromSerializer(reader, qlever.allocator_,
-                                              indexAndViews->index_);
+  // The header is valid, but the contents may still be corrupted. Wrap the
+  // reading of the contents, so that the user gets a message that names the
+  // expected input, instead of a low-level error from deep inside the
+  // deserialization.
+  rethrowWithContext(
+      blobContentsNotReadableMessage,
+      [&indexImpl, &reader, &qlever, &indexAndViews]() {
+        // Read and apply the index metadata JSON before loading the vocabulary,
+        // so that the vocabulary is set up with the correct configuration
+        // (locale, comparator, etc.).
+        std::string metadataJson;
+        reader >> metadataJson;
+        indexImpl.applyConfiguration(nlohmann::json::parse(metadataJson));
+        indexImpl.loadVocabularyFromZeroCopyBlob(reader);
+        qlever.namedResultCache_.readFromSerializer(reader, qlever.allocator_,
+                                                    indexAndViews->index_);
+      });
 }
 
 }  // namespace qlever

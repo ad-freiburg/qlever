@@ -31,13 +31,13 @@ class Qlever;
 // friend of `Qlever` so that it can access its internals.
 class NamedCachedQueryBlobManager {
  public:
-  // Allocator for the decompressed blob buffer (see
-  // `decompressBlobWithTrailingSizeInfo`). It is stacked so that the buffer is
-  // 1. default-initialized (no redundant zeroing of a buffer that is about to
-  // be overwritten by the decompression), 2. allocated via a caller-provided
-  // `pmr` memory resource, and 3. aligned to the maximal possible alignment
-  // (required so that the aligned, zero-copy serialization written by
-  // `serialize` can be read back without misalignment).
+  // Allocator for the decompressed blob buffer (see `decompressBlob`). It is
+  // stacked so that the buffer is 1. default-initialized (no redundant zeroing
+  // of a buffer that is about to be overwritten by the decompression),
+  // 2. allocated via a caller-provided `pmr` memory resource, and 3. aligned to
+  // the maximal possible alignment (required so that the aligned, zero-copy
+  // serialization written by `serialize` can be read back without
+  // misalignment).
   using BlobAllocator = ad_utility::default_init_allocator<
       char,
       ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
@@ -75,18 +75,17 @@ class NamedCachedQueryBlobManager {
   // format. They are exposed publicly so that they can be unit-tested in
   // isolation.
 
-  // Compress `uncompressedBlob` and append the size of the uncompressed buffer
-  // as a trailing `uint64_t`. `decompressBlobWithTrailingSizeInfo` reads this
-  // trailing size to allocate a target buffer of exactly the right size for
-  // the decompression.
-  static std::vector<char> compressBlobAndAddTrailingSizeInfo(
-      ql::span<const char> uncompressedBlob);
+  // Compress `uncompressedBlob` into a single ZSTD frame. The size of the
+  // uncompressed data needs no separate bookkeeping, because it is already
+  // stored in the header of that frame (see
+  // `ZstdWrapper::getUncompressedSize`).
+  static std::vector<char> compressBlob(ql::span<const char> uncompressedBlob);
 
-  // Inverse of `compressBlobAndAddTrailingSizeInfo`: read the trailing
-  // `uint64_t` size, then decompress the preceding compressed data into a
-  // freshly allocated buffer that uses `allocator` for its storage (see
-  // `BlobAllocator`).
-  static std::vector<char, BlobAllocator> decompressBlobWithTrailingSizeInfo(
+  // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
+  // allocated buffer that uses `allocator` for its storage (see
+  // `BlobAllocator`). Throw with a descriptive message if `compressedBlob` was
+  // not written by `compressBlob`, or is corrupted.
+  static std::vector<char, BlobAllocator> decompressBlob(
       ql::span<const char> compressedBlob,
       ql::pmr::polymorphic_allocator<char> allocator);
 
@@ -96,8 +95,9 @@ class NamedCachedQueryBlobManager {
       ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer);
 
   // Read and verify the magic header and format version at the start of a
-  // decompressed blob, advancing `serializer` past them. Throws on mismatch.
-  // Mirrors `writeBlobHeader`.
+  // decompressed blob, advancing `serializer` past them. Throw if the header is
+  // missing, truncated, or has an incompatible format version. Mirrors
+  // `writeBlobHeader`.
   static void skipAndVerifyBlobHeader(
       ad_utility::serialization::ByteBufferReadSerializerT<
           true, ql::span<const char>>& serializer);
