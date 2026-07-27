@@ -239,6 +239,8 @@ addLinkAndDiscoverTest(ParsedUriTest)
 
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
 
+addLinkAndDiscoverTestNoLibs(LocaleManagerTest)
+
 addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
 
 addLinkAndDiscoverTest(PriorityQueueTest)
@@ -246,6 +248,8 @@ addLinkAndDiscoverTest(PriorityQueueTest)
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
+
+addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 

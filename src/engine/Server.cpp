@@ -82,6 +82,9 @@ Server::Server(
         return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
       },
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
+      [this]() -> int64_t {
+        return static_cast<int64_t>(rebuildInProgress_.load());
+      },
       config.memoryLimit_);
   metrics_->registerCallbacks();
 
@@ -634,6 +637,28 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
+    requireValidAccessToken("delete-materialized-view");
+    logCommand(cmd, "delete materialized view");
+
+    // Extract materialized view name parameter.
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value(),
+                      "Deleting a materialized view requires a name to be set "
+                      "via the 'view-name' parameter");
+
+    indexAndViews->materializedViewsManager_.deleteView(name.value());
+
+    // Construct simple response JSON.
+    nlohmann::json json{{"materialized-view-deleted", name.value()}};
+    response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
   }
 
   // Ping with or without message.
@@ -718,10 +743,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
+    // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+    // structured binding is not destroyed when the coroutine frame is
+    // destroyed while suspended (gcc.gnu.org bug 124584).
+    auto preparedOp = prepareOperation(
+        indexAndViews, operationName, operationString, std::move(messageSender),
+        parameters, timeLimit.value(), accessTokenOk, clientIp);
+    auto& [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] = preparedOp;
     auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
