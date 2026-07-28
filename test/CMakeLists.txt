@@ -478,6 +478,8 @@ addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
 
+addLinkAndDiscoverTest(RuntimeParametersTest global)
+
 addLinkAndDiscoverTest(JThreadTest)
 
 addLinkAndDiscoverTest(ChunkedForLoopTest)
