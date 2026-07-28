@@ -10,9 +10,10 @@
 #ifndef QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 #define QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 
+#include <gtest/gtest_prod.h>
+
 #include "backports/filesystem.h"
 #include "global/Constants.h"
-#include "gtest/gtest_prod.h"
 #include "rdfTypes/Iri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Serializer/SerializeAtomic.h"
@@ -64,8 +65,12 @@ class GraphNameManager {
   void writeToDisk() const;
   // Read the state from disk to restore it after a restart.
   void readFromDisk();
-  // Set the file where the state is persisted to and try to read the state.
-  void setFilenameForPersistingAndReadFromDisk(ql::filesystem::path filename);
+  // Set the file where the state is persisted to. If `readFromDisk` is `true`,
+  // the already persisted state is additionally read back from disk; if
+  // `false`, only the filename is set (used when the persistence file of an
+  // already loaded index is moved, see `Qlever::moveRebuiltIndexIntoPlace`).
+  void setFilenameForPersisting(ql::filesystem::path filename,
+                                bool readFromDisk);
 
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
     serializer | arg.prefixWithoutBraces_;

@@ -24,6 +24,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -33,6 +34,7 @@
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
@@ -525,6 +527,16 @@ bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
 }
 
 // _____________________________________________________________________________
+std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
+    const ql::filesystem::path& onDiskBase) {
+  // View files are named `<base>.view.<name>...`. Reuse the canonical filename
+  // builder so the `.view.` infix is not duplicated here, and let the shared
+  // helper enumerate the matching files in the directory of `onDiskBase`.
+  std::string suffix = MaterializedView::getFilenameBase("", "");
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, suffix);
+}
+
+// _____________________________________________________________________________
 void MaterializedView::throwIfScanColumnMissing(
     const std::optional<TripleComponent>& s) const {
   // The scan column must be set.
@@ -679,8 +691,8 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
   AD_CORRECTNESS_CHECK(
-      onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
-      "Changing the on disk basename is not allowed.");
+      loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed once views are loaded.");
   onDiskBase_ = onDiskBase;
 }
 

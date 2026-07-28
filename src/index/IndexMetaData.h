@@ -18,6 +18,7 @@
 #include <optional>
 #include <utility>
 
+#include "global/FileSuffixConstants.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"

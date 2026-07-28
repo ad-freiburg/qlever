@@ -30,6 +30,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
+#include "global/FileSuffixConstants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"

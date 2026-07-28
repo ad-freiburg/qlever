@@ -267,6 +267,10 @@ class DeltaTriples {
   // `writeToDisk` will be a nullop.
   void setPersists(std::optional<std::string> filename);
 
+  // Return true if `setPersists()` has been called with a non-nullopt filename,
+  // false otherwise.
+  bool persists() const;
+
   // Write the delta triples to disk to persist them between restarts.
   void writeToDisk() const;
 
@@ -436,7 +440,14 @@ class DeltaTriplesManager {
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
+  // Set the file where the updates are persisted to. If `readFromDisk` is
+  // `true`, the already persisted updates are additionally read back from disk;
+  // if `false`, only the filename is set (used when the persistence file of an
+  // already loaded index is moved, see `Qlever::moveRebuiltIndexIntoPlace`).
+  void setFilenameForPersistentUpdates(std::string filename, bool readFromDisk);
+
+  // Call `DeltaTriples::persists()`.
+  bool persists() const;
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.

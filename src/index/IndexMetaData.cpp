@@ -11,7 +11,7 @@
 
 #include "index/IndexMetaData.h"
 
-#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "util/File.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
