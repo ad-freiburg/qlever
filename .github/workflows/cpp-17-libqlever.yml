@@ -99,8 +99,12 @@ jobs:
               # Run backport-using-enum on all src/ files containing 'using enum'.
               # We deliberately also attempt files that are not valid in the
               # reduced feature set mode, so an individual rewrite may fail. Such
-              # per-file failures must NOT fail the CI (unlike the `set -e`
-              # guarded `apt-get`/`cmake` steps above), hence the `|| true`.
+              # per-file failures must NOT fail the CI (unlike the set -e
+              # guarded apt-get/cmake steps above), hence the '|| true'.
+              #
+              # NOTE: no backticks in the comments of this script: it is one
+              # double-quoted string, in which the outer shell expands
+              # backticks as command substitutions.
               for f in \$(grep -rl 'using enum' ./src/ --include='*.h' --include='*.cpp'); do
                 echo \"Rewriting: \$f\"
                 /opt/llvm/bin/backport-using-enum -p /src/rewriter-build \"\$f\" || true
