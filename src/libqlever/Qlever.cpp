@@ -558,7 +558,7 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
   // happened at this point, so a failure here is only worth a warning.
   fs::path directoryOfNewIndexSource =
       fs::path{config.newIndexSource()}.parent_path();
-  std::error_code errorCode;
+  ql::error_code errorCode;
   if (!directoryOfNewIndexSource.empty() &&
       (!fs::remove(directoryOfNewIndexSource, errorCode) || errorCode)) {
     AD_LOG_WARN << "Could not remove the directory \""
