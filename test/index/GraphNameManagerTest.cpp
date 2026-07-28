@@ -88,17 +88,17 @@ TEST(GraphNameManager, readFromDisk) {
   }
   {
     auto readManager = manager;
-    readManager.setFilenameForPersistingAndReadFromDisk("nonexistent_file");
+    readManager.setFilenameForPersisting("nonexistent_file", true);
     EXPECT_EQ(readManager.prefixWithoutBraces_, manager.prefixWithoutBraces_);
     EXPECT_EQ(readManager.nextUnallocatedGraph_, manager.nextUnallocatedGraph_);
     ad_utility::deleteFile("nonexistent_file");
   }
   {
     auto otherManager = GraphNameManager("http://example.org/ns/", 42);
-    otherManager.setFilenameForPersistingAndReadFromDisk("state_file");
+    otherManager.setFilenameForPersisting("state_file", true);
     otherManager.writeToDisk();
     auto readManager = manager;
-    readManager.setFilenameForPersistingAndReadFromDisk("state_file");
+    readManager.setFilenameForPersisting("state_file", true);
     EXPECT_EQ(readManager, otherManager);
     ad_utility::deleteFile("state_file");
   }
