@@ -34,7 +34,9 @@ jobs:
             expensive-tests: true
             use-keep-going: true
             use-ignore-errors: true
-            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
+            # The GCC 8 build additionally exercises the ICU-free (`NO_UNICODE`)
+            # mode, which targets constrained environments without ICU.
+            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON -DQLEVER_NO_UNICODE=ON"
 
 
     env:
@@ -94,7 +96,8 @@ jobs:
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                 -DUSE_PARALLEL=true \
                 -DUSE_PRECOMPILED_HEADERS=OFF \
-                -DREDUCED_FEATURE_SET_FOR_CPP17=ON
+                -DREDUCED_FEATURE_SET_FOR_CPP17=ON \
+                -DQLEVER_NO_UNICODE=ON
 
               # Run backport-using-enum on all src/ files containing 'using enum'.
               # We deliberately also attempt files that are not valid in the
