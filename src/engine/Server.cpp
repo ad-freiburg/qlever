@@ -1614,7 +1614,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   auto coroutine = computeInNewThread(
       queryThreadPool_,
       [&index, &handle, &indexBaseName] {
-        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
+        auto logFileName = indexBaseName + REBUILD_INDEX_LOG_SUFFIX;
         auto [currentSnapshot, localVocabCopy, ownedBlocks] =
             index.deltaTriplesManager()
                 .getCurrentLocatedTriplesSharedStateWithVocab();

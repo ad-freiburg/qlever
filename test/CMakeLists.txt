@@ -173,6 +173,8 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 addLinkAndDiscoverTest(IndexTest index)
 
+addLinkAndDiscoverTest(PermutationTest index)
+
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
