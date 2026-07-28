@@ -115,12 +115,6 @@ class Server {
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
 
-  // Store the basename of the original index that was loaded when the server
-  // started. This is used to check that any rebuilt index is stored in the same
-  // directory, because any new index will have a different basename and we
-  // don't want to infinitely nest the index directories.
-  std::string originalBasename_;
-
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
   std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;

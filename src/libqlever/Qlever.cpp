@@ -428,15 +428,25 @@ nlohmann::json IndexRebuildConfig::successResponseAsJson() const {
 
 // ___________________________________________________________________________
 IndexRebuildConfig Qlever::makeIndexRebuildConfig(
-    const Index& index, const std::string& originalBaseName,
-    std::optional<std::string> tmpDirForRebuild,
+    const Index& index, std::optional<std::string> tmpDirForRebuild,
     std::optional<std::string> dirForOldIndex) {
   namespace fs = ql::filesystem;
 
+  // The base name the current index is served from. The new index has to end up
+  // exactly there, so that a later restart loads it; it is therefore also the
+  // base name whose file name and directory the two directories below are
+  // derived from and checked against.
+  const std::string& currentBaseName = index.getOnDiskBase();
+
   // Resolve one of the two directories (falling back to `defaultDirectory` if
   // it was not specified) and turn it into a base name.
+  // NOTE: Use `ql::pathFilename` and not `path::filename()`, so that a base
+  // name with a trailing directory separator yields an empty file name
+  // component (and hence a directory base name, see the test
+  // `moveRebuiltIndexIntoPlaceWithDirectoryBasename`) in both the
+  // `std::filesystem` and the `boost::filesystem` backend.
   auto resolveBaseName =
-      [indexFileName = fs::path{originalBaseName}.filename()](
+      [indexFileName = ql::pathFilename(fs::path{currentBaseName})](
           std::optional<std::string> directory, std::string defaultDirectory) {
         return (fs::path{std::move(directory).value_or(
                     std::move(defaultDirectory))} /
@@ -479,17 +489,17 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
           absl::StrCat("The directory \"", dir.string(),
                        "\" already exists and is not empty")};
     }
-    if (!qlever::util::isSubdirectoryOf(baseName, originalBaseName)) {
+    if (!qlever::util::isSubdirectoryOf(baseName, currentBaseName)) {
       throw std::runtime_error{absl::StrCat(
           "The directory \"", dir.string(),
           "\" is not a subdirectory of the directory of the current index")};
     }
   }
 
-  // The new index ends up at the base name of the index the engine was started
-  // on, so that a later restart loads it.
-  return IndexRebuildConfig{index.getOnDiskBase(), baseNameForRebuild,
-                            baseNameForOldIndex, originalBaseName};
+  // The new index ends up at the base name the current index is served from, so
+  // that a later restart loads it.
+  return IndexRebuildConfig{currentBaseName, baseNameForRebuild,
+                            baseNameForOldIndex, currentBaseName};
 }
 
 // ___________________________________________________________________________

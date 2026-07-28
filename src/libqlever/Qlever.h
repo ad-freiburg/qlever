@@ -533,20 +533,19 @@ class Qlever {
   // is built, and `dirForOldIndex`, to which the old index is retired. Both
   // default to a directory that is derived from the current time resp. from the
   // build date of the current index. Inside these directories, and for the new
-  // index after the swap, the file name of `originalBaseName` (the base name of
-  // the index the engine was started on, which is where the new index has to
-  // end up so that a later restart loads it) is used.
+  // index after the swap, the file name of `index.getOnDiskBase()` is used: the
+  // new index has to end up at the base name the current index is served from,
+  // so that a later restart loads it.
   //
   // The two directories must be relative paths (they are resolved against the
   // working directory of the engine, just like the base name of the current
   // index), must be empty or not exist yet, and must lie inside the directory
-  // of `originalBaseName`, so that the index directories are not nested ever
-  // deeper. Throws `std::runtime_error` if one of these conditions is violated,
-  // and (via the `IndexRebuildConfig` constructor) if the resulting base names
-  // collide.
+  // of `index.getOnDiskBase()`, so that the index directories are not nested
+  // ever deeper. Throws `std::runtime_error` if one of these conditions is
+  // violated, and (via the `IndexRebuildConfig` constructor) if the resulting
+  // base names collide.
   static IndexRebuildConfig makeIndexRebuildConfig(
-      const Index& index, const std::string& originalBaseName,
-      std::optional<std::string> tmpDirForRebuild,
+      const Index& index, std::optional<std::string> tmpDirForRebuild,
       std::optional<std::string> dirForOldIndex);
 
   // Move a freshly rebuilt index into the place of the old one. There are two

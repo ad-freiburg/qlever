@@ -85,12 +85,6 @@ Server::Server(
       config.memoryLimit_);
   metrics_->registerCallbacks();
 
-  // Remember the base name of the initially loaded index. A later index rebuild
-  // requires the new index to live in the same directory (see `rebuildIndex`).
-  // The actual index loading (including preloading of materialized views) is
-  // performed by the `Qlever` instance `qlever_`.
-  originalBasename_ = config.baseName_;
-
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
                 << std::endl;
@@ -1632,12 +1626,13 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   auto& [index, oldManager] = *indexAndViews;
 
   // Turn the two directories that can be set via command parameters into the
-  // base names of the indexes involved in the rebuild. The new index has to end
-  // up at the base name the server was started on, so that a later restart
-  // loads it.
+  // base names of the indexes involved in the rebuild. The new index ends up at
+  // the base name `index` is currently served from (which is the base name the
+  // server was started on, because a rebuild re-anchors the new index to
+  // exactly that place, see `Qlever::moveRebuiltIndexIntoPlace`), so that a
+  // later restart loads it.
   auto config = qlever::Qlever::makeIndexRebuildConfig(
-      index, originalBasename_, std::move(tmpDirForRebuild),
-      std::move(dirForOldIndex));
+      index, std::move(tmpDirForRebuild), std::move(dirForOldIndex));
 
   // Warn if state that won't carry over to the rebuilt index was previously
   // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
