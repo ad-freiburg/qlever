@@ -4,6 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <utility>
@@ -1665,24 +1666,30 @@ TEST(ParserTest, unionGraphAsDefaultGraphRuntimeParameter) {
           false);
 
   // With the parameter set to `false`, top-level queries without an explicit
-  // dataset clause implicitly get a dataset clause that consists only of
-  // `ql:default-graph`.
+  // dataset clause implicitly use only `ql:default-graph` as their default
+  // graph. Note that the set of named graphs stays unconstrained (`nullopt`),
+  // such that `GRAPH` clauses keep working; this is deliberately different
+  // from an explicit `FROM <ql:default-graph>`, which leaves no named graphs
+  // (see the last assertion of this test).
+  parsedQuery::DatasetClauses::Graphs allNamedGraphs = std::nullopt;
   EXPECT_THAT(parseQuery(query),
               m::SelectQuery(m::AsteriskSelect(), graphPatternMatcher,
-                             defaultGraphOnly, noGraphs));
-  EXPECT_THAT(parseQuery("ASK { ?s ?p ?o }"),
-              m::AskQuery(graphPatternMatcher, defaultGraphOnly, noGraphs));
+                             defaultGraphOnly, allNamedGraphs));
+  EXPECT_THAT(
+      parseQuery("ASK { ?s ?p ?o }"),
+      m::AskQuery(graphPatternMatcher, defaultGraphOnly, allNamedGraphs));
   EXPECT_THAT(
       parseQuery("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"),
       m::ConstructQuery({{Var("?s"), Var("?p"), Var("?o")}},
-                        graphPatternMatcher, defaultGraphOnly, noGraphs));
+                        graphPatternMatcher, defaultGraphOnly, allNamedGraphs));
   EXPECT_THAT(
       parseQuery("DESCRIBE ?s WHERE { ?s ?p ?o }"),
       m::DescribeQuery(
-          m::Describe({Var("?s")}, {defaultGraphOnly, {}},
+          m::Describe({Var("?s")},
+                      parsedQuery::DatasetClauses::fromImplicitDefaultGraph(),
                       m::SelectQuery(m::VariablesSelect({"?s"}, false, false),
                                      graphPatternMatcher)),
-          defaultGraphOnly, noGraphs));
+          defaultGraphOnly, allNamedGraphs));
 
   // An explicit dataset clause always takes precedence over the implicit one.
   EXPECT_THAT(parseQuery("SELECT * FROM <foo> WHERE { ?s ?p ?o }"),
@@ -1705,6 +1712,14 @@ TEST(ParserTest, unionGraphAsDefaultGraphRuntimeParameter) {
       SparqlParser::parseUpdate(&bnm, &ev, "DELETE WHERE { ?s ?p ?o }"),
       testing::ElementsAre(m::UpdateClause(deleteWhereOp, graphPatternMatcher,
                                            m::datasetClausesMatcher())));
+
+  // In contrast to the implicit default graph above, an *explicit* `FROM
+  // <ql:default-graph>` leaves the set of named graphs empty, as required by
+  // section 13.2 of the SPARQL 1.1 standard.
+  EXPECT_THAT(parseQuery(absl::StrCat("SELECT * FROM ", DEFAULT_GRAPH_IRI,
+                                      " WHERE { ?s ?p ?o }")),
+              m::SelectQuery(m::AsteriskSelect(), graphPatternMatcher,
+                             defaultGraphOnly, noGraphs));
 }
 
 // _____________________________________________________________________________

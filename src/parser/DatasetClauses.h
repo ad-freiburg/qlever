@@ -20,15 +20,28 @@ struct DatasetClauses {
   using Graphs = std::optional<ad_utility::HashSet<TripleComponent>>;
 
  private:
+  // The way in which the `defaultGraphs_` below were specified, which slightly
+  // changes the semantics (see `namedGraphsAreUnconstrained` below).
+  enum class DefaultGraphKind {
+    // The default graphs come from a `FROM` or `USING` clause (or were not
+    // specified at all).
+    FromOrUsing,
+    // The default graph is the single graph of a `WITH` clause.
+    With,
+    // The default graph is the implicit unnamed default graph that is used for
+    // queries without a dataset clause when the `union-graph-as-default-graph`
+    // runtime parameter is disabled.
+    Implicit
+  };
+
   // Store the default and named graphs.
   Graphs defaultGraphs_{};
   Graphs namedGraphs_{};
 
   // An empty set of graphs that sometimes has to be returned.
   Graphs emptyDummy_{Graphs::value_type{}};
-  // True iff the `defaultGraph` is a single graph that originates from a `WITH`
-  // clause, which slightly changes the semantics.
-  bool defaultGraphSpecifiedUsingWith_ = false;
+  // How the `defaultGraphs_` were specified.
+  DefaultGraphKind defaultGraphKind_ = DefaultGraphKind::FromOrUsing;
 
  public:
   // Divide the dataset clause from `clauses` into default and named graphs,
@@ -38,6 +51,16 @@ struct DatasetClauses {
   // Return the `DatasetClauses` that correspond to the `WITH <withGraph>`
   // clause in a SPARQL UPDATE.
   static DatasetClauses fromWithClause(const TripleComponent::Iri& withGraph);
+
+  // Return the `DatasetClauses` for a query without an explicit dataset clause
+  // in the case that the union of all graphs is *not* used as the default
+  // graph (see the `union-graph-as-default-graph` runtime parameter). The
+  // active default graph then is the unnamed default graph (spelled
+  // `ql:default-graph` inside QLever), while all named graphs stay available
+  // inside `GRAPH` clauses. Note that this is deliberately different from an
+  // explicit `FROM <ql:default-graph>`, which per section 13.2 of the SPARQL
+  // 1.1 standard would leave the set of named graphs empty.
+  static DatasetClauses fromImplicitDefaultGraph();
 
   // Construct directly from two optional sets, mostly used in tests.
   DatasetClauses(Graphs defaultGraphs, Graphs namedGraphs);
@@ -51,6 +74,15 @@ struct DatasetClauses {
   // function is needed (WITH clauses are the weakest clauses and can easily be
   // overridden.
   bool isUnconstrainedOrWithClause() const;
+
+  // Return true iff the active default graphs are restricted by the query
+  // itself, that is, by an explicit `FROM`/`FROM NAMED`/`USING`/`USING
+  // NAMED`/`WITH` clause. In contrast to `activeDefaultGraphs().has_value()`
+  // this returns false for the implicit default graph of
+  // `fromImplicitDefaultGraph` above. Use this for features that silently
+  // cannot honor a graph restriction (in particular the text index, which
+  // stores no graph information) and therefore have to reject such queries.
+  bool defaultGraphsAreExplicitlyRestricted() const;
 
   // Return the set of active default graphs (The set of graphs which will be
   // used evaluate all triples outside an explicit `GRAPH` clause.
@@ -86,7 +118,15 @@ struct DatasetClauses {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(DatasetClauses, defaultGraphs_,
                                               namedGraphs_, emptyDummy_,
-                                              defaultGraphSpecifiedUsingWith_)
+                                              defaultGraphKind_)
+
+ private:
+  // Return true iff no explicit `FROM`/`USING` clause restricted the graphs,
+  // such that all named graphs stay available inside `GRAPH` clauses. This is
+  // the case for a completely unconstrained dataset, but also for a `WITH`
+  // clause and for the implicit default graph, both of which only specify a
+  // default graph without narrowing down the named graphs.
+  bool namedGraphsAreUnconstrained() const;
 };
 }  // namespace parsedQuery
 

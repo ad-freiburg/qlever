@@ -535,8 +535,14 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
         std::string s{ad_utility::utf8ToLower(term)};
         potentialTermsForCvar[t.s_.getVariable()].push_back(s);
+        // NOTE: The implicit default graph that is used when the
+        // `union-graph-as-default-graph` runtime parameter is disabled
+        // deliberately does not trigger this error, because it would otherwise
+        // disable text search altogether on such a server. The text index
+        // stores no graph information, so the restriction to the default graph
+        // simply is not applied to text matches.
         if (activeGraphVariable_.has_value() ||
-            activeDatasetClauses_.activeDefaultGraphs().has_value()) {
+            activeDatasetClauses_.defaultGraphsAreExplicitlyRestricted()) {
           AD_THROW(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
