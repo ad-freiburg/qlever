@@ -631,8 +631,6 @@ void Qlever::swapInRebuiltIndex(
   // file handles survive the renames), but the on-disk layout has to be
   // repaired manually before the next restart.
   moveRebuiltIndexIntoPlace(*newIndexAndViews, config);
-  // TODO<RobinTF> add this function
-  // oldIndex->removeOnDestruction();
   swapIndexAndViews(std::move(newIndexAndViews));
   // Clear the query cache, including pinned entries: cached results were
   // computed against the old index, so their `VocabIndex` ids are in the old

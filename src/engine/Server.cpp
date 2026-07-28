@@ -665,7 +665,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                       "Deleting a materialized view requires a name to be set "
                       "via the 'view-name' parameter");
 
-    indexAndViews->materializedViewsManager_.deleteView(name.value());
+    // Snapshot again instead of using `indexAndViews` from the beginning of
+    // this function (see `clear-delta-triples` above for the same pattern), so
+    // that we delete the view from the index that is currently being served and
+    // not from a stale one that a concurrent rebuild has swapped out in the
+    // meantime. Deleting from a stale manager is not unsafe (the rebuild called
+    // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
+    // `deleteView` throw), it would just needlessly fail.
+    indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name.value());
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-deleted", name.value()}};
@@ -1672,8 +1679,24 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   // current index.
   auto swapRoutine = ad_utility::runFunctionOnExecutor(
       updateThreadPool_.get_executor(),
-      [this, &index, rebuildResult = std::move(rebuildResult), &handle,
-       &config]() mutable {
+      [this, &index, &oldManager, rebuildResult = std::move(rebuildResult),
+       &handle, &config]() mutable {
+        // The swap below moves all files of the old index to a different base
+        // name and installs the new index at the base name of the old one. Any
+        // view file that `oldManager` created after that point would silently
+        // become a view of the NEW index, even though its `Id`s refer to the
+        // vocabulary of the old one. `oldManager` outlives the swap (queries
+        // that started before it still hold a snapshot of it), so close it for
+        // writing first. This blocks until a concurrent
+        // `write-materialized-view` or `delete-materialized-view` has finished;
+        // the files it created are then moved along with the rest of the old
+        // index.
+        //
+        // NOTE: The other on-disk state of the old index (its persisted delta
+        // triples and allocated graph names) needs no such protection, because
+        // it is only written from this very executor, which has a single
+        // thread.
+        oldManager.retireOnDiskFiles();
         qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
                                     config);
       },
