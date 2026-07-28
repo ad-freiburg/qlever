@@ -13,6 +13,7 @@
 #include "backports/three_way_comparison.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
+#include "util/UnicodeSupport.h"
 
 class Variable {
  private:
@@ -76,7 +77,10 @@ class Variable {
   static bool isValidVariableName(std::string_view var);
 
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
-  // it at the end of target.
+  // it at the end of target. If `useICU == false`, only alphanumeric ASCII
+  // bytes are kept and all other bytes are escaped via their numeric value
+  // (for ASCII input this gives the same result as the ICU version).
+  template <bool useICU = ad_utility::useICUDefault>
   static void appendEscapedWord(std::string_view word, std::string& target);
 
   // Serialization for `Variable`s - just serialize the name.

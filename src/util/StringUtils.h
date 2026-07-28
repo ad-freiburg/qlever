@@ -86,10 +86,9 @@ std::string_view getUTF8Substring(const std::string_view str, size_t start);
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
  * codepoints of sv, encoded as UTF-8
  *
- * If `useICU == false`, only an ASCII prefix is formed (each byte is treated as
- * a codepoint).
+ * NOTE: Counting codepoints only requires the byte structure of UTF-8, so this
+ * function is ICU-free and does not depend on the build configuration.
  */
-template <bool useICU = useICUDefault>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
                                                   size_t prefixLength);
 
