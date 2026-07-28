@@ -18,12 +18,11 @@ namespace sparqlParserHelpers {
 // using the automatically generated parser + the manually written
 // `SparqlQLeverVisitor`.
 struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
+ private:
   // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
-  // before beginning with actual parsing as the SPARQL standard mandates. It is
-  // public for unit testing purposes.
+  // before beginning with actual parsing as the SPARQL standard mandates.
   static std::string unescapeUnicodeSequences(std::string input);
 
- private:
   using Base = ParserAndVisitorBase<SparqlQleverVisitor>;
 
  public:

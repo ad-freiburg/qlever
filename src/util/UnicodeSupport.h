@@ -1,9 +1,9 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -15,8 +15,11 @@
 namespace ad_utility {
 // The default value for the `useICU` template parameter of the various string
 // functions that have both an ICU-based and an ICU-free implementation (for
-// example `ad_utility::utf8ToLower`). It is `false` exactly if the `NO_UNICODE`
-// CMake option was set (which defines the `QLEVER_NO_UNICODE` macro).
+// example `ad_utility::utf8ToLower`). It is `false` exactly if the
+// `QLEVER_NO_UNICODE` macro is defined. Currently there is deliberately no
+// build option that defines this macro (the unit tests instantiate the ICU-free
+// variants directly); a CMake option will follow, see the comment on
+// `LocaleManager` in `index/LocaleManager.h`.
 #ifdef QLEVER_NO_UNICODE
 inline constexpr bool useICUDefault = false;
 #else
@@ -39,7 +42,7 @@ inline constexpr bool useICUDefault = true;
   throw std::runtime_error(                                       \
       "The operation '" msg                                       \
       "' requires ICU, but QLever was built without ICU support " \
-      "(the `NO_UNICODE` CMake option was set).")
+      "(the `QLEVER_NO_UNICODE` macro was defined).")
 #else
 #define QLEVER_UNICODE_ONLY(msg, ...) __VA_ARGS__
 #endif

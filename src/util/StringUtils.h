@@ -38,28 +38,10 @@ bool strIsLangTag(const std::string& strLangTag);
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
 // Encode the single Unicode `codepoint` as UTF-8 and append the resulting bytes
-// to `output`. Codepoints outside the valid Unicode range (> 0x10FFFF) are
-// encoded as the Unicode replacement character U+FFFD. This function does not
-// depend on ICU.
+// to `output`. Codepoints that are not valid Unicode scalar values (larger than
+// 0x10FFFF, or in the surrogate range 0xD800-0xDFFF) are encoded as the Unicode
+// replacement character U+FFFD. This function does not depend on ICU.
 void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
-
-// UTF-16 surrogate helpers. These are ICU-free equivalents of ICU's
-// `U16_IS_LEAD`, `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY` macros; they are
-// used when decoding `\uXXXX` escape sequences.
-
-// Return true iff `c` is a high (leading) surrogate code unit.
-constexpr bool isHighSurrogate(uint32_t c) {
-  return c >= 0xD800 && c <= 0xDBFF;
-}
-
-// Return true iff `c` is a low (trailing) surrogate code unit.
-constexpr bool isLowSurrogate(uint32_t c) { return c >= 0xDC00 && c <= 0xDFFF; }
-
-// Combine a high and a low surrogate into the corresponding supplementary
-// Unicode codepoint.
-constexpr uint32_t combineSurrogates(uint32_t high, uint32_t low) {
-  return 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
-}
 
 // Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used
 // for locale-specific case folding (e.g. "tr" for Turkish); the default empty
@@ -71,7 +53,7 @@ std::string utf8ToLower(std::string_view s, const char* localeName = "");
 
 // Get the uppercase value. For details see `utf8ToLower` above.
 template <bool useICU = useICUDefault>
-std::string utf8ToUpper(std::string_view s);
+std::string utf8ToUpper(std::string_view s, const char* localeName = "");
 
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th

@@ -18,12 +18,15 @@
 #include <future>
 #include <numeric>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "CompilationInfo.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
@@ -32,6 +35,7 @@
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -42,7 +46,9 @@
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
+#include "util/UnicodeSupport.h"
 #include "util/Views.h"
+#include "util/json.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -1144,11 +1150,16 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        onDiskBase + ".update-triples");
-    graphNameManager_.setFilenameForPersistingAndReadFromDisk(
-        onDiskBase + ".allocated-graphs-state");
+    setFilenamesForPersistentUpdates(true);
   }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setFilenamesForPersistentUpdates(bool readFromDisk) {
+  deltaTriplesManager().setFilenameForPersistentUpdates(
+      absl::StrCat(onDiskBase_, UPDATE_TRIPLES_SUFFIX), readFromDisk);
+  graphNameManager_.setFilenameForPersisting(
+      absl::StrCat(onDiskBase_, ALLOCATED_GRAPHS_SUFFIX), readFromDisk);
 }
 
 // _____________________________________________________________________________
@@ -1220,6 +1231,53 @@ void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
+std::vector<ql::filesystem::path> IndexImpl::allIndexFiles(
+    std::string_view onDiskBase) {
+  std::vector<ql::filesystem::path> result;
+  auto addIfExists = [&result](ql::filesystem::path file) {
+    if (ql::filesystem::exists(file)) {
+      result.push_back(std::move(file));
+    }
+  };
+
+  // The six permutations and the two internal permutations, each with their
+  // `.meta` file. `isInternal` is passed as a `std::bool_constant` (a type that
+  // carries the `bool` value) because C++17 does not support explicitly
+  // templated lambdas.
+  auto addPermutationFiles = [&addIfExists](auto isInternal,
+                                            std::string_view base) {
+    for (auto permutation : Permutation::all<isInternal>()) {
+      for (auto& file : Permutation::fileNames(permutation, base)) {
+        addIfExists(std::move(file));
+      }
+    }
+  };
+  addPermutationFiles(std::bool_constant<false>{}, onDiskBase);
+  addPermutationFiles(std::bool_constant<true>{},
+                      absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX));
+
+  // Files with a fixed name. The optional ones (settings, persisted updates,
+  // text index) are simply skipped by `addIfExists` when they do not exist.
+  for (auto suffix :
+       {PATTERNS_FILE_SUFFIX, CONFIGURATION_FILE, SETTINGS_FILE_SUFFIX,
+        UPDATE_TRIPLES_SUFFIX, ALLOCATED_GRAPHS_SUFFIX, TEXT_INDEX_FILE_SUFFIX,
+        TEXT_VOCAB_FILE_SUFFIX, TEXT_DOCS_DB_FILE_SUFFIX}) {
+    addIfExists(absl::StrCat(onDiskBase, suffix));
+  }
+
+  // The set of vocabulary files depends on the vocabulary type, but they all
+  // start with `<onDiskBase>.vocabulary`, so enumerate them via that prefix
+  // (the same mechanism as `MaterializedViewsManager::viewFilesOnDisk`). The
+  // helper only returns files that exist, so no extra existence check is
+  // needed here.
+  ql::ranges::move(
+      qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VOCAB_SUFFIX),
+      std::back_inserter(result));
+
+  return result;
+}
+
+// ____________________________________________________________________________
 void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
   keepTempFiles_ = keepTempFiles;
 }
@@ -1251,6 +1309,11 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  // Record whether the index was built with ICU (Unicode) support. Indexes
+  // built with and without ICU use different collations and are hence not
+  // interchangeable; `readConfiguration` throws if the configuration of the
+  // loaded index does not match the current binary.
+  configuration["has-icu-support"] = ad_utility::useICUDefault;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1282,8 +1345,26 @@ std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
 
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
-  f >> configurationJson_;
+  applyConfiguration(
+      fileToJson<nlohmann::json>(onDiskBase_ + CONFIGURATION_FILE));
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  //
+  // NOTE: This is computed here rather than in `applyConfiguration`, because
+  // `getKbName` reads from the `PSO` permutation, which is only available on
+  // the on-disk load path (`applyConfiguration` is also used when loading from
+  // a blob, where no permutations are loaded).
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
+                          numSubjects_.normal, ".", numPredicates_.normal, ".",
+                          numObjects_.normal);
+}
+
+// ___________________________________________________________________________
+void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
+  configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     AD_LOG_INFO << "The git hash used to build this index was "
                 << configurationJson_["git-hash"] << std::endl;
@@ -1331,6 +1412,26 @@ void IndexImpl::readConfiguration() {
         << std::endl;
     throw std::runtime_error{
         "Incompatible index format, see log message for details"};
+  }
+
+  // The index and the current binary must agree on whether ICU (Unicode)
+  // support is available: the two use different string collations, so mixing
+  // them would silently produce a wrong sort order. Indexes built before this
+  // flag was recorded were always built with ICU, hence the default of `true`.
+  bool indexHasIcuSupport = configurationJson_.value("has-icu-support", true);
+  if (indexHasIcuSupport != ad_utility::useICUDefault) {
+    AD_LOG_ERROR << "This index was built "
+                 << (indexHasIcuSupport ? "with" : "without")
+                 << " ICU (Unicode) support, but the QLever binary you are "
+                    "using was built "
+                 << (ad_utility::useICUDefault ? "with" : "without")
+                 << " it. The two use different string collations and are not "
+                    "interchangeable. Please rebuild the index or use a "
+                    "matching QLever binary."
+                 << std::endl;
+    throw std::runtime_error{
+        "The index's ICU-support configuration does not match the QLever "
+        "binary, see log message for details"};
   }
 
   if (configurationJson_.find("prefixes-external") !=
@@ -1413,14 +1514,6 @@ void IndexImpl::readConfiguration() {
                  EncodedIriManager{});
   loadDataMember("graphNameManager", graphNameManager_,
                  GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
-
-  // Compute unique ID for this index.
-  //
-  // TODO: This is a simplistic way. It would be better to incorporate bytes
-  // from the index files.
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
-                          numSubjects_.normal, ".", numPredicates_.normal, ".",
-                          numObjects_.normal);
 }
 
 // ___________________________________________________________________________
@@ -1849,7 +1942,7 @@ void IndexImpl::deleteTemporaryFile(const std::string& path) {
 
 // _____________________________________________________________________________
 std::string IndexImpl::getPatternFilename() const {
-  return onDiskBase_ + ".index.patterns";
+  return absl::StrCat(onDiskBase_, PATTERNS_FILE_SUFFIX);
 }
 
 // _____________________________________________________________________________

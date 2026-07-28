@@ -4,12 +4,14 @@
 
 #include "parser/SparqlParserHelpers.h"
 
+#ifndef QLEVER_NO_UNICODE
+#include <unicode/unistr.h>
+#endif
+
 #include <charconv>
-#include <cstdint>
 #include <ctre-unicode.hpp>
 
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
-#include "util/StringUtils.h"
 
 namespace sparqlParserHelpers {
 using std::string;
@@ -47,11 +49,16 @@ ParserAndVisitor::ParserAndVisitor(
 
 // _____________________________________________________________________________
 std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
+#ifdef QLEVER_NO_UNICODE
+  // Without ICU we do not process unicode escape sequences and return the input
+  // unchanged.
+  return input;
+#else
   std::string_view view{input};
   std::string output;
   bool noEscapeSequenceFound = true;
   size_t lastPos = 0;
-  uint32_t highSurrogate = 0;
+  UChar32 highSurrogate = 0;
 
   auto throwError = [](bool condition, std::string_view message) {
     if (!condition) {
@@ -78,7 +85,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     auto hexValue = match.to_view();
     hexValue.remove_prefix(std::string_view{"\\U"}.size());
 
-    uint32_t codePoint = 0;
+    UChar32 codePoint = 0;
     auto result = std::from_chars(
         hexValue.data(), hexValue.data() + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
@@ -90,7 +97,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
 
     // See https://symbl.cc/en/unicode/blocks/high-surrogates/ for more
     // information.
-    if (ad_utility::isHighSurrogate(codePoint)) {
+    if (U16_IS_LEAD(codePoint)) {
       throwError(!isFullCodePoint,
                  "Surrogates should not be encoded as full code points.");
       throwError(
@@ -98,12 +105,12 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
           "A high surrogate cannot be followed by another high surrogate.");
       highSurrogate = codePoint;
       continue;
-    } else if (ad_utility::isLowSurrogate(codePoint)) {
+    } else if (U16_IS_TRAIL(codePoint)) {
       throwError(!isFullCodePoint,
                  "Surrogates should not be encoded as full code points.");
       throwError(highSurrogate != 0,
                  "A low surrogate cannot be the first surrogate.");
-      codePoint = ad_utility::combineSurrogates(highSurrogate, codePoint);
+      codePoint = U16_GET_SUPPLEMENTARY(highSurrogate, codePoint);
       highSurrogate = 0;
     } else {
       throwError(
@@ -111,7 +118,8 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
           "A high surrogate cannot be followed by a regular code point.");
     }
 
-    ad_utility::utf8EncodeCodepoint(codePoint, output);
+    icu::UnicodeString helper{codePoint};
+    helper.toUTF8String(output);
   }
 
   // Avoid redundant copy if no escape sequences were found.
@@ -124,5 +132,6 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
 
   output += view.substr(lastPos);
   return output;
+#endif
 }
 }  // namespace sparqlParserHelpers

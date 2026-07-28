@@ -7,7 +7,6 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 #include <unicode/unistr.h>
-#include <unicode/utf16.h>
 
 #include <ranges>
 #include <sstream>
@@ -54,6 +53,15 @@ TEST(StringUtils, utf8ToUpper) {
 }
 
 // _____________________________________________________________________________
+TEST(StringUtils, utf8ToUpperWithLocale) {
+  // With the default (root) locale, ASCII `i` uppercases to `I`.
+  EXPECT_EQ("I", utf8ToUpper("i"));
+  EXPECT_EQ("I", utf8ToUpper("i", ""));
+  // The Turkish locale instead uppercases `i` to the dotted `İ` (U+0130).
+  EXPECT_EQ("İ", utf8ToUpper("i", "tr"));
+}
+
+// _____________________________________________________________________________
 // Test the ICU-free (`useICU == false`) implementations of `utf8ToLower` and
 // `utf8ToUpper`. These only fold ASCII characters; all other bytes (including
 // the bytes of multibyte UTF-8 characters) are passed through unchanged.
@@ -70,6 +78,12 @@ TEST(StringUtils, utf8ToLowerUpperNoICU) {
   EXPECT_EQ("CAFé", utf8ToUpper<false>("café"));
   EXPECT_EQ("aÔb", utf8ToLower<false>("AÔB"));
   EXPECT_EQ("AÔB", utf8ToUpper<false>("aÔb"));
+
+  // The `localeName` is ignored, as locale-specific case folding requires ICU.
+  // Compare the `utf8ToLowerWithLocale` and `utf8ToUpperWithLocale` tests
+  // above, where the Turkish locale yields `ı` and `İ` respectively.
+  EXPECT_EQ("i", utf8ToLower<false>("I", "tr"));
+  EXPECT_EQ("I", utf8ToUpper<false>("i", "tr"));
 
   // The `useICU == true` instantiation exists and behaves like the default.
   EXPECT_EQ(utf8ToLower<true>("Schindler's List"),
@@ -121,30 +135,21 @@ TEST(StringUtils, utf8EncodeCodepoint) {
   EXPECT_EQ(encode(0x00E9), "é");            // two bytes (U+00E9)
   EXPECT_EQ(encode(0x2702), "✂");            // three bytes
   EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
+  // The boundaries between the one-, two-, three- and four-byte encodings.
+  EXPECT_EQ(encode(0x7F), "\x7F");
+  EXPECT_EQ(encode(0x80), "\xC2\x80");
+  EXPECT_EQ(encode(0x7FF), "\xDF\xBF");
+  EXPECT_EQ(encode(0x800), "\xE0\xA0\x80");
+  EXPECT_EQ(encode(0xFFFF), "\xEF\xBF\xBF");
+  EXPECT_EQ(encode(0x10000), "\xF0\x90\x80\x80");
   // Out-of-range codepoints are replaced by U+FFFD.
   EXPECT_EQ(encode(0x110000), "�");
-}
-
-// _____________________________________________________________________________
-// Test the ICU-free UTF-16 surrogate helpers against ICU's `U16_IS_LEAD`,
-// `U16_IS_TRAIL` and `U16_GET_SUPPLEMENTARY`.
-TEST(StringUtils, surrogateHelpers) {
-  using ad_utility::combineSurrogates;
-  using ad_utility::isHighSurrogate;
-  using ad_utility::isLowSurrogate;
-  // The predicates match ICU over the whole codepoint range (this includes the
-  // corner cases at the boundaries of the two surrogate blocks).
-  for (uint32_t c = 0; c <= 0x10FFFF; ++c) {
-    ASSERT_EQ(isHighSurrogate(c), static_cast<bool>(U16_IS_LEAD(c))) << c;
-    ASSERT_EQ(isLowSurrogate(c), static_cast<bool>(U16_IS_TRAIL(c))) << c;
-  }
-  // Combining matches ICU for every valid (high, low) surrogate pair.
-  for (uint32_t high = 0xD800; high <= 0xDBFF; ++high) {
-    for (uint32_t low = 0xDC00; low <= 0xDFFF; ++low) {
-      ASSERT_EQ(combineSurrogates(high, low),
-                static_cast<uint32_t>(U16_GET_SUPPLEMENTARY(high, low)));
-    }
-  }
+  // Surrogates (reserved for UTF-16, not valid Unicode scalar values) are also
+  // replaced by U+FFFD; their direct neighbors are encoded normally.
+  EXPECT_EQ(encode(0xD800), "�");
+  EXPECT_EQ(encode(0xDFFF), "�");
+  EXPECT_EQ(encode(0xD7FF), "\xED\x9F\xBF");
+  EXPECT_EQ(encode(0xE000), "\xEE\x80\x80");
 }
 
 // _____________________________________________________________________________
