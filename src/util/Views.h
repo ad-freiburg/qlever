@@ -527,7 +527,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
 template <typename View>
 auto bufferedAsyncView(View view, uint64_t blockSize) {
   return ql::views::join(
-      allView(detail::BufferedAsyncView<View>{std::move(view), blockSize}));
+      detail::BufferedAsyncView<View>{std::move(view), blockSize});
 }
 
 // Returns a view that contains all the values in `[0, upperBound)`, similar to

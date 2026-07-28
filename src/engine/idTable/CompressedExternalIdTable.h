@@ -204,8 +204,7 @@ class CompressedExternalIdTableWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return ql::views::join(
-        ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
+    return ql::views::join(makeGeneratorForIdTable<N>(index));
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -678,9 +677,7 @@ class CompressedExternalIdTableSorter
   // output phase and return a generator that yields the sorted elements one by
   // one. Either this function or the following function must be called exactly
   // once.
-  auto sortedView() {
-    return ql::views::join(ad_utility::OwningView{getSortedBlocks()});
-  }
+  auto sortedView() { return ql::views::join(getSortedBlocks()); }
 
   // Similar to `sortedView` (see above), but the elements are yielded in
   // blocks. The size of the blocks is `blocksize` if specified, otherwise it

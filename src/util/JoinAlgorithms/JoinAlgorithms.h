@@ -1153,9 +1153,8 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
     };
 
     return ad_utility::CallbackOnEndView{
-        ql::views::join(
-            ad_utility::OwningView{ad_utility::CachingTransformInputRange(
-                undefBlocks, std::move(perBlockCallback))}),
+        ql::views::join(ad_utility::CachingTransformInputRange(
+            undefBlocks, std::move(perBlockCallback))),
         std::move(endCallback)};
   }
 
