@@ -12,10 +12,12 @@ using namespace RdfEscaping;
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, hexadecimalCharactersToUtf8Codepoint) {
   using detail::hexadecimalCharactersToUtf8Codepoint;
-  // Ordinary cases: one-, two-, three- and four-byte codepoints.
+  // Ordinary cases: one-, two-, three- and four-byte codepoints. The expected
+  // values use the C++ `\u`/`\U` escapes matching the hexadecimal input (except
+  // for `0041`, since `A` would be an ill-formed universal character name).
   EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("0041"), "A");
-  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("00e4"), "ä");
-  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("2702"), "✂");
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("00e4"), "\u00e4");
+  EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("2702"), "\u2702");
   EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("0001F600"), "\U0001F600");
   // Corner cases: shorter and full-length (8 hex digits) inputs are accepted.
   EXPECT_EQ(hexadecimalCharactersToUtf8Codepoint("41"), "A");

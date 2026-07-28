@@ -197,4 +197,9 @@ TEST(WordsAndDocsFileParser, LiteralsTokenizationDelimiterNoICU) {
   // empty tail is returned). Without ICU its bytes are treated as a delimiter.
   EXPECT_TRUE(delimiter.Find<true>("abäcd", 0).empty());
   EXPECT_EQ(delimiter.Find<false>("abäcd", 0), "ä");
+
+  // Input without any separator: both variants return the empty substring at
+  // the end.
+  EXPECT_TRUE(delimiter.Find<true>("abcd", 0).empty());
+  EXPECT_TRUE(delimiter.Find<false>("abcd", 0).empty());
 }

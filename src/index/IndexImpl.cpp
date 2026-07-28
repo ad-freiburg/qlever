@@ -1420,18 +1420,14 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   // flag was recorded were always built with ICU, hence the default of `true`.
   bool indexHasIcuSupport = configurationJson_.value("has-icu-support", true);
   if (indexHasIcuSupport != ad_utility::useICUDefault) {
-    AD_LOG_ERROR << "This index was built "
-                 << (indexHasIcuSupport ? "with" : "without")
-                 << " ICU (Unicode) support, but the QLever binary you are "
-                    "using was built "
-                 << (ad_utility::useICUDefault ? "with" : "without")
-                 << " it. The two use different string collations and are not "
-                    "interchangeable. Please rebuild the index or use a "
-                    "matching QLever binary."
-                 << std::endl;
-    throw std::runtime_error{
-        "The index's ICU-support configuration does not match the QLever "
-        "binary, see log message for details"};
+    throw std::runtime_error{absl::StrCat(
+        "This index was built ", indexHasIcuSupport ? "with" : "without",
+        " ICU (Unicode) support, but the QLever binary you are using was "
+        "built ",
+        ad_utility::useICUDefault ? "with" : "without",
+        " it. The two use different string collations and are not "
+        "interchangeable. Please rebuild the index or use a matching QLever "
+        "binary.")};
   }
 
   if (configurationJson_.find("prefixes-external") !=

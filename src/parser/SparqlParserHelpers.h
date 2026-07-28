@@ -20,7 +20,9 @@ namespace sparqlParserHelpers {
 struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
  private:
   // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
-  // before beginning with actual parsing as the SPARQL standard mandates.
+  // before beginning with actual parsing as the SPARQL standard mandates. In an
+  // ICU-free build (the `QLEVER_NO_UNICODE` macro is defined) unicode escape
+  // sequences are not processed and the input is returned unchanged.
   static std::string unescapeUnicodeSequences(std::string input);
 
   using Base = ParserAndVisitorBase<SparqlQleverVisitor>;

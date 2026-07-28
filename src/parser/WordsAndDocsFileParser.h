@@ -111,9 +111,8 @@ struct LiteralsTokenizationDelimiter {
       auto isAlNum = [](unsigned char c) { return std::isalnum(c); };
       auto begOfSep =
           std::find_if_not(text.begin() + unsignedPos, text.end(), isAlNum);
-      if (begOfSep == text.end()) {
-        return {text.end(), 0};
-      }
+      // Note: If there is no separator, then `begOfSep == text.end()` and the
+      // following two lines correctly return the empty substring at the end.
       auto endOfSep = std::find_if(begOfSep, text.end(), isAlNum);
       return {begOfSep, std::size_t(endOfSep - begOfSep)};
     } else {

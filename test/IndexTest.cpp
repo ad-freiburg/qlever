@@ -1010,7 +1010,7 @@ TEST(IndexImpl, icuSupportConfigurationMustMatch) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       indexImpl.applyConfiguration(mismatchedConfig),
       ::testing::HasSubstr(
-          "ICU-support configuration does not match the QLever binary"));
+          "different string collations and are not interchangeable"));
 
   // An index built before this flag existed is assumed to have ICU support, so
   // it loads iff the current binary also has ICU support.
@@ -1022,7 +1022,7 @@ TEST(IndexImpl, icuSupportConfigurationMustMatch) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         indexImpl.applyConfiguration(legacyConfig),
         ::testing::HasSubstr(
-            "ICU-support configuration does not match the QLever binary"));
+            "different string collations and are not interchangeable"));
   }
 }
 
