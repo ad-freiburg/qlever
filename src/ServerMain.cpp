@@ -233,11 +233,6 @@ int main(int argc, char** argv) {
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
       "token.");
-  add("service-max-redirects",
-      optionFactory
-          .getProgramOption<&RuntimeParameters::serviceMaxRedirects_>(),
-      "The maximum number of redirects that will be done for query "
-      "federation.");
   std::vector<std::string> runtimeParameterAssignments;
   add("set-runtime-parameter",
       po::value<std::vector<std::string>>(&runtimeParameterAssignments)

@@ -46,4 +46,22 @@ TEST(RuntimeParameters, setFromAssignment) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       params.setFromAssignment("default-query-timeout=banana"),
       HasSubstr("Could not set parameter default-query-timeout"));
+
+  // The use case that prompted this option (see #3031): set the maximal
+  // number of redirects for query federation at startup.
+  params.setFromAssignment("service-max-redirects=5");
+  EXPECT_EQ(params.serviceMaxRedirects_.get(), 5u);
+}
+
+// Test that `getKeys` and `toMap` (the building blocks of
+// `--set-runtime-parameter help`) are consistent with each other.
+TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
+  RuntimeParameters params;
+  auto keys = params.getKeys();
+  auto map = params.toMap();
+  EXPECT_FALSE(keys.empty());
+  EXPECT_EQ(keys.size(), map.size());
+  for (const auto& key : keys) {
+    EXPECT_TRUE(map.contains(key)) << key;
+  }
 }
