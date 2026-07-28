@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_METRICSTESTHELPERS_H
-#define QLEVER_METRICSTESTHELPERS_H
+#ifndef QLEVER_TEST_UTIL_METRICSTESTHELPERS_H
+#define QLEVER_TEST_UTIL_METRICSTESTHELPERS_H
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
@@ -33,4 +33,4 @@ inline auto IsZero = [](std::string_view metric,
   return MetricIs(metric, "0", label);
 };
 
-#endif  // QLEVER_METRICSTESTHELPERS_H
+#endif  // QLEVER_TEST_UTIL_METRICSTESTHELPERS_H
