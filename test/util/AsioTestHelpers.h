@@ -11,9 +11,10 @@
 #define QLEVER_TEST_UTIL_ASIOTESTHELPERS_H
 
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/deferred.hpp>
+#include <boost/asio/use_future.hpp>
 #include <exception>
 #include <future>
-#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -51,9 +52,12 @@
 //
 // The helpers below avoid this by converting the exception into a `std::string`
 // on the thread on which the operation completes, and by transferring only that
-// string. For the transfer of a value, the `std::promise`/`std::future` pair
-// establishes synchronization that the thread sanitizer does understand,
-// because its mutex is intercepted.
+// string. The conversion is expressed as a `boost::asio::deferred`
+// transformation, which Asio invokes inline in the completion handler of the
+// operation. The transfer to the calling thread is done by
+// `boost::asio::use_future`: for the transfer of a value, the
+// `std::promise`/`std::future` pair establishes synchronization that the thread
+// sanitizer does understand, because its mutex is intercepted.
 namespace ad_utility::testing {
 
 // Return the message of the exception that `exception` refers to, or
@@ -87,46 +91,57 @@ struct AsyncOutcome {
   bool failed() const { return errorMessage_.has_value(); }
 };
 
-// Run the asynchronous operation that is initiated by
-// `initiateOperation(completionToken)`, wait for its completion, and return the
-// corresponding `AsyncOutcome<Result>`. The exception (if any) is converted
-// into its message on the thread that completes the operation, see the comment
-// above for the reason.
+// A `boost::asio::deferred` transformation that replaces the
+// `std::exception_ptr` of a completion by the message of that exception and
+// discards the result of the operation. Pipe it onto an operation that was
+// initiated with the `boost::asio::deferred` completion token, for example
 //
-// NOTE: The `completionToken` is a plain completion handler. It is passed as a
-// copyable lvalue (with the promise inside a `std::shared_ptr`, just as
-// `boost::asio::use_future` does it), because some of Asio's initiating
-// functions require exactly that.
-template <typename Result, typename InitiateOperation>
+//   auto message = (source.asyncGetNextBlock(boost::asio::deferred)
+//                   | asErrorMessage() | boost::asio::use_future).get();
+//
+// Asio invokes the transformation inline in the completion handler of the
+// operation, which is exactly what the comment above requires.
+inline auto asErrorMessage() {
+  return boost::asio::deferred([](std::exception_ptr exception, auto&&...) {
+    return boost::asio::deferred.values(getMessageOfException(exception));
+  });
+}
+
+// Same as `asErrorMessage` above, but keep the result of the operation and
+// combine it with the message into an `AsyncOutcome<Result>`. The `Result` has
+// to be specified explicitly, because the arguments of the completion are
+// forwarded to the transformation exactly as the operation has passed them,
+// without a conversion to the types from its completion signature.
+template <typename Result>
+auto asOutcome() {
+  return boost::asio::deferred(
+      [](std::exception_ptr exception, auto&&... results) {
+        return boost::asio::deferred.values(AsyncOutcome<Result>{
+            getMessageOfException(exception), Result{AD_FWD(results)...}});
+      });
+}
+
+// Run the `deferredOperation` (an asynchronous operation that was initiated
+// with the `boost::asio::deferred` completion token), wait for its completion,
+// and return the corresponding `AsyncOutcome<Result>`.
+template <typename Result, typename DeferredOperation>
 AsyncOutcome<Result> runAsyncOperationAndGetOutcome(
-    InitiateOperation initiateOperation) {
-  auto outcomePromise = std::make_shared<std::promise<AsyncOutcome<Result>>>();
-  auto outcomeFuture = outcomePromise->get_future();
-  auto completionToken = [outcomePromise](std::exception_ptr exception,
-                                          auto&&... results) {
-    outcomePromise->set_value(AsyncOutcome<Result>{
-        getMessageOfException(exception), Result{AD_FWD(results)...}});
-  };
-  std::move(initiateOperation)(completionToken);
-  return outcomeFuture.get();
+    DeferredOperation deferredOperation) {
+  return (std::move(deferredOperation) | asOutcome<Result>() |
+          boost::asio::use_future)
+      .get();
 }
 
 // Same as `runAsyncOperationAndGetOutcome` above, but only return the message
 // of the exception that the operation has failed with (`std::nullopt` if it has
 // succeeded) and discard the result. This also works for operations that
 // complete without a result.
-template <typename InitiateOperation>
+template <typename DeferredOperation>
 std::optional<std::string> getErrorMessageOfAsyncOperation(
-    InitiateOperation initiateOperation) {
-  auto messagePromise =
-      std::make_shared<std::promise<std::optional<std::string>>>();
-  auto messageFuture = messagePromise->get_future();
-  auto completionToken = [messagePromise](std::exception_ptr exception,
-                                          auto&&...) {
-    messagePromise->set_value(getMessageOfException(exception));
-  };
-  std::move(initiateOperation)(completionToken);
-  return messageFuture.get();
+    DeferredOperation deferredOperation) {
+  return (std::move(deferredOperation) | asErrorMessage() |
+          boost::asio::use_future)
+      .get();
 }
 
 // `co_spawn` the coroutine `awaitable` onto the `executor` (which may also be
@@ -137,11 +152,8 @@ std::optional<std::string> getErrorMessageOfAsyncOperation(
 template <typename Executor, typename Awaitable>
 std::optional<std::string> getErrorMessageOfCoroutine(Executor&& executor,
                                                       Awaitable awaitable) {
-  return getErrorMessageOfAsyncOperation(
-      [&executor, awaitable = std::move(awaitable)](auto&& token) mutable {
-        return boost::asio::co_spawn(AD_FWD(executor), std::move(awaitable),
-                                     AD_FWD(token));
-      });
+  return getErrorMessageOfAsyncOperation(boost::asio::co_spawn(
+      AD_FWD(executor), std::move(awaitable), boost::asio::deferred));
 }
 }  // namespace ad_utility::testing
 

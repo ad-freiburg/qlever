@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <boost/asio/deferred.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <future>
@@ -27,7 +28,6 @@
 #include "parser/AsyncBlockSource.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/Forward.h"
 #include "util/MemorySize/MemorySize.h"
 
 namespace {
@@ -52,9 +52,8 @@ DrainOutcome drainBlocks(qp::AsyncBlockSource& source) {
   DrainOutcome outcome;
   while (true) {
     auto blockOrError = ad_utility::testing::runAsyncOperationAndGetOutcome<
-        std::optional<qp::ByteBlock>>([&source](auto&& completionToken) {
-      return source.asyncGetNextBlock(AD_FWD(completionToken));
-    });
+        std::optional<qp::ByteBlock>>(
+        source.asyncGetNextBlock(boost::asio::deferred));
     if (blockOrError.failed()) {
       outcome.errorMessage_ = std::move(blockOrError.errorMessage_);
       return outcome;
