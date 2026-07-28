@@ -102,8 +102,9 @@ struct DocsFileLine {
 
 // Custom delimiter class for tokenization of literals using `absl::StrSplit`.
 // The `Find` function returns the next delimiter in `text` after the given
-// `pos` or an empty substring if there is no next delimiter.
-// This version properly handles Unicode characters using ICU.
+// `pos` or an empty substring if there is no next delimiter. With `useICU ==
+// true` it handles Unicode characters via ICU; with `useICU == false` it uses
+// the ASCII `std::isalnum`.
 struct LiteralsTokenizationDelimiter {
   template <bool useICU = ad_utility::useICUDefault>
   absl::string_view Find(absl::string_view text, size_t unsignedPos) const {
@@ -111,10 +112,8 @@ struct LiteralsTokenizationDelimiter {
       auto isAlNum = [](unsigned char c) { return std::isalnum(c); };
       auto begOfSep =
           std::find_if_not(text.begin() + unsignedPos, text.end(), isAlNum);
-      // Note: If there is no separator, then `begOfSep == text.end()` and the
-      // following two lines correctly return the empty substring at the end.
       auto endOfSep = std::find_if(begOfSep, text.end(), isAlNum);
-      return {begOfSep, std::size_t(endOfSep - begOfSep)};
+      return text.substr(begOfSep - text.begin(), endOfSep - begOfSep);
     } else {
       QLEVER_UNICODE_ONLY("LiteralsTokenizationDelimiter::Find", {
         auto pos = static_cast<int64_t>(unsignedPos);
