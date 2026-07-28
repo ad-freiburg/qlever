@@ -564,11 +564,15 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
   // exclusively for the rebuild, see `rebuildIndexToDisk`), so that directory
   // is now empty and can be removed. Everything that matters has already
   // happened at this point, so a failure here is only worth a warning.
+  // NOTE: The `error_code` is only there to select the non-throwing overload of
+  // `fs::remove`; it does not have to be inspected, because that overload
+  // returns `false` whenever it sets an error code (and also if the directory
+  // did not exist in the first place, which is just as unexpected here).
   fs::path directoryOfNewIndexSource =
       fs::path{config.newIndexSource()}.parent_path();
   ql::error_code errorCode;
   if (!directoryOfNewIndexSource.empty() &&
-      (!fs::remove(directoryOfNewIndexSource, errorCode) || errorCode)) {
+      !fs::remove(directoryOfNewIndexSource, errorCode)) {
     AD_LOG_WARN << "Could not remove the directory \""
                 << directoryOfNewIndexSource.string()
                 << "\" in which the new index was built" << std::endl;
