@@ -7,6 +7,8 @@
 #include "libqlever/Qlever.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
 #include <boost/optional.hpp>
 #include <functional>
@@ -28,6 +30,7 @@
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/TimeTracer.h"
 #include "util/http/UrlParser.h"
 
@@ -415,6 +418,81 @@ IndexRebuildConfig::IndexRebuildConfig(std::string oldIndexSource,
 }
 
 // ___________________________________________________________________________
+nlohmann::json IndexRebuildConfig::successResponseAsJson() const {
+  nlohmann::json json;
+  json["message"] = "Index successfully rebuilt and swapped in";
+  json["old-index-basename"] = oldIndexTarget_;
+  json["new-index-basename"] = newIndexTarget_;
+  return json;
+}
+
+// ___________________________________________________________________________
+IndexRebuildConfig Qlever::makeIndexRebuildConfig(
+    const Index& index, const std::string& originalBaseName,
+    std::optional<std::string> tmpDirForRebuild,
+    std::optional<std::string> dirForOldIndex) {
+  namespace fs = ql::filesystem;
+
+  // Resolve one of the two directories (falling back to `defaultDirectory` if
+  // it was not specified) and turn it into a base name.
+  auto resolveBaseName =
+      [indexFileName = fs::path{originalBaseName}.filename()](
+          std::optional<std::string> directory, std::string defaultDirectory) {
+        return (fs::path{std::move(directory).value_or(
+                    std::move(defaultDirectory))} /
+                indexFileName)
+            .string();
+      };
+
+  // The defaults are: build the new index in `rebuild.<current datetime>.tmp`
+  // and move the old index to `previous.<datetime of the build of the current
+  // index>`.
+  std::string baseNameForRebuild = resolveBaseName(
+      std::move(tmpDirForRebuild),
+      absl::StrCat("rebuild.",
+                   absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::Now(),
+                                    absl::UTCTimeZone()),
+                   ".tmp"));
+  std::string baseNameForOldIndex = resolveBaseName(
+      std::move(dirForOldIndex),
+      absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
+
+  // Check the two base names that were derived from the arguments: they must be
+  // relative (they are resolved against the working directory of the engine,
+  // like the base name of the current index), and their directory must be empty
+  // or not exist yet and be a subdirectory of the directory of the current
+  // index. Base names that would collide with each other or with the currently
+  // served index are rejected by the `IndexRebuildConfig` constructor below.
+  for (const auto& baseName : {baseNameForRebuild, baseNameForOldIndex}) {
+    fs::path path{baseName};
+    if (!path.is_relative()) {
+      throw std::runtime_error{absl::StrCat("The directory \"",
+                                            path.parent_path().string(),
+                                            "\" must be a relative path")};
+    }
+    // The parent path is empty if the base name lies in the working directory
+    // itself, which the checks below then refer to.
+    fs::path dir =
+        path.has_parent_path() ? path.parent_path() : fs::current_path();
+    if (fs::exists(dir) && !fs::is_empty(dir)) {
+      throw std::runtime_error{
+          absl::StrCat("The directory \"", dir.string(),
+                       "\" already exists and is not empty")};
+    }
+    if (!qlever::util::isSubdirectoryOf(baseName, originalBaseName)) {
+      throw std::runtime_error{absl::StrCat(
+          "The directory \"", dir.string(),
+          "\" is not a subdirectory of the directory of the current index")};
+    }
+  }
+
+  // The new index ends up at the base name of the index the engine was started
+  // on, so that a later restart loads it.
+  return IndexRebuildConfig{index.getOnDiskBase(), baseNameForRebuild,
+                            baseNameForOldIndex, originalBaseName};
+}
+
+// ___________________________________________________________________________
 void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                        const IndexRebuildConfig& config) {
   namespace fs = ql::filesystem;
@@ -472,6 +550,21 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
     newIndex.getImpl().setFilenamesForPersistentUpdates(false);
   }
   newManager.setOnDiskBase(config.newIndexTarget());
+
+  // The move took the new index and its rebuild log out of the directory in
+  // which the new index was built (typically a temporary directory created
+  // exclusively for the rebuild, see `rebuildIndexToDisk`), so that directory
+  // is now empty and can be removed. Everything that matters has already
+  // happened at this point, so a failure here is only worth a warning.
+  fs::path directoryOfNewIndexSource =
+      fs::path{config.newIndexSource()}.parent_path();
+  std::error_code errorCode;
+  if (!directoryOfNewIndexSource.empty() &&
+      (!fs::remove(directoryOfNewIndexSource, errorCode) || errorCode)) {
+    AD_LOG_WARN << "Could not remove the directory \""
+                << directoryOfNewIndexSource.string()
+                << "\" in which the new index was built" << std::endl;
+  }
 }
 
 // ___________________________________________________________________________
