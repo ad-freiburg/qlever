@@ -172,13 +172,12 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
             resultSortedOn()};
   }
 
-  // Owning view wrapper to please gcc 11.
-  return {produceTablesLazily(std::move(staticMergedVocab),
-                              ad_utility::OwningView{std::move(subResults)} |
-                                  ql::views::transform(&Result::idTableView),
-                              getLimitOffset()._offset,
-                              getLimitOffset().limitOrDefault()),
-          resultSortedOn()};
+  return {
+      produceTablesLazily(
+          std::move(staticMergedVocab),
+          std::move(subResults) | ql::views::transform(&Result::idTableView),
+          getLimitOffset()._offset, getLimitOffset().limitOrDefault()),
+      resultSortedOn()};
 }
 
 // ____________________________________________________________________________
@@ -423,10 +422,10 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 
     return Result::IdTableLoopControl::yieldAll(
         ad_utility::InputRangeTypeErased{
-            ad_utility::OwningView{self->produceTablesLazily(
+            self->produceTablesLazily(
                 std::move(localVocab),
                 ql::views::transform(idTables, ad_utility::dereference), offset,
-                limit, lastTableOffset)} |
+                limit, lastTableOffset) |
             ql::views::transform([&producedTableSize](auto& tableAndVocab) {
               producedTableSize += tableAndVocab.idTable_.size();
               return std::move(tableAndVocab);

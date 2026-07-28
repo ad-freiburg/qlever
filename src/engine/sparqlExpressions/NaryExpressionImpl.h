@@ -244,8 +244,8 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     // respective child result.
     auto zipper = std::apply(
         [&](const auto&... getters) {
-          return ::ranges::views::zip(ad_utility::OwningView{
-              getters(std::move(operands), context, targetSize)}...);
+          return ::ranges::views::zip(
+              getters(std::move(operands), context, targetSize)...);
         },
         getters_);
 
