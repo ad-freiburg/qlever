@@ -89,6 +89,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.0.0")
+        # GCC 11's libstdc++ doesn't yet provide `std::ranges::owning_view`, on
+        # which we now rely, so we fall back to `range-v3` for that compiler.
+        MESSAGE(STATUS "range-v3 is used for GCC 11 because its libstdc++ doesn't yet provide `std::ranges::owning_view`")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
@@ -102,6 +108,25 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL
     endif ()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+endif ()
+
+# Additionally fall back to `range-v3` whenever the C++ standard library is
+# libstdc++ older than version 12, independent of the compiler. Such versions
+# (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
+# on which we now rely. Detecting the standard library directly (rather than the
+# compiler version) also covers Clang paired with an old libstdc++, e.g. in the
+# `using enum` rewriter container.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("
+#include <cstddef>
+#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE < 12
+#error libstdc++ older than 12 does not provide std::ranges::owning_view
+#endif
+int main() { return 0; }
+" QLEVER_STDLIB_PROVIDES_OWNING_VIEW)
+if (NOT QLEVER_STDLIB_PROVIDES_OWNING_VIEW)
+    MESSAGE(STATUS "range-v3 is used because the C++ standard library is libstdc++ older than version 12, which doesn't provide `std::ranges::owning_view`")
+    set(RANGE_V3_REQUIRED_BY_COMPILER ON)
 endif ()
 
 ## Build targets for address sanitizer
@@ -197,7 +222,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        GIT_TAG 0e2a41b61694e823df1b7d77174b139253c7ac39 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
