@@ -124,14 +124,12 @@ void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
 }
 
 // ___________________________________________________________________________
-template <bool useICU>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
   // Counting codepoints only requires the byte structure of UTF-8 and no
-  // Unicode tables, so both instantiations share this ICU-free
-  // implementation. Malformed UTF-8 (invalid lead or continuation bytes,
-  // overlong encodings, surrogates, values beyond U+10FFFF) is rejected
-  // exactly like by ICU's `U8_NEXT`.
+  // Unicode tables, so this implementation is ICU-free. Malformed UTF-8
+  // (invalid lead or continuation bytes, overlong encodings, surrogates,
+  // values beyond U+10FFFF) is rejected exactly like by ICU's `U8_NEXT`.
   size_t numCodepoints = 0;
   size_t i = 0;
   while (i < sv.size() && numCodepoints < prefixLength) {
@@ -164,11 +162,6 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
   }
   return {numCodepoints, sv.substr(0, i)};
 }
-// Explicit instantiations for both configurations.
-template std::pair<size_t, std::string_view> getUTF8Prefix<true>(
-    std::string_view, size_t);
-template std::pair<size_t, std::string_view> getUTF8Prefix<false>(
-    std::string_view, size_t);
 
 #ifndef QLEVER_NO_UNICODE
 namespace detail {
