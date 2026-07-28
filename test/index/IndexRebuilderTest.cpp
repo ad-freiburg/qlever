@@ -13,6 +13,9 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <future>
+#include <optional>
+#include <string>
 
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
@@ -696,11 +699,50 @@ TEST(IndexRebuilder, serverIntegration) {
     return net::co_spawn(threadPool, std::move(task), net::use_future);
   };
 
+  // Perform the given `request`, expect it to fail, and check the message of
+  // the resulting exception against the `matcher`. NOTE: The exception must not
+  // be handed out of the coroutine (in particular not via `net::use_future` +
+  // `AD_EXPECT_THROW_WITH_MESSAGE`). The exception is stored in the shared
+  // state of the `std::future`, and `std::future::get()` releases the future's
+  // reference to that shared state while the exception is propagating. The
+  // `std::promise` inside the coroutine's completion handler on the thread pool
+  // is then the last owner and destroys the exception (including the buffer
+  // holding its message) concurrently with the main thread reading that
+  // message, which is a data race. We therefore convert the exception into a
+  // `std::string` on the thread pool and only transfer that string, which
+  // `std::promise`/`std::future` synchronize properly.
+  auto expectRequestFailsWith =
+      [&threadPool, &server](auto& request, const auto& matcher,
+                             ad_utility::source_location location =
+                                 ad_utility::source_location::current()) {
+        auto trace = generateLocationTrace(location);
+        using ResT = ad_utility::httpUtils::ResponseT;
+        auto task = server.template onlyForTestingProcess<
+            std::decay_t<decltype(request)>, ResT>(request);
+        std::promise<std::optional<std::string>> messagePromise;
+        auto messageFuture = messagePromise.get_future();
+        net::co_spawn(threadPool, std::move(task),
+                      [messagePromise = std::move(messagePromise)](
+                          std::exception_ptr exception, ResT) mutable {
+                        std::optional<std::string> message;
+                        if (exception) {
+                          try {
+                            std::rethrow_exception(exception);
+                          } catch (const std::exception& e) {
+                            message = e.what();
+                          }
+                        }
+                        messagePromise.set_value(std::move(message));
+                      });
+        auto message = messageFuture.get();
+        ASSERT_TRUE(message.has_value()) << "No exception was thrown";
+        EXPECT_THAT(message.value(), matcher);
+      };
+
   // Without access token this operation is not allowed!
   auto request0 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&index-name=my-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request0).get(),
-                               ::testing::HasSubstr("access token"));
+  expectRequestFailsWith(request0, ::testing::HasSubstr("access token"));
 
   auto request1 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&index-name=my-name&access-token="
@@ -733,22 +775,19 @@ TEST(IndexRebuilder, serverIntegration) {
   // it.
   auto request4 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request4).get(),
-      ::testing::HasSubstr("already files with the same base name"));
+  expectRequestFailsWith(
+      request4, ::testing::HasSubstr("already files with the same base name"));
 
   // The index has to reside within the same directory as the original index.
   auto request5 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request5).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  expectRequestFailsWith(
+      request5, ::testing::HasSubstr("not located in the same directory"));
 
   auto request6 = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request6).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  expectRequestFailsWith(
+      request6, ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }
