@@ -264,6 +264,19 @@ PlannedQuery Qlever::planQuery(
 }
 
 // ___________________________________________________________________________
+PlannedQuery Qlever::planQuery(
+    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
+  // duration of this call, and the resulting `PlannedQuery` takes its own
+  // `shared_ptr` to the context.
+  auto& qec = parsedQuery.queryExecutionContext();
+  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
+                   timeLimit, requestTimer);
+}
+
+// ___________________________________________________________________________
 ParsedQueryAndContext Qlever::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
@@ -287,19 +300,6 @@ ParsedQueryAndContext Qlever::bindParsedQuery(
       indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
       pinResult, disableCaching_);
   return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
-}
-
-// ___________________________________________________________________________
-PlannedQuery Qlever::planQuery(
-    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
-    std::optional<TimeLimit> timeLimit,
-    boost::optional<const ad_utility::Timer&> requestTimer) const {
-  // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
-  // duration of this call, and the resulting `PlannedQuery` takes its own
-  // `shared_ptr` to the context.
-  auto& qec = parsedQuery.queryExecutionContext();
-  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
-                   timeLimit, requestTimer);
 }
 
 // ___________________________________________________________________________

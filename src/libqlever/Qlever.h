@@ -369,13 +369,28 @@ class Qlever {
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
+  // Plan a query that was parsed by `parseQuery` (or bundled by
+  // `bindParsedQuery`, both see below). The query is planned against the
+  // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
+  // out of sync. Implemented in terms of the `planQuery` overload above.
+  //
+  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
+  // `planQuery` above.
+  PlannedQuery planQuery(
+      ParsedQueryAndContext parsedQuery,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
+
   // Parse the given `query` (despite the name, `query` may also be a SPARQL
   // update operation) and return it together with the
   // `QueryExecutionContext` to plan and execute it against, see
   // `ParsedQueryAndContext`.
   //
   // This is the first half of `parseAndPlanQuery`, the second half being the
-  // `planQuery` overload below. Calling the two separately is useful to inspect
+  // `planQuery` overload above. Calling the two separately is useful to inspect
   // or modify the `ParsedQuery` before it is planned, to measure the time for
   // the parsing and the planning separately, and to reuse a parsed query (see
   // below).
@@ -409,21 +424,6 @@ class Qlever {
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* the default is a noop*/ },
       bool pinSubtrees = false, bool pinResult = false) const;
-
-  // Plan a query that was parsed by `parseQuery` (or bundled by
-  // `bindParsedQuery`). The query is planned against the
-  // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
-  // out of sync. Implemented in terms of the `planQuery` overload above.
-  //
-  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
-  // `planQuery` above.
-  PlannedQuery planQuery(
-      ParsedQueryAndContext parsedQuery,
-      SharedCancellationHandle handle =
-          std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
-      boost::optional<const ad_utility::Timer&> requestTimer =
-          boost::none) const;
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
   // name, `query` may also be a SPARQL update operation). This is exactly

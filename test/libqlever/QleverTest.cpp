@@ -24,6 +24,35 @@
 using namespace qlever;
 using namespace testing;
 
+namespace {
+// Write `turtleContents` to a turtle file, build an index from it with all
+// settings at their default, and return an `EngineConfig` for that index. The
+// base name of both the turtle file and the index is derived from the name of
+// the currently running test and the optional `suffix`, so that a single test
+// can build several distinct indexes. The turtle file is deleted again before
+// this returns; the files of the index itself remain on disk.
+//
+// NOTE: An index that cannot be built throws, which `gtest` reports as a
+// failure of the running test. This is deliberately not an `EXPECT_NO_THROW`,
+// which would let the test continue with a nonexistent index.
+EngineConfig buildTestIndex(std::string_view turtleContents,
+                            std::string_view suffix = "") {
+  std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
+  std::string filename = absl::StrCat(basename, ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << turtleContents;
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig config;
+  config.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  config.baseName_ = basename;
+  Qlever::buildIndex(config);
+  return EngineConfig{config};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(LibQlever, buildIndexAndRunQuery) {
   std::string filename = "libQleverbuildIndexAndRunQuery.ttl";
@@ -215,22 +244,9 @@ TEST(IndexBuilderConfig, validate) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, loadIndexWithoutPermutations) {
-  std::string filename = "libQleverLoadIndexWithoutPermutations.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
-  }
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "LibQlever.loadIndexWithoutPermutations";
-  c.memoryLimit_ = std::nullopt;
-
-  // Build the index normally.
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
 
   // Load the index with `doNotLoadPermutations` set to true.
-  EngineConfig ec{c};
   ec.doNotLoadPermutations_ = true;
   Qlever engine{ec};
 
@@ -257,17 +273,7 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 // named result cache is not empty (its entries are only valid for one specific
 // snapshot). Uses `FRIEND_TEST` to reach the otherwise private method.
 TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
-  std::string filename = "libQleverSwapIndexAndViews.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o>.";
-  }
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "LibQlever.swapIndexAndViews";
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  Qlever qlever{EngineConfig{c}};
+  Qlever qlever{buildTestIndex("<s> <p> <o>.")};
 
   // With an empty named result cache, swapping (here: with the current
   // snapshot) is allowed.
@@ -285,21 +291,7 @@ TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, disableCaching) {
-  std::string filename = "libQleverDisableCaching.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
-  }
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "LibQlever.disableCaching";
-  c.memoryLimit_ = std::nullopt;
-
-  // Build the index normally.
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  EngineConfig ec{c};
+  EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
   {
     // Load the index with `disableCaching` set to true.
     ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
@@ -344,18 +336,7 @@ TEST(LibQlever, disableCaching) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, externallySpecifiedValues) {
-  std::string filename = "libQleverExternalValues.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .";
-  }
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexForExternalValues";
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  EngineConfig ec{c};
+  EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
   // Caching must be disabled for externally specified values.
   ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
   Qlever engine{ec};
@@ -652,19 +633,7 @@ TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
 // its `QueryExecutionTree`, and `cloneQetInPlace` gives the copy a tree of its
 // own, which can then be modified without affecting the original.
 TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = gtestCurrentTestName();
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  EngineConfig ec{c};
+  EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
   // Caching must be disabled for externally specified values.
   ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
   Qlever engine{ec};
@@ -743,18 +712,7 @@ TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
 // Test that `parseAndPlanQuery` is exactly `parseQuery` followed by
 // `planQuery`, and that all the arguments of the former reach the two halves.
 TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o> . <s2> <p> <o2> .";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = gtestCurrentTestName();
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-  Qlever engine{EngineConfig{c}};
+  Qlever engine{buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .")};
 
   std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
 
@@ -793,25 +751,11 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
 // second `Qlever` instance, as long as that instance has an equivalent
 // `EncodedIriManager` (see the note on reusing a parsed query in `parseQuery`).
 TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o> . <s2> <p> <o2> .";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
   // Two indexes over the same data and with the same configuration, so their
   // `EncodedIriManager`s are equivalent.
-  IndexBuilderConfig c1;
-  c1.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c1.baseName_ = absl::StrCat(gtestCurrentTestName(), ".first");
-  EXPECT_NO_THROW(Qlever::buildIndex(c1));
-  IndexBuilderConfig c2 = c1;
-  c2.baseName_ = absl::StrCat(gtestCurrentTestName(), ".second");
-  EXPECT_NO_THROW(Qlever::buildIndex(c2));
-
-  Qlever first{EngineConfig{c1}};
-  Qlever second{EngineConfig{c2}};
+  std::string_view turtle = "<s> <p> <o> . <s2> <p> <o2> .";
+  Qlever first{buildTestIndex(turtle, ".first")};
+  Qlever second{buildTestIndex(turtle, ".second")};
 
   std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
   std::string expected = "?s\n<s>\n<s2>\n";
@@ -840,19 +784,7 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
 // expensive) estimates are computed by default, but not if the config disables
 // them.
 TEST(LibQlever, computeSortPerformanceEstimators) {
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o> .";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = gtestCurrentTestName();
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  EngineConfig ec{c};
+  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
   ASSERT_TRUE(ec.computeSortPerformanceEstimators_);
   EXPECT_TRUE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
 
@@ -864,18 +796,7 @@ TEST(LibQlever, computeSortPerformanceEstimators) {
 // Test the trivial getters of `ParsedQueryAndContext`, both the `const` and the
 // non-`const` overloads. All of them refer to the same objects.
 TEST(LibQlever, parsedQueryAndContextGetters) {
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o> .";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = gtestCurrentTestName();
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-  Qlever engine{EngineConfig{c}};
+  Qlever engine{buildTestIndex("<s> <p> <o> .")};
 
   std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
   ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
@@ -899,18 +820,7 @@ TEST(LibQlever, parsedQueryAndContextGetters) {
 // Test `Qlever::clearCache`, and trivially the `const` getter for the named
 // result cache.
 TEST(LibQlever, clearCache) {
-  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o> . <s2> <p> <o2> .";
-  }
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = gtestCurrentTestName();
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-  Qlever engine{EngineConfig{c}};
+  Qlever engine{buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .")};
 
   // The cache starts out empty.
   ASSERT_EQ(engine.cache().numPinnedEntries(), 0U);
