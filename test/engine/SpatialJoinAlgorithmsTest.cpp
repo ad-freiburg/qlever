@@ -26,8 +26,8 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
 
 namespace {  // anonymous namespace to avoid linker problems
