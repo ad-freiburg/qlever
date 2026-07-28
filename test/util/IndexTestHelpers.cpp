@@ -15,6 +15,7 @@
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "global/FileSuffixConstants.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
