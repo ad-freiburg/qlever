@@ -459,9 +459,7 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
   // index>`.
   std::string baseNameForRebuild = resolveBaseName(
       std::move(tmpDirForRebuild),
-      absl::StrCat("rebuild.",
-                   absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::Now(),
-                                    absl::UTCTimeZone()),
+      absl::StrCat("rebuild.", IndexImpl::formatIndexBuildTime(absl::Now()),
                    ".tmp"));
   std::string baseNameForOldIndex = resolveBaseName(
       std::move(dirForOldIndex),

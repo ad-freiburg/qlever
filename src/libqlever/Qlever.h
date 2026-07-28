@@ -531,11 +531,11 @@ class Qlever {
   // the index that is currently being served) from the two directories a
   // rebuild can be configured with: `tmpDirForRebuild`, in which the new index
   // is built, and `dirForOldIndex`, to which the old index is retired. Both
-  // default to a directory that is derived from the current time resp. from the
-  // build date of the current index. Inside these directories, and for the new
-  // index after the swap, the file name of `index.getOnDiskBase()` is used: the
-  // new index has to end up at the base name the current index is served from,
-  // so that a later restart loads it.
+  // default (if `std::nullopt`) to a directory that is derived from the current
+  // time resp. from the build date of the current index. Inside these
+  // directories, and for the new index after the swap, the file name of
+  // `index.getOnDiskBase()` is used: the new index has to end up at the base
+  // name the current index is served from, so that a later restart loads it.
   //
   // The two directories must be relative paths (they are resolved against the
   // working directory of the engine, just like the base name of the current
@@ -564,7 +564,8 @@ class Qlever {
   //    base name, files for persisted updates and graph names, and the views
   //    manager) to `config.newIndexTarget()`.
   // 4. Remove the directory that contained `config.newIndexSource()`, which
-  //    step 2 has emptied. A failure here is only logged as a warning.
+  //    step 2 has emptied (if it is actually empty). A failure here is only
+  //    logged as a warning.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
