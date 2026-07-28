@@ -6,7 +6,11 @@
 #include "index/IndexImpl.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <cstdio>
@@ -14,11 +18,16 @@
 #include <future>
 #include <numeric>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "global/FileSuffixConstants.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
@@ -26,6 +35,7 @@
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -37,6 +47,7 @@
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/json.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -107,8 +118,7 @@ static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   };
 
   return ad_utility::CachingTransformInputRange{
-      ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset};
+      sorterPtr->template getSortedBlocks<0>(), setSubset};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
@@ -392,6 +402,8 @@ void IndexImpl::createFromFiles(
   }
 
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
+  configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
+      formatIndexBuildTime(absl::Now());
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -702,7 +714,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numPartialVocabs, sortPred, wordCallback,
-        memoryLimitIndexBuilding());
+        memoryLimitIndexBuilding(), blankNodeIriRegexes_);
     wordCallback.finish();
     return mergedVocabMeta;
   }();
@@ -906,7 +918,8 @@ auto IndexImpl::convertPartialToGlobalIds(
 namespace {
 // Lift a callback that works on single elements to a callback that works on
 // blocks.
-auto liftCallback(auto callback) {
+template <typename Callback>
+auto liftCallback(Callback callback) {
   return [callback = std::move(callback)](const auto& block) mutable {
     ql::ranges::for_each(block, callback);
   };
@@ -1135,11 +1148,16 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        onDiskBase + ".update-triples");
-    graphNameManager_.setFilenameForPersistingAndReadFromDisk(
-        onDiskBase + ".allocated-graphs-state");
+    setFilenamesForPersistentUpdates(true);
   }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setFilenamesForPersistentUpdates(bool readFromDisk) {
+  deltaTriplesManager().setFilenameForPersistentUpdates(
+      absl::StrCat(onDiskBase_, UPDATE_TRIPLES_SUFFIX), readFromDisk);
+  graphNameManager_.setFilenameForPersisting(
+      absl::StrCat(onDiskBase_, ALLOCATED_GRAPHS_SUFFIX), readFromDisk);
 }
 
 // _____________________________________________________________________________
@@ -1211,6 +1229,53 @@ void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
+std::vector<ql::filesystem::path> IndexImpl::allIndexFiles(
+    std::string_view onDiskBase) {
+  std::vector<ql::filesystem::path> result;
+  auto addIfExists = [&result](ql::filesystem::path file) {
+    if (ql::filesystem::exists(file)) {
+      result.push_back(std::move(file));
+    }
+  };
+
+  // The six permutations and the two internal permutations, each with their
+  // `.meta` file. `isInternal` is passed as a `std::bool_constant` (a type that
+  // carries the `bool` value) because C++17 does not support explicitly
+  // templated lambdas.
+  auto addPermutationFiles = [&addIfExists](auto isInternal,
+                                            std::string_view base) {
+    for (auto permutation : Permutation::all<isInternal>()) {
+      for (auto& file : Permutation::fileNames(permutation, base)) {
+        addIfExists(std::move(file));
+      }
+    }
+  };
+  addPermutationFiles(std::bool_constant<false>{}, onDiskBase);
+  addPermutationFiles(std::bool_constant<true>{},
+                      absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX));
+
+  // Files with a fixed name. The optional ones (settings, persisted updates,
+  // text index) are simply skipped by `addIfExists` when they do not exist.
+  for (auto suffix :
+       {PATTERNS_FILE_SUFFIX, CONFIGURATION_FILE, SETTINGS_FILE_SUFFIX,
+        UPDATE_TRIPLES_SUFFIX, ALLOCATED_GRAPHS_SUFFIX, TEXT_INDEX_FILE_SUFFIX,
+        TEXT_VOCAB_FILE_SUFFIX, TEXT_DOCS_DB_FILE_SUFFIX}) {
+    addIfExists(absl::StrCat(onDiskBase, suffix));
+  }
+
+  // The set of vocabulary files depends on the vocabulary type, but they all
+  // start with `<onDiskBase>.vocabulary`, so enumerate them via that prefix
+  // (the same mechanism as `MaterializedViewsManager::viewFilesOnDisk`). The
+  // helper only returns files that exist, so no extra existence check is
+  // needed here.
+  ql::ranges::move(
+      qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VOCAB_SUFFIX),
+      std::back_inserter(result));
+
+  return result;
+}
+
+// ____________________________________________________________________________
 void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
   keepTempFiles_ = keepTempFiles;
 }
@@ -1246,10 +1311,53 @@ void IndexImpl::writeConfiguration() const {
   f << configuration;
 }
 
+// ____________________________________________________________________________
+std::string IndexImpl::dateOfIndexBuild() const {
+  if (configurationJson_.contains(DATE_OF_INDEX_BUILD_KEY)) {
+    return configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
+  }
+  // For indexes that were built before the build date was recorded in the
+  // configuration, fall back to the last modification time of the
+  // configuration file, which is written at the end of the index build. We
+  // deliberately use `stat` and not `std::filesystem::last_write_time`: the
+  // latter returns a time point on the `file_clock`, which cannot be
+  // converted portably to a wall-clock time in C++17 (`clock_cast` requires
+  // C++20), and `std::filesystem` is not available on all toolchains that
+  // QLever targets.
+  struct stat fileStat {};
+  auto configFilename = onDiskBase_ + CONFIGURATION_FILE;
+  AD_CONTRACT_CHECK(stat(configFilename.c_str(), &fileStat) == 0);
+  return formatIndexBuildTime(absl::FromTimeT(fileStat.st_mtime));
+}
+
+// ____________________________________________________________________________
+std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
+  return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
+                          absl::UTCTimeZone());
+}
+
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
-  f >> configurationJson_;
+  applyConfiguration(
+      fileToJson<nlohmann::json>(onDiskBase_ + CONFIGURATION_FILE));
+
+  // Compute unique ID for this index.
+  //
+  // TODO: This is a simplistic way. It would be better to incorporate bytes
+  // from the index files.
+  //
+  // NOTE: This is computed here rather than in `applyConfiguration`, because
+  // `getKbName` reads from the `PSO` permutation, which is only available on
+  // the on-disk load path (`applyConfiguration` is also used when loading from
+  // a blob, where no permutations are loaded).
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
+                          numSubjects_.normal, ".", numPredicates_.normal, ".",
+                          numObjects_.normal);
+}
+
+// ___________________________________________________________________________
+void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
+  configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     AD_LOG_INFO << "The git hash used to build this index was "
                 << configurationJson_["git-hash"] << std::endl;
@@ -1379,14 +1487,6 @@ void IndexImpl::readConfiguration() {
                  EncodedIriManager{});
   loadDataMember("graphNameManager", graphNameManager_,
                  GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
-
-  // Compute unique ID for this index.
-  //
-  // TODO: This is a simplistic way. It would be better to incorporate bytes
-  // from the index files.
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
-                          numSubjects_.normal, ".", numPredicates_.normal, ".",
-                          numObjects_.normal);
 }
 
 // ___________________________________________________________________________
@@ -1815,7 +1915,7 @@ void IndexImpl::deleteTemporaryFile(const std::string& path) {
 
 // _____________________________________________________________________________
 std::string IndexImpl::getPatternFilename() const {
-  return onDiskBase_ + ".index.patterns";
+  return absl::StrCat(onDiskBase_, PATTERNS_FILE_SUFFIX);
 }
 
 // _____________________________________________________________________________
@@ -1887,12 +1987,11 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
         getPatternFilename(), idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
-      bool ignoreForPatterns = false;
       static_assert(NumColumnsIndexBuilding == 4,
                     "this place probably has to be changed when additional "
                     "payload columns are added");
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
-      patternCreator.processTriple(tripleArr, ignoreForPatterns);
+      patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
@@ -1972,6 +2071,37 @@ void IndexImpl::setPrefixesForEncodedValues(
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
 }
+
+// _____________________________________________________________________________
+void IndexImpl::setBlankNodeIriRegexes(
+    const std::vector<std::string>& blankNodeIriRegexes) {
+  std::vector<std::unique_ptr<re2::RE2>> compiledRegexes;
+  ql::ranges::for_each(
+      blankNodeIriRegexes, [&compiledRegexes](const std::string& regex) {
+        // The regexes are matched against the full IRI text (including the
+        // angle brackets), so each of them has to describe an IRI and must
+        // therefore start with `<`.
+        if (!ql::starts_with(regex, '<')) {
+          throw std::runtime_error{absl::StrCat(
+              "A regex for treating IRIs as blank nodes has to match a full "
+              "IRI and must therefore start with `<`, but got: ",
+              regex)};
+        }
+        // `RE2` does not throw for an invalid pattern but stores an error
+        // state, which we turn into a user-readable exception here.
+        auto compiledRegex = std::make_unique<re2::RE2>(regex, re2::RE2::Quiet);
+        if (!compiledRegex->ok()) {
+          throw std::runtime_error{absl::StrCat(
+              "The regex \"", regex,
+              "\" passed to `--iri-as-blank-node-regexes` is not a valid "
+              "regular expression (as understood by Google's RE2 library): ",
+              compiledRegex->error())};
+        }
+        compiledRegexes.push_back(std::move(compiledRegex));
+      });
+  blankNodeIriRegexes_ = std::move(compiledRegexes);
+}
+
 // _____________________________________________________________________________
 void IndexImpl::writePatternsToFile() const {
   PatternStatistics statistics;
@@ -2025,9 +2155,10 @@ namespace {
 // over all tables produced by scanning the given permutation. The customAction
 // is invoked for each table to allow for additional computations while
 // scanning.
+template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, auto customAction) {
+    const Permutation& permutation, CustomAction customAction) {
   return std::packaged_task<void()>{[&counter, &permutation,
                                      &locatedTriplesSharedState,
                                      customAction = std::move(customAction)]() {
@@ -2035,9 +2166,20 @@ std::packaged_task<void()> computeStatistics(
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+    // The statistics are only recomputed as part of a runtime index rebuild
+    // (see `IndexRebuilder`), so this scan is also throttled by
+    // `rebuild-index-scan-num-threads` (several permutations are scanned in
+    // parallel, so without the throttle this short phase has a high peak
+    // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
+    auto rebuildScanThreads =
+        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+    std::optional<size_t> numThreadsOverride =
+        rebuildScanThreads == 0 ? std::nullopt
+                                : std::optional<size_t>{rebuildScanThreads};
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
-        additionalColumns, cancellationHandle, *locatedTriplesSharedState);
+        additionalColumns, cancellationHandle, *locatedTriplesSharedState,
+        numThreadsOverride);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);

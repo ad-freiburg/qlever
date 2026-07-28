@@ -30,8 +30,14 @@ class SparqlExpression {
   // Evaluate a Sparql expression.
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
-  // Return all variables, needed for certain parser methods.
-  virtual std::vector<const Variable*> containedVariables() const final;
+  // Return all variables, needed for certain parser methods. If `excludeExists`
+  // is true, `EXISTS` is treated as a scope boundary: variables that occur only
+  // inside the body of an `EXISTS` are not returned, because they live in their
+  // own scope and thus need not be bound by the surrounding query. This is used
+  // by the parser to check that all variables used in a clause are actually
+  // bound (see e.g. `ParsedQuery::checkUsedVariablesAreVisible`).
+  virtual std::vector<const Variable*> containedVariables(
+      bool excludeExists = false) const final;
 
   // Return all the variables that occur in the expression, but are not
   // aggregated. These variables must be grouped in a GROUP BY. The default
@@ -165,6 +171,11 @@ class SparqlExpression {
   // tree is an aggregate. For an example usage see the `LiteralExpression`
   // class.
   bool isInsideAggregate() const;
+
+  // Return true iff this expression is evaluated on aggregated data, i.e. it is
+  // part of a GROUP BY but not inside an aggregate. In this case the expression
+  // only has to produce a single (constant) value per group.
+  bool worksOnAggregatedData(const EvaluationContext* context) const;
 
  private:
   virtual ql::span<SparqlExpression::Ptr> childrenImpl() = 0;

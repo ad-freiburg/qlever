@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
+#include "backports/filesystem.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -201,14 +202,16 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
 TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   using namespace ::testing;
   auto* qec = ad_utility::testing::getQec();
-  auto tmpFile = std::filesystem::temp_directory_path() / "fileNoPermissions";
+  auto tmpFile = ql::filesystem::temp_directory_path() / "fileNoPermissions";
   // Create empty file
-  std::ofstream{tmpFile}.close();
-  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  std::ofstream{tmpFile.string()}.close();
+  absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   // Remove all permissions to make read fail
-  std::filesystem::permissions(tmpFile, std::filesystem::perms::none);
+  ql::filesystem::permissions(tmpFile, ql::filesystem_perms_none);
 
-  if (FILE* handle = fopen(tmpFile.c_str(), "r")) {
+  // NOTE: `path::c_str()` is `const wchar_t*` on Windows; `string().c_str()`
+  // is `const char*`.
+  if (FILE* handle = fopen(tmpFile.string().c_str(), "r")) {
     fclose(handle);
     // This can happen in docker environments.
     GTEST_SKIP_("File permissions are not set to none");

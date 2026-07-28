@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/VariableToColumnMap.h"
+#include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
@@ -52,7 +53,7 @@ void Permutation::loadFromDisk(
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
-  auto filename = absl::StrCat(onDiskBase, ".index", fileSuffix_);
+  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");
@@ -162,6 +163,15 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 }
 
 // _____________________________________________________________________
+std::vector<ql::filesystem::path> Permutation::fileNames(
+    Enum permutation, std::string_view onDiskBase) {
+  ql::filesystem::path filename =
+      absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
+                   ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename.string(), META_FILE_SUFFIX)};
+}
+
+// _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
   using enum Permutation::Enum;
   switch (permutation) {
@@ -246,10 +256,14 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    std::optional<size_t> numThreadsOverride) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
+  // Applies only to this dedicated reader; query scans use the shared reader
+  // and are unaffected.
+  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
   auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
                              std::nullopt, additionalColumns,
                              cancellationHandle, locatedTriplesState, {});

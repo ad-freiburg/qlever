@@ -74,20 +74,20 @@ std::string CartesianProductJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
   auto view = childView() | ql::views::transform(&Operation::getResultWidth);
-  return ::ranges::accumulate(view, 0UL);
+  return ::ranges::accumulate(view, size_t{0});
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | ql::views::transform(&Operation::getCostEstimate);
-  return getSizeEstimate() + ::ranges::accumulate(childSizes, 0UL);
+  return getSizeEstimate() + ::ranges::accumulate(childSizes, size_t{0});
 }
 
 // ____________________________________________________________________________
 uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
   auto view = childView() | ql::views::transform(&Operation::getSizeEstimate);
-  return ::ranges::accumulate(view, 1UL, std::multiplies{});
+  return ::ranges::accumulate(view, uint64_t{1}, std::multiplies{});
 }
 
 // ____________________________________________________________________________
@@ -172,13 +172,12 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
             resultSortedOn()};
   }
 
-  // Owning view wrapper to please gcc 11.
-  return {produceTablesLazily(std::move(staticMergedVocab),
-                              ad_utility::OwningView{std::move(subResults)} |
-                                  ql::views::transform(&Result::idTableView),
-                              getLimitOffset()._offset,
-                              getLimitOffset().limitOrDefault()),
-          resultSortedOn()};
+  return {
+      produceTablesLazily(
+          std::move(staticMergedVocab),
+          std::move(subResults) | ql::views::transform(&Result::idTableView),
+          getLimitOffset()._offset, getLimitOffset().limitOrDefault()),
+      resultSortedOn()};
 }
 
 // ____________________________________________________________________________
@@ -212,7 +211,7 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
   auto sizesView =
       ql::views::transform(idTables, [](const auto& t) { return t.size(); });
   auto totalResultSize =
-      ::ranges::accumulate(sizesView, 1UL, std::multiplies{});
+      ::ranges::accumulate(sizesView, uint64_t{1}, std::multiplies{});
 
   if (!ql::ranges::empty(idTables) && sizesView.back() != 0) {
     totalResultSize += (totalResultSize / sizesView.back()) * lastTableOffset;
@@ -423,10 +422,10 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 
     return Result::IdTableLoopControl::yieldAll(
         ad_utility::InputRangeTypeErased{
-            ad_utility::OwningView{self->produceTablesLazily(
+            self->produceTablesLazily(
                 std::move(localVocab),
                 ql::views::transform(idTables, ad_utility::dereference), offset,
-                limit, lastTableOffset)} |
+                limit, lastTableOffset) |
             ql::views::transform([&producedTableSize](auto& tableAndVocab) {
               producedTableSize += tableAndVocab.idTable_.size();
               return std::move(tableAndVocab);

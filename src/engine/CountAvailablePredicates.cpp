@@ -6,6 +6,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
+#include "global/Pattern.h"
 #include "index/IndexImpl.h"
 
 // _____________________________________________________________________________

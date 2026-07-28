@@ -306,14 +306,9 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -335,14 +330,9 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
 TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -420,14 +410,9 @@ TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
 
 TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(DEBUG);
-  auto& choice = ad_utility::LogstreamChoice::get();
   CancellationHandle<ENABLED> handle;
 
-  auto& originalOStream = choice.getStream();
-  absl::Cleanup cleanup{[&]() { choice.setStream(&originalOStream); }};
-
-  std::ostringstream testStream;
-  choice.setStream(&testStream);
+  auto [cleanup, testStream] = setGlobalLoggingStreamToStringStream();
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;

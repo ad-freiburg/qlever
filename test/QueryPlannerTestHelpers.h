@@ -634,8 +634,8 @@ inline QueryExecutionTree parseAndPlan(std::string query,
 // be controlled to choose between the greedy and the dynamic programming
 // planner. This function only serves as a common implementation, for the
 // actual tests the three functions below should be used.
-template <typename QueryPlannerClass = QueryPlanner>
-void expectWithGivenBudget(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expectWithGivenBudget(std::string query, MatcherT matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
                            source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -661,8 +661,8 @@ void expectWithGivenBudget(std::string query, auto matcher,
 }
 
 // Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
-template <typename QueryPlannerClass = QueryPlanner>
-void expectWithGivenBudgets(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expectWithGivenBudgets(std::string query, MatcherT matcher,
                             std::optional<QueryExecutionContext*> optQec,
                             std::vector<size_t> queryPlanningBudgets,
                             source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -673,8 +673,8 @@ void expectWithGivenBudgets(std::string query, auto matcher,
 
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
-template <typename QueryPlannerClass = QueryPlanner>
-void expectGreedy(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expectGreedy(std::string query, MatcherT matcher,
                   std::optional<QueryExecutionContext*> optQec = std::nullopt,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(std::move(query), std::move(matcher),
@@ -682,9 +682,9 @@ void expectGreedy(std::string query, auto matcher,
 }
 // Same as `expectWithGivenBudget` above, but always use the dynamic
 // programming query planner.
-template <typename QueryPlannerClass = QueryPlanner>
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
 void expectDynamicProgramming(
-    std::string query, auto matcher,
+    std::string query, MatcherT matcher,
     std::optional<QueryExecutionContext*> optQec = std::nullopt,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudget<QueryPlannerClass>(
@@ -695,8 +695,8 @@ void expectDynamicProgramming(
 // Same as `expectWithGivenBudget` above, but run the test for different
 // query planning budgets. This is guaranteed to run with both the greedy
 // query planner and the dynamic-programming based query planner.
-template <typename QueryPlannerClass = QueryPlanner>
-void expect(std::string query, auto matcher,
+template <typename QueryPlannerClass = QueryPlanner, typename MatcherT>
+void expect(std::string query, MatcherT matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = AD_CURRENT_SOURCE_LOC()) {
   expectWithGivenBudgets<QueryPlannerClass>(

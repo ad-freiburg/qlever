@@ -11,7 +11,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "global/Pattern.h"
+#include "util/CompactStringVector.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result

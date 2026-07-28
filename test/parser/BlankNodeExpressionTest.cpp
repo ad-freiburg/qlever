@@ -8,6 +8,7 @@
 #include "../util/GTestHelpers.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 
 using namespace sparqlExpression;
 using namespace ad_utility::triple_component;
@@ -183,6 +184,61 @@ TEST(BlankNodeExpression, consistentCounterWithUndefined) {
               AD_PROPERTY(LiteralOrIri, toStringRepresentation,
                           StrEq("<http://qlever.cs.uni-freiburg.de/"
                                 "builtin-functions/blank-node/_:unT2_2>"))))));
+}
+
+// _____________________________________________________________________________
+TEST(BlankNodeExpression, groupByReturnsSingleBlankNodePerGroup) {
+  TestContext context;
+  context.context._isPartOfGroupBy = true;
+
+  // `BNODE()` returns a single, constant blank node `Id`.
+  {
+    auto result = makeUniqueBlankNodeExpression()->evaluate(&context.context);
+    ASSERT_TRUE(std::holds_alternative<Id>(result));
+    EXPECT_EQ(std::get<Id>(result).getDatatype(), Datatype::BlankNodeIndex);
+  }
+  // `BNODE(<constant>)` returns a single, constant blank node.
+  {
+    auto expression =
+        makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
+            Literal::literalWithoutQuotes("Test")));
+    auto result = expression->evaluate(&context.context);
+    EXPECT_TRUE(std::holds_alternative<IdOrLocalVocabEntry>(result));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(BlankNodeExpression, insideAggregateReturnsOnePerRow) {
+  TestContext context;
+  context.context._isPartOfGroupBy = true;
+  const size_t numRows = context.context.size();
+
+  // `BNODE()` (no arguments), wrapped in an aggregate.
+  {
+    auto aggregate = std::make_unique<SampleExpression>(
+        false, makeUniqueBlankNodeExpression());
+    const auto* blankNode = aggregate->children()[0].get();
+    ASSERT_TRUE(blankNode->isInsideAggregate());
+    auto result = blankNode->evaluate(&context.context);
+    ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result));
+    EXPECT_EQ(std::get<VectorWithMemoryLimit<Id>>(result).size(), numRows);
+  }
+  // `BNODE(<constant>)`, wrapped in an aggregate.
+  {
+    auto aggregate = std::make_unique<SampleExpression>(
+        false,
+        makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
+            Literal::literalWithoutQuotes("Test"))));
+    const auto* blankNode = aggregate->children()[0].get();
+    ASSERT_TRUE(blankNode->isInsideAggregate());
+    auto result = blankNode->evaluate(&context.context);
+    ASSERT_TRUE(
+        std::holds_alternative<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(
+            result));
+    EXPECT_EQ(
+        std::get<VectorWithMemoryLimit<IdOrLocalVocabEntry>>(result).size(),
+        numRows);
+  }
 }
 
 // _____________________________________________________________________________

@@ -15,6 +15,7 @@
 
 #include <future>
 #include <locale>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 
@@ -43,6 +44,18 @@ enum class TurtleParserIntegerOverflowBehavior {
   OverflowingToDouble,
   AllToDouble
 };
+
+namespace detail {
+// Find the end of the last match of the regex `[\r\n]+` in `input`, or
+// `std::nullopt` if there is no match. Used to split a block of input at a line
+// break.
+std::optional<size_t> findEndOfLastNewline(std::string_view input);
+
+// Find the end of the last match of the regex `\.[\t ]*[\r\n]+` in `input`, or
+// `std::nullopt` if there is no match. Used to split a block of input at a
+// Turtle statement boundary.
+std::optional<size_t> findEndOfLastStatement(std::string_view input);
+}  // namespace detail
 
 struct TurtleTriple {
   // The subject can be IRI or BlankNode, but the IRI can also be directly
