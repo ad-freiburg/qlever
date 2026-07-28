@@ -16,6 +16,7 @@
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 #include "./ServerTestHelpers.h"
+#include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/GroupByImpl.h"
@@ -951,6 +952,114 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
             makeServerForTesting(testIndexBase_).process(request)),
         ::testing::HasSubstr("The name for the view may not be empty"));
   }
+
+  // Delete a materialized view through a simulated HTTP GET request.
+  {
+    clearLog();
+    ASSERT_TRUE(ql::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
+    auto request = makeGetRequest(
+        "/?cmd=delete-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken");
+    auto response = responseBodyAsJson(
+        makeServerForTesting(testIndexBase_).process(request));
+
+    // Check HTTP response.
+    ASSERT_TRUE(response.has_value());
+    ASSERT_TRUE(response.value().contains("materialized-view-deleted"));
+    EXPECT_EQ(response.value()["materialized-view-deleted"],
+              "testViewFromHTTP2");
+
+    // The view's files have been deleted.
+    EXPECT_FALSE(ql::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Materialized view \"testViewFromHTTP2\" deleted"));
+  }
+
+  // Test access token check for deletion.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=delete-materialized-view&view-name=testViewFromHTTP");
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        responseBodyAsJson(
+            makeServerForTesting(testIndexBase_).process(request)),
+        ::testing::HasSubstr("delete-materialized-view requires a valid access "
+                             "token but no access token was provided"));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, Deletion) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+
+  // Write and load a view, then delete it.
+  manager.writeViewToDisk("testView1", plan);
+  EXPECT_NE(manager.getView("testView1", nullptr), nullptr);
+  EXPECT_TRUE(manager.isViewLoaded("testView1"));
+
+  manager.deleteView("testView1");
+
+  // The view is unloaded and all of its files are gone.
+  EXPECT_FALSE(manager.isViewLoaded("testView1"));
+  for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
+    EXPECT_FALSE(ql::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testView1", suffix)));
+  }
+
+  // A view with the same name can be written again afterwards.
+  manager.writeViewToDisk("testView1", plan);
+  EXPECT_NE(manager.getView("testView1", nullptr), nullptr);
+
+  // Deleting a non-existent view throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.deleteView("doesNotExist"),
+      ::testing::HasSubstr(
+          "The materialized view 'doesNotExist' does not exist."));
+
+  // Deleting with an invalid name throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.deleteView("invalid name!"),
+      ::testing::HasSubstr("is not a valid name for a materialized view"));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, DeletionFailureThrows) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  manager.writeViewToDisk("testViewBroken", plan);
+
+  // Replace the view's metadata file by a nonempty directory: the existence
+  // check still passes (the path exists), but deleting the "file" fails.
+  auto metadataFilename =
+      absl::StrCat(testIndexBase_, ".view.testViewBroken", VIEW_INFO_SUFFIX);
+  ql::filesystem::remove(metadataFilename);
+  ql::filesystem::create_directory(metadataFilename);
+  ad_utility::makeOfstream(absl::StrCat(metadataFilename, "/dummy.txt")) << "x";
+
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.deleteView("testViewBroken"),
+                               ::testing::HasSubstr("Failed to delete file"));
+
+  // Clean up the remains of the broken view.
+  ql::filesystem::remove_all(metadataFilename);
+  for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
+    ql::filesystem::remove(
+        absl::StrCat(testIndexBase_, ".view.testViewBroken", suffix));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, libqleverDeleteMaterializedView) {
+  const std::string metadataFilename =
+      absl::StrCat(testIndexBase_, ".view.viewToDelete.viewinfo.json");
+  qlv().writeMaterializedView("viewToDelete", simpleWriteQuery_);
+  EXPECT_TRUE(ql::filesystem::exists(metadataFilename));
+
+  qlv().deleteMaterializedView("viewToDelete");
+  EXPECT_FALSE(ql::filesystem::exists(metadataFilename));
+  EXPECT_FALSE(qlv().isMaterializedViewLoaded("viewToDelete"));
 }
 
 // _____________________________________________________________________________
@@ -1891,4 +2000,23 @@ TEST_F(MaterializedViewsTest,
   // Sort by object: same reasoning as predicate.
   AD_EXPECT_NULLOPT(groupBy.getPermutationForThreeVariableTriple(
       *scanTree, V{"?o"}, V{"?s"}));
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsManager, viewFilesOnDisk) {
+  auto [directory, cleanup] = makeTemporaryDirectory("viewFilesOnDisk");
+  std::string base = directory + "/index";
+  auto touch = [](const std::string& f) { ad_utility::makeOfstream(f) << "x"; };
+  // Two view files for the index, plus files that must be ignored: index files
+  // that are not view files, and a view file of a different index.
+  touch(MaterializedView::getFilenameBase(base, "viewA"));
+  touch(MaterializedView::getFilenameBase(base, "viewB") + ".spo");
+  touch(base + ".vocabulary");
+  touch(base + ".index.pso");
+  touch(directory + "/other.view.x");
+
+  EXPECT_THAT(MaterializedViewsManager::viewFilesOnDisk(base),
+              ::testing::UnorderedElementsAre(
+                  MaterializedView::getFilenameBase(base, "viewA"),
+                  MaterializedView::getFilenameBase(base, "viewB") + ".spo"));
 }

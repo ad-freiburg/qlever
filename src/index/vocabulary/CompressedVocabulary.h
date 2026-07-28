@@ -12,6 +12,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
@@ -56,6 +57,20 @@ CPP_template(typename UnderlyingVocabulary,
   std::string operator[](uint64_t idx) const {
     return compressionWrapper_.decompress(
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
+  }
+
+  // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
+  // words in batches) and decompress each word. `scanAll()` is expected to
+  // yield `IndexAndWord` elements, so we have to apply a transformation at the
+  // end.
+  auto scanAll() const {
+    return ad_utility::CachingTransformInputRange(
+        underlyingVocabulary_.scanAll(),
+        [this, buffer = std::string{}](const IndexAndWord& compressed) mutable {
+          const auto& [index, word] = compressed;
+          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
+          return IndexAndWord{index, buffer};
+        });
   }
 
   //____________________________________________________________________________
