@@ -34,6 +34,7 @@
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
+#include "util/SourceLocation.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -724,15 +725,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // The exception must not be handed out of the coroutine (in particular not
   // via `net::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
   // `AsioTestHelpers.h` for the reason.
-  auto expectRequestFailsWith =
-      [&threadPool, &makeTask](auto& request, const auto& matcher,
-                               ad_utility::source_location location =
-                                   ad_utility::source_location::current()) {
-        auto trace = generateLocationTrace(location);
-        EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
-                        threadPool, makeTask(request)),
-                    ::testing::Optional(matcher));
-      };
+  auto expectRequestFailsWith = [&threadPool, &makeTask](
+                                    auto& request, const auto& matcher,
+                                    ad_utility::source_location location =
+                                        AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
+                    threadPool, makeTask(request)),
+                ::testing::Optional(matcher));
+  };
 
   // Without access token this operation is not allowed!
   auto request0 = makeRebuildRequest("&index-name=my-name", false);

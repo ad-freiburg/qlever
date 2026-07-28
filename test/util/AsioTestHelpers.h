@@ -22,7 +22,8 @@
 #include "util/Forward.h"
 
 // Helpers for tests that run an asynchronous operation (typically on a
-// `boost::asio::thread_pool`) and expect that operation to fail.
+// `boost::asio::thread_pool`) and expect that operation to fail via an
+// `exception_ptr`.
 //
 // Such a test must not let the exception itself cross the thread boundary, in
 // particular not via `boost::asio::use_future` together with
@@ -58,6 +59,21 @@
 // `boost::asio::use_future`: for the transfer of a value, the
 // `std::promise`/`std::future` pair establishes synchronization that the thread
 // sanitizer does understand, because its mutex is intercepted.
+//
+// NOTE: There are two alternatives to the approach of these helpers, both of
+// which we have discarded:
+// 1. Build the standard library (`libc++` supports this via
+//    `LLVM_USE_SANITIZER=Thread`) as well as all our other dependencies with
+//    thread sanitizer instrumentation and use that in our CI. The sanitizer
+//    would then see the reference counting and the report would disappear.
+//    There are no prebuilt packages for such a setup, so this would be a large
+//    change to the CI.
+// 2. Exclude the affected places from the instrumentation, either via a
+//    suppression file (an entry like `called_from_lib:libstdc++.so.6`) or via
+//    `__attribute__((no_sanitize("thread")))` on the code that reads the
+//    message. Both are far coarser than the problem: they also hide real races,
+//    the suppression in everything that goes through the standard library, the
+//    attribute in the whole annotated function.
 namespace ad_utility::testing {
 
 // Return the message of the exception that `exception` refers to, or
