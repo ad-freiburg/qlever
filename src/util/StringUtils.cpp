@@ -127,29 +127,42 @@ void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
 template <bool useICU>
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
-  if constexpr (useICU) {
-    QLEVER_UNICODE_ONLY("getUTF8Prefix", {
-      const char* s = sv.data();
-      int32_t length = sv.length();
-      size_t numCodepoints = 0;
-      int32_t i = 0;
-      for (i = 0; i < length && numCodepoints < prefixLength;) {
-        UChar32 c;
-        U8_NEXT(s, i, length, c);
-        if (c >= 0) {
-          ++numCodepoints;
-        } else {
-          throw std::runtime_error(
-              "Illegal UTF sequence in ad_utility::getUTF8Prefix");
-        }
-      }
-      return {numCodepoints, sv.substr(0, i)};
-    });
-  } else {
-    // Without ICU we treat every byte as a single codepoint.
-    auto length = std::min(prefixLength, sv.size());
-    return {length, sv.substr(0, length)};
+  // Counting codepoints only requires the byte structure of UTF-8 and no
+  // Unicode tables, so both instantiations share this ICU-free
+  // implementation. Malformed UTF-8 (invalid lead or continuation bytes,
+  // overlong encodings, surrogates, values beyond U+10FFFF) is rejected
+  // exactly like by ICU's `U8_NEXT`.
+  size_t numCodepoints = 0;
+  size_t i = 0;
+  while (i < sv.size() && numCodepoints < prefixLength) {
+    auto lead = static_cast<unsigned char>(sv[i]);
+    // The length of the sequence and the payload bits of the lead byte.
+    size_t sequenceLength = lead < 0x80             ? 1
+                            : (lead & 0xE0) == 0xC0 ? 2
+                            : (lead & 0xF0) == 0xE0 ? 3
+                            : (lead & 0xF8) == 0xF0 ? 4
+                                                    : 0;
+    static constexpr uint32_t leadMask[] = {0, 0x7F, 0x1F, 0x0F, 0x07};
+    bool valid = sequenceLength > 0 && i + sequenceLength <= sv.size();
+    uint32_t codepoint = valid ? lead & leadMask[sequenceLength] : 0;
+    for (size_t j = 1; valid && j < sequenceLength; ++j) {
+      auto continuation = static_cast<unsigned char>(sv[i + j]);
+      valid = (continuation & 0xC0) == 0x80;
+      codepoint = (codepoint << 6) | (continuation & 0x3F);
+    }
+    static constexpr uint32_t minimumBySequenceLength[] = {0, 0, 0x80, 0x800,
+                                                           0x10000};
+    valid = valid && codepoint >= minimumBySequenceLength[sequenceLength] &&
+            codepoint <= 0x10FFFF &&
+            !(codepoint >= 0xD800 && codepoint <= 0xDFFF);
+    if (!valid) {
+      throw std::runtime_error(
+          "Illegal UTF sequence in ad_utility::getUTF8Prefix");
+    }
+    i += sequenceLength;
+    ++numCodepoints;
   }
+  return {numCodepoints, sv.substr(0, i)};
 }
 // Explicit instantiations for both configurations.
 template std::pair<size_t, std::string_view> getUTF8Prefix<true>(

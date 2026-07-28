@@ -8,6 +8,8 @@
 #include <unicode/uchar.h>
 #endif
 
+#include <cctype>
+
 #include "global/Constants.h"
 #include "parser/ParserAndVisitorBase.h"
 #include "util/Exception.h"
@@ -89,9 +91,15 @@ constexpr bool codePointSuitableForVariableName(UChar32 cp) {
 template <bool useICU>
 void Variable::appendEscapedWord(std::string_view word, std::string& target) {
   if constexpr (!useICU) {
-    // This is a bit hacky as no escaping happens, but it is also never used in
-    // the unicode-free use cases anyway.
-    target.append(word);
+    // ASCII version of the escaping below: keep alphanumeric ASCII bytes,
+    // escape every other byte via its numeric value.
+    for (char c : word) {
+      if (std::isalnum(static_cast<unsigned char>(c))) {
+        target.push_back(c);
+      } else {
+        absl::StrAppend(&target, "_", static_cast<unsigned char>(c), "_");
+      }
+    }
   } else {
     QLEVER_UNICODE_ONLY("Variable::appendEscapedWord", {
       const char* ptr = word.data();

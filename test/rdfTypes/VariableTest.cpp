@@ -79,22 +79,26 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
 
 // _____________________________________________________________________________
 // Test both instantiations of `Variable::appendEscapedWord`. The `useICU ==
-// true` path escapes characters that are not suitable for variable names, while
-// the ICU-free `useICU == false` path appends the word unchanged.
+// true` path escapes codepoints that are not suitable for variable names, the
+// ICU-free `useICU == false` path escapes all non-alphanumeric ASCII bytes.
+// For ASCII input the two produce identical results.
 TEST(Variable, appendEscapedWord) {
   // ICU path: 'a' and 'b' are valid, the space (0x20 == 32) is escaped.
   std::string targetIcu = "pre_";
   Variable::appendEscapedWord<true>("a b", targetIcu);
   EXPECT_EQ(targetIcu, "pre_a_32_b");
 
-  // ICU-free path: no escaping happens, the word is appended verbatim.
+  // ICU-free path: identical result for ASCII input.
   std::string targetNoIcu = "pre_";
   Variable::appendEscapedWord<false>("a b", targetNoIcu);
-  EXPECT_EQ(targetNoIcu, "pre_a b");
+  EXPECT_EQ(targetNoIcu, "pre_a_32_b");
 
+  // ICU-free path with non-ASCII input: the bytes of 'ä' (0xC3 0xA4 == 195
+  // 164) are escaped individually, the '*' (0x2A == 42) like in the ICU
+  // version.
   std::string targetUnicode = "pre_";
   Variable::appendEscapedWord<false>("äpfel*", targetUnicode);
-  EXPECT_EQ(targetUnicode, "pre_äpfel*");
+  EXPECT_EQ(targetUnicode, "pre__195__164_pfel_42_");
 }
 
 // _____________________________________________________________________________

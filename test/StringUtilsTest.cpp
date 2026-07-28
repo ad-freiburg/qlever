@@ -103,22 +103,29 @@ TEST(StringUtils, getUTF8PrefixNoICU) {
     EXPECT_EQ(num, 3u);
     EXPECT_EQ(prefix, "Apf");
   }
-  // "Flöhe" where 'ö' occupies two bytes (0xC3 0xB6).
+  // "Flöhe" where 'ö' occupies two bytes (0xC3 0xB6): both instantiations
+  // count codepoints, so the prefix of length 3 is "Flö" (four bytes) and the
+  // multi-byte character is never split.
   {
-    // The ICU-free version cuts after two bytes ("Fl").
-    auto [num, prefix] = getUTF8Prefix<false>("Flöhe", 2);
-    EXPECT_EQ(num, 2u);
-    EXPECT_EQ(prefix, "Fl");
-    // The ICU-based version counts three codepoints ("Flö", four bytes).
+    auto [num, prefix] = getUTF8Prefix<false>("Flöhe", 3);
+    EXPECT_EQ(num, 3u);
+    EXPECT_EQ(prefix, "Flö");
     auto [numIcu, prefixIcu] = getUTF8Prefix<true>("Flöhe", 3);
     EXPECT_EQ(numIcu, 3u);
     EXPECT_EQ(prefixIcu, "Flö");
   }
-  // Requesting more bytes than available returns the whole string.
+  // Requesting more codepoints than available returns the whole string.
   {
     auto [num, prefix] = getUTF8Prefix<false>("ab", 100);
     EXPECT_EQ(num, 2u);
     EXPECT_EQ(prefix, "ab");
+  }
+  // Malformed UTF-8 is rejected by both instantiations: a stray continuation
+  // byte, a truncated sequence, an overlong encoding, and a surrogate.
+  for (std::string_view malformed :
+       {"\x80", "\xC3", "\xC0\xAF", "\xED\xA0\x80"}) {
+    EXPECT_THROW(getUTF8Prefix<false>(malformed, 1), std::runtime_error);
+    EXPECT_THROW(getUTF8Prefix<true>(malformed, 1), std::runtime_error);
   }
 }
 

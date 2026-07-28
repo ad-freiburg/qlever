@@ -77,9 +77,9 @@ class Variable {
   static bool isValidVariableName(std::string_view var);
 
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
-  // it at the end of target. If `useICU == false`, no escaping happens and
-  // `word` is appended unchanged (the escaping is only relevant for the text
-  // index, which typically is not used in the ICU-free configuration).
+  // it at the end of target. If `useICU == false`, only alphanumeric ASCII
+  // bytes are kept and all other bytes are escaped via their numeric value
+  // (for ASCII input this gives the same result as the ICU version).
   template <bool useICU = ad_utility::useICUDefault>
   static void appendEscapedWord(std::string_view word, std::string& target);
 

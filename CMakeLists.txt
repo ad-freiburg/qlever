@@ -254,7 +254,7 @@ if (QLEVER_NO_UNICODE)
 endif()
 
 if (NOT QLEVER_NO_UNICODE)
-find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
+    find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
 endif()
 
 ###################################
