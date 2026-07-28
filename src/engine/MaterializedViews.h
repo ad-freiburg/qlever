@@ -296,7 +296,19 @@ class MaterializedViewsManager {
   //
   // NOTE: Whenever this and `loadedViews_` are held at the same time, this one
   // has to be locked first, otherwise `retireOnDiskFiles` can deadlock against
-  // a concurrent write or deletion of a view.
+  // a concurrent write or deletion of a view. Since `lockIfNotRetired` is
+  // private and used only by `writeViewToDisk` and `deleteView`, which both
+  // take it before touching `loadedViews_`, no code holding `loadedViews_` can
+  // ask for this lock, so the two can not be acquired in the opposite order.
+  //
+  // NOTE: This deliberately is a separate `Synchronized` and not a member of
+  // `LoadedViews` below, although that would make the above ordering rule
+  // unnecessary. The two locks have very different hold times: this one is held
+  // in shared mode for the whole duration of writing a view (query execution,
+  // external sorting and writing the permutation), whereas `loadedViews_` is
+  // held only for the short lookups and updates of the loaded views. Merging
+  // them would mean that `getView`, which needs the exclusive lock to load a
+  // view lazily, has to wait for a concurrent view write to finish.
   ad_utility::Synchronized<bool> onDiskFilesRetired_{false};
 
   // Return a lock that blocks `retireOnDiskFiles` for as long as it is held, or
