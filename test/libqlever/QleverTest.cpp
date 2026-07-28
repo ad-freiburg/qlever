@@ -39,10 +39,7 @@ EngineConfig buildTestIndex(std::string_view turtleContents,
                             std::string_view suffix = "") {
   std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
   std::string filename = absl::StrCat(basename, ".ttl");
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << turtleContents;
-  }
+  ad_utility::makeOfstream(filename) << turtleContents;
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
 
   IndexBuilderConfig config;
