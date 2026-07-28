@@ -81,7 +81,8 @@ class ServerForTesting {
         io,
         [](auto request, Server* server,
            auto& io) -> boost::asio::awaitable<ResT> {
-          auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(io);
+          auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
+              io.get_executor());
           server->queryHub_ = queryHub;
 
           auto result =
