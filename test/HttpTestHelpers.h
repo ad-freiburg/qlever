@@ -25,9 +25,9 @@ template <typename HttpHandler, BodyReadMode readMode = BodyReadMode::Eager>
 class TestHttpServer {
  private:
   static constexpr auto webSocketSessionSupplier =
-      [](net::io_context& ioContext) {
+      [](net::any_io_executor& ioExecutor) {
         using namespace ad_utility::websocket;
-        return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
+        return [queryHub = QueryHub{ioExecutor}, registry = QueryRegistry{}](
                    const http::request<http::string_body>& request,
                    tcp::socket socket) mutable {
           return WebSocketSession::handleSession(queryHub, registry, request,
@@ -35,7 +35,7 @@ class TestHttpServer {
         };
       };
   using WebSocketHandlerType =
-      decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
+      decltype(webSocketSessionSupplier(std::declval<net::any_io_executor&>()));
 
   // The server.
   std::shared_ptr<HttpServer<readMode, HttpHandler, WebSocketHandlerType>>

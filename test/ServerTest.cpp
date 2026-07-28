@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "./util/FileTestHelpers.h"
+#include "./util/MetricsTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -211,8 +212,8 @@ TEST(ServerTest, createMessageSender) {
   {
     // Set a dummy query hub.
     boost::asio::io_context io_context;
-    auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(io_context);
+    auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
+        io_context.get_executor());
     server.queryHub_ = queryHub;
     // MessageSenders are created normally.
     server.createMessageSender(server.queryHub_, req,
@@ -569,19 +570,6 @@ TEST(ServerTest, metricsEndpoint) {
         {{http::field::content_type, "application/sparql-query"}},
         std::move(query));
   };
-  using Label = std::pair<std::string_view, std::string_view>;
-  auto MetricIs = [](std::string_view metric, std::string_view value,
-                     std::optional<Label> label = std::nullopt) {
-    std::string labelText =
-        label.has_value()
-            ? absl::StrCat("{", label->first, "=\"", label->second, "\"}")
-            : "";
-    return testing::HasSubstr(absl::StrCat(metric, labelText, " ", value));
-  };
-  auto IsZero = [&MetricIs](std::string_view metric,
-                            std::optional<Label> label = std::nullopt) {
-    return MetricIs(metric, "0", label);
-  };
   auto ExpectMetricsChange = [&makeServerWithMetrics, &expectMetrics](
                                  auto matcherBefore, auto request,
                                  auto matcherAfter,
@@ -621,6 +609,8 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_running";
   std::string_view qleverSparqlOperationErrorsTotal =
       "qlever_sparql_operation_errors_total";
+  std::string_view qleverIndexRebuildInProgress =
+      "qlever_index_rebuild_in_progress";
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -645,6 +635,11 @@ TEST(ServerTest, metricsEndpoint) {
                      MetricIs(qleverSparqlOperationStartedTotal, "1", query),
                      IsZero(qleverSparqlOperationRunning, update),
                      IsZero(qleverSparqlOperationRunning, query)));
+  // No rebuild is running during a normal query, so the rebuild-in-progress
+  // gauge reads 0 both before and after.
+  ExpectMetricsChange(IsZero(qleverIndexRebuildInProgress),
+                      QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
+                      IsZero(qleverIndexRebuildInProgress));
   ExpectMetricsChange(
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       QueryRequest("Foo"),
@@ -839,7 +834,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
           "<a> <b> <c>",
           testing::AllOf(
               // Check that the random part of the graph is a V4 UUID.
-              LocationIs(testing::MatchesRegex(
+              LocationIs(MatchesRegex(
                   R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
               StatusIs(http::status::created)));
       locations.push_back(location);
@@ -858,7 +853,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
                    {http::field::content_type, "text/turtle"}},
                   "<a> <b> <c>"),
       testing::AllOf(
-          LocationIs(testing::MatchesRegex(
+          LocationIs(MatchesRegex(
               R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
           StatusIs(http::status::created)));
 
