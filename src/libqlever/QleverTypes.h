@@ -20,7 +20,7 @@ namespace qlever {
 
 // A `ParsedQuery` together with the `QueryExecutionContext` that it was parsed
 // against and that it therefore has to be planned against. Returned by
-// `Qlever::parseQuery` and consumed by `Qlever::planParsedQuery`.
+// `Qlever::parseQuery` and consumed by `Qlever::planQuery`.
 //
 // NOTE: The two are bundled deliberately, so that a query is planned against
 // the context it was parsed with by default. Parsing depends on the context
@@ -102,12 +102,11 @@ struct PlannedQuery {
   // held by `shared_ptr`); calling this afterwards gives this `PlannedQuery` a
   // tree of its own, which can then be modified and executed without affecting
   // the other copies. That makes it possible to plan a query once and then
-  // instantiate it repeatedly, for example by injecting varying values into the
-  // `ExternalValues` placeholder of a pre-planned query template.
+  // modify and execute it repeatedly, for example by injecting varying values
+  // into the `ExternalValues` placeholder of a pre-planned query template.
   //
-  // NOTE: `QueryExecutionTree::clone` recursively clones the operations, but
-  // never copies the tree itself. The `QueryExecutionContext` is untouched and
-  // stays shared with the other copies.
+  // NOTE: The `QueryExecutionContext` is untouched and stays shared with the
+  // other copies of `*this`.
   void cloneQetInPlace() {
     queryExecutionTree_ = queryExecutionTree_->clone();
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());

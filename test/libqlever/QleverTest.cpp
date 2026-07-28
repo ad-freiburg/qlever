@@ -646,12 +646,12 @@ TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
 }
 
 // _____________________________________________________________________________
-// Test `parseQuery` + `planParsedQuery` + `PlannedQuery::cloneQetInPlace`,
-// which together make it possible to plan a query once and then execute it
+// Test `parseQuery` + `planQuery` + `PlannedQuery::cloneQetInPlace`, which
+// together make it possible to plan a query once and then execute it
 // repeatedly with varying values: copying the resulting `PlannedQuery` shares
 // its `QueryExecutionTree`, and `cloneQetInPlace` gives the copy a tree of its
 // own, which can then be modified without affecting the original.
-TEST(LibQlever, planParsedQueryAndCloneQetInPlace) {
+TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
   {
     auto ofs = ad_utility::makeOfstream(filename);
@@ -682,12 +682,12 @@ TEST(LibQlever, planParsedQueryAndCloneQetInPlace) {
   // Parsing is instance-independent, planning is not, so the same
   // `ParsedQuery` can be planned more than once.
   // `parseQuery` returns the `ParsedQuery` together with the
-  // `QueryExecutionContext` it was parsed against, and `planParsedQuery` plans
-  // it against exactly that context.
+  // `QueryExecutionContext` it was parsed against, and `planQuery` plans it
+  // against exactly that context.
   ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
   EXPECT_EQ(&parsedQuery.queryExecutionContext(),
             parsedQuery.sharedQueryExecutionContext().get());
-  PlannedQuery plan = engine.planParsedQuery(parsedQuery);
+  PlannedQuery plan = engine.planQuery(parsedQuery);
   EXPECT_EQ(&plan.queryExecutionContext(),
             &parsedQuery.queryExecutionContext());
 
@@ -741,8 +741,7 @@ TEST(LibQlever, planParsedQueryAndCloneQetInPlace) {
 
 // _____________________________________________________________________________
 // Test that `parseAndPlanQuery` is exactly `parseQuery` followed by
-// `planParsedQuery`, and that all the arguments of the former reach the two
-// halves.
+// `planQuery`, and that all the arguments of the former reach the two halves.
 TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
   {
@@ -762,18 +761,18 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
   // Both paths produce the same result.
   auto viaCombined =
       engine.query(engine.parseAndPlanQuery(query), ad_utility::MediaType::tsv);
-  auto viaSplit = engine.query(engine.planParsedQuery(engine.parseQuery(query)),
+  auto viaSplit = engine.query(engine.planQuery(engine.parseQuery(query)),
                                ad_utility::MediaType::tsv);
   EXPECT_EQ(viaCombined, viaSplit);
   EXPECT_EQ(viaCombined, "?s\n<s>\n<s2>\n");
 
-  // `requestTimer` reaches `planQuery` through `planParsedQuery` and ends up in
+  // `requestTimer` reaches the query planner through `planQuery` and ends up in
   // the runtime information, just as it does via `parseAndPlanQuery`.
   ad_utility::Timer requestTimer{ad_utility::Timer::Started};
-  auto plan = engine.planParsedQuery(
-      engine.parseQuery(query),
-      std::make_shared<ad_utility::CancellationHandle<>>(), std::nullopt,
-      requestTimer);
+  auto plan =
+      engine.planQuery(engine.parseQuery(query),
+                       std::make_shared<ad_utility::CancellationHandle<>>(),
+                       std::nullopt, requestTimer);
   EXPECT_GT(plan.queryExecutionTree()
                 .getRootOperation()
                 ->getRuntimeInfoWholeQuery()
@@ -781,11 +780,11 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
             -1);
 
   // A cancellation handle that is already cancelled makes planning fail, which
-  // shows that the handle reaches `planQuery` as well.
+  // shows that the handle reaches the query planner as well.
   auto cancelledHandle = std::make_shared<ad_utility::CancellationHandle<>>();
   cancelledHandle->cancel(ad_utility::CancellationState::MANUAL);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      engine.planParsedQuery(engine.parseQuery(query), cancelledHandle),
+      engine.planQuery(engine.parseQuery(query), cancelledHandle),
       HasSubstr("manually cancelled"));
 }
 
@@ -819,9 +818,9 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
 
   // Parse once on `first`, then plan on both instances.
   ParsedQueryAndContext parsedOnFirst = first.parseQuery(query);
-  EXPECT_EQ(first.query(first.planParsedQuery(parsedOnFirst),
-                        ad_utility::MediaType::tsv),
-            expected);
+  EXPECT_EQ(
+      first.query(first.planQuery(parsedOnFirst), ad_utility::MediaType::tsv),
+      expected);
 
   // `bindParsedQuery` pairs the parsed query with a context of `second`, so the
   // parsing is not repeated. The context of the plan is one of `second`, not
@@ -830,8 +829,108 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
       second.bindParsedQuery(parsedOnFirst.parsedQuery());
   EXPECT_NE(&boundToSecond.queryExecutionContext(),
             &parsedOnFirst.queryExecutionContext());
-  PlannedQuery planOnSecond = second.planParsedQuery(boundToSecond);
+  PlannedQuery planOnSecond = second.planQuery(boundToSecond);
   EXPECT_EQ(&planOnSecond.queryExecutionContext(),
             &boundToSecond.queryExecutionContext());
   EXPECT_EQ(second.query(planOnSecond, ad_utility::MediaType::tsv), expected);
+}
+
+// _____________________________________________________________________________
+// Test `EngineConfig::computeSortPerformanceEstimators_`: the (potentially
+// expensive) estimates are computed by default, but not if the config disables
+// them.
+TEST(LibQlever, computeSortPerformanceEstimators) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o> .";
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = gtestCurrentTestName();
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  EngineConfig ec{c};
+  ASSERT_TRUE(ec.computeSortPerformanceEstimators_);
+  EXPECT_TRUE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
+
+  ec.computeSortPerformanceEstimators_ = false;
+  EXPECT_FALSE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
+}
+
+// _____________________________________________________________________________
+// Test the trivial getters of `ParsedQueryAndContext`, both the `const` and the
+// non-`const` overloads. All of them refer to the same objects.
+TEST(LibQlever, parsedQueryAndContextGetters) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o> .";
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = gtestCurrentTestName();
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  Qlever engine{EngineConfig{c}};
+
+  std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
+  ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
+  const ParsedQueryAndContext& constParsedQuery = parsedQuery;
+
+  // The non-`const` and the `const` getter yield the same `ParsedQuery`, which
+  // is the one that was parsed from `query`.
+  EXPECT_EQ(&parsedQuery.parsedQuery(), &constParsedQuery.parsedQuery());
+  EXPECT_EQ(constParsedQuery.parsedQuery()._originalString, query);
+  EXPECT_TRUE(constParsedQuery.parsedQuery().hasSelectClause());
+
+  // The same holds for the `QueryExecutionContext`, which is also the one that
+  // the (only `const`) getter for the `shared_ptr` yields.
+  EXPECT_EQ(&parsedQuery.queryExecutionContext(),
+            &constParsedQuery.queryExecutionContext());
+  EXPECT_EQ(constParsedQuery.sharedQueryExecutionContext().get(),
+            &constParsedQuery.queryExecutionContext());
+}
+
+// _____________________________________________________________________________
+// Test `Qlever::clearCache`, and trivially the `const` getter for the named
+// result cache.
+TEST(LibQlever, clearCache) {
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  {
+    auto ofs = ad_utility::makeOfstream(filename);
+    ofs << "<s> <p> <o> . <s2> <p> <o2> .";
+  }
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig c;
+  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  c.baseName_ = gtestCurrentTestName();
+  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  Qlever engine{EngineConfig{c}};
+
+  // The cache starts out empty.
+  ASSERT_EQ(engine.cache().numPinnedEntries(), 0U);
+  ASSERT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+
+  // Run a query with `pinResult`, so that its result is stored in the cache as
+  // a pinned entry.
+  PlannedQuery plan = engine.planQuery(engine.parseQuery(
+      "SELECT ?s WHERE { ?s <p> ?o }", {},
+      [](std::string) { /* the default is a noop*/ }, false, true));
+  EXPECT_EQ(engine.query(plan, ad_utility::MediaType::tsv), "?s\n<s>\n<s2>\n");
+  EXPECT_GT(engine.cache().numPinnedEntries(), 0U);
+
+  // `clearCache` clears the pinned as well as the unpinned entries.
+  engine.clearCache();
+  EXPECT_EQ(engine.cache().numPinnedEntries(), 0U);
+  EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+
+  // The named result cache is a separate cache, and its `const` getter yields
+  // the same cache as the non-`const` one.
+  const Qlever& constEngine = engine;
+  EXPECT_EQ(&constEngine.namedResultCache(), &engine.namedResultCache());
 }

@@ -290,7 +290,7 @@ ParsedQueryAndContext Qlever::bindParsedQuery(
 }
 
 // ___________________________________________________________________________
-PlannedQuery Qlever::planParsedQuery(
+PlannedQuery Qlever::planQuery(
     ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
     std::optional<TimeLimit> timeLimit,
     boost::optional<const ad_utility::Timer&> requestTimer) const {
@@ -309,7 +309,7 @@ PlannedQuery Qlever::parseAndPlanQuery(
     boost::optional<const ad_utility::Timer&> requestTimer,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
-  return planParsedQuery(
+  return planQuery(
       parseQuery(std::move(query), datasetClauses, std::move(updateCallback),
                  pinSubtrees, pinResult),
       std::move(handle), timeLimit, requestTimer);

@@ -255,7 +255,7 @@ struct EngineConfig : CommonConfig {
   // concrete machine. This step can take some time and can be disabled by
   // setting this flag to `false`. In that case, sort operations are always
   // started and run to completion (unless the query times out or is canceled
-  // before the operation starts).
+  // before the sort operation starts).
   bool computeSortPerformanceEstimators_ = true;
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
@@ -374,10 +374,10 @@ class Qlever {
   // `QueryExecutionContext` to plan and execute it against, see
   // `ParsedQueryAndContext`.
   //
-  // This is the first half of `parseAndPlanQuery`, the second half being
-  // `planParsedQuery`. Calling the two separately is useful to inspect or
-  // modify the `ParsedQuery` before it is planned, to measure the time for the
-  // parsing and the planning separately, and to reuse a parsed query (see
+  // This is the first half of `parseAndPlanQuery`, the second half being the
+  // `planQuery` overload below. Calling the two separately is useful to inspect
+  // or modify the `ParsedQuery` before it is planned, to measure the time for
+  // the parsing and the planning separately, and to reuse a parsed query (see
   // below).
   //
   // NOTE ON REUSING A PARSED QUERY: The `ParsedQuery` depends on the
@@ -413,11 +413,11 @@ class Qlever {
   // Plan a query that was parsed by `parseQuery` (or bundled by
   // `bindParsedQuery`). The query is planned against the
   // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
-  // out of sync.
+  // out of sync. Implemented in terms of the `planQuery` overload above.
   //
   // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
   // `planQuery` above.
-  PlannedQuery planParsedQuery(
+  PlannedQuery planQuery(
       ParsedQueryAndContext parsedQuery,
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
@@ -427,7 +427,7 @@ class Qlever {
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
   // name, `query` may also be a SPARQL update operation). This is exactly
-  // `parseQuery` followed by `planParsedQuery`.
+  // `parseQuery` followed by `planQuery`.
   //
   // NOTES: This is useful as a separate function for the following reasons.
   //
@@ -546,7 +546,7 @@ class Qlever {
     blobManager_.deserialize(*this, blob, allocator);
   }
 
-  // Clear the (unnamed) query result cache.
+  // Clear the query result cache.
   void clearCache() { cache_.clearAll(); }
 
   // Create a Query Execution Context needed for execution of single SPARQL
@@ -641,7 +641,6 @@ class Qlever {
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }
 };
-
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_LIBQLEVER_QLEVER_H
