@@ -838,8 +838,7 @@ class IdTable {
     resize(numRows() + numInserted);
     // For each column, copy the requested rows into the reserved tail.
     for (auto&& [destination, source] :
-         ::ranges::views::zip(ad_utility::allView(getColumns()),
-                              ad_utility::allView(table.getColumns()))) {
+         ::ranges::views::zip(getColumns(), table.getColumns())) {
       ql::ranges::transform(indices, destination.begin() + oldSize,
                             [&source](size_t idx) { return source[idx]; });
     }
@@ -998,8 +997,7 @@ inline bool operator==(const IdTable& table, const IdTableView<COLS>& view) {
     return false;
   }
   return ql::ranges::all_of(
-      ::ranges::views::zip(ad_utility::allView(table.getColumns()),
-                           ad_utility::allView(view.getColumns())),
+      ::ranges::views::zip(table.getColumns(), view.getColumns()),
       [](const auto& pair) {
         return ql::ranges::equal(pair.first, pair.second);
       });

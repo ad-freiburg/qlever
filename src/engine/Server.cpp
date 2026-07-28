@@ -585,8 +585,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           checkParameter("dir-for-old-index", std::nullopt));
       nlohmann::json json;
       json["message"] = "Index successfully rebuilt and swapped in";
-      json["dir-for-old-index"] = config.dirForOldIndex_;
-      json["new-index-basename"] = config.finalBasename();
+      json["old-index-basename"] = config.oldIndexTarget();
+      json["new-index-basename"] = config.newIndexTarget();
       response = createJsonResponse(json, request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
@@ -1118,26 +1118,26 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     const std::vector<ad_utility::MediaType>& candidates,
     const ParsedQuery& parsedQuery) {
   if (!candidates.empty()) {
-    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
-                                                  MediaType mediaType) {
-      if (parsedQuery.hasAskClause()) {
-        std::array supportedMediaTypes{
-            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      if (parsedQuery.hasSelectClause()) {
-        std::array supportedMediaTypes{MediaType::octetStream,
-                                       MediaType::csv,
-                                       MediaType::tsv,
-                                       MediaType::qleverJson,
-                                       MediaType::sparqlXml,
-                                       MediaType::sparqlJson,
-                                       MediaType::binaryQleverExport};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
-                                     MediaType::qleverJson, MediaType::turtle};
-      return ad_utility::contains(supportedMediaTypes, mediaType);
+    using enum ad_utility::MediaType;
+    static constexpr auto askTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForAskQueries;
+    static constexpr auto selectTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForSelectQueries;
+    static constexpr auto constructTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForConstructQueries;
+
+    ql::span<const MediaType> supported;
+    if (parsedQuery.hasAskClause()) {
+      supported = askTypes;
+    } else if (parsedQuery.hasSelectClause()) {
+      supported = selectTypes;
+    } else {
+      AD_CORRECTNESS_CHECK(parsedQuery.hasConstructClause());
+      supported = constructTypes;
+    }
+
+    auto it = ql::ranges::find_if(candidates, [supported](MediaType mediaType) {
+      return ad_utility::contains(supported, mediaType);
     });
     if (it != candidates.end()) {
       return *it;
@@ -1633,27 +1633,21 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   auto indexAndViews = indexAndViewsSnapshot();
   auto& [index, oldManager] = *indexAndViews;
 
-  // Assemble the full rebuild configuration. The defaults are: build the new
-  // index in `rebuild.<current datetime>.tmp`, move the old index to
-  // `previous.<datetime of the build of the current index>`, and serve the
-  // new index from the place of the old one.
-  qlever::IndexRebuildConfig config;
-  config.tmpDirForRebuild_ =
+  // Resolve the two directories that can be set via command parameters. The
+  // defaults are: build the new index in `rebuild.<current datetime>.tmp` and
+  // move the old index to `previous.<datetime of the build of the current
+  // index>`.
+  std::string tmpDirForRebuildResolved =
       std::move(tmpDirForRebuild)
           .value_or(
               absl::StrCat("rebuild.",
                            absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT,
                                             absl::Now(), absl::UTCTimeZone()),
                            ".tmp"));
-  config.dirForOldIndex_ =
+  std::string dirForOldIndexResolved =
       std::move(dirForOldIndex)
           .value_or(
               absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
-  fs::path originalPath{originalBasename_};
-  config.dirForNewIndex_ = originalPath.has_parent_path()
-                               ? originalPath.parent_path().string()
-                               : std::string{"."};
-  config.basenameForNewIndex_ = originalPath.filename().string();
 
   // Check the two directories that can be set via command parameters: they
   // must be relative paths (they are resolved against the working directory
@@ -1662,7 +1656,7 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   // of the current index. The appended dummy file name makes
   // `isSubdirectoryOf` (which compares the PARENT directories of its
   // arguments) applicable to a directory.
-  for (const auto& dir : {config.tmpDirForRebuild_, config.dirForOldIndex_}) {
+  for (const auto& dir : {tmpDirForRebuildResolved, dirForOldIndexResolved}) {
     fs::path path{dir};
     if (!path.is_relative()) {
       throw std::runtime_error{
@@ -1679,17 +1673,34 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
           "\" is not a subdirectory of the directory of the current index")};
     }
   }
+
+  // Turn the directories into the four base names that make up an
+  // `IndexRebuildConfig`. The new index keeps the base name of the index the
+  // server was started on and is served from its directory (so that a later
+  // restart loads it), and the old index is moved to `dirForOldIndexResolved`
+  // under the same file names.
+  fs::path originalPath{originalBasename_};
+  auto baseNameIn = [basename = originalPath.filename()](const fs::path& dir) {
+    return (dir / basename).lexically_normal().string();
+  };
+  std::string dirForNewIndex = originalPath.has_parent_path()
+                                   ? originalPath.parent_path().string()
+                                   : std::string{"."};
   // When the old index and the new index end up in the same directory, the
-  // base name of the new index must differ from the current one, otherwise
-  // the renames during the swap would collide.
-  if (fs::path{config.dirForOldIndex_}.lexically_normal() ==
-          fs::path{config.dirForNewIndex_}.lexically_normal() &&
-      config.basenameForNewIndex_ == originalPath.filename().string()) {
+  // base name of the new index must differ from the current one, otherwise the
+  // renames during the swap would collide. The `IndexRebuildConfig`
+  // constructor also rejects this, but with a message that talks about base
+  // names instead of the directories the user actually specified.
+  if (baseNameIn(dirForOldIndexResolved) == baseNameIn(dirForNewIndex)) {
     throw std::runtime_error{absl::StrCat(
-        "The old index cannot be moved to \"", config.dirForOldIndex_,
+        "The old index cannot be moved to \"", dirForOldIndexResolved,
         "\" because the new index is served from that directory under the "
         "same base name")};
   }
+  qlever::IndexRebuildConfig config{
+      index.getOnDiskBase(), baseNameIn(tmpDirForRebuildResolved),
+      baseNameIn(dirForOldIndexResolved), baseNameIn(dirForNewIndex)};
+
   // Warn if state that won't carry over to the rebuilt index was previously
   // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
   // with a fresh, empty `MaterializedViewsManager`.
@@ -1742,9 +1753,9 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   // directory (see `moveRebuiltIndexIntoPlace`), so it is now empty and can be
   // removed.
   std::error_code errorCode;
-  if (!fs::remove(config.tmpDirForRebuild_, errorCode) || errorCode) {
+  if (!fs::remove(tmpDirForRebuildResolved, errorCode) || errorCode) {
     AD_LOG_WARN << "Could not remove the temporary directory \""
-                << config.tmpDirForRebuild_ << "\"" << std::endl;
+                << tmpDirForRebuildResolved << "\"" << std::endl;
   }
   co_return config;
 }

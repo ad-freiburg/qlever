@@ -14,6 +14,7 @@
 
 #include <array>
 
+#include "backports/filesystem.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -316,17 +317,13 @@ class MaterializedViewsManager {
   // Check if any materialized view is currently loaded.
   bool hasLoadedViews() const;
 
-  // Return the names of all view files (of all views, loaded or not) that
-  // exist on disk for the given index basename. Views are loaded lazily by
-  // name, so the only way to enumerate them is to scan the directory for
-  // files with the `<basename>.view.` prefix.
-  static std::vector<std::string> viewFilesOnDisk(
-      const std::string& onDiskBase);
-
-  // Overload of the above for this manager's index basename.
-  std::vector<std::string> viewFilesOnDisk() const {
-    return viewFilesOnDisk(onDiskBase_);
-  }
+  // Return the names of all view files (of all views, loaded or not) that exist
+  // on disk for the given index base name. Views are loaded lazily by name, so
+  // the only way to enumerate them is to scan the directory for files with the
+  // `<base>.view.` prefix (see `MaterializedView::getFilenameBase`). This is
+  // used to move the views together with their index after a rebuild.
+  static std::vector<ql::filesystem::path> viewFilesOnDisk(
+      const ql::filesystem::path& onDiskBase);
 
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,

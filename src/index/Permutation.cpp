@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "engine/VariableToColumnMap.h"
+#include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
@@ -52,7 +53,7 @@ void Permutation::loadFromDisk(
     internalPermutation_->permutationType_ = Type::INTERNAL;
   }
   possiblyUndefinedColumns_ = std::move(possiblyUndefinedColumns);
-  auto filename = absl::StrCat(onDiskBase, ".index", fileSuffix_);
+  auto filename = absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");
@@ -162,11 +163,12 @@ auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
 }
 
 // _____________________________________________________________________
-std::vector<std::string> Permutation::fileNames(Enum permutation,
-                                                const std::string& onDiskBase) {
-  auto filename = absl::StrCat(onDiskBase, ".index.",
-                               ad_utility::utf8ToLower(toString(permutation)));
-  return {filename, absl::StrCat(filename, META_FILE_SUFFIX)};
+std::vector<ql::filesystem::path> Permutation::fileNames(
+    Enum permutation, std::string_view onDiskBase) {
+  ql::filesystem::path filename =
+      absl::StrCat(onDiskBase, PERMUTATION_FILE_INFIX, ".",
+                   ad_utility::utf8ToLower(toString(permutation)));
+  return {filename, absl::StrCat(filename.string(), META_FILE_SUFFIX)};
 }
 
 // _____________________________________________________________________

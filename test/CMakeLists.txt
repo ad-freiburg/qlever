@@ -173,6 +173,8 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 addLinkAndDiscoverTest(IndexTest index)
 
+addLinkAndDiscoverTest(PermutationTest index)
+
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
@@ -544,6 +546,8 @@ addLinkAndDiscoverTest(ExportIdsTest engine parser)
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
+
+addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
 
 addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 

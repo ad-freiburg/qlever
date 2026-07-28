@@ -24,6 +24,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -33,6 +34,7 @@
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
@@ -178,7 +180,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   } else {
     // Transform the lazy result (permute columns)
     return RangeOfIdTables{
-        ad_utility::OwningView{result->idTables()} |
+        result->idTables() |
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
               auto& [block, vocab] = idTableAndLocalVocab;
@@ -530,23 +532,13 @@ bool MaterializedViewsManager::hasLoadedViews() const {
 }
 
 // _____________________________________________________________________________
-std::vector<std::string> MaterializedViewsManager::viewFilesOnDisk(
-    const std::string& onDiskBase) {
-  namespace fs = std::filesystem;
-  fs::path base{onDiskBase};
-  auto directory = base.parent_path();
-  if (directory.empty()) {
-    directory = ".";
-  }
-  std::string prefix = absl::StrCat(std::string{base.filename()}, ".view.");
-  std::vector<std::string> result;
-  for (const auto& entry : fs::directory_iterator{directory}) {
-    if (entry.is_regular_file() &&
-        ql::starts_with(std::string{entry.path().filename()}, prefix)) {
-      result.push_back(entry.path().string());
-    }
-  }
-  return result;
+std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
+    const ql::filesystem::path& onDiskBase) {
+  // View files are named `<base>.view.<name>...`. Reuse the canonical filename
+  // builder so the `.view.` infix is not duplicated here, and let the shared
+  // helper enumerate the matching files in the directory of `onDiskBase`.
+  std::string suffix = MaterializedView::getFilenameBase("", "");
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, suffix);
 }
 
 // _____________________________________________________________________________

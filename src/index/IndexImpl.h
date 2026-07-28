@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
@@ -247,6 +248,13 @@ class IndexImpl {
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
+  // Configure the delta triples and the graph name manager to persist their
+  // state to the files derived from the current `onDiskBase_`. If
+  // `readFromDisk` is `true`, the already persisted state is additionally read
+  // back from disk (used when loading an existing index); if `false`, only the
+  // filenames are set (used when re-anchoring an index that was moved on disk).
+  void setFilenamesForPersistentUpdates(bool readFromDisk);
+
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
@@ -276,6 +284,16 @@ class IndexImpl {
       const {
     vocab_.writeAsZeroCopyBlob(serializer);
   }
+
+  // Get the configuration JSON (index metadata) of this `IndexImpl`.
+  const nlohmann::json& configurationJson() const { return configurationJson_; }
+
+  // Apply the given configuration JSON (index metadata) to this `IndexImpl`,
+  // setting up the vocabulary type, case comparator, locale, encoded-IRI
+  // prefixes, triple counts, etc. This is the part of `readConfiguration` that
+  // does not itself read from disk, factored out so that a configuration
+  // obtained from elsewhere (e.g. a serialized blob) can be applied directly.
+  void applyConfiguration(const nlohmann::json& configuration);
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
@@ -491,17 +509,23 @@ class IndexImpl {
 
   void setOnDiskBase(const std::string& onDiskBase);
 
-  // Return the names of all files that belong to the index with the given
-  // base name and currently exist on disk (permutations and their metadata,
-  // vocabulary, patterns, configuration, text index, persisted updates,
-  // etc.). Files that merely share the base name but belong to the server
-  // (e.g. the metrics log) are NOT included. This is used to move an index to
-  // a different directory after an index rebuild.
+  // Return the names of all files that belong to the index with the given base
+  // name and currently exist on disk: the permutations and their metadata, the
+  // vocabulary, the patterns, the configuration, the settings, the text index,
+  // and the persisted updates. Optional components that do not exist for the
+  // given index (e.g. the text index or the persisted updates) are omitted.
   //
-  // NOTE: The files of the materialized views are not included either; they
-  // are enumerated by `MaterializedViewsManager::viewFilesOnDisk`, which
-  // lives on the level of the `Qlever` class.
-  static std::vector<std::string> allIndexFiles(const std::string& onDiskBase);
+  // The following files are deliberately NOT included, even though they may
+  // share the base name: the files of the materialized views (enumerated
+  // separately by `MaterializedViewsManager::viewFilesOnDisk`, which lives on
+  // the level of the `Qlever` class), and the runtime and build logs (which are
+  // handled separately because they are either appended across restarts or
+  // travel with the index explicitly). A unit test (`allIndexFilesAreListed`)
+  // guards that this list stays exhaustive with respect to the actual index
+  // files. This is used to move an index to a different directory after a
+  // rebuild.
+  static std::vector<ql::filesystem::path> allIndexFiles(
+      std::string_view onDiskBase);
 
   void setSettingsFile(const std::string& filename);
 

@@ -601,11 +601,6 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
 }
 
 // _____________________________________________________________________________
-bool DeltaTriplesManager::persists() const {
-  return deltaTriples_.rlock()->persists();
-}
-
-// _____________________________________________________________________________
 void DeltaTriples::setOriginalMetadata(
     Permutation::Enum permutation,
     std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
@@ -722,20 +717,21 @@ bool DeltaTriples::persists() const {
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
-    std::string filename) {
+void DeltaTriplesManager::setFilenameForPersistentUpdates(std::string filename,
+                                                          bool readFromDisk) {
   modify<void>(
-      [&filename](DeltaTriples& deltaTriples) {
+      [&filename, readFromDisk](DeltaTriples& deltaTriples) {
         deltaTriples.setPersists(std::move(filename));
-        deltaTriples.readFromDisk();
+        if (readFromDisk) {
+          deltaTriples.readFromDisk();
+        }
       },
       false);
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::setFilenameForPersistentUpdates(
-    std::string filename) {
-  deltaTriples_.wlock()->setPersists(std::move(filename));
+bool DeltaTriplesManager::persists() const {
+  return deltaTriples_.rlock()->persists();
 }
 
 // _____________________________________________________________________________
