@@ -66,7 +66,8 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
+      # Precompiled headers have to be disabled to make coverage deterministic.
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DUSE_PRECOMPILED_HEADERS=OFF -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
 
     - name: Build
         # Build your program with the given configuration
@@ -88,7 +89,7 @@ jobs:
         # `llvm-cov` only warns about a nonexistent source filter, and then reports everything.
         test -d "${{github.workspace}}/src"
         llvm-profdata-${{env.compiler-version}} merge -sparse *.profraw -o default.profdata
-        llvm-cov-${{env.compiler-version}} export ./QLeverAllUnitTestsMain --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
+        llvm-cov-${{env.compiler-version}} export ./QLeverAllUnitTestsMain --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
