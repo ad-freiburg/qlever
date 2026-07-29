@@ -93,6 +93,26 @@ class PolymorphicVocabulary {
   Variant& getUnderlyingVocabulary() { return vocab_; }
   const Variant& getUnderlyingVocabulary() const { return vocab_; }
 
+  // Apply `function` to the currently active vocabulary, provided that this
+  // vocabulary supports zero-copy (de)serialization (see
+  // `VocabularySupportsZeroCopy`); throw otherwise. The `operation` describes
+  // the attempted operation and is expected to read like `"Loading a vocabulary
+  // from"`. The `const` overload is used for writing a zero-copy blob, the
+  // non-`const` overload for reading one (which overwrites the active
+  // vocabulary in place).
+  template <typename Function>
+  void applyToZeroCopyCapableVocabulary(std::string_view operation,
+                                        Function function) {
+    applyToZeroCopyCapableVocabularyImpl(*this, operation, std::move(function));
+  }
+
+  //____________________________________________________________________________
+  template <typename Function>
+  void applyToZeroCopyCapableVocabulary(std::string_view operation,
+                                        Function function) const {
+    applyToZeroCopyCapableVocabularyImpl(*this, operation, std::move(function));
+  }
+
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
   template <typename String, typename Comp>
   WordAndIndex lower_bound(const String& word, Comp comp) const {
@@ -187,6 +207,31 @@ class PolymorphicVocabulary {
   // Generic serialization support - delegates to the active variant.
   AD_SERIALIZE_FRIEND_FUNCTION(PolymorphicVocabulary) {
     std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
+  }
+
+ private:
+  // The common implementation of the two `applyToZeroCopyCapableVocabulary`
+  // overloads above. `self` is a deduced (possibly `const`) reference to
+  // `*this`, so that a single implementation serves both of them.
+  template <typename Self, typename Function>
+  static void applyToZeroCopyCapableVocabularyImpl(Self& self,
+                                                   std::string_view operation,
+                                                   Function function) {
+    std::visit(
+        [&function, &operation](auto& vocab) {
+          // Only those alternatives that support zero-copy (in-memory,
+          // uncompressed or compressed) can be handled, the others throw.
+          if constexpr (VocabularySupportsZeroCopy<
+                            std::decay_t<decltype(vocab)>>) {
+            function(vocab);
+          } else {
+            AD_THROW(absl::StrCat(
+                operation,
+                " a zero-copy blob is only supported for the in-memory "
+                "(uncompressed or compressed) vocabulary implementations"));
+          }
+        },
+        self.vocab_);
   }
 };
 
