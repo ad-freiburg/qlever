@@ -27,6 +27,7 @@ class ServerMetrics {
   ServerMetrics& operator=(const ServerMetrics&) = delete;
 
   // Synchronous instruments recorded directly by Server.
+  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> buildInfoMetric_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> startTimeMetric_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> indexLoadMetric_;
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>

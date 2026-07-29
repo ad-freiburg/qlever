@@ -21,8 +21,16 @@ namespace qlever::version {
 extern const std::string_view GitShortHash;
 // The date and time at which QLever was compiled.
 extern const std::string_view DatetimeOfCompilation;
+// The Unix timestamp (seconds since the epoch) at which QLever was compiled.
+extern const std::string_view TimeOfCompilationUnix;
 // The project version from `git describe --tags --always`.
 extern const std::string_view ProjectVersion;
+// The compiler used to compile QLever (e.g. `GNU` or `Clang`).
+extern const std::string_view Compiler;
+// The version of the compiler used to compile QLever (e.g. `13.2.0`).
+extern const std::string_view CompilerVersion;
+// The C++ standard QLever was compiled with (e.g. `20`).
+extern const std::string_view CxxStandard;
 
 // The following versions of the above constants do NOT require linking
 // against the `compilationInfo` library, but only the inclusion of this header.
@@ -34,8 +42,17 @@ inline ad_utility::Synchronized<std::string_view> gitShortHashWithoutLinking{
 inline ad_utility::Synchronized<std::string_view>
     datetimeOfCompilationWithoutLinking{
         std::string_view{"datetime of compilation not set"}};
+inline ad_utility::Synchronized<std::string_view>
+    timeOfCompilationUnixWithoutLinking{
+        std::string_view{"time of compilation not set"}};
 inline ad_utility::Synchronized<std::string_view> projectVersionWithoutLinking{
     std::string_view{"project version not set"}};
+inline ad_utility::Synchronized<std::string_view> compilerWithoutLinking{
+    std::string_view{"compiler not set"}};
+inline ad_utility::Synchronized<std::string_view> compilerVersionWithoutLinking{
+    std::string_view{"compiler version not set"}};
+inline ad_utility::Synchronized<std::string_view> cxxStandardWithoutLinking{
+    std::string_view{"c++ standard not set"}};
 
 // Copy the values from the constants that require linking to the `inline`
 // variables that don't require linking. For details see above.
