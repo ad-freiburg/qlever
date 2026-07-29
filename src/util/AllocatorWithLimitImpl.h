@@ -112,46 +112,22 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
-  explicit AllocatorWithLimit(const AllocatorWithLimit<U>& other)
+  AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : tracker_{other.tracker_} {}
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
   AllocatorWithLimit& operator=(const AllocatorWithLimit&) = default;
 
-  // We deliberately let the move assignment call the copy assignment, because
-  // when a `vector<..., AllocatorWithLimit>` is moved from, we still want the
-  // vector that was moved from to have a valid allocator that uses the same
-  // memory limit. Note: We could also implicitly leave out the move operators,
-  // then the copy operators would be called implicitly, but
-  // 1. It is hard to reason about things that are implicitly not there.
-  // 2. This would inhibit move semantics from `std::vector` unless the copy
-  // operations are also `noexcept`, so we need
-  //    some extra code anyway.
-  AllocatorWithLimit(AllocatorWithLimit&& other) noexcept try
-      : AllocatorWithLimit(static_cast<const AllocatorWithLimit&>(other)) {
-    // Empty body, because all the logic is done by the delegated constructor
-    // and the catch block.
-  } catch (const std::exception& e) {
-    auto log = [&e](auto& stream) {
-      stream << "The move constructor of `AllocatorWithLimit` threw an "
-                "exception with message "
-             << e.what() << " .This should never happen, terminating"
-             << std::endl;
-    };
-    log(ad_utility::Log::getLog<ERROR>());
-    log(std::cerr);
-    std::terminate();
-  }
-  AllocatorWithLimit& operator=(AllocatorWithLimit&& other) noexcept {
-    ad_utility::terminateIfThrows(
-        [self = this, &other] {
-          *self = static_cast<const AllocatorWithLimit&>(other);
-        },
-        "The move assignment operator of `AllocatorWithLimit` should never "
-        "throw in practice.");
-    return *this;
-  }
+  // The tracker's noexcept move operations copy rather than steal (keeping the
+  // moved-from allocator valid and sharing the same budget), so defaulting the
+  // allocator move operations here is both correct and noexcept.
+  static_assert(std::is_nothrow_move_constructible_v<detail::MemoryLimitTracker>);
+  static_assert(std::is_nothrow_move_assignable_v<detail::MemoryLimitTracker>);
+  static_assert(std::is_nothrow_copy_constructible_v<std::allocator<T>>);
+  static_assert(std::is_nothrow_copy_assignable_v<std::allocator<T>>);
+  AllocatorWithLimit(AllocatorWithLimit&&) noexcept = default;
+  AllocatorWithLimit& operator=(AllocatorWithLimit&&) noexcept = default;
 
   // An allocator must have a function "allocate" with exactly this signature.
   // TODO<C++20> : the exact signature of allocate changes

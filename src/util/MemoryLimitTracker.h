@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 
@@ -105,6 +106,15 @@ class AllocationMemoryLeftThreadsafe {
   // Constructor from an existing shared, synchronized memory counter.
   explicit AllocationMemoryLeftThreadsafe(T ptr) : ptr_{std::move(ptr)} {}
 
+  // Copying a shared_ptr never throws in practice (its refcount increment is
+  // an atomic operation that cannot fail). Declare copy ops noexcept explicitly
+  // so that downstream static_asserts and noexcept move constructors relying on
+  // these operations compile correctly.
+  AllocationMemoryLeftThreadsafe(
+      const AllocationMemoryLeftThreadsafe&) noexcept = default;
+  AllocationMemoryLeftThreadsafe& operator=(
+      const AllocationMemoryLeftThreadsafe&) noexcept = default;
+
   // Returns the shared, synchronized memory counter.
   T& ptr() { return ptr_; }
 
@@ -155,9 +165,14 @@ class MemoryLimitTracker {
   // from `clearOnAllocation_`: The counter stores the actual budget, while the
   // hook is only called on a failed reservation attempt to possibly free memory
   // elsewhere before retrying the same counter.
+  // Copying a shared_ptr-backed wrapper never throws; assert this so that the
+  // noexcept move operations below can copy this member unconditionally.
   AllocationMemoryLeftThreadsafe sharedMemoryLeft_;
+  static_assert(std::is_nothrow_copy_constructible_v<AllocationMemoryLeftThreadsafe>);
+  static_assert(std::is_nothrow_copy_assignable_v<AllocationMemoryLeftThreadsafe>);
 
-  // Hook that may free memory before a reservation finally fails.
+  // Hook that may free memory before a reservation finally fails. `std::function`
+  // copy can throw (it may allocate), so we deliberately do NOT assert it noexcept.
   ClearOnAllocation clearOnAllocation_;
 
  public:
@@ -173,6 +188,35 @@ class MemoryLimitTracker {
                      ClearOnAllocation clearOnAllocation = noClearOnAllocation)
       : MemoryLimitTracker{makeAllocationMemoryLeftThreadsafeObject(limit),
                            std::move(clearOnAllocation)} {}
+
+  // Copy operations: explicitly defaulted so that declaring move operations
+  // below does not suppress the implicit copy.
+  MemoryLimitTracker(const MemoryLimitTracker&) = default;
+  MemoryLimitTracker& operator=(const MemoryLimitTracker&) = default;
+
+  // Move operations deliberately COPY the source rather than steal it, so that
+  // the moved-from tracker remains valid and continues to share the same memory
+  // budget. This mirrors the semantics required by AllocatorWithLimit (a
+  // moved-from allocator must still hold a usable tracker).
+  //
+  // `sharedMemoryLeft_` copy is noexcept (shared_ptr refcount increment);
+  // `clearOnAllocation_` copy (std::function) may throw in theory, so we wrap
+  // it in terminateIfThrows — these exceptions should never occur in practice.
+  MemoryLimitTracker(MemoryLimitTracker&& other) noexcept
+      : sharedMemoryLeft_{other.sharedMemoryLeft_} {
+    ad_utility::terminateIfThrows(
+        [this, &other]() { clearOnAllocation_ = other.clearOnAllocation_; },
+        "The move constructor of `MemoryLimitTracker` copied "
+        "`clearOnAllocation_` which threw unexpectedly.");
+  }
+  MemoryLimitTracker& operator=(MemoryLimitTracker&& other) noexcept {
+    sharedMemoryLeft_ = other.sharedMemoryLeft_;
+    ad_utility::terminateIfThrows(
+        [this, &other]() { clearOnAllocation_ = other.clearOnAllocation_; },
+        "The move assignment operator of `MemoryLimitTracker` copied "
+        "`clearOnAllocation_` which threw unexpectedly.");
+    return *this;
+  }
 
   // Reserve `n` bytes or throw AllocationExceedsLimitException, running the
   // clearOnAllocation hook first if the budget is momentarily exceeded.
