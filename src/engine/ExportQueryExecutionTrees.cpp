@@ -783,11 +783,14 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
+  const auto mode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
+
   auto triples = qlever::constructExport::ConstructTripleGenerator::
       generateFormattedTriples(constructTriples, qet.getVariableColumns(),
                                qet.getQec()->getIndex(), cancellationHandle,
                                std::move(rowIndices), limitAndOffset._offset,
-                               format, *qet.getQec());
+                               format, *qet.getQec(), mode);
 
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);

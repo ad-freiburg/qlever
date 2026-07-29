@@ -2117,8 +2117,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
 // DISABLED: this test can only pass once the `ConstructDeduplicator` is wired
 // into the CONSTRUCT export, which happens in the next PR of this series.
 // Enable it there.
-TEST(ExportQueryExecutionTrees,
-     DISABLED_ConstructGlobalDeduplicationAcrossLocalVocab) {
+TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
   const std::string kg =
       "<http://example.org/x> <http://example.org/name> \"Alice\" . "
       "<http://example.org/y> <http://example.org/label> \"Alice\" .";
@@ -2153,5 +2152,58 @@ TEST(ExportQueryExecutionTrees,
     EXPECT_EQ(
         runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
         expected);
+  }
+}
+
+// VALUES clause that emits the identical triple 3 times — a minimal smoke
+// test that the deduplication is wired end-to-end.
+TEST(ExportQueryExecutionTrees, ConstructDeduplicationValues) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>)"
+      " } }";
+  const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
+
+  using ad_utility::DeduplicationMode;
+
+  // 3 identical triples with `none`.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::none());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        absl::StrCat(expected, expected, expected));
+  }
+
+  // 1 unique triple with `global`.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::global());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        expected);
+  }
+
+  // With a batch-wise window of 1, three *distinct* keys in an A-B-A
+  // pattern: A inserted, B inserted (evicts A), A inserted again (evicts B,
+  // A is new) — all three are emitted.
+  {
+    const std::string queryAba =
+        "CONSTRUCT { ?s ?p ?o } WHERE {"
+        " VALUES (?s ?p ?o) {"
+        "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>) (<ex:a> <ex:a> <ex:a>)"
+        " } }";
+    const std::string a = "<ex:a> <ex:a> <ex:a> .\n";
+    const std::string b = "<ex:b> <ex:b> <ex:b> .\n";
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::batchWise(1));
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, queryAba, ad_utility::MediaType::turtle),
+        absl::StrCat(a, b, a));
   }
 }

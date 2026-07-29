@@ -32,7 +32,7 @@ namespace {
 // Filter `triples` through `deduplicator`, dropping duplicates.  The
 // deduplicator is mutated in-place so that its state persists across batches.
 // Only called when `DeduplicationMode` is not `None`.
-std::vector<EvaluatedTriple> filterDuplicates(
+static std::vector<EvaluatedTriple> filterDuplicates(
     std::vector<EvaluatedTriple> triples,
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationContext& ctx, size_t batchBegin,
@@ -90,9 +90,9 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   // Deduplicator persists across batches within a single query.
-  std::unique_ptr<ConstructDeduplicator> deduplicator;
+  std::shared_ptr<ConstructDeduplicator> deduplicator;
   if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
-    deduplicator = std::make_unique<ConstructDeduplicator>(mode, qec);
+    deduplicator = std::make_shared<ConstructDeduplicator>(mode, qec);
   }
 
   auto preprocessedTemplatePtr =
@@ -102,7 +102,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
   auto processTable =
       [preprocessedTemplate = std::move(preprocessedTemplatePtr), &index,
        cancellationHandle, cache = std::move(cache),
-       deduplicator = deduplicator.get(),
+       deduplicator = std::move(deduplicator),
        accumulatedRowOffset = rowOffset](const TableWithRange& table) mutable {
         const size_t numRowsOfTable = ql::ranges::size(table.view_);
 
@@ -112,7 +112,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
         return ranges::views::chunk(table.view_, BATCH_SIZE) |
                ql::views::transform([&table, &preprocessedTemplate, &index,
                                      &cache, cancellationHandle, tableRowOffset,
-                                     deduplicator](auto chunkView) {
+                                     &deduplicator](auto chunkView) {
                  auto triples = computeBatch(
                      table.tableWithVocab_, chunkView, *preprocessedTemplate,
                      index, cache, tableRowOffset, cancellationHandle);
