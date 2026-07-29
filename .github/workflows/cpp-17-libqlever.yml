@@ -56,38 +56,30 @@ jobs:
         with:
           compiler: ${{env.compiler}}
           compiler-version: ${{matrix.compiler-version}}
+      - name: Build the Docker image for the 'using enum' rewriter
+        if: matrix.compiler-version == 8
+        run: |
+          # The base image ghcr.io/joka921/llvm-cpp-17-rewriter contains a custom
+          # clang build with the `backport-using-enum` tool at /opt/llvm/bin/. It
+          # is built using the Dockerfile at
+          # https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile .
+          # All the dependencies that QLever needs are installed on top of it by
+          # `Dockerfiles/Dockerfile.cpp-17-rewriter`, so a new dependency only
+          # requires a change in that Dockerfile. The build context is the
+          # `Dockerfiles` directory (the Dockerfile copies nothing, so we don't
+          # have to send the whole repository to the Docker daemon).
+          docker build -f Dockerfiles/Dockerfile.cpp-17-rewriter -t qlever-cpp-17-rewriter:local Dockerfiles
+
       - name: Rewrite C++20 'using enum' for C++17 compatibility
         if: matrix.compiler-version == 8
         run: |
-          # The Docker container ghcr.io/joka921/llvm-enum-rewriter contains a custom
-          # clang-21 build with the `backport-using-enum` tool at /opt/llvm/bin/.
-          # It also has cmake, boost 1.81, icu, zstd, and jemalloc installed.
-          # The docker image is built using the Dockerfile at
-          # https://github.com/joka921/llvm-project/blob/2d1f59cd321c3a7efd6e47bd2e97413cafa912c9/Dockerfile
-          # and will be extended and moved to a more stable location in the future.
-          docker pull ghcr.io/joka921/llvm-enum-rewriter:latest
-
-          # Run the container as root (i.e. without the `--user` override) so
-          # that we can `apt-get install` the Boost::filesystem dev package
-          # below, which the C++17 backports require but the image is missing.
-          # Generating the compile commands and the actual rewriting happen in
-          # the same invocation so the package is present for both; the
-          # workspace ownership is restored afterwards.
-          docker run --rm \
+          # Generate compile_commands.json using the container's clang-21.
+          docker run --user "$(id -u):$(id -g)" --rm \
             -v ${{github.workspace}}:/src \
             -w /src \
-            ghcr.io/joka921/llvm-enum-rewriter:latest \
+            qlever-cpp-17-rewriter:local \
             bash -c "
-              set -e
               export PATH=/opt/llvm/bin:\$PATH
-
-              # The image ships Boost 1.81 but not its filesystem component,
-              # which the C++17 backports require (there ql::filesystem aliases
-              # boost::filesystem). Install it before configuring.
-              apt-get update
-              apt-get install -y libboost-filesystem1.81-dev
-
-              # Generate compile_commands.json using the container's clang-21.
               cmake -B /src/rewriter-build \
                 -DCMAKE_C_COMPILER=clang \
                 -DCMAKE_CXX_COMPILER=clang++ \
@@ -98,25 +90,28 @@ jobs:
                 -DUSE_PRECOMPILED_HEADERS=OFF \
                 -DREDUCED_FEATURE_SET_FOR_CPP17=ON \
                 -DQLEVER_NO_UNICODE=ON
+            "
 
-              # Run backport-using-enum on all src/ files containing 'using enum'.
-              # We deliberately also attempt files that are not valid in the
-              # reduced feature set mode, so an individual rewrite may fail. Such
-              # per-file failures must NOT fail the CI (unlike the set -e
-              # guarded apt-get/cmake steps above), hence the '|| true'.
-              #
-              # NOTE: no backticks in the comments of this script: it is one
-              # double-quoted string, in which the outer shell expands
-              # backticks as command substitutions.
+          # Run backport-using-enum on all src/ files containing 'using enum'.
+          # We deliberately also attempt files that are not valid in the reduced
+          # feature set mode, so an individual rewrite may fail. Such per-file
+          # failures must NOT fail the CI, hence the '|| true'.
+          #
+          # NOTE: no backticks in the comments of this script: it is one
+          # double-quoted string, in which the outer shell expands backticks as
+          # command substitutions.
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v ${{github.workspace}}:/src \
+            -w /src \
+            qlever-cpp-17-rewriter:local \
+            bash -c "
               for f in \$(grep -rl 'using enum' ./src/ --include='*.h' --include='*.cpp'); do
                 echo \"Rewriting: \$f\"
                 /opt/llvm/bin/backport-using-enum -p /src/rewriter-build \"\$f\" || true
               done
             "
 
-          # The container ran as root; restore ownership of the (rewritten)
-          # workspace and remove the temporary build directory.
-          sudo chown -R "$(id -u):$(id -g)" ${{github.workspace}}
+          # Clean up the temporary build directory to save disk space.
           rm -rf ${{github.workspace}}/rewriter-build
 
       - name: Configure CMake
