@@ -42,16 +42,16 @@ class AllocationExceedsLimitException : public std::exception {
   // Constructor from requested and currently free memory.
   AllocationExceedsLimitException(MemorySize requestedMemory,
                                   MemorySize freeMemory)
-      : _message{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
+      : message_{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
                               ", but only ", freeMemory.asString(),
                               " were available")} {};
 
   // Returns the human-readable error message.
-  const char* what() const noexcept override { return _message.c_str(); }
+  const char* what() const noexcept override { return message_.c_str(); }
 
  private:
   // Error message returned by `what()`.
-  const std::string _message;
+  const std::string message_;
 };
 
 // Class to keep track of the amount of memory that is left for allocation. When
@@ -65,7 +65,7 @@ class AllocationMemoryLeft {
 
  public:
   // Constructor from the initial amount of free memory.
-  AllocationMemoryLeft(MemorySize n) : free_(n) {}
+  explicit AllocationMemoryLeft(MemorySize n) : free_(n) {}
 
   // Called before memory is allocated.
   bool decrease_if_enough_left_or_return_false(MemorySize n) noexcept {
@@ -122,10 +122,7 @@ class AllocationMemoryLeftThreadsafe {
   const T& ptr() const { return ptr_; }
 
   // Compares whether two wrappers refer to the same shared memory counter.
-  friend bool operator==(const AllocationMemoryLeftThreadsafe& a,
-                         const AllocationMemoryLeftThreadsafe& b) {
-    return a.ptr_ == b.ptr_;
-  }
+  bool operator==(const AllocationMemoryLeftThreadsafe&) const = default;
 
  private:
   // Shared synchronized memory counter.
@@ -152,7 +149,9 @@ using ClearOnAllocation = std::function<void(MemorySize)>;
 
 /// A Noop lambda that will be used as a template default parameter
 /// in the `AllocatorWithLimit` class.
-inline ClearOnAllocation noClearOnAllocation = [](MemorySize) {};
+inline const ClearOnAllocation noClearOnAllocation = [](MemorySize) {
+  // Intentionally empty: default policy performs no memory reclamation.
+};
 
 namespace detail {
 
@@ -184,8 +183,9 @@ class MemoryLimitTracker {
         clearOnAllocation_{std::move(clearOnAllocation)} {}
 
   // Constructor from an initial memory limit and an optional clear hook.
-  MemoryLimitTracker(MemorySize limit,
-                     ClearOnAllocation clearOnAllocation = noClearOnAllocation)
+  explicit MemoryLimitTracker(
+      MemorySize limit,
+      ClearOnAllocation clearOnAllocation = noClearOnAllocation)
       : MemoryLimitTracker{makeAllocationMemoryLeftThreadsafeObject(limit),
                            std::move(clearOnAllocation)} {}
 

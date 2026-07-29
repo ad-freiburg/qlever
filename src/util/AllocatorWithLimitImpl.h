@@ -33,12 +33,11 @@
 // `util/MemoryLimitTracker.h` because they are part of the public API used
 // across the code base.
 
-namespace ad_utility {
 
 // The concrete memory-limit enforcing allocator. See the file-level comment for
 // why it lives in this dedicated namespace rather than directly in
 // `ad_utility`.
-namespace allocatorImpl {
+namespace ad_utility::allocatorImpl {
 
 /**
  * @brief Class to concurrently allocate memory up to a specified limit on the
@@ -87,7 +86,7 @@ class AllocatorWithLimit {
   friend class AllocatorWithLimit;
 
   detail::MemoryLimitTracker tracker_;
-  std::allocator<T> allocator_;
+  [[no_unique_address]] std::allocator<T> allocator_;
 
  public:
   /// obtain an AllocationMemoryLeftThreadsafe by calls to
@@ -112,7 +111,7 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
-  AllocatorWithLimit(const AllocatorWithLimit<U>& other)
+  AllocatorWithLimit(const AllocatorWithLimit<U>& other)  // NOLINT
       : tracker_{other.tracker_} {}
 
   // Defaulted copy operations.
@@ -128,6 +127,8 @@ class AllocatorWithLimit {
   static_assert(std::is_nothrow_copy_assignable_v<std::allocator<T>>);
   AllocatorWithLimit(AllocatorWithLimit&&) noexcept = default;
   AllocatorWithLimit& operator=(AllocatorWithLimit&&) noexcept = default;
+
+  ~AllocatorWithLimit() = default;
 
   // An allocator must have a function "allocate" with exactly this signature.
   // TODO<C++20> : the exact signature of allocate changes
@@ -177,8 +178,6 @@ class AllocatorWithLimit {
   }
 };
 
-}  // namespace allocatorImpl
-
-}  // namespace ad_utility
+}  // namespace ad_utility::allocatorImpl
 
 #endif  // QLEVER_SRC_UTIL_ALLOCATORWITHLIMITIMPL_H
