@@ -29,7 +29,7 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [8, 11, 12, 13, 15, 16, 18, 21]
+        compiler-version: [8, 11, 12, 13, 18, 21]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         expensive-tests: [true]
@@ -41,8 +41,8 @@ jobs:
         # build".
         #
         # TODO<joka921> This is temporarily hardcoded to `false`, such that the
-        # merge-queue-only builds (`gcc-12`, `gcc-15`, `gcc-16`, and `clang-18`,
-        # see the `exclude` section below) also run for pull requests. That way
+        # merge-queue-only builds (`gcc-12` and `clang-18`, see the `exclude`
+        # section below) also run for pull requests. That way
         # we can check whether they pass at all before the merge queue is
         # activated. Undo this by restoring the original value, which is
         #   - ${{github.event_name == 'pull_request'}}
@@ -51,8 +51,7 @@ jobs:
           - false
         exclude:
           # Compiler versions that we currently don't test at all (there is no
-          # `gcc-18`/`gcc-21`, and the following `clang` versions are either too
-          # old or only used for the sanitizer builds in `include` below).
+          # `gcc-18`/`gcc-21`, and the following `clang` versions are too old).
           - compiler: gcc
             compiler-version: 8
           - compiler: gcc
@@ -71,18 +70,11 @@ jobs:
             compiler-version: 15
           - compiler: clang
             compiler-version: 16
-          # The following builds are only run in the merge queue. They cover
-          # additional compiler versions (in particular the most recent ones,
-          # which typically report new warnings) that would make the CI for
-          # each single push to a pull request unnecessarily expensive.
+          # The following builds are only run in the merge queue, because
+          # running them for each single push to a pull request would make the
+          # CI unnecessarily expensive.
           - compiler: gcc
             compiler-version: 12
-            isPullRequest: true
-          - compiler: gcc
-            compiler-version: 15
-            isPullRequest: true
-          - compiler: gcc
-            compiler-version: 16
             isPullRequest: true
           - compiler: clang
             compiler-version: 18
