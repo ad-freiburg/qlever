@@ -23,6 +23,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -32,6 +34,7 @@
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
@@ -177,7 +180,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   } else {
     // Transform the lazy result (permute columns)
     return RangeOfIdTables{
-        ad_utility::OwningView{result->idTables()} |
+        result->idTables() |
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
               auto& [block, vocab] = idTableAndLocalVocab;
@@ -250,7 +253,7 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 // _____________________________________________________________________________
 IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
-  std::string spoFilename = getFilenameBase() + ".index.spo";
+  std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
@@ -299,7 +302,7 @@ void MaterializedViewWriter::writeViewMetadata() const {
         }) |
         ::ranges::to<std::vector<nlohmann::json>>())},
       {"query", parsedQuery_._originalString}};
-  ad_utility::makeOfstream(getFilenameBase() + ".viewinfo.json")
+  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
 }
 
@@ -351,7 +354,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
               << std::endl;
   auto filename = getFilenameBase(onDiskBase_, name_);
 
-  auto metadataFilename = absl::StrCat(filename, ".viewinfo.json");
+  auto metadataFilename = absl::StrCat(filename, VIEW_INFO_SUFFIX);
   if (!ql::filesystem::exists(metadataFilename)) {
     throw std::runtime_error(
         absl::StrCat("The materialized view '", name_, "' does not exist."));
@@ -439,21 +442,29 @@ void MaterializedView::connectPermutationBackReference() {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name) const {
-  auto lock = loadedViews_.wlock();
-  if (lock->views_.contains(name)) {
-    return;
+std::shared_ptr<MaterializedView>
+MaterializedViewsManager::loadViewIntoLockedState(const std::string& name,
+                                                  LoadedViews& state) const {
+  if (auto it = state.views_.find(name); it != state.views_.end()) {
+    return it->second;
   }
   auto view = std::make_shared<MaterializedView>(onDiskBase_, name);
   view->connectPermutationBackReference();
-  lock->views_.insert({name, view});
+  state.views_.insert({name, view});
   // If we would analyze the view at the time of writing and (de)serialize an
   // analysis result here, we could not extend query analysis without rewriting
   // all views. Therefore query analysis is performed when loading views.
-  if (lock->queryPatternCache_.analyzeView(view)) {
+  if (state.queryPatternCache_.analyzeView(view)) {
     AD_LOG_INFO << "The materialized view '" << name
                 << "' was added to the query pattern cache." << std::endl;
   }
+  return view;
+}
+
+// _____________________________________________________________________________
+void MaterializedViewsManager::loadView(const std::string& name) const {
+  auto lock = loadedViews_.wlock();
+  loadViewIntoLockedState(name, *lock);
 }
 
 // _____________________________________________________________________________
@@ -468,15 +479,61 @@ void MaterializedViewsManager::unloadViewIfLoaded(
 }
 
 // _____________________________________________________________________________
+void MaterializedViewsManager::deleteView(const std::string& name) const {
+  MaterializedView::throwIfInvalidName(name);
+  auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
+
+  // Hold the lock for the whole check-unload-delete sequence below, so that a
+  // concurrent `loadView`/`getView` call for the same view can not reload it
+  // in between, and so that of two concurrent `deleteView` calls for the same
+  // view exactly one succeeds and the other throws.
+  auto lock = loadedViews_.wlock();
+  if (!ql::filesystem::exists(absl::StrCat(filenameBase, VIEW_INFO_SUFFIX))) {
+    throw std::runtime_error(
+        absl::StrCat("The materialized view '", name, "' does not exist."));
+  }
+  if (auto it = lock->views_.find(name); it != lock->views_.end()) {
+    lock->queryPatternCache_.removeView(it->second);
+    lock->views_.erase(it);
+  }
+
+  // Delete all files belonging to the view from disk. NOTE: This is safe even
+  // if a running query still scans the view: the files are unlinked, but live
+  // on until the last open file handle is closed, and the query's shared
+  // pointer keeps the `MaterializedView` (and its open file) alive.
+  for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
+    ql::error_code ec;
+    ql::filesystem::remove(absl::StrCat(filenameBase, suffix), ec);
+    if (ec) {
+      throw std::runtime_error(absl::StrCat(
+          "Failed to delete file '", filenameBase, suffix,
+          "' while deleting materialized view '", name, "': ", ec.message()));
+    }
+  }
+
+  AD_LOG_INFO << "Materialized view \"" << name << "\" deleted" << std::endl;
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
     const std::string& name) const {
-  loadView(name);
-  return loadedViews_.rlock()->views_.at(name);
+  auto lock = loadedViews_.wlock();
+  return loadViewIntoLockedState(name, *lock);
 }
 
 // _____________________________________________________________________________
 bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
   return loadedViews_.rlock()->views_.contains(name);
+}
+
+// _____________________________________________________________________________
+std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
+    const ql::filesystem::path& onDiskBase) {
+  // View files are named `<base>.view.<name>...`. Reuse the canonical filename
+  // builder so the `.view.` infix is not duplicated here, and let the shared
+  // helper enumerate the matching files in the directory of `onDiskBase`.
+  std::string suffix = MaterializedView::getFilenameBase("", "");
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, suffix);
 }
 
 // _____________________________________________________________________________
@@ -634,8 +691,8 @@ void MaterializedView::throwIfInvalidName(std::string_view name) {
 // _____________________________________________________________________________
 void MaterializedViewsManager::setOnDiskBase(const std::string& onDiskBase) {
   AD_CORRECTNESS_CHECK(
-      onDiskBase_ == "" && loadedViews_.rlock()->views_.empty(),
-      "Changing the on disk basename is not allowed.");
+      loadedViews_.rlock()->views_.empty(),
+      "Changing the on disk basename is not allowed once views are loaded.");
   onDiskBase_ = onDiskBase;
 }
 

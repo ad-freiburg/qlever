@@ -15,6 +15,15 @@
 #include "util/StringUtils.h"
 
 namespace RdfEscaping {
+namespace detail {
+// Turn a sequence of at most 8 hexadecimal characters that encode a single
+// Unicode codepoint (e.g. "00e4") into the corresponding UTF-8 string (e.g.
+// "ä"). The input must be short enough to represent a single codepoint (at most
+// 8 hex digits, the length of a `\UXXXXXXXX` escape); longer inputs violate a
+// contract check. Exposed for unit testing.
+std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex);
+}  // namespace detail
+
 /// Replaces each newline '\n' by an escaped newline '\\n', and each backslash
 /// '\\' by an escaped backslash "\\\\". This is the minimal amount of escaping
 /// that has to be done in order to store strings in a line-based text file.

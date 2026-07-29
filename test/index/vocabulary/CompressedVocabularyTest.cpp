@@ -172,4 +172,69 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ad_utility::deleteFile(filename);
 }
 
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+
+  // Create vocabulary with small block size (4 words per block) on top of an
+  // in-memory (and hence zero-copy-capable) underlying vocabulary.
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
+  std::string filename = gtestCurrentTestName();
+  auto writerPtr = vocab.makeDiskWriterPtr(filename);
+  auto& writer = *writerPtr;
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+  vocab.open(filename);
+
+  // Write using an aligned serializer (required for zero-copy reads).
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer | vocab;
+
+  // Read back the words as a non-owning, zero-copy view, and the (small)
+  // decoders normally.
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view =
+      (CompressedVocabulary<VocabularyInMemory, TypeParam,
+                            4>::fromZeroCopyDeserializer(readSerializer));
+  assertThatRangesAreEqual(vocab, view);
+
+  ad_utility::deleteFile(filename);
+}
+
 }  // namespace
+
+// _____________________________________________________________________________
+TYPED_TEST(CompressedVocabularyF, ScanAll) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 111; ++i) {
+    words.push_back(absl::StrCat("someWord", i, std::string(i % 13, 'y')));
+  }
+  // NOTE: The fixture uses a decoder block size of 4, so this vocabulary has
+  // many decoder blocks that the scan has to span.
+  auto vocab = createVocab(words);
+
+  using ::testing::ElementsAreArray;
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()), ElementsAreArray(words));
+  // Abandon a scan early; the destructor has to clean up properly.
+  {
+    auto range = vocab.scanAll();
+    auto it = ql::ranges::begin(range);
+    ASSERT_NE(it, ql::ranges::end(range));
+    IndexAndWord indexAndWord = *it;
+    EXPECT_EQ(indexAndWord.index_, 0);
+    EXPECT_EQ(indexAndWord.word_, words.at(0));
+  }
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompressedVocabularyF, ScanAllEmptyVocabulary) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  auto vocab = createVocab({});
+  auto range = vocab.scanAll();
+  EXPECT_EQ(ql::ranges::begin(range), ql::ranges::end(range));
+}

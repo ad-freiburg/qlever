@@ -1736,7 +1736,10 @@ template <typename Context>
 void Visitor::warnOrThrowIfUnboundVariables(
     Context* ctx, const SparqlExpressionPimpl& expression,
     std::string_view clauseName) {
-  for (const auto& var : expression.containedVariables()) {
+  // Note: We pass `excludeExists = true`, because the variables that occur only
+  // inside the body of an `EXISTS` live in their own scope and thus need not be
+  // bound by the surrounding query.
+  for (const auto& var : expression.containedVariables(true)) {
     if (!ad_utility::contains(visibleVariables_, *var)) {
       auto message = absl::StrCat(
           "The variable ", var->name(), " was used in the expression of a ",

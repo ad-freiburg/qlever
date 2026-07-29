@@ -10,7 +10,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "util/GeoSparqlHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -41,8 +41,7 @@ CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
     return ::ranges::views::repeat_n(makeId(input), targetSize);
   } else if constexpr (isVectorResult<S>) {
     AD_CONTRACT_CHECK(targetSize == input.size());
-    return ::ranges::views::transform(ad_utility::allView(AD_FWD(input)),
-                                      makeId);
+    return ::ranges::views::transform(AD_FWD(input), makeId);
   } else {
     static_assert(
         ad_utility::SimilarToAny<S, Variable, ad_utility::SetOfIntervals>);

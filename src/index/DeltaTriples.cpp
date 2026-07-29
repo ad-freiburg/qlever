@@ -482,11 +482,10 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
-  return LocatedTriplesSharedState{
-      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
-          locatedTriples_->locatedTriplesPerBlock_,
-          locatedTriples_->internalLocatedTriplesPerBlock_,
-          localVocab_.getLifetimeExtender(), locatedTriples_->index_})};
+  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
+      locatedTriples_->locatedTriplesPerBlock_,
+      locatedTriples_->internalLocatedTriplesPerBlock_,
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_, getCounts())};
 }
 
 // ____________________________________________________________________________
@@ -713,14 +712,26 @@ void DeltaTriples::setPersists(std::optional<std::string> filename) {
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
-    std::string filename) {
+bool DeltaTriples::persists() const {
+  return filenameForPersisting_.has_value();
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdates(std::string filename,
+                                                          bool readFromDisk) {
   modify<void>(
-      [&filename](DeltaTriples& deltaTriples) {
+      [&filename, readFromDisk](DeltaTriples& deltaTriples) {
         deltaTriples.setPersists(std::move(filename));
-        deltaTriples.readFromDisk();
+        if (readFromDisk) {
+          deltaTriples.readFromDisk();
+        }
       },
       false);
+}
+
+// _____________________________________________________________________________
+bool DeltaTriplesManager::persists() const {
+  return deltaTriples_.rlock()->persists();
 }
 
 // _____________________________________________________________________________

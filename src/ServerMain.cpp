@@ -17,11 +17,13 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "libqlever/Qlever.h"
+#include "util/Algorithm.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
+#include "util/metrics/Metrics.h"
 
 using std::size_t;
 using std::string;
@@ -51,6 +53,7 @@ int main(int argc, char** argv) {
   std::string accessToken;
   bool noAccessCheck = false;
   unsigned short port;
+  bool metricsEnabled = false;
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
@@ -208,12 +211,15 @@ int main(int argc, char** argv) {
       "prefix are rejected. To disable all federated queries, set this option "
       "to an invalid IRI prefix like `-`. Magic services (for example spatial "
       "search or materialized views) are never affected.");
+  auto logLevelDescription = absl::StrCat(
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (",
+      LogLevel{LOGLEVEL}.toString(),
+      ") applies as an upper bound — messages above it are never emitted "
+      "regardless of this setting.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
-      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
-      "Default is INFO. The compile-time level (CMake -DLOGLEVEL=...) applies "
-      "as an upper bound — messages above it are never emitted regardless of "
-      "this setting.");
+      logLevelDescription.c_str());
   add("construct-deduplication",
       optionFactory
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
@@ -223,10 +229,36 @@ int main(int argc, char** argv) {
       "\"batchwise:N\" (positive integer N): deduplicate against the N most "
       "recently seen unique triples per template triple (bounded memory, "
       "partial deduplication).")");
+  add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
+      "Enable metrics collection and expose a Prometheus /metrics endpoint on "
+      "the main server port. Accessing the endpoint requires a valid access "
+      "token.");
+  std::vector<std::string> runtimeParameterAssignments;
+  add("set-runtime-parameter",
+      po::value<std::vector<std::string>>(&runtimeParameterAssignments)
+          ->composing(),
+      "Set any runtime parameter at startup, in the form <name>=<value>, for "
+      "example `--set-runtime-parameter default-query-timeout=300s`. Can be "
+      "given multiple times. Use `--set-runtime-parameter help` to list all "
+      "runtime parameters together with their default values. The parameters "
+      "can also be changed while the server is running, via the API. If a "
+      "parameter can also be set by one of the dedicated options above, the "
+      "value given here wins.");
   po::variables_map optionsMap;
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
+    if (optionsMap.count("set-runtime-parameter") &&
+        ad_utility::contains(
+            optionsMap["set-runtime-parameter"].as<std::vector<std::string>>(),
+            "help")) {
+      std::cout << "Available runtime parameters and their default values:\n";
+      auto parameters = globalRuntimeParameters.rlock()->toMap();
+      for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {
+        std::cout << "  " << name << " = " << parameters.at(name) << '\n';
+      }
+      return EXIT_SUCCESS;
+    }
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
@@ -247,6 +279,23 @@ int main(int argc, char** argv) {
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
 
+  // Apply the `--set-runtime-parameter` assignments. This runs after
+  // `po::notify` above, so for parameters that can also be set by a dedicated
+  // option (like `--service-max-redirects`), the value given here wins. A bad
+  // name or value fails the startup with a readable message, before the index
+  // is loaded.
+  for (const auto& assignment : runtimeParameterAssignments) {
+    try {
+      globalRuntimeParameters.wlock()->setFromAssignment(assignment);
+    } catch (const std::exception& e) {
+      AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: "
+                   << e.what() << std::endl;
+      return EXIT_FAILURE;
+    }
+    AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
+                << std::endl;
+  }
+
   try {
     // Samples RSS and CPU usage, starting before the index is loaded.
     ad_utility::ResourceMonitor resourceMonitor;
@@ -255,8 +304,9 @@ int main(int argc, char** argv) {
                             ad_utility::ResourceMonitor::Mode::Append,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
+    auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck);
+                  noAccessCheck, std::move(metricsReader));
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {
