@@ -26,13 +26,6 @@
 #include "util/HashSet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
-// Note on the `VocabularySupportsZeroCopy` concept (defined in
-// `VocabularyConstraints.h`) that is used by the zero-copy functions below: the
-// concept is never instantiated for the wrapping `UnicodeVocabulary` itself,
-// because those functions always address the vocabulary *below* the
-// `UnicodeVocabulary` via `getUnderlyingVocabulary()`, so the comparator never
-// enters the picture.
-
 template <typename IndexT = WordVocabIndex>
 class IdRange {
  public:
