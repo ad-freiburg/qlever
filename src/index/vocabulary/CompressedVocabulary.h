@@ -62,7 +62,9 @@ CPP_template(typename UnderlyingVocabulary,
   // matches the one written by the generic serialization function below. The
   // returned vocabulary is only valid as long as the memory backing
   // `serializer`'s buffer is valid and unchanged.
-  CPP_template(typename S)(
+  // Note: This has to use `CPP_template_2` (and not `CPP_template`), because
+  // the enclosing class is itself constrained via `CPP_template`.
+  CPP_template_2(typename S)(
       requires ad_utility::serialization::SupportsZeroCopyDeserialization<
           UnderlyingVocabulary, S>) static CompressedVocabulary
       fromZeroCopyDeserializer(S& serializer) {
