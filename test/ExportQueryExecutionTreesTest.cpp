@@ -2207,3 +2207,59 @@ TEST(ExportQueryExecutionTrees, ConstructDeduplicationValues) {
         absl::StrCat(a, b, a));
   }
 }
+
+// Batchwise dedup with a stream of 5 unique triples repeated twice → 10
+// triples total. The window size controls how many duplicates survive.
+TEST(ExportQueryExecutionTrees, ConstructDeduplicationBatchWiseWindow) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>)"
+      "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
+      "  (<ex:e> <ex:e> <ex:e>)"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>)"
+      "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
+      "  (<ex:e> <ex:e> <ex:e>)"
+      " } }";
+  auto T = [](char c) {
+    return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
+                        "> <ex:", std::string(1, c), "> .\n");
+  };
+
+  using ad_utility::DeduplicationMode;
+
+  // window 4: A is 5 positions back when it reappears → evicted → emitted.
+  // All 10 triples survive (window is too small to catch any repeat).
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::batchWise(4));
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        absl::StrCat(T('a'), T('b'), T('c'), T('d'), T('e'), T('a'), T('b'),
+                     T('c'), T('d'), T('e')));
+  }
+
+  // window 5: the second 'a' is only 5 positions after the first — still in
+  // cache. Suppressed. But 'b'-'e' repeats hit the same window and are
+  // suppressed. Result: 5 unique triples.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::batchWise(5));
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        absl::StrCat(T('a'), T('b'), T('c'), T('d'), T('e')));
+  }
+
+  // window 10: all duplicates caught, 5 unique triples.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::batchWise(10));
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        absl::StrCat(T('a'), T('b'), T('c'), T('d'), T('e')));
+  }
+}
