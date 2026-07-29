@@ -82,13 +82,13 @@ struct InputFileSpecification {
   }
 
   // Create and return an `AsyncBlockSource` for this spec. For filename-based
-  // specs, an `AsyncFileBlockSource` with the given `exec` and `blocksize` is
+  // specs, a `FileBlockSource` with the given `exec` and `blocksize` is
   // returned. For factory-based specs, the factory is called.
   std::unique_ptr<qlever::parser::AsyncBlockSource> makeAsyncBlockSource(
       const boost::asio::any_io_executor& exec,
       ad_utility::MemorySize blocksize) const {
     if (std::holds_alternative<std::string>(source_)) {
-      return std::make_unique<qlever::parser::AsyncFileBlockSource>(
+      return std::make_unique<qlever::parser::FileBlockSource>(
           exec, blocksize, std::get<std::string>(source_));
     }
     auto& [factory, description] =

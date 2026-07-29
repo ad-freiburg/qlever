@@ -96,7 +96,8 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 // Check that `expected` and `actual` have the same contents. The `int`s in
 // expected are converted to `Id`s of type `VocabIndex` using the `V`-function
 // before the comparison.
-void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
+template <typename Expected>
+void checkThatTablesAreEqual(const Expected& expected, const IdTable& actual,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
@@ -270,7 +271,8 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`.  `blocksize` is the size of the
 // blocks in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
+template <typename Inputs>
+void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
                              ad_utility::MemorySize blocksize,
                              float locatedTriplesProbability = 0.5) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;

@@ -34,6 +34,10 @@ class FileWriteSerializer {
 
   void close() { _file.close(); }
 
+  // Flush the underlying file, such that all bytes that have been written so
+  // far are visible to other (read) handles on the same file.
+  void flush() { _file.flush(); }
+
   [[nodiscard]] SerializationPosition getSerializationPosition() const {
     return _file.tell();
   }

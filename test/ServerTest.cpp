@@ -9,7 +9,9 @@
 #include <optional>
 
 #include "./util/FileTestHelpers.h"
+#include "./util/MetricsTestHelpers.h"
 #include "ServerTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
@@ -22,6 +24,7 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
+#include "util/metrics/Metrics.h"
 
 using nlohmann::json;
 
@@ -176,6 +179,7 @@ TEST(ServerTest, composeStatsJson) {
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
+                    {"version-server", "project version not set"},
                     {"name-index", ""},
                     {"name-text-index", ""},
                     {"num-entity-occurrences", 0},
@@ -209,8 +213,8 @@ TEST(ServerTest, createMessageSender) {
   {
     // Set a dummy query hub.
     boost::asio::io_context io_context;
-    auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(io_context);
+    auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
+        io_context.get_executor());
     server.queryHub_ = queryHub;
     // MessageSenders are created normally.
     server.createMessageSender(server.queryHub_, req,
@@ -354,36 +358,101 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Test with no pinNamed value - should not modify qec
   std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, true, *qec);
+  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
   // Test with pinNamed and valid access token - should set the pin name
   std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedResultWithName(pinNamed, std::nullopt, true, *qec);
-  EXPECT_TRUE(qec->pinResultWithName().has_value());
+  Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
+                                        true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+            std::nullopt);
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
   // Test with pinNamed AND pinned geo Var.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", true, *qec);
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", std::nullopt,
+                                        true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
               ::testing::Optional(Variable{"?geom_var"}));
+  EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+            std::nullopt);
+
+  // Reset for next test
+  qec->pinResultWithName() = std::nullopt;
+  // Test with pinNamed, geo var, AND simplification.
+  Server::configurePinnedResultWithName(pinNamed, "geom_var", 10.0, true, *qec);
+  ASSERT_TRUE(qec->pinResultWithName().has_value());
+  EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
+              ::testing::Optional(Variable{"?geom_var"}));
+  EXPECT_THAT(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
+              ::testing::Optional(10.0));
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
   // Test with pinNamed but invalid access token - should throw exception
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, std::nullopt, false,
-                                            *qec),
+      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
+                                            std::nullopt, false, *qec),
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinResultWithName().has_value());
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, parsePinGeoIndexSimplification) {
+  // No value given - no simplification.
+  EXPECT_EQ(Server::parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
+
+  // A valid positive number is parsed correctly.
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("10.5"),
+              ::testing::Optional(10.5));
+
+  // A non-numeric value throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::parsePinGeoIndexSimplification("not-a-number"),
+      testing::HasSubstr(
+          "Invalid value for `pin-geo-index-simplification`: must be a "
+          "floating-point number of meters."));
+
+  // Negative and zero values are not rejected by the parser itself (that is
+  // left to the downstream consumer, see `GeoConverters::simplifyPolyline`).
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("-5"),
+              ::testing::Optional(-5.0));
+  EXPECT_THAT(Server::parsePinGeoIndexSimplification("0"),
+              ::testing::Optional(0.0));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, describePinResultWithNameForLog) {
+  // No pinned name - nothing to describe.
+  EXPECT_EQ(Server::describePinResultWithNameForLog(std::nullopt, std::nullopt,
+                                                    std::nullopt),
+            "");
+
+  // Pinned name only.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", std::nullopt,
+                                                    std::nullopt),
+            " [pin result with name \"myPin\"]");
+
+  // Pinned name and geo index, but no simplification.
+  EXPECT_EQ(
+      Server::describePinResultWithNameForLog("myPin", "geom", std::nullopt),
+      " [pin result with name \"myPin\" with geo index on ?geom]");
+
+  // Pinned name, geo index, and simplification.
+  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", "geom", 5.0),
+            " [pin result with name \"myPin\" with geo index on ?geom, "
+            "simplification=5m]");
 }
 
 // _____________________________________________________________________________
@@ -444,6 +513,157 @@ MATCHER_P(StatusIs, status,
 }
 
 using namespace serverTestHelpers;
+
+// A minimal MetricsReader that returns a fixed Prometheus-format string.
+// Used for testing the `/metrics` endpoint routing without a real OTEL
+// provider.
+class FakeMetricsReader : public ad_utility::metrics::MetricsReader {
+ public:
+  std::string getMetricsText() const override {
+    return "# HELP fake_counter A test counter.\nfake_counter 42\n";
+  }
+};
+
+// _____________________________________________________________________________
+TEST(ServerTest, metricsEndpoint) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto makeServerWithMetrics =
+      [&qec](
+          std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader) {
+        return ServerForTesting{
+            1, "accessToken",
+            getDefaultConfigWithName(qec->getIndex().getOnDiskBase()), false,
+            std::move(metricsReader)};
+      };
+  auto expectMetrics = [](std::optional<std::string> accessToken,
+                          ServerForTesting& server, const auto& responseMatcher,
+                          const auto& bodyMatcher,
+                          ad_utility::source_location l =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto request = makeGetRequest("/metrics");
+    if (accessToken.has_value()) {
+      request.set(http::field::authorization, "Bearer " + accessToken.value());
+    }
+    auto response = server.process(request);
+
+    EXPECT_THAT(response, responseMatcher);
+    EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
+  };
+  auto expectRequiresAccessToken = [&](auto& server,
+                                       ad_utility::source_location l =
+                                           AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        expectMetrics(std::nullopt, server, testing::_, testing::_),
+        testing::HasSubstr("metrics requires a valid access token"));
+  };
+  auto UpdateRequest = [](std::string update) {
+    return makeRequest(
+        http::verb::post, "/",
+        {{http::field::content_type, "application/sparql-update"},
+         {http::field::authorization, "Bearer accessToken"}},
+        std::move(update));
+  };
+  auto QueryRequest = [](std::string query) {
+    return makeRequest(
+        http::verb::post, "/",
+        {{http::field::content_type, "application/sparql-query"}},
+        std::move(query));
+  };
+  auto ExpectMetricsChange = [&makeServerWithMetrics, &expectMetrics](
+                                 auto matcherBefore, auto request,
+                                 auto matcherAfter,
+                                 ad_utility::source_location l =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
+                  matcherBefore);
+    EXPECT_THAT(server.process(request), testing::_);
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
+                  matcherAfter);
+  };
+  {
+    auto server = makeServerWithMetrics(nullptr);
+    expectRequiresAccessToken(server);
+    expectMetrics("accessToken", server, StatusIs(http::status::not_found),
+                  testing::StrEq("Metrics not enabled (use --enable-metrics)"));
+  }
+  {
+    auto server = makeServerWithMetrics(std::make_shared<FakeMetricsReader>());
+    expectRequiresAccessToken(server);
+    expectMetrics("accessToken", server, StatusIs(http::status::ok),
+                  testing::HasSubstr("fake_counter 42"));
+  }
+  {
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    expectRequiresAccessToken(server);
+  }
+  {
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    // `qlever_build_info` is always present with a value of 1 and carries the
+    // build metadata in its labels.
+    expectMetrics(
+        "accessToken", server, StatusIs(http::status::ok),
+        testing::HasSubstr(
+            "qlever_build_info{compile_time=\"time of compilation not set\","
+            "compiler=\"compiler not set\","
+            "compiler_version=\"compiler version not set\","
+            "cxx_standard=\"c++ standard not set\","
+            "git_hash=\"git short hash not set\","
+            "version=\"project version not set\"} 1"));
+  }
+  Label update{"operation", "update"};
+  Label query{"operation", "query"};
+  Label syntaxError{"type", "syntax"};
+  std::string_view qleverDeltaTriples = "qlever_delta_triples";
+  std::string_view qleverSparqlOperationStartedTotal =
+      "qlever_sparql_operation_started_total";
+  std::string_view qleverSparqlOperationRunning =
+      "qlever_sparql_operation_running";
+  std::string_view qleverSparqlOperationErrorsTotal =
+      "qlever_sparql_operation_errors_total";
+  std::string_view qleverIndexRebuildInProgress =
+      "qlever_index_rebuild_in_progress";
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverSparqlOperationStartedTotal, update),
+                     IsZero(qleverSparqlOperationStartedTotal, query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)),
+      UpdateRequest("INSERT DATA { <a> <b> <c> . <d> <e> <f> }"),
+      testing::AllOf(MetricIs(qleverDeltaTriples, "2"),
+                     MetricIs(qleverSparqlOperationStartedTotal, "1", update),
+                     IsZero(qleverSparqlOperationStartedTotal, query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)));
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverSparqlOperationStartedTotal, update),
+                     IsZero(qleverSparqlOperationStartedTotal, query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)),
+      QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
+      testing::AllOf(MetricIs(qleverDeltaTriples, "0"),
+                     IsZero(qleverSparqlOperationStartedTotal, update),
+                     MetricIs(qleverSparqlOperationStartedTotal, "1", query),
+                     IsZero(qleverSparqlOperationRunning, update),
+                     IsZero(qleverSparqlOperationRunning, query)));
+  // No rebuild is running during a normal query, so the rebuild-in-progress
+  // gauge reads 0 both before and after.
+  ExpectMetricsChange(IsZero(qleverIndexRebuildInProgress),
+                      QueryRequest("SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
+                      IsZero(qleverIndexRebuildInProgress));
+  ExpectMetricsChange(
+      IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
+      QueryRequest("Foo"),
+      MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
+  ExpectMetricsChange(
+      IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
+      UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
+      MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
+}
 
 // _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
@@ -629,7 +849,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
           "<a> <b> <c>",
           testing::AllOf(
               // Check that the random part of the graph is a V4 UUID.
-              LocationIs(testing::MatchesRegex(
+              LocationIs(MatchesRegex(
                   R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
               StatusIs(http::status::created)));
       locations.push_back(location);
@@ -648,7 +868,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
                    {http::field::content_type, "text/turtle"}},
                   "<a> <b> <c>"),
       testing::AllOf(
-          LocationIs(testing::MatchesRegex(
+          LocationIs(MatchesRegex(
               R"(http://qlever\.cs\.uni-freiburg\.de/builtin-functions/graph/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})")),
           StatusIs(http::status::created)));
 
@@ -677,7 +897,7 @@ TEST(ServerTest, gspPostCreateNewGraph) {
 // _____________________________________________________________________________
 // Read a query-event-log file and parse each JSONL line.
 namespace {
-std::vector<json> parseEventLog(const std::filesystem::path& path) {
+std::vector<json> parseEventLog(const ql::filesystem::path& path) {
   std::vector<json> events;
   for (const auto& line : ad_utility::testing::readLines(path)) {
     events.push_back(json::parse(line));

@@ -118,9 +118,9 @@ TEST(GroupBy, clone) {
 namespace {
 // All the operations take a `QueryExecutionContext` as a first argument.
 // Todo: Continue the comment.
-template <typename Operation>
+template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, auto&&... args) {
+    QueryExecutionContext* qec, Args&&... args) {
   return std::make_shared<QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }

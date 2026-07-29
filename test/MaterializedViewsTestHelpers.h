@@ -14,9 +14,11 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 
 namespace materializedViewsTestHelpers {
 
@@ -49,13 +51,10 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
   std::cout << "Removing test files " << basename << ".*" << std::endl;
-  for (const auto& entry :
-       std::filesystem::directory_iterator(std::filesystem::current_path())) {
-    if (entry.is_regular_file() &&
-        std::regex_match(entry.path().filename().string(), pattern)) {
-      std::filesystem::remove(entry.path());
-    }
-  }
+  qlever::util::deleteFilesInDirectory(
+      ql::filesystem::current_path(), [&pattern](const auto& path) {
+        return std::regex_match(path.filename().string(), pattern);
+      });
 }
 
 // _____________________________________________________________________________
@@ -196,7 +195,8 @@ inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-inline void qpExpect(qlever::Qlever& qlv, const auto& query,
+template <typename Query>
+inline void qpExpect(qlever::Qlever& qlv, const Query& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -227,9 +227,10 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
 };
 
 // _____________________________________________________________________________
+template <typename ViewName, typename Query>
 inline void expectNotSuitableForRewrite(
     const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
-    const auto& viewName, const auto& query,
+    const ViewName& viewName, const Query& query,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;

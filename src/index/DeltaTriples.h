@@ -49,6 +49,9 @@ struct LocatedTriplesState {
   // than another, then the version that has been modified last has a higher
   // index. The index is used in the query cache.
   size_t index_;
+  // Counts of the external triples. Only set when this is a deep copy, not for
+  // references.
+  std::optional<DeltaTriplesCount> counts_ = std::nullopt;
   // Get `LocatedTriplesPerBlock` objects for the given permutation.
   template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
@@ -264,6 +267,10 @@ class DeltaTriples {
   // `writeToDisk` will be a nullop.
   void setPersists(std::optional<std::string> filename);
 
+  // Return true if `setPersists()` has been called with a non-nullopt filename,
+  // false otherwise.
+  bool persists() const;
+
   // Write the delta triples to disk to persist them between restarts.
   void writeToDisk() const;
 
@@ -320,9 +327,12 @@ class DeltaTriples {
  private:
   // Remap the `Id` from the old index to the new index using the given
   // `idMapping`. If the `Id` can't be remapped, this means that it was added
-  // after the mapping was created and will be left unchanged.
+  // after the mapping was created and is left unchanged, except for local vocab
+  // ids, which are re-anchored to the new `index` by inserting a copy of their
+  // entry into `localVocab`.
   static void remapId(
-      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id);
+      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
+      LocalVocab& localVocab, const IndexImpl& index);
 #endif
 
   // Call `consolidateAll()` iff `consolidate` is `Consolidate::Yes`. Used by
@@ -394,9 +404,11 @@ class DeltaTriples {
 
   // Drop multiple update triples in a permutation.
   // Note: This is currently used for `vacuum`.
+  template <typename IsInternal>
   void eraseTriplesInPermutation(
       Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-      auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle);
+      IsInternal isInternal,
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   friend class DeltaTriplesManager;
   FRIEND_TEST(DeltaTriplesTest, remapId);
@@ -428,7 +440,14 @@ class DeltaTriplesManager {
                     ad_utility::timer::TimeTracer& tracer =
                         ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
+  // Set the file where the updates are persisted to. If `readFromDisk` is
+  // `true`, the already persisted updates are additionally read back from disk;
+  // if `false`, only the filename is set (used when the persistence file of an
+  // already loaded index is moved, see `Qlever::moveRebuiltIndexIntoPlace`).
+  void setFilenameForPersistentUpdates(std::string filename, bool readFromDisk);
+
+  // Call `DeltaTriples::persists()`.
+  bool persists() const;
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.
