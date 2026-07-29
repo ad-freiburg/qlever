@@ -12,12 +12,11 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
-#include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
 #include "index/Index.h"
 #include "util/CancellationHandle.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/Iterators.h"
 #include "util/http/MediaTypes.h"
 
@@ -45,18 +44,25 @@ class ConstructTripleGenerator {
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of triples serialized according to `mediaType`.
+  // When `mode` is not `None`, duplicate triples are suppressed.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      ad_utility::MediaType mediaType);
+      ad_utility::MediaType mediaType, const QueryExecutionContext& qec,
+      ad_utility::DeduplicationMode mode =
+          ad_utility::DeduplicationMode::none());
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
+  // When `mode` is not `None`, duplicate triples are suppressed.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       const Index& index, CancellationHandle cancellationhandle,
-      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset);
+      InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+      const QueryExecutionContext& qec,
+      ad_utility::DeduplicationMode mode =
+          ad_utility::DeduplicationMode::none());
 
  private:
   // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
@@ -65,13 +71,15 @@ class ConstructTripleGenerator {
 
   // Lazily evaluates all `TableWithRange` values from `rowIndices`, processes
   // them in batches of `BATCH_SIZE` rows, and returns a flat range of
-  // `EvaluatedTriple`.
+  // `EvaluatedTriple`. When `mode` is not `None`, duplicate triples are
+  // suppressed across batches.
   static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationhandle,
+      CancellationHandle cancellationHandle,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset);
+      size_t rowOffset, const QueryExecutionContext& qec,
+      ad_utility::DeduplicationMode mode);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);

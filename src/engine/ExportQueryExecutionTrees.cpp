@@ -14,7 +14,6 @@
 #include "engine/ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
 #include <optional>
@@ -24,14 +23,10 @@
 #include "backports/algorithm.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
-#include "index/EncodedIriManager.h"
 #include "index/ExportIds.h"
-#include "index/IndexImpl.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
-#include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
-#include "util/json.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
 using ad_utility::InputRangeTypeErased;
@@ -282,10 +277,14 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
+  const auto mode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
+
   return qlever::constructExport::ConstructTripleGenerator::
       generateStringTriples(constructTriples, qet.getVariableColumns(),
                             qet.getQec()->getIndex(), cancellationHandle,
-                            std::move(rowIndices), limitAndOffset._offset);
+                            std::move(rowIndices), limitAndOffset._offset,
+                            *qet.getQec(), mode);
 }
 
 // _____________________________________________________________________________
@@ -367,7 +366,7 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
                    });
              }) |
          ql::views::join;
-};
+}
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
@@ -788,7 +787,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       generateFormattedTriples(constructTriples, qet.getVariableColumns(),
                                qet.getQec()->getIndex(), cancellationHandle,
                                std::move(rowIndices), limitAndOffset._offset,
-                               format);
+                               format, *qet.getQec());
 
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
