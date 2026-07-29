@@ -38,8 +38,8 @@
 #include "index/LocalVocabEntry.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 

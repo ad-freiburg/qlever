@@ -13,8 +13,8 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace SpatialJoinTestHelpers {
 

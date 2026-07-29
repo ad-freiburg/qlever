@@ -11,9 +11,9 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace {
 

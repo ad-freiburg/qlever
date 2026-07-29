@@ -34,11 +34,11 @@
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "index/ExportIds.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
-#include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
 using namespace geometryConverters;
