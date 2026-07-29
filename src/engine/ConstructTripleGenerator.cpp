@@ -89,7 +89,6 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns, index);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
-  // Deduplicator persists across batches within a single query.
   std::shared_ptr<ConstructDeduplicator> deduplicator;
   if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
     deduplicator = std::make_shared<ConstructDeduplicator>(mode, qec);
