@@ -79,10 +79,13 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
-  // Estimate the cost of sorting operations (needed for query planning).
-  sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index.numTriples().normalAndInternal_() *
-                      PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+  // Estimate the cost of sorting operations (needed for query planning), unless
+  // the user disabled this (potentially expensive) step.
+  if (config.computeSortPerformanceEstimators_) {
+    sortPerformanceEstimator_.computeEstimatesExpensively(
+        allocator_, index.numTriples().normalAndInternal_() *
+                        PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+  }
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
@@ -261,10 +264,21 @@ PlannedQuery Qlever::planQuery(
 }
 
 // ___________________________________________________________________________
-PlannedQuery Qlever::parseAndPlanQuery(
+PlannedQuery Qlever::planQuery(
+    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
+  // duration of this call, and the resulting `PlannedQuery` takes its own
+  // `shared_ptr` to the context.
+  auto& qec = parsedQuery.queryExecutionContext();
+  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
+                   timeLimit, requestTimer);
+}
+
+// ___________________________________________________________________________
+ParsedQueryAndContext Qlever::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
-    boost::optional<const ad_utility::Timer&> requestTimer,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
@@ -275,8 +289,30 @@ PlannedQuery Qlever::parseAndPlanQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
       datasetClauses);
 
-  return planQuery(std::move(parsedQuery), *qecPtr, std::move(handle),
-                   timeLimit, requestTimer);
+  return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
+}
+
+// ___________________________________________________________________________
+ParsedQueryAndContext Qlever::bindParsedQuery(
+    ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
+    bool pinSubtrees, bool pinResult) const {
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
+      pinResult, disableCaching_);
+  return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
+}
+
+// ___________________________________________________________________________
+PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
+    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) const {
+  return planQuery(
+      parseQuery(std::move(query), datasetClauses, std::move(updateCallback),
+                 pinSubtrees, pinResult),
+      std::move(handle), timeLimit, requestTimer);
 }
 
 // ___________________________________________________________________________

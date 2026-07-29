@@ -18,6 +18,41 @@
 
 namespace qlever {
 
+// A `ParsedQuery` together with the `QueryExecutionContext` that it was parsed
+// against and that it therefore has to be planned against. Returned by
+// `Qlever::parseQuery` and consumed by `Qlever::planQuery`.
+//
+// NOTE: The two are bundled deliberately, so that a query is planned against
+// the context it was parsed with by default. Parsing depends on the context
+// only through the context's `EncodedIriManager`, so a `ParsedQuery` may be
+// reused with a different context that has an equivalent `EncodedIriManager`;
+// see the note on reusing a parsed query in `Qlever::parseQuery` and
+// `Qlever::bindParsedQuery`.
+class ParsedQueryAndContext {
+ private:
+  // NOTE: As in `PlannedQuery` below, `qec_` is declared first so that it is
+  // destroyed last.
+  std::shared_ptr<QueryExecutionContext> qec_;
+  ParsedQuery parsedQuery_;
+
+ public:
+  ParsedQueryAndContext(ParsedQuery parsedQuery,
+                        std::shared_ptr<QueryExecutionContext> qec)
+      : qec_{std::move(qec)}, parsedQuery_{std::move(parsedQuery)} {
+    AD_CONTRACT_CHECK(qec_ != nullptr);
+  }
+
+  const ParsedQuery& parsedQuery() const { return parsedQuery_; }
+  ParsedQuery& parsedQuery() { return parsedQuery_; }
+
+  const QueryExecutionContext& queryExecutionContext() const { return *qec_; }
+  QueryExecutionContext& queryExecutionContext() { return *qec_; }
+  const std::shared_ptr<QueryExecutionContext>& sharedQueryExecutionContext()
+      const {
+    return qec_;
+  }
+};
+
 // Helper struct bundling a parsed query with a query execution tree.
 // We store both `QueryExecutionTree` and `QueryExecutionContext` as
 // `shared_ptr` to avoid lifetime issues especially in the asynchronous server
@@ -60,6 +95,21 @@ struct PlannedQuery {
   std::shared_ptr<const QueryExecutionContext> sharedQueryExecutionContext()
       const {
     return qec_;
+  }
+
+  // Replace the `QueryExecutionTree` of this `PlannedQuery` by a fresh clone of
+  // itself. Copying a `PlannedQuery` shares the tree between the copies (it is
+  // held by `shared_ptr`); calling this afterwards gives this `PlannedQuery` a
+  // tree of its own, which can then be modified and executed without affecting
+  // the other copies. That makes it possible to plan a query once and then
+  // modify and execute it repeatedly, for example by injecting varying values
+  // into the `ExternalValues` placeholder of a pre-planned query template.
+  //
+  // NOTE: The `QueryExecutionContext` is untouched and stays shared with the
+  // other copies of `*this`.
+  void cloneQetInPlace() {
+    queryExecutionTree_ = queryExecutionTree_->clone();
+    AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
 };
 }  // namespace qlever
