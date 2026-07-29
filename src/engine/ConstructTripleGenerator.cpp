@@ -13,6 +13,7 @@
 #include "engine/ConstructDeduplicator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
+#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -27,15 +28,37 @@ IdCache ConstructTripleGenerator::makeIdCache(
 }
 
 namespace {
+
+// Filter `triples` through `deduplicator`, dropping duplicates.  The
+// deduplicator is mutated in-place so that its state persists across batches.
+// Only called when `DeduplicationMode` is not `None`.
+std::vector<EvaluatedTriple> filterDuplicates(
+    std::vector<EvaluatedTriple> triples,
+    const PreprocessedConstructTemplate& tmpl,
+    const BatchEvaluationContext& ctx, size_t batchBegin,
+    ConstructDeduplicator& deduplicator) {
+  std::vector<EvaluatedTriple> deduped;
+  deduped.reserve(triples.size());
+  for (size_t row = 0; row < ctx.numRows(); ++row) {
+    const size_t rowIdx = batchBegin + row;
+    for (size_t t = 0; t < tmpl.preprocessedTriples_.size(); ++t) {
+      const size_t idx = row * tmpl.preprocessedTriples_.size() + t;
+      if (deduplicator.isNew(t, rowIdx, tmpl, ctx)) {
+        deduped.push_back(std::move(triples[idx]));
+      }
+    }
+  }
+  return deduped;
+}
+
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
-// the start. When `deduplicator` is not null, duplicate triples are suppressed.
+// the start.
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
     std::vector<EvaluatedTriple> computeBatch(
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
-        const CancellationHandle& cancellationHandle,
-        ConstructDeduplicator* deduplicator) {
+        const CancellationHandle& cancellationHandle) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -51,28 +74,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
       tableWithVocab.localVocab(), index, cache);
 
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
-  auto triples =
-      instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
-
-  // Apply deduplication if a deduplicator is active.
-  if (deduplicator) {
-    std::vector<EvaluatedTriple> deduped;
-    deduped.reserve(triples.size());
-    for (size_t row = 0; row < batchResult.numRows_; ++row) {
-      const size_t rowIdx = batchBegin + row;
-      for (size_t t = 0; t < preprocessedTemplate.preprocessedTriples_.size();
-           ++t) {
-        const size_t tripleIdx =
-            row * preprocessedTemplate.preprocessedTriples_.size() + t;
-        if (deduplicator->isNew(t, rowIdx, preprocessedTemplate, ctx)) {
-          deduped.push_back(std::move(triples[tripleIdx]));
-        }
-      }
-    }
-    return deduped;
-  }
-
-  return triples;
+  return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId);
 }
 }  // namespace
 
@@ -87,8 +89,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
       templateTriples, variableColumns, index);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
-  // Create deduplicator once per query so it persists across batches.
-  // nullptr when mode is `None` -- no deduplication overhead.
+  // Deduplicator persists across batches within a single query.
   std::unique_ptr<ConstructDeduplicator> deduplicator;
   if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
     deduplicator = std::make_unique<ConstructDeduplicator>(mode, qec);
@@ -112,10 +113,20 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                ql::views::transform([&table, &preprocessedTemplate, &index,
                                      &cache, cancellationHandle, tableRowOffset,
                                      deduplicator](auto chunkView) {
-                 return computeBatch(table.tableWithVocab_, chunkView,
-                                     *preprocessedTemplate, index, cache,
-                                     tableRowOffset, cancellationHandle,
-                                     deduplicator);
+                 auto triples = computeBatch(
+                     table.tableWithVocab_, chunkView, *preprocessedTemplate,
+                     index, cache, tableRowOffset, cancellationHandle);
+                 if (deduplicator) {
+                   const size_t batchBegin = *ql::ranges::begin(chunkView);
+                   const BatchEvaluationContext ctx{
+                       table.tableWithVocab_.idTable(), batchBegin,
+                       batchBegin +
+                           static_cast<size_t>(ql::ranges::size(chunkView))};
+                   return filterDuplicates(std::move(triples),
+                                           *preprocessedTemplate, ctx,
+                                           batchBegin, *deduplicator);
+                 }
+                 return triples;
                }) |
                ql::views::join;
       };
