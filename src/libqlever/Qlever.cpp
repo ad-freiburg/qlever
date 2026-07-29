@@ -6,18 +6,27 @@
 
 #include "libqlever/Qlever.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <boost/optional.hpp>
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
+#include "util/Exception.h"
 #include "util/http/UrlParser.h"
 
 namespace qlever {
@@ -70,10 +79,13 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
-  // Estimate the cost of sorting operations (needed for query planning).
-  sortPerformanceEstimator_.computeEstimatesExpensively(
-      allocator_, index.numTriples().normalAndInternal_() *
-                      PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+  // Estimate the cost of sorting operations (needed for query planning), unless
+  // the user disabled this (potentially expensive) step.
+  if (config.computeSortPerformanceEstimators_) {
+    sortPerformanceEstimator_.computeEstimatesExpensively(
+        allocator_, index.numTriples().normalAndInternal_() *
+                        PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+  }
 
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
@@ -252,10 +264,21 @@ PlannedQuery Qlever::planQuery(
 }
 
 // ___________________________________________________________________________
-PlannedQuery Qlever::parseAndPlanQuery(
+PlannedQuery Qlever::planQuery(
+    ParsedQueryAndContext parsedQuery, SharedCancellationHandle handle,
+    std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer) const {
+  // NOTE: `qec` is a reference into `parsedQuery`, which is alive for the
+  // duration of this call, and the resulting `PlannedQuery` takes its own
+  // `shared_ptr` to the context.
+  auto& qec = parsedQuery.queryExecutionContext();
+  return planQuery(std::move(parsedQuery.parsedQuery()), qec, std::move(handle),
+                   timeLimit, requestTimer);
+}
+
+// ___________________________________________________________________________
+ParsedQueryAndContext Qlever::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasetClauses,
-    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
-    boost::optional<const ad_utility::Timer&> requestTimer,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult) const {
   auto qecPtr = createQueryExecutionContext(
@@ -266,8 +289,30 @@ PlannedQuery Qlever::parseAndPlanQuery(
       &qecPtr->getIndex().getImpl().encodedIriManager(), std::move(query),
       datasetClauses);
 
-  return planQuery(std::move(parsedQuery), *qecPtr, std::move(handle),
-                   timeLimit, requestTimer);
+  return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
+}
+
+// ___________________________________________________________________________
+ParsedQueryAndContext Qlever::bindParsedQuery(
+    ParsedQuery parsedQuery, std::function<void(std::string)> updateCallback,
+    bool pinSubtrees, bool pinResult) const {
+  auto qecPtr = createQueryExecutionContext(
+      indexAndViewsSnapshot(), std::move(updateCallback), pinSubtrees,
+      pinResult, disableCaching_);
+  return ParsedQueryAndContext{std::move(parsedQuery), std::move(qecPtr)};
+}
+
+// ___________________________________________________________________________
+PlannedQuery Qlever::parseAndPlanQuery(
+    std::string query, const std::vector<DatasetClause>& datasetClauses,
+    SharedCancellationHandle handle, std::optional<TimeLimit> timeLimit,
+    boost::optional<const ad_utility::Timer&> requestTimer,
+    std::function<void(std::string)> updateCallback, bool pinSubtrees,
+    bool pinResult) const {
+  return planQuery(
+      parseQuery(std::move(query), datasetClauses, std::move(updateCallback),
+                 pinSubtrees, pinResult),
+      std::move(handle), timeLimit, requestTimer);
 }
 
 // ___________________________________________________________________________
@@ -336,5 +381,130 @@ std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
       std::move(index), &cache_, allocator_, sortPerformanceEstimator_,
       &namedResultCache_, std::move(viewsManager), std::move(updateCallback),
       pinSubtrees, pinResult, disableCaching);
+}
+
+namespace {
+// Two base names "collide" if the prefix-based file enumerators
+// (`allIndexFiles`, `viewFilesOnDisk`, `filesWithBaseNameAndSuffix`) could
+// confuse the files belonging to one with the files belonging to the other.
+// Everything QLever appends to a base name starts with a '.' (`.index.pso`,
+// `.meta`, `.vocabulary`, `.internal`, `.view.<name>`, the log suffixes, ...),
+// so a merely shared textual prefix is harmless: base names `foo` and `foobar`
+// never clash, because `foobar.index...` does not fall inside the `foo.` glob.
+// The two dangerous cases are that the (lexically normalized) base names are
+// equal, or that one is the other followed by a '.', e.g. `foo` and `foo.view`:
+// there `foo.view`'s own index files sit inside the `foo.view.*` glob that
+// enumerates `foo`'s materialized views, so moving/replacing one base name
+// would sweep up the other's files.
+//
+// Both cases collapse into a single check once we append the separating '.' to
+// each normalized name: they collide iff one dotted form is a prefix of the
+// other. Equal names give identical dotted forms; `foo` vs `foo.view` is caught
+// because `foo.` is a prefix of `foo.view.`; and `foo` vs `foobar` is not,
+// because `foo.` is not a prefix of `foobar.`.
+bool baseNamesCollide(const std::string& a, const std::string& b) {
+  auto normalizedWithSeparator = [](const std::string& s) {
+    return absl::StrCat(ql::filesystem::path{s}.lexically_normal().string(),
+                        ".");
+  };
+  std::string na = normalizedWithSeparator(a);
+  std::string nb = normalizedWithSeparator(b);
+  return ql::starts_with(na, nb) || ql::starts_with(nb, na);
+}
+}  // namespace
+
+// ___________________________________________________________________________
+IndexRebuildConfig::IndexRebuildConfig(std::string oldIndexSource,
+                                       std::string newIndexSource,
+                                       std::string oldIndexTarget,
+                                       std::string newIndexTarget)
+    : oldIndexSource_{std::move(oldIndexSource)},
+      newIndexSource_{std::move(newIndexSource)},
+      oldIndexTarget_{std::move(oldIndexTarget)},
+      newIndexTarget_{std::move(newIndexTarget)} {
+  // Both the relocation of the old index and the installation of the new index
+  // are implemented (in `Qlever::moveRebuiltIndexIntoPlace`) as "replace the
+  // base-name prefix of each file". For this to be well-defined and
+  // non-destructive, the involved base names must not collide in ways that
+  // would overwrite files that are still needed, or that would turn a move into
+  // a (potentially partial) self-overwrite. Note that `newIndexTarget_ ==
+  // oldIndexSource_` is the common (and intended) case: the old index is moved
+  // away first, so its place is free for the new index.
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(oldIndexSource_, newIndexSource_),
+      "The currently served index and the freshly rebuilt index must not share "
+      "a base name.");
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(oldIndexTarget_, oldIndexSource_),
+      "The base name for the retired old index must differ from the currently "
+      "served index.");
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(oldIndexTarget_, newIndexSource_),
+      "The base name for the retired old index must differ from the freshly "
+      "rebuilt index.");
+  AD_CONTRACT_CHECK(
+      !baseNamesCollide(oldIndexTarget_, newIndexTarget_),
+      "The base names for the retired old index and the new index must "
+      "differ.");
+}
+
+// ___________________________________________________________________________
+void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
+                                       const IndexRebuildConfig& config) {
+  namespace fs = ql::filesystem;
+
+  // Move a `file` whose name starts with `fromBasename` so that its base-name
+  // prefix becomes `toBasename` while the file-specific suffix is preserved
+  // (e.g. `<from>.index.pso` -> `<to>.index.pso`).
+  auto moveByBasename = [](const fs::path& file, std::string_view fromBasename,
+                           std::string_view toBasename) {
+    std::string fileString = file.string();
+    AD_CORRECTNESS_CHECK(ql::starts_with(fileString, fromBasename));
+    fs::rename(file,
+               absl::StrCat(toBasename, std::string_view{fileString}.substr(
+                                            fromBasename.size())));
+  };
+
+  // Move all files that make up an index from the `source` base name to the
+  // `target` base name: its permutation and vocabulary files, its materialized
+  // views, and its build log. Both file enumerators and the existence check
+  // below only touch files that actually exist, so this is a no-op for anything
+  // the index does not have (e.g. the freshly rebuilt new index has no
+  // materialized views yet, and only one of the two build-log variants ever
+  // exists for a given index).
+  auto moveIndex = [&moveByBasename](std::string_view source,
+                                     const std::string& target) {
+    // Move the index to `target`. Create the containing directory first (the
+    // base name may point into a directory that does not exist yet).
+    fs::path targetDir = fs::path{target}.parent_path();
+    if (!targetDir.empty()) {
+      fs::create_directories(targetDir);
+    }
+    auto move = [&](const fs::path& file) {
+      moveByBasename(file, source, target);
+    };
+    ql::ranges::for_each(IndexImpl::allIndexFiles(source), move);
+    ql::ranges::for_each(MaterializedViewsManager::viewFilesOnDisk(source),
+                         move);
+    // Move the log files along with all the actual index files.
+    for (auto suffix : {INDEX_LOG_SUFFIX, REBUILD_INDEX_LOG_SUFFIX}) {
+      fs::path logFile = absl::StrCat(source, suffix);
+      if (fs::exists(logFile)) {
+        move(logFile);
+      }
+    }
+  };
+
+  auto& [newIndex, newManager] = newIndexAndViews;
+  AD_CORRECTNESS_CHECK(newIndex.getOnDiskBase() == config.newIndexSource());
+  moveIndex(config.oldIndexSource(), config.oldIndexTarget());
+  moveIndex(config.newIndexSource(), config.newIndexTarget());
+
+  // Re-anchor the path-derived state of the new index.
+  newIndex.setOnDiskBase(config.newIndexTarget());
+  if (newIndex.deltaTriplesManager().persists()) {
+    newIndex.getImpl().setFilenamesForPersistentUpdates(false);
+  }
+  newManager.setOnDiskBase(config.newIndexTarget());
 }
 }  // namespace qlever

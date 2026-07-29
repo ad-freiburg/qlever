@@ -173,6 +173,8 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 addLinkAndDiscoverTest(IndexTest index)
 
+addLinkAndDiscoverTest(PermutationTest index)
+
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
@@ -315,7 +317,7 @@ addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(GeoPointTest)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest qlever_util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
@@ -476,6 +478,8 @@ addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
 
+addLinkAndDiscoverTest(RuntimeParametersTest global)
+
 addLinkAndDiscoverTest(JThreadTest)
 
 addLinkAndDiscoverTest(ChunkedForLoopTest)
@@ -545,6 +549,8 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
+addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
+
 addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 
 addLinkAndDiscoverTest(LogTest)
@@ -552,5 +558,7 @@ addLinkAndDiscoverTest(LogTest)
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
+
+addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
