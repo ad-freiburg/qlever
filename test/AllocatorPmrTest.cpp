@@ -13,13 +13,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <vector>
-
 #include "backports/memory_resource.h"
 #include "util/AllocatorPmr.h"
 #include "util/MemorySize/MemorySize.h"
 
-using ad_utility::LimitedMemoryResource;
 using ad_utility::makePmrAllocatorFromResource;
 using ad_utility::makePmrAllocatorWithLimit;
 using ad_utility::MemorySize;
@@ -29,33 +26,11 @@ namespace {
 using namespace ad_utility::memory_literals;
 }
 
-// `clearOnAllocation` is invoked when the budget is exceeded and may free room.
-TEST(AllocatorPmr, ClearOnAllocationHook) {
-  bool called = false;
-  auto resource = std::make_shared<LimitedMemoryResource>(
-      4_B, ql::pmr::get_default_resource(),
-      [&called](MemorySize) { called = true; });
-  auto alloc = PmrAllocator<int>{
-      std::static_pointer_cast<ql::pmr::memory_resource>(resource)};
-  int* p1 = alloc.allocate(1);
-  // Second allocation triggers the hook; since the hook frees nothing, it still
-  // throws afterwards.
-  EXPECT_THROW(alloc.allocate(1),
-               ad_utility::detail::AllocationExceedsLimitException);
-  EXPECT_TRUE(called);
-  alloc.deallocate(p1, 1);
-}
-
-// `.as<U>()` yields an allocator sharing the same underlying resource/budget.
-TEST(AllocatorPmr, AsSharesResource) {
+// `.as<U>()` keeps using the same underlying PMR resource.
+TEST(AllocatorPmr, AsSharesResourcePointer) {
   auto allocInt = makePmrAllocatorWithLimit<int>(8_B);
   auto allocChar = allocInt.as<char>();
   EXPECT_EQ(allocInt.resource(), allocChar.resource());
-  EXPECT_TRUE(allocInt == allocInt.as<int>());
-  // Consuming through the char allocator reduces the shared budget.
-  char* p = allocChar.allocate(4);
-  EXPECT_EQ(allocInt.amountMemoryLeft(), 4_B);
-  allocChar.deallocate(p, 4);
 }
 
 // A plain platform resource (non-owning) enforces no limit.

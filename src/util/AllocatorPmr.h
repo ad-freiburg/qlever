@@ -31,6 +31,9 @@
 
 namespace ad_utility {
 
+template <typename T>
+class PmrAllocator;
+
 // A `ql::pmr::memory_resource` that forwards all allocations to an *upstream*
 // resource while enforcing a global memory limit. When an allocation would
 // exceed the remaining budget, an optional `ClearOnAllocation` callback is
@@ -43,6 +46,9 @@ namespace ad_utility {
 // the same budget. Access to the counter is synchronized.
 class LimitedMemoryResource : public ql::pmr::memory_resource {
  private:
+  template <typename U>
+  friend class PmrAllocator;
+
   detail::MemoryLimitTracker tracker_;
   ql::pmr::memory_resource* upstream_;
 
@@ -53,13 +59,6 @@ class LimitedMemoryResource : public ql::pmr::memory_resource {
       : tracker_{limit, std::move(clearOnAllocation)},
         upstream_{upstream == nullptr ? ql::pmr::get_default_resource()
                                       : upstream} {}
-
-  // Number of bytes still available for allocation.
-  [[nodiscard]] MemorySize amountMemoryLeft() const {
-    return tracker_.amountMemoryLeft();
-  }
-
-  ql::pmr::memory_resource* upstream() const { return upstream_; }
 
  protected:
   void* do_allocate(std::size_t bytes, std::size_t alignment) override {
@@ -188,11 +187,9 @@ class PmrAllocator {
   // for its whole lifetime. This can only extend a resource's lifetime, never
   // shorten it, so the resource always outlives all buffers allocated from it.
   PmrAllocator(PmrAllocator&& other) noexcept
-      : owner_{other.owner_}, resource_{other.resource_} {}
+      : PmrAllocator(other) {}
   PmrAllocator& operator=(PmrAllocator&& other) noexcept {
-    owner_ = other.owner_;
-    resource_ = other.resource_;
-    return *this;
+    return *this = other;
   }
 
   // Obtain an allocator for another type sharing the same resource.
@@ -212,7 +209,7 @@ class PmrAllocator {
   // `LimitedMemoryResource` its budget is reported, otherwise "unlimited".
   [[nodiscard]] MemorySize amountMemoryLeft() const {
     if (auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_)) {
-      return limited->amountMemoryLeft();
+      return limited->tracker_.amountMemoryLeft();
     }
     return MemorySize::max();
   }
@@ -268,26 +265,19 @@ PmrAllocator<T> makePmrAllocatorWithLimit(
       std::static_pointer_cast<ql::pmr::memory_resource>(std::move(resource))};
 }
 
-// Create an unlimited `PmrAllocator` over the default resource.
-template <typename T>
-PmrAllocator<T> makeUnlimitedPmrAllocator() {
-  return PmrAllocator<T>::makeUnlimited();
-}
-
 // Create a `PmrAllocator` from a platform-provided resource without any limit
 // enforcement (non-owning). QLever never takes ownership of `resource`; the
 // caller must keep it alive for at least as long as any container using the
 // returned allocator (and any buffer allocated from it).
 //
 // IMPORTANT - memory accounting: an allocator created this way reports
-// `amountMemoryLeft() == MemorySize::max()` ("unlimited"). This is unavoidable
-// because `ql::pmr::memory_resource` exposes no way to query a resource's
-// remaining capacity - only our own `LimitedMemoryResource` can report a
-// budget. Consequently QLever's memory-aware planning (sort-size estimation,
-// cache sizing, ...) will treat the pool as infinite and may over-commit if the
-// pool is in fact bounded. Use this factory only for effectively-unbounded
-// upstreams. For a *bounded* arena, wrap it with `makePmrAllocatorWithLimit`
-// (passing the arena as `upstream` and its size as `limit`) so that QLever's
+// `MemorySize::max()` ("unlimited") for a plain `ql::pmr::memory_resource`,
+// because that interface exposes no way to query a resource's remaining
+// capacity. The exception is when `resource` already points to a
+// `LimitedMemoryResource` (possibly one wrapping a custom upstream): then
+// `PmrAllocator::amountMemoryLeft()` recognizes it via `dynamic_cast` and
+// reports that limit. For a bounded arena, prefer `makePmrAllocatorWithLimit`
+// (passing the arena as `upstream` and its size as `limit`) so QLever's
 // accounting matches the real capacity.
 template <typename T>
 PmrAllocator<T> makePmrAllocatorFromResource(

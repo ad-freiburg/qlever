@@ -45,20 +45,6 @@ namespace qlever {
 template <typename T>
 using Allocator = ad_utility::PmrAllocator<T>;
 
-template <typename T>
-Allocator<T> makeUnlimitedAllocator() {
-  return Allocator<T>::makeUnlimited();
-}
-
-template <typename T>
-Allocator<T> makeAllocatorWithLimit(
-    ad_utility::MemorySize limit,
-    ad_utility::ClearOnAllocation c = ad_utility::noClearOnAllocation) {
-  return Allocator<T>::makeLimited(limit, std::move(c));
-}
-
-}  // namespace qlever
-
 #else  // LIMIT backend (default)
 
 #include "util/AllocatorWithLimitImpl.h"
@@ -68,6 +54,8 @@ namespace qlever {
 template <typename T>
 using Allocator = ad_utility::allocatorImpl::AllocatorWithLimit<T>;
 
+#endif  // QLEVER_USE_PMR_ALLOCATOR
+
 template <typename T>
 Allocator<T> makeUnlimitedAllocator() {
   return Allocator<T>::makeUnlimited();
@@ -81,7 +69,5 @@ Allocator<T> makeAllocatorWithLimit(
 }
 
 }  // namespace qlever
-
-#endif  // QLEVER_USE_PMR_ALLOCATOR
 
 #endif  // QLEVER_SRC_UTIL_ALLOCATOR_H

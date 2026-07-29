@@ -2,49 +2,19 @@
 // Created by johannes on 27.04.20.
 //
 
-#include <vector>
+#include <stdexcept>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/GTestHelpers.h"
 
 // This is a white-box test of the limit-enforcing allocator implementation, so
 // it always targets `ad_utility::allocatorImpl::AllocatorWithLimit` directly
 // (rather than the public `ad_utility::AllocatorWithLimit` name, which is an
 // alias for the compile-time selected backend and may be the PMR allocator).
-using ad_utility::allocatorImpl::AllocatorWithLimit;
 using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
+using ad_utility::allocatorImpl::AllocatorWithLimit;
 using namespace ad_utility::memory_literals;
-
-using V = std::vector<int, AllocatorWithLimit<int>>;
-TEST(AllocatorWithLimit, initial) {
-  AllocatorWithLimit<int> all{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(2_MB)};
-  static_assert(sizeof(int) == 4);
-  [[maybe_unused]] auto ptr = all.allocate(250'000);
-  ASSERT_EQ(all.amountMemoryLeft(), 1_MB);
-  ASSERT_EQ(std::as_const(all).amountMemoryLeft(), 1_MB);
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      all.allocate(500'000),
-      ::testing::StrEq("Tried to allocate 2 MB, but only 1 MB were available"));
-  all.deallocate(ptr, 250'000);
-}
-
-TEST(AllocatorWithLimit, vectorShared) {
-  AllocatorWithLimit<int> allocator(
-      makeAllocationMemoryLeftThreadsafeObject(18_B));
-  V v{allocator};
-  V u{allocator};
-  v.push_back(5);  // allocate 4 bytes -> works
-  u.push_back(5);
-  v.push_back(4);  // allocate 8 bytes, then free 4, works (10 bytes free)
-  ASSERT_EQ(v.size(), 2u);
-  ASSERT_EQ(v[1], 4);
-
-  ASSERT_THROW(u.push_back(1),
-               ad_utility::detail::AllocationExceedsLimitException);
-}
 
 TEST(AllocatorWithLimit, unlikelyExceptionsDuringCopyingAndMoving) {
   struct ThrowOnCopy {

@@ -83,6 +83,9 @@ class AllocatorWithLimit {
   using propagate_on_container_swap = std::true_type;
 
  private:
+  template <typename>
+  friend class AllocatorWithLimit;
+
   detail::MemoryLimitTracker tracker_;
   std::allocator<T> allocator_;
 
@@ -97,7 +100,7 @@ class AllocatorWithLimit {
   /// Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
   template <typename U>
   AllocatorWithLimit<U> as() const {
-    return AllocatorWithLimit<U>(getMemoryLeft(), clearOnAllocation());
+    return AllocatorWithLimit<U>(*this);
   }
 
   // This allocator has no default constructor, as it always requires a memory
@@ -109,8 +112,8 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
-      AllocatorWithLimit(const AllocatorWithLimit<U>& other)
-      : tracker_{other.getMemoryLeft(), other.clearOnAllocation()} {}
+  explicit AllocatorWithLimit(const AllocatorWithLimit<U>& other)
+      : tracker_{other.tracker_} {}
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
@@ -178,12 +181,9 @@ class AllocatorWithLimit {
     return tracker_.amountMemoryLeft();
   }
 
-  const auto& getMemoryLeft() const { return tracker_.memoryLeft(); }
-  const auto& clearOnAllocation() const { return tracker_.clearOnAllocation(); }
-
   template <typename V>
   bool operator==(const AllocatorWithLimit<V>& v) const {
-    return getMemoryLeft() == v.getMemoryLeft();
+    return tracker_ == v.tracker_;
   }
   template <typename V>
   bool operator!=(const AllocatorWithLimit<V>& v) const {
@@ -200,18 +200,6 @@ class AllocatorWithLimit {
                                std::move(clearOnAllocation)};
   }
 };
-
-// Return a new allocator with the specified limit.
-template <typename T>
-AllocatorWithLimit<T> makeAllocatorWithLimit(MemorySize limit) {
-  return AllocatorWithLimit<T>::makeLimited(limit);
-}
-
-// Return a new allocator with the maximal possible limit.
-template <typename T>
-AllocatorWithLimit<T> makeUnlimitedAllocator() {
-  return AllocatorWithLimit<T>::makeUnlimited();
-}
 
 }  // namespace allocatorImpl
 
