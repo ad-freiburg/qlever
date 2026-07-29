@@ -13,6 +13,7 @@
 
 #include <utility>
 
+#include "CompilationInfo.h"
 #include "util/metrics/Metrics.h"
 
 // _____________________________________________________________________________
@@ -30,6 +31,10 @@ ServerMetrics::ServerMetrics(
       getRebuildInProgress_(std::move(getRebuildInProgress)) {
   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
       "qlever", "0.0.1");
+  buildInfoMetric_ = meter->CreateInt64Gauge(
+      "qlever.build_info",
+      "Build information of the running QLever binary; the value is always 1, "
+      "all information is contained in the labels");
   startTimeMetric_ = meter->CreateInt64Gauge(
       "qlever.server.start_time",
       "Unix timestamp when the QLever server was started", "s");
@@ -76,6 +81,17 @@ ServerMetrics::ServerMetrics(
                  .count();
   startTimeMetric_->Record(now);
   indexLoadMetric_->Record(now);
+
+  buildInfoMetric_->Record(
+      1,
+      {{"compiler", *qlever::version::compilerWithoutLinking.rlock()},
+       {"compiler_version",
+        *qlever::version::compilerVersionWithoutLinking.rlock()},
+       {"version", *qlever::version::projectVersionWithoutLinking.rlock()},
+       {"git_hash", *qlever::version::gitShortHashWithoutLinking.rlock()},
+       {"compile_time",
+        *qlever::version::timeOfCompilationUnixWithoutLinking.rlock()},
+       {"cxx_standard", *qlever::version::cxxStandardWithoutLinking.rlock()}});
   if (maxMem.has_value()) {
     memoryQueryTotal_->Record(maxMem.value().getBytes());
   }

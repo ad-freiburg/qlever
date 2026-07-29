@@ -599,6 +599,20 @@ TEST(ServerTest, metricsEndpoint) {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
     expectRequiresAccessToken(server);
   }
+  {
+    auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
+    // `qlever_build_info` is always present with a value of 1 and carries the
+    // build metadata in its labels.
+    expectMetrics(
+        "accessToken", server, StatusIs(http::status::ok),
+        testing::HasSubstr(
+            "qlever_build_info{compile_time=\"time of compilation not set\","
+            "compiler=\"compiler not set\","
+            "compiler_version=\"compiler version not set\","
+            "cxx_standard=\"c++ standard not set\","
+            "git_hash=\"git short hash not set\","
+            "version=\"project version not set\"} 1"));
+  }
   Label update{"operation", "update"};
   Label query{"operation", "query"};
   Label syntaxError{"type", "syntax"};
