@@ -6,12 +6,24 @@ add_subdirectory(data)
 # depends on `index`, so the dependency chain is
 # `parser` -> `index` -> `basicParser`. They therefore have to live in their own
 # library instead of in `parser`.
-add_library(basicParser Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp)
+# NOTE: `TripleComponent.cpp` only implements `operator<<` and `toString()`. The
+# conversions that require an index live in `index/TripleComponentConversions.h`.
+add_library(basicParser Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp
+        TripleComponent.cpp PropertyPath.cpp PayloadVariables.cpp)
 qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 
-# TODO: Consider moving files that don't depend on the engine (sparqlExpressions,
-# index) into basicParser or a new intermediate library to clean up the
-# dependency graph.
+# The parser for the RDF input formats. It is used by `index` (which builds an
+# index from RDF input files), so it must not depend on `index` itself. It needs
+# the `vocabulary` library for the `EncodedIriManager`.
+add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp)
+qlever_target_link_libraries(rdfParser basicParser vocabulary localVocab)
+
+# TODO: Consider moving further files that don't depend on the engine
+# (sparqlExpressions, index) into `basicParser` or a new intermediate library to
+# clean up the dependency graph. The remaining files all reach `index` or
+# `sparqlExpressions`, mostly through `parser/Alias.h` (which includes
+# `SparqlExpressionPimpl.h`) and through `GraphPatternOperation.h` (which
+# includes `PathQuery.h` and `TextSearchQuery.h`, and thus even `engine`).
 add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp
@@ -22,8 +34,6 @@ add_library(parser
         NamedCachedResult.cpp
         PathQuery.cpp
         SpatialQuery.cpp
-        PayloadVariables.cpp
-        PropertyPath.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp
         GraphPatternOperation.cpp

@@ -31,6 +31,7 @@
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
+#include "index/LocalVocabContext.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
@@ -88,7 +89,9 @@ struct IndexBuilderDataAsFirstPermutationSorter {
   SorterPtr sorter_;
 };
 
-class IndexImpl {
+// NOTE: `IndexImpl` is the only implementation of `LocalVocabContext`, see the
+// comment on that class for why there must not be a second one.
+class IndexImpl : public LocalVocabContext {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
   using TripleVec =
@@ -299,7 +302,7 @@ class IndexImpl {
     return allocator_;
   };
 
-  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+  ad_utility::BlankNodeManager* getBlankNodeManager() const override;
 
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
@@ -310,6 +313,18 @@ class IndexImpl {
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  // Return this index as the context of the `LocalVocabEntry`s that belong to
+  // it. Mirrors `Index::getLocalVocabContext()`, such that callers can spell
+  // this the same way no matter whether they hold an `Index` or an `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const { return *this; }
+
+  // The implementation of the `LocalVocabContext` interface. These simply
+  // forward to `vocab_` and `encodedIriManager_`; see `LocalVocabContext.h` for
+  // why they exist as virtual functions.
+  int compareWords(std::string_view a, std::string_view b) const override;
+  VocabBounds getPositionOfWord(std::string_view word) const override;
+  std::optional<Id> encodeAsId(std::string_view word) const override;
 
   // Set the prefixes of the IRIs that will be encoded directly into
   // the `Id`; see `EncodedIriManager` for details.

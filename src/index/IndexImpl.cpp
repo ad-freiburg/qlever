@@ -30,6 +30,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
+#include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
 #include "parser/WordsAndDocsFileParser.h"
@@ -1542,7 +1543,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Note that the actual folding is done by the `TripleComponent`.
     auto& el = std::invoke(getter, triple);
     std::optional<Id> idIfNotString =
-        el.toValueIdIfNotString(&encodedIriManager());
+        toValueIdIfNotString(el, &encodedIriManager());
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
@@ -1571,7 +1572,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
+    if (vocab_.shouldBeExternalized(toRdfLiteral(iriOrLiteral))) {
       component.isExternal_ = true;
     }
   }
@@ -1896,7 +1897,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
     const LocatedTriplesState& locatedTriplesState) const {
-  if (auto keyId = key.toValueId(*this)) {
+  if (auto keyId = toValueId(key, *this)) {
     auto meta = permutation.getMetadata(keyId.value(), locatedTriplesState);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
@@ -2263,4 +2264,19 @@ nlohmann::json IndexImpl::recomputeStatistics(
   // before. If we updated this value here, it would lead to an incorrect
   // allocation start value during the next index rebuild.
   return configuration;
+}
+
+// _____________________________________________________________________________
+int IndexImpl::compareWords(std::string_view a, std::string_view b) const {
+  return vocab_.getCaseComparator().compare(a, b, LocaleManager::Level::TOTAL);
+}
+
+// _____________________________________________________________________________
+auto IndexImpl::getPositionOfWord(std::string_view word) const -> VocabBounds {
+  return vocab_.getPositionOfWord(word);
+}
+
+// _____________________________________________________________________________
+std::optional<Id> IndexImpl::encodeAsId(std::string_view word) const {
+  return encodedIriManager_.encode(word);
 }

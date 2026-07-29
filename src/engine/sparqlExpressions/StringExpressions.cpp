@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/EncodedIriManager.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
@@ -613,7 +614,7 @@ struct StrIriDtTag {
       auto tc =
           TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
               content, inputIri.value(), ev);
-      auto id = tc.toValueIdIfNotString(&ev);
+      auto id = toValueIdIfNotString(tc, &ev);
       if (id.has_value()) {
         return id.value();
       }

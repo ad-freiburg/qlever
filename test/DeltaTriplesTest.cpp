@@ -22,6 +22,7 @@
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
@@ -92,11 +93,11 @@ class DeltaTriplesTest : public ::testing::Test {
             TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI));
       }
       std::array<Id, 4> ids{
-          std::move(triple.subject_).toValueId(index, localVocab),
-          std::move(TripleComponent(triple.predicate_))
-              .toValueId(index, localVocab),
-          std::move(triple.object_).toValueId(index, localVocab),
-          std::move(triple.graphIri_).toValueId(index, localVocab)};
+          toValueId(std::move(triple.subject_), index, localVocab),
+          toValueId(std::move(TripleComponent(triple.predicate_)), index,
+                    localVocab),
+          toValueId(std::move(triple.object_), index, localVocab),
+          toValueId(std::move(triple.graphIri_), index, localVocab)};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(
@@ -387,13 +388,13 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   deltaTriples.clear();
   // Test internal language filter triples are inserted correctly.
   auto toId = [&index, &localVocab](TripleComponent& component) {
-    return std::move(component).toValueId(index, localVocab);
+    return toValueId(std::move(component), index, localVocab);
   };
 
   Id graphId = [&index]() {
-    auto graphOpt =
-        TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
-            .toValueId(index);
+    auto graphOpt = toValueId(
+        TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)),
+        index);
     AD_CORRECTNESS_CHECK(graphOpt.has_value());
     return graphOpt.value();
   }();
@@ -842,8 +843,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   ql::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   auto defaultGraph =
-      TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
-          .toValueId(testQec->getIndex().getImpl())
+      toValueId(
+          TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)),
+          testQec->getIndex().getImpl())
           .value();
   const auto& localVocabContext = testQec->getLocalVocabContext();
   {
