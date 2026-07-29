@@ -487,8 +487,14 @@ TEST(Date, parseLargeYear) {
   testLargeYearDate("2039481726-01-01", 2039481726);
   testLargeYearDate("-2039481726-01-01", -2039481726);
 
-  testLargeYearDatetime("2039481726-01-01T00:00:00", 2039481726);
-  testLargeYearDatetime("-2039481726-01-01T00:00:00", -2039481726);
+  // NOTE: Only the year is stored, so the export is always in the canonical
+  // UTC form (with the `Z`), also when the input has no timezone.
+  testLargeYearDatetime("2039481726-01-01T00:00:00Z", 2039481726);
+  testLargeYearDatetime("-2039481726-01-01T00:00:00Z", -2039481726);
+  testLargeYearDatetime("2039481726-01-01T00:00:00", 2039481726,
+                        "2039481726-01-01T00:00:00Z");
+  testLargeYearDatetime("-2039481726-01-01T00:00:00", -2039481726,
+                        "-2039481726-01-01T00:00:00Z");
 }
 
 TEST(Date, parseLargeYearCornerCases) {
@@ -510,11 +516,11 @@ TEST(Date, parseLargeYearCornerCases) {
   testLargeYearDate("-2039481726-02-05", -2039481726, "-2039481726-01-01");
 
   testLargeYearDatetime("2039481726-01-01T12:00:00", 2039481726,
-                        "2039481726-01-01T00:00:00");
+                        "2039481726-01-01T00:00:00Z");
   testLargeYearDatetime("2039481726-01-01T00:13:00", 2039481726,
-                        "2039481726-01-01T00:00:00");
+                        "2039481726-01-01T00:00:00Z");
   testLargeYearDatetime("-2039481726-01-01T00:00:14", -2039481726,
-                        "-2039481726-01-01T00:00:00");
+                        "-2039481726-01-01T00:00:00Z");
 }
 
 TEST(Date, parseErrors) {
