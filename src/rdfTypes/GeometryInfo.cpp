@@ -78,8 +78,8 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{type,      boundingBox.value(), centroid.value(),
-                      {numGeom}, metricLength,        MetricArea{area}};
+  return GeometryInfo{type.wktType, boundingBox.value(), centroid.value(),
+                      {numGeom},    metricLength,        MetricArea{area}};
 }
 
 // ____________________________________________________________________________
