@@ -2269,4 +2269,33 @@ TEST(IndexScan, isDistinctBy) {
   ASSERT_TRUE(
       std::dynamic_pointer_cast<IndexScan>(stripped->getRootOperation()));
   EXPECT_FALSE(stripped->getRootOperation()->isDistinctBy(SC{0, 1}));
+
+  // The graph column is an identifying column, whereas payload columns (like
+  // the pattern column) are functionally determined by the identifying columns
+  // and therefore need not be covered.
+  auto scanWithAdditionalColumns = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}},
+                         TC{Variable{"?p"}},
+                         TC{Variable{"?o"}},
+                         {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?g"}},
+                          std::pair{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                                    Variable{"?pattern"}}}});
+  // The columns are `?s`, `?p`, `?o`, `?g`, `?pattern` in this order.
+  const auto& scanWithColumnsOp =
+      *scanWithAdditionalColumns->getRootOperation();
+  EXPECT_TRUE(scanWithColumnsOp.isDistinctBy(SC{0, 1, 2, 3}));
+  EXPECT_TRUE(scanWithColumnsOp.isDistinctBy(SC{0, 1, 2, 3, 4}));
+  // Without the graph column, quads that only differ in their graph become
+  // duplicates, so the pattern column can't make up for it.
+  EXPECT_FALSE(scanWithColumnsOp.isDistinctBy(SC{0, 1, 2, 4}));
+
+  // The same holds if the graph column is stripped away instead of missing from
+  // the `distinctIndices`.
+  auto strippedGraph = QueryExecutionTree::makeTreeWithStrippedColumns(
+      scanWithAdditionalColumns,
+      {Variable{"?s"}, Variable{"?p"}, Variable{"?o"}, Variable{"?pattern"}});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<IndexScan>(strippedGraph->getRootOperation()));
+  EXPECT_FALSE(strippedGraph->getRootOperation()->isDistinctBy(SC{0, 1, 2, 3}));
 }

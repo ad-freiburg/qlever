@@ -965,6 +965,11 @@ TEST(Operation, isDistinctByRecognizesLimitOne) {
   // Without a limit, `ValuesForTesting` is not known to be distinct.
   EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
 
+  // A limit greater than one doesn't help, as the result may still contain
+  // duplicates.
+  values->applyLimitOffset(LimitOffsetClause{._limit = 2});
+  EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
+
   // With `LIMIT 1` the result has at most one row, so it is trivially distinct
   // wrt any set of columns.
   values->applyLimitOffset(LimitOffsetClause{._limit = 1});
