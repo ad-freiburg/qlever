@@ -383,8 +383,8 @@ class Server {
   // This assumes that the access token has already been checked and no other
   // rebuild is currently in progress.
   Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
-      std::optional<std::string> tmpDirForRebuild,
-      std::optional<std::string> dirForOldIndex);
+      std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }

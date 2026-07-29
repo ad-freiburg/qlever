@@ -126,8 +126,9 @@ class IndexRebuildConfig {
   const std::string& newIndexTarget() const { return newIndexTarget_; }
 
   // The JSON that is reported to the client after a successful rebuild: a
-  // human-readable message plus the base names under which the old and the new
-  // index can now be found.
+  // human-readable message plus the directory to which the old index was
+  // retired (the resolved value of the `rebuild-previous-index-dir` command
+  // parameter, which the client does not know when the default was used).
   nlohmann::json successResponseAsJson() const;
 };
 
@@ -595,10 +596,10 @@ class Qlever {
 
   // Assemble the `IndexRebuildConfig` for a rebuild of `index` (which has to be
   // the index that is currently being served) from the two directories a
-  // rebuild can be configured with: `tmpDirForRebuild`, in which the new index
-  // is built, and `dirForOldIndex`, to which the old index is retired. Both
-  // default (if `std::nullopt`) to a directory that is derived from the current
-  // time resp. from the build date of the current index. Inside these
+  // rebuild can be configured with: `rebuildTmpDir`, in which the new index
+  // is built, and `rebuildPreviousIndexDir`, to which the old index is retired.
+  // Both default (if `std::nullopt`) to a directory that is derived from the
+  // current time resp. from the build date of the current index. Inside these
   // directories, and for the new index after the swap, the file name of
   // `index.getOnDiskBase()` is used: the new index has to end up at the base
   // name the current index is served from, so that a later restart loads it.
@@ -611,8 +612,8 @@ class Qlever {
   // violated, and (via the `IndexRebuildConfig` constructor) if the resulting
   // base names collide.
   static IndexRebuildConfig makeIndexRebuildConfig(
-      const Index& index, std::optional<std::string> tmpDirForRebuild,
-      std::optional<std::string> dirForOldIndex);
+      const Index& index, std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
 
   // Move a freshly rebuilt index into the place of the old one. There are two
   // indices involved, both with base names given by `config`: the old index

@@ -571,8 +571,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
       logCommand(cmd, "rebuilding index");
       auto config = co_await rebuildIndex(
-          checkParameter("tmp-dir-for-rebuild", std::nullopt),
-          checkParameter("dir-for-old-index", std::nullopt));
+          checkParameter("rebuild-tmp-dir", std::nullopt),
+          checkParameter("rebuild-previous-index-dir", std::nullopt));
       response = createJsonResponse(config.successResponseAsJson(), request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
@@ -1618,8 +1618,8 @@ Server::createMessageSender<http::request<http::string_body>>(
 
 // _____________________________________________________________________________
 Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
-    std::optional<std::string> tmpDirForRebuild,
-    std::optional<std::string> dirForOldIndex) {
+    std::optional<std::string> rebuildTmpDir,
+    std::optional<std::string> rebuildPreviousIndexDir) {
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   auto indexAndViews = indexAndViewsSnapshot();
@@ -1632,7 +1632,7 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   // exactly that place, see `Qlever::moveRebuiltIndexIntoPlace`), so that a
   // later restart loads it.
   auto config = qlever::Qlever::makeIndexRebuildConfig(
-      index, std::move(tmpDirForRebuild), std::move(dirForOldIndex));
+      index, std::move(rebuildTmpDir), std::move(rebuildPreviousIndexDir));
 
   // Warn if state that won't carry over to the rebuilt index was previously
   // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired

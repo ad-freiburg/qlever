@@ -781,8 +781,8 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // Rebuild with explicitly given directories.
   auto request3 = makeRebuildRequest(
-      "&tmp-dir-for-rebuild=serverIntegration.tmp"
-      "&dir-for-old-index=serverIntegration.old");
+      "&rebuild-tmp-dir=serverIntegration.tmp"
+      "&rebuild-previous-index-dir=serverIntegration.old");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   EXPECT_TRUE(fs::exists(fs::path{"serverIntegration.old"} /
@@ -791,17 +791,18 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // The directory for the old index must be empty or non-existing.
   auto request4 =
-      makeRebuildRequest("&dir-for-old-index=serverIntegration.old");
+      makeRebuildRequest("&rebuild-previous-index-dir=serverIntegration.old");
   expectRequestFailsWith(
       request4, ::testing::HasSubstr("already exists and is not empty"));
 
   // The directories must be relative paths and located inside the directory
   // of the current index.
-  auto request5 = makeRebuildRequest("&dir-for-old-index=%2Fabsolute-path");
+  auto request5 =
+      makeRebuildRequest("&rebuild-previous-index-dir=%2Fabsolute-path");
   expectRequestFailsWith(request5,
                          ::testing::HasSubstr("must be a relative path"));
 
-  auto request6 = makeRebuildRequest("&tmp-dir-for-rebuild=..%2Fother");
+  auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
 
   threadPool.join();
@@ -846,8 +847,8 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
   auto request = ad_utility::testing::makeGetRequest(
       "/?cmd=rebuild-index&access-token=accessToken"
-      "&tmp-dir-for-rebuild=droppedState.tmp"
-      "&dir-for-old-index=droppedState.old");
+      "&rebuild-tmp-dir=droppedState.tmp"
+      "&rebuild-previous-index-dir=droppedState.old");
   using ResT = ad_utility::httpUtils::ResponseT;
   auto response =
       net::co_spawn(

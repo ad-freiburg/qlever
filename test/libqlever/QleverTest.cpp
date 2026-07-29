@@ -945,10 +945,11 @@ TEST(LibQlever, clearCache) {
 TEST(Qlever, makeIndexRebuildConfig) {
   auto cleanup = useFreshWorkingDirectory();
   Index index = ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
-  auto makeConfig = [&index](std::optional<std::string> tmpDirForRebuild,
-                             std::optional<std::string> dirForOldIndex) {
-    return Qlever::makeIndexRebuildConfig(index, std::move(tmpDirForRebuild),
-                                          std::move(dirForOldIndex));
+  auto makeConfig = [&index](
+                        std::optional<std::string> rebuildTmpDir,
+                        std::optional<std::string> rebuildPreviousIndexDir) {
+    return Qlever::makeIndexRebuildConfig(index, std::move(rebuildTmpDir),
+                                          std::move(rebuildPreviousIndexDir));
   };
 
   // Both directories default to a directory that does not exist yet, derived
@@ -962,6 +963,11 @@ TEST(Qlever, makeIndexRebuildConfig) {
                 AllOf(StartsWith("rebuild."), EndsWith(".tmp/index")));
     EXPECT_THAT(config.oldIndexTarget(),
                 AllOf(StartsWith("previous."), EndsWith("/index")));
+    // The success response reports the directory of the old index (which the
+    // client cannot know in advance when it was defaulted), not its base name.
+    auto response = config.successResponseAsJson();
+    EXPECT_THAT(response["previous-index-dir"].get<std::string>(),
+                AllOf(StartsWith("previous."), Not(EndsWith("/index"))));
   }
 
   // Explicitly given directories that do not exist yet are accepted as is (the
@@ -971,6 +977,7 @@ TEST(Qlever, makeIndexRebuildConfig) {
     auto config = makeConfig("tmpForRebuild", "oldIndex");
     EXPECT_EQ(config.newIndexSource(), "tmpForRebuild/index");
     EXPECT_EQ(config.oldIndexTarget(), "oldIndex/index");
+    EXPECT_EQ(config.successResponseAsJson()["previous-index-dir"], "oldIndex");
   }
 
   // Directories that already exist are fine as long as they are empty.

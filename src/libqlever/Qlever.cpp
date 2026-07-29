@@ -457,15 +457,20 @@ IndexRebuildConfig::IndexRebuildConfig(std::string oldIndexSource,
 nlohmann::json IndexRebuildConfig::successResponseAsJson() const {
   nlohmann::json json;
   json["message"] = "Index successfully rebuilt and swapped in";
-  json["old-index-basename"] = oldIndexTarget_;
-  json["new-index-basename"] = newIndexTarget_;
+  // Report the directory (not the full base name): it mirrors the
+  // `rebuild-previous-index-dir` command parameter and is the one piece of
+  // information the client cannot know in advance (the default is derived from
+  // the build date of the old index). The new index is not mentioned because
+  // it is always served from the base name of the old one.
+  json["previous-index-dir"] =
+      ql::filesystem::path{oldIndexTarget_}.parent_path().string();
   return json;
 }
 
 // ___________________________________________________________________________
 IndexRebuildConfig Qlever::makeIndexRebuildConfig(
-    const Index& index, std::optional<std::string> tmpDirForRebuild,
-    std::optional<std::string> dirForOldIndex) {
+    const Index& index, std::optional<std::string> rebuildTmpDir,
+    std::optional<std::string> rebuildPreviousIndexDir) {
   namespace fs = ql::filesystem;
 
   // The base name the current index is served from. The new index has to end up
@@ -494,11 +499,11 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
   // and move the old index to `previous.<datetime of the build of the current
   // index>`.
   std::string baseNameForRebuild = resolveBaseName(
-      std::move(tmpDirForRebuild),
+      std::move(rebuildTmpDir),
       absl::StrCat("rebuild.", IndexImpl::formatIndexBuildTime(absl::Now()),
                    ".tmp"));
   std::string baseNameForOldIndex = resolveBaseName(
-      std::move(dirForOldIndex),
+      std::move(rebuildPreviousIndexDir),
       absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
 
   // Check the two base names that were derived from the arguments: they must be
