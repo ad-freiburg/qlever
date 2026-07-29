@@ -317,7 +317,7 @@ addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(GeoPointTest)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest qlever_util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
@@ -477,6 +477,8 @@ addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
+
+addLinkAndDiscoverTest(RuntimeParametersTest global)
 
 addLinkAndDiscoverTest(JThreadTest)
 

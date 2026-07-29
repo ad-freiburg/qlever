@@ -24,6 +24,32 @@
 using namespace qlever;
 using namespace testing;
 
+namespace {
+// Write `turtleContents` to a turtle file, build an index from it with all
+// settings at their default, and return an `EngineConfig` for that index. The
+// base name of both the turtle file and the index is derived from the name of
+// the currently running test and the optional `suffix`, so that a single test
+// can build several distinct indexes. The turtle file is deleted again before
+// this returns; the files of the index itself remain on disk.
+//
+// NOTE: An index that cannot be built throws, which `gtest` reports as a
+// failure of the running test. This is deliberately not an `EXPECT_NO_THROW`,
+// which would let the test continue with a nonexistent index.
+EngineConfig buildTestIndex(std::string_view turtleContents,
+                            std::string_view suffix = "") {
+  std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
+  std::string filename = absl::StrCat(basename, ".ttl");
+  ad_utility::makeOfstream(filename) << turtleContents;
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  IndexBuilderConfig config;
+  config.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  config.baseName_ = basename;
+  Qlever::buildIndex(config);
+  return EngineConfig{config};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(LibQlever, buildIndexAndRunQuery) {
   std::string filename = "libQleverbuildIndexAndRunQuery.ttl";
@@ -215,22 +241,9 @@ TEST(IndexBuilderConfig, validate) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, loadIndexWithoutPermutations) {
-  std::string filename = "libQleverLoadIndexWithoutPermutations.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
-  }
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "LibQlever.loadIndexWithoutPermutations";
-  c.memoryLimit_ = std::nullopt;
-
-  // Build the index normally.
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
+  EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
 
   // Load the index with `doNotLoadPermutations` set to true.
-  EngineConfig ec{c};
   ec.doNotLoadPermutations_ = true;
   Qlever engine{ec};
 
@@ -257,17 +270,7 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
 // named result cache is not empty (its entries are only valid for one specific
 // snapshot). Uses `FRIEND_TEST` to reach the otherwise private method.
 TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
-  std::string filename = "libQleverSwapIndexAndViews.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o>.";
-  }
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "LibQlever.swapIndexAndViews";
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  Qlever qlever{EngineConfig{c}};
+  Qlever qlever{buildTestIndex("<s> <p> <o>.")};
 
   // With an empty named result cache, swapping (here: with the current
   // snapshot) is allowed.
@@ -285,21 +288,7 @@ TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, disableCaching) {
-  std::string filename = "libQleverDisableCaching.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s> <p> <o>. <s2> <p2> \"literal\".";
-  }
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "LibQlever.disableCaching";
-  c.memoryLimit_ = std::nullopt;
-
-  // Build the index normally.
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  EngineConfig ec{c};
+  EngineConfig ec = buildTestIndex("<s> <p> <o>. <s2> <p2> \"literal\".");
   {
     // Load the index with `disableCaching` set to true.
     ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
@@ -344,18 +333,7 @@ TEST(LibQlever, disableCaching) {
 
 // _____________________________________________________________________________
 TEST(LibQlever, externallySpecifiedValues) {
-  std::string filename = "libQleverExternalValues.ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(filename);
-    ofs << "<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .";
-  }
-
-  IndexBuilderConfig c;
-  c.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
-  c.baseName_ = "testIndexForExternalValues";
-  EXPECT_NO_THROW(Qlever::buildIndex(c));
-
-  EngineConfig ec{c};
+  EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
   // Caching must be disabled for externally specified values.
   ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
   Qlever engine{ec};
@@ -643,4 +621,222 @@ TEST(Qlever, indexRebuildConfigRejectsCollidingBaseNames) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       IndexRebuildConfig("index", "index.view", "previous/old", "newidx"),
       ::testing::HasSubstr("currently served index and the freshly rebuilt"));
+}
+
+// _____________________________________________________________________________
+// Test `parseQuery` + `planQuery` + `PlannedQuery::cloneQetInPlace`, which
+// together make it possible to plan a query once and then execute it
+// repeatedly with varying values: copying the resulting `PlannedQuery` shares
+// its `QueryExecutionTree`, and `cloneQetInPlace` gives the copy a tree of its
+// own, which can then be modified without affecting the original.
+TEST(LibQlever, planQueryOfParsedQueryAndCloneQetInPlace) {
+  EngineConfig ec = buildTestIndex("<s1> <p> 1 . <s2> <p> 2 . <s3> <p> 3 .");
+  // Caching must be disabled for externally specified values.
+  ec.disableCaching_ = QueryExecutionContext::DisableCaching::True;
+  Qlever engine{ec};
+
+  std::string query = R"(
+    SELECT ?x ?o WHERE {
+      ?x <p> ?o .
+      SERVICE <https://qlever.cs.uni-freiburg.de/external-values/> {
+        [] <name> "myValues" .
+        [] <variable> ?x .
+      }
+    } ORDER BY ?o
+  )";
+
+  // Parsing is instance-independent, planning is not, so the same
+  // `ParsedQuery` can be planned more than once.
+  // `parseQuery` returns the `ParsedQuery` together with the
+  // `QueryExecutionContext` it was parsed against, and `planQuery` plans it
+  // against exactly that context.
+  ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
+  EXPECT_EQ(&parsedQuery.queryExecutionContext(),
+            parsedQuery.sharedQueryExecutionContext().get());
+  PlannedQuery plan = engine.planQuery(parsedQuery);
+  EXPECT_EQ(&plan.queryExecutionContext(),
+            &parsedQuery.queryExecutionContext());
+
+  // Inject `iris` into the single `ExternalValues` placeholder of `plan`,
+  // execute it, and return the objects that it yields (ordered by `?o`).
+  auto runWith = [](PlannedQuery& plan, const std::vector<std::string>& iris) {
+    std::vector<ExternalValues*> values;
+    plan.queryExecutionTree().getRootOperation()->getExternalValues(values);
+    AD_CONTRACT_CHECK(values.size() == 1);
+    parsedQuery::SparqlValues newValues;
+    newValues._variables = {Variable{"?x"}};
+    for (const auto& iri : iris) {
+      newValues._values.push_back({TripleComponent::Iri::fromIriref(iri)});
+    }
+    values.at(0)->updateValues(std::move(newValues));
+
+    const auto& qet = plan.queryExecutionTree();
+    auto result = qet.getResult();
+    auto objectColumn = qet.getVariableColumn(Variable{"?o"});
+    std::vector<int64_t> objects;
+    for (size_t i = 0; i < result->idTableView().numRows(); ++i) {
+      objects.push_back(result->idTableView()(i, objectColumn).getInt());
+    }
+    return objects;
+  };
+
+  // A copy of a `PlannedQuery` shares the `QueryExecutionTree`, so modifying
+  // the copy would also modify `plan`.
+  PlannedQuery firstCopy = plan;
+  EXPECT_EQ(&firstCopy.queryExecutionTree(), &plan.queryExecutionTree());
+
+  // `cloneQetInPlace` gives the copy its own tree, while the
+  // `QueryExecutionContext` stays shared.
+  firstCopy.cloneQetInPlace();
+  EXPECT_NE(&firstCopy.queryExecutionTree(), &plan.queryExecutionTree());
+  EXPECT_EQ(&firstCopy.queryExecutionContext(), &plan.queryExecutionContext());
+
+  PlannedQuery secondCopy = plan;
+  secondCopy.cloneQetInPlace();
+  EXPECT_NE(&secondCopy.queryExecutionTree(), &firstCopy.queryExecutionTree());
+
+  // The two copies can be given different values and executed independently.
+  EXPECT_THAT(runWith(firstCopy, {"<s1>", "<s3>"}), ElementsAre(1, 3));
+  EXPECT_THAT(runWith(secondCopy, {"<s2>"}), ElementsAre(2));
+
+  // `firstCopy` still has its own tree, so it can be given new values again,
+  // without `secondCopy` interfering.
+  EXPECT_THAT(runWith(firstCopy, {"<s1>", "<s2>"}), ElementsAre(1, 2));
+  EXPECT_THAT(runWith(secondCopy, {"<s3>"}), ElementsAre(3));
+}
+
+// _____________________________________________________________________________
+// Test that `parseAndPlanQuery` is exactly `parseQuery` followed by
+// `planQuery`, and that all the arguments of the former reach the two halves.
+TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
+  Qlever engine{buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .")};
+
+  std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
+
+  // Both paths produce the same result.
+  auto viaCombined =
+      engine.query(engine.parseAndPlanQuery(query), ad_utility::MediaType::tsv);
+  auto viaSplit = engine.query(engine.planQuery(engine.parseQuery(query)),
+                               ad_utility::MediaType::tsv);
+  EXPECT_EQ(viaCombined, viaSplit);
+  EXPECT_EQ(viaCombined, "?s\n<s>\n<s2>\n");
+
+  // `requestTimer` reaches the query planner through `planQuery` and ends up in
+  // the runtime information, just as it does via `parseAndPlanQuery`.
+  ad_utility::Timer requestTimer{ad_utility::Timer::Started};
+  auto plan =
+      engine.planQuery(engine.parseQuery(query),
+                       std::make_shared<ad_utility::CancellationHandle<>>(),
+                       std::nullopt, requestTimer);
+  EXPECT_GT(plan.queryExecutionTree()
+                .getRootOperation()
+                ->getRuntimeInfoWholeQuery()
+                .timeQueryPlanning.count(),
+            -1);
+
+  // A cancellation handle that is already cancelled makes planning fail, which
+  // shows that the handle reaches the query planner as well.
+  auto cancelledHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+  cancelledHandle->cancel(ad_utility::CancellationState::MANUAL);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      engine.planQuery(engine.parseQuery(query), cancelledHandle),
+      HasSubstr("manually cancelled"));
+}
+
+// _____________________________________________________________________________
+// Test `bindParsedQuery`: a query that was parsed once can be planned on a
+// second `Qlever` instance, as long as that instance has an equivalent
+// `EncodedIriManager` (see the note on reusing a parsed query in `parseQuery`).
+TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
+  // Two indexes over the same data and with the same configuration, so their
+  // `EncodedIriManager`s are equivalent.
+  std::string_view turtle = "<s> <p> <o> . <s2> <p> <o2> .";
+  Qlever first{buildTestIndex(turtle, ".first")};
+  Qlever second{buildTestIndex(turtle, ".second")};
+
+  std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
+  std::string expected = "?s\n<s>\n<s2>\n";
+
+  // Parse once on `first`, then plan on both instances.
+  ParsedQueryAndContext parsedOnFirst = first.parseQuery(query);
+  EXPECT_EQ(
+      first.query(first.planQuery(parsedOnFirst), ad_utility::MediaType::tsv),
+      expected);
+
+  // `bindParsedQuery` pairs the parsed query with a context of `second`, so the
+  // parsing is not repeated. The context of the plan is one of `second`, not
+  // the one the query was parsed with.
+  ParsedQueryAndContext boundToSecond =
+      second.bindParsedQuery(parsedOnFirst.parsedQuery());
+  EXPECT_NE(&boundToSecond.queryExecutionContext(),
+            &parsedOnFirst.queryExecutionContext());
+  PlannedQuery planOnSecond = second.planQuery(boundToSecond);
+  EXPECT_EQ(&planOnSecond.queryExecutionContext(),
+            &boundToSecond.queryExecutionContext());
+  EXPECT_EQ(second.query(planOnSecond, ad_utility::MediaType::tsv), expected);
+}
+
+// _____________________________________________________________________________
+// Test `EngineConfig::computeSortPerformanceEstimators_`: the (potentially
+// expensive) estimates are computed by default, but not if the config disables
+// them.
+TEST(LibQlever, computeSortPerformanceEstimators) {
+  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
+  ASSERT_TRUE(ec.computeSortPerformanceEstimators_);
+  EXPECT_TRUE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
+
+  ec.computeSortPerformanceEstimators_ = false;
+  EXPECT_FALSE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
+}
+
+// _____________________________________________________________________________
+// Test the trivial getters of `ParsedQueryAndContext`, both the `const` and the
+// non-`const` overloads. All of them refer to the same objects.
+TEST(LibQlever, parsedQueryAndContextGetters) {
+  Qlever engine{buildTestIndex("<s> <p> <o> .")};
+
+  std::string query = "SELECT ?s WHERE { ?s <p> ?o }";
+  ParsedQueryAndContext parsedQuery = engine.parseQuery(query);
+  const ParsedQueryAndContext& constParsedQuery = parsedQuery;
+
+  // The non-`const` and the `const` getter yield the same `ParsedQuery`, which
+  // is the one that was parsed from `query`.
+  EXPECT_EQ(&parsedQuery.parsedQuery(), &constParsedQuery.parsedQuery());
+  EXPECT_EQ(constParsedQuery.parsedQuery()._originalString, query);
+  EXPECT_TRUE(constParsedQuery.parsedQuery().hasSelectClause());
+
+  // The same holds for the `QueryExecutionContext`, which is also the one that
+  // the (only `const`) getter for the `shared_ptr` yields.
+  EXPECT_EQ(&parsedQuery.queryExecutionContext(),
+            &constParsedQuery.queryExecutionContext());
+  EXPECT_EQ(constParsedQuery.sharedQueryExecutionContext().get(),
+            &constParsedQuery.queryExecutionContext());
+}
+
+// _____________________________________________________________________________
+// Test `Qlever::clearCache`, and trivially the `const` getter for the named
+// result cache.
+TEST(LibQlever, clearCache) {
+  Qlever engine{buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .")};
+
+  // The cache starts out empty.
+  ASSERT_EQ(engine.cache().numPinnedEntries(), 0U);
+  ASSERT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+
+  // Run a query with `pinResult`, so that its result is stored in the cache as
+  // a pinned entry.
+  PlannedQuery plan = engine.planQuery(engine.parseQuery(
+      "SELECT ?s WHERE { ?s <p> ?o }", {}, ad_utility::noop, false, true));
+  EXPECT_EQ(engine.query(plan, ad_utility::MediaType::tsv), "?s\n<s>\n<s2>\n");
+  EXPECT_GT(engine.cache().numPinnedEntries(), 0U);
+
+  // `clearCache` clears the pinned as well as the unpinned entries.
+  engine.clearCache();
+  EXPECT_EQ(engine.cache().numPinnedEntries(), 0U);
+  EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+
+  // The named result cache is a separate cache, and its `const` getter yields
+  // the same cache as the non-`const` one.
+  const Qlever& constEngine = engine;
+  EXPECT_EQ(&constEngine.namedResultCache(), &engine.namedResultCache());
 }

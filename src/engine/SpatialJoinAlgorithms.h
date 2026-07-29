@@ -24,7 +24,7 @@
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
-#include "util/GeoSparqlHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/VectorWithMemoryLimit.h"
 
 namespace BoostGeometryNamespace {
