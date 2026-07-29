@@ -822,8 +822,9 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
           makeExistsArgument({varX, varY, Variable{"?c"}}, {{1, 999, 999}}),
           inputXY, tableXY, true, true),
       ::testing::HasSubstr(
-          "The variable ?y is used inside an EXISTS in the expression (alias "
-          "as ?e), but it is neither aggregated nor part of the GROUP BY."));
+          "The EXISTS in the expression (alias as ?e) uses the variable ?y "
+          "from the query body, but this variable is not part of the GROUP "
+          "BY."));
 }
 
 // _____________________________________________________________________________

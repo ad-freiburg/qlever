@@ -2716,9 +2716,9 @@ TEST(QueryPlanner, Exists) {
       h::parseAndPlan(
           "SELECT ?x (EXISTS{?x ?y ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
           ad_utility::testing::getQec()),
-      HasSubstr("The variable ?y is used inside an EXISTS in the expression "
-                "(EXISTS{?x ?y ?c} as ?e), but it is neither aggregated nor "
-                "part of the GROUP BY."));
+      HasSubstr("The EXISTS in the expression (EXISTS{?x ?y ?c} as ?e) uses "
+                "the variable ?y from the query body, but this variable is "
+                "not part of the GROUP BY."));
   // In contrast, an `EXISTS` inside an aggregate is evaluated once per row and
   // may therefore use non-grouped variables (here `?y`), just like in a
   // `FILTER`.

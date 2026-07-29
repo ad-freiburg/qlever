@@ -282,15 +282,13 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
         if (subtree->getVariableColumns().contains(variable) &&
             !ad_utility::contains(_groupByVariables, variable)) {
           throw std::runtime_error{absl::StrCat(
-              "The variable ", variable.name(),
-              " is used inside an EXISTS in the expression ",
-              alias.getDescriptor(),
-              ", but it is neither aggregated nor part of the GROUP BY. QLever "
-              "doesn't support this, because the SPARQL 1.1 standard doesn't "
-              "clearly define the semantics of this case. Consider adding ",
-              variable.name(),
-              " to the GROUP BY, or wrapping the EXISTS in an aggregate "
-              "function like SAMPLE.")};
+              "The EXISTS in the expression ", alias.getDescriptor(),
+              " uses the variable ", variable.name(),
+              " from the query body, but this variable is not part of the "
+              "GROUP BY. QLever doesn't support this, because the SPARQL 1.1 "
+              "standard doesn't clearly define the semantics of this case. "
+              "Consider adding ",
+              variable.name(), " to the GROUP BY.")};
         }
       }
     }
