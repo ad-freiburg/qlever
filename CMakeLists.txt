@@ -612,6 +612,7 @@ FetchContent_Declare(
         GIT_TAG 04d8b8df5e0c6bf6c06e472540c015943a613bd2 # 1.0.0
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 

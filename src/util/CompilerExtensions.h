@@ -21,7 +21,7 @@
 // because their only callers are in other translation units. Declaring those
 // `inline` would emit no symbol at all and break the link.
 #define AD_ALWAYS_INLINE
-#elif defined(__CLANG__)
+#elif defined(__clang__)
 #define AD_ALWAYS_INLINE [[clang::always_inline]]
 #elif __GNUC__
 #define AD_ALWAYS_INLINE [[gnu::always_inline]]
