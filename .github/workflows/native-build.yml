@@ -39,8 +39,16 @@ jobs:
         # workflow is only triggered by the `pull_request` and the `merge_group`
         # event, `isPullRequest: false` exactly means "this is a merge queue
         # build".
+        #
+        # TODO<joka921> This is temporarily hardcoded to `false`, such that the
+        # merge-queue-only builds (`gcc-12`, `gcc-15`, `gcc-16`, and `clang-18`,
+        # see the `exclude` section below) also run for pull requests. That way
+        # we can check whether they pass at all before the merge queue is
+        # activated. Undo this by restoring the original value, which is
+        #   - ${{github.event_name == 'pull_request'}}
+        # This is the ONLY place that has to be changed to undo this.
         isPullRequest:
-          - ${{github.event_name == 'pull_request'}}
+          - false
         exclude:
           # Compiler versions that we currently don't test at all (there is no
           # `gcc-18`/`gcc-21`, and the following `clang` versions are either too
