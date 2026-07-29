@@ -104,7 +104,8 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
       Triples triples, VariableToColumnMap varMap, TableWithRange table,
       ad_utility::SharedCancellationHandle handle = makeHandle()) {
     auto stringTriples = ConstructTripleGenerator::evaluateTables(
-        triples, varMap, index_, handle, singleTableRange(std::move(table)), 0);
+        triples, varMap, index_, handle, singleTableRange(std::move(table)), 0,
+        *qec_, ad_utility::DeduplicationMode::none());
 
     return ::ranges::to_vector(stringTriples);
   }
@@ -236,7 +237,8 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
       ad_utility::InputRangeTypeErased<TableWithRange>{std::move(tables)};
 
   auto range = ConstructTripleGenerator::evaluateTables(
-      templateTriples, {}, index_, makeHandle(), std::move(tableRange), 0);
+      templateTriples, {}, index_, makeHandle(), std::move(tableRange), 0,
+      *qec_, ad_utility::DeduplicationMode::none());
 
   // Table 1: rowOffset=0, firstRow=0
   //   row 0: rowId = 0+0+0 = 0
@@ -308,7 +310,8 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
 
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
-      templateTriples, {}, index_, handle, singleTableRange(table), 0);
+      templateTriples, {}, index_, handle, singleTableRange(table), 0, *qec_,
+      ad_utility::DeduplicationMode::none());
 
   // Drain all ConstructTripleGenerator::BATCH_SIZE triples from batch
   // 0.
@@ -335,7 +338,7 @@ TEST_F(ConstructTripleGeneratorTest, cannotCancelDuringBatch) {
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
       templateTriples, {}, index_, handle, singleTableRange(std::move(table)),
-      0);
+      0, *qec_, ad_utility::DeduplicationMode::none());
 
   // First triple succeeds.
   ASSERT_TRUE(range.get().has_value());
@@ -423,7 +426,8 @@ TEST_F(ConstructTripleGeneratorTest, generateStringTriplesFormatsAsStrings) {
 
   auto range = ConstructTripleGenerator::generateStringTriples(
       templateTriples, {}, index_, makeHandle(),
-      singleTableRange(std::move(table)), 0);
+      singleTableRange(std::move(table)), 0, *qec_,
+      ad_utility::DeduplicationMode::none());
 
   auto triples = ::ranges::to_vector(range);
 
@@ -460,7 +464,7 @@ TEST_P(GenerateFormattedTriplesTest, formatsCorrectly) {
 
   auto range = ConstructTripleGenerator::generateFormattedTriples(
       templateTriples, {}, index_, makeHandle(),
-      singleTableRange(std::move(table)), 0, GetParam().mediaType);
+      singleTableRange(std::move(table)), 0, GetParam().mediaType, *qec_);
 
   EXPECT_THAT(collectFormatted(std::move(range)),
               ElementsAre(GetParam().expected));
@@ -493,7 +497,7 @@ TEST_F(ConstructTripleGeneratorTest,
   for (const auto& [mediaType, _] : ad_utility::detail::getAllMediaTypes()) {
     auto range = ConstructTripleGenerator::generateFormattedTriples(
         templateTriples, {}, index_, makeHandle(), singleTableRange(table), 0,
-        mediaType);
+        mediaType, *qec_);
 
     if (ad_utility::contains(supported, mediaType)) {
       EXPECT_NO_THROW(range.get());
