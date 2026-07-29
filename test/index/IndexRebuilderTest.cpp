@@ -13,7 +13,12 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <future>
+#include <optional>
+#include <string>
+#include <string_view>
 
+#include "../util/AsioTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -34,6 +39,7 @@
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
+#include "util/SourceLocation.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -692,28 +698,57 @@ TEST(IndexRebuilder, serverIntegration) {
 
   qlever::EngineConfig config;
   config.baseName_ = indexName;
-  Server server{4321, 1, "accessToken", config};
-  auto performRequest = [&threadPool, &server](auto& request) {
-    using ResT = ad_utility::httpUtils::ResponseT;
-    auto task =
-        server.template onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                              ResT>(request);
-    return net::co_spawn(threadPool, std::move(task), net::use_future);
+  constexpr std::string_view accessToken = "accessToken";
+  Server server{4321, 1, std::string{accessToken}, config};
+
+  // Create a GET request that triggers a rebuild of the index. The
+  // `additionalParameters` are appended to the URL as they are, and the access
+  // token is added unless `withAccessToken` is false.
+  auto makeRebuildRequest = [accessToken](
+                                std::string_view additionalParameters = "",
+                                bool withAccessToken = true) {
+    return ad_utility::testing::makeGetRequest(absl::StrCat(
+        "/?cmd=rebuild-index", additionalParameters,
+        withAccessToken ? absl::StrCat("&access-token=", accessToken) : ""));
+  };
+
+  // Create the coroutine that lets the `server` process the given `request`.
+  auto makeTask = [&server](auto& request) {
+    return server.template onlyForTestingProcess<
+        std::decay_t<decltype(request)>, ad_utility::httpUtils::ResponseT>(
+        request);
+  };
+
+  // Perform the given `request` on the `threadPool` and return a future for the
+  // response.
+  auto performRequest = [&threadPool, &makeTask](auto& request) {
+    return net::co_spawn(threadPool, makeTask(request), net::use_future);
+  };
+
+  // Perform the given `request` on the `threadPool`, expect it to fail, and
+  // check the message of the resulting exception against the `matcher`. NOTE:
+  // The exception must not be handed out of the coroutine (in particular not
+  // via `net::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
+  // `AsioTestHelpers.h` for the reason.
+  auto expectRequestFailsWith = [&threadPool, &makeTask](
+                                    auto& request, const auto& matcher,
+                                    ad_utility::source_location location =
+                                        AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
+                    threadPool, makeTask(request)),
+                ::testing::Optional(matcher));
   };
 
   // Without access token this operation is not allowed!
-  auto request0 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request0).get(),
-                               ::testing::HasSubstr("access token"));
+  auto request0 = makeRebuildRequest("&index-name=my-name", false);
+  expectRequestFailsWith(request0, ::testing::HasSubstr("access token"));
 
-  auto request1 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name&access-token="
-      "accessToken");
+  // The same request twice, the second one has to be rejected because a
+  // rebuild is already running.
+  auto request1 = makeRebuildRequest("&index-name=my-name");
   auto future1 = performRequest(request1);
-  auto request2 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name&access-token="
-      "accessToken");
+  auto request2 = makeRebuildRequest("&index-name=my-name");
   auto future2 = performRequest(request2);
 
   auto response1 = future1.get();
@@ -727,8 +762,7 @@ TEST(IndexRebuilder, serverIntegration) {
   // successfully.
   EXPECT_TRUE(ql::filesystem::exists("my-name.meta-data.json"));
 
-  auto request3 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
+  auto request3 = makeRebuildRequest();
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
   // By default QLever should assign a default name for the new index.
@@ -736,24 +770,18 @@ TEST(IndexRebuilder, serverIntegration) {
 
   // The index with the same name already exists, so we don't want to overwrite
   // it.
-  auto request4 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request4).get(),
-      ::testing::HasSubstr("already files with the same base name"));
+  auto request4 = makeRebuildRequest();
+  expectRequestFailsWith(
+      request4, ::testing::HasSubstr("already files with the same base name"));
 
   // The index has to reside within the same directory as the original index.
-  auto request5 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request5).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  auto request5 = makeRebuildRequest("&index-name=%2Fmy-name");
+  expectRequestFailsWith(
+      request5, ::testing::HasSubstr("not located in the same directory"));
 
-  auto request6 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request6).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  auto request6 = makeRebuildRequest("&index-name=..%2Fother");
+  expectRequestFailsWith(
+      request6, ::testing::HasSubstr("not located in the same directory"));
 
   threadPool.join();
 }
