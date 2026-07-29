@@ -15,7 +15,8 @@
 namespace {
 
 // _____________________________________________________________________________
-auto iterablesEqual(const auto& a, const auto& b) {
+template <typename A, typename B>
+auto iterablesEqual(const A& a, const B& b) {
   ASSERT_EQ(a.size(), b.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);

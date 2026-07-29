@@ -48,7 +48,8 @@ class SortedSequence {
   [[no_unique_address]] Projection proj_ = {};
 
   // Helper for the overloads of `smallPart`/`largePart`.
-  static auto partImpl(auto& self, bool wantSmall) {
+  template <typename Self>
+  static auto partImpl(Self& self, bool wantSmall) {
     auto mid = self.elements_.begin() + self.numItemsLargePart_;
     return wantSmall ? ql::ranges::subrange(mid, self.elements_.end())
                      : ql::ranges::subrange(self.elements_.begin(), mid);
@@ -191,7 +192,8 @@ class SortedSequence {
 
  private:
   // Helper for the overloads of `getSortedView`.
-  auto getSortedViewImpl(auto& self) const {
+  template <typename Self>
+  auto getSortedViewImpl(Self& self) const {
     AD_CONTRACT_CHECK(self.isConsolidated());
     auto mid = self.elements_.begin() + self.numItemsLargePart_;
     return ZipMergeUniqueView(ql::ranges::subrange(self.elements_.begin(), mid),

@@ -21,6 +21,7 @@
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
+#include "util/Timer.h"
 #include "util/UniqueCleanup.h"
 #include "util/json.h"
 
@@ -72,14 +73,6 @@ inline std::string_view toString(QueryStatus s) noexcept {
       return "timeout";
   }
   return "unknown";
-}
-
-// Unix-epoch milliseconds for a wall-clock instant; used to serialize
-// query-event timestamps.
-inline int64_t epochMillis(std::chrono::system_clock::time_point tp) noexcept {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-             tp.time_since_epoch())
-      .count();
 }
 
 // This class is similar to QueryId, but it's instances are all unique within

@@ -178,8 +178,11 @@ CompressedRelationReader::asyncParallelBlockGenerator(
           reader_{reader} {}
 
     void start() {
-      auto numThreads{
-          getRuntimeParameter<&RuntimeParameters::lazyIndexScanNumThreads_>()};
+      // The rebuild's dedicated reader may override the thread count (to reduce
+      // the rebuild's peak CPU); otherwise use the runtime parameter, which is
+      // what all query scans use.
+      auto numThreads{reader_->lazyScanNumThreadsOverride_.value_or(
+          getRuntimeParameter<&RuntimeParameters::lazyIndexScanNumThreads_>())};
       auto queueSize{
           getRuntimeParameter<&RuntimeParameters::lazyIndexScanQueueSize_>()};
       auto producer{std::bind(&Generator::readAndDecompressBlock, this)};
@@ -930,7 +933,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
       auto trunc = [divisor](size_t num) {
-        return std::max(std::min(num, 1ul), num / divisor);
+        return std::max<size_t>(std::min<size_t>(num, 1), num / divisor);
       };
       inserted += trunc(ins);
       deleted += trunc(del);

@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <string>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
@@ -16,14 +17,25 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/BufferedVector.h"
+#include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
-}
+
+// A storage type that only differs from a plain `std::vector` in that it has an
+// additional constructor that takes (and ignores) the arguments that the old
+// disk-based `BufferedVector` used to need (a threshold and a filename). It is
+// used to test that the `IdTable` works with a column storage type that is not
+// exactly `std::vector`, and that needs constructor arguments.
+template <typename T>
+struct VectorWithExtraConstructor : public std::vector<T> {
+  using std::vector<T>::vector;
+  VectorWithExtraConstructor(size_t, std::string) {}
+};
+}  // namespace
 
 // This unit tests is part of the documentation of the `IdTable` class. It
 // demonstrates the correct usage of the proxy references that
@@ -219,7 +231,7 @@ TEST(IdTable, rowIterators) {
 // template:
 // - The default `IdTable` (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
 // - An `IdTable` that stores plain `int`s in a plain `std::vector`.
-// - An `IdTable` that stores `Id`s in a `BufferedVector`.
+// - An `IdTable` that stores `Id`s in a `VectorWithExtraConstructor`.
 // Arguments:
 // `NumIdTables` - The number of distinct `IdTable` objects that are used inside
 //                 the test case
@@ -228,14 +240,14 @@ TEST(IdTable, rowIterators) {
 // function that converts a `size_t` to the `value_type` of the `IdTable`, and
 // the second one (if present) is a `std::vector` with `NumIdTables` entries
 // that represent the additional arguments that are needed to instantiate an
-// `IdTable` (e.g. an allocator or a `BufferedVector`).
+// `IdTable` (e.g. an allocator or a `VectorWithExtraConstructor`).
 template <size_t NumIdTables, typename T>
 void runTestForDifferentTypes(T testCase, std::string testCaseName) {
-  using Buffer = ad_utility::BufferedVector<Id>;
+  using Buffer = VectorWithExtraConstructor<Id>;
   using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
-  // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
-  // for the respective `IdTable` types.
+  // Prepare the vectors of `allocators` and distinct
+  // `VectorWithExtraConstructor`s needed for the respective `IdTable` types.
   std::vector<std::decay_t<decltype(makeAllocator())>> allocators;
   std::vector<std::vector<Buffer>> buffers;
   for (size_t i = 0; i < NumIdTables; ++i) {
@@ -256,11 +268,13 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // This helper function has to be used inside the `testCase` lambdas for the
 // `runTestForDifferentTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
-// (for example when the data is stored in a `BufferedVector`) the `clone`
-// member function needs additional arguments. Currently, the only additional
-// argument is the filename for the copy for `IdTables` that store their data in
-// a `BufferedVector`. For an example usage see the test cases below.
-auto clone(const auto& table, auto... args) {
+// (for example when the data is stored in a `VectorWithExtraConstructor`) the
+// `clone` member function needs additional arguments. Currently, the only
+// additional argument is the filename for the copy for `IdTables` that store
+// their data in a `VectorWithExtraConstructor`. For an example usage see the
+// test cases below.
+template <typename Table, typename... Args>
+auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {
     return table.clone();
   } else {
@@ -332,7 +346,15 @@ TEST(IdTable, at) {
     constexpr size_t NUM_COLS = 4;
 
     Table t1{NUM_COLS, std::move(additionalArgs.at(0))...};
+    // GCC 12 emits a spurious `-Wstringop-overflow` for the `__builtin_memmove`
+    // in libstdc++'s bitwise-relocate path of `std::vector` growth when the
+    // column storage is instantiated with `ValueId`: it derives a bogus
+    // `[2^63, 2^64)` size range for the (unreachable) copy and treats it as an
+    // overflow. This only surfaces here in the test, so we suppress it locally
+    // instead of in `IdTable::resize` itself.
+    DISABLE_STRINGOP_OVERFLOW_WARNINGS
     t1.resize(1);
+    GCC_REENABLE_WARNINGS
     t1.at(0, 0) = make(42);
     ASSERT_EQ(t1.at(0, 0), make(42));
     ASSERT_EQ(std::as_const(t1).at(0, 0), make(42));
@@ -836,28 +858,18 @@ TEST(IdTableTest, statusAfterMove) {
               (std::array{V(4), V(16), V(23)}));
   }
   {
-    using Buffer = ad_utility::BufferedVector<Id>;
+    // The same behavior also holds for an `IdTable` with a custom column
+    // storage type that needs constructor arguments.
+    using Buffer = VectorWithExtraConstructor<Id>;
     Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
     using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
     BufferedTable table{1, std::array{std::move(buffer)}};
     table.push_back(std::array{V(19)});
     auto t2 = std::move(table);
-    // The `table` has been moved from and is invalid, because we don't have a
-    // file anymore where we could write the contents. This means that all
-    // operations that would have to change the size of the IdTable throw until
-    // we have reinstated the column vector by explicitly assigning a newly
-    // constructed table. The exceptions that are thrown are from the
-    // `BufferedVector` class which throws when it is being accessed after being
-    // moved from. In other words, the `IdTable` class needs no special code to
-    // handle the case of the columns being stored in a `BufferedVector`.
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        table.push_back(std::array{V(4)}),
-        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        table.resize(42),
-        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
-    table = BufferedTable{
-        1, std::array{Buffer{0, "IdTableTest.statusAfterMove2.dat"}}};
+    // The moved-from `table` is valid and still has the same number of columns,
+    // but they are now empty.
+    ASSERT_EQ(1, table.numColumns());
+    ASSERT_EQ(0, table.numRows());
     ASSERT_NO_THROW(table.push_back(std::array{V(4)}));
     ASSERT_NO_THROW(table.resize(42));
     ASSERT_EQ(table.size(), 42u);
@@ -1251,6 +1263,54 @@ TEST(IdTable, moveOrCloneOnView) {
 }
 
 // ____________________________________________________________________________
+TEST(IdTable, fromColumns) {
+  std::vector<Id> col0{V(1), V(2), V(3)};
+  std::vector<Id> col1{V(4), V(5), V(6)};
+  auto allocator = makeAllocator();
+
+  IdTableView<0>::ViewSpans columns{col0, col1};
+  auto view = IdTableView<0>::fromColumns(columns, 2, 3, allocator);
+
+  ASSERT_EQ(view.numColumns(), 2u);
+  ASSERT_EQ(view.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(view(i, 0), col0[i]);
+    EXPECT_EQ(view(i, 1), col1[i]);
+    // The view must not copy the data: its elements are the very same
+    // objects as those in `col0`/`col1`.
+    EXPECT_EQ(&view(i, 0), &col0[i]);
+    EXPECT_EQ(&view(i, 1), &col1[i]);
+  }
+
+  // The `columns` and the passed in `numColumns` must be consistent.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Each of the `columns` must have exactly `numRows` elements.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 2, 2, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // A statically-sized `IdTableView<N>` requires `numColumns == N`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<2>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Constructing a static `IdTableView<2>` with the correct `numColumns`
+  // works and yields the same contents as the dynamic view above.
+  auto staticView = IdTableView<2>::fromColumns(columns, 2, 3, allocator);
+  ASSERT_EQ(staticView.numColumns(), 2u);
+  ASSERT_EQ(staticView.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(staticView(i, 0), col0[i]);
+    EXPECT_EQ(staticView(i, 1), col1[i]);
+    EXPECT_EQ(&staticView(i, 0), &col0[i]);
+    EXPECT_EQ(&staticView(i, 1), &col1[i]);
+  }
+}
+
+// ____________________________________________________________________________
 // Typed test fixture for `subView`, covering both owned `IdTable` and
 // `IdTableView<0>`.
 template <typename T>
@@ -1313,6 +1373,5 @@ TYPED_TEST(IdTableSubViewTest, subView) {
 // type and a different underlying storage.
 
 template class columnBasedIdTable::IdTable<char, 0>;
-static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
 template class columnBasedIdTable::IdTable<char, 0,
-                                           ad_utility::BufferedVector<char>>;
+                                           VectorWithExtraConstructor<char>>;

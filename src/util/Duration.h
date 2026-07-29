@@ -75,12 +75,12 @@ class DayTimeDuration {
   static constexpr int dayMultiplier = 24 * hourMultiplier;
 
   // The maxDays value of 1048575 corresponds to approximately 2870 years.
-  static constexpr unsigned long maxDays = 1048575;
+  static constexpr uint64_t maxDays = 1048575;
 
   // With the given specifications above, the total number of milliseconds we
   // have to store at the limit (days -> milliseconds) + (hours -> milliseconds)
   // + (minutes -> silliseconds) + (seconds -> milliseconds).
-  static constexpr unsigned long boundTotalMilliseconds =
+  static constexpr uint64_t boundTotalMilliseconds =
       (maxDays + 1) * dayMultiplier;
 
   // The number of bits reserved to store the total number of milliseconds.

@@ -85,6 +85,7 @@ TEST(UnicodeVocabulary, EmptyVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, Level::TOTAL);
 }
 
+// _____________________________________________________________________________
 TEST(UnicodeVocabulary, ZeroCopyDeserialization) {
   const std::vector<std::string> words{"alpha", "beta", "camma", "delta"};
   const auto vocab = createVocabulary(words);
@@ -99,4 +100,20 @@ TEST(UnicodeVocabulary, ZeroCopyDeserialization) {
   auto view = Vocab::fromZeroCopyDeserializer(readSerializer);
 
   assertThatRangesAreEqual(vocab, view);
+}
+
+// _____________________________________________________________________________
+TEST(UnicodeVocabulary, ScanAll) {
+  // `scanAll` must yield all words in order (it simply delegates to the
+  // underlying vocabulary).
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary(words);
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()),
+              ::testing::ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+TEST(UnicodeVocabulary, ScanAllEmptyVocabulary) {
+  auto vocab = createVocabulary({});
+  EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
 }

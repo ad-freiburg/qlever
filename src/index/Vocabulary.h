@@ -140,6 +140,15 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
+  // Delegate to `scanAll` of the underlying vocabulary.
+  auto scanAll() const { return vocabulary_.scanAll(); }
+
+  // Batch lookup: look up multiple indices at once and return their words.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  // Streaming variant of batch lookup.
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
+
   // Get an Id from the vocabulary for some full word (not prefix of a word).
   // Return a boolean value that signals if the word was found. If the word was
   // not found, the lower bound for the word is stored in idx, otherwise the
@@ -343,11 +352,12 @@ class Vocabulary {
           },
           variant);
     } else {
-      static_assert(VocabularySupportsZeroCopy<UnderlyingVocabulary>,
-                    "`writeAsZeroCopyBlob` requires a vocabulary implementation "
-                    "that supports zero-copy deserialization (in-memory, or a "
-                    "compressed/unicode vocabulary wrapping such a vocabulary) "
-                    "or a polymorphic vocabulary");
+      static_assert(
+          VocabularySupportsZeroCopy<UnderlyingVocabulary>,
+          "`writeAsZeroCopyBlob` requires a vocabulary implementation "
+          "that supports zero-copy deserialization (in-memory, or a "
+          "compressed/unicode vocabulary wrapping such a vocabulary) "
+          "or a polymorphic vocabulary");
       serializer << vocabulary_.getUnderlyingVocabulary();
     }
   }

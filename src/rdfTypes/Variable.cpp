@@ -4,7 +4,11 @@
 
 #include "rdfTypes/Variable.h"
 
+#ifndef QLEVER_NO_UNICODE
 #include <unicode/uchar.h>
+#endif
+
+#include <cctype>
 
 #include "global/Constants.h"
 #include "parser/ParserAndVisitorBase.h"
@@ -62,6 +66,7 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
 }
 
 namespace {
+#ifndef QLEVER_NO_UNICODE
 // Returns true for a subset of characters that are valid in variable names.
 // This roughly corresponds to `PN_CHARS_BASE` from the SPARQL 1.1 grammar with
 // the characters 0-9 also being allowed. Note that this deliberately does not
@@ -79,28 +84,48 @@ constexpr bool codePointSuitableForVariableName(UChar32 cp) {
     return cp >= arr[0] && cp <= arr[1];
   });
 }
+#endif
 }  // namespace
 
 // _____________________________________________________________________________
+template <bool useICU>
 void Variable::appendEscapedWord(std::string_view word, std::string& target) {
-  const char* ptr = word.data();
-  const char* end = word.data() + word.size();
-
-  while (ptr < end) {
-    // Convert all other characters based on their unicode codepoint.
-    UChar32 codePoint;
-    int64_t i = 0;
-    U8_NEXT(reinterpret_cast<const uint8_t*>(ptr), i,
-            static_cast<int64_t>(word.size()), codePoint);
-    AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8");
-    if (codePointSuitableForVariableName(codePoint)) {
-      target.append(ptr, i);
-    } else {
-      absl::StrAppend(&target, "_", codePoint, "_");
+  if constexpr (!useICU) {
+    // ASCII version of the escaping below: keep alphanumeric ASCII bytes,
+    // escape every other byte via its numeric value.
+    for (char c : word) {
+      if (std::isalnum(static_cast<unsigned char>(c))) {
+        target.push_back(c);
+      } else {
+        absl::StrAppend(&target, "_", static_cast<unsigned char>(c), "_");
+      }
     }
-    ptr += i;
+  } else {
+    QLEVER_UNICODE_ONLY("Variable::appendEscapedWord", {
+      const char* ptr = word.data();
+      const char* end = word.data() + word.size();
+
+      while (ptr < end) {
+        // Convert all other characters based on their unicode codepoint.
+        UChar32 codePoint;
+        int64_t i = 0;
+        U8_NEXT(reinterpret_cast<const uint8_t*>(ptr), i,
+                static_cast<int64_t>(word.size()), codePoint);
+        AD_CONTRACT_CHECK(codePoint != U_SENTINEL, "Invalid UTF-8");
+        if (codePointSuitableForVariableName(codePoint)) {
+          target.append(ptr, i);
+        } else {
+          absl::StrAppend(&target, "_", codePoint, "_");
+        }
+        ptr += i;
+      }
+    });
   }
 }
+// Explicit instantiations for both configurations.
+template void Variable::appendEscapedWord<true>(std::string_view, std::string&);
+template void Variable::appendEscapedWord<false>(std::string_view,
+                                                 std::string&);
 
 namespace {
 struct IsVariableVisitor {

@@ -7,7 +7,9 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
+#include <re2/re2.h>
 
 #include <memory>
 #include <optional>
@@ -15,6 +17,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
@@ -36,8 +39,6 @@
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
-#include "util/BufferedVector.h"
-#include "util/CompactStringVector.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -192,6 +193,11 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // Compiled regexes for IRIs that should be treated as blank nodes during
+  // index building (only relevant during index building). Set (and compiled
+  // from their string representation) via `setBlankNodeIriRegexes`.
+  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes_;
+
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
@@ -242,6 +248,13 @@ class IndexImpl {
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
+  // Configure the delta triples and the graph name manager to persist their
+  // state to the files derived from the current `onDiskBase_`. If
+  // `readFromDisk` is `true`, the already persisted state is additionally read
+  // back from disk (used when loading an existing index); if `false`, only the
+  // filenames are set (used when re-anchoring an index that was moved on disk).
+  void setFilenamesForPersistentUpdates(bool readFromDisk);
+
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
@@ -272,6 +285,16 @@ class IndexImpl {
     vocab_.writeAsZeroCopyBlob(serializer);
   }
 
+  // Get the configuration JSON (index metadata) of this `IndexImpl`.
+  const nlohmann::json& configurationJson() const { return configurationJson_; }
+
+  // Apply the given configuration JSON (index metadata) to this `IndexImpl`,
+  // setting up the vocabulary type, case comparator, locale, encoded-IRI
+  // prefixes, triple counts, etc. This is the part of `readConfiguration` that
+  // does not itself read from disk, factored out so that a configuration
+  // obtained from elsewhere (e.g. a serialized blob) can be applied directly.
+  void applyConfiguration(const nlohmann::json& configuration);
+
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
   };
@@ -292,6 +315,21 @@ class IndexImpl {
   // the `Id`; see `EncodedIriManager` for details.
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
+
+  // Set the regexes for IRIs that should be treated as blank nodes during index
+  // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
+  // of them (via `RE2::FullMatch`) is stored as a blank node instead of in the
+  // vocabulary. This is useful for IRIs that only act as internal connector
+  // nodes (e.g. statement nodes), to save vocabulary memory. The regexes are
+  // compiled here and stored in their compiled form. Each regex has to match a
+  // full IRI and must therefore start with `<`; a regex that violates this or
+  // is not a valid regular expression is reported with a user-readable
+  // exception. See `TripleComponentWithIndex::isBlankNode`.
+  void setBlankNodeIriRegexes(
+      const std::vector<std::string>& blankNodeIriRegexes);
+  const std::vector<std::unique_ptr<re2::RE2>>& getBlankNodeIriRegexes() const {
+    return blankNodeIriRegexes_;
+  }
 
   // Set the vocabulary type; see `ad_utility::VocabularyType` for details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
@@ -471,6 +509,24 @@ class IndexImpl {
 
   void setOnDiskBase(const std::string& onDiskBase);
 
+  // Return the names of all files that belong to the index with the given base
+  // name and currently exist on disk: the permutations and their metadata, the
+  // vocabulary, the patterns, the configuration, the settings, the text index,
+  // and the persisted updates. Optional components that do not exist for the
+  // given index (e.g. the text index or the persisted updates) are omitted.
+  //
+  // The following files are deliberately NOT included, even though they may
+  // share the base name: the files of the materialized views (enumerated
+  // separately by `MaterializedViewsManager::viewFilesOnDisk`, which lives on
+  // the level of the `Qlever` class), and the runtime and build logs (which are
+  // handled separately because they are either appended across restarts or
+  // travel with the index explicitly). A unit test (`allIndexFilesAreListed`)
+  // guards that this list stays exhaustive with respect to the actual index
+  // files. This is used to move an index to a different directory after a
+  // rebuild.
+  static std::vector<ql::filesystem::path> allIndexFiles(
+      std::string_view onDiskBase);
+
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
@@ -482,6 +538,17 @@ class IndexImpl {
   const std::string& getOnDiskBase() const { return onDiskBase_; }
   const std::string& getIndexId() const { return indexId_; }
   const std::string& getGitShortHash() const { return gitShortHash_; }
+
+  // Return the datetime when the build of this index started, in the format
+  // `2026-07-12T14:03:52Z` (UTC). For indexes that were built before this
+  // date was recorded in the configuration, the modification time of the
+  // configuration file is used instead (which approximates the END of the
+  // build).
+  std::string dateOfIndexBuild() const;
+
+  // Format the given time as a UTC timestamp string in the
+  // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
+  static std::string formatIndexBuildTime(absl::Time time);
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -715,6 +782,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, recomputeStatistics);
   FRIEND_TEST(IndexImpl, writePatternsToFile);
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
+  FRIEND_TEST(IndexImpl, dateOfIndexBuild);
 
   bool isLiteral(std::string_view object) const;
 
@@ -834,8 +902,9 @@ class IndexImpl {
   // of only two permutations (where we have to build the Pxx permutations). In
   // all other cases the Sxx permutations are built first because we need the
   // patterns.
+  template <typename... Args>
   std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
-      auto&&... args) {
+      Args&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     if (loadAllPermutations()) {

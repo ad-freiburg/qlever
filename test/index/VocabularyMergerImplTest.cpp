@@ -11,7 +11,6 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <string>
 
 #include "index/VocabularyMergerImpl.h"

@@ -42,7 +42,9 @@ auto toBuffer(std::string_view view) {
 // server logic. Note that the client logic and the server logic are run
 // separately, meaning that they can't be cancelled and both have to run to
 // completion on their own.
-net::awaitable<void> runTest(auto executor, net::awaitable<void> serverLogic,
+template <typename Executor>
+net::awaitable<void> runTest(Executor executor,
+                             net::awaitable<void> serverLogic,
                              net::awaitable<void> clientLogic) {
   auto fut = std::async(std::launch::async, [&]() {
     net::co_spawn(executor, std::move(clientLogic), net::use_future).get();
@@ -85,6 +87,11 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 // _____________________________________________________________________________
 
 struct WebSocketTestContainer {
+  // Note: this strand has to be created directly from the
+  // `io_context::executor_type` because creating it from `any_io_executor`
+  // causes a race in `runTest`. There `strand_` is wrapped into
+  // `any_io_executor` and copies are destroyed concurrently across
+  // threads.
   net::strand<net::io_context::executor_type> strand_;
   std::unique_ptr<QueryHub> queryHub_;
   QueryRegistry registry_;
@@ -109,8 +116,8 @@ net::awaitable<WebSocketTestContainer> createTestContainer(
     net::io_context& ioContext) {
   auto strand = net::make_strand(ioContext);
   WebSocketTestContainer container{
-      strand, std::make_unique<QueryHub>(ioContext), QueryRegistry{},
-      tcp::socket{strand}, tcp::socket{strand}};
+      strand, std::make_unique<QueryHub>(ioContext.get_executor()),
+      QueryRegistry{}, tcp::socket{strand}, tcp::socket{strand}};
   co_await connect(container.server_, container.client_);
   co_return std::move(container);
 }
