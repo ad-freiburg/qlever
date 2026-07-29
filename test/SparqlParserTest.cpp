@@ -1669,7 +1669,7 @@ TEST(ParserTest, unionGraphAsDefaultGraphRuntimeParameter) {
   // dataset clause implicitly use only `ql:default-graph` as their default
   // graph. Note that the set of named graphs stays unconstrained (`nullopt`),
   // such that `GRAPH` clauses keep working; this is deliberately different
-  // from an explicit `FROM <ql:default-graph>`, which leaves no named graphs
+  // from an explicit `FROM ql:default-graph`, which leaves no named graphs
   // (see the last assertion of this test).
   parsedQuery::DatasetClauses::Graphs allNamedGraphs = std::nullopt;
   EXPECT_THAT(parseQuery(query),
@@ -1715,7 +1715,7 @@ TEST(ParserTest, unionGraphAsDefaultGraphRuntimeParameter) {
                                            m::datasetClausesMatcher())));
 
   // In contrast to the implicit default graph above, an *explicit* `FROM
-  // <ql:default-graph>` leaves the set of named graphs empty, as required by
+  // ql:default-graph` leaves the set of named graphs empty, as required by
   // section 13.2 of the SPARQL 1.1 standard.
   EXPECT_THAT(parseQuery(absl::StrCat("SELECT * FROM ", DEFAULT_GRAPH_IRI,
                                       " WHERE { ?s ?p ?o }")),

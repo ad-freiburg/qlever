@@ -482,7 +482,7 @@ SparqlQleverVisitor::setAndGetDatasetClausesForQuery(
   // `ql:default-graph` as its default graph, instead of the union of all
   // graphs. Note that all named graphs stay available inside `GRAPH` clauses,
   // so this is deliberately not the same as an explicit `FROM
-  // <ql:default-graph>` (for details see
+  // ql:default-graph` (for details see
   // `DatasetClauses::fromImplicitDefaultGraph`).
   if (clauses.empty() && !datasetsAreFixed_ &&
       !getRuntimeParameter<&RuntimeParameters::unionGraphAsDefaultGraph_>()) {

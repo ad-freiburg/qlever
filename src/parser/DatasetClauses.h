@@ -28,9 +28,10 @@ struct DatasetClauses {
     FromOrUsing,
     // The default graph is the single graph of a `WITH` clause.
     With,
-    // The default graph is the implicit unnamed default graph that is used for
-    // queries without a dataset clause when the `union-graph-as-default-graph`
-    // runtime parameter is disabled.
+    // The default graph is the implicit unnamed default graph (internally
+    // spelled as `ql:default-graph`) that is used for queries without a
+    // dataset clause when the `union-graph-as-default-graph` runtime parameter
+    // is disabled.
     Implicit
   };
 
@@ -58,7 +59,7 @@ struct DatasetClauses {
   // active default graph then is the unnamed default graph (spelled
   // `ql:default-graph` inside QLever), while all named graphs stay available
   // inside `GRAPH` clauses. Note that this is deliberately different from an
-  // explicit `FROM <ql:default-graph>`, which per section 13.2 of the SPARQL
+  // explicit `FROM ql:default-graph`, which per section 13.2 of the SPARQL
   // 1.1 standard would leave the set of named graphs empty.
   static DatasetClauses fromImplicitDefaultGraph();
 

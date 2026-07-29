@@ -11,6 +11,7 @@
 
 #include "global/Constants.h"
 #include "parser/DatasetClauses.h"
+#include "util/TripleComponentTestHelpers.h"
 
 namespace {
 using parsedQuery::DatasetClauses;
@@ -18,9 +19,7 @@ using Graphs = DatasetClauses::Graphs;
 using Iri = ad_utility::triple_component::Iri;
 
 // Shorthands for the graph IRIs that are used in the tests below.
-Iri iri(std::string_view iriWithBrackets) {
-  return Iri::fromIriref(iriWithBrackets);
-}
+auto iri = ad_utility::testing::iri;
 Iri defaultGraph() { return iri(DEFAULT_GRAPH_IRI); }
 
 // Return the `Graphs` that consist exactly of the given `iris`.
@@ -72,7 +71,7 @@ TEST(DatasetClauses, fromImplicitDefaultGraph) {
   auto clauses = DatasetClauses::fromImplicitDefaultGraph();
 
   // The default graph is restricted to `ql:default-graph`, but in contrast to
-  // an explicit `FROM <ql:default-graph>` all named graphs stay available.
+  // an explicit `FROM ql:default-graph` all named graphs stay available.
   EXPECT_EQ(clauses.activeDefaultGraphs(), graphs({defaultGraph()}));
   EXPECT_EQ(clauses.namedGraphs(), std::nullopt);
   EXPECT_TRUE(clauses.isCompatibleNamedGraph(iri("<foo>")));
@@ -82,7 +81,7 @@ TEST(DatasetClauses, fromImplicitDefaultGraph) {
   EXPECT_FALSE(clauses.defaultGraphsAreExplicitlyRestricted());
 
   // The implicit default graph is not the same as an explicit
-  // `FROM <ql:default-graph>`, even though both have the same active default
+  // `FROM ql:default-graph`, even though both have the same active default
   // graphs.
   auto explicitDefaultGraph =
       DatasetClauses::fromClauses({DatasetClause{defaultGraph(), false}});
@@ -96,15 +95,15 @@ TEST(DatasetClauses, fromImplicitDefaultGraph) {
 TEST(DatasetClauses, fromImplicitDefaultGraphInsideGraphClause) {
   auto clauses = DatasetClauses::fromImplicitDefaultGraph();
 
-  // Inside `GRAPH <foo> {...}` the single active default graph is `<foo>`,
-  // exactly as for a completely unconstrained dataset.
+  // Inside `GRAPH <foo> {...}` the single active default graph is `<foo>` if
+  // the outer query has no `FROM NAMED` and an implicit default graph.
   auto insideGraphFoo = clauses.getDatasetClauseForGraphClause(iri("<foo>"));
   EXPECT_EQ(insideGraphFoo.activeDefaultGraphs(), graphs({iri("<foo>")}));
   EXPECT_EQ(DatasetClauses{}.getDatasetClauseForGraphClause(iri("<foo>")),
             insideGraphFoo);
 
-  // Inside `GRAPH ?var {...}` all named graphs are active, again exactly as for
-  // a completely unconstrained dataset.
+  // Inside `GRAPH ?var {...}` all named graphs are active (in the same scenario
+  // as described above).
   auto insideGraphVar = clauses.getDatasetClauseForVariableGraphClause();
   EXPECT_EQ(insideGraphVar.activeDefaultGraphs(), std::nullopt);
   EXPECT_EQ(insideGraphVar.namedGraphs(), std::nullopt);

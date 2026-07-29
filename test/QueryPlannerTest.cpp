@@ -2565,7 +2565,7 @@ TEST(QueryPlanner, unionGraphAsDefaultGraphRuntimeParameter) {
 
   // With `union-graph-as-default-graph` set to its default value `true`, a
   // query without a dataset clause scans all graphs.
-  h::expect("SELECT * WHERE { ?x ?y ?z}", scan("?x", "?y", "?z"));
+  h::expect("SELECT * WHERE { ?x ?y ?z }", scan("?x", "?y", "?z"));
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::unionGraphAsDefaultGraph_>(
@@ -2573,29 +2573,29 @@ TEST(QueryPlanner, unionGraphAsDefaultGraphRuntimeParameter) {
 
   // With the parameter set to `false`, only the unnamed default graph is
   // scanned, both in the top-level query and in a subquery.
-  h::expect("SELECT * WHERE { ?x ?y ?z}",
+  h::expect("SELECT * WHERE { ?x ?y ?z }",
             scan("?x", "?y", "?z", {}, Graphs{defaultGraph}));
-  h::expect("SELECT * { SELECT * {?x ?y ?z}}",
+  h::expect("SELECT * { SELECT * {?x ?y ?z }}",
             scan("?x", "?y", "?z", {}, Graphs{defaultGraph}));
 
   // `GRAPH` clauses are unaffected: all named graphs stay available, exactly as
   // if the parameter was `true`. This is the crucial difference to an explicit
-  // `FROM <ql:default-graph>`, which would leave no named graphs at all (see
+  // `FROM ql:default-graph`, which would leave no named graphs at all (see
   // the last two assertions of this test).
-  h::expect("SELECT * WHERE { GRAPH <z> {?x ?y ?z}}",
+  h::expect("SELECT * WHERE { GRAPH <z> {?x ?y ?z }}",
             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
-  h::expect("SELECT * WHERE { GRAPH ?g {<a> <b> <c>}}",
+  h::expect("SELECT * WHERE { GRAPH ?g { <a> <b> <c> }}",
             scan("<a>", "<b>", "<c>", {}, NamedTag{}, varG, graphCol));
 
   // An explicit dataset clause still takes precedence.
-  h::expect("SELECT * FROM <x> WHERE { ?x ?y ?z}",
+  h::expect("SELECT * FROM <x> WHERE { ?x ?y ?z }",
             scan("?x", "?y", "?z", {}, Graphs{"<x>"}));
-  h::expect("SELECT * FROM <x> FROM NAMED <z> WHERE { GRAPH <z> {?x ?y ?z}}",
+  h::expect("SELECT * FROM <x> FROM NAMED <z> WHERE { GRAPH <z> { ?x ?y ?z }}",
             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
-  h::expect(absl::StrCat("SELECT * FROM ", defaultGraph, " WHERE { ?x ?y ?z}"),
+  h::expect(absl::StrCat("SELECT * FROM ", defaultGraph, " WHERE { ?x ?y ?z }"),
             scan("?x", "?y", "?z", {}, Graphs{defaultGraph}));
   h::expect(absl::StrCat("SELECT * FROM ", defaultGraph,
-                         " WHERE { GRAPH ?g {<a> <b> <c>}}"),
+                         " WHERE { GRAPH ?g { <a> <b> <c> }}"),
             scan("<a>", "<b>", "<c>", {}, Graphs{}, varG, graphCol));
 }
 
