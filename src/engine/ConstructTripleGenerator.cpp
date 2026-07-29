@@ -89,7 +89,7 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                ql::views::join;
       };
 
-  auto pipeline = allView(std::move(rowIndices)) |
+  auto pipeline = std::move(rowIndices) |
                   ql::views::transform(std::move(processTable)) |
                   ql::views::join;
   return InputRangeTypeErased(std::move(pipeline));
@@ -109,7 +109,7 @@ ConstructTripleGenerator::generateFormattedTriples(
   auto transformer = [mediaType](const EvaluatedTriple& triple) {
     return formatTriple(triple, mediaType);
   };
-  return InputRangeTypeErased(allView(std::move(evaluatedTriples)) |
+  return InputRangeTypeErased(std::move(evaluatedTriples) |
                               ql::views::transform(transformer));
 }
 
@@ -126,7 +126,7 @@ ConstructTripleGenerator::generateStringTriples(
   auto transformer = [](const EvaluatedTriple& triple) {
     return createStringTriple(triple);
   };
-  return InputRangeTypeErased(allView(std::move(evaluatedTriples)) |
+  return InputRangeTypeErased(std::move(evaluatedTriples) |
                               ql::views::transform(transformer));
 }
 

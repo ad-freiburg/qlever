@@ -107,6 +107,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.0.0")
+        # GCC 11's libstdc++ doesn't yet provide `std::ranges::owning_view`, on
+        # which we now rely, so we fall back to `range-v3` for that compiler.
+        MESSAGE(STATUS "range-v3 is used for GCC 11 because its libstdc++ doesn't yet provide `std::ranges::owning_view`")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" )
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
@@ -120,6 +126,25 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL
     endif ()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
+endif ()
+
+# Additionally fall back to `range-v3` whenever the C++ standard library is
+# libstdc++ older than version 12, independent of the compiler. Such versions
+# (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
+# on which we now rely. Detecting the standard library directly (rather than the
+# compiler version) also covers Clang paired with an old libstdc++, e.g. in the
+# `using enum` rewriter container.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("
+#include <cstddef>
+#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE < 12
+#error libstdc++ older than 12 does not provide std::ranges::owning_view
+#endif
+int main() { return 0; }
+" QLEVER_STDLIB_PROVIDES_OWNING_VIEW)
+if (NOT QLEVER_STDLIB_PROVIDES_OWNING_VIEW)
+    MESSAGE(STATUS "range-v3 is used because the C++ standard library is libstdc++ older than version 12, which doesn't provide `std::ranges::owning_view`")
+    set(RANGE_V3_REQUIRED_BY_COMPILER ON)
 endif ()
 
 ## Build targets for address sanitizer
@@ -220,7 +245,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 42340ef354f7b4e4660268b788e37008d9cc85aa # branch fork-for-qlever
+        GIT_TAG 0e2a41b61694e823df1b7d77174b139253c7ac39 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -246,7 +271,14 @@ find_package(Threads REQUIRED)
 #################################
 # ICU (for proper collation
 ################################
-find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
+option(QLEVER_NO_UNICODE "Build QLever without a dependency on ICU (International Components for Unicode). When ON, `find_package(ICU)` is skipped, the ICU libraries are not linked, and the `QLEVER_NO_UNICODE` macro is defined. In this mode all string comparisons, sorting, case conversion and normalization operate on plain ASCII bytes instead of proper Unicode collation. This is intended for minimal or embedded builds where ICU is unavailable; do not enable it if you need correct Unicode handling." OFF)
+if (QLEVER_NO_UNICODE)
+  add_compile_definitions(QLEVER_NO_UNICODE)
+endif()
+
+if (NOT QLEVER_NO_UNICODE)
+    find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
+endif()
 
 ###################################
 # JEMALLOC
@@ -351,9 +383,12 @@ function(qlever_target_link_libraries target)
             absl::base absl::compare absl::flat_hash_map absl::flat_hash_set
             absl::strings absl::str_format absl::status absl::statusor absl::time
             absl::hash absl::synchronization
-            re2 ICU::uc ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock
+            re2 OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock
             fsst nlohmann_json::nlohmann_json Boost::container
             ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+    if (NOT QLEVER_NO_UNICODE)
+        target_link_libraries(${target} PUBLIC ICU::uc ICU::i18n)
+    endif()
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -640,17 +675,20 @@ include_directories(src)
 # `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
 # never updated. This is useful during development to avoid a relinking of the binaries for
 # every compilation.
+# The first output which is never created is necessary s.t. the command is never cached and
+# always rerun. It is omitted when `DONT_UPDATE_COMPILATION_INFO` is set, so the command is
+# cached and the compilation info is not regenerated on every build.
+set(COMPILATION_INFO_EXTRA_OUTPUT "")
 if (NOT DONT_UPDATE_COMPILATION_INFO)
-    # The first output which is never created is necessary s.t. the command is never cached and
-    # always rerun.
-    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
-            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
-else ()
-    add_custom_command(OUTPUT
-            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+    set(COMPILATION_INFO_EXTRA_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp")
 endif ()
+add_custom_command(OUTPUT ${COMPILATION_INFO_EXTRA_OUTPUT}
+        "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+        COMMAND cmake
+        -DCXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}
+        -DCXX_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION}
+        -DCXX_STANDARD=${CMAKE_CXX_STANDARD}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)
