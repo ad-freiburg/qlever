@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <boost/asio/deferred.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <future>
@@ -22,6 +23,7 @@
 #include <variant>
 #include <vector>
 
+#include "../util/AsioTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "parser/AsyncBlockSource.h"
 #include "util/Exception.h"
@@ -33,14 +35,43 @@ namespace {
 namespace qp = qlever::parser;
 using namespace ad_utility::memory_literals;
 
-// Synchronously drive an `AsyncBlockSource` until EOF and return all blocks
-// in order. Throws if the source signals an error.
-std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
-  std::vector<qp::ByteBlock> result;
-  while (auto opt = source.asyncGetNextBlock(boost::asio::use_future).get()) {
-    result.push_back(std::move(*opt));
+// The outcome of `drainBlocks` below: all the blocks that were read (in order)
+// and, if the source has signaled an error, the message of the corresponding
+// exception.
+struct DrainOutcome {
+  std::vector<qp::ByteBlock> blocks_;
+  std::optional<std::string> errorMessage_;
+};
+
+// Synchronously drive an `AsyncBlockSource` until EOF or until it signals an
+// error, and return the corresponding `DrainOutcome`. NOTE: The exception must
+// not be handed out of the thread that runs the source (in particular not via
+// `boost::asio::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
+// `AsioTestHelpers.h` for the reason.
+DrainOutcome drainBlocks(qp::AsyncBlockSource& source) {
+  DrainOutcome outcome;
+  while (true) {
+    auto blockOrError = ad_utility::testing::runAsyncOperationAndGetOutcome<
+        std::optional<qp::ByteBlock>>(
+        source.asyncGetNextBlock(boost::asio::deferred));
+    if (blockOrError.failed()) {
+      outcome.errorMessage_ = std::move(blockOrError.errorMessage_);
+      return outcome;
+    }
+    if (!blockOrError.result_.has_value()) {
+      return outcome;
+    }
+    outcome.blocks_.push_back(std::move(blockOrError.result_).value());
   }
-  return result;
+}
+
+// Synchronously drive an `AsyncBlockSource` until EOF and return all blocks in
+// order. Fail the test if the source signals an error.
+std::vector<qp::ByteBlock> drainAllBlocks(qp::AsyncBlockSource& source) {
+  auto outcome = drainBlocks(source);
+  EXPECT_FALSE(outcome.errorMessage_.has_value())
+      << outcome.errorMessage_.value_or("");
+  return std::move(outcome.blocks_);
 }
 
 // Scan `sv` from the back and return the position right after the last digit
@@ -152,8 +183,9 @@ TEST(AsyncStatementBoundaryBlockSource, CutsAtBoundary) {
         std::make_unique<qp::FileBlockSource>(pool.get_executor(), blocksize,
                                               filename),
         findXToZ, "a letter from x to z");
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        drainAllBlocks(buf), ::testing::ContainsRegex("No statement boundary"));
+    EXPECT_THAT(
+        drainBlocks(buf).errorMessage_,
+        ::testing::Optional(::testing::ContainsRegex("No statement boundary")));
   }
   {
     // The same example but with a larger blocksize, s.t. the complete input
@@ -228,8 +260,9 @@ TEST(BlockingBlockSource, ForwardsExceptionFromGetNextBlockImpl) {
   ScriptedBlockSource buf(
       pool.get_executor(), 4_B,
       {ScriptedBlockSource::Step{std::string{"boom from getNextBlockImpl"}}});
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      drainAllBlocks(buf), ::testing::HasSubstr("boom from getNextBlockImpl"));
+  EXPECT_THAT(
+      drainBlocks(buf).errorMessage_,
+      ::testing::Optional(::testing::HasSubstr("boom from getNextBlockImpl")));
 }
 
 // ________________________________________________________
@@ -245,8 +278,9 @@ TEST(AsyncStatementBoundaryBlockSource,
           ScriptedBlockSource::Step{std::string{"boom from initial fetch"}}});
   qp::AsyncStatementBoundaryBlockSource buf(
       pool.get_executor(), std::move(inner), findXToZ, "a letter from x to z");
-  AD_EXPECT_THROW_WITH_MESSAGE(drainAllBlocks(buf),
-                               ::testing::HasSubstr("boom from initial fetch"));
+  EXPECT_THAT(
+      drainBlocks(buf).errorMessage_,
+      ::testing::Optional(::testing::HasSubstr("boom from initial fetch")));
 }
 
 // ________________________________________________________
@@ -265,8 +299,8 @@ TEST(AsyncStatementBoundaryBlockSource, ForwardsExceptionFromPeek) {
           ScriptedBlockSource::Step{std::string{"boom from peek"}}});
   qp::AsyncStatementBoundaryBlockSource buf(
       pool.get_executor(), std::move(inner), findNever, "never found");
-  AD_EXPECT_THROW_WITH_MESSAGE(drainAllBlocks(buf),
-                               ::testing::HasSubstr("boom from peek"));
+  EXPECT_THAT(drainBlocks(buf).errorMessage_,
+              ::testing::Optional(::testing::HasSubstr("boom from peek")));
 }
 
 // ________________________________________________________
@@ -287,6 +321,7 @@ TEST(AsyncStatementBoundaryBlockSource,
   };
   qp::AsyncStatementBoundaryBlockSource buf(
       pool.get_executor(), std::move(inner), findThrows, "throwing finder");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      drainAllBlocks(buf), ::testing::HasSubstr("boom from findEndPosition"));
+  EXPECT_THAT(
+      drainBlocks(buf).errorMessage_,
+      ::testing::Optional(::testing::HasSubstr("boom from findEndPosition")));
 }
