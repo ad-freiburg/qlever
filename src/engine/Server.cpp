@@ -82,6 +82,9 @@ Server::Server(
         return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
       },
       [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
+      [this]() -> int64_t {
+        return static_cast<int64_t>(rebuildInProgress_.load());
+      },
       config.memoryLimit_);
   metrics_->registerCallbacks();
 
@@ -169,11 +172,11 @@ void Server::run() {
     }
   };
 
-  auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
+  auto webSocketSessionSupplier = [this](net::any_io_executor& ioExecutor) {
     // This must only be called once
     AD_CONTRACT_CHECK(queryHub_.expired());
     auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(ioContext);
+        std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
     // Make sure the `queryHub` does not outlive the ioContext it has a
     // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
     // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
@@ -634,6 +637,28 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
+    requireValidAccessToken("delete-materialized-view");
+    logCommand(cmd, "delete materialized view");
+
+    // Extract materialized view name parameter.
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value(),
+                      "Deleting a materialized view requires a name to be set "
+                      "via the 'view-name' parameter");
+
+    indexAndViews->materializedViewsManager_.deleteView(name.value());
+
+    // Construct simple response JSON.
+    nlohmann::json json{{"materialized-view-deleted", name.value()}};
+    response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
   }
 
   // Ping with or without message.
@@ -718,10 +743,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
+    // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+    // structured binding is not destroyed when the coroutine frame is
+    // destroyed while suspended (gcc.gnu.org bug 124584).
+    auto preparedOp = prepareOperation(
+        indexAndViews, operationName, operationString, std::move(messageSender),
+        parameters, timeLimit.value(), accessTokenOk, clientIp);
+    auto& [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] = preparedOp;
     auto& qec = *qecPtr;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
@@ -900,6 +928,8 @@ nlohmann::json Server::composeStatsJson(const Index& index) {
   result["git-hash-index"] = index.getGitShortHash();
   result["git-hash-server"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
+  result["version-server"] =
+      *qlever::version::projectVersionWithoutLinking.wlock();
   result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index.numDistinctPredicates().internal;
@@ -1065,26 +1095,26 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     const std::vector<ad_utility::MediaType>& candidates,
     const ParsedQuery& parsedQuery) {
   if (!candidates.empty()) {
-    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
-                                                  MediaType mediaType) {
-      if (parsedQuery.hasAskClause()) {
-        std::array supportedMediaTypes{
-            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      if (parsedQuery.hasSelectClause()) {
-        std::array supportedMediaTypes{MediaType::octetStream,
-                                       MediaType::csv,
-                                       MediaType::tsv,
-                                       MediaType::qleverJson,
-                                       MediaType::sparqlXml,
-                                       MediaType::sparqlJson,
-                                       MediaType::binaryQleverExport};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
-                                     MediaType::qleverJson, MediaType::turtle};
-      return ad_utility::contains(supportedMediaTypes, mediaType);
+    using enum ad_utility::MediaType;
+    static constexpr auto askTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForAskQueries;
+    static constexpr auto selectTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForSelectQueries;
+    static constexpr auto constructTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForConstructQueries;
+
+    ql::span<const MediaType> supported;
+    if (parsedQuery.hasAskClause()) {
+      supported = askTypes;
+    } else if (parsedQuery.hasSelectClause()) {
+      supported = selectTypes;
+    } else {
+      AD_CORRECTNESS_CHECK(parsedQuery.hasConstructClause());
+      supported = constructTypes;
+    }
+
+    auto it = ql::ranges::find_if(candidates, [supported](MediaType mediaType) {
+      return ad_utility::contains(supported, mediaType);
     });
     if (it != candidates.end()) {
       return *it;
@@ -1586,7 +1616,7 @@ Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
   auto coroutine = computeInNewThread(
       queryThreadPool_,
       [&index, &handle, &indexBaseName] {
-        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
+        auto logFileName = indexBaseName + REBUILD_INDEX_LOG_SUFFIX;
         auto [currentSnapshot, localVocabCopy, ownedBlocks] =
             index.deltaTriplesManager()
                 .getCurrentLocatedTriplesSharedStateWithVocab();

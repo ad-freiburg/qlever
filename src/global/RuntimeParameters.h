@@ -218,6 +218,12 @@ struct RuntimeParameters {
   void setFromString(const std::string& parameterName,
                      const std::string& value);
 
+  // Set a parameter from a single string of the form `<name>=<value>` (split
+  // at the first `=`). Throws if the string contains no `=`, if the parameter
+  // does not exist, or if the value is invalid. Used for the
+  // `--set-runtime-parameter` option of `qlever-server`.
+  void setFromAssignment(const std::string& assignment);
+
   // Get all parameter names.
   std::vector<std::string> getKeys() const;
 

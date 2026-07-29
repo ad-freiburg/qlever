@@ -33,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         # Generate metadata for the docker image based on the GH Actions environment.
       - name: Generate image metadata
         id: meta
@@ -72,7 +72,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/digests/*
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -130,7 +130,7 @@ jobs:
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Download digests
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*

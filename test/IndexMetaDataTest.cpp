@@ -14,7 +14,7 @@
 #include <fstream>
 
 #include "./util/IdTestHelpers.h"
-#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexMetaData.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"

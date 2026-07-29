@@ -68,7 +68,7 @@ CPP_template(typename R,
   };
   auto permutations = ql::views::iota(size_t{0}, upperBound - 1) |
                       ql::views::transform(getIthMask);
-  return ad_utility::OwningView{std::move(permutations)} |
+  return std::move(permutations) |
          ql::views::transform([begin, end](const Row& row) {
            auto rng = ql::ranges::equal_range(
                begin, end, row, ql::ranges::lexicographical_compare);
@@ -122,7 +122,7 @@ CPP_template(typename It, typename RowT)(
                       numLastUndefined == 0 ? size_t{0} : upperBound - 1) |
       ql::views::transform(getIthMask);
 
-  return ad_utility::OwningView{std::move(permutations)} |
+  return std::move(permutations) |
          ql::views::transform([begin, end, &resultMightBeUnsorted,
                                numDefinedColumns](Row&& row) {
            auto begOfUndef = std::lower_bound(
@@ -169,7 +169,7 @@ CPP_template(typename It, typename RowT)(
     return true;
   };
 
-  return ad_utility::OwningView{ad_utility::IteratorRange(begin, end)} |
+  return ad_utility::IteratorRange(begin, end) |
          ql::views::filter(
              [isCompatible, &resultMightBeUnsorted](const auto& otherRow) {
                if (isCompatible(otherRow)) {

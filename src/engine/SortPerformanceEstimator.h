@@ -49,6 +49,11 @@ class SortPerformanceEstimator {
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       size_t maxNumberOfElementsToSort);
 
+  // Return true iff `computeEstimatesExpensively` has been called. If it
+  // returns false, `estimatedSortTime` always returns zero, and sorts thus
+  // never time out.
+  bool estimatesWereCalculated() const { return _estimatesWereCalculated; }
+
   // Throw an exception if the estimated time to sort an IdTable with the given
   // number of rows and columns is larger than `deadline - now()` *
   // `RuntimeParameters(sort-estimate-cancellaction-factor)`. The exception

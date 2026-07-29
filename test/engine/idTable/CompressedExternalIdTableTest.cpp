@@ -137,9 +137,8 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
             EXPECT_FALSE(idTable.empty());
             return AD_FWD(idTable);
           };
-          return ql::views::join(
-              ad_utility::OwningView{writer.getSortedBlocks(blocksize)} |
-              ql::views::transform(checkNonEmpty));
+          return ql::views::join(writer.getSortedBlocks(blocksize) |
+                                 ql::views::transform(checkNonEmpty));
         } else {
           return writer.sortedView();
         }

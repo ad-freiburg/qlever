@@ -26,13 +26,13 @@ using ::testing::Pointee;
 // `std::optional<std::shared_ptr<const EvaluatedTermData>>`): asserts the
 // optional is non-empty and the pointed-to term's `rdfTermString_` field equals
 // `expected`.
-static constexpr auto evalTerm = [](const std::string& expected) {
+constexpr auto evalTerm = [](const std::string& expected) {
   return Optional(
       Pointee(Field(&EvaluatedTermData::rdfTermString_, Eq(expected))));
 };
 
-static const EvaluatedVariableValues& getColumn(
-    const BatchEvaluationResult& result, size_t variableColumnIdx) {
+const EvaluatedVariableValues& getColumn(const BatchEvaluationResult& result,
+                                         size_t variableColumnIdx) {
   return result.variablesByColumn_.at(variableColumnIdx);
 }
 
@@ -66,9 +66,10 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   // Evaluate all rows of the `IdTable` with the given variable columns in
   // one single batch.
   BatchEvaluationResult evaluateIdTable(
-      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
-      IdCache& idCache) {
-    BatchEvaluationContext ctx{idTable.asStaticView<0>(), 0, idTable.numRows()};
+      const std::vector<ColumnIndex>& variableColumnIndices,
+      const IdTable& idTable, IdCache& idCache) {
+    const BatchEvaluationContext ctx{idTable.asStaticView<0>(), 0,
+                                     idTable.numRows()};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
                                                   localVocab_, index_, idCache);
   }
@@ -76,9 +77,11 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable` in one single
   // batch.
   BatchEvaluationResult evaluateRowRange(
-      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
-      size_t firstRow, size_t endRow, IdCache& idCache) {
-    BatchEvaluationContext ctx{idTable.asStaticView<0>(), firstRow, endRow};
+      const std::vector<ColumnIndex>& variableColumnIndices,
+      const IdTable& idTable, size_t firstRow, size_t endRow,
+      IdCache& idCache) {
+    const BatchEvaluationContext ctx{idTable.asStaticView<0>(), firstRow,
+                                     endRow};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
                                                   localVocab_, index_, idCache);
   }
