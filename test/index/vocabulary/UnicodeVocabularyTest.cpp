@@ -8,7 +8,6 @@
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 
 using Vocab = UnicodeVocabulary<VocabularyInMemory, SimpleStringComparator>;
 using namespace vocabulary_test;
@@ -83,23 +82,6 @@ TEST(UnicodeVocabulary, AccessOperator) {
 TEST(UnicodeVocabulary, EmptyVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, Level::PRIMARY);
   testEmptyVocabularyWithComparator(createVocabulary, Level::TOTAL);
-}
-
-// _____________________________________________________________________________
-TEST(UnicodeVocabulary, ZeroCopyDeserialization) {
-  const std::vector<std::string> words{"alpha", "beta", "camma", "delta"};
-  const auto vocab = createVocabulary(words);
-
-  // The `_comparator` is not part of the serialized data; the words are
-  // delegated to the underlying (in-memory) vocabulary.
-  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
-  writeSerializer | vocab;
-
-  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
-      std::move(writeSerializer).data()};
-  auto view = Vocab::fromZeroCopyDeserializer(readSerializer);
-
-  assertThatRangesAreEqual(vocab, view);
 }
 
 // _____________________________________________________________________________

@@ -29,11 +29,15 @@
 // A vocabulary implementation supports "zero-copy" (de)serialization if it (or,
 // recursively, its underlying vocabulary) provides a static
 // `fromZeroCopyDeserializer` factory. This currently holds for
-// `VocabularyInMemory`, a `CompressedVocabulary` or `UnicodeVocabulary` that
-// wraps a zero-copy-capable vocabulary, but not for the disk-backed
+// `VocabularyInMemory` and for a `CompressedVocabulary` that wraps a
+// zero-copy-capable vocabulary, but not for the disk-backed
 // (`VocabularyInternalExternal`, `VocabularyOnDisk`) or split
 // (`SplitVocabulary`) vocabularies, which cannot be represented as a single
-// contiguous, mmap-friendly blob. The concept is phrased in terms of the
+// contiguous, mmap-friendly blob. Note that the concept is never instantiated
+// for the wrapping `UnicodeVocabulary` itself: the functions below always
+// address the vocabulary *below* the `UnicodeVocabulary` via
+// `getUnderlyingVocabulary()`, so the comparator never enters the picture. The
+// concept is phrased in terms of the
 // canonical `AlignedByteBufferReadSerializer`, so that it can be used as a
 // pure type-level predicate (independent of the concrete serializer at the
 // call site).
@@ -272,16 +276,16 @@ class Vocabulary {
   // zero-copy view directly into `serializer`'s buffer (see e.g.
   // `VocabularyInMemory::fromZeroCopyDeserializer`). This only works for
   // vocabulary implementations that support zero-copy deserialization (see
-  // `VocabularySupportsZeroCopy`): a bare `VocabularyInMemory`, or (possibly
-  // nested) a `CompressedVocabulary`/`UnicodeVocabulary` wrapping such a
-  // vocabulary. If `UnderlyingVocabulary` is a `PolymorphicVocabulary`, the
-  // currently active alternative is deserialized in place (the caller has to
-  // ensure via `resetToType` that the active alternative matches the blob's
-  // format); if it is a concrete type that does not support zero-copy, this
-  // fails to compile (via a `static_assert`). Any comparator (e.g. of a
-  // wrapping `UnicodeVocabulary`) is preserved / reconstructed as usual and is
-  // not part of the blob. The vocabulary is only valid as long as the memory
-  // backing `serializer`'s buffer is valid and unchanged.
+  // `VocabularySupportsZeroCopy`): a bare `VocabularyInMemory`, or a
+  // `CompressedVocabulary` wrapping such a vocabulary. If
+  // `UnderlyingVocabulary` is a `PolymorphicVocabulary`, the currently active
+  // alternative is deserialized in place (the caller has to ensure via
+  // `resetToType` that the active alternative matches the blob's format); if it
+  // is a concrete type that does not support zero-copy, this fails to compile
+  // (via a `static_assert`). Note that the wrapping `UnicodeVocabulary` is
+  // bypassed via `getUnderlyingVocabulary()`, so its comparator is left
+  // untouched and is not part of the blob. The vocabulary is only valid as long
+  // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::ZeroCopyReadSerializer<
           Serializer>) void loadFromZeroCopyDeserializer(Serializer&
@@ -315,8 +319,8 @@ class Vocabulary {
       static_assert(VocabularySupportsZeroCopy<UnderlyingVocabulary>,
                     "`loadFromZeroCopyDeserializer` requires a vocabulary "
                     "implementation that supports zero-copy deserialization "
-                    "(in-memory, or a compressed/unicode vocabulary wrapping "
-                    "such a vocabulary) or a polymorphic vocabulary");
+                    "(in-memory, or a compressed vocabulary wrapping such a "
+                    "vocabulary) or a polymorphic vocabulary");
       vocabulary_.getUnderlyingVocabulary() =
           UnderlyingVocabulary::fromZeroCopyDeserializer(serializer);
     }
@@ -356,7 +360,7 @@ class Vocabulary {
           VocabularySupportsZeroCopy<UnderlyingVocabulary>,
           "`writeAsZeroCopyBlob` requires a vocabulary implementation "
           "that supports zero-copy deserialization (in-memory, or a "
-          "compressed/unicode vocabulary wrapping such a vocabulary) "
+          "compressed vocabulary wrapping such a vocabulary) "
           "or a polymorphic vocabulary");
       serializer << vocabulary_.getUnderlyingVocabulary();
     }
