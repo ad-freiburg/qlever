@@ -38,7 +38,6 @@
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
-#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
@@ -142,7 +141,6 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
-DISABLE_ATTRIBUTE_WARNINGS
 namespace {
 // Compute by what offset `value` needs to be increased to fit in the new index.
 AD_ALWAYS_INLINE size_t computeIndexOffset(
@@ -210,7 +208,6 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
 
   return applyOffset(value, hint);
 }
-GCC_REENABLE_WARNINGS
 
 // _____________________________________________________________________________
 std::optional<Id> tryRemapBlankNodeId(Id original,

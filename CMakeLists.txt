@@ -66,6 +66,9 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 if(BUILD_SHARED_LIBS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     add_compile_options(-fPIC -fno-semantic-interposition)
+    # Let the code detect that it is compiled into shared libraries, see
+    # `AD_ALWAYS_INLINE` in `CompilerExtensions.h` for the only current use.
+    add_compile_definitions(QLEVER_BUILD_SHARED_LIBRARIES)
 endif()
 
 # Disable nlohmann implicit conversions (e.g. json → std::string) globally so

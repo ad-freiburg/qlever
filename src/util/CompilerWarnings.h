@@ -44,19 +44,6 @@
   _Pragma("GCC diagnostic push")             \
       _Pragma("GCC diagnostic ignored \"-Waggressive-loop-optimizations\"")
 
-// Disable the `attributes` warning. GCC emits it for every definition that is
-// marked `AD_ALWAYS_INLINE` but is not also declared `inline`, because it then
-// has to emit an out-of-line copy of the function which by definition is not
-// inlined. Note that this is unrelated to shared vs. static libraries: it
-// happens identically with and without `-fPIC`, and neither hidden visibility
-// (`-fvisibility=hidden` or an explicit `visibility("hidden")` attribute) nor
-// an anonymous namespace suppresses it. Adding `inline` is the only fix, which
-// is not possible for functions that are declared in a header and called from
-// another translation unit. For those, use this macro.
-#define DISABLE_ATTRIBUTE_WARNINGS \
-  _Pragma("GCC diagnostic push")   \
-      _Pragma("GCC diagnostic ignored \"-Wattributes\"")
-
 // Disable the `dangling-reference` warning, which produces false positives
 // when `std::visit` returns a reference or when a reference is bound to the
 // result of an immediately-invoked lambda that returns a reference to a static
@@ -85,7 +72,6 @@
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
 #define DISABLE_FREE_NONHEAP_WARNINGS
 #define DISABLE_AGGRESSIVE_LOOP_OPT_WARNINGS
-#define DISABLE_ATTRIBUTE_WARNINGS
 #define DISABLE_DANGLING_REFERENCE_WARNINGS
 #define DISABLE_ARRAY_BOUNDS_WARNINGS
 #define GCC_REENABLE_WARNINGS
