@@ -30,16 +30,17 @@ jobs:
   build:
     env:
           compiler: clang
-          compiler-version: 16
+          # The compiler and the LLVM coverage tools have to use the same major
+          # version, so this is the single place where it is specified.
+          compiler-version: 21
           build-type: Debug
           warnings: "-Wall -Wextra "
           # we disable the `assert()` macro as it messes with the coverage reports
           asan-flags: "-DNDEBUG"
           ubsan-flags: ""
           coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
-          cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7
       with:
@@ -50,22 +51,22 @@ jobs:
     - name: Install compiler
       uses: ./.github/workflows/install-compiler-ubuntu
       with:
-        compiler: "clang"
-        compiler-version: "16"
+        compiler: ${{env.compiler}}
+        compiler-version: ${{env.compiler-version}}
     - name: Install coverage tools
       run: |
-        sudo apt install -y llvm-16
+        sudo apt install -y llvm-${{env.compiler-version}}
         sudo apt install mold
     - name: Show path
       run: |
-        which llvm-profdata-16
-        which llvm-cov-16
+        which llvm-profdata-${{env.compiler-version}}
+        which llvm-cov-${{env.compiler-version}}
     - name: Create build directory
       run: mkdir ${{github.workspace}}/build
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=TIMING -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
 
     - name: Build
         # Build your program with the given configuration
@@ -86,8 +87,8 @@ jobs:
       run: |
         # `llvm-cov` only warns about a nonexistent source filter, and then reports everything.
         test -d "${{github.workspace}}/src"
-        llvm-profdata-16 merge -sparse *.profraw -o default.profdata
-        llvm-cov-16 export ./QLeverAllUnitTestsMain --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
+        llvm-profdata-${{env.compiler-version}} merge -sparse *.profraw -o default.profdata
+        llvm-cov-${{env.compiler-version}} export ./QLeverAllUnitTestsMain --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
