@@ -1961,11 +1961,16 @@ CPP_template_def(typename... NextSorter)(requires(
         if (graph.getDatatype() != Datatype::EncodedVal) {
           return;
         }
-        auto [prefix, payload] =
-            EncodedIriManager::splitIntoPrefixIdxAndDecodedPayload(graph);
+        // NOTE: The prefix has to be checked BEFORE the payload is decoded,
+        // because the payload of a prefix with constraints (see
+        // `encodedIris::BitRangeConstraint`) is not a digit encoding at all, so
+        // decoding it with the digit decoder would yield garbage.
+        auto [prefix, rawPayload] =
+            EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
         if (prefix != newGraphPrefixIdx) {
           return;
         }
+        auto payload = EncodedIriManager::decodeDecimalFrom64Bit(rawPayload);
         nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
       };
   size_t numPredicates =
@@ -2092,6 +2097,13 @@ void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
   encodedIriManager_ =
       EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setPrefixesForEncodedValues(
+    std::vector<encodedIris::PrefixWithConstraints> prefixesWithConstraints) {
+  encodedIriManager_ = EncodedIriManager::fromPrefixesWithConstraints(
+      std::move(prefixesWithConstraints));
 }
 
 // _____________________________________________________________________________

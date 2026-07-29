@@ -240,8 +240,8 @@ TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
   // Adding a hardcoded prefix a second time in the constructor is an error.
   AD_EXPECT_THROW_WITH_MESSAGE(
       Manager({std::string{TestHardcodedPrefixes::value.at(0)}}),
-      testing::HasSubstr(
-          "!ad_utility::contains(prefixesWithoutAngleBrackets, prefix)"));
+      testing::HasSubstr("is always added automatically and must not be "
+                         "specified explicitly"));
 }
 
 // _____________________________________________________________________________
@@ -257,6 +257,253 @@ TEST(EncodedIriManager, HardcodedPrefixesJson) {
   EXPECT_EQ(em2.toString(id.value()), "<http://example.org/always/42>");
   auto id2 = em2.encode("<http://other.org/1>");
   ASSERT_TRUE(id2.has_value());
+}
+
+// _____________________________________________________________________________
+// Tests for prefixes with bit constraints (see
+// `encodedIris::BitRangeConstraint`). The numbers used here are typical of the
+// use case that motivated the feature: external 64-bit IDs whose top three bits
+// are a constant tag `001` and which have a window of zero bits, so that 12 of
+// the 64 bits carry no information and do not have to be stored.
+using BitRangeConstraint = encodedIris::BitRangeConstraint;
+using PrefixWithConstraints = encodedIris::PrefixWithConstraints;
+
+// A prefix whose numbers have bits [61, 64) equal to `001` and bits [23, 32)
+// equal to zero; 3 + 9 = 12 constrained bits, so 52 remain, which is exactly
+// `NumBitsEncoding`.
+PrefixWithConstraints laneConstraints() {
+  return PrefixWithConstraints{"http://example.org/lane_",
+                               {{61, 64, 0b001}, {23, 32, 0u}}};
+}
+
+TEST(EncodedIriManager, ConstraintsRoundTrip) {
+  auto em = EncodedIriManager::fromPrefixesWithConstraints({laneConstraints()});
+  // A real ID that fulfills the constraints: bits [61, 64) are `001` and bits
+  // [23, 32) are zero.
+  uint64_t value = 2343140642651111426ULL;
+  ASSERT_EQ((value >> 61) & 0b111, 0b001u);
+  ASSERT_EQ((value >> 23) & 0x1FFu, 0u);
+  std::string iri = absl::StrCat("<http://example.org/lane_", value, ">");
+
+  auto id = em.encode(iri);
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(id.value().getDatatype(), Datatype::EncodedVal);
+  // The IRI, and in particular the full 64-bit number, is recovered exactly,
+  // although only 52 bits are available for the payload.
+  EXPECT_EQ(em.toString(id.value()), iri);
+  EXPECT_EQ(em.getNumberOfConstrainedId(id.value()), value);
+}
+
+TEST(EncodedIriManager, ConstraintsViolatedIsNotEncoded) {
+  auto em = EncodedIriManager::fromPrefixesWithConstraints({laneConstraints()});
+  // Bits [61, 64) are `000` instead of `001`.
+  EXPECT_FALSE(em.encode("<http://example.org/lane_42>").has_value());
+  // Bits [61, 64) are correct, but a bit in [23, 32) is set.
+  uint64_t base = 1ULL << 61;
+  EXPECT_FALSE(em.encode(absl::StrCat("<http://example.org/lane_",
+                                      base | (1ULL << 25), ">"))
+                   .has_value());
+  // The same number is encodable once the offending bit is gone.
+  EXPECT_TRUE(em.encode(absl::StrCat("<http://example.org/lane_",
+                                     base | (1ULL << 22), ">"))
+                  .has_value());
+  // A number that does not fit into 64 bits at all.
+  EXPECT_FALSE(
+      em.encode("<http://example.org/lane_99999999999999999999>").has_value());
+}
+
+TEST(EncodedIriManager, ConstraintsWithGapAndSeveralPrefixes) {
+  // Three prefixes with different constraint sets, including one whose three
+  // constraints leave bit 23 free in between.
+  auto em = EncodedIriManager::fromPrefixesWithConstraints(
+      {laneConstraints(),
+       PrefixWithConstraints{"http://example.org/roadPart_",
+                             {{61, 64, 0b001}, {22, 23, 0}, {24, 32, 0u}}},
+       PrefixWithConstraints{"http://example.org/dp_",
+                             {{61, 64, 0b001}, {23, 32, 0}}}});
+  // For `roadPart_` bit 23 is unconstrained, so both values round-trip.
+  uint64_t base = 1ULL << 61;
+  for (uint64_t bit23 : {0ULL, 1ULL << 23}) {
+    auto iri = absl::StrCat("<http://example.org/roadPart_",
+                            base | bit23 | 12345ULL, ">");
+    auto id = em.encode(iri);
+    ASSERT_TRUE(id.has_value()) << iri;
+    EXPECT_EQ(em.toString(id.value()), iri);
+  }
+  // Each prefix uses its own constraints.
+  auto dpIri = absl::StrCat("<http://example.org/dp_", base | 777ULL, ">");
+  auto dpId = em.encode(dpIri);
+  ASSERT_TRUE(dpId.has_value());
+  EXPECT_EQ(em.toString(dpId.value()), dpIri);
+}
+
+TEST(EncodedIriManager, ConstraintsAndPlainPrefixesMixed) {
+  auto em = EncodedIriManager::fromPrefixesWithConstraints(
+      {laneConstraints(), PrefixWithConstraints{"http://plain.org/"}});
+  // The plain prefix still uses the digit encoding, with all its properties
+  // (in particular the lexicographic order and preserved leading zeros).
+  auto plain = em.encode("<http://plain.org/007>");
+  ASSERT_TRUE(plain.has_value());
+  EXPECT_EQ(em.toString(plain.value()), "<http://plain.org/007>");
+  // A number that is too long for the digit encoding is not encoded.
+  EXPECT_FALSE(em.encode("<http://plain.org/12345678901234>").has_value());
+  // The constrained prefix works alongside it.
+  auto constrained = em.encode(
+      absl::StrCat("<http://example.org/lane_", 2343140642651111426ULL, ">"));
+  ASSERT_TRUE(constrained.has_value());
+  EXPECT_NE(plain.value(), constrained.value());
+}
+
+TEST(EncodedIriManager, ConstraintsJsonRoundTrip) {
+  auto em = EncodedIriManager::fromPrefixesWithConstraints(
+      {laneConstraints(), PrefixWithConstraints{"http://plain.org/"}});
+  nlohmann::json j = em;
+  auto em2 = j.get<EncodedIriManager>();
+  EXPECT_EQ(em, em2);
+  auto iri =
+      absl::StrCat("<http://example.org/lane_", 2343140642651111426ULL, ">");
+  EXPECT_EQ(em2.toString(em2.encode(iri).value()), iri);
+}
+
+TEST(EncodedIriManager, JsonWithoutConstraintsIsUnchangedAndReadable) {
+  // An index that was built before the constraints existed has no constraint
+  // key at all, and must still be readable.
+  EncodedIriManager em{{"http://example.org/"}};
+  nlohmann::json j = em;
+  EXPECT_FALSE(j.contains("prefix-bit-constraints"));
+  auto em2 = j.get<EncodedIriManager>();
+  EXPECT_EQ(em, em2);
+  EXPECT_EQ(em2.toString(em2.encode("<http://example.org/42>").value()),
+            "<http://example.org/42>");
+}
+
+TEST(EncodedIriManager, InvalidConstraintsAreRejected) {
+  // An empty bit range.
+  AD_EXPECT_THROW_WITH_MESSAGE(BitRangeConstraint(5, 5, 0),
+                               testing::HasSubstr("must be nonempty"));
+  // A bit range that leaves the 64 bits of the number.
+  AD_EXPECT_THROW_WITH_MESSAGE(BitRangeConstraint(60, 65, 0),
+                               testing::HasSubstr("within the 64 bits"));
+  // A value that does not fit into its range.
+  AD_EXPECT_THROW_WITH_MESSAGE(BitRangeConstraint(0, 2, 4),
+                               testing::HasSubstr("must fit into its bit"));
+  // Overlapping ranges.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      EncodedIriManager::fromPrefixesWithConstraints({PrefixWithConstraints{
+          "http://example.org/", {{10, 20, 0}, {15, 25, 0}}}}),
+      testing::HasSubstr("must not overlap"));
+  // Too few constrained bits: 64 - 4 = 60 bits remain, but only 52 are
+  // available.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      EncodedIriManager::fromPrefixesWithConstraints(
+          {PrefixWithConstraints{"http://example.org/", {{0, 4, 0}}}}),
+      testing::HasSubstr("constrain at least 12 bits"));
+  // The same prefix twice with different constraints.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      EncodedIriManager::fromPrefixesWithConstraints(
+          {laneConstraints(),
+           PrefixWithConstraints{"http://example.org/lane_",
+                                 {{61, 64, 0b001}, {24, 33, 0u}}}}),
+      testing::HasSubstr("with different constraints"));
+}
+
+TEST(EncodedIriManager, ConstraintsExhaustiveBitRoundTrip) {
+  // Exhaustively check the bit (de)compression for a constraint set with a gap,
+  // over all values of the unconstrained bits in a small window.
+  std::vector<BitRangeConstraint> constraints{
+      {61, 64, 0b001}, {22, 23, 0}, {24, 32, 0u}};
+  ql::ranges::sort(constraints, std::less<>{},
+                   [](const BitRangeConstraint& c) { return c.bitStart_; });
+  uint64_t base = 1ULL << 61;
+  for (uint64_t low = 0; low < 512; ++low) {
+    for (uint64_t bit23 : {0ULL, 1ULL << 23}) {
+      uint64_t value = base | bit23 | low;
+      uint64_t payload =
+          EncodedIriManager::removeConstrainedBits(value, constraints);
+      EXPECT_LE(payload, ad_utility::bitMaskForLowerBits(
+                             EncodedIriManager::NumBitsEncoding));
+      EXPECT_EQ(
+          EncodedIriManager::reinsertConstrainedBits(payload, constraints),
+          value);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Regression test: for a constrained prefix the number is stored, not the
+// digits, so a number with leading zeros must NOT be encoded. Otherwise
+// `<pfx_007>` and `<pfx_7>` would get the same `Id` although they are different
+// IRIs.
+TEST(EncodedIriManager, ConstraintsRejectLeadingZeros) {
+  auto em = EncodedIriManager::fromPrefixesWithConstraints({laneConstraints()});
+  uint64_t value = 2343140642651111426ULL;
+  auto withoutZeros =
+      em.encode(absl::StrCat("<http://example.org/lane_", value, ">"));
+  ASSERT_TRUE(withoutZeros.has_value());
+  // A single leading zero, and many of them, are both rejected.
+  EXPECT_FALSE(em.encode(absl::StrCat("<http://example.org/lane_0", value, ">"))
+                   .has_value());
+  EXPECT_FALSE(em.encode(absl::StrCat("<http://example.org/lane_",
+                                      std::string(30, '0'), value, ">"))
+                   .has_value());
+  // `0` itself is a single digit and has no leading zero, so it is not affected
+  // by the check (it violates the constraints here and is rejected for that
+  // reason).
+  EXPECT_FALSE(em.encode("<http://example.org/lane_0>").has_value());
+}
+
+// _____________________________________________________________________________
+// Regression test: a constrained prefix can produce a payload of `0` (namely
+// for the number that consists of exactly the constrained values with all free
+// bits zero). The digit decoder must not be confused by that, and the round
+// trip must still work.
+TEST(EncodedIriManager, ConstraintsPayloadZero) {
+  auto em = EncodedIriManager::fromPrefixesWithConstraints({laneConstraints()});
+  // Bits [61, 64) are `001` and everything else is zero, so all free bits are
+  // zero and the payload becomes 0.
+  uint64_t value = 1ULL << 61;
+  auto iri = absl::StrCat("<http://example.org/lane_", value, ">");
+  auto id = em.encode(iri);
+  ASSERT_TRUE(id.has_value());
+  auto [prefixIdx, payload] =
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value());
+  EXPECT_EQ(payload, 0u);
+  EXPECT_EQ(em.toString(id.value()), iri);
+  EXPECT_EQ(em.getNumberOfConstrainedId(id.value()), value);
+
+  // The digit decoder itself must terminate for a payload of `0` (it is
+  // reachable for `EncodedVal` ids of a constrained prefix, e.g. from
+  // `IndexImpl`), and not loop into a `size_t` underflow.
+  EXPECT_EQ(EncodedIriManager::decodeDecimalFrom64Bit(uint64_t{0}), 0u);
+  std::string decoded;
+  EncodedIriManager::decodeDecimalFrom64Bit(decoded, uint64_t{0});
+  EXPECT_TRUE(decoded.empty());
+}
+
+// _____________________________________________________________________________
+// Constraints that come from (possibly corrupted) index metadata are validated
+// on deserialization, so that a violation is reported there and not deep inside
+// the parser.
+TEST(EncodedIriManager, ConstraintsFromJsonAreValidated) {
+  nlohmann::json j;
+  j["prefixes-with-leading-angle-brackets"] =
+      std::vector<std::string>{"<http://example.org/"};
+  // Overlapping ranges.
+  j["prefix-bit-constraints"] = std::vector<std::vector<BitRangeConstraint>>{
+      {BitRangeConstraint{10, 20, 0}, BitRangeConstraint{15, 25, 0}}};
+  AD_EXPECT_THROW_WITH_MESSAGE(j.get<EncodedIriManager>(),
+                               testing::HasSubstr("must not overlap"));
+  // Constraints that are stored in an arbitrary order are accepted and
+  // normalized, because the order carries no meaning.
+  nlohmann::json j2;
+  j2["prefixes-with-leading-angle-brackets"] =
+      std::vector<std::string>{"<http://example.org/lane_"};
+  j2["prefix-bit-constraints"] = std::vector<std::vector<BitRangeConstraint>>{
+      {BitRangeConstraint{61, 64, 0b001}, BitRangeConstraint{23, 32, 0}}};
+  auto em = j2.get<EncodedIriManager>();
+  auto iri =
+      absl::StrCat("<http://example.org/lane_", 2343140642651111426ULL, ">");
+  EXPECT_EQ(em.toString(em.encode(iri).value()), iri);
 }
 
 }  // namespace

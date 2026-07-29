@@ -316,6 +316,12 @@ class IndexImpl {
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
 
+  // Same as above, but the prefixes may carry constraints on the number that
+  // follows them; see `encodedIris::BitRangeConstraint`. Constrained prefixes
+  // can encode numbers that need more than `NumBitsEncoding` bits.
+  void setPrefixesForEncodedValues(
+      std::vector<encodedIris::PrefixWithConstraints> prefixesWithConstraints);
+
   // Set the regexes for IRIs that should be treated as blank nodes during index
   // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
   // of them (via `RE2::FullMatch`) is stored as a blank node instead of in the
