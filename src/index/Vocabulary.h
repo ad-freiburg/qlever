@@ -10,8 +10,6 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
 
-#include <absl/strings/str_cat.h>
-
 #include <cassert>
 #include <optional>
 #include <string>
@@ -28,25 +26,12 @@
 #include "util/HashSet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
-// A vocabulary implementation supports "zero-copy" (de)serialization if it (or,
-// recursively, its underlying vocabulary) provides a static
-// `fromZeroCopyDeserializer` factory. This currently holds for
-// `VocabularyInMemory` and for a `CompressedVocabulary` that wraps a
-// zero-copy-capable vocabulary, but not for the disk-backed
-// (`VocabularyInternalExternal`, `VocabularyOnDisk`) or split
-// (`SplitVocabulary`) vocabularies, which cannot be represented as a single
-// contiguous, mmap-friendly blob. Note that the concept is never instantiated
-// for the wrapping `UnicodeVocabulary` itself: the functions below always
-// address the vocabulary *below* the `UnicodeVocabulary` via
-// `getUnderlyingVocabulary()`, so the comparator never enters the picture. The
-// concept is phrased in terms of the
-// canonical `AlignedByteBufferReadSerializer`, so that it can be used as a
-// pure type-level predicate (independent of the concrete serializer at the
-// call site).
-template <typename T>
-CPP_concept VocabularySupportsZeroCopy =
-    ad_utility::serialization::SupportsZeroCopyDeserialization<
-        T, ad_utility::serialization::AlignedByteBufferReadSerializer>;
+// Note on the `VocabularySupportsZeroCopy` concept (defined in
+// `VocabularyConstraints.h`) that is used by the zero-copy functions below: the
+// concept is never instantiated for the wrapping `UnicodeVocabulary` itself,
+// because those functions always address the vocabulary *below* the
+// `UnicodeVocabulary` via `getUnderlyingVocabulary()`, so the comparator never
+// enters the picture.
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -321,10 +306,11 @@ class Vocabulary {
   // Apply `function` to the vocabulary that actually holds the words, i.e. to
   // the vocabulary below the wrapping `UnicodeVocabulary` (whose comparator
   // plays no role for a zero-copy blob and is therefore neither written nor
-  // read). If `UnderlyingVocabulary` is a `PolymorphicVocabulary`, dispatch to
-  // the currently active alternative of its variant, and throw if that
-  // alternative does not support zero-copy; `operation` describes the attempted
-  // operation and is expected to read like `"Loading a vocabulary from"`.
+  // read). If `UnderlyingVocabulary` is a `PolymorphicVocabulary`, delegate to
+  // its `applyToZeroCopyCapableVocabulary`, which dispatches to the currently
+  // active alternative and throws if that alternative does not support
+  // zero-copy; `operation` describes the attempted operation and is expected to
+  // read like `"Loading a vocabulary from"`.
   // Otherwise `UnderlyingVocabulary` is a concrete type that has to support
   // zero-copy, which is checked via a `static_assert`. The vocabulary is passed
   // to `function` as a reference, so that `function` can either read from it
@@ -337,25 +323,11 @@ class Vocabulary {
                                              Function function) {
     auto& underlyingVocabulary = self.vocabulary_.getUnderlyingVocabulary();
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
-      // The `PolymorphicVocabulary`'s own `getUnderlyingVocabulary()` returns a
-      // reference to the `std::variant` of the concrete vocabulary
-      // implementations that it can hold (see
-      // `PolymorphicVocabulary::getUnderlyingVocabulary`). Only those
-      // alternatives that support zero-copy (in-memory, uncompressed or
-      // compressed) can be handled, the others throw at runtime.
-      std::visit(
-          [&function, &operation](auto& vocab) {
-            if constexpr (VocabularySupportsZeroCopy<
-                              std::decay_t<decltype(vocab)>>) {
-              function(vocab);
-            } else {
-              AD_THROW(absl::StrCat(
-                  operation,
-                  " a zero-copy blob is only supported for the in-memory "
-                  "(uncompressed or compressed) vocabulary implementations"));
-            }
-          },
-          underlyingVocabulary.getUnderlyingVocabulary());
+      // The dispatch to the currently active alternative (including the throw
+      // for those alternatives that don't support zero-copy) is the
+      // `PolymorphicVocabulary`'s own business.
+      underlyingVocabulary.applyToZeroCopyCapableVocabulary(
+          operation, std::move(function));
     } else {
       static_assert(VocabularySupportsZeroCopy<UnderlyingVocabulary>,
                     "The zero-copy (de)serialization of a vocabulary requires "

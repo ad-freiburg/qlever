@@ -9,6 +9,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/TypeTraits.h"
 
 // This header contains type constraints used to ensure that the correct
@@ -67,5 +68,21 @@ CPP_concept NeverProvidesGeometryInfo =
 template <typename... Ts>
 CPP_concept AllNeverProvideGeometryInfo =
     (... && NeverProvidesGeometryInfo<Ts>);
+
+// A vocabulary implementation supports "zero-copy" (de)serialization if it (or,
+// recursively, its underlying vocabulary) provides a static
+// `fromZeroCopyDeserializer` factory. This currently holds for
+// `VocabularyInMemory` and for a `CompressedVocabulary` that wraps a
+// zero-copy-capable vocabulary, but not for the disk-backed
+// (`VocabularyInternalExternal`, `VocabularyOnDisk`) or split
+// (`SplitVocabulary`) vocabularies, which cannot be represented as a single
+// contiguous, mmap-friendly blob. The concept is phrased in terms of the
+// canonical `AlignedByteBufferReadSerializer`, so that it can be used as a pure
+// type-level predicate (independent of the concrete serializer at the call
+// site).
+template <typename T>
+CPP_concept VocabularySupportsZeroCopy =
+    ad_utility::serialization::SupportsZeroCopyDeserialization<
+        T, ad_utility::serialization::AlignedByteBufferReadSerializer>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYCONSTRAINTS_H
