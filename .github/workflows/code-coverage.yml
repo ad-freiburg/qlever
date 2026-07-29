@@ -80,9 +80,14 @@ jobs:
 
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
-      run:  >
-        llvm-profdata-16 merge -sparse *.profraw -o default.profdata;
-        llvm-cov-16 export ./QLeverAllUnitTestsMain --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" --ignore-filename-regex="/benchmark/" > ./coverage.lcov
+      # Only measure QLever's own sources. Everything else (the dependencies
+      # below `_deps`, the tests, the benchmarks) already lies outside of `src`;
+      # the generated parsers don't, hence the explicit exclusion.
+      run: |
+        # `llvm-cov` only warns about a nonexistent source filter, and then reports everything.
+        test -d "${{github.workspace}}/src"
+        llvm-profdata-16 merge -sparse *.profraw -o default.profdata
+        llvm-cov-16 export ./QLeverAllUnitTestsMain --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/generated/" "${{github.workspace}}/src" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
