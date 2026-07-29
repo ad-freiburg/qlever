@@ -318,6 +318,19 @@ CPP_concept ZeroCopyReadSerializer =
     ReadSerializer<S> && usesAlignedSerialization<S> &&
     CPP_requires_ref(zeroCopyReadSerializerRequires, S);
 
+// Concept that checks whether a type `T` provides a static
+// `fromZeroCopyDeserializer(S&)` factory for the zero-copy read serializer `S`.
+// This is used to (recursively) determine which (possibly nested) vocabulary
+// types support zero-copy deserialization.
+template <typename T, typename S>
+CPP_requires(supportsZeroCopyDeserialization_,
+             requires(S& serializer)(T::fromZeroCopyDeserializer(serializer)));
+
+template <typename T, typename S>
+CPP_concept SupportsZeroCopyDeserialization =
+    ZeroCopyReadSerializer<S> &&
+    CPP_requires_ref(supportsZeroCopyDeserialization_, T, S);
+
 // Align the current write position to the alignment requirement of type `T`.
 // This adds padding bytes (zeros) if necessary. If the serializer does not use
 // aligned serialization, this is a no-op.

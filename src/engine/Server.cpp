@@ -946,6 +946,8 @@ nlohmann::json Server::composeStatsJson(const Index& index) {
   result["git-hash-index"] = index.getGitShortHash();
   result["git-hash-server"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
+  result["version-server"] =
+      *qlever::version::projectVersionWithoutLinking.wlock();
   result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index.numDistinctPredicates().internal;
