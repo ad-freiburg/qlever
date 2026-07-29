@@ -261,8 +261,8 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   // result constant within a group and can be substituted by that constant
   // during the evaluation of the aliases (see
   // `GroupByImpl::findAggregatesImpl`). For non-grouped variables the SPARQL
-  // standard (https://www.w3.org/TR/2013/REC-sparql11-query-20130321) is very
-  // vague about the expected semantics, so we reject those queries.
+  // standard is very vague about the expected semantics, so we reject those
+  // queries.
   //
   // An `EXISTS` *inside* an aggregate (e.g. `SUM(IF(EXISTS {...}, ...))`) is
   // evaluated once per row and may therefore use all variables, just like in a
@@ -286,7 +286,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
               " is used inside an EXISTS in the expression ",
               alias.getDescriptor(),
               ", but it is neither aggregated nor part of the GROUP BY. QLever "
-              "doesn't support this, because the SPARQL standard doesn't "
+              "doesn't support this, because the SPARQL 1.1 standard doesn't "
               "clearly define the semantics of this case. Consider adding ",
               variable.name(),
               " to the GROUP BY, or wrapping the EXISTS in an aggregate "
