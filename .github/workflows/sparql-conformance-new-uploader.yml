@@ -13,8 +13,8 @@ permissions:
 jobs:
   upload:
     env:
-      SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_NEW_SERVER_URL }}
-      API_KEY: ${{ secrets.SPARQL_CONFORMANCE_NEW_TOKEN }}
+      SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_V2_UPLOADER_URL }}
+      API_KEY: ${{ secrets.SPARQL_CONFORMANCE_V2_TOKEN }}
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
     steps:
