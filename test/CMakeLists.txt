@@ -321,7 +321,7 @@ addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(GeoPointTest)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest qlever_util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
@@ -482,6 +482,8 @@ addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
 
+addLinkAndDiscoverTest(RuntimeParametersTest global)
+
 addLinkAndDiscoverTest(JThreadTest)
 
 addLinkAndDiscoverTest(ChunkedForLoopTest)
@@ -560,5 +562,7 @@ addLinkAndDiscoverTest(LogTest)
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
+
+addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)

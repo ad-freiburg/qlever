@@ -266,7 +266,14 @@ find_package(Threads REQUIRED)
 #################################
 # ICU (for proper collation
 ################################
-find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
+option(QLEVER_NO_UNICODE "Build QLever without a dependency on ICU (International Components for Unicode). When ON, `find_package(ICU)` is skipped, the ICU libraries are not linked, and the `QLEVER_NO_UNICODE` macro is defined. In this mode all string comparisons, sorting, case conversion and normalization operate on plain ASCII bytes instead of proper Unicode collation. This is intended for minimal or embedded builds where ICU is unavailable; do not enable it if you need correct Unicode handling." OFF)
+if (QLEVER_NO_UNICODE)
+  add_compile_definitions(QLEVER_NO_UNICODE)
+endif()
+
+if (NOT QLEVER_NO_UNICODE)
+    find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
+endif()
 
 ###################################
 # JEMALLOC
@@ -368,8 +375,11 @@ function(qlever_target_link_libraries target)
         set(QLEVER_BOOST_FILESYSTEM_LIB "")
     endif()
     target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+            absl::flat_hash_set absl::strings absl::str_format
+            OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+    if (NOT QLEVER_NO_UNICODE)
+      target_link_libraries(${target} ICU::uc ICU::i18n)
+    endif()
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -614,17 +624,20 @@ include_directories(src)
 # `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
 # never updated. This is useful during development to avoid a relinking of the binaries for
 # every compilation.
+# The first output which is never created is necessary s.t. the command is never cached and
+# always rerun. It is omitted when `DONT_UPDATE_COMPILATION_INFO` is set, so the command is
+# cached and the compilation info is not regenerated on every build.
+set(COMPILATION_INFO_EXTRA_OUTPUT "")
 if (NOT DONT_UPDATE_COMPILATION_INFO)
-    # The first output which is never created is necessary s.t. the command is never cached and
-    # always rerun.
-    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
-            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
-else ()
-    add_custom_command(OUTPUT
-            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+    set(COMPILATION_INFO_EXTRA_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp")
 endif ()
+add_custom_command(OUTPUT ${COMPILATION_INFO_EXTRA_OUTPUT}
+        "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+        COMMAND cmake
+        -DCXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}
+        -DCXX_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION}
+        -DCXX_STANDARD=${CMAKE_CXX_STANDARD}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)
