@@ -2701,22 +2701,32 @@ TEST(QueryPlanner, Exists) {
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
                  h::ExistsJoin(xyz, abc)));
 
-  // Inside a `GROUP BY`, a top-level `EXISTS` (i.e. one that is not inside an
-  // aggregate) may only join on and expose the grouped variables, so that its
-  // result is constant within each group. Here the body `{?x ?y ?c}` shares the
-  // grouped `?x` and the non-grouped `?y` with the outer query, but only `?x`
-  // may be used, so the right side of the `ExistsJoin` exposes only `?x`.
-  h::expect("SELECT ?x (EXISTS{?x ?y ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
-            h::GroupBy({V{"?x"}}, {"(EXISTS{?x ?y ?c} as ?e)"},
-                       h::ExistsJoin(::testing::_, h::hasVariables({"?x"}))));
+  // Inside a `GROUP BY`, an `EXISTS` that is not inside an aggregate may only
+  // be correlated with the grouped variables, so that its result is constant
+  // within each group. Here the body `{?x ?b ?c}` only shares the grouped `?x`
+  // with the outer query.
+  h::expect("SELECT ?x (EXISTS{?x ?b ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+            h::GroupBy({V{"?x"}}, {"(EXISTS{?x ?b ?c} as ?e)"},
+                       h::ExistsJoin(::testing::_,
+                                     h::hasVariables({"?x", "?b", "?c"}))));
+  // Correlating such an `EXISTS` with a non-grouped variable (here `?y`) is
+  // rejected, because the SPARQL standard doesn't clearly define the semantics
+  // of this case.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          "SELECT ?x (EXISTS{?x ?y ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+          ad_utility::testing::getQec()),
+      HasSubstr("The variable ?y is used inside an EXISTS in the expression "
+                "(EXISTS{?x ?y ?c} as ?e), but it is neither aggregated nor "
+                "part of the GROUP BY."));
   // In contrast, an `EXISTS` inside an aggregate is evaluated once per row and
-  // therefore keeps exposing all of its variables (here `?x`, `?b`, and `?c`),
-  // exactly as it would inside a `FILTER`.
+  // may therefore use non-grouped variables (here `?y`), just like in a
+  // `FILTER`.
   h::expect(
-      "SELECT ?x (SAMPLE(EXISTS{?x ?b ?c}) as ?e) { ?x ?y ?z } GROUP BY ?x",
+      "SELECT ?x (SAMPLE(EXISTS{?x ?y ?c}) as ?e) { ?x ?y ?z } GROUP BY ?x",
       h::GroupBy(
-          {V{"?x"}}, {"(SAMPLE(EXISTS{?x ?b ?c}) as ?e)"},
-          h::ExistsJoin(::testing::_, h::hasVariables({"?x", "?b", "?c"}))));
+          {V{"?x"}}, {"(SAMPLE(EXISTS{?x ?y ?c}) as ?e)"},
+          h::ExistsJoin(::testing::_, h::hasVariables({"?x", "?y", "?c"}))));
 
   // Similar tests, but with multiple EXISTS clauses
   auto existsAbcDef = h::ExistsJoin(h::ExistsJoin(xyz, abc), def);

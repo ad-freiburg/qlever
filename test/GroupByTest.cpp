@@ -713,22 +713,15 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
     return pq;
   };
 
-  // Runs `SELECT ?x (makeAliasExpression(EXISTS{existsArgument}) AS ?e)
-  // GROUP BY ?x` over the given input and checks that the result equals
-  // `expected`. `inputSorted` and `inputLazy` (together with `hashMapEnabled`)
-  // select the group-by variant. Column stripping is left at its (enabled)
-  // default.
-  auto runTest = [&](const auto& makeAliasExpression,
-                     ParsedQuery existsArgument,
-                     std::vector<std::optional<Variable>> inputVariables,
-                     const VectorTable& inputTable, bool hashMapEnabled,
-                     bool inputSorted, bool inputLazy,
-                     const VectorTable& expected) {
-    auto hashMapCleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
-            hashMapEnabled);
-    qec->getQueryTreeCache().clearAll();
-
+  // Creates the group by `SELECT ?x
+  // (makeAliasExpression(EXISTS{existsArgument}) AS ?e) GROUP BY ?x` over the
+  // given input. `inputSorted` and `inputLazy` (together with `hashMapEnabled`
+  // in `runTest`) select the group-by variant.
+  auto makeGroupBy = [&](const auto& makeAliasExpression,
+                         ParsedQuery existsArgument,
+                         std::vector<std::optional<Variable>> inputVariables,
+                         const VectorTable& inputTable, bool inputSorted,
+                         bool inputLazy) {
     auto exists = std::make_unique<ExistsExpression>(std::move(existsArgument));
     Alias alias{
         SparqlExpressionPimpl{makeAliasExpression(std::move(exists)), "alias"},
@@ -744,9 +737,28 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
     dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
         .forceFullyMaterialized() = !inputLazy;
 
-    GroupByImpl groupBy{
-        qec, variablesOnlyX, {std::move(alias)}, std::move(subtree)};
-    auto result = groupBy.computeResultOnlyForTesting(false);
+    return std::make_unique<GroupByImpl>(qec, variablesOnlyX,
+                                         std::vector<Alias>{std::move(alias)},
+                                         std::move(subtree));
+  };
+
+  // Runs the group by created by `makeGroupBy` (see above) and checks that the
+  // result equals `expected`.
+  auto runTest = [&](const auto& makeAliasExpression,
+                     ParsedQuery existsArgument,
+                     std::vector<std::optional<Variable>> inputVariables,
+                     const VectorTable& inputTable, bool hashMapEnabled,
+                     bool inputSorted, bool inputLazy,
+                     const VectorTable& expected) {
+    auto hashMapCleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+            hashMapEnabled);
+    qec->getQueryTreeCache().clearAll();
+
+    auto groupBy = makeGroupBy(makeAliasExpression, std::move(existsArgument),
+                               std::move(inputVariables), inputTable,
+                               inputSorted, inputLazy);
+    auto result = groupBy->computeResultOnlyForTesting(false);
     ASSERT_TRUE(result.isFullyMaterialized());
     EXPECT_THAT(result.idTableView(), matchesIdTableFromVector(expected));
   };
@@ -784,18 +796,15 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
   runTest(identity, makeExistsArgument({Variable{"?w"}}, {{1}}), inputX, tableX,
           true, false, false, {{I(1), T}, {I(2), T}, {I(3), T}});
 
-  // Edge case: the body of the `EXISTS` has multiple variables, only one of
-  // which (`?x`) is grouped. `?y` also occurs in the outer query but is not
-  // grouped, and `?c` is a novel variable. The `EXISTS` must only join on the
-  // grouped `?x`; the values of `?y` and `?c` in the body are irrelevant. Hence
-  // the `EXISTS` is `true` exactly for the groups whose `?x` appears in the
-  // body (here `?x == 1`), independent of the outer `?y`. If the join
-  // incorrectly also used `?y`, the result would be `false` for all groups (no
-  // outer `?y` equals the body's `?y == 999`).
+  // Edge case: the body of the `EXISTS` has multiple variables, but only `?x`
+  // is correlated with the outer query, while the value of the novel variable
+  // `?c` is irrelevant. The outer query has an additional non-grouped variable
+  // `?y` that is not used by the `EXISTS`. So the `EXISTS` is `true` exactly
+  // for the groups whose `?x` appears in the body (here `?x == 1`).
   const std::vector<std::optional<Variable>> inputXY{varX, varY};
   const VectorTable tableXY{{1, 10}, {1, 11}, {2, 12}};
   auto multiVarBody = [&] {
-    return makeExistsArgument({varX, varY, Variable{"?c"}}, {{1, 999, 999}});
+    return makeExistsArgument({varX, Variable{"?c"}}, {{1, 999}});
   };
   // Lazy group by:
   runTest(identity, multiVarBody(), inputXY, tableXY, false, true, true,
@@ -803,6 +812,18 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
   // Fully materialized (sequential) group by:
   runTest(identity, multiVarBody(), inputXY, tableXY, false, true, false,
           {{I(1), T}, {I(2), F}});
+
+  // An `EXISTS` that is correlated with a non-grouped variable (here `?y`) is
+  // rejected, because the SPARQL standard doesn't clearly define the semantics
+  // of this case.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeGroupBy(
+          identity,
+          makeExistsArgument({varX, varY, Variable{"?c"}}, {{1, 999, 999}}),
+          inputXY, tableXY, true, true),
+      ::testing::HasSubstr(
+          "The variable ?y is used inside an EXISTS in the expression (alias "
+          "as ?e), but it is neither aggregated nor part of the GROUP BY."));
 }
 
 // _____________________________________________________________________________

@@ -843,8 +843,7 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
           {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
   // Only add ?a (and select it via `*`, exactly as the parser does) to see if
-  // ?b remains hidden. The `ExistsJoin` correlates on the selected variables,
-  // so ?b must not become a join column.
+  // ?b remains hidden.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
@@ -878,8 +877,7 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
           {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
 
-  // Select the visible variables via `*`, exactly as the parser does, so that
-  // the `ExistsJoin` correlates on them.
+  // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
