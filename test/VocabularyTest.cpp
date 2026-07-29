@@ -283,51 +283,19 @@ TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
-// _____________________________________________________________________________
-TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
-  using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+namespace {
+// Write an `RdfsVocabulary` of the given `type` to an aligned buffer via
+// `writeAsZeroCopyBlob`, read it back via `loadFromZeroCopyDeserializer`, and
+// check that the round trip preserves all words. Use this for all vocabulary
+// types that support zero-copy (de)serialization, so that the same code tests
+// the compressed as well as the uncompressed in-memory vocabulary.
+void testZeroCopyRoundTripPolymorphic(
+    ad_utility::VocabularyType type,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l);
 
   RdfsVocabulary vocabulary;
-  vocabulary.resetToType(VocabularyType{InMemoryUncompressed});
-  ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
-  auto filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
-  vocabulary.createFromSet(words, filename);
-
-  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
-  vocabulary.writeAsZeroCopyBlob(writeSerializer);
-
-  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
-      std::move(writeSerializer).data()};
-  RdfsVocabulary readVocabulary;
-  readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
-
-  ASSERT_EQ(vocabulary.size(), readVocabulary.size());
-  for (size_t i = 0; i < vocabulary.size(); ++i) {
-    EXPECT_EQ(vocabulary[VocabIndex::make(i)],
-              readVocabulary[VocabIndex::make(i)]);
-  }
-}
-
-// _____________________________________________________________________________
-TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
-  using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
-
-  RdfsVocabulary vocabulary;
-  vocabulary.resetToType(VocabularyType{OnDiskCompressed});
-  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
-  EXPECT_ANY_THROW(vocabulary.writeAsZeroCopyBlob(writeSerializer));
-}
-
-// _____________________________________________________________________________
-TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
-  using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
-
-  RdfsVocabulary vocabulary;
-  vocabulary.resetToType(VocabularyType{InMemoryCompressed});
+  vocabulary.resetToType(type);
   ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
   auto filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
@@ -341,7 +309,7 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
   // The reader has to select the matching type before loading, exactly as with
   // the regular `open` mechanism.
   RdfsVocabulary readVocabulary;
-  readVocabulary.resetToType(VocabularyType{InMemoryCompressed});
+  readVocabulary.resetToType(type);
   readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
 
   ASSERT_EQ(vocabulary.size(), readVocabulary.size());
@@ -349,6 +317,34 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
     EXPECT_EQ(vocabulary[VocabIndex::make(i)],
               readVocabulary[VocabIndex::make(i)]);
   }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphicUncompressed) {
+  testZeroCopyRoundTripPolymorphic(
+      ad_utility::VocabularyType::InMemoryUncompressed);
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
+  testZeroCopyRoundTripPolymorphic(
+      ad_utility::VocabularyType::InMemoryCompressed);
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyBlobThrowsWhenNotInMemory) {
+  RdfsVocabulary vocabulary;
+  vocabulary.resetToType(ad_utility::VocabularyType::OnDiskCompressed);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  EXPECT_ANY_THROW(vocabulary.writeAsZeroCopyBlob(writeSerializer));
+
+  // Reading throws before the buffer is touched at all, so the (empty) buffer
+  // of the write serializer above is sufficient here.
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  EXPECT_ANY_THROW(vocabulary.loadFromZeroCopyDeserializer(readSerializer));
 }
 
 // _____________________________________________________________________________
