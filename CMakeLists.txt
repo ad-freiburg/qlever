@@ -59,9 +59,9 @@ add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 # details.
 # Note on tests: With BUILD_SHARED_LIBS=ON, each test binary is smaller because
 # shared libraries are loaded at runtime rather than linked statically. However,
-# the per-test-case discovery regime (CTest discovering individual gtest cases
-# via a subprocess invocation) becomes noticeably slower because every subprocess
-# invocation triggers shared-library loading overhead.
+# every test process now has to load those libraries at startup, which makes the
+# per-test-case regime much more expensive; consider combining this option with
+# `QLEVER_ONE_TEST_CASE_PER_FILE` below.
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 if(BUILD_SHARED_LIBS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -70,6 +70,54 @@ if(BUILD_SHARED_LIBS)
     # `AD_ALWAYS_INLINE` in `CompilerExtensions.h` for the only current use.
     add_compile_definitions(QLEVER_BUILD_SHARED_LIBRARIES)
 endif()
+
+# Link QLever's shared libraries with `--no-undefined`, such that a library that
+# is missing one of its dependencies fails to link right away. Without this, such
+# a library links successfully and the missing dependency only shows up (much
+# later) when an executable is linked against it, and only with those linkers
+# that reject undefined symbols from shared libraries. In particular `mold`,
+# which we use in the CI, silently accepts them, so without this check a missing
+# dependency can pass the CI and still break the build for everyone who uses the
+# default linker.
+# The default is `ON`, except in the following cases:
+# - The Apple linker doesn't know `--no-undefined` (its default behavior already
+#   is to report undefined symbols).
+# - Emscripten resolves symbols differently and doesn't support this.
+# - The sanitizer runtimes are linked into the executable and not into the
+#   individual shared libraries, so instrumented shared libraries legitimately
+#   have undefined `__asan_*`, `__ubsan_*`, or `__tsan_*` symbols.
+# NOTE: The sanitizer flags may arrive through any of several channels, and none
+# of them has been applied to `CMAKE_CXX_FLAGS` yet at this point in the file. We
+# therefore inspect all of them: `CMAKE_CXX_FLAGS` itself (for example set by one
+# of the `toolchains`), `ADDITIONAL_COMPILER_FLAGS` (which is how the CI passes
+# them and which is only appended to `CMAKE_CXX_FLAGS` much further below), and
+# the flags of the selected build type. For the last one we additionally match
+# the name of the build type, because QLever defines `CMAKE_CXX_FLAGS_ASAN`
+# itself, also only further below.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" QLEVER_BUILD_TYPE_UPPERCASE)
+set(QLEVER_ALL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS} ${CMAKE_CXX_FLAGS_${QLEVER_BUILD_TYPE_UPPERCASE}}")
+if (QLEVER_ALL_CXX_FLAGS MATCHES "-fsanitize" OR QLEVER_BUILD_TYPE_UPPERCASE STREQUAL "ASAN")
+    set(QLEVER_SANITIZER_ENABLED ON)
+else ()
+    set(QLEVER_SANITIZER_ENABLED OFF)
+endif ()
+if (BUILD_SHARED_LIBS AND NOT APPLE AND NOT EMSCRIPTEN AND
+        NOT QLEVER_SANITIZER_ENABLED)
+    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT ON)
+else ()
+    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT OFF)
+endif ()
+option(QLEVER_NO_UNDEFINED_SYMBOLS "Require that all symbols of a shared library can be resolved when it is linked" ${QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT})
+message(STATUS "QLEVER_NO_UNDEFINED_SYMBOLS is ${QLEVER_NO_UNDEFINED_SYMBOLS}")
+
+# Choose how `ctest` addresses the test cases of a test binary. When `OFF` (the
+# default), `gtest_discover_tests` registers every single gtest case as its own
+# `ctest` test. When `ON`, each test binary becomes a single `ctest` test that
+# runs all of its cases at once.
+# Note: `ON` is much faster together with `BUILD_SHARED_LIBS=ON`, because the
+# per-case regime starts one subprocess per case, and each of those subprocesses
+# has to load all the shared libraries again.
+option(QLEVER_ONE_TEST_CASE_PER_FILE "Register one `ctest` test per test binary instead of one per gtest case" OFF)
 
 # Disable nlohmann implicit conversions (e.g. json → std::string) globally so
 # all TUs, including those compiled via PCH, see the same flag value.
@@ -436,30 +484,6 @@ endif ()
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
-
-# Link QLever's shared libraries with `--no-undefined`, such that a library that
-# is missing one of its dependencies fails to link right away. Without this, such
-# a library links successfully and the missing dependency only shows up (much
-# later) when an executable is linked against it, and only with those linkers
-# that reject undefined symbols from shared libraries. In particular `mold`,
-# which we use in the CI, silently accepts them, so without this check a missing
-# dependency can pass the CI and still break the build for everyone who uses the
-# default linker.
-# The default is `ON`, except in the following cases:
-# - The Apple linker doesn't know `--no-undefined` (its default behavior already
-#   is to report undefined symbols).
-# - Emscripten resolves symbols differently and doesn't support this.
-# - The sanitizer runtimes are linked into the executable and not into the
-#   individual shared libraries, so instrumented shared libraries legitimately
-#   have undefined `__asan_*`, `__ubsan_*`, or `__tsan_*` symbols.
-if (BUILD_SHARED_LIBS AND NOT APPLE AND NOT EMSCRIPTEN AND
-        NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")
-    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT ON)
-else ()
-    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT OFF)
-endif ()
-option(QLEVER_NO_UNDEFINED_SYMBOLS "Require that all symbols of a shared library can be resolved when it is linked" ${QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT})
-message(STATUS "QLEVER_NO_UNDEFINED_SYMBOLS is ${QLEVER_NO_UNDEFINED_SYMBOLS}")
 
 
 if (${PERFTOOLS_PROFILER})

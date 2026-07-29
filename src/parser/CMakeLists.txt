@@ -2,6 +2,10 @@
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
 
+# These files are needed by `index`, but the `parser` library below itself
+# depends on `index`, so the dependency chain is
+# `parser` -> `index` -> `basicParser`. They therefore have to live in their own
+# library instead of in `parser`.
 add_library(basicParser Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp)
 qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 

@@ -25,9 +25,7 @@ add_library(sparqlExpressions
         BlankNodeExpression.cpp
         GroupConcatExpression.cpp)
 
-# `SortPerformanceEstimator` is needed by `CountStarExpression` for the
-# sort-before-distinct timeout guard in `COUNT(DISTINCT *)`.
-qlever_target_link_libraries(sparqlExpressions qlever_util index SortPerformanceEstimator)
+qlever_target_link_libraries(sparqlExpressions qlever_util index sortPerformanceEstimator)
 if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
     target_link_libraries(sparqlExpressions PUBLIC Boost::url)
 endif()

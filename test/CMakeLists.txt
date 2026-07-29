@@ -16,20 +16,12 @@ function(addTest basename)
     add_executable(${basename} "${basename}.cpp")
 endfunction()
 
-# Choose how `ctest` addresses the test cases of a test binary. When `OFF` (the
-# default), `gtest_discover_tests` registers every single gtest case as its own
-# `ctest` test. When `ON`, each test binary becomes a single `ctest` test that
-# runs all of its cases at once.
-# Note: `ON` is much faster together with `BUILD_SHARED_LIBS=ON`, because the
-# per-case regime starts one subprocess per case, and each of those subprocesses
-# has to load all the shared libraries again.
-option(QLEVER_ONE_TEST_CASE_PER_FILE "Register one `ctest` test per test binary instead of one per gtest case" OFF)
-
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
 # Link the executable `basename` against `gmock_main`,threading library,
 # and all `additionLibraries` which are passed as arguments.
 # Then register the test cases from the executable with `ctest` (see
-# `QLEVER_ONE_TEST_CASE_PER_FILE` above for the two possible regimes).
+# `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
+# possible regimes).
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
@@ -279,8 +271,8 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator parser)
-#addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator parser)
+#addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
