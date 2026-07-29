@@ -826,8 +826,7 @@ TEST(LibQlever, clearCache) {
   // Run a query with `pinResult`, so that its result is stored in the cache as
   // a pinned entry.
   PlannedQuery plan = engine.planQuery(engine.parseQuery(
-      "SELECT ?s WHERE { ?s <p> ?o }", {},
-      [](std::string) { /* the default is a noop*/ }, false, true));
+      "SELECT ?s WHERE { ?s <p> ?o }", {}, ad_utility::noop, false, true));
   EXPECT_EQ(engine.query(plan, ad_utility::MediaType::tsv), "?s\n<s>\n<s2>\n");
   EXPECT_GT(engine.cache().numPinnedEntries(), 0U);
 

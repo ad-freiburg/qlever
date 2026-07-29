@@ -32,6 +32,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
@@ -408,8 +409,7 @@ class Qlever {
   // so this has to be ensured by the caller.
   ParsedQueryAndContext parseQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
 
   // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
@@ -421,8 +421,7 @@ class Qlever {
   // reusing a parsed query in `parseQuery` above. This is not checked.
   ParsedQueryAndContext bindParsedQuery(
       ParsedQuery parsedQuery,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
 
   // Parse and plan the given `query` (see `planQuery` above; despite the
@@ -454,8 +453,7 @@ class Qlever {
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
@@ -554,8 +552,7 @@ class Qlever {
   // consistent state.
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<IndexAndViews> indexAndViews,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =
           QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
