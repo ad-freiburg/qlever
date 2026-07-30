@@ -126,6 +126,71 @@ struct CompressedBlockMetadataNoBlockIndex {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
+  // Additional information for a block that only represents a *part* of an
+  // on-disk block. Such partial blocks are created when many update triples
+  // fall into the same on-disk block, which is then split into several parts,
+  // see `LocatedTriplesPerBlock::updateAugmentedMetadata`. All parts of an
+  // on-disk block share the same `blockIndex_`, the same
+  // `offsetsAndCompressedSize_` (unless a part provably contains no rows of the
+  // on-disk block, in which case those are `nullopt`), and the same `numRows_`.
+  // The part of the block (both of its rows and of its update triples) that
+  // belongs to a partial block is defined by the bounds below.
+  struct PartialBlockInfo {
+    // The estimated number of rows of the on-disk block that belong to this
+    // part. Note that `numRows_` always is the exact number of rows of the
+    // *whole* on-disk block, as it is required to decompress that block.
+    uint32_t numRowsEstimate_;
+    // If true, then `firstTriple_` is the inclusive lower bound of this part:
+    // all rows and update triples that are smaller (ignoring the graph) belong
+    // to a preceding part. If false, then this part has no lower bound.
+    bool firstTripleIsInclusiveLowerBound_;
+    // If true, then `lastTriple_` is the *exclusive* upper bound of this part:
+    // all rows and update triples that are greater than or equal to it
+    // (ignoring the graph) belong to a subsequent part. If false, then this
+    // part has no upper bound, and `lastTriple_` is inclusive, as it is for a
+    // block that is not partial.
+    bool lastTripleIsExclusiveUpperBound_;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
+        PartialBlockInfo, numRowsEstimate_, firstTripleIsInclusiveLowerBound_,
+        lastTripleIsExclusiveUpperBound_)
+  };
+  std::optional<PartialBlockInfo> partialBlockInfo_ = std::nullopt;
+
+  // Return true iff this block only represents a part of an on-disk block, see
+  // `PartialBlockInfo` above.
+  bool isPartial() const { return partialBlockInfo_.has_value(); }
+
+  // The number of rows that this block contributes to a scan. For a partial
+  // block this is only an estimate. NOTE: Use `numRows_` (which is exact also
+  // for partial blocks) whenever the number of rows of the on-disk block is
+  // required, in particular for decompressing it.
+  size_t numRowsEstimate() const {
+    return isPartial() ? partialBlockInfo_.value().numRowsEstimate_ : numRows_;
+  }
+
+  // The inclusive lower bound of this block, or `nullopt` if it has none. All
+  // rows and update triples that are smaller (ignoring the graph) do not belong
+  // to this block.
+  std::optional<PermutedTriple> inclusiveLowerBound() const {
+    if (isPartial() &&
+        partialBlockInfo_.value().firstTripleIsInclusiveLowerBound_) {
+      return firstTriple_;
+    }
+    return std::nullopt;
+  }
+
+  // The exclusive upper bound of this block, or `nullopt` if it has none. All
+  // rows and update triples that are greater than or equal to it (ignoring the
+  // graph) do not belong to this block.
+  std::optional<PermutedTriple> exclusiveUpperBound() const {
+    if (isPartial() &&
+        partialBlockInfo_.value().lastTripleIsExclusiveUpperBound_) {
+      return lastTriple_;
+    }
+    return std::nullopt;
+  }
+
   // Check for constant values in `firstTriple_` and `lastTriple` over all
   // columns `< columnIndex`.
   // Returns `true` if the respective column values of `firstTriple_` and
@@ -145,7 +210,7 @@ struct CompressedBlockMetadataNoBlockIndex {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       CompressedBlockMetadataNoBlockIndex, offsetsAndCompressedSize_, numRows_,
       firstTriple_, lastTriple_, graphInfo_,
-      containsDuplicatesWithDifferentGraphs_)
+      containsDuplicatesWithDifferentGraphs_, partialBlockInfo_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
@@ -161,6 +226,14 @@ struct CompressedBlockMetadataNoBlockIndex {
     }
     str << "[possibly] contains duplicates: "
         << blockMetadata.containsDuplicatesWithDifferentGraphs_ << '\n';
+    if (blockMetadata.isPartial()) {
+      const auto& info = blockMetadata.partialBlockInfo_.value();
+      str << "part of an on-disk block, est. num. rows: "
+          << info.numRowsEstimate_
+          << ", has lower bound: " << info.firstTripleIsInclusiveLowerBound_
+          << ", has exclusive upper bound: "
+          << info.lastTripleIsExclusiveUpperBound_ << '\n';
+    }
     return str;
   }
 };
@@ -188,6 +261,12 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
+  //
+  // NOTE: Two consecutive parts of the same on-disk block (see
+  // `PartialBlockInfo`) touch: the exclusive upper bound of the first part is
+  // the inclusive lower bound of the second part. Triples that are the same
+  // when disregarding the graph are still in the same block, because the bounds
+  // are compared while ignoring the graph.
   template <typename SequenceOfBlocks>
   static bool checkInvariantsForSortedBlocks(
       const SequenceOfBlocks& sequenceOfBlocks) {
@@ -196,6 +275,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
         [](const auto& adjacent) {
           const auto& first = adjacent.front().lastTriple_;
           const auto& second = adjacent.back().firstTriple_;
+          if (adjacent.front().exclusiveUpperBound().has_value()) {
+            return first <= second;
+          }
           return (first < second) &&
                  (first.tieWithoutGraph() != second.tieWithoutGraph());
         });
@@ -921,6 +1003,33 @@ class CompressedRelationReader {
   std::optional<DecompressedBlockAndMetadata> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
+
+  // The number of columns that have to be read from disk in addition to the
+  // `scanColumns_` of the `scanConfig` for the block described by the
+  // `metadata`. This is `0` unless that block is only a part of an on-disk
+  // block (see `CompressedBlockMetadata::PartialBlockInfo`), in which case the
+  // leading columns of a triple that are fixed by the scan specification are
+  // required to determine which rows of the on-disk block belong to that part.
+  static size_t numAdditionalColumnsForPartialBlock(
+      const ScanImplConfig& scanConfig,
+      const CompressedBlockMetadata& metadata);
+
+  // The columns that have to be read from disk for the block described by the
+  // `metadata`: the additional columns `0, 1, ...` (see above), followed by the
+  // `scanColumns_` of the `scanConfig`. Return an empty vector if no additional
+  // columns are required, which means that the `scanColumns_` can be used
+  // directly.
+  static std::vector<ColumnIndex> columnsToReadForBlock(
+      const ScanImplConfig& scanConfig,
+      const CompressedBlockMetadata& metadata);
+
+  // Erase all rows from the `block` (which is the decompressed on-disk block,
+  // read with the `numAdditionalColumns` additional columns) that do not belong
+  // to the part of that block which the `metadata` describes, and then erase
+  // those additional columns again.
+  static void restrictBlockToPartialBlockBounds(
+      DecompressedBlock& block, const CompressedBlockMetadata& metadata,
+      size_t numAdditionalColumns);
 
   // Like `readAndDecompressBlock`, and postprocess by merging the located
   // triples (if any) and applying the graph filters (if any), both specified

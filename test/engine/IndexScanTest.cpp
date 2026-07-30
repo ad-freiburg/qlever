@@ -15,13 +15,16 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/QueryPlanner.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
+#include "parser/SparqlParser.h"
 
 using namespace ad_utility::testing;
 using namespace std::chrono_literals;
@@ -623,6 +626,117 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     auto scan = makeScan();
     EXPECT_EQ(scan.getSizeEstimate(), 3);
     EXPECT_FALSE(scan.sizeEstimateIsExactForTesting());
+  }
+}
+
+// _____________________________________________________________________________
+// Check that the results of scans and joins do not depend on whether the blocks
+// that contain the delta triples are split into several parts, see
+// `LocatedTriplesPerBlock::updateAugmentedMetadata`.
+TEST(IndexScan, resultsDontDependOnSplittingOfBlocksWithUpdates) {
+  std::string turtle;
+  for (size_t i = 0; i < 5; ++i) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> <s", i, "> . ");
+  }
+  auto index = std::make_shared<Index>(
+      makeTestIndex("resultsDontDependOnSplittingOfBlocksWithUpdates", turtle));
+  auto getId = makeGetId(*index);
+  auto graph = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto predicate = getId("<p>");
+
+  // Insert all combinations `<si> <p> <sj>`, most of which are not yet
+  // contained in the index. All of them are located in very few blocks.
+  std::vector<IdTriple<0>> triples;
+  for (size_t i = 0; i < 5; ++i) {
+    for (size_t j = 0; j < 5; ++j) {
+      triples.push_back(
+          IdTriple<0>{std::array{getId(absl::StrCat("<s", i, ">")), predicate,
+                                 getId(absl::StrCat("<s", j, ">")), graph}});
+    }
+  }
+  ql::ranges::sort(triples);
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.insertTriples(
+        std::make_shared<ad_utility::CancellationHandle<>>(), triples);
+  });
+
+  // Run a scan of the complete permutation, as well as a join of two scans, and
+  // return their results as vectors of rows, together with the number of blocks
+  // of the augmented metadata. Note: The rows are extracted via the variables,
+  // such that the comparison of the results does not depend on the chosen query
+  // plan.
+  using Rows = std::vector<std::array<Id, 3>>;
+  auto runQueries = [&index]() {
+    // The blocks are split when the augmented metadata is computed, which
+    // happens at the end of each modification of the delta triples. We thus
+    // have to trigger a recomputation after the runtime parameter has been
+    // changed.
+    index->deltaTriplesManager().modify<void>([](DeltaTriples&) {});
+    size_t numAugmentedBlocks =
+        index->deltaTriplesManager()
+            .getCurrentLocatedTriplesSharedState()
+            ->getLocatedTriplesForPermutation<false>(Permutation::Enum::PSO)
+            .getAugmentedMetadata()
+            .size();
+    QueryResultCache cache;
+    NamedResultCache namedCache;
+    auto materializedViewsManager =
+        std::make_shared<MaterializedViewsManager>();
+    QueryExecutionContext qec{
+        index,
+        &cache,
+        makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{},
+        &namedCache,
+        materializedViewsManager};
+    IndexScan scan{&qec, Permutation::Enum::PSO,
+                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+    auto scanResult = scan.computeResultOnlyForTesting();
+    EXPECT_EQ(scanResult.idTableView().numRows(), scan.getExactSize());
+    Rows scanRows;
+    for (const auto& row : scanResult.idTableView()) {
+      scanRows.push_back({row[0], row[1], row[2]});
+    }
+
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    QueryPlanner queryPlanner{&qec, cancellationHandle};
+    auto parsedQuery = SparqlParser::parseQuery(
+        &index->getImpl().encodedIriManager(),
+        "SELECT * WHERE { ?x <p> ?y . ?y <p> ?z } ORDER BY ?x ?y ?z");
+    auto queryExecutionTree = queryPlanner.createExecutionTree(parsedQuery);
+    auto joinResult = queryExecutionTree.getResult();
+    Rows joinRows;
+    auto column = [&queryExecutionTree](const std::string& variable) {
+      return queryExecutionTree.getVariableColumn(Var{variable});
+    };
+    for (const auto& row : joinResult->idTableView()) {
+      joinRows.push_back(
+          {row[column("?x")], row[column("?y")], row[column("?z")]});
+    }
+    return std::tuple{std::move(scanRows), std::move(joinRows),
+                      numAugmentedBlocks};
+  };
+
+  // The reference results, computed with the splitting disabled.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::maxBlockSizeWithUpdates_>(
+          0);
+  auto [expectedScanResult, expectedJoinResult, numBlocksWithoutSplitting] =
+      runQueries();
+  EXPECT_EQ(expectedScanResult.size(), 25);
+
+  for (size_t maxBlockSizeWithUpdates : {1, 2, 7}) {
+    auto trace = generateLocationTrace(
+        AD_CURRENT_SOURCE_LOC(),
+        absl::StrCat("maxBlockSizeWithUpdates = ", maxBlockSizeWithUpdates));
+    auto cleanupInner = setRuntimeParameterForTest<
+        &RuntimeParameters::maxBlockSizeWithUpdates_>(maxBlockSizeWithUpdates);
+    auto [scanResult, joinResult, numBlocks] = runQueries();
+    // The blocks with the update triples were actually split.
+    EXPECT_GT(numBlocks, numBlocksWithoutSplitting);
+    EXPECT_EQ(scanResult, expectedScanResult);
+    EXPECT_EQ(joinResult, expectedJoinResult);
   }
 }
 

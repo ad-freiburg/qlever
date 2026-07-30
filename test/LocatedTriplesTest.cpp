@@ -46,6 +46,14 @@ auto CBM = [](const auto firstTriple, const auto lastTriple,
       dummyBlockIndex};
 };
 
+// A dummy block metadata for the block with the given index, which is not
+// partial. Only the `blockIndex_` is relevant for the functions that take a
+// block metadata to look up the update triples of that block.
+auto blockMetadataWithIndex = [](size_t blockIndex) {
+  return CompressedBlockMetadata{
+      {{}, 0, PT(0, 0, 0), PT(0, 0, 0), std::nullopt, false}, blockIndex};
+};
+
 auto numBlocks =
     [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numBlocks,
@@ -260,14 +268,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {4, 10, 10}   // LT 7
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                 block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -302,14 +312,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30, 10}   // LT 5
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 2, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
+    merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                 block, 2, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -336,14 +348,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30}   // orig. Row 5
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 1, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
+    merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                 block, 1, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -354,14 +368,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
     IdTable resultExpected = block.clone();
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                 block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -373,14 +389,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
          LT{1, IT(1, 3, 5), false}});
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
     // result.
     addGraphColumn(block);
     addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                 block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -399,7 +417,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 3, 6, UndefId(), UndefId()},
                                {1, 7, 9, IntId(13), IntId(14)}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
@@ -409,7 +428,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     block.setColumnSubset(std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
     resultExpected.setColumnSubset(
         std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                 block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -434,7 +454,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
 
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(2, block, 3, false),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(2),
+                                                     block, 3, false),
                  ad_utility::Exception);
   }
 
@@ -460,7 +481,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 3, false),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                     block, 3, false),
                  ad_utility::Exception);
   }
 
@@ -485,7 +507,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 4, false),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                     block, 4, false),
                  ad_utility::Exception);
   }
 
@@ -503,7 +526,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(1, 5, 10), true},   // Insert before row 0
         LT{1, IT(2, 11, 10), true},  // Insert before row 1
     });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 0, false),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                     block, 0, false),
                  ad_utility::Exception);
   }
 }
@@ -542,7 +566,8 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
         {3, 30, 30, 0}   // Row 6
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -569,7 +594,8 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
                                                     {15, 30, 1},    // Row 2
                                                     {20, 10, 2}});  // Row 3
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 2, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -592,7 +618,8 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
         {20, 0}   // Row 3
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 1, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -611,7 +638,8 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
                                {1, 2, 3, 1, UndefId(), UndefId()},
                                {1, 2, 3, 2, IntId(12), IntId(11)}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    auto merged = locatedTriplesPerBlock.mergeTriples(blockMetadataWithIndex(1),
+                                                      block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 }
@@ -829,6 +857,121 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
   {
     LocatedTriplesPerBlock ltpb;
     EXPECT_THROW(ltpb.getAugmentedMetadata(), ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, augmentedMetadataWithSplitBlocks) {
+  using B = CompressedBlockMetadata;
+  using LT = LocatedTriple;
+  // A bound between two parts of a block; its graph is the smallest possible ID
+  // (see `LocatedTriples.cpp`).
+  auto boundPT = [](const auto& c1, const auto& c2, const auto& c3) {
+    return B::PermutedTriple{V(c1), V(c2), V(c3), Id::min()};
+  };
+  // Matcher for a single part of a block.
+  auto isPart = [](B::PermutedTriple firstTriple, B::PermutedTriple lastTriple,
+                   size_t numRowsEstimate, bool hasLowerBound,
+                   bool hasUpperBound) -> testing::Matcher<const B&> {
+    auto hasValue = [](auto getter, bool expected) {
+      return testing::ResultOf(
+          [getter](const B& block) {
+            return std::invoke(getter, block).has_value();
+          },
+          testing::Eq(expected));
+    };
+    return testing::AllOf(
+        AD_FIELD(B, firstTriple_, testing::Eq(firstTriple)),
+        AD_FIELD(B, lastTriple_, testing::Eq(lastTriple)),
+        AD_PROPERTY(B, isPartial, testing::IsTrue()),
+        AD_PROPERTY(B, numRowsEstimate, testing::Eq(numRowsEstimate)),
+        hasValue(&B::inclusiveLowerBound, hasLowerBound),
+        hasValue(&B::exclusiveUpperBound, hasUpperBound));
+  };
+  // Split blocks as soon as they have more than two rows (rows in the file plus
+  // update triples).
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::maxBlockSizeWithUpdates_>(
+          2);
+
+  // A block that has four rows in the file (from `(1, 1, 1)` to `(1, 1, 7)`),
+  // and three update triples, one of which lies before all the rows in the
+  // file.
+  {
+    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets{
+        {0, 17}};
+    std::vector<CompressedBlockMetadata> metadata{CompressedBlockMetadata{
+        {offsets, 4, PT(1, 1, 1), PT(1, 1, 7), std::nullopt, false}, 0}};
+    auto ltpb = makeLocatedTriplesPerBlock({LT{0, IT(1, 1, 0), true},
+                                            LT{0, IT(1, 1, 3), true},
+                                            LT{0, IT(1, 1, 5), false}});
+    ltpb.setOriginalMetadata(metadata);
+    ltpb.updateAugmentedMetadata();
+
+    // The block is split into one part per update triple. The rows in the file
+    // are distributed evenly over the parts (which is only an estimate; all
+    // four of them might as well lie in a single part).
+    EXPECT_THAT(ltpb.getAugmentedMetadata(),
+                testing::ElementsAre(
+                    isPart(PT(1, 1, 0), boundPT(1, 1, 3), 2, false, true),
+                    isPart(boundPT(1, 1, 3), boundPT(1, 1, 5), 2, true, true),
+                    isPart(boundPT(1, 1, 5), PT(1, 1, 7), 2, true, false)));
+    // Each of the parts sees exactly its own update triple.
+    for (const auto& part : ltpb.getAugmentedMetadata()) {
+      EXPECT_TRUE(ltpb.containsTriples(part));
+      EXPECT_EQ(ltpb.numTriples(part), (NumAddedAndDeleted{1, 1}));
+    }
+  }
+
+  // A block that consists of update triples only (this is the case for the
+  // artificial last block, and in particular for all updates if the index was
+  // empty when it was built). Such parts are never read from disk.
+  {
+    LocatedTriplesPerBlock ltpb = makeLocatedTriplesPerBlock(
+        {LT{0, IT(1, 1, 1), true}, LT{0, IT(1, 1, 2), true},
+         LT{0, IT(2, 2, 2), true}, LT{0, IT(3, 3, 3), false}});
+    ltpb.setOriginalMetadata(std::vector<CompressedBlockMetadata>{});
+    ltpb.updateAugmentedMetadata();
+
+    EXPECT_THAT(ltpb.getAugmentedMetadata(),
+                testing::ElementsAre(
+                    isPart(PT(1, 1, 1), boundPT(2, 2, 2), 0, false, true),
+                    isPart(boundPT(2, 2, 2), PT(3, 3, 3), 0, true, false)));
+    EXPECT_THAT(ltpb.getAugmentedMetadata(),
+                testing::Each(AD_FIELD(B, offsetsAndCompressedSize_,
+                                       testing::Eq(std::nullopt))));
+    const auto& parts = ltpb.getAugmentedMetadata();
+    EXPECT_EQ(ltpb.numTriples(parts.at(0)), (NumAddedAndDeleted{2, 2}));
+    EXPECT_EQ(ltpb.numTriples(parts.at(1)), (NumAddedAndDeleted{2, 2}));
+  }
+
+  // Update triples that are all equal when ignoring the graph must not be
+  // split, because they have to stay in the same block.
+  {
+    LocatedTriplesPerBlock ltpb = makeLocatedTriplesPerBlock(
+        {LT{0, IT(1, 1, 1, 10), true}, LT{0, IT(1, 1, 1, 11), true},
+         LT{0, IT(1, 1, 1, 12), true}});
+    ltpb.setOriginalMetadata(std::vector<CompressedBlockMetadata>{});
+    ltpb.updateAugmentedMetadata();
+
+    EXPECT_THAT(
+        ltpb.getAugmentedMetadata(),
+        testing::ElementsAre(AD_PROPERTY(B, isPartial, testing::IsFalse())));
+  }
+
+  // If the splitting is disabled, then large blocks stay unsplit.
+  {
+    auto cleanupInner = setRuntimeParameterForTest<
+        &RuntimeParameters::maxBlockSizeWithUpdates_>(0);
+    LocatedTriplesPerBlock ltpb = makeLocatedTriplesPerBlock(
+        {LT{0, IT(1, 1, 1), true}, LT{0, IT(2, 2, 2), true},
+         LT{0, IT(3, 3, 3), true}});
+    ltpb.setOriginalMetadata(std::vector<CompressedBlockMetadata>{});
+    ltpb.updateAugmentedMetadata();
+
+    EXPECT_THAT(
+        ltpb.getAugmentedMetadata(),
+        testing::ElementsAre(AD_PROPERTY(B, isPartial, testing::IsFalse())));
   }
 }
 
