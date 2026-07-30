@@ -7,13 +7,9 @@
 #include <gmock/gmock.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/IndexScan.h"
-#include "engine/QueryExportTypes.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
-#include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
-#include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -2157,7 +2153,8 @@ TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
 
 // VALUES clause that emits the identical triple 3 times — a minimal smoke
 // test that the deduplication is wired end-to-end.
-TEST(ExportQueryExecutionTrees, ConstructDeduplicationValuesNoneKeepsDuplicates) {
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesNoneKeepsDuplicates) {
   const std::string kg = "";
   const std::string query =
       "CONSTRUCT { ?s ?p ?o } WHERE {"
@@ -2170,7 +2167,7 @@ TEST(ExportQueryExecutionTrees, ConstructDeduplicationValuesNoneKeepsDuplicates)
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
           ad_utility::DeduplicationMode::none());
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-           absl::StrCat(expected, expected, expected));
+            absl::StrCat(expected, expected, expected));
 }
 
 TEST(ExportQueryExecutionTrees,
@@ -2187,7 +2184,7 @@ TEST(ExportQueryExecutionTrees,
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
           ad_utility::DeduplicationMode::global());
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-           expected);
+            expected);
 }
 
 // A-B-A pattern with a batch-wise window of 1: A inserted, B inserted
@@ -2209,7 +2206,7 @@ TEST(ExportQueryExecutionTrees,
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
           ad_utility::DeduplicationMode::batchWise(1));
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-           absl::StrCat(a, b, a));
+            absl::StrCat(a, b, a));
 }
 
 // ____________________________________________________________________________
@@ -2255,7 +2252,7 @@ TEST_P(ConstructDeduplicationBatchWiseWindowTest, window) {
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
           ad_utility::DeduplicationMode::batchWise(GetParam().windowSize));
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-           expected);
+            expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(
