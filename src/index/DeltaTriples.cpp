@@ -790,7 +790,7 @@ void DeltaTriples::addFromSnapshotDiff(
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE void DeltaTriples::remapId(
+void DeltaTriples::remapId(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
     LocalVocab& localVocab, const IndexImpl& index) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
