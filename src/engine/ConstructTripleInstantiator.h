@@ -10,7 +10,6 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,6 +22,8 @@ namespace qlever::constructExport {
 
 using StringTriple = QueryExecutionTree::StringTriple;
 
+class ConstructDeduplicator;
+
 // Instantiates a single preprocessed term for a specific row.
 // For constants: returns the precomputed string.
 // For variables: looks up the batch-evaluated value.
@@ -32,14 +33,23 @@ std::optional<EvaluatedTerm> instantiateTerm(
     const PreprocessedTerm& term, const BatchEvaluationResult& batchResult,
     size_t rowIdxInBatch, size_t rowIdxTotal);
 
+// Bundles the state `instantiateBatch` needs to deduplicate triples as it
+// instantiates them.
+struct DeduplicationParams {
+  ConstructDeduplicator& deduplicator_;
+  const BatchEvaluationContext& ctx_;
+};
+
 // Instantiates all template triples for all rows in a batch. For each row,
 // every triple in `tmpl.preprocessedTriples_` is instantiated; triples with
 // any unbound term are silently dropped. `batchOffset` is the absolute
 // row ID of the first row in the batch (used to generate unique blank node
-// IDs).
+// IDs). If `deduplication` is given, a triple is also dropped when its
+// deduplication key was already seen.
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t batchOffset);
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    std::optional<DeduplicationParams> deduplication = std::nullopt);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals

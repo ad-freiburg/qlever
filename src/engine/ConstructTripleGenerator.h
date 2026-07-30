@@ -12,9 +12,11 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "engine/VariableToColumnMap.h"
 #include "index/Index.h"
+#include "parser/data/Types.h"
 #include "util/CancellationHandle.h"
 #include "util/ConstructDeduplicationMode.h"
 #include "util/Iterators.h"

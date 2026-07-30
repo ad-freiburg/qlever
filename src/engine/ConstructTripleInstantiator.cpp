@@ -12,6 +12,7 @@
 #include <absl/strings/str_cat.h>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/ConstructDeduplicator.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
@@ -43,13 +44,15 @@ std::optional<EvaluatedTerm> instantiateTerm(
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t batchOffset) {
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    std::optional<DeduplicationParams> deduplication) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
   for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
-    for (const auto& triple : tmpl.preprocessedTriples_) {
+    for (auto&& [tripleIdx, triple] :
+         ::ranges::views::enumerate(tmpl.preprocessedTriples_)) {
       auto instantiate = [&triple, &batchResult, rowInBatch,
                           blankNodeRowId](size_t pos) {
         return instantiateTerm(triple[pos], batchResult, rowInBatch,
@@ -58,9 +61,19 @@ std::vector<EvaluatedTriple> instantiateBatch(
       auto subject = instantiate(0);
       auto predicate = instantiate(1);
       auto object = instantiate(2);
-      if (subject && predicate && object) {
-        triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
+      if (!subject || !predicate || !object) {
+        continue;
       }
+      if (deduplication) {
+        const size_t rowIdxInIdTable =
+            deduplication->ctx_.firstRow_ + rowInBatch;
+        if (!deduplication->deduplicator_.isNew(static_cast<size_t>(tripleIdx),
+                                                rowIdxInIdTable, tmpl,
+                                                deduplication->ctx_)) {
+          continue;
+        }
+      }
+      triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
     }
   }
   return triples;
