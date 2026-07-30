@@ -22,10 +22,11 @@ using ::testing::HasSubstr;
 using ::testing::Optional;
 
 namespace {
-// The environment variables that `ProxyConfiguration::fromEnvironment` looks at.
+// The environment variables that `ProxyConfiguration::fromEnvironment` looks
+// at.
 constexpr std::array proxyEnvironmentVariables{
-    "http_proxy",  "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
-    "all_proxy",   "ALL_PROXY",  "no_proxy",    "NO_PROXY"};
+    "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
+    "all_proxy",  "ALL_PROXY",  "no_proxy",    "NO_PROXY"};
 
 // Matcher for a `Proxy` with the given host and port and no authentication.
 auto isProxy(std::string_view host, std::string_view port) {
@@ -236,14 +237,15 @@ TEST(ProxyConfiguration, noProxyAndLoopbackBypassTheProxy) {
 
 // _____________________________________________________________________________
 TEST(ProxyConfiguration, invalidSchemeIsAContractViolation) {
-  ProxyConfiguration configuration{"http://proxy:3128", "http://proxy:3128", ""};
+  ProxyConfiguration configuration{"http://proxy:3128", "http://proxy:3128",
+                                   ""};
   EXPECT_ANY_THROW(configuration.proxyFor("ftp", "example.org"));
 }
 
 // _____________________________________________________________________________
 TEST(ProxyConfiguration, asStringForLoggingHidesCredentials) {
-  ProxyConfiguration configuration{
-      "http://user:secret@proxy:3128", "http://proxy:3129", "example.org"};
+  ProxyConfiguration configuration{"http://user:secret@proxy:3128",
+                                   "http://proxy:3129", "example.org"};
   std::string logged = configuration.asStringForLogging();
   EXPECT_THAT(logged, HasSubstr("proxy:3128"));
   EXPECT_THAT(logged, HasSubstr("(with auth)"));
@@ -251,8 +253,8 @@ TEST(ProxyConfiguration, asStringForLoggingHidesCredentials) {
   EXPECT_THAT(logged, HasSubstr("example.org"));
   // Neither the password nor its encoding may appear in the log.
   EXPECT_THAT(logged, ::testing::Not(HasSubstr("secret")));
-  EXPECT_THAT(logged, ::testing::Not(HasSubstr(
-                          absl::Base64Escape("user:secret"))));
+  EXPECT_THAT(logged,
+              ::testing::Not(HasSubstr(absl::Base64Escape("user:secret"))));
 
   EXPECT_EQ(ProxyConfiguration("", "", "").asStringForLogging(), "none");
 }

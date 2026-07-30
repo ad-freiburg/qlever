@@ -796,11 +796,12 @@ class FakeConnectProxy {
     if (ec) {
       return;
     }
-    request_ = absl::StrCat(toStd(to_string(parser.get().method())), " ",
-                            toStd(parser.get().target()), "\nhost: ",
-                            toStd(parser.get()[http::field::host]),
-                            "\nproxy-authorization: ",
-                            toStd(parser.get()[http::field::proxy_authorization]));
+    request_ =
+        absl::StrCat(toStd(to_string(parser.get().method())), " ",
+                     toStd(parser.get().target()),
+                     "\nhost: ", toStd(parser.get()[http::field::host]),
+                     "\nproxy-authorization: ",
+                     toStd(parser.get()[http::field::proxy_authorization]));
     net::write(socket, net::buffer(response_), ec);
     // Keep the socket open briefly so the client can attempt its handshake and
     // observe a TLS error rather than a premature EOF on the read above.
@@ -821,9 +822,8 @@ TEST(HttpProxy, plainHttpRequestUsesAbsoluteFormTarget) {
   // goes to the proxy, which is our echo server here.
   auto client =
       std::make_unique<HttpClient>("example.org", "8080", std::move(proxy));
-  auto response = HttpClient::sendRequest(std::move(client), verb::get,
-                                          "example.org", "/sparql?query=X",
-                                          handle);
+  auto response = HttpClient::sendRequest(
+      std::move(client), verb::get, "example.org", "/sparql?query=X", handle);
   EXPECT_EQ(response.status_, status::ok);
   EXPECT_EQ(toString(std::move(response.body_)),
             "http://example.org:8080/sparql?query=X\nexample.org");
@@ -884,8 +884,8 @@ TEST(HttpProxy, httpsRequestEstablishesConnectTunnel) {
 // the `CONNECT` request.
 TEST(HttpProxy, connectTunnelSendsProxyAuthorization) {
   FakeConnectProxy fakeProxy{"HTTP/1.1 200 Connection established\r\n\r\n"};
-  auto proxyWithAuth = ad_utility::httpProxy::parseProxyUrl(absl::StrCat(
-      "http://user:password@localhost:", fakeProxy.getPort()));
+  auto proxyWithAuth = ad_utility::httpProxy::parseProxyUrl(
+      absl::StrCat("http://user:password@localhost:", fakeProxy.getPort()));
   ASSERT_TRUE(proxyWithAuth.has_value());
 
   EXPECT_ANY_THROW(HttpsClient("example.org", "443", proxyWithAuth.value()));

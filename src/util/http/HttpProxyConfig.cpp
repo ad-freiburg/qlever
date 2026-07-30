@@ -82,9 +82,9 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
   // Boost.URL requires a scheme, so add the implied one. We must not do this
   // when a scheme is already present, because we want to report an unsupported
   // scheme (e.g. `socks5://`) as such.
-  std::string withScheme =
-      absl::StrContains(trimmed, "://") ? std::string{trimmed}
-                                        : absl::StrCat("http://", trimmed);
+  std::string withScheme = absl::StrContains(trimmed, "://")
+                               ? std::string{trimmed}
+                               : absl::StrCat("http://", trimmed);
   boost::system::result<boost::urls::url_view> parsed =
       boost::urls::parse_uri(withScheme);
   if (parsed.has_error()) {
@@ -110,9 +110,9 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
   // A proxy URL is an authority, not a resource; a path would silently be
   // ignored, so reject it instead of pretending to honor it.
   if (!url.path().empty() && url.path() != "/") {
-    throw std::runtime_error(absl::StrCat(
-        "The proxy URL \"", proxyUrl, "\" must not have a path, but has \"",
-        url.path(), "\""));
+    throw std::runtime_error(absl::StrCat("The proxy URL \"", proxyUrl,
+                                          "\" must not have a path, but has \"",
+                                          url.path(), "\""));
   }
 
   Proxy proxy;
@@ -198,8 +198,7 @@ ProxyConfiguration ProxyConfiguration::fromEnvironment() {
   return ProxyConfiguration{
       orElseAllProxy(firstEnvThatIsSet({"http_proxy"})),
       orElseAllProxy(firstEnvThatIsSet({"https_proxy", "HTTPS_PROXY"})),
-      firstEnvThatIsSet({"no_proxy", "NO_PROXY"})
-          .value_or(std::string_view{})};
+      firstEnvThatIsSet({"no_proxy", "NO_PROXY"}).value_or(std::string_view{})};
 }
 
 // ____________________________________________________________________________

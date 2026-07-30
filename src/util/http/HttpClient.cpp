@@ -70,8 +70,8 @@ void establishProxyTunnel(tcp::socket& socket, const Proxy& proxy,
   if (status < 200 || status >= 300) {
     throw std::runtime_error(absl::StrCat(
         "The HTTP proxy <", proxy.host_, ":", proxy.port_,
-        "> refused to open a tunnel to <", authority, "> and responded with: ",
-        status, " ", toStd(response.reason()),
+        "> refused to open a tunnel to <", authority,
+        "> and responded with: ", status, " ", toStd(response.reason()),
         status == 407 ? ". Note that credentials for the proxy can be given as "
                         "part of the proxy URL, as in "
                         "`https_proxy=http://user:password@proxy:3128`"

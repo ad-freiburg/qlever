@@ -69,9 +69,9 @@ class HttpClientImpl {
   // handshake (see `establishProxyTunnel`). Note that `sendHttpOrHttpsRequest`
   // below determines the proxy automatically; an explicit `proxy` is mostly
   // useful for tests.
-  HttpClientImpl(std::string_view host, std::string_view port,
-                 std::optional<ad_utility::httpProxy::Proxy> proxy =
-                     std::nullopt);
+  HttpClientImpl(
+      std::string_view host, std::string_view port,
+      std::optional<ad_utility::httpProxy::Proxy> proxy = std::nullopt);
 
   // The destructor closes the connection.
   ~HttpClientImpl();
