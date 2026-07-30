@@ -41,6 +41,16 @@ class alignas(16) LocalVocabEntry
 
  private:
   // Pointer to keep this object assignable.
+  // IMPORTANT: This is a raw pointer to the index the entry was created with,
+  // used for the lazy computation of the position in the vocabulary (see
+  // below) and for comparisons between entries. The index must therefore stay
+  // alive as long as the entry (or any copy of it, which copies this pointer
+  // and the cached position) can be used. In particular, when entries are
+  // transferred to a different index (e.g. when a rebuilt index is swapped in
+  // at runtime, see #2832), they must be *re-anchored*: re-created with the
+  // new index as context so that the position is recomputed against the new
+  // vocabulary. A plain copy would keep a dangling pointer (use-after-free)
+  // and a stale position (silently wrong comparison results).
   const LocalVocabContext* context_;
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
