@@ -30,7 +30,7 @@ IdCache ConstructTripleGenerator::makeIdCache(
 namespace {
 
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
-// the start. When `deduplicator` is non-null, duplicate triples are dropped
+// the start. When `deduplicator` is set, duplicate triples are dropped
 // as they are instantiated (see `instantiateBatch`'s `DeduplicationParams`).
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
     std::vector<EvaluatedTriple> computeBatch(
@@ -38,7 +38,8 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
         const PreprocessedConstructTemplate& preprocessedTemplate,
         const Index& index, IdCache& cache, size_t tableRowOffset,
         const CancellationHandle& cancellationHandle,
-        ConstructDeduplicator* deduplicator) {
+        std::optional<std::reference_wrapper<ConstructDeduplicator>>
+            deduplicator) {
   cancellationHandle->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -97,10 +98,15 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
                ql::views::transform([&table, &preprocessedTemplate, &index,
                                      &cache, cancellationHandle, tableRowOffset,
                                      &deduplicator](auto chunkView) {
+                 std::optional<std::reference_wrapper<ConstructDeduplicator>>
+                     deduplicatorRef;
+                 if (deduplicator) {
+                   deduplicatorRef.emplace(*deduplicator);
+                 }
                  return computeBatch(table.tableWithVocab_, chunkView,
                                      *preprocessedTemplate, index, cache,
                                      tableRowOffset, cancellationHandle,
-                                     deduplicator.get());
+                                     deduplicatorRef);
                }) |
                ql::views::join;
       };
