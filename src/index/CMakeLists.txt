@@ -30,5 +30,6 @@ add_library(index
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
         IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
-        InputFileSpecification.cpp ../parser/AsyncFileBlockDriver.cpp)
+        InputFileSpecification.cpp ../parser/AsyncFileBlockDriver.cpp
+        TripleComponentConversions.cpp)
 qlever_target_link_libraries(index qlever_util basicParser vocabulary global)

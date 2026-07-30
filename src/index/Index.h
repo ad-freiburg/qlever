@@ -12,6 +12,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/EncodedIriManager.h"
 #include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"

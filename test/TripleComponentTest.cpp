@@ -9,6 +9,7 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
 #include "index/EncodedIriManager.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/Literal.h"
@@ -125,21 +126,21 @@ TEST(TripleComponent, assignmentOperator) {
 
 TEST(TripleComponent, toRdfLiteral) {
   TripleComponent literal{lit("\"aTypedLiteral\"", "^^<someType>")};
-  EXPECT_EQ(literal.toRdfLiteral(), "\"aTypedLiteral\"^^<someType>");
+  EXPECT_EQ(toRdfLiteral(literal), "\"aTypedLiteral\"^^<someType>");
   std::vector<std::string> strings{"plainString", "<IRI>"};
   for (const auto& s : strings) {
-    ASSERT_EQ(s, TripleComponent{s}.toRdfLiteral());
+    ASSERT_EQ(s, toRdfLiteral(TripleComponent{s}));
   }
 
   TripleComponent object{42};
-  ASSERT_EQ(object.toRdfLiteral(),
+  ASSERT_EQ(toRdfLiteral(object),
             R"("42"^^<http://www.w3.org/2001/XMLSchema#int>)");
 
   object = -43.3;
-  ASSERT_EQ(object.toRdfLiteral(),
+  ASSERT_EQ(toRdfLiteral(object),
             R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#decimal>)");
   object = DateYearOrDuration{123456, DateYearOrDuration::Type::Year};
-  ASSERT_EQ(object.toRdfLiteral(),
+  ASSERT_EQ(toRdfLiteral(object),
             R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");
 
   // Test encoded IRI - covers the "else" branch in toRdfLiteral
@@ -151,7 +152,7 @@ TEST(TripleComponent, toRdfLiteral) {
 
   // Create a TripleComponent with the encoded ID
   TripleComponent encodedIriComponent{encodedIdOpt.value()};
-  std::string result = encodedIriComponent.toRdfLiteral();
+  std::string result = toRdfLiteral(encodedIriComponent);
 
   // This function is just used for cache keys etc, so it is not an issue that
   // the result is not human readable
@@ -160,19 +161,19 @@ TEST(TripleComponent, toRdfLiteral) {
 
 TEST(TripleComponent, toValueIdIfNotString) {
   TripleComponent tc{42};
-  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), I(42));
+  ASSERT_EQ(toValueIdIfNotString(tc, encodedIriManager()).value(), I(42));
   tc = 131.4;
-  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), D(131.4));
+  ASSERT_EQ(toValueIdIfNotString(tc, encodedIriManager()).value(), D(131.4));
 
   tc = TripleComponent{GeoPoint(47.9, 7.8)};
-  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value().getDatatype(),
+  ASSERT_EQ(toValueIdIfNotString(tc, encodedIriManager()).value().getDatatype(),
             Datatype::GeoPoint);
-  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString(encodedIriManager())
+  ASSERT_FLOAT_EQ(toValueIdIfNotString(tc, encodedIriManager())
                       .value()
                       .getGeoPoint()
                       .getLat(),
                   47.9);
-  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString(encodedIriManager())
+  ASSERT_FLOAT_EQ(toValueIdIfNotString(tc, encodedIriManager())
                       .value()
                       .getGeoPoint()
                       .getLng(),
@@ -180,19 +181,19 @@ TEST(TripleComponent, toValueIdIfNotString) {
 
   DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;
-  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(),
+  ASSERT_EQ(toValueIdIfNotString(tc, encodedIriManager()).value(),
             Id::makeFromDate(date));
   tc = "<x>";
-  ASSERT_FALSE(tc.toValueIdIfNotString(encodedIriManager()).has_value());
+  ASSERT_FALSE(toValueIdIfNotString(tc, encodedIriManager()).has_value());
   tc = lit("\"a\"");
-  ASSERT_FALSE(tc.toValueIdIfNotString(encodedIriManager()).has_value());
+  ASSERT_FALSE(toValueIdIfNotString(tc, encodedIriManager()).has_value());
 
   tc = Variable{"?x"};
-  // Note: we cannot simply write `ASSERT_THROW(tc.toValueIdIfNotString(),
+  // Note: we cannot simply write `ASSERT_THROW(toValueIdIfNotString(tc),
   // Exception)` because `toValueIdIfNotString` is marked `nodiscard` and we
   // would get a compiler warning.
   auto f = [&]() {
-    [[maybe_unused]] auto x = tc.toValueIdIfNotString(encodedIriManager());
+    [[maybe_unused]] auto x = toValueIdIfNotString(tc, encodedIriManager());
   };
   ASSERT_THROW(f(), ad_utility::Exception);
 }
@@ -204,25 +205,25 @@ TEST(TripleComponent, toValueId) {
   TripleComponent tc = iri("<x>");
   auto getId = makeGetId(qec->getIndex());
   Id id = getId("<x>");
-  ASSERT_EQ(tc.toValueId(index).value(), id);
+  ASSERT_EQ(toValueId(tc, index).value(), id);
 
   tc = lit("\"alpha\"");
   id = getId("\"alpha\"");
-  EXPECT_EQ(tc.toValueId(index).value(), id);
+  EXPECT_EQ(toValueId(tc, index).value(), id);
 
   tc = iri("<notexisting>");
-  ASSERT_FALSE(tc.toValueId(index).has_value());
+  ASSERT_FALSE(toValueId(tc, index).has_value());
   tc = 42;
 
-  ASSERT_EQ(tc.toValueIdIfNotString(encodedIriManager()).value(), I(42));
+  ASSERT_EQ(toValueIdIfNotString(tc, encodedIriManager()).value(), I(42));
 
   tc = iri(HAS_PATTERN_PREDICATE);
-  ASSERT_EQ(tc.toValueId(index).value(),
+  ASSERT_EQ(toValueId(tc, index).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 
   auto lv = LocalVocab();
   auto expectLocalVocab = [&lv, &index](TripleComponent tc, size_t pos) {
-    auto id = std::move(tc).toValueId(index, lv);
+    auto id = toValueId(std::move(tc), index, lv);
     ASSERT_TRUE(id.getDatatype() == Datatype::LocalVocabIndex);
     auto lve = lv.getWord(id.getLocalVocabIndex());
     // Check that the constructed LVEs have the correct position in vocab set
@@ -247,7 +248,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
 
   auto expectIsInVocab = [&index, &getId](TripleComponent tc) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
-    auto idOrBounds = tc.toValueIdOrBounds(index);
+    auto idOrBounds = toValueIdOrBounds(tc, index);
     auto expectedId =
         getId(tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
                              : tc.getIri().toStringRepresentation());
@@ -263,7 +264,7 @@ TEST(TripleComponent, toValueIdOrBounds) {
   auto expectBounds = [&index, &makePos](TripleComponent tc, BoundsT bounds) {
     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
     // Check that toValueIdOrBounds returns the expected bounds
-    auto idOrBounds = tc.toValueIdOrBounds(index);
+    auto idOrBounds = toValueIdOrBounds(tc, index);
     EXPECT_THAT(idOrBounds, testing::VariantWith<BoundsT>(testing::Eq(bounds)));
     // Check that the bounds are the same as from LocalVocabEntry
     auto lve = tc.isLiteral() ? LocalVocabEntry(tc.getLiteral(), index)
