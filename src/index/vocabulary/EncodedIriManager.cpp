@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "index/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 
 #include "util/CtreHelpers.h"
 
