@@ -484,7 +484,8 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
   const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
-      LVE::fromStringRepresentation("<>", context), localVocab);
+      LVE::fromStringRepresentation("<>", context.getLocalVocabContext()),
+      localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
   // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
@@ -708,7 +709,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // in order. The smallest possible IRI is represented by "<>", we use its
   // corresponding ValueId later on as a lower bound.
   auto vocabIriRanges =
-      make<GreaterThanExpression>(LVE::fromStringRepresentation("<>", context))
+      make<GreaterThanExpression>(
+          LVE::fromStringRepresentation("<>", context.getLocalVocabContext()))
           ->evaluateImpl(context, idRange, blockRange, isNegated_);
   // (2) Encoded IRIs: These sort *after* all vocabulary IRIs, so the `> <>`
   // prefilter above does not cover them and we have to add their datatype range
@@ -748,7 +750,8 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
   auto inlinedRanges =
       getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
   auto nonInlinedRanges =
-      make<LessThanExpression>(LVE::fromStringRepresentation("<>", context))
+      make<LessThanExpression>(
+          LVE::fromStringRepresentation("<>", context.getLocalVocabContext()))
           ->evaluateImpl(context, idRange, blockRange, isNegated_);
 
   // `LITERAL = inlined || nonInlined` (an intersection under negation, see the

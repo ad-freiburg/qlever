@@ -137,22 +137,34 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id falseId = BoolId(false);
   const Id trueId = BoolId(true);
   const Id referenceDateEqual = DateId(DateParser, "2000-01-01");
-  const LocalVocabEntry augsburg = LVE("\"Augsburg\"", indexImpl);
-  const LocalVocabEntry berlin = LVE("\"Berlin\"", indexImpl);
-  const LocalVocabEntry düsseldorf = LVE("\"Düsseldorf\"", indexImpl);
-  const LocalVocabEntry frankfurt = LVE("\"Frankfurt\"", indexImpl);
-  const LocalVocabEntry hamburg = LVE("\"Hamburg\"", indexImpl);
-  const LocalVocabEntry köln = LVE("\"Köln\"", indexImpl);
-  const LocalVocabEntry münchen = LVE("\"München\"", indexImpl);
-  const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"", indexImpl);
-  const LocalVocabEntry wolfsburg = LVE("\"Wolfsburg\"", indexImpl);
-  const LocalVocabEntry iri0 = LVE("<a>", indexImpl);
-  const LocalVocabEntry iri1 = LVE("<iri>", indexImpl);
-  const LocalVocabEntry iri2 = LVE("<iri>", indexImpl);
-  const LocalVocabEntry iri3 = LVE("<randomiriref>", indexImpl);
-  const LocalVocabEntry iri4 = LVE("<someiri>", indexImpl);
-  const LocalVocabEntry iri5 = LVE("<www-iri.de>", indexImpl);
-  const LocalVocabEntry iriBegin = LVE("<", indexImpl);
+  const LocalVocabEntry augsburg =
+      LVE("\"Augsburg\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry berlin =
+      LVE("\"Berlin\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry düsseldorf =
+      LVE("\"Düsseldorf\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry frankfurt =
+      LVE("\"Frankfurt\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry hamburg =
+      LVE("\"Hamburg\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry köln =
+      LVE("\"Köln\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry münchen =
+      LVE("\"München\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry stuttgart =
+      LVE("\"Stuttgart\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry wolfsburg =
+      LVE("\"Wolfsburg\"", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iri0 = LVE("<a>", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iri1 = LVE("<iri>", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iri2 = LVE("<iri>", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iri3 =
+      LVE("<randomiriref>", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iri4 =
+      LVE("<someiri>", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iri5 =
+      LVE("<www-iri.de>", indexImpl.getLocalVocabContext());
+  const LocalVocabEntry iriBegin = LVE("<", indexImpl.getLocalVocabContext());
   const Id idAugsburg = getId(augsburg, vocab);
   const Id vocabIdBe = getVocabId("\"Be\"");
   const Id vocabIdBern = getVocabId("\"Bern\"");
@@ -166,12 +178,15 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id vocabIdMünchen = getVocabId("\"München\"");
   const Id vocabIdStuttgart = getVocabId("\"Stuttgart\"");
   const Id idWolfsburg = getId(wolfsburg, vocab);
-  const Id idB = getId(LVE("\"B\"", indexImpl), vocab);
-  const Id idBe = getId(LVE("\"Be\"", indexImpl), vocab);
-  const Id idBerl = getId(LVE("\"Berl\"", indexImpl), vocab);
-  const Id idHamburgAlt = getId(LVE("\"Hamburg Alt\"", indexImpl), vocab);
+  const Id idB = getId(LVE("\"B\"", indexImpl.getLocalVocabContext()), vocab);
+  const Id idBe = getId(LVE("\"Be\"", indexImpl.getLocalVocabContext()), vocab);
+  const Id idBerl =
+      getId(LVE("\"Berl\"", indexImpl.getLocalVocabContext()), vocab);
+  const Id idHamburgAlt =
+      getId(LVE("\"Hamburg Alt\"", indexImpl.getLocalVocabContext()), vocab);
   const Id idStuttgartZuffenhausen =
-      getId(LVE("\"Stuttgart-Zuffenhausen\"", indexImpl), vocab);
+      getId(LVE("\"Stuttgart-Zuffenhausen\"", indexImpl.getLocalVocabContext()),
+            vocab);
   const Id idBerlin = getId(berlin, vocab);
   const Id idDüsseldorf = getId(düsseldorf, vocab);
   const Id idFrankfurt = getId(frankfurt, vocab);
@@ -677,7 +692,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
   makeTest(le(DoubleId(3.1415)), {b6, b9, b10, b11, b15, b16, b17, b18});
   makeTest(le(DoubleId(-11.99999999999999)), {b17, b18}, true);
   makeTest(le(DoubleId(-14.03)), {b18});
-  makeTest(le(LVE("\"Aachen\"", indexImpl)), {b18});
+  makeTest(le(LVE("\"Aachen\"", indexImpl.getLocalVocabContext())), {b18});
   makeTest(le(frankfurt), {b18, b19});
   makeTest(le(hamburg), {b18, b19, b21}, true);
   makeTest(le(undef), {});
@@ -1024,8 +1039,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // pruned `blockEncodedIri`.
   auto isEncodedIriSparqlExpr = sparqlExpression::makeIsEncodedIriExpression(
       std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}));
-  auto prefilterVec =
-      isEncodedIriSparqlExpr->getPrefilterExpressionForMetadata(indexImpl);
+  auto prefilterVec = isEncodedIriSparqlExpr->getPrefilterExpressionForMetadata(
+      indexImpl.getLocalVocabContext());
   ASSERT_EQ(prefilterVec.size(), 1u);
   const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
   EXPECT_EQ(
@@ -1344,7 +1359,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(isBlank(true));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
-  makeTestClone(le(LVE("\"Hello World\"", indexImpl)));
+  makeTestClone(le(LVE("\"Hello World\"", indexImpl.getLocalVocabContext())));
   makeTestClone(orExpr(eq(IntId(10)), neq(DoubleId(10))));
   makeTestClone(notExpr(ge(referenceDate1)));
   makeTestClone(notExpr(notExpr(neq(VocabId(0)))));
@@ -1355,9 +1370,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
                         orExpr(gt(DoubleId(0.001)), lt(IntId(250)))));
   makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
                        notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
-  makeTestClone(orExpr(
-      orExpr(le(LVE("<iri/id5>", indexImpl)), gt(LVE("<iri/id22>", indexImpl))),
-      neq(LVE("<iri/id10>", indexImpl))));
+  makeTestClone(
+      orExpr(orExpr(le(LVE("<iri/id5>", indexImpl.getLocalVocabContext())),
+                    gt(LVE("<iri/id22>", indexImpl.getLocalVocabContext()))),
+             neq(LVE("<iri/id10>", indexImpl.getLocalVocabContext()))));
   makeTestClone(inExpr({referenceDate2, idDüsseldorf, idHamburg, IntId(0)}));
   makeTestClone(inExpr({falseId, IntId(10), DoubleId(42.5)}, true));
   makeTestClone(prefixRegex(L("prefixPreeefix")));
@@ -1373,8 +1389,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_FALSE(*neq(BoolId(true)) == *eq(BoolId(true)));
   ASSERT_TRUE(*eq(IntId(1)) == *eq(IntId(1)));
   ASSERT_TRUE(*ge(referenceDate1) == *ge(referenceDate1));
-  ASSERT_TRUE(*eq(LVE("<iri>", indexImpl)) == *eq(LVE("<iri>", indexImpl)));
-  ASSERT_FALSE(*gt(LVE("<iri>", indexImpl)) == *gt(LVE("\"iri\"", indexImpl)));
+  ASSERT_TRUE(*eq(LVE("<iri>", indexImpl.getLocalVocabContext())) ==
+              *eq(LVE("<iri>", indexImpl.getLocalVocabContext())));
+  ASSERT_FALSE(*gt(LVE("<iri>", indexImpl.getLocalVocabContext())) ==
+               *gt(LVE("\"iri\"", indexImpl.getLocalVocabContext())));
   // IsDatatypeExpression
   ASSERT_TRUE(*isBlank() == *isBlank());
   ASSERT_FALSE(*isLit() == *isNum());
@@ -1384,8 +1402,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
               *notExpr(notExpr(ge(VocabId(0)))));
-  ASSERT_TRUE(*notExpr(le(LVE("<iri>", indexImpl))) ==
-              *notExpr(le(LVE("<iri>", indexImpl))));
+  ASSERT_TRUE(*notExpr(le(LVE("<iri>", indexImpl.getLocalVocabContext()))) ==
+              *notExpr(le(LVE("<iri>", indexImpl.getLocalVocabContext()))));
   ASSERT_FALSE(*notExpr(gt(IntId(0))) == *eq(IntId(0)));
   ASSERT_FALSE(*notExpr(andExpr(eq(IntId(1)), eq(IntId(0)))) ==
                *notExpr(ge(VocabId(0))));
@@ -1393,9 +1411,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
               *orExpr(eq(IntId(0)), le(IntId(0))));
   ASSERT_TRUE(*orExpr(isIri(), isLit()) == *orExpr(isIri(), isLit()));
-  ASSERT_TRUE(
-      *orExpr(lt(LVE("\"L\"", indexImpl)), gt(LVE("\"O\"", indexImpl))) ==
-      *orExpr(lt(LVE("\"L\"", indexImpl)), gt(LVE("\"O\"", indexImpl))));
+  ASSERT_TRUE(*orExpr(lt(LVE("\"L\"", indexImpl.getLocalVocabContext())),
+                      gt(LVE("\"O\"", indexImpl.getLocalVocabContext()))) ==
+              *orExpr(lt(LVE("\"L\"", indexImpl.getLocalVocabContext())),
+                      gt(LVE("\"O\"", indexImpl.getLocalVocabContext()))));
   ASSERT_TRUE(*andExpr(le(VocabId(1)), le(IntId(0))) ==
               *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
@@ -1496,16 +1515,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
               "RelationalExpression<LT(<)>\nreferenceValue_ : I:20 .\n}child2 "
               "{Prefilter RelationalExpression<GT(>)>\nreferenceValue_ : I:10 "
               ".\n}\n.\n"));
-  EXPECT_THAT(*eq(LVE("\"Sophia\"", indexImpl)),
+  EXPECT_THAT(*eq(LVE("\"Sophia\"", indexImpl.getLocalVocabContext())),
               matcher("Prefilter RelationalExpression<EQ(=)>\nreferenceValue_ "
                       ": \"Sophia\" .\n.\n"));
-  EXPECT_THAT(*neq(LVE("<Iri/custom/value>", indexImpl)),
+  EXPECT_THAT(*neq(LVE("<Iri/custom/value>", indexImpl.getLocalVocabContext())),
               matcher("Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
                       ": <Iri/custom/value> .\n.\n"));
   EXPECT_THAT(
-      *andExpr(
-          orExpr(lt(LVE("\"Bob\"", indexImpl)), ge(LVE("\"Max\"", indexImpl))),
-          neq(LVE("\"Lars\"", indexImpl))),
+      *andExpr(orExpr(lt(LVE("\"Bob\"", indexImpl.getLocalVocabContext())),
+                      ge(LVE("\"Max\"", indexImpl.getLocalVocabContext()))),
+               neq(LVE("\"Lars\"", indexImpl.getLocalVocabContext()))),
       matcher(
           "Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
           "LogicalExpression<OR(||)>\nchild1 {Prefilter "
@@ -1515,8 +1534,8 @@ TEST_F(PrefilterExpressionOnMetadataTest,
           "RelationalExpression<NE(!=)>\nreferenceValue_ : \"Lars\" "
           ".\n}\n.\n"));
   EXPECT_THAT(
-      *orExpr(neq(LVE("<iri/custom/v10>", indexImpl)),
-              neq(LVE("<iri/custom/v66>", indexImpl))),
+      *orExpr(neq(LVE("<iri/custom/v10>", indexImpl.getLocalVocabContext())),
+              neq(LVE("<iri/custom/v66>", indexImpl.getLocalVocabContext()))),
       matcher(
           "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
           "RelationalExpression<NE(!=)>\nreferenceValue_ : <iri/custom/v10> "

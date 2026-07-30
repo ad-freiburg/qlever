@@ -24,8 +24,10 @@ TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
   Index index1 = makeTestIndex(gtestCurrentTestName() + "-1", "<a> <b> <c> .");
   Index index2 = makeTestIndex(gtestCurrentTestName() + "-2", "<a> <b> <c> .");
 
-  LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<x>", index1.getImpl());
-  LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<x>", index2.getImpl());
+  LocalVocabEntry entry1 = LocalVocabEntry::fromIriref(
+      "<x>", index1.getImpl().getLocalVocabContext());
+  LocalVocabEntry entry2 = LocalVocabEntry::fromIriref(
+      "<x>", index2.getImpl().getLocalVocabContext());
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       (void)(entry1 < entry2),

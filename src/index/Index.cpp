@@ -295,4 +295,6 @@ const GraphNameManager& Index::graphNameManager() const {
 }
 
 // ____________________________________________________________________________
-const LocalVocabContext& Index::getLocalVocabContext() const { return *pimpl_; }
+const LocalVocabContext& Index::getLocalVocabContext() const {
+  return pimpl_->getLocalVocabContext();
+}

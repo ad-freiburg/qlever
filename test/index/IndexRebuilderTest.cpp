@@ -130,7 +130,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
+    return LocalVocabEntry{ad_utility::testing::iri(str),
+                           oldIndex.getLocalVocabContext()};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -352,8 +353,10 @@ TEST(IndexRebuilder, readIndexAndRemap) {
 
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<a2>", index);
-        LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<d2>", index);
+        LocalVocabEntry entry1 =
+            LocalVocabEntry::fromIriref("<a2>", index.getLocalVocabContext());
+        LocalVocabEntry entry2 =
+            LocalVocabEntry::fromIriref("<d2>", index.getLocalVocabContext());
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(

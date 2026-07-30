@@ -2266,16 +2266,26 @@ nlohmann::json IndexImpl::recomputeStatistics(
 }
 
 // ____________________________________________________________________________
-int IndexImpl::compareWords(std::string_view a, std::string_view b) const {
-  return vocab_.getCaseComparator().compare(a, b, LocaleManager::Level::TOTAL);
+int IndexImpl::LocalVocabContextImpl::compareWords(std::string_view a,
+                                                   std::string_view b) const {
+  return index_->getVocab().getCaseComparator().compare(
+      a, b, LocaleManager::Level::TOTAL);
 }
 
 // ____________________________________________________________________________
-auto IndexImpl::getPositionOfWord(std::string_view word) const -> VocabBounds {
-  return vocab_.getPositionOfWord(word);
+auto IndexImpl::LocalVocabContextImpl::getPositionOfWord(
+    std::string_view word) const -> VocabBounds {
+  return index_->getVocab().getPositionOfWord(word);
 }
 
 // ____________________________________________________________________________
-std::optional<Id> IndexImpl::encodeAsId(std::string_view word) const {
-  return encodedIriManager_.encode(word);
+std::optional<Id> IndexImpl::LocalVocabContextImpl::encodeAsId(
+    std::string_view word) const {
+  return index_->encodedIriManager().encode(word);
+}
+
+// ____________________________________________________________________________
+ad_utility::BlankNodeManager*
+IndexImpl::LocalVocabContextImpl::getBlankNodeManager() const {
+  return index_->getBlankNodeManager();
 }
