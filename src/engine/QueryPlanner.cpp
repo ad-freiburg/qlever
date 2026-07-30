@@ -26,6 +26,7 @@
 #include "engine/CountConnectedSubgraphs.h"
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
+#include "engine/DistinctGraphs.h"
 #include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -67,9 +68,11 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/VariableCounter.h"
 #include "rdfTypes/Variable.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
+#include "util/Log.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -3096,7 +3099,43 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       }
     }
 
+    // If the graph variable is already in the inner pattern.
+    bool graphVarInInnerPattern = false;
+    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
+      if (const auto* graphPair = std::get_if<std::pair<
+              Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+              &arg.graphSpec_)) {
+        p::VariableCounter vc;
+        vc(arg._child);
+        graphVarInInnerPattern = vc.counts().contains(graphPair->first);
+      }
+    }
+
     auto candidates = planner_.optimize(&arg._child);
+
+    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
+      if (const auto* graphPair = std::get_if<std::pair<
+              Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+              &arg.graphSpec_)) {
+        const Variable& graphVar = graphPair->first;
+        auto graphsCand = makeSubtreePlan<DistinctGraphs>(qec_, graphVar);
+
+        for (auto& innerCand : candidates) {
+          bool isGraphVarBound =
+              planner_.activeDatasetClauses_.namedGraphs().has_value() ||
+              graphVarInInnerPattern ||
+              innerCand._qet->getVariableColumns().contains(graphVar);
+          if (!isGraphVarBound) {
+            innerCand = makeSubtreePlan<CartesianProductJoin>(
+                planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
+                                   graphsCand._qet, innerCand._qet});
+          }
+          // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
+          // { <doesnotexist> } } } are not correctly handled.
+        }
+      }
+    }
+
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
