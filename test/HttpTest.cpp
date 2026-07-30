@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
+#include <absl/strings/escaping.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
@@ -727,4 +728,194 @@ TYPED_TEST(HttpServerBodyTest, MaterializeBody) {
           EXPECT_EQ(result, expected);
         }));
   }
+}
+
+// _____________________________________________________________________________
+// Tests for routing requests through an HTTP proxy, see `HttpProxyConfig.h`.
+namespace {
+using ad_utility::httpProxy::Proxy;
+
+// An echo handler that reports the request target and the `Host` header, which
+// is what a proxy needs to see in order to relay a plain HTTP request.
+auto makeProxyEchoServer() {
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    co_await send(createOkResponse(
+        absl::StrCat(toStd(req.target()), "\n", toStd(req[http::field::host])),
+        req, ad_utility::MediaType::textPlain));
+  };
+  return TestHttpServer<decltype(handler)>(std::move(handler));
+}
+
+// A minimal fake proxy that accepts a single connection, reads one `CONNECT`
+// request from it, stores the raw request bytes in `requestOut`, and replies
+// with `response` (which must be a complete HTTP response). It never speaks
+// TLS, so a client that proceeds to the TLS handshake after a successful
+// `CONNECT` will fail there; that is intentional, and lets us verify the
+// tunnel setup itself without a TLS server.
+class FakeConnectProxy {
+ private:
+  net::io_context ioContext_;
+  tcp::acceptor acceptor_{ioContext_, tcp::endpoint{tcp::v4(), 0}};
+  std::string response_;
+  std::string request_;
+  ad_utility::JThread thread_;
+
+ public:
+  explicit FakeConnectProxy(std::string response)
+      : response_{std::move(response)}, thread_{[this]() { runOnce(); }} {}
+
+  unsigned short getPort() const { return acceptor_.local_endpoint().port(); }
+
+  // The raw `CONNECT` request that the client sent. Only valid after the
+  // connection has been handled, i.e. after this object has been destroyed or
+  // the client has finished; call `join()` first.
+  const std::string& getRequest() const { return request_; }
+
+  void join() {
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+
+  ~FakeConnectProxy() { join(); }
+
+ private:
+  void runOnce() {
+    boost::system::error_code ec;
+    tcp::socket socket{ioContext_};
+    acceptor_.accept(socket, ec);
+    if (ec) {
+      return;
+    }
+    // Read until the end of the request header. `CONNECT` has no body.
+    beast::flat_buffer buffer;
+    http::request_parser<http::empty_body> parser;
+    parser.skip(true);
+    http::read_header(socket, buffer, parser, ec);
+    if (ec) {
+      return;
+    }
+    request_ = absl::StrCat(toStd(to_string(parser.get().method())), " ",
+                            toStd(parser.get().target()), "\nhost: ",
+                            toStd(parser.get()[http::field::host]),
+                            "\nproxy-authorization: ",
+                            toStd(parser.get()[http::field::proxy_authorization]));
+    net::write(socket, net::buffer(response_), ec);
+    // Keep the socket open briefly so the client can attempt its handshake and
+    // observe a TLS error rather than a premature EOF on the read above.
+    socket.shutdown(tcp::socket::shutdown_send, ec);
+  }
+};
+}  // namespace
+
+// A plain HTTP request through a proxy goes to the proxy, and uses the absolute
+// form of the request target while keeping `Host` pointed at the target server.
+TEST(HttpProxy, plainHttpRequestUsesAbsoluteFormTarget) {
+  auto proxyServer = makeProxyEchoServer();
+  proxyServer.runInOwnThread();
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  Proxy proxy{"localhost", std::to_string(proxyServer.getPort()), ""};
+  // Note that the target host `example.org` is never contacted; the connection
+  // goes to the proxy, which is our echo server here.
+  auto client =
+      std::make_unique<HttpClient>("example.org", "8080", std::move(proxy));
+  auto response = HttpClient::sendRequest(std::move(client), verb::get,
+                                          "example.org", "/sparql?query=X",
+                                          handle);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)),
+            "http://example.org:8080/sparql?query=X\nexample.org");
+}
+
+// A target that does not start with a `/` still yields a well-formed absolute
+// form target.
+TEST(HttpProxy, plainHttpRequestWithTargetWithoutLeadingSlash) {
+  auto proxyServer = makeProxyEchoServer();
+  proxyServer.runInOwnThread();
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  Proxy proxy{"localhost", std::to_string(proxyServer.getPort()), ""};
+  auto client =
+      std::make_unique<HttpClient>("example.org", "80", std::move(proxy));
+  auto response = HttpClient::sendRequest(std::move(client), verb::get,
+                                          "example.org", "sparql", handle);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)),
+            "http://example.org:80/sparql\nexample.org");
+}
+
+// Without a proxy, the request target stays in origin form.
+TEST(HttpProxy, withoutProxyTheTargetStaysInOriginForm) {
+  auto server = makeProxyEchoServer();
+  server.runInOwnThread();
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  auto client = std::make_unique<HttpClient>("localhost",
+                                             std::to_string(server.getPort()));
+  auto response = HttpClient::sendRequest(std::move(client), verb::get,
+                                          "localhost", "/sparql", handle);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)), "/sparql\nlocalhost");
+}
+
+// For HTTPS, the client first asks the proxy for a tunnel via `CONNECT`. Check
+// that the `CONNECT` request is well-formed (authority-form target with an
+// explicit port, matching `Host`) and that the client proceeds to the TLS
+// handshake after a `200`. The handshake then fails because our fake proxy
+// does not speak TLS, which is exactly how we know we got that far.
+TEST(HttpProxy, httpsRequestEstablishesConnectTunnel) {
+  FakeConnectProxy fakeProxy{"HTTP/1.1 200 Connection established\r\n\r\n"};
+  Proxy proxy{"localhost", std::to_string(fakeProxy.getPort()), ""};
+
+  // The TLS handshake with a non-TLS peer fails, but it must fail *in the
+  // handshake*, not in the tunnel setup: the `200` has to be accepted.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HttpsClient("example.org", "443", proxy),
+      ::testing::Not(HasSubstr("refused to open a tunnel")));
+  fakeProxy.join();
+  EXPECT_EQ(fakeProxy.getRequest(),
+            "CONNECT example.org:443\nhost: example.org:443\n"
+            "proxy-authorization: ");
+}
+
+// Credentials in the proxy URL are sent as a `Proxy-Authorization` header on
+// the `CONNECT` request.
+TEST(HttpProxy, connectTunnelSendsProxyAuthorization) {
+  FakeConnectProxy fakeProxy{"HTTP/1.1 200 Connection established\r\n\r\n"};
+  auto proxyWithAuth = ad_utility::httpProxy::parseProxyUrl(absl::StrCat(
+      "http://user:password@localhost:", fakeProxy.getPort()));
+  ASSERT_TRUE(proxyWithAuth.has_value());
+
+  EXPECT_ANY_THROW(HttpsClient("example.org", "443", proxyWithAuth.value()));
+  fakeProxy.join();
+  EXPECT_THAT(fakeProxy.getRequest(),
+              HasSubstr(absl::StrCat("proxy-authorization: Basic ",
+                                     absl::Base64Escape("user:password"))));
+}
+
+// If the proxy refuses the tunnel, the error message names the proxy, the
+// target and the status the proxy returned.
+TEST(HttpProxy, connectTunnelRefusedByProxy) {
+  FakeConnectProxy fakeProxy{
+      "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"};
+  Proxy proxy{"localhost", std::to_string(fakeProxy.getPort()), ""};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HttpsClient("example.org", "443", proxy),
+      ::testing::AllOf(HasSubstr("refused to open a tunnel"),
+                       HasSubstr("example.org:443"), HasSubstr("403"),
+                       HasSubstr("Forbidden")));
+}
+
+// A `407` from the proxy additionally hints at how to supply credentials.
+TEST(HttpProxy, connectTunnelRequiresAuthentication) {
+  FakeConnectProxy fakeProxy{
+      "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: "
+      "0\r\n\r\n"};
+  Proxy proxy{"localhost", std::to_string(fakeProxy.getPort()), ""};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HttpsClient("example.org", "443", proxy),
+      ::testing::AllOf(HasSubstr("407"),
+                       HasSubstr("user:password@proxy:3128")));
 }
