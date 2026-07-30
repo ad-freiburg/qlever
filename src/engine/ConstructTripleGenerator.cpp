@@ -13,7 +13,6 @@
 #include "engine/ConstructDeduplicator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
-#include "util/Views.h"
 
 namespace qlever::constructExport {
 
