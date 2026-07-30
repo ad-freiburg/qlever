@@ -13,7 +13,6 @@
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/Result.h"
-#include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 
 namespace {
@@ -105,7 +104,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
       ad_utility::SharedCancellationHandle handle = makeHandle()) {
     auto stringTriples = ConstructTripleGenerator::evaluateTables(
         triples, varMap, index_, handle, singleTableRange(std::move(table)), 0,
-        *qec_, ad_utility::DeduplicationMode::none());
+        *qec_);
 
     return ::ranges::to_vector(stringTriples);
   }
@@ -238,7 +237,7 @@ TEST_F(ConstructTripleGeneratorTest, rowOffsetAccumulatesAcrossTables) {
 
   auto range = ConstructTripleGenerator::evaluateTables(
       templateTriples, {}, index_, makeHandle(), std::move(tableRange), 0,
-      *qec_, ad_utility::DeduplicationMode::none());
+      *qec_);
 
   // Table 1: rowOffset=0, firstRow=0
   //   row 0: rowId = 0+0+0 = 0
@@ -310,8 +309,7 @@ TEST_F(ConstructTripleGeneratorTest, cancellationThrowsBetweenBatches) {
 
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
-      templateTriples, {}, index_, handle, singleTableRange(table), 0, *qec_,
-      ad_utility::DeduplicationMode::none());
+      templateTriples, {}, index_, handle, singleTableRange(table), 0, *qec_);
 
   // Drain all ConstructTripleGenerator::BATCH_SIZE triples from batch
   // 0.
@@ -338,7 +336,7 @@ TEST_F(ConstructTripleGeneratorTest, cannotCancelDuringBatch) {
   auto handle = makeHandle();
   auto range = ConstructTripleGenerator::evaluateTables(
       templateTriples, {}, index_, handle, singleTableRange(std::move(table)),
-      0, *qec_, ad_utility::DeduplicationMode::none());
+      0, *qec_);
 
   // First triple succeeds.
   ASSERT_TRUE(range.get().has_value());
@@ -426,8 +424,7 @@ TEST_F(ConstructTripleGeneratorTest, generateStringTriplesFormatsAsStrings) {
 
   auto range = ConstructTripleGenerator::generateStringTriples(
       templateTriples, {}, index_, makeHandle(),
-      singleTableRange(std::move(table)), 0, *qec_,
-      ad_utility::DeduplicationMode::none());
+      singleTableRange(std::move(table)), 0, *qec_);
 
   auto triples = ::ranges::to_vector(range);
 

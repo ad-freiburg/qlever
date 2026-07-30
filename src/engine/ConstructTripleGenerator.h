@@ -81,7 +81,8 @@ class ConstructTripleGenerator {
       CancellationHandle cancellationHandle,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
       size_t rowOffset, const QueryExecutionContext& qec,
-      ad_utility::DeduplicationMode mode);
+      ad_utility::DeduplicationMode mode =
+          ad_utility::DeduplicationMode::none());
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);
