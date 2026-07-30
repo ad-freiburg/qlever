@@ -575,6 +575,20 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           checkParameter("rebuild-previous-index-dir", std::nullopt));
       response = createJsonResponse(config.successResponseAsJson(), request);
     }
+  } else if (auto cmd = checkParameter("cmd", "build-aux-index")) {
+    requireValidAccessToken("build-aux-index");
+    logCommand(cmd, "build the auxiliary index from the delta triples");
+
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    // The build runs on the update executor, which is single-threaded, so that
+    // it is mutually exclusive with the updates; see the documentation of
+    // `Qlever::buildAuxIndex`.
+    auto coroutine = computeInNewThread(
+        updateThreadPool_, [this, handle] { qlever().buildAuxIndex(handle); },
+        handle);
+    co_await std::move(coroutine);
+    response = createJsonResponse(
+        composeStatsJson(indexAndViewsSnapshot()->index_), request);
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
     logCommand(cmd, "write materialized view");
@@ -961,6 +975,16 @@ nlohmann::json Server::composeStatsJson(const Index& index) {
   auto numTriples = index.numTriples();
   result["num-triples-normal"] = numTriples.normal;
   result["num-triples-internal"] = numTriples.internal;
+
+  // The auxiliary index, if there is one (see `index/AuxIndex.h`).
+  const auto* auxIndex = index.getImpl().auxIndex();
+  if (auxIndex != nullptr) {
+    const auto& metadata = auxIndex->metadata();
+    result["aux-index"]["generation"] = metadata.generation_;
+    result["aux-index"]["num-inserted"] = metadata.numInserted_;
+    result["aux-index"]["num-deleted"] = metadata.numDeleted_;
+    result["aux-index"]["num-vocab-words"] = metadata.numVocabWords_;
+  }
   result["name-text-index"] = index.getTextName();
   result["num-text-records"] = index.getNofTextRecords();
   result["num-word-occurrences"] = index.getNofWordPostings();

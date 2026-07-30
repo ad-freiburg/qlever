@@ -15,6 +15,33 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
       "Contexts of LocalVocabEntries have to be identical. If this is not the "
       "case this means that stale entries associated with an old index are "
       "falsely carried over somewhere.");
+  // First compare the positions in the vocabulary, see the documentation of
+  // this function in the header for why this is required.
+  auto position = positionInVocab();
+  auto rhsPosition = rhs.positionInVocab();
+  if (position.lowerBound_ != rhsPosition.lowerBound_) {
+    return position.lowerBound_ < rhsPosition.lowerBound_
+               ? ql::strong_ordering::less
+               : ql::strong_ordering::greater;
+  }
+  // A word that is contained in one of the vocabularies (in which case the
+  // bounds differ) is greater than a word that only would be sorted at the same
+  // position (in which case the bounds are equal), because the latter is
+  // strictly smaller than the word at that position.
+  bool isContained = position.lowerBound_ != position.upperBound_;
+  bool rhsIsContained = rhsPosition.lowerBound_ != rhsPosition.upperBound_;
+  if (isContained != rhsIsContained) {
+    return isContained ? ql::strong_ordering::greater
+                       : ql::strong_ordering::less;
+  }
+  // Both words fall into the same gap of the main vocabulary, so the number of
+  // smaller words in the auxiliary vocabulary decides.
+  auto numSmallerAux = numSmallerAuxVocabWords();
+  auto rhsNumSmallerAux = rhs.numSmallerAuxVocabWords();
+  if (numSmallerAux != rhsNumSmallerAux) {
+    return numSmallerAux < rhsNumSmallerAux ? ql::strong_ordering::less
+                                            : ql::strong_ordering::greater;
+  }
   int i = context_->getVocab().getCaseComparator().compare(
       toStringRepresentation(), rhs.toStringRepresentation(),
       LocaleManager::Level::TOTAL);
@@ -47,6 +74,19 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
     }
     auto [l, u] = vocab.getPositionOfWord(toStringRepresentation());
     AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);
+    if (l == u) {
+      // The word is not in the vocabulary of the main index, so it may be in
+      // the vocabulary of the auxiliary index. Note that the two vocabularies
+      // are disjoint, so we only have to look there if the lookup above failed.
+      const auto* auxVocab = context_->auxVocab();
+      if (auxVocab != nullptr) {
+        if (auto auxIndex = auxVocab->getId(toStringRepresentation());
+            auxIndex.has_value()) {
+          auto id = Id::makeFromAuxVocabIndex(auxIndex.value());
+          return std::pair{id, Id::fromBits(id.getBits() + 1)};
+        }
+      }
+    }
     return std::pair{Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
   }();
   positionInVocab.lowerBound_ = IdProxy::make(lower.getBits());
@@ -58,6 +98,18 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
                            std::memory_order_relaxed);
   positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
+}
+
+// ___________________________________________________________________________
+uint64_t LocalVocabEntry::numSmallerAuxVocabWordsExpensiveCase() const {
+  const auto* auxVocab = context_->auxVocab();
+  uint64_t result =
+      auxVocab == nullptr
+          ? 0
+          : auxVocab->numWordsSmallerThan(toStringRepresentation());
+  numSmallerAuxVocabWords_.store(result, std::memory_order_relaxed);
+  numSmallerAuxVocabWordsKnown_.store(true, std::memory_order_release);
+  return result;
 }
 
 // _____________________________________________________________________________

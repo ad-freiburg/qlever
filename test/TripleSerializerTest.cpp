@@ -101,11 +101,18 @@ TEST(TripleSerializer, blankNodesRemapper) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, headerFormatIsCorrect) {
   ad_utility::serialization::ByteBufferWriteSerializer serializer;
-  ad_utility::detail::writeHeader(serializer);
+  // The header ends with the generation of the auxiliary index, here the
+  // sentinel that means "the `Id`s do not belong to an auxiliary index".
+  ad_utility::detail::writeHeader(serializer,
+                                  ad_utility::detail::noAuxIndexGeneration);
 
   EXPECT_THAT(serializer.data(),
-              ::testing::ElementsAre('Q', 'L', 'E', 'V', 'E', 'R', '.', 'U',
-                                     'P', 'D', 'A', 'T', 'E', 1, 0));
+              ::testing::ElementsAre(
+                  'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T',
+                  'E', 2, 0, static_cast<char>(0xff), static_cast<char>(0xff),
+                  static_cast<char>(0xff), static_cast<char>(0xff),
+                  static_cast<char>(0xff), static_cast<char>(0xff),
+                  static_cast<char>(0xff), static_cast<char>(0xff)));
 }
 
 // _____________________________________________________________________________
@@ -115,21 +122,24 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 1,
          0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
+    EXPECT_THROW(ad_utility::detail::readHeader(
+                     serializer, ad_utility::detail::noAuxIndexGeneration),
                  ad_utility::Exception);
   }
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'e', 0,
          0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
+    EXPECT_THROW(ad_utility::detail::readHeader(
+                     serializer, ad_utility::detail::noAuxIndexGeneration),
                  ad_utility::Exception);
   }
   // Too short magic bytes
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', 'U', 'P', 'D', 'A', 'T', 'E', 0, 0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
+    EXPECT_THROW(ad_utility::detail::readHeader(
+                     serializer, ad_utility::detail::noAuxIndexGeneration),
                  ad_utility::Exception);
   }
   // Wrong version
@@ -137,15 +147,36 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
          0}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
+    EXPECT_THROW(ad_utility::detail::readHeader(
+                     serializer, ad_utility::detail::noAuxIndexGeneration),
                  ad_utility::Exception);
   }
   {
     ad_utility::serialization::ByteBufferReadSerializer serializer{
         {'Q', 'L', 'E', 'V', 'E', 'R', '.', 'U', 'P', 'D', 'A', 'T', 'E', 0,
          1}};
-    EXPECT_THROW(ad_utility::detail::readHeader(serializer),
+    EXPECT_THROW(ad_utility::detail::readHeader(
+                     serializer, ad_utility::detail::noAuxIndexGeneration),
                  ad_utility::Exception);
+  }
+  // A header for a different generation of the auxiliary index. Its `Id`s are
+  // only valid for that generation, so reading them back must fail.
+  {
+    ad_utility::serialization::ByteBufferWriteSerializer writeSerializer;
+    ad_utility::detail::writeHeader(writeSerializer, 3);
+    ad_utility::serialization::ByteBufferReadSerializer serializer{
+        std::move(writeSerializer).data()};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        ad_utility::detail::readHeader(serializer, 4),
+        ::testing::HasSubstr("only valid for the generation"));
+  }
+  // The matching generation works.
+  {
+    ad_utility::serialization::ByteBufferWriteSerializer writeSerializer;
+    ad_utility::detail::writeHeader(writeSerializer, 3);
+    ad_utility::serialization::ByteBufferReadSerializer serializer{
+        std::move(writeSerializer).data()};
+    EXPECT_NO_THROW(ad_utility::detail::readHeader(serializer, 3));
   }
 }
 

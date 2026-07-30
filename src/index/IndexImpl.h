@@ -21,6 +21,8 @@
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
+#include "global/ValueIdComparators.h"
+#include "index/AuxIndex.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
@@ -203,6 +205,16 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
+  // The auxiliary index (see `index/AuxIndex.h`), or `nullptr` if this index
+  // has no auxiliary index. Note that this member is immutable once the index
+  // has been loaded: a rebuild of the auxiliary index creates a new generation
+  // and publishes it by swapping in a freshly loaded `Index` (see
+  // `Qlever::buildAuxIndex`), such that queries that are still running keep
+  // using the `IndexImpl` and hence the auxiliary index generation that they
+  // started with. This is what makes the `Id`s of an auxiliary vocabulary,
+  // which are only valid for a single generation, safe to use.
+  std::shared_ptr<const AuxIndex> auxIndex_;
+
   GraphNameManager graphNameManager_ = GraphNameManager();
 
  public:
@@ -248,6 +260,18 @@ class IndexImpl {
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
+  // Load the auxiliary index with the highest generation that exists on disk
+  // for the current `onDiskBase_`, if there is any. Older generations are
+  // leftovers of rebuilds that were still in use by running queries when the
+  // server was shut down, and are ignored.
+  void loadNewestAuxIndexFromDisk();
+
+  // Make the delta triples of this index merge in the triples of its auxiliary
+  // index, see `LocatedTriplesPerBlock::setAuxLocatedTriples`. Has to be called
+  // after the permutations and the auxiliary index have been loaded, and does
+  // nothing if this index has no auxiliary index.
+  void connectAuxIndexToDeltaTriples();
+
   // Configure the delta triples and the graph name manager to persist their
   // state to the files derived from the current `onDiskBase_`. If
   // `readFromDisk` is `true`, the already persisted state is additionally read
@@ -261,6 +285,34 @@ class IndexImpl {
 
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
+
+  // The auxiliary index of this index, or `nullptr` if it has none.
+  const AuxIndex* auxIndex() const { return auxIndex_.get(); }
+
+  // Set the auxiliary index. Only for testing: in production a new generation
+  // of the auxiliary index is published by swapping in a freshly loaded
+  // `Index`, see the documentation of `auxIndex_`.
+  void setAuxIndexForTesting(std::shared_ptr<const AuxIndex> auxIndex) {
+    auxIndex_ = std::move(auxIndex);
+    connectAuxIndexToDeltaTriples();
+  }
+
+  // The vocabulary of the auxiliary index of this index, or `nullptr` if it has
+  // no auxiliary index.
+  const AuxVocabulary* auxVocab() const {
+    return auxIndex_ == nullptr ? nullptr : &auxIndex_->vocab();
+  }
+
+  // The information that is required to compare `Id`s of type
+  // `Datatype::AuxVocabIndex` by the string values that they represent. It is
+  // empty if this index has no auxiliary index. Note that this must always be
+  // the ordering of the very `IndexImpl` that the compared `Id`s came from, see
+  // the documentation of `auxIndex_`.
+  valueIdComparators::AuxVocabOrdering auxVocabOrdering() const {
+    const auto* vocab = auxVocab();
+    return vocab == nullptr ? valueIdComparators::AuxVocabOrdering{}
+                            : vocab->ordering();
+  }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly
   // into `serializer`'s buffer. See `Vocabulary::loadFromZeroCopyDeserializer`
@@ -536,6 +588,15 @@ class IndexImpl {
   const std::string& getTextName() const { return textMeta_.getName(); }
   const std::string& getKbName() const { return PSO().getKbName(); }
   const std::string& getOnDiskBase() const { return onDiskBase_; }
+
+  // The `VocabularyType` of the vocabulary of this index, as recorded in its
+  // configuration. Note that this is the type of an index that was loaded from
+  // disk; the type to be used for a *new* index is
+  // `vocabularyTypeForIndexBuilding_`.
+  ad_utility::VocabularyType getVocabularyType() const {
+    return configurationJson_.at("vocabulary-type")
+        .get<ad_utility::VocabularyType>();
+  }
   const std::string& getIndexId() const { return indexId_; }
   const std::string& getGitShortHash() const { return gitShortHash_; }
 

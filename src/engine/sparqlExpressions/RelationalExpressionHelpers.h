@@ -180,32 +180,38 @@ inline const auto compareIdsOrStrings =
   } else {
     auto x = makeValueId(a, ctx);
     auto y = makeValueId(b, ctx);
-    if constexpr (ranges::invocable<decltype(valueIdComparators::compareIds<
-                                             comparisonForIncompatibleTypes>),
-                                    decltype(x), decltype(y),
-                                    valueIdComparators::Comparison>) {
+    auto auxVocabOrdering = ctx->_qec.getIndex().auxVocabOrdering();
+    if constexpr (ranges::invocable<
+                      decltype(valueIdComparators::compareIds<
+                               comparisonForIncompatibleTypes>),
+                      decltype(x), decltype(y), valueIdComparators::Comparison,
+                      const valueIdComparators::AuxVocabOrdering&>) {
       // Compare two `ValueId`s
       return valueIdComparators::compareIds<comparisonForIncompatibleTypes>(
-          x, y, Comp);
+          x, y, Comp, auxVocabOrdering);
     } else if constexpr (ranges::invocable<
                              decltype(valueIdComparators::compareWithEqualIds<
                                       comparisonForIncompatibleTypes>),
                              decltype(x), decltype(y.first), decltype(y.second),
-                             valueIdComparators::Comparison>) {
+                             valueIdComparators::Comparison,
+                             const valueIdComparators::AuxVocabOrdering&>) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
       // is `string` or `vector<string>`.
       return valueIdComparators::compareWithEqualIds<
-          comparisonForIncompatibleTypes>(x, y.first, y.second, Comp);
+          comparisonForIncompatibleTypes>(x, y.first, y.second, Comp,
+                                          auxVocabOrdering);
     } else if constexpr (ranges::invocable<
                              decltype(valueIdComparators::compareWithEqualIds<
                                       comparisonForIncompatibleTypes>),
                              decltype(y), decltype(x.first), decltype(x.second),
-                             valueIdComparators::Comparison>) {
+                             valueIdComparators::Comparison,
+                             const valueIdComparators::AuxVocabOrdering&>) {
       // Compare `ValueId` with range of equal `ValueId`s (used when `value2`
       // is `string` or `vector<string>`.
       return valueIdComparators::compareWithEqualIds<
           comparisonForIncompatibleTypes>(
-          y, x.first, x.second, getComparisonForSwappedArguments(Comp));
+          y, x.first, x.second, getComparisonForSwappedArguments(Comp),
+          auxVocabOrdering);
     } else {
       // The `variant` is such that both types are shown in the compiler error
       // message once the `static_assert` fails.

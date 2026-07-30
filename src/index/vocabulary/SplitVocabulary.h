@@ -16,6 +16,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "global/ValueId.h"
+#include "global/VocabIndexMarker.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
@@ -66,6 +67,12 @@ class SplitVocabulary {
                 sizeof...(UnderlyingVocabularies) <= 255);
   static constexpr uint8_t numberOfVocabs =
       static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
+
+  // The auxiliary vocabulary of an auxiliary index mirrors the split of the
+  // vocabulary of the main index, and its marker arithmetic (see
+  // `VocabIndexMarker`) supports at most `maxNumMarkers` sub-vocabularies. If
+  // this assertion fails, raise that constant.
+  static_assert(numberOfVocabs <= VocabIndexMarker::maxNumMarkers);
 
   // Because of the marker bits, a `SplitVocabulary` should not hold another
   // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be

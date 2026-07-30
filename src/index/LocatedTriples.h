@@ -25,6 +25,7 @@
 #include "util/TypeTraits.h"
 
 class Permutation;
+class AuxLocatedTriples;
 
 struct NumAddedAndDeleted {
   size_t numAdded_;
@@ -87,6 +88,14 @@ struct LocatedTriple {
   // If `true`, the triple is inserted, otherwise it is deleted.
   bool insertOrDelete_;
 
+  // The index of the block of the given permutation that `triple` (which is in
+  // the order `(S, P, O, G)`) belongs to, according to the definition at the
+  // end of this file.
+  static size_t locateTripleInPermutation(
+      const IdTriple<0>& triple,
+      ql::span<const CompressedBlockMetadata> blockMetadata,
+      const qlever::KeyOrder& keyOrder);
+
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       ql::span<const IdTriple<0>> triples,
@@ -132,6 +141,33 @@ class LocatedTriplesPerBlock {
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
   std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
       originalMetadata_;
+
+  // The triples of the corresponding permutation of the auxiliary index (see
+  // `index/AuxLocatedTriples.h`), or `nullptr` if the index has no auxiliary
+  // index. Unlike the triples in `map_`, these are not held in RAM but read
+  // from disk on demand.
+  //
+  // Together, `map_` and this form the update triples of the permutation, where
+  // `map_` takes precedence: if both of them have an entry for the same triple,
+  // the one in `map_` is the more recent one, because the auxiliary index only
+  // ever holds updates that were made *before* those in `map_`.
+  std::shared_ptr<const AuxLocatedTriples> auxTriples_;
+
+  // The update triples of the given block: the ones in `map_` merged with those
+  // of the auxiliary index, with the former winning (see above). The second
+  // element is an upper bound for the number of them. If there is no auxiliary
+  // index, this simply returns the entry of `map_`.
+  LocatedTriples getAllUpdatesForBlock(size_t blockIndex) const;
+
+  // Widen the bounds and the graph info of `blockMetadata` (which belongs to
+  // the block with the given index) such that they also cover the triples of
+  // the auxiliary index, see `updateAugmentedMetadata`. The upper bound is only
+  // widened if `widenLastTriple` is true, which must be the case exactly for
+  // the synthetic block after the last block of the main index; see the
+  // implementation for the reason.
+  void applyAuxMetadataContribution(CompressedBlockMetadata& blockMetadata,
+                                    size_t blockIndex,
+                                    bool widenLastTriple) const;
 
  public:
   void updateAugmentedMetadata();
@@ -182,10 +218,15 @@ class LocatedTriplesPerBlock {
                        size_t numIndexColumns, bool includeGraphColumn) const;
 
   // Return true iff there are located triples in the block with the given
-  // index.
-  bool containsTriples(size_t blockIndex) const {
-    return map_.contains(blockIndex);
-  }
+  // index. Note that this may be a false positive if the index has an auxiliary
+  // index, see `AuxLocatedTriples::mayContainTriples`.
+  bool containsTriples(size_t blockIndex) const;
+
+  // Set the triples of the corresponding permutation of the auxiliary index,
+  // see `auxTriples_`. Must be called before any updates are processed,
+  // together with `setOriginalMetadata`.
+  void setAuxLocatedTriples(
+      std::shared_ptr<const AuxLocatedTriples> auxTriples);
 
   // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
   void add(ql::span<const LocatedTriple> locatedTriples,
@@ -230,6 +271,14 @@ class LocatedTriplesPerBlock {
             std::move(metadata)));
   }
 
+  // The original (that is, not augmented) block metadata that was set via
+  // `setOriginalMetadata`.
+  const std::shared_ptr<const std::vector<CompressedBlockMetadata>>&
+  originalMetadata() const {
+    AD_CONTRACT_CHECK(originalMetadata_.has_value());
+    return originalMetadata_.value();
+  }
+
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
   // enlarge the block borders.
@@ -241,7 +290,9 @@ class LocatedTriplesPerBlock {
     return *originalMetadata_.value();
   };
 
-  // Remove all located triples.
+  // Remove all located triples. Note that this does not remove the triples of
+  // the auxiliary index, which are not updates of this `LocatedTriplesPerBlock`
+  // but part of the index.
   void clear() {
     map_.clear();
     augmentedMetadata_.reset();

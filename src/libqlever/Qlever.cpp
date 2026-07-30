@@ -24,6 +24,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
+#include "index/AuxIndexBuilder.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
 #include "index/TextIndexBuilder.h"
@@ -47,6 +48,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
           }}},
       indexAndViews_{std::make_shared<IndexAndViews>(
           Index{allocator_}, MaterializedViewsManager{})},
+      config_{config},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -101,6 +103,74 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
                    << "' failed: " << ex.what() << "." << std::endl;
     }
   }
+}
+
+// _____________________________________________________________________________
+void Qlever::buildAuxIndex(const SharedCancellationHandle& cancellationHandle) {
+  auto oldIndexAndViews = indexAndViewsSnapshot();
+  auto& oldIndex = oldIndexAndViews->index_;
+
+  // Build the files of the new generation. This is the expensive part and
+  // happens without any lock; the delta triples that arrive in the meantime are
+  // carried over below.
+  auto [stateAtStartOfBuild, localVocabEntries, ownedBlocks] =
+      oldIndex.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  auto buildResult = qlever::buildAuxIndex(
+      oldIndex.getImpl(), *stateAtStartOfBuild,
+      config_.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
+      cancellationHandle);
+
+  // Load a fresh `Index` from the same files, which picks up the new generation
+  // of the auxiliary index. Note that the persisted updates must *not* be read
+  // back here: they still refer to the `Id`s of the previous generation. They
+  // are instead carried over below and written out again afterwards.
+  auto newIndexAndViews = std::make_shared<IndexAndViews>(
+      Index{allocator_}, MaterializedViewsManager{});
+  auto& newIndex = newIndexAndViews->index_;
+  newIndex.usePatterns() = enablePatternTrick_;
+  newIndex.loadAllPermutations() = !config_.onlyPsoAndPos_;
+  newIndex.doNotLoadPermutations() = config_.doNotLoadPermutations_;
+  newIndex.createFromOnDiskIndex(config_.baseName_, false);
+  if (config_.loadTextIndex_) {
+    newIndex.addTextFromOnDiskIndex();
+  }
+  bool persistUpdates = oldIndex.deltaTriplesManager().persists();
+  if (persistUpdates) {
+    // Only set the file name, do not read the file back (see above).
+    newIndex.getImpl().setFilenamesForPersistentUpdates(false);
+  }
+  newIndexAndViews->materializedViewsManager_.setOnDiskBase(config_.baseName_);
+
+  // Carry over the updates that arrived while the build was running,
+  // translating their `Id`s into those of the new generation, and publish the
+  // new index. Note that the caches have to be cleared: their entries hold
+  // `Id`s of the previous generation.
+  const auto& idMapping = buildResult.idMapping_;
+  // `Id`s that the mapping does not know are local vocab entries that were
+  // created after the build started; `addFromSnapshotDiff` re-anchors those to
+  // the new index itself.
+  auto mapId = [&idMapping](Id id) { return idMapping.map(id); };
+  auto& tracer = ad_utility::timer::DEFAULT_TIME_TRACER;
+  oldIndex.deltaTriplesManager().modify<void>(
+      [&](DeltaTriples& oldDeltaTriples) {
+        auto currentState =
+            oldDeltaTriples.getLocatedTriplesSharedStateReference();
+        newIndex.deltaTriplesManager().modify<void>(
+            [&](DeltaTriples& newDeltaTriples) {
+              newDeltaTriples.addFromSnapshotDiff(*stateAtStartOfBuild,
+                                                  *currentState, mapId,
+                                                  cancellationHandle, tracer);
+            },
+            persistUpdates, true);
+        cache_.clearAll();
+        namedResultCache_.clear();
+        swapIndexAndViews(newIndexAndViews);
+      },
+      false, false);
+  AD_LOG_INFO << "The auxiliary index of generation "
+              << buildResult.metadata_.generation_ << " is now in use"
+              << std::endl;
 }
 
 // _____________________________________________________________________________

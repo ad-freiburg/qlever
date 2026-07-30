@@ -82,6 +82,25 @@ std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
 }
 
 // _____________________________________________________________________________
+uint8_t PolymorphicVocabulary::numberOfSubVocabularies(VocabularyType type) {
+  // Use a temporary vocabulary of the given type to determine the number of
+  // sub-vocabularies of that type, such that this function does not have to be
+  // adapted when a new vocabulary type is added.
+  PolymorphicVocabulary dummyVocab;
+  dummyVocab.resetToType(type);
+  return std::visit(
+      [](const auto& vocab) -> uint8_t {
+        using T = std::decay_t<decltype(vocab)>;
+        if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+          return T::numberOfVocabs;
+        } else {
+          return 1;
+        }
+      },
+      dummyVocab.vocab_);
+}
+
+// _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
   // The names of the enum values are the same as the type aliases for the

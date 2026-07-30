@@ -119,6 +119,18 @@ TripleComponent::toValueIdOrBounds(const IndexImpl& index) const {
   if (lower != upper) {
     return Id::makeFromVocabIndex(lower);
   }
+  // The word may be stored in the vocabulary of the auxiliary index (see
+  // `AuxVocabulary`), which is disjoint from the vocabulary of the main index,
+  // so we only have to look there if the lookup above failed. This is in
+  // particular important for updates: a triple that mentions such a word has to
+  // use its `Id` of the auxiliary vocabulary, else it would not be recognized
+  // as a duplicate of, or as the deletion of, a triple of the auxiliary index.
+  const auto* auxVocab = index.auxVocab();
+  if (auxVocab != nullptr) {
+    if (auto auxIndex = auxVocab->getId(content); auxIndex.has_value()) {
+      return Id::makeFromAuxVocabIndex(auxIndex.value());
+    }
+  }
   return std::pair(lower, upper);
 }
 

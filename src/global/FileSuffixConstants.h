@@ -42,6 +42,22 @@ constexpr inline std::string_view UPDATE_TRIPLES_SUFFIX = ".update-triples";
 constexpr inline std::string_view ALLOCATED_GRAPHS_SUFFIX =
     ".allocated-graphs-state";
 
+// The files of an auxiliary index (see `index/AuxIndex.h`). They only exist if
+// at least one auxiliary index has been built for the index. The base name of
+// an auxiliary index is the base name of the main index, followed by
+// `AUX_INDEX_INFIX` and the generation number, so the files of the second
+// generation of the auxiliary index of `wikidata` are
+// `wikidata.aux1.vocabulary`, `wikidata.aux1.index.pso`, etc.
+constexpr inline std::string_view AUX_INDEX_INFIX = ".aux";
+// The array that stores, for each word of the vocabulary of an auxiliary index,
+// the position at which that word would be sorted into the vocabulary of the
+// main index.
+constexpr inline std::string_view AUX_VOCAB_POSITIONS_SUFFIX =
+    ".vocabulary.positions";
+// The metadata of an auxiliary index.
+constexpr inline std::string_view AUX_INDEX_CONFIGURATION_FILE =
+    ".aux-meta-data.json";
+
 // The build log of an index. QLever does not write this directly, but
 // `qlever-control` creates this file to persist QLever's `stdout` during the
 // index building. If it is present, we still move it alongside the index that

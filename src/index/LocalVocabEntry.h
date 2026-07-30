@@ -46,12 +46,21 @@ class alignas(16) LocalVocabEntry
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
   // the first *larger* word in the vocabulary. Note: we store the cache as
-  // three separate atomics to avoid mutexes. The downside is, that in parallel
-  // code multiple threads might look up the position concurrently, which wastes
-  // a bit of resources. However, we don't consider this case to be likely.
+  // several separate atomics to avoid mutexes. The downside is, that in
+  // parallel code multiple threads might look up the position concurrently,
+  // which wastes a bit of resources. However, we don't consider this case to be
+  // likely.
   mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
+  // A second, independent cache for the position in the auxiliary vocabulary of
+  // the index (see `numSmallerAuxVocabWords()` below). It is separate from the
+  // cache above because it is only required for the semantically correct
+  // comparison in `valueIdComparators`, whereas the bounds above are also
+  // required on the much hotter path of `Id::compareThreeWay`.
+  mutable ad_utility::CopyableAtomic<uint64_t> numSmallerAuxVocabWords_;
+  mutable ad_utility::CopyableAtomic<bool> numSmallerAuxVocabWordsKnown_ =
+      false;
 
  public:
   LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
@@ -65,7 +74,11 @@ class alignas(16) LocalVocabEntry
   LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
       : Base{std::move(base)}, context_{&context} {}
 
-  // Constructor for when the position in the vocab is already known.
+  // Constructor for when the position in the vocab is already known. Note that
+  // the caller has to guarantee that the word is contained in neither the main
+  // nor the auxiliary vocabulary, or that `lower` and `upper` are the bounds
+  // that `positionInVocabExpensiveCase` would compute (which is checked by the
+  // expensive check below).
   template <typename Lower, typename Upper>
   LocalVocabEntry(Base&& base, Lower lower, Upper upper,
                   const LocalVocabContext& context)
@@ -129,6 +142,22 @@ class alignas(16) LocalVocabEntry
     return positionInVocabExpensiveCase();
   }
 
+  // Return the number of words of the auxiliary vocabulary of the index (see
+  // `AuxVocabulary`) that are smaller than this word. Note that this is a dense
+  // offset across all sub-vocabularies of the auxiliary vocabulary, not an
+  // `AuxVocabIndex`, so that it is directly comparable across the
+  // sub-vocabularies of a split vocabulary. Together with
+  // `positionInVocab()` this pins down the position of this word in the merged
+  // order of the main and the auxiliary vocabulary, which is what the
+  // semantically correct comparison of `Id`s in `valueIdComparators` requires.
+  // Return zero if the index has no auxiliary index.
+  uint64_t numSmallerAuxVocabWords() const {
+    if (numSmallerAuxVocabWordsKnown_.load(std::memory_order_acquire)) {
+      return numSmallerAuxVocabWords_.load(std::memory_order_relaxed);
+    }
+    return numSmallerAuxVocabWordsExpensiveCase();
+  }
+
   // It suffices to hash the base class `LiteralOrIri` as the position in the
   // vocab is redundant for those purposes.
   template <typename H, typename V>
@@ -137,10 +166,14 @@ class alignas(16) LocalVocabEntry
     return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
-  // Comparison between two entries could in theory also be sped up using the
-  // cached `position` if it has previously been computed for both of the
-  // entries, but it is currently questionable whether this gains much
-  // performance.
+  // Compare two entries. Note that this first compares the positions in the
+  // vocabulary (see `positionInVocab()`) and only falls back to the (expensive)
+  // comparison of the strings if those are equal. Comparing the strings alone
+  // would not be a valid strict weak ordering: for example, a word that is
+  // stored in the auxiliary vocabulary of the index is positioned after all
+  // words of the main vocabulary (see `AuxVocabulary`), so comparing it to a
+  // word that is in neither vocabulary has to yield the same result as
+  // comparing the corresponding `Id`s, which are compared by their positions.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
@@ -150,6 +183,9 @@ class alignas(16) LocalVocabEntry
  private:
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
+
+  // The expensive case of looking up the position in the auxiliary vocabulary.
+  uint64_t numSmallerAuxVocabWordsExpensiveCase() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

@@ -329,6 +329,10 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
+  // The configuration that this instance was created with. It is kept because
+  // publishing a new generation of the auxiliary index reloads the index from
+  // disk (see `buildAuxIndex`) and has to apply the same settings again.
+  EngineConfig config_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
   using TimeLimit = std::chrono::milliseconds;
@@ -345,6 +349,26 @@ class Qlever {
   FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
 
  public:
+  // Build a new generation of the auxiliary index (see `index/AuxIndex.h`) from
+  // the delta triples that are currently held in RAM, and publish it. The
+  // triples then live on disk instead of in RAM, and are merged into the index
+  // scans from there.
+  //
+  // Publishing works by atomically swapping in a freshly loaded `Index` that
+  // uses the new generation. Queries that are still running keep the `Index`
+  // (and hence the generation of the auxiliary vocabulary) that they started
+  // with, which is what makes the `Id`s of an auxiliary vocabulary -- which are
+  // only valid for a single generation -- safe to use.
+  //
+  // PRECONDITION: No update may be applied concurrently, else it would be
+  // applied to the retired `Index` and hence be lost. The server guarantees
+  // this by running this on its single-threaded update executor. Note that the
+  // updates that arrive between the start of the build and the swap are carried
+  // over (see `DeltaTriples::addFromSnapshotDiff`), so moving the build off
+  // that executor only requires making the *swap* mutually exclusive with
+  // updates.
+  void buildAuxIndex(const SharedCancellationHandle& cancellationHandle);
+
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
 

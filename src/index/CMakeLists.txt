@@ -21,7 +21,8 @@ add_subdirectory(vocabulary)
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp EncodedIriManager.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
-        Vocabulary.cpp ../parser/RdfParser.cpp
+        Vocabulary.cpp AuxVocabulary.cpp AuxIndex.cpp AuxIndexBuilder.cpp AuxLocatedTriples.cpp
+        ../parser/RdfParser.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
         PrefixHeuristic.cpp CompressedRelation.cpp

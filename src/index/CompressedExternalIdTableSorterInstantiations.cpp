@@ -28,6 +28,13 @@ namespace ad_utility {
 template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
 template class CompressedExternalIdTableSorter<SortByOSP,
                                                NumColumnsIndexBuilding + 1>;
+// The permutations of an auxiliary index have one column more than those of the
+// main index (the column that stores whether a triple is inserted or deleted),
+// see `AuxIndex`.
+template class CompressedExternalIdTableSorter<SortBySPO,
+                                               NumColumnsIndexBuilding + 1>;
+template class CompressedExternalIdTableSorter<SortByPSO,
+                                               NumColumnsIndexBuilding + 1>;
 template class CompressedExternalIdTableSorter<SortBySPO,
                                                NumColumnsIndexBuilding>;
 template class CompressedExternalIdTableSorter<SortByOSP,
