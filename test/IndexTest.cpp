@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "./util/EncodedIriSchemeTestHelpers.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -1166,5 +1167,59 @@ TEST(IndexImpl, allIndexFilesAreListed) {
     EXPECT_TRUE(isAllowedNonIndexFile)
         << "File is neither an index file nor an allowed exclusion: "
         << entry.path().string();
+  }
+}
+
+// _____________________________________________________________________________
+// Build an index that uses a user-defined encoding scheme for IRIs (see
+// `EncodedIriScheme.h`), and check that the scheme is properly applied during
+// the index building and restored when the index is loaded again.
+TEST(IndexImpl, encodedIriSchemeEndToEnd) {
+  auto [directory, cleanup] = makeTemporaryDirectory("encodedIriScheme");
+  std::string base = directory + "/index";
+  std::string inputFilename = base + ".ttl";
+  {
+    std::ofstream input{inputFilename};
+    input << "<a> <b> <somePrefix://num_123_anotherNum_24> . "
+             "<a> <b> <somePrefix://num_1_otherNum_2> . <a> <b> <c> .";
+  }
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(base);
+    index.getImpl().setEncodedIriSchemes(
+        {ad_utility::testing::twoNumbersScheme()});
+    index.getImpl().setPrefixesForEncodedValues({});
+    index.createFromFiles(
+        {{inputFilename, qlever::Filetype::Turtle, std::nullopt}});
+  }
+
+  // Load the index again. The scheme is restored from the index via the global
+  // `EncodedIriSchemeRegistry`, so it doesn't have to be configured again.
+  {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(base, false);
+    const auto& manager = index.encodedIriManager();
+    std::string iri = "<somePrefix://num_123_anotherNum_24>";
+    auto id = manager.encode(iri);
+    ASSERT_TRUE(id.has_value());
+    EXPECT_EQ(id.value().getDatatype(), Datatype::EncodedVal);
+    EXPECT_EQ(manager.toString(id.value()), iri);
+    EXPECT_THAT(manager.decodeNumbers(id.value()),
+                ::testing::ElementsAre(123, 24));
+    // The IRIs of the scheme were encoded, so they are not in the vocabulary,
+    // in contrast to the other IRIs of the input.
+    VocabIndex vocabIndex;
+    EXPECT_FALSE(index.getVocab().getId(iri, &vocabIndex));
+    EXPECT_TRUE(index.getVocab().getId("<c>", &vocabIndex));
+  }
+
+  // Loading the index with a different configured scheme is an error.
+  {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.getImpl().setEncodedIriSchemes(
+        {ad_utility::testing::twoNumbersScheme("otherPrefix://num_")});
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        index.createFromOnDiskIndex(base, false),
+        ::testing::HasSubstr("differ from the ones that the index was built"));
   }
 }

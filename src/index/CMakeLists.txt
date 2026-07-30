@@ -20,6 +20,7 @@ add_subdirectory(vocabulary)
 # files into a proper library of their own.
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp EncodedIriManager.cpp
+        EncodedIriScheme.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
         Vocabulary.cpp ../parser/RdfParser.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
