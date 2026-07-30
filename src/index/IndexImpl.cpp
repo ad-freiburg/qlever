@@ -1970,7 +1970,7 @@ CPP_template_def(typename... NextSorter)(requires(
         if (prefix != newGraphPrefixIdx) {
           return;
         }
-        auto payload = EncodedIriManager::decodeDecimalFrom64Bit(rawPayload);
+        auto payload = EncodedIriManager::NibbleEncoder::decode(rawPayload);
         nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
       };
   size_t numPredicates =

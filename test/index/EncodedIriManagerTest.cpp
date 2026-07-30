@@ -135,7 +135,7 @@ TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
       EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value());
   EXPECT_EQ(prefixIdx, 1);
   std::string result;
-  EncodedIriManager::decodeDecimalFrom64Bit(result, payload);
+  EncodedIriManager::NibbleEncoder::decodeToString(result, payload);
   EXPECT_EQ(result, "42");
   AD_EXPECT_THROW_WITH_MESSAGE(
       EncodedIriManager::splitIntoPrefixIdxAndPayload(Id::makeUndefined()),
@@ -143,36 +143,11 @@ TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
 }
 
 // _____________________________________________________________________________
-TEST(EncodedIriManager, toStringWithGivenPrefix) {
-  auto str = EncodedIriManager::toStringWithGivenPrefix(
-      EncodedIriManager::encodeDecimalToNBit("7643"), "<blibb_");
-  EXPECT_EQ(str, "<blibb_7643>");
-}
-
-// _____________________________________________________________________________
 TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EncodedIriManager em{{"blabb", "blubb"}};
   auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
-      1, EncodedIriManager::encodeDecimalToNBit("7643"));
+      1, EncodedIriManager::NibbleEncoder::encode("7643"));
   EXPECT_EQ(em.toString(id), "<blubb7643>");
-}
-
-// _____________________________________________________________________________
-TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
-  auto testNumber = [](uint64_t number, ad_utility::source_location l =
-                                            AD_CURRENT_SOURCE_LOC()) {
-    using m = EncodedIriManager;
-    auto trace = generateLocationTrace(l);
-    EXPECT_EQ(number, m::decodeDecimalFrom64Bit(
-                          m::encodeDecimalToNBit(std::to_string(number))));
-  };
-  uint64_t MAX = std::stoull(std::string(EncodedIriManager::NumDigits, '9'));
-  testNumber(0);
-  testNumber(MAX);
-  auto intGenerator = ad_utility::SlowRandomIntGenerator<uint64_t>(0, MAX);
-  for (auto _ = 0; _ < 20; ++_) {
-    testNumber(intGenerator());
-  }
 }
 
 // _____________________________________________________________________________
@@ -377,16 +352,10 @@ TEST(EncodedIriManager, JsonWithoutConstraintsIsUnchangedAndReadable) {
             "<http://example.org/42>");
 }
 
+// NOTE: The constraints themselves are tested in
+// `EncodedIriBitConstraintTest.cpp`; the tests here only cover that the manager
+// applies and reports them.
 TEST(EncodedIriManager, InvalidConstraintsAreRejected) {
-  // An empty bit range.
-  AD_EXPECT_THROW_WITH_MESSAGE(BitRangeConstraint(5, 5, 0),
-                               testing::HasSubstr("must be nonempty"));
-  // A bit range that leaves the 64 bits of the number.
-  AD_EXPECT_THROW_WITH_MESSAGE(BitRangeConstraint(60, 65, 0),
-                               testing::HasSubstr("within the 64 bits"));
-  // A value that does not fit into its range.
-  AD_EXPECT_THROW_WITH_MESSAGE(BitRangeConstraint(0, 2, 4),
-                               testing::HasSubstr("must fit into its bit"));
   // Overlapping ranges.
   AD_EXPECT_THROW_WITH_MESSAGE(
       EncodedIriManager::fromPrefixesWithConstraints({PrefixWithConstraints{
@@ -405,28 +374,6 @@ TEST(EncodedIriManager, InvalidConstraintsAreRejected) {
            PrefixWithConstraints{"http://example.org/lane_",
                                  {{61, 64, 0b001}, {24, 33, 0u}}}}),
       testing::HasSubstr("with different constraints"));
-}
-
-TEST(EncodedIriManager, ConstraintsExhaustiveBitRoundTrip) {
-  // Exhaustively check the bit (de)compression for a constraint set with a gap,
-  // over all values of the unconstrained bits in a small window.
-  std::vector<BitRangeConstraint> constraints{
-      {61, 64, 0b001}, {22, 23, 0}, {24, 32, 0u}};
-  ql::ranges::sort(constraints, std::less<>{},
-                   [](const BitRangeConstraint& c) { return c.bitStart_; });
-  uint64_t base = 1ULL << 61;
-  for (uint64_t low = 0; low < 512; ++low) {
-    for (uint64_t bit23 : {0ULL, 1ULL << 23}) {
-      uint64_t value = base | bit23 | low;
-      uint64_t payload =
-          EncodedIriManager::removeConstrainedBits(value, constraints);
-      EXPECT_LE(payload, ad_utility::bitMaskForLowerBits(
-                             EncodedIriManager::NumBitsEncoding));
-      EXPECT_EQ(
-          EncodedIriManager::reinsertConstrainedBits(payload, constraints),
-          value);
-    }
-  }
 }
 
 // _____________________________________________________________________________
@@ -470,14 +417,6 @@ TEST(EncodedIriManager, ConstraintsPayloadZero) {
   EXPECT_EQ(payload, 0u);
   EXPECT_EQ(em.toString(id.value()), iri);
   EXPECT_EQ(em.getNumberOfConstrainedId(id.value()), value);
-
-  // The digit decoder itself must terminate for a payload of `0` (it is
-  // reachable for `EncodedVal` ids of a constrained prefix, e.g. from
-  // `IndexImpl`), and not loop into a `size_t` underflow.
-  EXPECT_EQ(EncodedIriManager::decodeDecimalFrom64Bit(uint64_t{0}), 0u);
-  std::string decoded;
-  EncodedIriManager::decodeDecimalFrom64Bit(decoded, uint64_t{0});
-  EXPECT_TRUE(decoded.empty());
 }
 
 // _____________________________________________________________________________

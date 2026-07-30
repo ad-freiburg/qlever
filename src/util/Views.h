@@ -467,6 +467,23 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
     ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
+// Return a view of all adjacent pairs of the elements of `range`: for the
+// elements `a, b, c` it yields the tuples `(a, b)` and `(b, c)`. For a range
+// with fewer than two elements the result is empty.
+//
+// NOTE: `range` is taken by lvalue reference (and not by a forwarding
+// reference), because the result only refers to it and does not own it, so
+// binding a temporary would dangle.
+//
+// NOTE: This is implemented via `zip` with a dropped view, which is equivalent
+// to a sliding view of size 2. The `sliding` view of `range-v3` cannot be used,
+// because it yields subranges and not pairs.
+// TODO<C++23> Use `std::views::adjacent<2>` (aka `std::views::pairwise`).
+CPP_template(typename Range)(
+    requires ql::ranges::forward_range<Range>) auto pairwiseView(Range& range) {
+  return ::ranges::views::zip(range, range | ::ranges::views::drop(1));
+}
+
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
 // in blocks.
