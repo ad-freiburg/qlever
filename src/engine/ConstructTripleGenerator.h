@@ -31,6 +31,17 @@ using IdCache =
     ad_utility::util::LRUCacheWithStatistics<Id, std::optional<EvaluatedTerm>>;
 using StringTriple = QueryExecutionTree::StringTriple;
 
+// Bundles the pieces shared by `evaluateTables`, `generateStringTriples`, and
+// `generateFormattedTriples`: the index to resolve IDs against, the
+// cancellation handle checked between batches, the owning query execution
+// context, and the deduplication mode.
+struct EvaluationConfig {
+  const Index& index_;
+  CancellationHandle cancellationHandle_;
+  const QueryExecutionContext& qec_;
+  ad_utility::DeduplicationMode mode_ = ad_utility::DeduplicationMode::none();
+};
+
 // Generates triples from the CONSTRUCT query results by instantiating the
 // template triple patterns with the values from the result table produced by
 // the WHERE clause of the CONSTRUCT query.
@@ -49,22 +60,16 @@ class ConstructTripleGenerator {
   // When `mode` is not `None`, duplicate triples are suppressed.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
-      const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      ad_utility::MediaType mediaType, const QueryExecutionContext& qec,
-      ad_utility::DeduplicationMode mode =
-          ad_utility::DeduplicationMode::none());
+      ad_utility::MediaType mediaType, EvaluationConfig config);
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
   // When `mode` is not `None`, duplicate triples are suppressed.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
-      const Index& index, CancellationHandle cancellationhandle,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      const QueryExecutionContext& qec,
-      ad_utility::DeduplicationMode mode =
-          ad_utility::DeduplicationMode::none());
+      EvaluationConfig config);
 
  private:
   // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
@@ -77,12 +82,9 @@ class ConstructTripleGenerator {
   // suppressed across batches.
   static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
       const Triples& templateTriples,
-      const VariableToColumnMap& variableColumns, const Index& index,
-      CancellationHandle cancellationHandle,
+      const VariableToColumnMap& variableColumns,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset, const QueryExecutionContext& qec,
-      ad_utility::DeduplicationMode mode =
-          ad_utility::DeduplicationMode::none());
+      size_t rowOffset, EvaluationConfig config);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);

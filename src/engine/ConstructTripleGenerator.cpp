@@ -28,18 +28,26 @@ IdCache ConstructTripleGenerator::makeIdCache(
 
 namespace {
 
+// Bundles the pieces `computeBatch` needs beyond the batch itself: the
+// preprocessed template, the index, the ID cache, the cancellation handle,
+// and (optionally) the deduplicator to consult while instantiating.
+struct BatchEvalContext {
+  const PreprocessedConstructTemplate& preprocessedTemplate_;
+  const Index& index_;
+  IdCache& cache_;
+  const CancellationHandle& cancellationHandle_;
+  std::optional<std::reference_wrapper<ConstructDeduplicator>> deduplicator_;
+};
+
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
-// the start. When `deduplicator` is set, duplicate triples are dropped
-// as they are instantiated (see `instantiateBatch`'s `DeduplicationParams`).
+// the start. When `context.deduplicator_` is set, duplicate triples are
+// dropped as they are instantiated (see `instantiateBatch`'s
+// `DeduplicationParams`).
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
     std::vector<EvaluatedTriple> computeBatch(
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
-        const PreprocessedConstructTemplate& preprocessedTemplate,
-        const Index& index, IdCache& cache, size_t tableRowOffset,
-        const CancellationHandle& cancellationHandle,
-        std::optional<std::reference_wrapper<ConstructDeduplicator>>
-            deduplicator) {
-  cancellationHandle->throwIfCancelled();
+        const BatchEvalContext& context, size_t tableRowOffset) {
+  context.cancellationHandle_->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
   const size_t batchBegin = *ql::ranges::begin(batch);
@@ -50,33 +58,59 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
                                    batchEnd};
 
   auto batchResult = ConstructBatchEvaluator::evaluateBatch(
-      preprocessedTemplate.uniqueVariableColumns_, ctx,
-      tableWithVocab.localVocab(), index, cache);
+      context.preprocessedTemplate_.uniqueVariableColumns_, ctx,
+      tableWithVocab.localVocab(), context.index_, context.cache_);
 
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
   std::optional<DeduplicationParams> deduplication;
-  if (deduplicator) {
-    deduplication.emplace(DeduplicationParams{*deduplicator, ctx});
+  if (context.deduplicator_) {
+    deduplication.emplace(DeduplicationParams{*context.deduplicator_, ctx});
   }
-  return instantiateBatch(preprocessedTemplate, batchResult, blankNodeBaseId,
-                          deduplication);
+  return instantiateBatch(context.preprocessedTemplate_, batchResult,
+                          blankNodeBaseId, deduplication);
+}
+
+// Chunks `table.view_` into batches and evaluates each one. Rebuilds the
+// (cheap) deduplicator reference per chunk so no reference into this
+// function's locals is captured beyond the chunk's own evaluation.
+auto processTableBatches(
+    const TableWithRange& table,
+    const PreprocessedConstructTemplate& preprocessedTemplate,
+    const Index& index, const CancellationHandle& cancellationHandle,
+    IdCache& cache, const std::shared_ptr<ConstructDeduplicator>& deduplicator,
+    size_t tableRowOffset) {
+  return ranges::views::chunk(table.view_,
+                              ConstructTripleGenerator::BATCH_SIZE) |
+         ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
+                               cancellationHandle, &deduplicator,
+                               tableRowOffset](auto chunkView) {
+           std::optional<std::reference_wrapper<ConstructDeduplicator>>
+               deduplicatorRef;
+           if (deduplicator) {
+             deduplicatorRef.emplace(*deduplicator);
+           }
+           BatchEvalContext context{preprocessedTemplate, index, cache,
+                                    cancellationHandle, deduplicatorRef};
+           return computeBatch(table.tableWithVocab_, chunkView, context,
+                               tableRowOffset);
+         }) |
+         ql::views::join;
 }
 }  // namespace
 
 //______________________________________________________________________________
 InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
-    const Index& index, CancellationHandle cancellationHandle,
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-    size_t rowOffset, const QueryExecutionContext& qec,
-    ad_utility::DeduplicationMode mode) {
+    size_t rowOffset, EvaluationConfig config) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
-      templateTriples, variableColumns, index);
+      templateTriples, variableColumns, config.index_);
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   std::shared_ptr<ConstructDeduplicator> deduplicator;
-  if (!std::holds_alternative<DeduplicationMode::None>(mode.value_)) {
-    deduplicator = std::make_shared<ConstructDeduplicator>(mode, qec);
+  if (!std::holds_alternative<DeduplicationMode::None>(config.mode_.value_)) {
+    deduplicator =
+        std::make_shared<ConstructDeduplicator>(config.mode_, config.qec_);
   }
 
   auto preprocessedTemplatePtr =
@@ -84,30 +118,18 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
           std::move(preprocessedTemplate));
 
   auto processTable =
-      [preprocessedTemplate = std::move(preprocessedTemplatePtr), &index,
-       cancellationHandle, cache = std::move(cache),
-       deduplicator = std::move(deduplicator),
+      [preprocessedTemplate = std::move(preprocessedTemplatePtr),
+       index = &config.index_, cancellationHandle = config.cancellationHandle_,
+       cache = std::move(cache), deduplicator = std::move(deduplicator),
        accumulatedRowOffset = rowOffset](const TableWithRange& table) mutable {
         const size_t numRowsOfTable = ql::ranges::size(table.view_);
 
         const size_t tableRowOffset = accumulatedRowOffset;
         accumulatedRowOffset += numRowsOfTable;
 
-        return ranges::views::chunk(table.view_, BATCH_SIZE) |
-               ql::views::transform([&table, &preprocessedTemplate, &index,
-                                     &cache, cancellationHandle, tableRowOffset,
-                                     &deduplicator](auto chunkView) {
-                 std::optional<std::reference_wrapper<ConstructDeduplicator>>
-                     deduplicatorRef;
-                 if (deduplicator) {
-                   deduplicatorRef.emplace(*deduplicator);
-                 }
-                 return computeBatch(table.tableWithVocab_, chunkView,
-                                     *preprocessedTemplate, index, cache,
-                                     tableRowOffset, cancellationHandle,
-                                     deduplicatorRef);
-               }) |
-               ql::views::join;
+        return processTableBatches(table, *preprocessedTemplate, *index,
+                                   cancellationHandle, cache, deduplicator,
+                                   tableRowOffset);
       };
 
   auto pipeline = std::move(rowIndices) |
@@ -120,13 +142,11 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
 InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
     const Triples& templateTriples, const VariableToColumnMap& variableColums,
-    const Index& index, CancellationHandle cancellationhandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-    ad_utility::MediaType mediaType, const QueryExecutionContext& qec,
-    ad_utility::DeduplicationMode mode) {
-  auto evaluatedTriples = evaluateTables(
-      templateTriples, variableColums, index, std::move(cancellationhandle),
-      std::move(rowIndices), rowOffset, qec, mode);
+    ad_utility::MediaType mediaType, EvaluationConfig config) {
+  auto evaluatedTriples =
+      evaluateTables(templateTriples, variableColums, std::move(rowIndices),
+                     rowOffset, std::move(config));
 
   auto transformer = [mediaType](const EvaluatedTriple& triple) {
     return formatTriple(triple, mediaType);
@@ -139,12 +159,11 @@ ConstructTripleGenerator::generateFormattedTriples(
 InputRangeTypeErased<StringTriple>
 ConstructTripleGenerator::generateStringTriples(
     const Triples& templateTriples, const VariableToColumnMap& variableColums,
-    const Index& index, CancellationHandle cancellationhandle,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-    const QueryExecutionContext& qec, ad_utility::DeduplicationMode mode) {
-  auto evaluatedTriples = evaluateTables(
-      templateTriples, variableColums, index, std::move(cancellationhandle),
-      std::move(rowIndices), rowOffset, qec, mode);
+    EvaluationConfig config) {
+  auto evaluatedTriples =
+      evaluateTables(templateTriples, variableColums, std::move(rowIndices),
+                     rowOffset, std::move(config));
 
   auto transformer = [](const EvaluatedTriple& triple) {
     return createStringTriple(triple);

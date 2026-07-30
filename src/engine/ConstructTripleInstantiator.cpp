@@ -41,6 +41,37 @@ std::optional<EvaluatedTerm> instantiateTerm(
       term);
 }
 
+namespace {
+// Instantiates one template triple for one result row, or returns
+// `nullopt` if a term is undefined or the triple is a duplicate under
+// `deduplication`.
+std::optional<EvaluatedTriple> tryInstantiateTriple(
+    const PreprocessedTriple& triple, const BatchEvaluationResult& batchResult,
+    size_t rowInBatch, size_t blankNodeRowId, size_t tripleIdx,
+    const PreprocessedConstructTemplate& tmpl,
+    const std::optional<DeduplicationParams>& deduplication) {
+  auto instantiate = [&triple, &batchResult, rowInBatch,
+                      blankNodeRowId](size_t pos) {
+    return instantiateTerm(triple[pos], batchResult, rowInBatch,
+                           blankNodeRowId);
+  };
+  auto subject = instantiate(0);
+  auto predicate = instantiate(1);
+  auto object = instantiate(2);
+  if (!subject || !predicate || !object) {
+    return std::nullopt;
+  }
+  if (deduplication) {
+    const size_t rowIdxInIdTable = deduplication->ctx_.firstRow_ + rowInBatch;
+    if (!deduplication->deduplicator_.isNew(tripleIdx, rowIdxInIdTable, tmpl,
+                                            deduplication->ctx_)) {
+      return std::nullopt;
+    }
+  }
+  return EvaluatedTriple{*subject, *predicate, *object};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
@@ -53,27 +84,11 @@ std::vector<EvaluatedTriple> instantiateBatch(
     const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (auto&& [tripleIdx, triple] :
          ::ranges::views::enumerate(tmpl.preprocessedTriples_)) {
-      auto instantiate = [&triple, &batchResult, rowInBatch,
-                          blankNodeRowId](size_t pos) {
-        return instantiateTerm(triple[pos], batchResult, rowInBatch,
-                               blankNodeRowId);
-      };
-      auto subject = instantiate(0);
-      auto predicate = instantiate(1);
-      auto object = instantiate(2);
-      if (!subject || !predicate || !object) {
-        continue;
+      if (auto instantiated = tryInstantiateTriple(
+              triple, batchResult, rowInBatch, blankNodeRowId,
+              static_cast<size_t>(tripleIdx), tmpl, deduplication)) {
+        triples.push_back(std::move(*instantiated));
       }
-      if (deduplication) {
-        const size_t rowIdxInIdTable =
-            deduplication->ctx_.firstRow_ + rowInBatch;
-        if (!deduplication->deduplicator_.isNew(static_cast<size_t>(tripleIdx),
-                                                rowIdxInIdTable, tmpl,
-                                                deduplication->ctx_)) {
-          continue;
-        }
-      }
-      triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
     }
   }
   return triples;
