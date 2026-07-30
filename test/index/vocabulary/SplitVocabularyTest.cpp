@@ -7,8 +7,8 @@
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "index/Vocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 
 namespace splitVocabTestHelpers {

@@ -19,7 +19,7 @@
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "util/Iterators.h"
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering

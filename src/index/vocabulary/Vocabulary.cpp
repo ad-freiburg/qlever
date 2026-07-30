@@ -5,7 +5,7 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 
 #include <iostream>
 

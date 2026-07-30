@@ -18,7 +18,7 @@
 #include <string>
 
 #include "global/Id.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "util/Iterators.h"
 #include "util/UnicodeSupport.h"
 #include "util/Views.h"

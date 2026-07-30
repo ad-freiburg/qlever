@@ -19,7 +19,7 @@ namespace ad_utility {
 // `QLEVER_NO_UNICODE` macro is defined, which happens iff the CMake option of
 // the same name is `ON`. For the consequences of an ICU-free build, see the
 // comment on that option in the top-level `CMakeLists.txt` and the comment on
-// `LocaleManager` in `index/LocaleManager.h`.
+// `LocaleManager` in `index/vocabulary/LocaleManager.h`.
 #ifdef QLEVER_NO_UNICODE
 inline constexpr bool useICUDefault = false;
 #else
