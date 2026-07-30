@@ -2157,7 +2157,7 @@ TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
 
 // VALUES clause that emits the identical triple 3 times — a minimal smoke
 // test that the deduplication is wired end-to-end.
-TEST(ExportQueryExecutionTrees, ConstructDeduplicationValues) {
+TEST(ExportQueryExecutionTrees, ConstructDeduplicationValuesNoneKeepsDuplicates) {
   const std::string kg = "";
   const std::string query =
       "CONSTRUCT { ?s ?p ?o } WHERE {"
@@ -2166,51 +2166,74 @@ TEST(ExportQueryExecutionTrees, ConstructDeduplicationValues) {
       " } }";
   const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
 
-  using ad_utility::DeduplicationMode;
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::none());
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+           absl::StrCat(expected, expected, expected));
+}
 
-  // 3 identical triples with `none`.
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::none());
-    EXPECT_EQ(
-        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-        absl::StrCat(expected, expected, expected));
-  }
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesGlobalDropsDuplicates) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>)"
+      " } }";
+  const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
 
-  // 1 unique triple with `global`.
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::global());
-    EXPECT_EQ(
-        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-        expected);
-  }
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::global());
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+           expected);
+}
 
-  // With a batch-wise window of 1, three *distinct* keys in an A-B-A
-  // pattern: A inserted, B inserted (evicts A), A inserted again (evicts B,
-  // A is new) — all three are emitted.
-  {
-    const std::string queryAba =
-        "CONSTRUCT { ?s ?p ?o } WHERE {"
-        " VALUES (?s ?p ?o) {"
-        "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>) (<ex:a> <ex:a> <ex:a>)"
-        " } }";
-    const std::string a = "<ex:a> <ex:a> <ex:a> .\n";
-    const std::string b = "<ex:b> <ex:b> <ex:b> .\n";
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::batchWise(1));
-    EXPECT_EQ(
-        runQueryStreamableResult(kg, queryAba, ad_utility::MediaType::turtle),
-        absl::StrCat(a, b, a));
-  }
+// A-B-A pattern with a batch-wise window of 1: A inserted, B inserted
+// (evicts A), A inserted again (evicts B, A is new again) — all three are
+// distinct insertions from the deduplicator's point of view, so all three
+// are emitted.
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesBatchWiseAbaPatternEvictsAndReemits) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>) (<ex:a> <ex:a> <ex:a>)"
+      " } }";
+  const std::string a = "<ex:a> <ex:a> <ex:a> .\n";
+  const std::string b = "<ex:b> <ex:b> <ex:b> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::batchWise(1));
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+           absl::StrCat(a, b, a));
+}
+
+// ____________________________________________________________________________
+// Formats the single triple `<ex:c> <ex:c> <ex:c> .` for one lowercase
+// letter `c`, used by `ConstructDeduplicationBatchWiseWindowTest`.
+static std::string batchWiseWindowTriple(char c) {
+  return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
+                      "> <ex:", std::string(1, c), "> .\n");
 }
 
 // Batchwise dedup with a stream of 5 unique triples repeated twice → 10
 // triples total. The window size controls how many duplicates survive.
-TEST(ExportQueryExecutionTrees, ConstructDeduplicationBatchWiseWindow) {
+struct BatchWiseWindowParam {
+  size_t windowSize;
+  // The letters (each standing for one `<ex:c> <ex:c> <ex:c>` triple)
+  // expected to survive deduplication, in order.
+  std::string expectedLetters;
+};
+
+class ConstructDeduplicationBatchWiseWindowTest
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<BatchWiseWindowParam> {};
+
+TEST_P(ConstructDeduplicationBatchWiseWindowTest, window) {
   const std::string kg = "";
   const std::string query =
       "CONSTRUCT { ?s ?p ?o } WHERE {"
@@ -2222,44 +2245,29 @@ TEST(ExportQueryExecutionTrees, ConstructDeduplicationBatchWiseWindow) {
       "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
       "  (<ex:e> <ex:e> <ex:e>)"
       " } }";
-  auto T = [](char c) {
-    return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
-                        "> <ex:", std::string(1, c), "> .\n");
-  };
 
-  using ad_utility::DeduplicationMode;
-
-  // window 4: A is 5 positions back when it reappears → evicted → emitted.
-  // All 10 triples survive (window is too small to catch any repeat).
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::batchWise(4));
-    EXPECT_EQ(
-        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-        absl::StrCat(T('a'), T('b'), T('c'), T('d'), T('e'), T('a'), T('b'),
-                     T('c'), T('d'), T('e')));
+  std::string expected;
+  for (char letter : GetParam().expectedLetters) {
+    absl::StrAppend(&expected, batchWiseWindowTriple(letter));
   }
 
-  // window 5: the second 'a' is only 5 positions after the first — still in
-  // cache. Suppressed. But 'b'-'e' repeats hit the same window and are
-  // suppressed. Result: 5 unique triples.
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::batchWise(5));
-    EXPECT_EQ(
-        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-        absl::StrCat(T('a'), T('b'), T('c'), T('d'), T('e')));
-  }
-
-  // window 10: all duplicates caught, 5 unique triples.
-  {
-    auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::batchWise(10));
-    EXPECT_EQ(
-        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
-        absl::StrCat(T('a'), T('b'), T('c'), T('d'), T('e')));
-  }
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::batchWise(GetParam().windowSize));
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+           expected);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    WindowSizes, ConstructDeduplicationBatchWiseWindowTest,
+    ::testing::Values(
+        // window 4: A is 5 positions back when it reappears → evicted →
+        // emitted. All 10 triples survive (window is too small to catch any
+        // repeat).
+        BatchWiseWindowParam{4, "abcdeabcde"},
+        // window 5: the second 'a' is only 5 positions after the first —
+        // still in cache. Suppressed. 'b'-'e' repeats hit the same window
+        // and are suppressed too. Result: 5 unique triples.
+        BatchWiseWindowParam{5, "abcde"},
+        // window 10: all duplicates caught, 5 unique triples.
+        BatchWiseWindowParam{10, "abcde"}));
