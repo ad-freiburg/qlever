@@ -528,6 +528,15 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(strStartsSprql(strSprql(L("\"\"")), L("\"Bob\"")));
   evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
                        pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
+  // The dedicated `ql:prefix-match` function is prefiltered in the same way as
+  // `STRSTARTS` (note that its argument is a plain prefix, not a regex).
+  evalAndEqualityCheck(prefixMatchSparql(varX, L("\"prefix\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  evalAndEqualityCheck(notSprqlExpr(prefixMatchSparql(varX, L("\"prefix\""))),
+                       pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
+  // As for `STRSTARTS` and `REGEX`, `ql:prefix-match` on `STR(?var)` cannot be
+  // prefiltered.
+  evalAndEqualityCheck(prefixMatchSparql(strSprql(varX), L("\"Bob\"")));
   evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));

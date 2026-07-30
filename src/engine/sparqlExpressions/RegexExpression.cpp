@@ -1,19 +1,26 @@
-// Copyright 2022 - 2024
-// University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2024 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/sparqlExpressions/RegexExpression.h"
 
 #include <re2/re2.h>
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/RegexExpressionHelpers.h"
+#include "engine/sparqlExpressions/SimpleLiteralHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 
@@ -74,81 +81,8 @@ struct RegexImpl {
 
 // The standard `REGEX` expression. It always evaluates the actual regex (via
 // Google's RE2 library) by delegating to the string-expression machinery.
-class RegexExpressionBase
-    : public string_expressions::StringExpressionImpl<2, RegexImpl,
-                                                      RegexValueGetter> {
-  using Base =
-      string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
-  using Base::Base;
-};
-
-// A `RegexExpressionBase` that additionally supports prefiltering when the
-// regex is a prefix regex (e.g. `^prefix`) applied to a plain variable. The
-// prefilter only restricts the blocks that are scanned; the actual regex is
-// still evaluated on the remaining rows by the base class.
-class RegexExpression : public RegexExpressionBase {
- private:
-  // The variable and the guaranteed literal prefix (see `getPrefixRegex`) if
-  // the regex is a prefix regex on a plain variable, `std::nullopt` otherwise.
-  std::optional<std::pair<Variable, std::string>> prefix_;
-
- public:
-  RegexExpression(Ptr child, Ptr regex,
-                  std::optional<std::pair<Variable, std::string>> prefix)
-      : RegexExpressionBase(std::move(child), std::move(regex)),
-        prefix_{std::move(prefix)} {}
-
-  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      [[maybe_unused]] const LocalVocabContext& context,
-      [[maybe_unused]] bool isNegated) const override {
-    if (!prefix_.has_value()) {
-      return {};
-    }
-    std::vector<PrefilterExprVariablePair> prefilterVec;
-    prefilterVec.emplace_back(
-        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-            TripleComponent::Literal::literalWithNormalizedContent(
-                asNormalizedStringViewUnsafe(prefix_->second))),
-        prefix_->first);
-    return prefilterVec;
-  }
-};
-
-// If `string` is a plain variable and `regex` is a constant simple-literal
-// prefix regex (see `getPrefixRegex`), return the variable and the extracted
-// prefix, which enables prefiltering. Return `std::nullopt` otherwise. Throws
-// if the regex is a constant literal with a datatype or language tag (which the
-// `REGEX` function forbids).
-//
-// Note: Prefiltering `STR(?var)` is deliberately not supported, since we would
-// not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
-// current prefilter expressions do not consider this matching logic.
-std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
-    const SparqlExpression::Ptr& string, const SparqlExpression& regex) {
-  bool childIsStrExpression = string->isStrExpression();
-  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
-      childIsStrExpression ? string->children()[0].get() : string.get());
-  const auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(&regex);
-  if (!variableExpression || !stringLiteralExpression) {
-    return std::nullopt;
-  }
-  const auto& stringLiteral = stringLiteralExpression->value();
-  ensureIsSimpleLiteral(stringLiteral);
-  if (childIsStrExpression) {
-    return std::nullopt;
-  }
-  std::optional<std::string> prefixRegex = getPrefixRegex(
-      std::string{asStringViewUnsafe(stringLiteral.getContent())});
-  if (!prefixRegex.has_value()) {
-    return std::nullopt;
-  }
-  return std::pair{variableExpression->value(), std::move(prefixRegex.value())};
-}
-
-}  // namespace sparqlExpression::detail
-
-namespace sparqlExpression {
+using RegexExpressionBase =
+    string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
 namespace {
 // The regex characters that have a special meaning. An unescaped occurrence
@@ -202,7 +136,7 @@ bool hasTopLevelAlternation(std::string_view regex) {
 }  // namespace
 
 // _____________________________________________________________________________
-std::optional<std::string> getPrefixRegex(std::string regex) {
+std::optional<std::string> getPrefixRegex(std::string_view regex) {
   if (!ql::starts_with(regex, '^')) {
     return std::nullopt;
   }
@@ -211,7 +145,7 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   // prefix. This has to be a full scan of the whole regex up front: the
   // accumulation loop below stops at the first special character, so it would
   // not notice a `|` that appears later (as in `^abc.*|def`).
-  if (hasTopLevelAlternation(std::string_view{regex}.substr(1))) {
+  if (hasTopLevelAlternation(regex.substr(1))) {
     return std::nullopt;
   }
 
@@ -268,15 +202,101 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   return prefix;
 }
 
+// A `RegexExpressionBase` that additionally supports prefiltering when the
+// regex is a prefix regex (e.g. `^prefix`) applied to a plain variable. The
+// prefilter only restricts the blocks that are scanned; the actual regex is
+// still evaluated on the remaining rows by the base class.
+class RegexExpression : public RegexExpressionBase {
+ private:
+  // The variable and the guaranteed literal prefix (see `getPrefixRegex`) if
+  // the regex is a prefix regex on a plain variable, `std::nullopt` otherwise.
+  std::optional<std::pair<Variable, std::string>> prefix_;
+
+ public:
+  RegexExpression(Ptr child, Ptr regex,
+                  std::optional<std::pair<Variable, std::string>> prefix)
+      : RegexExpressionBase(std::move(child), std::move(regex)),
+        prefix_{std::move(prefix)} {}
+
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
+      [[maybe_unused]] bool isNegated) const override {
+    if (!prefix_.has_value()) {
+      return {};
+    }
+    std::vector<PrefilterExprVariablePair> prefilterVec;
+    prefilterVec.emplace_back(
+        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+            TripleComponent::Literal::literalWithNormalizedContent(
+                asNormalizedStringViewUnsafe(prefix_->second))),
+        prefix_->first);
+    return prefilterVec;
+  }
+
+  // If we know a guaranteed prefix, assume that only 10^-k entries remain,
+  // where k is the length of that prefix, and cap to reasonable maximal values
+  // to prevent numerical stability problems. Note that unlike for
+  // `PrefixMatchExpression`, the actual regex has to be evaluated for each of
+  // the input rows, so the cost always includes the full input size (even if
+  // the input is sorted by the variable).
+  Estimates getEstimatesForFilterExpression(
+      uint64_t inputSize,
+      const std::optional<Variable>& firstSortedVariable) const override {
+    if (!prefix_.has_value()) {
+      return RegexExpressionBase::getEstimatesForFilterExpression(
+          inputSize, firstSortedVariable);
+    }
+    double reductionFactor =
+        std::pow(10, std::min<size_t>(8, prefix_->second.size()));
+    size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
+    return {sizeEstimate, sizeEstimate + inputSize};
+  }
+};
+
+// If `string` is a plain variable and `regex` is a constant prefix regex (see
+// `getPrefixRegex`), return the variable and the extracted prefix, which
+// enables prefiltering. Return `std::nullopt` otherwise.
+//
+// Note: Prefiltering `STR(?var)` is deliberately not supported, since we would
+// not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
+// current prefilter expressions do not consider this matching logic.
+std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
+    const SparqlExpression::Ptr& string, const SparqlExpression& regex) {
+  bool childIsStrExpression = string->isStrExpression();
+  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
+      childIsStrExpression ? string->children()[0].get() : string.get());
+  const auto* stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&regex);
+  if (!variableExpression || !stringLiteralExpression || childIsStrExpression) {
+    return std::nullopt;
+  }
+  std::optional<std::string> prefixRegex = getPrefixRegex(
+      asStringViewUnsafe(stringLiteralExpression->value().getContent()));
+  if (!prefixRegex.has_value()) {
+    return std::nullopt;
+  }
+  return std::pair{variableExpression->value(), std::move(prefixRegex.value())};
+}
+
+}  // namespace sparqlExpression::detail
+
+namespace sparqlExpression {
+
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr regex,
                                           SparqlExpression::Ptr flags) {
+  // The pattern has to be a simple literal, no matter what the other arguments
+  // look like.
+  if (const auto* regexLiteralExpression =
+          dynamic_cast<const StringLiteralExpression*>(regex.get())) {
+    detail::ensureIsSimpleLiteral(regexLiteralExpression->value(), "REGEX");
+  }
   detail::ensureIsValidRegexIfConstant(*regex);
   if (flags) {
     if (auto* stringLiteralExpression =
             dynamic_cast<const StringLiteralExpression*>(flags.get())) {
-      detail::ensureIsSimpleLiteral(stringLiteralExpression->value());
+      detail::ensureIsSimpleLiteral(stringLiteralExpression->value(), "REGEX");
     }
     detail::ensureIsValidFlagIfConstant(*flags);
     // Merge the flags into the regex. The result is no longer a plain string

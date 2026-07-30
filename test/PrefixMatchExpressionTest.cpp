@@ -242,6 +242,36 @@ TEST(PrefixMatchExpression, onGroupedVariableIsConstant) {
 }
 
 // _____________________________________________________________________________
+TEST(PrefixMatchExpression, onGroupedVariableWithVectorChildResult) {
+  // Hash-map based or lazy GROUP BY implementations can replace the child of a
+  // `PrefixMatchExpression` by an expression that yields one `Id` per group
+  // instead of a single constant. The prefix check then has to be applied to
+  // each of these `Id`s.
+  auto expression = makePrefixMatch("?vocab", "al");
+  ASSERT_TRUE(isPrefixExpression(expression));
+
+  TestContext ctx;
+  VectorWithMemoryLimit<Id> childValues{ctx.context._allocator};
+  childValues.push_back(ctx.Beta);
+  childValues.push_back(ctx.alpha);
+  childValues.push_back(ctx.aelpha);
+  childValues.push_back(U);
+  expression->replaceChild(0, std::make_unique<SingleUseExpression>(
+                                  ExpressionResult{std::move(childValues)}));
+
+  ctx.context._groupedVariables = {Variable{"?vocab"}};
+  ctx.context._isPartOfGroupBy = true;
+  ctx.context._beginIndex = 0;
+  ctx.context._endIndex = 1;
+  // `"alpha"` and `"älpha"` match the prefix `al` (the prefix match is
+  // case-insensitive and works on the primary collation level), `"Beta"` does
+  // not, and `UNDEF` stays `UNDEF`.
+  EXPECT_THAT(expression->evaluate(&ctx.context),
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAre(F, T, T, U)));
+}
+
+// _____________________________________________________________________________
 TEST(PrefixMatchExpression, insideAggregateIsNotFolded) {
   auto prefixMatch = makePrefixMatch("?vocab", "al");
   ASSERT_TRUE(isPrefixExpression(prefixMatch));
@@ -281,6 +311,36 @@ TEST(PrefixMatchExpression, onGroupedVariableWithUnexpectedChildResult) {
   ctx.context._endIndex = 1;
   AD_EXPECT_THROW_WITH_MESSAGE(expression->evaluate(&ctx.context),
                                ::testing::HasSubstr("unreachable"));
+}
+
+// _____________________________________________________________________________
+TEST(PrefixMatchExpression, getCacheKey) {
+  using namespace ::testing;
+  VariableToColumnMap map;
+  map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
+  map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
+
+  auto expression = makePrefixMatch("?first", "alp");
+  EXPECT_THAT(
+      expression->getCacheKey(map),
+      AllOf(StartsWith("Prefix match expression: alp"), HasSubstr("str:0"),
+            HasSubstr(expression->children()[0]->getCacheKey(map))));
+
+  // Equal expressions have equal cache keys, expressions that differ in the
+  // prefix or in the variable have different cache keys.
+  EXPECT_EQ(expression->getCacheKey(map),
+            makePrefixMatch("?first", "alp")->getCacheKey(map));
+  EXPECT_NE(expression->getCacheKey(map),
+            makePrefixMatch("?first", "alq")->getCacheKey(map));
+  EXPECT_NE(expression->getCacheKey(map),
+            makePrefixMatch("?second", "alp")->getCacheKey(map));
+
+  // The `STR()` variant is distinguished by the `str:` part of the cache key.
+  auto strExpression = makePrefixMatch("?first", "alp", true);
+  EXPECT_THAT(strExpression->getCacheKey(map),
+              AllOf(HasSubstr("str:1"),
+                    HasSubstr(strExpression->children()[0]->getCacheKey(map))));
+  EXPECT_NE(expression->getCacheKey(map), strExpression->getCacheKey(map));
 }
 
 // _____________________________________________________________________________

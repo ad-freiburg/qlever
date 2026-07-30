@@ -17,7 +17,7 @@
 #include <cmath>
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/RegexExpressionHelpers.h"
+#include "engine/sparqlExpressions/SimpleLiteralHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
 
@@ -246,7 +246,7 @@ SparqlExpression::Ptr makePrefixMatchExpression(
         "second argument"};
   }
   const auto& stringLiteral = stringLiteralExpression->value();
-  detail::ensureIsSimpleLiteral(stringLiteral);
+  detail::ensureIsSimpleLiteral(stringLiteral, "ql:prefix-match");
   return std::make_unique<PrefixMatchExpression>(
       std::move(string),
       std::string{asStringViewUnsafe(stringLiteral.getContent())},

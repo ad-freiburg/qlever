@@ -1,6 +1,12 @@
-// Copyright 2022 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -332,9 +338,12 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
 }
 
 namespace sparqlExpression {
-// Test the `getPrefixRegex` function, which returns the longest guaranteed
-// literal prefix of a regex (or `std::nullopt` if there is none).
+// Test the `getPrefixRegex` function, which returns a guaranteed literal prefix
+// of a regex (or `std::nullopt` if there is none). Note that this is a
+// best-effort scan and not a full regex parse, so the prefix may be shorter
+// than what a complete analysis could derive.
 TEST(RegexExpression, getPrefixRegex) {
+  using detail::getPrefixRegex;
   // No leading `^` -> no prefix.
   ASSERT_EQ(std::nullopt, getPrefixRegex("alpha"));
   // A plain prefix regex yields the full prefix.
@@ -365,6 +374,14 @@ TEST(RegexExpression, getPrefixRegex) {
   ASSERT_EQ(std::nullopt, getPrefixRegex("^abc.*|def"));
   // An empty prefix is not useful for prefiltering.
   ASSERT_EQ(std::nullopt, getPrefixRegex("^"));
+  // Inside `\Q...\E` (which RE2 interprets as literal text) a `)` can appear
+  // without a matching `(`. The scan for a top-level alternation must not
+  // "underflow" the nesting depth because of it, so the `|` here is still
+  // recognized as being at the top level.
+  ASSERT_EQ(std::nullopt, getPrefixRegex(R"(^a\Qb)c\E|d)"));
+  // A trailing backslash cannot occur in a valid regex, but the scan must not
+  // read past the end of the string because of it.
+  ASSERT_EQ("ab", getPrefixRegex(R"(^ab\)"));
 }
 }  // namespace sparqlExpression
 
@@ -473,4 +490,59 @@ TEST(RegexExpression, invalidConstruction) {
   EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"a\""),
                                        literal("\"x\"")),
                std::runtime_error);
+
+  // The pattern has to be a simple literal independently of the other
+  // arguments, so the same holds if the first argument is not a variable and if
+  // flags are present.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeTestRegexExpression(literal("\"notAVariable\""),
+                              literal("\"b\"", "@en")),
+      ::testing::HasSubstr("The REGEX function only accepts simple literals"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeTestRegexExpression(variable("?a"), literal("\"b\"", "@en"),
+                              literal("\"i\"")),
+      ::testing::HasSubstr("The REGEX function only accepts simple literals"));
+}
+
+// _____________________________________________________________________________
+TEST(RegexExpression, getEstimatesForFilterExpression) {
+  using Estimates = SparqlExpressionPimpl::Estimates;
+  auto hasEstimate = [](size_t sizeEstimate, size_t costEstimate) {
+    using namespace ::testing;
+    return AllOf(AD_FIELD(Estimates, sizeEstimate, Eq(sizeEstimate)),
+                 AD_FIELD(Estimates, costEstimate, Eq(costEstimate)));
+  };
+  // For a prefix regex we assume that only 10^-k entries remain, where k is the
+  // length of the prefix. In contrast to `ql:prefix-match`, the actual regex
+  // has to be evaluated for each input row, so the cost always contains the
+  // full input size, even if the input is sorted by the variable.
+  auto expression = makeRegexExpression("?a", "^abc");
+  EXPECT_THAT(expression->getEstimatesForFilterExpression(10000, std::nullopt),
+              hasEstimate(10, 10010));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(100000, Variable{"?b"}),
+      hasEstimate(100, 100100));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
+      hasEstimate(10, 10010));
+
+  // The reduction factor is capped to prevent numerical stability problems.
+  auto longPrefixExpression = makeRegexExpression("?a", "^thisisverylong");
+  EXPECT_THAT(longPrefixExpression->getEstimatesForFilterExpression(
+                  1000000000, Variable{"?a"}),
+              hasEstimate(10, 1000000010));
+
+  // A regex for which no prefix can be derived (and hence no prefiltering is
+  // possible) falls back to the default estimates, where nothing is filtered
+  // out.
+  auto nonPrefixExpression = makeRegexExpression("?a", "abc");
+  EXPECT_THAT(
+      nonPrefixExpression->getEstimatesForFilterExpression(10000, std::nullopt),
+      hasEstimate(10000, 10000));
+  // The same holds for a prefix regex on `STR(?a)`, which cannot be
+  // prefiltered either.
+  auto strExpression = makeRegexExpression("?a", "^abc", std::nullopt, true);
+  EXPECT_THAT(
+      strExpression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
+      hasEstimate(10000, 10000));
 }
