@@ -17,8 +17,8 @@
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
-#include "index/EncodedIriManager.h"
 #include "index/LocalVocab.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 
 class IndexImpl;

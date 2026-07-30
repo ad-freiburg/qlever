@@ -12,12 +12,12 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "index/EncodedIriManager.h"
 #include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
