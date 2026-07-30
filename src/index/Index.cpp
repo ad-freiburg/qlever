@@ -298,3 +298,8 @@ GraphNameManager& Index::graphNameManager() {
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
 }
+
+// _____________________________________________________________________________
+valueIdComparators::AuxVocabOrdering Index::auxVocabOrdering() const {
+  return pimpl_->auxVocabOrdering();
+}

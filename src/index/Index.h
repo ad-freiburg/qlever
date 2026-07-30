@@ -12,6 +12,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "global/ValueIdComparators.h"
 #include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
@@ -241,6 +242,11 @@ class Index {
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
+
+  // The information that is required to compare `Id`s of type
+  // `Datatype::AuxVocabIndex` by the string values that they represent, see
+  // `IndexImpl::auxVocabOrdering`.
+  valueIdComparators::AuxVocabOrdering auxVocabOrdering() const;
 
   // Allow implicit conversions to `const IndexImpl&`.
   operator const IndexImpl&() const { return getImpl(); }

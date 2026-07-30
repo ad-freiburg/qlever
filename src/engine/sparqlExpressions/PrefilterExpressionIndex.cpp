@@ -545,9 +545,8 @@ RelationalExpression<Comparison>::logicalComplement() const {
 //______________________________________________________________________________
 template <CompOp Comparison>
 BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
-    [[maybe_unused]] const LocalVocabContext& context,
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    bool getTotalComplement) const {
+    const LocalVocabContext& context, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
@@ -560,11 +559,13 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   // Reason: The referenceId could be contained within the bounds formed by
   // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
   // empty ranges).
-  auto relevantIdRanges = Comparison != CompOp::EQ
-                              ? getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison)
-                              : getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison, false);
+  auto auxVocabOrdering = context.auxVocabOrdering();
+  auto relevantIdRanges =
+      Comparison != CompOp::EQ
+          ? getRangesForId(idRange.begin(), idRange.end(), referenceId,
+                           Comparison, auxVocabOrdering)
+          : getRangesForId(idRange.begin(), idRange.end(), referenceId,
+                           Comparison, auxVocabOrdering, false);
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)

@@ -217,6 +217,17 @@ class Vocabulary {
   // Get prefix ranges for the given prefix.
   PrefixRanges prefixRanges(std::string_view prefix) const;
 
+  // The marker of the sub-vocabulary that `word` belongs to, see
+  // `PolymorphicVocabulary::getMarkerForWord`. Always zero for vocabulary
+  // implementations that do not split their words.
+  uint8_t getMarkerForWord(std::string_view word) const {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      return vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
+    } else {
+      return 0;
+    }
+  }
+
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return getCaseComparator().getLocaleManager();
   }
