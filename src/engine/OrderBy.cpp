@@ -102,7 +102,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Return true iff `rowA` comes before `rowB` in the sort order specified by
   // `sortIndices_`.
-  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
+  auto auxVocabOrdering = getExecutionContext()->getIndex().auxVocabOrdering();
+  auto comparison = [this, &auxVocabOrdering](const auto& row1,
+                                              const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
       if (row1[column] == row2[column]) {
         continue;
@@ -110,8 +112,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
       bool isLessThan =
           toBoolNotUndef(valueIdComparators::compareIds<
                          valueIdComparators::ComparisonForIncompatibleTypes::
-                             CompareByType>(
-              row1[column], row2[column], valueIdComparators::Comparison::LT));
+                             CompareByType>(row1[column], row2[column],
+                                            valueIdComparators::Comparison::LT,
+                                            auxVocabOrdering));
       return isLessThan != isDescending;
     }
     return false;

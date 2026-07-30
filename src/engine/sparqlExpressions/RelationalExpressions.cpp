@@ -102,11 +102,13 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 
   // Perform the actual evaluation.
   const auto resultRanges = [&]() {
+    auto auxVocabOrdering = context->_qec.getIndex().auxVocabOrdering();
     if (valueIdUpper) {
       return valueIdComparators::getRangesForEqualIds(
-          begin, end, valueId, valueIdUpper.value(), Comp);
+          begin, end, valueId, valueIdUpper.value(), Comp, auxVocabOrdering);
     } else {
-      return valueIdComparators::getRangesForId(begin, end, valueId, Comp);
+      return valueIdComparators::getRangesForId(begin, end, valueId, Comp,
+                                                auxVocabOrdering);
     }
   }();
 

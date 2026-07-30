@@ -11,6 +11,7 @@
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
+#include "global/VocabIndexMarker.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
@@ -78,6 +79,188 @@ inline ValueId toValueId(ComparisonResult comparisonResult) {
 // representation of these values as unsigned integers.
 inline bool compareByBits(ValueId a, ValueId b) { return a < b; }
 
+// All the information that is required to compare `Id`s of type
+// `Datatype::AuxVocabIndex` by the string values that they represent instead of
+// by their bits. It consists of the positions at which the words of the
+// auxiliary vocabulary would be sorted into the main vocabulary, see
+// `AuxVocabulary` for the details. A default-constructed `AuxVocabOrdering`
+// means that the index has no auxiliary index; comparing an `Id` of type
+// `Datatype::AuxVocabIndex` then is a programming error (namely, forgetting to
+// pass the ordering of the auxiliary vocabulary that the `Id` came from).
+class AuxVocabOrdering {
+ private:
+  ql::span<const uint64_t> positionsInMainVocab_;
+  std::array<uint64_t, VocabIndexMarker::maxNumMarkers> markerOffsets_{};
+  VocabIndexMarker marker_;
+
+ public:
+  AuxVocabOrdering() = default;
+  AuxVocabOrdering(ql::span<const uint64_t> positionsInMainVocab,
+                   const std::array<uint64_t, VocabIndexMarker::maxNumMarkers>&
+                       markerOffsets,
+                   VocabIndexMarker marker)
+      : positionsInMainVocab_{positionsInMainVocab},
+        markerOffsets_{markerOffsets},
+        marker_{marker} {}
+
+  // The offset of the word of `auxId` (which must be of type
+  // `Datatype::AuxVocabIndex`), see the comment on
+  // `AuxVocabulary::positionsInMainVocab`. This is also the number of words of
+  // the auxiliary vocabulary that are smaller than that word, so it is directly
+  // comparable to the result of `numWordsSmallerThan` below.
+  uint64_t offsetOf(ValueId auxId) const {
+    AD_CORRECTNESS_CHECK(auxId.getDatatype() == Datatype::AuxVocabIndex);
+    auto index = auxId.getAuxVocabIndex().get();
+    uint64_t offset = markerOffsets_.at(marker_.getMarker(index)) +
+                      marker_.getIndexWithoutMarker(index);
+    AD_CORRECTNESS_CHECK(
+        offset < positionsInMainVocab_.size(),
+        "An `Id` of the auxiliary vocabulary was compared without the "
+        "corresponding `AuxVocabOrdering`, or with the one of a different "
+        "generation of the auxiliary index");
+    return offset;
+  }
+
+  // The raw bits of the `Id` of the first word of the main vocabulary that is
+  // greater than the word of `auxId` (which must be of type
+  // `Datatype::AuxVocabIndex`).
+  uint64_t positionInMainVocab(ValueId auxId) const {
+    return positionsInMainVocab_[offsetOf(auxId)];
+  }
+
+  // The number of words of the auxiliary vocabulary that are smaller than the
+  // word of the main vocabulary with the given `Id`.
+  uint64_t numWordsSmallerThan(ValueId mainVocabId) const {
+    // A word `w` of the auxiliary vocabulary is smaller than the word of the
+    // main vocabulary with the index `i` if and only if
+    // `positionInMainVocab(w) <= i`, and the positions are ascending. Note that
+    // this also holds across the sub-vocabularies of a split vocabulary: the
+    // marker sits in the highest bits of the payload of an `Id`, so comparing
+    // positions bitwise compares the markers first, and both the positions and
+    // the offsets are ordered by (marker, index within the sub-vocabulary).
+    auto it =
+        ql::ranges::upper_bound(positionsInMainVocab_, mainVocabId.getBits());
+    return static_cast<uint64_t>(it - positionsInMainVocab_.begin());
+  }
+};
+
+namespace detail {
+
+// The position of an `Id` of one of the string types (see
+// `ValueId::isStringType`) in the merged order of the main and the auxiliary
+// vocabulary. Comparing these positions lexicographically is the semantically
+// correct comparison of the string values, with the single exception of two
+// local vocab entries that fall into the same gap of both vocabularies, which
+// have to be compared by their strings.
+struct SemanticStringPosition {
+  // The raw bits of the `Id` of the first word of the main vocabulary that is
+  // greater than or equal to the word.
+  uint64_t mainVocabPosition_;
+  // True iff the word is the word of the main vocabulary at
+  // `mainVocabPosition_`, false iff it only would be sorted directly before it.
+  bool isWordAtMainVocabPosition_;
+  // Set iff the `Id` is of type `LocalVocabIndex`. Only used to break ties
+  // between two local vocab entries.
+  const LocalVocabEntry* localVocabEntry_;
+  // The number of words of the auxiliary vocabulary that are smaller than the
+  // word. Computing this is not free, so it is only computed on demand via
+  // `numSmallerAuxVocabWords()`, which is only necessary if the two members
+  // above are equal for both sides of a comparison.
+  ValueId id_;
+};
+
+// Compute the `SemanticStringPosition` of `id`, which must be of one of the
+// string types.
+inline SemanticStringPosition getSemanticStringPosition(
+    ValueId id, const AuxVocabOrdering& auxVocabOrdering) {
+  using enum Datatype;
+  auto datatype = id.getDatatype();
+  if (datatype == AuxVocabIndex) {
+    return {auxVocabOrdering.positionInMainVocab(id), false, nullptr, id};
+  }
+  if (datatype == VocabIndex) {
+    return {id.getBits(), true, nullptr, id};
+  }
+  AD_CORRECTNESS_CHECK(datatype == LocalVocabIndex);
+  const auto* entry = id.getLocalVocabIndex();
+  auto [lowerBound, upperBound] = entry->positionInVocab();
+  auto boundId = ValueId::fromBits(lowerBound.get());
+  // A local vocab entry whose word is stored in the auxiliary vocabulary is
+  // positioned exactly like the corresponding `Id` of that vocabulary.
+  if (boundId.getDatatype() == AuxVocabIndex) {
+    return {auxVocabOrdering.positionInMainVocab(boundId), false, entry,
+            boundId};
+  }
+  return {lowerBound.get(), lowerBound != upperBound, entry, id};
+}
+
+// The number of words of the auxiliary vocabulary that are smaller than the
+// word of `position`.
+inline uint64_t numSmallerAuxVocabWords(
+    const SemanticStringPosition& position,
+    const AuxVocabOrdering& auxVocabOrdering) {
+  using enum Datatype;
+  auto datatype = position.id_.getDatatype();
+  if (datatype == AuxVocabIndex) {
+    return auxVocabOrdering.offsetOf(position.id_);
+  }
+  if (datatype == LocalVocabIndex) {
+    return position.localVocabEntry_->numSmallerAuxVocabWords();
+  }
+  AD_CORRECTNESS_CHECK(datatype == VocabIndex);
+  return auxVocabOrdering.numWordsSmallerThan(position.id_);
+}
+
+}  // namespace detail
+
+// Compare two `Id`s that both are of one of the string types (see
+// `ValueId::isStringType`) by the string values that they represent. Note that
+// this is different from `ValueId::compareThreeWay`, which compares the words
+// of the auxiliary vocabulary as if they were all greater than all words of the
+// main vocabulary, because that is the order in which the index scans emit
+// them.
+inline ql::strong_ordering compareStringIdsSemantically(
+    ValueId a, ValueId b, const AuxVocabOrdering& auxVocabOrdering) {
+  AD_EXPENSIVE_CHECK(ValueId::isStringType(a.getDatatype()) &&
+                     ValueId::isStringType(b.getDatatype()));
+  auto positionA = detail::getSemanticStringPosition(a, auxVocabOrdering);
+  auto positionB = detail::getSemanticStringPosition(b, auxVocabOrdering);
+  if (positionA.mainVocabPosition_ != positionB.mainVocabPosition_) {
+    return positionA.mainVocabPosition_ < positionB.mainVocabPosition_
+               ? ql::strong_ordering::less
+               : ql::strong_ordering::greater;
+  }
+  // A word that is the word of the main vocabulary at that position is greater
+  // than a word that only would be sorted directly before it.
+  if (positionA.isWordAtMainVocabPosition_ !=
+      positionB.isWordAtMainVocabPosition_) {
+    return positionA.isWordAtMainVocabPosition_ ? ql::strong_ordering::greater
+                                                : ql::strong_ordering::less;
+  }
+  if (positionA.isWordAtMainVocabPosition_) {
+    // Both are the same word of the main vocabulary.
+    return ql::strong_ordering::equal;
+  }
+  // Both words fall into the same gap of the main vocabulary, so their
+  // positions in the auxiliary vocabulary decide.
+  auto numSmallerA =
+      detail::numSmallerAuxVocabWords(positionA, auxVocabOrdering);
+  auto numSmallerB =
+      detail::numSmallerAuxVocabWords(positionB, auxVocabOrdering);
+  if (numSmallerA != numSmallerB) {
+    return numSmallerA < numSmallerB ? ql::strong_ordering::less
+                                     : ql::strong_ordering::greater;
+  }
+  // The only remaining case is two local vocab entries that fall into the same
+  // gap of both vocabularies, which have to be compared by their strings.
+  if (positionA.localVocabEntry_ == nullptr ||
+      positionB.localVocabEntry_ == nullptr) {
+    return ql::strong_ordering::equal;
+  }
+  return positionA.localVocabEntry_->compareThreeWay(
+      *positionB.localVocabEntry_);
+}
+
 namespace detail {
 
 // Returns a comparator predicate `pred` that can be called with two arguments:
@@ -106,25 +289,19 @@ auto makeSymmetricComparator(Projection valueIdProjection,
 // For a range of `ValueId`s that is represented by `[begin, end)` and has to
 // be sorted according to `compareByBits`, return the contiguous range of
 // `ValueIds` (as a pair of iterators) where the Ids have the `datatype`.
+//
+// NOTE: The projection is `ValueId::datatypeForOrdering()`, not
+// `ValueId::getDatatype()`, because only the former is ascending in a sorted
+// range. In particular, an `Id` of type `LocalVocabIndex` is contained in the
+// range of the datatype of its position in the vocabularies (which is
+// `VocabIndex`, `EncodedVal`, or `AuxVocabIndex`), and the range for
+// `Datatype::LocalVocabIndex` is always empty.
 template <typename RandomIt>
 inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
                                                          RandomIt end,
                                                          Datatype datatype) {
-  // In a sorted input, `VocabIndex` and `LocalVocabIndex` IDs might be
-  // interleaved because they logically both store strings. We therefore
-  // need the range where any of those Datatypes match.
-  auto comparatorForVocabTypes = [](Datatype d1, Datatype d2) {
-    auto containsStringType = [](Datatype d) {
-      return ad_utility::contains(ValueId::stringTypes_, d);
-    };
-    if (containsStringType(d1) && containsStringType(d2)) {
-      return false;
-    }
-    return d1 < d2;
-  };
-  auto comparator = detail::makeSymmetricComparator(&ValueId::getDatatype,
-                                                    comparatorForVocabTypes);
-
+  auto comparator =
+      detail::makeSymmetricComparator(&ValueId::datatypeForOrdering);
   return std::equal_range(begin, end, datatype, comparator);
 }
 
@@ -333,6 +510,50 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   return std::move(rangeFilter).getResult();
 }
 
+// The two ranges of a sorted range of `ValueId`s that hold the `Id`s of the
+// string types: those that are positioned in the main vocabulary (`VocabIndex`
+// and the local vocab entries whose word is in or between the words of the main
+// vocabulary) and those that are positioned in the auxiliary vocabulary
+// (`AuxVocabIndex` and the local vocab entries whose word is stored there).
+// The two ranges are not adjacent, see `ValueId::stringTypes_`.
+template <typename RandomIt>
+inline std::array<std::pair<RandomIt, RandomIt>, 2> getRangesForStringTypes(
+    RandomIt begin, RandomIt end) {
+  return {getRangeForDatatype(begin, end, Datatype::VocabIndex),
+          getRangeForDatatype(begin, end, Datatype::AuxVocabIndex)};
+}
+
+// This function is part of the implementation of `getRangesForId` and
+// `getRangesForEqualIds` for the string types. See the documentation there.
+// Unlike `getRangesForIndexTypes` below, this compares the `Id`s by the string
+// values they represent, which requires searching in both of the ranges of
+// `getRangesForStringTypes` above. If `valueIdEnd` is set, then all `Id`s in
+// `[valueIdBegin, valueIdEnd)` are considered to be equal, else exactly the
+// `Id`s that are semantically equal to `valueIdBegin` are.
+template <typename RandomIt>
+inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForStringTypes(
+    RandomIt begin, RandomIt end, ValueId valueIdBegin,
+    std::optional<ValueId> valueIdEnd, Comparison comparison,
+    const AuxVocabOrdering& auxVocabOrdering) {
+  auto less = [&auxVocabOrdering](ValueId a, ValueId b) {
+    return compareStringIdsSemantically(a, b, auxVocabOrdering) < 0;
+  };
+  RangeFilter<RandomIt> rangeFilter{comparison};
+  for (auto [beginOfRange, endOfRange] : getRangesForStringTypes(begin, end)) {
+    auto eqBegin =
+        std::lower_bound(beginOfRange, endOfRange, valueIdBegin, less);
+    auto eqEnd =
+        valueIdEnd.has_value()
+            ? std::lower_bound(beginOfRange, endOfRange, valueIdEnd.value(),
+                               less)
+            : std::upper_bound(beginOfRange, endOfRange, valueIdBegin, less);
+    rangeFilter.addSmaller(beginOfRange, eqBegin);
+    rangeFilter.addEqual(eqBegin, eqEnd);
+    rangeFilter.addGreater(eqEnd, endOfRange);
+  }
+  return std::move(rangeFilter).getResult();
+}
+
 // This function is part of the implementation of `getRangesForEqualIds`. See
 // the documentation there.
 template <typename RandomIt>
@@ -391,10 +612,15 @@ auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
 //
 // When setting the flag argument `removeEmptyRanges` to false, empty ranges
 // [`begin`, `end`] where `begin` is equal to `end` will not be discarded.
+//
+// The `auxVocabOrdering` is required to compare the `Id`s of the auxiliary
+// vocabulary by their string values, see `AuxVocabOrdering`. It may be left
+// empty if and only if neither `valueId` nor any of the `Id`s in the range are
+// of type `Datatype::AuxVocabIndex`.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison,
-    bool removeEmptyRanges = true) {
+    const AuxVocabOrdering& auxVocabOrdering, bool removeEmptyRanges = true) {
   switch (valueId.getDatatype()) {
     case Datatype::Double:
       return detail::simplifyRanges(
@@ -412,6 +638,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
       return {};
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
+    case Datatype::AuxVocabIndex:
+      return detail::simplifyRanges(
+          detail::getRangesForStringTypes(begin, end, valueId, std::nullopt,
+                                          comparison, auxVocabOrdering),
+          removeEmptyRanges);
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
       // TODO<joka921> for the `EncodedVal` type, the behavior is only correct
@@ -439,7 +670,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
-    Comparison comparison) {
+    Comparison comparison, const AuxVocabOrdering& auxVocabOrdering) {
   // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
   // documentation of a similar check in `compareIds` below.
   AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
@@ -448,8 +679,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   auto typeBegin = valueIdBegin.getDatatype();
   auto typeEnd = valueIdEnd.getDatatype();
   AD_CONTRACT_CHECK(typeBegin == typeEnd ||
-                    (ad_utility::contains(Id::stringTypes_, typeBegin) &&
-                     ad_utility::contains(Id::stringTypes_, typeEnd)));
+                    (Id::isStringType(typeBegin) && Id::isStringType(typeEnd)));
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
@@ -459,10 +689,13 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
       AD_FAIL();
-    // TODO<joka921> check what the correct behavior is here.
-    case Datatype::EncodedVal:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
+    case Datatype::AuxVocabIndex:
+      return detail::simplifyRanges(detail::getRangesForStringTypes(
+          begin, end, valueIdBegin, valueIdEnd, comparison, auxVocabOrdering));
+    // TODO<joka921> check what the correct behavior is here.
+    case Datatype::EncodedVal:
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
       return detail::simplifyRanges(detail::getRangesForIndexTypes(
@@ -481,9 +714,7 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
     return type == Datatype::Double || type == Datatype::Int;
   };
   // TODO<joka921> Make this work for the WordIndex also.
-  auto isString = [](Datatype type) {
-    return ad_utility::contains(ValueId::stringTypes_, type);
-  };
+  auto isString = [](Datatype type) { return ValueId::isStringType(type); };
   auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
   // Note: Undefined values cannot be compared to other undefined values.
   return (!isUndefined(typeA)) &&
@@ -495,7 +726,8 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysUndef,
           typename Comparator>
-ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
+ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator,
+                                const AuxVocabOrdering& auxVocabOrdering) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
   using enum ComparisonResult;
@@ -509,11 +741,18 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
     }
   }
 
-  // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
-  // on ValueIds already does the right thing.
-  if (a.getDatatype() == Datatype::LocalVocabIndex ||
-      b.getDatatype() == Datatype::LocalVocabIndex) {
-    return fromBool(std::invoke(comparator, a, b));
+  // Both are of one of the string types, so compare them by the string values
+  // that they represent. Note that this differs from the comparison of the
+  // `Id`s (which is what the index scans are sorted by) for the `Id`s of the
+  // auxiliary vocabulary, see `compareStringIdsSemantically`.
+  if (ValueId::isStringType(typeA)) {
+    AD_CORRECTNESS_CHECK(ValueId::isStringType(typeB));
+    // Reduce the comparison to a comparison of two integers, such that it works
+    // with all the comparators (including the wrappers for `NaN` values, see
+    // `ad_utility::makeComparatorForNans`).
+    auto ordering = compareStringIdsSemantically(a, b, auxVocabOrdering);
+    int orderingAsInt = ordering < 0 ? -1 : (ordering > 0 ? 1 : 0);
+    return fromBool(std::invoke(comparator, orderingAsInt, 0));
   }
 
   // TODO<joka921> We currently don't perform correct comparisons (other than
@@ -562,8 +801,8 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
 // see the documentation of the enum `ComparisonForIncompatibleTypes` above.
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysUndef>
-inline ComparisonResult compareIds(ValueId a, ValueId b,
-                                   Comparison comparison) {
+inline ComparisonResult compareIds(ValueId a, ValueId b, Comparison comparison,
+                                   const AuxVocabOrdering& auxVocabOrdering) {
   // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
     // For the `compareByType` mode, which is used by ORDER BY, we also need a
@@ -571,10 +810,11 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
     if constexpr (comparisonForIncompatibleTypes ==
                   ComparisonForIncompatibleTypes::CompareByType) {
       return detail::compareIdsImpl<comparisonForIncompatibleTypes>(
-          a, b, ad_utility::makeComparatorForNans(comparator));
+          a, b, ad_utility::makeComparatorForNans(comparator),
+          auxVocabOrdering);
     } else {
-      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
-                                                                    comparator);
+      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(
+          a, b, comparator, auxVocabOrdering);
     }
   };
 
@@ -601,9 +841,9 @@ inline ComparisonResult compareIds(ValueId a, ValueId b,
 // are considered to be equal.
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysUndef>
-inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
-                                            ValueId bEnd,
-                                            Comparison comparison) {
+inline ComparisonResult compareWithEqualIds(
+    ValueId a, ValueId bBegin, ValueId bEnd, Comparison comparison,
+    const AuxVocabOrdering& auxVocabOrdering) {
   // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
   // compared to "pseudo"-IDs that represent words that are not part of the
   // vocabulary. In this case the ID `bBegin` is the ID of the smallest
@@ -617,15 +857,18 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
   // factor it out.
   auto compareEqual = [&]() {
     return toBoolNotUndef(detail::compareIdsImpl<mode>(
-               a, bBegin, std::greater_equal<>())) &&
-           toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>()));
+               a, bBegin, std::greater_equal<>(), auxVocabOrdering)) &&
+           toBoolNotUndef(detail::compareIdsImpl<mode>(a, bEnd, std::less<>(),
+                                                       auxVocabOrdering));
   };
   using enum Comparison;
   switch (comparison) {
     case LT:
-      return detail::compareIdsImpl<mode>(a, bBegin, std::less<>());
+      return detail::compareIdsImpl<mode>(a, bBegin, std::less<>(),
+                                          auxVocabOrdering);
     case LE:
-      return detail::compareIdsImpl<mode>(a, bEnd, std::less<>());
+      return detail::compareIdsImpl<mode>(a, bEnd, std::less<>(),
+                                          auxVocabOrdering);
     case EQ: {
       if constexpr (mode == ComparisonForIncompatibleTypes::AlwaysUndef) {
         bool typesAreCompatible =
@@ -650,9 +893,11 @@ inline ComparisonResult compareWithEqualIds(ValueId a, ValueId bBegin,
       }
     }
     case GE:
-      return detail::compareIdsImpl<mode>(a, bBegin, std::greater_equal<>());
+      return detail::compareIdsImpl<mode>(a, bBegin, std::greater_equal<>(),
+                                          auxVocabOrdering);
     case GT:
-      return detail::compareIdsImpl<mode>(a, bEnd, std::greater_equal<>());
+      return detail::compareIdsImpl<mode>(a, bEnd, std::greater_equal<>(),
+                                          auxVocabOrdering);
     default:
       AD_FAIL();
   }

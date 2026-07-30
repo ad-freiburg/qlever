@@ -318,6 +318,9 @@ template class Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
                           TripleComponentComparator, VocabIndex>;
 template class Vocabulary<detail::UnderlyingVocabTextVocabulary,
                           SimpleStringComparator, WordVocabIndex>;
+// The vocabulary of an auxiliary index, see `index/AuxVocabulary.h`.
+template class Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
+                          TripleComponentComparator, AuxVocabIndex>;
 
 template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);

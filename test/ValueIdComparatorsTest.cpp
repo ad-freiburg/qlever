@@ -61,13 +61,13 @@ TEST_F(ValueIdComparators, GetRangeForDatatype) {
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
     auto [begin, end] = getRangeForDatatype(ids.begin(), ids.end(), datatype);
+    // `getRangeForDatatype` groups the `Id`s by `datatypeForOrdering()`, which
+    // is the only datatype projection that is ascending in a sorted range. In
+    // particular, an `Id` of type `LocalVocabIndex` belongs to the range of the
+    // datatype of its position in the vocabulary (here always `VocabIndex`),
+    // and the range for `Datatype::LocalVocabIndex` is empty.
     auto hasMatchingDatatype = [&datatype](ValueId id) {
-      std::array vocabTypes{Datatype::VocabIndex, Datatype::LocalVocabIndex};
-      if (ad_utility::contains(vocabTypes, datatype)) {
-        return ad_utility::contains(vocabTypes, id.getDatatype());
-      } else {
-        return id.getDatatype() == datatype;
-      }
+      return id.datatypeForOrdering() == datatype;
     };
     for (auto it = ids.begin(); it < begin; ++it) {
       ASSERT_FALSE(hasMatchingDatatype(*it));
@@ -112,7 +112,8 @@ auto testGetRangesForId(It begin, It end, ValueId id,
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
   auto testImpl = [&](auto comparison) {
-    auto ranges = getRangesForId(begin, end, id, comparison);
+    auto ranges =
+        getRangesForId(begin, end, id, comparison, AuxVocabOrdering{});
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
 
@@ -130,14 +131,15 @@ auto testGetRangesForId(It begin, It end, ValueId id,
         ASSERT_FALSE(isMatching(*it, id))
             << *it << ' ' << id << comparison.value;
         auto expected = isMatchingDatatype(*it) ? False : Undef;
-        ASSERT_EQ(compareIds(*it, id, comparison), expected)
+        ASSERT_EQ(compareIds(*it, id, comparison, AuxVocabOrdering{}), expected)
             << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
         ASSERT_TRUE(isMatching(*it, id))
             << *it << ' ' << id << comparison.value;
-        ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
+        ASSERT_EQ(compareIds(*it, id, comparison, AuxVocabOrdering{}), True)
+            << *it << ' ' << id;
         ++it;
       }
     }
@@ -145,7 +147,8 @@ auto testGetRangesForId(It begin, It end, ValueId id,
       ASSERT_FALSE(isMatching(*it, id))
           << *it << ", " << id << comparison.value;
       auto expected = isMatchingDatatype(*it) ? False : Undef;
-      ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
+      ASSERT_EQ(compareIds(*it, id, comparison, AuxVocabOrdering{}), expected)
+          << *it << ' ' << id;
       ++it;
     }
   };
@@ -212,8 +215,8 @@ TEST_F(ValueIdComparators, Undefined) {
 
   for (auto comparison : {Comparison::EQ, Comparison::LE, Comparison::GE,
                           Comparison::GT, Comparison::LT, Comparison::NE}) {
-    auto equalRange =
-        getRangesForId(ids.begin(), ids.end(), undefined, comparison);
+    auto equalRange = getRangesForId(ids.begin(), ids.end(), undefined,
+                                     comparison, AuxVocabOrdering{});
     ASSERT_EQ(equalRange.size(), 0);
   }
 }
@@ -230,12 +233,14 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
       EXPECT_TRUE(true);
     }
     using enum ComparisonResult;
-    auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
+    auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison,
+                                       AuxVocabOrdering{});
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         // TODO<joka921> Correctly determine, which of these cases we want.
-        ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
+        ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison,
+                                        AuxVocabOrdering{}),
                     ::testing::AnyOf(False, Undef))
             << *it << " " << idBegin << ' ' << idEnd << ' '
             << static_cast<int>(comparison.value);
@@ -244,14 +249,17 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
       while (it != rangeEnd) {
         // The "not equal" relation also yields true for different datatypes.
         ASSERT_TRUE(isMatchingDatatype(*it) || comparison == Comparison::NE);
-        ASSERT_EQ(compareWithEqualIds(*it, idBegin, idEnd, comparison), True)
+        ASSERT_EQ(compareWithEqualIds(*it, idBegin, idEnd, comparison,
+                                      AuxVocabOrdering{}),
+                  True)
             << *it << ' ' << idBegin << ' ' << idEnd;
         ++it;
       }
     }
     while (it != end) {
       // TODO<joka921> Correctly determine, which of these cases we want.
-      ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
+      ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison,
+                                      AuxVocabOrdering{}),
                   ::testing::AnyOf(False, Undef));
       ++it;
     }
@@ -315,12 +323,12 @@ TEST_F(ValueIdComparators, IndexTypes) {
     }
   };
 
-  // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
-  // complex....
   using ad_utility::use_value_identity::vi;
+  // Note: The `Id`s of type `LocalVocabIndex` are part of the range of the
+  // `VocabIndex`es (see `getRangeForDatatype`), so they are covered by the
+  // first of these calls and do not get one of their own.
   testImpl(vi<Datatype::VocabIndex>, &getVocabIndex);
   testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex);
-  testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex);
   testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex);
 }
 
@@ -329,19 +337,25 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
   using enum ComparisonResult;
   using enum ComparisonForIncompatibleTypes;
-  ASSERT_EQ(compareIds(u, u, Comparison::LT), Undef);
-  ASSERT_EQ(compareIds(u, u, Comparison::LE), Undef);
-  ASSERT_EQ(compareIds(u, u, Comparison::EQ), Undef);
-  ASSERT_EQ(compareIds(u, u, Comparison::NE), Undef);
-  ASSERT_EQ(compareIds(u, u, Comparison::GT), Undef);
-  ASSERT_EQ(compareIds(u, u, Comparison::GE), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::LT, AuxVocabOrdering{}), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::LE, AuxVocabOrdering{}), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::EQ, AuxVocabOrdering{}), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::NE, AuxVocabOrdering{}), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::GT, AuxVocabOrdering{}), Undef);
+  ASSERT_EQ(compareIds(u, u, Comparison::GE, AuxVocabOrdering{}), Undef);
 
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LT), False);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LE), True);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::EQ), True);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::NE), False);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GT), False);
-  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GE), True);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LT, AuxVocabOrdering{}),
+            False);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::LE, AuxVocabOrdering{}),
+            True);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::EQ, AuxVocabOrdering{}),
+            True);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::NE, AuxVocabOrdering{}),
+            False);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GT, AuxVocabOrdering{}),
+            False);
+  ASSERT_EQ(compareIds<CompareByType>(u, u, Comparison::GE, AuxVocabOrdering{}),
+            True);
 }
 
 // _______________________________________________________________________
@@ -349,10 +363,12 @@ TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   auto I = ad_utility::testing::IntId;
   // Invalid value for the `Comparison` enum.
-  ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
   ASSERT_ANY_THROW(
-      (compareWithEqualIds(u, u, u, static_cast<Comparison>(542))));
+      (compareIds(u, u, static_cast<Comparison>(542), AuxVocabOrdering{})));
+  ASSERT_ANY_THROW((compareWithEqualIds(u, u, u, static_cast<Comparison>(542),
+                                        AuxVocabOrdering{})));
 
   // The third argument must be >= the second.
-  ASSERT_ANY_THROW((compareWithEqualIds(I(3), I(25), I(12), Comparison::LE)));
+  ASSERT_ANY_THROW((compareWithEqualIds(I(3), I(25), I(12), Comparison::LE,
+                                        AuxVocabOrdering{})));
 }

@@ -42,6 +42,12 @@ constexpr inline std::string_view UPDATE_TRIPLES_SUFFIX = ".update-triples";
 constexpr inline std::string_view ALLOCATED_GRAPHS_SUFFIX =
     ".allocated-graphs-state";
 
+// The array that stores, for each word of an auxiliary vocabulary (see
+// `index/AuxVocabulary.h`), the position at which that word would be sorted
+// into the vocabulary of the main index.
+constexpr inline std::string_view AUX_VOCAB_POSITIONS_SUFFIX =
+    ".vocabulary.positions";
+
 // The build log of an index. QLever does not write this directly, but
 // `qlever-control` creates this file to persist QLever's `stdout` during the
 // index building. If it is present, we still move it alongside the index that

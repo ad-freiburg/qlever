@@ -194,6 +194,29 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
+  // The marker of the sub-vocabulary that `word` belongs to, see
+  // `SplitVocabulary` and `VocabIndexMarker`. This is always zero for the
+  // vocabulary types that do not split their words. Note that this is
+  // determined by the word alone and requires no lookup.
+  uint8_t getMarkerForWord(std::string_view word) const {
+    return std::visit(
+        [&word](const auto& vocab) -> uint8_t {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            return T::getMarkerForWord(word);
+          } else {
+            return 0;
+          }
+        },
+        vocab_);
+  }
+
+  // The number of sub-vocabularies that a vocabulary of the given `type` splits
+  // its words over, see `SplitVocabulary`. It is one for all the types that do
+  // not split. The sub-vocabulary that a word belongs to is encoded in the
+  // marker bits of its `Id`, see `VocabIndexMarker`.
+  static uint8_t numberOfSubVocabularies(VocabularyType type);
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(

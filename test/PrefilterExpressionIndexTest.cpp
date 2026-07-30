@@ -493,8 +493,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     ValueIdSubrange inputRange{
         ValueIdIt{&evalBlocks, 0, accessValueIdOp},
         ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
-    std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
-        inputRange.begin(), inputRange.end(), referenceId, compOp);
+    std::vector<ValueIdItPair> iteratorRanges =
+        getRangesForId(inputRange.begin(), inputRange.end(), referenceId,
+                       compOp, valueIdComparators::AuxVocabOrdering{});
     using namespace prefilterExpressions::detail::mapping;
     ASSERT_TRUE(assertEqRelevantBlockItRanges(
         convertFromSpanIdxToSpanBlockItRanges(evalBlocks.begin(),

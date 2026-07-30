@@ -309,6 +309,7 @@ addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(VocabularyTest index)
+addLinkAndDiscoverTest(AuxVocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 

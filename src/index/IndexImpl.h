@@ -21,6 +21,8 @@
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
+#include "global/ValueIdComparators.h"
+#include "index/AuxVocabulary.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
@@ -203,6 +205,9 @@ class IndexImpl {
 
   std::optional<DeltaTriplesManager> deltaTriples_;
 
+  // The auxiliary vocabulary, see `auxVocab()`.
+  std::shared_ptr<const AuxVocabulary> auxVocab_;
+
   GraphNameManager graphNameManager_ = GraphNameManager();
 
  public:
@@ -261,6 +266,32 @@ class IndexImpl {
 
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
+
+  // The auxiliary vocabulary of this index (see `index/AuxVocabulary.h`), or
+  // `nullptr` if it has none. Note that this member is immutable once the index
+  // has been loaded, because the `Id`s of an auxiliary vocabulary are only
+  // valid for the very vocabulary that they were created for.
+  //
+  // TODO<joka921> Nothing sets this yet. It will be set by the auxiliary index,
+  // which follows in a separate PR; until then the only way to obtain an
+  // auxiliary vocabulary is `setAuxVocabForTesting`.
+  const AuxVocabulary* auxVocab() const { return auxVocab_.get(); }
+
+  // Set the auxiliary vocabulary, see above.
+  void setAuxVocabForTesting(std::shared_ptr<const AuxVocabulary> auxVocab) {
+    auxVocab_ = std::move(auxVocab);
+  }
+
+  // The information that is required to compare `Id`s of type
+  // `Datatype::AuxVocabIndex` by the string values that they represent. It is
+  // empty if this index has no auxiliary vocabulary. Note that this must always
+  // be the ordering of the very `IndexImpl` that the compared `Id`s came from,
+  // see the documentation of `auxVocab_`.
+  valueIdComparators::AuxVocabOrdering auxVocabOrdering() const {
+    const auto* vocab = auxVocab();
+    return vocab == nullptr ? valueIdComparators::AuxVocabOrdering{}
+                            : vocab->ordering();
+  }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly
   // into `serializer`'s buffer. See `Vocabulary::loadFromZeroCopyDeserializer`

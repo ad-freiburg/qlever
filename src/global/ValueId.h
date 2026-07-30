@@ -42,7 +42,15 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
-  MaxValue = EncodedVal
+  // An index into the auxiliary vocabulary of an auxiliary index (see
+  // `index/AuxIndex.h`). Because the datatype bits are the most significant
+  // bits, all IDs of this type are larger than all IDs of the other types.
+  // Words that are added by updates after the main index was built therefore
+  // are sorted after all words from the main vocabulary when comparing IDs
+  // bitwise. For the semantically correct (that is, by string value)
+  // comparison, see `valueIdComparators::AuxVocabOrdering`.
+  AuxVocabIndex,
+  MaxValue = AuxVocabIndex
   // Note: Unfortunately, we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -91,6 +99,8 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "GeoPoint";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
+    case Datatype::AuxVocabIndex:
+      return "AuxVocabIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -122,25 +132,37 @@ class ValueId {
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
-  // All types that store strings. Together, the IDs of all the items of these
-  // types form a consecutive range of IDs when sorted. Within this range, the
-  // IDs are ordered by their string values, not by their IDs (and hence also
-  // not by their types).
-  static constexpr std::array<Datatype, 2> stringTypes_{
-      Datatype::VocabIndex, Datatype::LocalVocabIndex};
+  // All types that store strings. Note that the IDs of these types do *not*
+  // form a consecutive range of IDs when sorted, because the IDs of the
+  // auxiliary vocabulary are all greater than the IDs of the other types (see
+  // `Datatype::AuxVocabIndex`). Within each of the two ranges, the IDs are
+  // ordered by their string values, not by their IDs (and hence also not by
+  // their types).
+  static constexpr std::array<Datatype, 3> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex, Datatype::AuxVocabIndex};
+
+  // Return true iff the `datatype` stores strings, see `stringTypes_`.
+  static constexpr bool isStringType(Datatype datatype) {
+    return ad_utility::contains(stringTypes_, datatype);
+  }
 
   // A mapping that decides if a Datatype is bitwise comparable or not. See
   // `canBeComparedBitwise()` below.
-  static constexpr std::array<bool, 12> isTypeBitwiseComparable_{
-      true, true, true, true, true, false, true, true, true, true, true, true};
+  static constexpr std::array<bool, 13> isTypeBitwiseComparable_{
+      true, true, true, true, true, false, true,
+      true, true, true, true, true, true};
 
-  // Assert that the types in `stringTypes_` are directly adjacent. This is
-  // required to make the comparison of IDs in `ValueIdComparators.h` work.
-  static constexpr Datatype maxStringType_ = ql::ranges::max(stringTypes_);
-  static constexpr Datatype minStringType_ = ql::ranges::min(stringTypes_);
-  static_assert(static_cast<size_t>(maxStringType_) -
-                    static_cast<size_t>(minStringType_) + 1 ==
-                stringTypes_.size());
+  // Return true iff IDs of the given `datatype` are compared to a
+  // `LocalVocabIndex` by looking up the position of the local vocab entry in
+  // the vocabularies of the index (see `compareVocabAndLocalVocab` below).
+  // These are exactly the string types whose IDs are ordered consistently with
+  // the bitwise order, that is all string types except `LocalVocabIndex`
+  // itself.
+  static constexpr bool comparesToLocalVocabByPosition(Datatype datatype) {
+    using enum Datatype;
+    return datatype == VocabIndex || datatype == EncodedVal ||
+           datatype == AuxVocabIndex;
+  }
 
   // Assert that the size of an encoded GeoPoint equals the available bits in a
   // ValueId.
@@ -185,6 +207,15 @@ class ValueId {
   // For doubles it is first the positive doubles in order, then the negative
   // doubles in reversed order. This is a direct consequence of comparing the
   // bit representation of these values as unsigned integers.
+  // NOTE: An `Id` of type `LocalVocabIndex` does not carry its value in its
+  // bits (they are a pointer), so it is ordered by the position that its word
+  // has in the vocabularies of the index (see
+  // `LocalVocabEntry::positionInVocab`). That position is an `Id` of one of the
+  // types for which `comparesToLocalVocabByPosition` holds, and the local vocab
+  // entry compares exactly like an `Id` at that position. In particular this
+  // also holds for the comparison against `Id`s of an unrelated datatype like
+  // `Int` or `Date`, which is required for the comparison to be a valid strict
+  // weak ordering (see `compareVocabAndLocalVocab`).
   constexpr auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
@@ -199,24 +230,17 @@ class ValueId {
 
     // GCC 11 issues a false positive warning here, so we try to avoid it by
     // being over-explicit about the branches here.
-    if ((type == VocabIndex || type == EncodedVal) &&
-        otherType == LocalVocabIndex) {
+    if (otherType == LocalVocabIndex) {
       return compareVocabAndLocalVocab(
           LocalVocabEntry::IdProxy::make(getBits()),
           other.getLocalVocabIndex());
-    } else if (type == LocalVocabIndex &&
-               (otherType == VocabIndex || otherType == EncodedVal)) {
+    } else {
       auto inverseOrder = compareVocabAndLocalVocab(
           LocalVocabEntry::IdProxy::make(other.getBits()),
           getLocalVocabIndex());
 
       return ql::compareThreeWay(0, inverseOrder);
     }
-
-    // One of the types is `LocalVocab`, and the other one is a non-string
-    // type like `Integer` or `Undefined. Then the comparison by bits
-    // automatically compares by the datatype.
-    return ql::compareThreeWay(_bits, other._bits);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
 
@@ -249,6 +273,24 @@ class ValueId {
   // Get the datatype.
   [[nodiscard]] constexpr Datatype getDatatype() const noexcept {
     return static_cast<Datatype>(_bits >> numDataBits);
+  }
+
+  // The datatype that determines the position of this `Id` in a range of `Id`s
+  // that is sorted by `compareThreeWay` (which is the order in which index
+  // scans emit their results). For all datatypes but `LocalVocabIndex` this
+  // simply is `getDatatype()`. An `Id` of type `LocalVocabIndex` is ordered by
+  // the position of its word in the vocabularies of the index, which is an `Id`
+  // of one of the types for which `comparesToLocalVocabByPosition` holds, so
+  // that position's datatype is returned instead. In particular, the sequence
+  // of the `datatypeForOrdering()` values of a sorted range of `Id`s is
+  // ascending, which is not true for `getDatatype()`.
+  [[nodiscard]] Datatype datatypeForOrdering() const {
+    auto datatype = getDatatype();
+    if (datatype != Datatype::LocalVocabIndex) {
+      return datatype;
+    }
+    return fromBits(getLocalVocabIndex()->positionInVocab().lowerBound_.get())
+        .getDatatype();
   }
 
   // Create a `ValueId` of the `Undefined` type. There is only one such ID and
@@ -348,6 +390,9 @@ class ValueId {
   static ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
     return makeFromIndex(index.get(), Datatype::BlankNodeIndex);
   }
+  static ValueId makeFromAuxVocabIndex(AuxVocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::AuxVocabIndex);
+  }
 
   // Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   // != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
@@ -372,6 +417,10 @@ class ValueId {
 
   [[nodiscard]] constexpr BlankNodeIndex getBlankNodeIndex() const noexcept {
     return BlankNodeIndex::make(removeDatatypeBits(_bits));
+  }
+
+  [[nodiscard]] constexpr AuxVocabIndex getAuxVocabIndex() const noexcept {
+    return AuxVocabIndex::make(removeDatatypeBits(_bits));
   }
 
   // Store or load a `Date` object.
@@ -489,6 +538,8 @@ class ValueId {
         return std::invoke(visitor, getGeoPoint());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
+      case Datatype::AuxVocabIndex:
+        return std::invoke(visitor, getAuxVocabIndex());
     }
     AD_FAIL();
   }
