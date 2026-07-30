@@ -35,7 +35,8 @@ Id StringMapping::remapId(Id id) {
   // be directly encoded into the ID). All other IDs have to be serialized by
   // different mechanism.
   static constexpr std::array allowedDatatypes{VocabIndex, LocalVocabIndex,
-                                               TextRecordIndex, WordVocabIndex};
+                                               TextRecordIndex, WordVocabIndex,
+                                               AuxVocabIndex};
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`

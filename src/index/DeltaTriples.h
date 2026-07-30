@@ -15,6 +15,7 @@
 #include "backports/three_way_comparison.h"
 #include "engine/UpdateMetadata.h"
 #include "global/IdTriple.h"
+#include "index/AuxIndex.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexRebuilderTypes.h"
@@ -271,6 +272,12 @@ class DeltaTriples {
   // false otherwise.
   bool persists() const;
 
+  // The generation of the auxiliary index of the index that these delta triples
+  // belong to, or `ad_utility::detail::noAuxIndexGeneration` if it has none.
+  // The persisted delta triples are stamped with it, because their `Id`s may
+  // refer to the vocabulary of that generation.
+  uint64_t auxIndexGenerationOfIndex() const;
+
   // Write the delta triples to disk to persist them between restarts.
   void writeToDisk() const;
 
@@ -288,6 +295,12 @@ class DeltaTriples {
   // evaluation.
   LocatedTriplesSharedState getLocatedTriplesSharedStateReference() const;
 
+  // Make all permutations merge in the triples of the given auxiliary index,
+  // see `LocatedTriplesPerBlock::setAuxLocatedTriples`. Has to be called after
+  // `setOriginalMetadata` was called for all permutations, and
+  // `updateAugmentedMetadata` has to be called afterwards.
+  void setAuxIndex(std::shared_ptr<const AuxIndex> auxIndex);
+
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed. If `setInternalMetadata` is
   // true, this will set the metadata to the internal permutations instead.
@@ -296,6 +309,12 @@ class DeltaTriples {
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
       bool setInternalMetadata);
 
+  // Implementation of `setAuxIndex` for the external resp. the internal
+  // permutations.
+  template <bool isInternal>
+  void setAuxIndexImpl(const std::shared_ptr<const AuxIndex>& auxIndex);
+
+ public:
   // Consolidate the located triples in all permutations. Must be called after a
   // batch of insertTriples/deleteTriples, before any query access or metadata
   // update.
@@ -323,6 +342,19 @@ class DeltaTriples {
       const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
       CancellationHandle cancellationHandle,
       ad_utility::timer::TimeTracer& tracer);
+
+  // Same as above, but with an explicit function that maps a single `Id`
+  // instead of the mapping of a full index rebuild. This is used for the build
+  // of an auxiliary index, which has its own (much smaller) mapping, see
+  // `qlever::AuxIndexIdMapping::map`. If `mapId` returns `std::nullopt`, the
+  // `Id` must be a local vocab entry that the mapping does not know (because it
+  // was created after the mapping was); a copy of it that is anchored to the
+  // index of *this* `DeltaTriples` is then added to its local vocabulary.
+  void addFromSnapshotDiff(const LocatedTriplesState& oldState,
+                           const LocatedTriplesState& newState,
+                           const std::function<std::optional<Id>(Id)>& mapId,
+                           CancellationHandle cancellationHandle,
+                           ad_utility::timer::TimeTracer& tracer);
 
  private:
   // Remap the `Id` from the old index to the new index using the given

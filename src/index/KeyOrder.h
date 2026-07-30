@@ -34,6 +34,16 @@ class KeyOrder {
   // Get access to the keys.
   const auto& keys() const { return keys_; }
 
+  // The inverse permutation, that is, the `KeyOrder` that undoes this one:
+  // `keyOrder.inverse().permuteTuple(keyOrder.permuteTuple(x)) == x`.
+  KeyOrder inverse() const {
+    Array inverse{};
+    for (size_t i = 0; i < NumKeys; ++i) {
+      inverse[keys_[i]] = static_cast<T>(i);
+    }
+    return KeyOrder{inverse[0], inverse[1], inverse[2], inverse[3]};
+  }
+
   // Apply the permutation specified by this `KeyOrder` to the `input`.
   // The elements of the input are copied into the result.
   template <typename T>

@@ -19,6 +19,7 @@
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "index/AuxLocatedTriples.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -601,6 +602,34 @@ DeltaTriplesManager::getCurrentLocatedTriplesSharedStateWithVocab() const {
 }
 
 // _____________________________________________________________________________
+uint64_t DeltaTriples::auxIndexGenerationOfIndex() const {
+  const auto* auxIndex = index_.auxIndex();
+  return auxIndex == nullptr ? ad_utility::detail::noAuxIndexGeneration
+                             : auxIndex->generation();
+}
+
+// _____________________________________________________________________________
+template <bool isInternal>
+void DeltaTriples::setAuxIndexImpl(
+    const std::shared_ptr<const AuxIndex>& auxIndex) {
+  for (auto permutation : Permutation::all<isInternal>()) {
+    auto& locatedTriples =
+        locatedTriples_->getLocatedTriplesForPermutation<isInternal>(
+            permutation);
+    locatedTriples.setAuxLocatedTriples(
+        std::make_shared<const AuxLocatedTriples>(
+            auxIndex, permutation, isInternal,
+            locatedTriples.originalMetadata()));
+  }
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::setAuxIndex(std::shared_ptr<const AuxIndex> auxIndex) {
+  setAuxIndexImpl<false>(auxIndex);
+  setAuxIndexImpl<true>(auxIndex);
+}
+
+// _____________________________________________________________________________
 void DeltaTriples::setOriginalMetadata(
     Permutation::Enum permutation,
     std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata,
@@ -664,7 +693,8 @@ void DeltaTriples::writeToDisk() const {
   ad_utility::serializeIds(
       tempPath, localVocab_,
       std::array{toRange(triplesSetsNormal_.triplesDeleted_),
-                 toRange(triplesSetsNormal_.triplesInserted_)});
+                 toRange(triplesSetsNormal_.triplesInserted_)},
+      auxIndexGenerationOfIndex());
   ql::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
@@ -674,8 +704,8 @@ void DeltaTriples::readFromDisk() {
     return;
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
-  auto [vocab, idRanges] =
-      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_, auxIndexGenerationOfIndex());
   if (idRanges.empty()) {
     return;
   }
@@ -757,10 +787,35 @@ void DeltaTriples::addFromSnapshotDiff(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping,
     CancellationHandle cancellationHandle,
     ad_utility::timer::TimeTracer& tracer) {
+  addFromSnapshotDiff(
+      oldState, newState,
+      [this, &idMapping](Id id) -> std::optional<Id> {
+        remapId(idMapping, id, localVocab_, index_);
+        return id;
+      },
+      std::move(cancellationHandle), tracer);
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::addFromSnapshotDiff(
+    const LocatedTriplesState& oldState, const LocatedTriplesState& newState,
+    const std::function<std::optional<Id>(Id)>& mapId,
+    CancellationHandle cancellationHandle,
+    ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("computeLocatedTriplesDiff");
   auto difference = computeLocatedTriplesDiff(oldState, newState);
-  difference.remapIds([this, &idMapping](Id& id) {
-    remapId(idMapping, id, localVocab_, index_);
+  difference.remapIds([this, &mapId](Id& id) {
+    if (auto mapped = mapId(id); mapped.has_value()) {
+      id = mapped.value();
+      return;
+    }
+    // The `Id` is a local vocab entry that the mapping does not know, so it
+    // still points to an entry that is anchored to the OLD index. Insert a
+    // re-anchored copy into the local vocabulary of this `DeltaTriples`, see
+    // the documentation of this function.
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::LocalVocabIndex);
+    id = Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
+        LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index_}));
   });
   tracer.endTrace("computeLocatedTriplesDiff");
   tracer.beginTrace("insertDiffedTriples");

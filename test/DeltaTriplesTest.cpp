@@ -752,7 +752,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
   EXPECT_NO_THROW(deltaTriples.writeToDisk());
 
   // Check if file contents match
-  std::array<char, 55> expectedContent{
+  std::array<char, 63> expectedContent{
       // Magic bytes
       'Q',
       'L',
@@ -768,8 +768,18 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       'T',
       'E',
       // Version
-      1,
+      2,
       0,
+      // The generation of the auxiliary index. The index of this test does not
+      // have one, so this is `ad_utility::detail::noAuxIndexGeneration`.
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
+      static_cast<char>(0xff),
       // Size of `BlankNodeBlocks`.
       0,
       0,

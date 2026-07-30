@@ -122,6 +122,10 @@ extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
                                                       3>;
 extern template class CompressedExternalIdTableSorter<
     SortByOSP, NumColumnsIndexBuilding + 1>;
+extern template class CompressedExternalIdTableSorter<
+    SortBySPO, NumColumnsIndexBuilding + 1>;
+extern template class CompressedExternalIdTableSorter<
+    SortByPSO, NumColumnsIndexBuilding + 1>;
 extern template class CompressedExternalIdTableSorter<SortBySPO,
                                                       NumColumnsIndexBuilding>;
 extern template class CompressedExternalIdTableSorter<SortByOSP,

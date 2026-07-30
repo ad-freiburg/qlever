@@ -1148,9 +1148,47 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
       usePatterns_ = false;
     }
   }
+  loadNewestAuxIndexFromDisk();
+  connectAuxIndexToDeltaTriples();
   if (persistUpdatesOnDisk) {
     setFilenamesForPersistentUpdates(true);
   }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::loadNewestAuxIndexFromDisk() {
+  AD_CORRECTNESS_CHECK(auxIndex_ == nullptr);
+  auto generations = AuxIndex::generationsOnDisk(onDiskBase_);
+  if (generations.empty()) {
+    return;
+  }
+  // Only the newest generation is used, the older ones are leftovers of
+  // rebuilds that were still in use by running queries when the server was shut
+  // down.
+  size_t generation = generations.back();
+  auto auxIndex = std::make_shared<AuxIndex>(allocator_);
+  const auto& locale = configurationJson_.at("locale");
+  auxIndex->loadFromDisk(AuxIndex::makeBasename(onDiskBase_, generation),
+                         std::string{locale.at("language")},
+                         std::string{locale.at("country")},
+                         bool{locale.at("ignore-punctuation")});
+  auxIndex_ = std::move(auxIndex);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::connectAuxIndexToDeltaTriples() {
+  if (auxIndex_ == nullptr) {
+    return;
+  }
+  // The contents of the delta triples are not changed, so they do not have to
+  // be written to disk; the augmented block metadata on the other hand has to
+  // be recomputed, because it now also has to account for the triples of the
+  // auxiliary index.
+  deltaTriplesManager().modify<void>(
+      [this](DeltaTriples& deltaTriples) {
+        deltaTriples.setAuxIndex(auxIndex_);
+      },
+      false, true);
 }
 
 // _____________________________________________________________________________

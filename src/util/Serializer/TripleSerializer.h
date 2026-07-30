@@ -8,6 +8,7 @@
 
 #include <array>
 #include <fstream>
+#include <limits>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -32,7 +33,11 @@ constexpr std::array magicBytes{'Q', 'L', 'E', 'V', 'E', 'R', '.',
                                 'U', 'P', 'D', 'A', 'T', 'E'};
 
 // The `formatVersion` has to be increased when the format below is changed.
-constexpr uint16_t formatVersion = 1;
+constexpr uint16_t formatVersion = 2;
+
+// The value that is stored for the generation of the auxiliary index (see
+// `index/AuxIndex.h`) when the `Id`s do not belong to any auxiliary index.
+constexpr uint64_t noAuxIndexGeneration = std::numeric_limits<uint64_t>::max();
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
@@ -43,20 +48,30 @@ CPP_template(typename T, typename Serializer)(
   return value;
 }
 
-// Write the header of the file format to the output stream. We are currently at
-// version 1.
+// Write the header of the file format to the output stream. Besides the magic
+// bytes and the format version, the header stores the generation of the
+// auxiliary index that the serialized `Id`s belong to (see
+// `readHeader` for why).
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
-        Serializer>) void writeHeader(Serializer& serializer) {
+        Serializer>) void writeHeader(Serializer& serializer,
+                                      uint64_t auxIndexGeneration) {
   serializer << magicBytes;
   serializer << formatVersion;
+  serializer << auxIndexGeneration;
 }
 
 // Read the header of the file format from the input stream and ensure that it
-// is correct.
+// is correct. In particular, the serialized `Id`s may refer to the vocabulary
+// of a specific generation of the auxiliary index (see `index/AuxIndex.h`),
+// whose `Id`s are only valid for that one generation, so reading them back is
+// only allowed for exactly that generation; `expectedAuxIndexGeneration`
+// therefore has to be the generation of the auxiliary index of the index that
+// the `Id`s are read for.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<
-        Serializer>) void readHeader(Serializer& serializer) {
+        Serializer>) void readHeader(Serializer& serializer,
+                                     uint64_t expectedAuxIndexGeneration) {
   std::decay_t<decltype(magicBytes)> magicByteBuffer{};
   serializer >> magicByteBuffer;
   AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes);
@@ -70,6 +85,17 @@ CPP_template(typename Serializer)(
       version,
       ", As those features are currently still experimental, please contact "
       "the developers of QLever");
+  uint64_t auxIndexGeneration;
+  serializer >> auxIndexGeneration;
+  AD_CORRECTNESS_CHECK(
+      auxIndexGeneration == expectedAuxIndexGeneration,
+      "The serialized triples were written for the generation ",
+      auxIndexGeneration,
+      " of the auxiliary index, but the index currently has the generation ",
+      expectedAuxIndexGeneration,
+      ". The `Id`s of an auxiliary vocabulary are only valid for the "
+      "generation "
+      "that they were created for, so they cannot be read back");
 }
 
 // Serialize the local vocabulary to the output stream. Returns a mapping from
@@ -171,9 +197,11 @@ std::vector<Id> deserializeIds(Serializer& serializer,
 CPP_template(typename Range)(
     requires ql::ranges::range<
         Range>) void serializeIds(const ql::filesystem::path& path,
-                                  const LocalVocab& vocab, Range&& idRanges) {
+                                  const LocalVocab& vocab, Range&& idRanges,
+                                  uint64_t auxIndexGeneration =
+                                      detail::noAuxIndexGeneration) {
   serialization::FileWriteSerializer serializer{path.string()};
-  detail::writeHeader(serializer);
+  detail::writeHeader(serializer, auxIndexGeneration);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
   for (const auto& ids : idRanges) {
@@ -182,7 +210,8 @@ CPP_template(typename Range)(
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const ql::filesystem::path& path, const LocalVocabContext& context) {
+    const ql::filesystem::path& path, const LocalVocabContext& context,
+    uint64_t expectedAuxIndexGeneration = detail::noAuxIndexGeneration) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
@@ -203,7 +232,7 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
   }();
   AD_LOG_INFO << "Reading and processing persisted updates from " << path
               << " ..." << std::endl;
-  detail::readHeader(serializer);
+  detail::readHeader(serializer, expectedAuxIndexGeneration);
   auto [vocab, mapping] = detail::deserializeLocalVocab(serializer, context);
   std::vector<std::vector<Id>> idVectors;
   auto numRanges = detail::readValue<uint64_t>(serializer);
