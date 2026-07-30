@@ -267,29 +267,38 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   // An `EXISTS` *inside* an aggregate (e.g. `SUM(IF(EXISTS {...}, ...))`) is
   // evaluated once per row and may therefore use all variables, just like in a
   // `FILTER`.
+  using sparqlExpression::ExistsExpression;
+  auto tr = ql::views::transform;
   for (const auto& alias : _aliases) {
-    for (const auto* expr : alias._expression.getExistsExpressions()) {
-      const auto& existsExpression =
-          dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);
-      if (existsExpression.isInsideAggregate()) {
-        continue;
-      }
-      // The `EXISTS` is correlated with the outer query via those of its
-      // variables that also occur in the subtree; variables that only occur
-      // inside the `EXISTS` are irrelevant here.
-      for (const Variable& variable :
-           existsExpression.argument().getVisibleVariables()) {
-        if (subtree->getVariableColumns().contains(variable) &&
-            !ad_utility::contains(_groupByVariables, variable)) {
-          throw std::runtime_error{absl::StrCat(
-              "The EXISTS in the expression ", alias.getDescriptor(),
-              " uses the variable ", variable.name(),
-              " from the query body, but this variable is not part of the "
-              "GROUP BY. QLever doesn't support this, because the SPARQL 1.1 "
-              "standard doesn't clearly define the semantics of this case. "
-              "Consider adding ",
-              variable.name(), " to the GROUP BY.")};
-        }
+    // A flat view of all the variables that are visible inside one of the
+    // alias's `EXISTS` expressions that is not nested inside an aggregate.
+    // Note: The `EXISTS` is correlated with the outer query via those of its
+    // variables that also occur in the subtree; variables that only occur
+    // inside the `EXISTS` are irrelevant here.
+    auto variablesInExists =
+        alias._expression.getExistsExpressions() |
+        tr([](const sparqlExpression::SparqlExpression* expression)
+               -> const ExistsExpression& {
+          return dynamic_cast<const ExistsExpression&>(*expression);
+        }) |
+        ql::views::filter([](const ExistsExpression& exists) {
+          return !exists.isInsideAggregate();
+        }) |
+        tr([](const ExistsExpression& exists) -> const std::vector<Variable>& {
+          return exists.argument().getVisibleVariables();
+        }) |
+        ql::views::join;
+    for (const Variable& variable : variablesInExists) {
+      if (subtree->getVariableColumns().contains(variable) &&
+          !ad_utility::contains(_groupByVariables, variable)) {
+        throw std::runtime_error{absl::StrCat(
+            "The EXISTS in the expression ", alias.getDescriptor(),
+            " uses the variable ", variable.name(),
+            " from the query body, but this variable is not part of the "
+            "GROUP BY. QLever doesn't support this, because the SPARQL 1.1 "
+            "standard doesn't clearly define the semantics of this case. "
+            "Consider adding ",
+            variable.name(), " to the GROUP BY.")};
       }
     }
   }
