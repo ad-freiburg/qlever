@@ -5,4 +5,4 @@ WHERE {
   ?s ?p ?o .
   FILTER(DATATYPE(?o) = xsd:int)
 }
-LIMIT 250000
+LIMIT 100000

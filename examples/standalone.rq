@@ -1,0 +1,14 @@
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dblp: <https://dblp.org/rdf/schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT (SUM(?year) AS ?sum)
+WHERE {
+  ?paper dblp:yearOfPublication ?date .
+  #BIND(YEAR(?date) * 2 AS ?year)
+  BIND(
+    (YEAR(?date) * 2) + (YEAR(?date) * 3)
+    AS ?year
+  )
+  #BIND(((YEAR(?date) * 2 + 3) * 5 - 7) AS ?year)
+}
