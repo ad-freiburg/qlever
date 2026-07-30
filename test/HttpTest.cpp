@@ -381,7 +381,9 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   // Docker cross-compilation build for ARM, this test sometimes fails because
   // we don't land in the correct catch clause for some reason. This needs
   // further debugging.
-  EXPECT_THAT(s, AnyOf(HasSubstr("not found"), Eq("")));
+  std::string expectedHostNotFound =
+      beast::system_error{boost::asio::error::host_not_found_try_again}.what();
+  EXPECT_THAT(s, AnyOf(HasSubstr(expectedHostNotFound), Eq("")));
 
   // The `timeout` and `eof` exceptions are only logged at `TRACE` level;
   // normally they are silently caught and ignored.
@@ -623,8 +625,9 @@ net::awaitable<void> withParsedRequest(std::string body, Fn fn) {
       ex,
       [](std::string body, unsigned short port) -> net::awaitable<void> {
         tcp::socket sock(co_await net::this_coro::executor);
-        co_await sock.async_connect(tcp::endpoint(tcp::v4(), port),
-                                    net::use_awaitable);
+        co_await sock.async_connect(
+            tcp::endpoint(net::ip::address_v4::loopback(), port),
+            net::use_awaitable);
         std::string request = absl::StrCat(
             "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: ",
             body.size(), "\r\n\r\n", body);

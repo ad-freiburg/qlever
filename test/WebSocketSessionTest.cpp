@@ -87,6 +87,11 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 // _____________________________________________________________________________
 
 struct WebSocketTestContainer {
+  // Note: this strand has to be created directly from the
+  // `io_context::executor_type` because creating it from `any_io_executor`
+  // causes a race in `runTest`. There `strand_` is wrapped into
+  // `any_io_executor` and copies are destroyed concurrently across
+  // threads.
   net::strand<net::io_context::executor_type> strand_;
   std::unique_ptr<QueryHub> queryHub_;
   QueryRegistry registry_;
@@ -111,8 +116,8 @@ net::awaitable<WebSocketTestContainer> createTestContainer(
     net::io_context& ioContext) {
   auto strand = net::make_strand(ioContext);
   WebSocketTestContainer container{
-      strand, std::make_unique<QueryHub>(ioContext), QueryRegistry{},
-      tcp::socket{strand}, tcp::socket{strand}};
+      strand, std::make_unique<QueryHub>(ioContext.get_executor()),
+      QueryRegistry{}, tcp::socket{strand}, tcp::socket{strand}};
   co_await connect(container.server_, container.client_);
   co_return std::move(container);
 }

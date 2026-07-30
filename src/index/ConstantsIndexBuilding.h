@@ -49,10 +49,6 @@ inline ad_utility::MemorySize& RDF_PARSER_MAX_TOTAL_BUFFER_SIZE() {
   return value;
 }
 
-// If a single relation has more than this number of triples, it will be
-// buffered into an MmapVector during the creation of the relations;
-constexpr inline size_t THRESHOLD_RELATION_CREATION = 2 << 20;
-
 // ________________________________________________________________
 constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";

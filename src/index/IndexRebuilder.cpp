@@ -30,7 +30,9 @@
 
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
+#include "global/FileSuffixConstants.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/LocalVocabEntry.h"
@@ -67,8 +69,9 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
                               const std::vector<InsertionInfo>& insertInfo) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
   LocalVocabMapping localVocabMapping;
-  auto writeWordFromVocab = [&vocab, &vocabWriter](VocabIndex vocabIndex) {
-    auto word = vocab[vocabIndex];
+  auto writeWordFromVocab = [&vocab,
+                             &vocabWriter](const IndexAndWord& indexAndWord) {
+    const auto& [_, word] = indexAndWord;
     (*vocabWriter)(word, vocab.shouldBeExternalized(word));
   };
   auto writeWordFromLocalVocab =
@@ -82,15 +85,16 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
   ad_utility::OverloadCallOperator writer{std::move(writeWordFromVocab),
                                           std::move(writeWordFromLocalVocab)};
   ql::ranges::merge(
-      ad_utility::integerRange(vocab.size()) |
-          ql::views::transform(&VocabIndex::make),
-      insertInfo, ad_utility::IteratorForAssigmentOperator{writer}, {},
+      vocab.scanAll(), insertInfo,
+      ad_utility::IteratorForAssigmentOperator{writer}, {},
       // The tags ensure that the local vocab entries are sorted before all the
       // original vocab entries, even if they share the same vocab index as
       // insertion position.
-      [tag = 1](const VocabIndex& index) { return std::tie(index, tag); },
+      [tag = 1](const IndexAndWord& indexAndWord) {
+        return std::tie(indexAndWord.index_, tag);
+      },
       [tag = 0](const InsertionInfo& info) {
-        return std::tie(info.insertionPosition_, tag);
+        return std::tie(info.insertionPosition_.get(), tag);
       });
   return localVocabMapping;
 }
@@ -255,9 +259,18 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
+  // A value of 0 means "fall back to `lazy-index-scan-num-threads`" (the same
+  // thread count as query scans); a positive value throttles the rebuild's
+  // read/decompress parallelism only, reducing its peak CPU without touching
+  // queries.
+  auto rebuildScanThreads =
+      getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
+  std::optional<size_t> numThreadsOverride =
+      rebuildScanThreads == 0 ? std::nullopt
+                              : std::optional<size_t>{rebuildScanThreads};
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState);
+      *locatedTriplesSharedState, numThreadsOverride);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -380,9 +393,12 @@ boost::asio::awaitable<void> createPermutationWriterTask(
           permutation, isInternal);
     };
   };
-  auto [resultA, resultB] =
-      co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
-                asCoroutine(makeTaskForPermutation(permutationB)));
+  // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+  // structured binding is not destroyed when the coroutine frame is
+  // destroyed while suspended (gcc.gnu.org bug 124584).
+  auto results = co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
+                           asCoroutine(makeTaskForPermutation(permutationB)));
+  auto& [resultA, resultB] = results;
   auto& [_, metaA] = resultA;
   auto& [__, metaB] = resultB;
   metaA.exchangeMultiplicities(metaB);

@@ -12,6 +12,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
@@ -52,10 +53,48 @@ CPP_template(typename UnderlyingVocabulary,
   // constructor leads to an empty vocabulary.
   CompressedVocabulary() = default;
 
+  // Build a `CompressedVocabulary` as a (partially) non-owning, zero-copy view
+  // directly into the buffer of `serializer`. The words are deserialized
+  // zero-copy by delegating to the `UnderlyingVocabulary` (which therefore has
+  // to support zero-copy deserialization itself, see
+  // `SupportsZeroCopyDeserialization`). The `decoders` are small, so they are
+  // simply read (and thus copied) as usual. The layout read here exactly
+  // matches the one written by the generic serialization function below. The
+  // returned vocabulary is only valid as long as the memory backing
+  // `serializer`'s buffer is valid and unchanged.
+  // Note: This has to use `CPP_template_2` (and not `CPP_template`), because
+  // the enclosing class is itself constrained via `CPP_template`.
+  CPP_template_2(typename S)(
+      requires ad_utility::serialization::SupportsZeroCopyDeserialization<
+          UnderlyingVocabulary, S>) static CompressedVocabulary
+      fromZeroCopyDeserializer(S& serializer) {
+    CompressedVocabulary result;
+    result.underlyingVocabulary_ =
+        UnderlyingVocabulary::fromZeroCopyDeserializer(serializer);
+    std::vector<typename CompressionWrapper::Decoder> decoders;
+    serializer | decoders;
+    result.compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+    return result;
+  }
+
   // Get the uncompressed word at the given index.
   std::string operator[](uint64_t idx) const {
     return compressionWrapper_.decompress(
         toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
+  }
+
+  // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
+  // words in batches) and decompress each word. `scanAll()` is expected to
+  // yield `IndexAndWord` elements, so we have to apply a transformation at the
+  // end.
+  auto scanAll() const {
+    return ad_utility::CachingTransformInputRange(
+        underlyingVocabulary_.scanAll(),
+        [this, buffer = std::string{}](const IndexAndWord& compressed) mutable {
+          const auto& [index, word] = compressed;
+          buffer = compressionWrapper_.decompress(word, getDecoderIdx(index));
+          return IndexAndWord{index, buffer};
+        });
   }
 
   //____________________________________________________________________________

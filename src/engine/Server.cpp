@@ -29,13 +29,10 @@
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
-#include "index/IndexImpl.h"
-#include "index/IndexRebuilder.h"
 #include "libqlever/Qlever.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
-#include "util/FilesystemHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
@@ -47,21 +44,46 @@
 
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
+using namespace ad_utility::metrics;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
 // __________________________________________________________________________
-Server::Server(unsigned short port, size_t numThreads, std::string accessToken,
-               const qlever::EngineConfig& config, bool noAccessCheck)
+Server::Server(
+    unsigned short port, size_t numThreads, std::string accessToken,
+    const qlever::EngineConfig& config, bool noAccessCheck,
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
-      queryThreadPool_{numThreads} {
+      queryThreadPool_{numThreads},
+      metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
+
+  metrics_ = std::make_unique<ServerMetrics>(
+      [this]() {
+        auto counts = indexAndViewsSnapshot()
+                          ->index_.deltaTriplesManager()
+                          .getCurrentLocatedTriplesSharedState()
+                          ->counts_;
+        AD_CORRECTNESS_CHECK(counts.has_value());
+        auto [ins, del] = counts.value();
+        return ins + del;
+      },
+      [this]() -> int64_t { return allocator().amountMemoryLeft().getBytes(); },
+      [this]() -> int64_t {
+        return (cache().nonPinnedSize() + cache().pinnedSize()).getBytes();
+      },
+      [this]() -> int64_t { return cache().getMaxSize().getBytes(); },
+      [this]() -> int64_t {
+        return static_cast<int64_t>(rebuildInProgress_.load());
+      },
+      config.memoryLimit_);
+  metrics_->registerCallbacks();
 
   if (noAccessCheck_) {
     AD_LOG_INFO << "No access token required for restricted API calls"
@@ -132,8 +154,10 @@ void Server::run() {
     } catch (const HttpError& e) {
       httpResponseStatus = e.status();
       exceptionErrorMsg = e.what();
+      metrics_->httpErrors_->Add(1, {HttpErrorType::http});
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
+      metrics_->httpErrors_->Add(1, {HttpErrorType::internal});
     }
     if (exceptionErrorMsg.has_value()) {
       AD_LOG_ERROR << exceptionErrorMsg.value() << std::endl;
@@ -145,11 +169,11 @@ void Server::run() {
     }
   };
 
-  auto webSocketSessionSupplier = [this](net::io_context& ioContext) {
+  auto webSocketSessionSupplier = [this](net::any_io_executor& ioExecutor) {
     // This must only be called once
     AD_CONTRACT_CHECK(queryHub_.expired());
     auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(ioContext);
+        std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
     // Make sure the `queryHub` does not outlive the ioContext it has a
     // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
     // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
@@ -297,8 +321,7 @@ std::string Server::describePinResultWithNameForLog(
 
 // ____________________________________________________________________________
 auto Server::prepareOperation(
-    SharedIndexAndView indexAndViews, std::string_view operationName,
-    std::string_view operationSPARQL,
+    std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
     const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit,
     bool accessTokenOk, std::string_view clientIp) {
@@ -333,16 +356,27 @@ auto Server::prepareOperation(
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
-  auto qec = qlever().createQueryExecutionContext(
-      std::move(indexAndViews),
-      [sharedMessageSender = std::move(sharedMessageSender)](std::string json) {
-        (*sharedMessageSender)(std::move(json));
-      },
-      pinSubtrees, pinResult);
-  configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
-                                geoIndexSimplificationInMeters, accessTokenOk,
-                                *qec);
-  return std::make_tuple(std::move(qec), std::move(cancellationHandle),
+  // Return a factory rather than a ready-made context, so the caller can bind
+  // it to whichever snapshot is current when the operation runs (see
+  // `processUpdate`).
+  MakeQueryExecutionContext makeQec =
+      [this, sharedMessageSender = std::move(sharedMessageSender), pinSubtrees,
+       pinResult, pinResultWithName = std::move(pinResultWithName),
+       pinNamedGeoIndex = std::move(pinNamedGeoIndex),
+       geoIndexSimplificationInMeters,
+       accessTokenOk](SharedIndexAndView indexAndViews) {
+        auto qec = qlever().createQueryExecutionContext(
+            std::move(indexAndViews),
+            [sharedMessageSender](std::string json) {
+              (*sharedMessageSender)(std::move(json));
+            },
+            pinSubtrees, pinResult);
+        configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
+                                      geoIndexSimplificationInMeters,
+                                      accessTokenOk, *qec);
+        return qec;
+      };
+  return std::make_tuple(std::move(makeQec), std::move(cancellationHandle),
                          std::move(cancelTimeoutOnDestruction));
 }
 
@@ -465,15 +499,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Conan setup.
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [&index] {
-          // Use `this` explicitly to silence false-positive errors on the
-          // captured `this` being unused.
-          auto counts = index.deltaTriplesManager().modify<DeltaTriplesCount>(
-              [](auto& deltaTriples) {
+        [this] {
+          // Snapshot here, on the (single-threaded) `updateThreadPool_`, so we
+          // modify the currently active index and not a stale one that a
+          // concurrent rebuild may have swapped out (whose changes would be
+          // lost).
+          auto snapshot = indexAndViewsSnapshot();
+          return snapshot->index_.deltaTriplesManager()
+              .modify<DeltaTriplesCount>([](auto& deltaTriples) {
                 deltaTriples.clear();
                 return deltaTriples.getCounts();
               });
-          return counts;
         },
         handle);
     auto countAfterClear = co_await std::move(coroutine);
@@ -497,10 +533,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     auto coroutine = computeInNewThread(
         updateThreadPool_,
-        [&index, handle] {
-          // Use `this` explicitly to silence false-positive errors on the
-          // captured `this` being unused.
-          return index.deltaTriplesManager().modify<nlohmann::json>(
+        [this, handle] {
+          // Snapshot on the update thread (see `clear-delta-triples` above).
+          auto snapshot = indexAndViewsSnapshot();
+          return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
               [handle](auto& deltaTriples) {
                 return deltaTriples.vacuum(handle);
               });
@@ -534,11 +570,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     } else {
       absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
       logCommand(cmd, "rebuilding index");
-      auto fileName =
-          checkParameter("index-name", std::nullopt).value_or("new_index");
-      co_await rebuildIndex(fileName);
-      response =
-          createOkResponse("Done writing", request, MediaType::textPlain);
+      auto config = co_await rebuildIndex(
+          checkParameter("rebuild-tmp-dir", std::nullopt),
+          checkParameter("rebuild-previous-index-dir", std::nullopt));
+      response = createJsonResponse(config.successResponseAsJson(), request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
@@ -610,6 +645,35 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
     response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
+  } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
+    requireValidAccessToken("delete-materialized-view");
+    logCommand(cmd, "delete materialized view");
+
+    // Extract materialized view name parameter.
+    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parameters, "view-name");
+    AD_CONTRACT_CHECK(name.has_value(),
+                      "Deleting a materialized view requires a name to be set "
+                      "via the 'view-name' parameter");
+
+    // Snapshot again instead of using `indexAndViews` from the beginning of
+    // this function (see `clear-delta-triples` above for the same pattern), so
+    // that we delete the view from the index that is currently being served and
+    // not from a stale one that a concurrent rebuild has swapped out in the
+    // meantime. Deleting from a stale manager is not unsafe (the rebuild called
+    // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
+    // `deleteView` throw), it would just needlessly fail.
+    indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name.value());
+
+    // Construct simple response JSON.
+    nlohmann::json json{{"materialized-view-deleted", name.value()}};
+    response = createJsonResponse(json, request);
+
+    // Prevent regular query processing by removing the query from the request.
+    parsedHttpRequest.operation_ = None{};
   }
 
   // Ping with or without message.
@@ -622,6 +686,18 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     response = createOkResponse("This QLever server is up and running\n",
                                 request, MediaType::textPlain);
+  }
+
+  // Prometheus metrics scrape endpoint.
+  if (parsedHttpRequest.path_ == "/metrics") {
+    requireValidAccessToken("metrics");
+    if (!metricsReader_) {
+      response = createNotFoundResponse(
+          "Metrics not enabled (use --enable-metrics)", request);
+    } else {
+      response = createOkResponse(metricsReader_->getMetricsText(), request,
+                                  MediaType::textPlain);
+    }
   }
 
   // Set description of KB index.
@@ -682,19 +758,23 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
-    auto [qecPtr, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(indexAndViews, operationName, operationString,
-                         std::move(messageSender), parameters,
-                         timeLimit.value(), accessTokenOk, clientIp);
-    auto& qec = *qecPtr;
+    // Workaround for a GCC 15/16 bug: the hidden object of a by-value
+    // structured binding is not destroyed when the coroutine frame is
+    // destroyed while suspended (gcc.gnu.org bug 124584).
+    auto preparedOp = prepareOperation(
+        operationName, operationString, std::move(messageSender), parameters,
+        timeLimit.value(), accessTokenOk, clientIp);
+    auto& [makeQec, cancellationHandle, cancelTimeoutOnDestruction] =
+        preparedOp;
     try {
       if (!ql::ranges::all_of(operations, expectedOperation)) {
         throw std::runtime_error(absl::StrCat(
             msg, ad_utility::truncateOperationString(operationString)));
       }
       if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
-        co_await processUpdate(indexAndViews, std::move(operations),
-                               requestTimer, tracer, cancellationHandle, qec,
+        metrics_->startedSparqlOperations_->Add(1, {OperationType::update});
+        co_await processUpdate(std::move(makeQec), std::move(operations),
+                               requestTimer, tracer, cancellationHandle,
                                std::move(request), send, timeLimit.value(),
                                plannedQuery);
       } else {
@@ -702,9 +782,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ParsedQuery query = std::move(operations[0]);
         AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                              query.hasConstructClause());
+        metrics_->startedSparqlOperations_->Add(1, {OperationType::query});
+        // Queries run against a consistent snapshot taken at the start of the
+        // request, so build the execution context from that snapshot here.
+        auto qecPtr = makeQec(indexAndViews);
         co_await processQuery(parameters, std::move(query), requestTimer,
-                              cancellationHandle, qec, std::move(request), send,
-                              timeLimit.value(), plannedQuery);
+                              cancellationHandle, *qecPtr, std::move(request),
+                              send, timeLimit.value(), plannedQuery);
       }
       queryStatus->store(OK);
       co_return;
@@ -862,6 +946,8 @@ nlohmann::json Server::composeStatsJson(const Index& index) {
   result["git-hash-index"] = index.getGitShortHash();
   result["git-hash-server"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
+  result["version-server"] =
+      *qlever::version::projectVersionWithoutLinking.wlock();
   result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index.numDistinctPredicates().internal;
@@ -945,6 +1031,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
     AD_LOG_ERROR << "Unexpected error while sending response: " << e.what()
                  << std::endl;
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::systemError});
   } catch (const std::exception& e) {
     // Even if an exception is thrown here for some unknown reason, don't
     // propagate it, and log it directly, so the code doesn't try to send
@@ -961,6 +1048,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // provide a somewhat cryptic error message when using curl, but is
     // better than silently failing.
     AD_LOG_ERROR << e.what() << std::endl;
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::sendStreamableResponse});
   }
 }
 
@@ -1025,26 +1113,26 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     const std::vector<ad_utility::MediaType>& candidates,
     const ParsedQuery& parsedQuery) {
   if (!candidates.empty()) {
-    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
-                                                  MediaType mediaType) {
-      if (parsedQuery.hasAskClause()) {
-        std::array supportedMediaTypes{
-            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      if (parsedQuery.hasSelectClause()) {
-        std::array supportedMediaTypes{MediaType::octetStream,
-                                       MediaType::csv,
-                                       MediaType::tsv,
-                                       MediaType::qleverJson,
-                                       MediaType::sparqlXml,
-                                       MediaType::sparqlJson,
-                                       MediaType::binaryQleverExport};
-        return ad_utility::contains(supportedMediaTypes, mediaType);
-      }
-      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
-                                     MediaType::qleverJson, MediaType::turtle};
-      return ad_utility::contains(supportedMediaTypes, mediaType);
+    using enum ad_utility::MediaType;
+    static constexpr auto askTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForAskQueries;
+    static constexpr auto selectTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForSelectQueries;
+    static constexpr auto constructTypes =
+        ExportQueryExecutionTrees::supportedMediaTypesForConstructQueries;
+
+    ql::span<const MediaType> supported;
+    if (parsedQuery.hasAskClause()) {
+      supported = askTypes;
+    } else if (parsedQuery.hasSelectClause()) {
+      supported = selectTypes;
+    } else {
+      AD_CORRECTNESS_CHECK(parsedQuery.hasConstructClause());
+      supported = constructTypes;
+    }
+
+    auto it = ql::ranges::find_if(candidates, [supported](MediaType mediaType) {
+      return ad_utility::contains(supported, mediaType);
     });
     if (it != candidates.end()) {
       return *it;
@@ -1065,6 +1153,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
+  ad_utility::metrics::ActiveCounterGuard queryGuard{
+      *metrics_->runningSparqlOperations_, "query"};
 
   auto mediaTypes = determineMediaTypes(params, request);
   AD_LOG_INFO << "Requested media types of the result are: "
@@ -1120,6 +1210,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   AD_LOG_INFO << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
+  metrics_->sparqlOperationDuration_->Record(
+      static_cast<double>(requestTimer.msecs().count()),
+      {OperationType::query});
+  metrics_->finishedSparqlOperations_->Add(1, {OperationType::query});
 
   // Log that we are done with the query and how long it took.
   //
@@ -1218,13 +1312,14 @@ UpdateMetadata Server::processUpdateImpl(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
+        MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
         const ad_utility::Timer& requestTimer, SharedTimeTracer outerTracer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  auto& index = indexAndViews->index_;
+        const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+        std::optional<PlannedQuery>& plannedUpdate) {
   outerTracer->beginTrace("waitingForUpdateThread");
+  ad_utility::metrics::ActiveCounterGuard updateGuard{
+      *metrics_->runningSparqlOperations_, "update"};
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -1243,9 +1338,17 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &index, &requestTimer, &cancellationHandle, &updates, &qec,
-       &timeLimit, &plannedUpdate, outerTracer, &metadatas]() {
+      [this, &makeQec, &requestTimer, &cancellationHandle, &updates, &timeLimit,
+       &plannedUpdate, outerTracer, &metadatas]() {
         outerTracer->endTrace("waitingForUpdateThread");
+        // Snapshot and build the context on the update thread (see
+        // `clear-delta-triples`), so the update sees and modifies the currently
+        // active index. The resulting `plannedUpdate` keeps the context alive
+        // past this lambda via `PlannedQuery`'s shared ownership.
+        auto indexAndViews = indexAndViewsSnapshot();
+        auto& index = indexAndViews->index_;
+        auto qecPtr = makeQec(indexAndViews);
+        auto& qec = *qecPtr;
         return index.deltaTriplesManager().modify<json>(
             [this, &index, &cancellationHandle, &plannedUpdate, &updates,
              &requestTimer, &timeLimit, &qec,
@@ -1303,6 +1406,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto operations = co_await std::move(coroutine);
+  metrics_->sparqlOperationDuration_->Record(
+      static_cast<double>(requestTimer.msecs().count()),
+      {OperationType::update});
+  metrics_->finishedSparqlOperations_->Add(1, {OperationType::update});
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
@@ -1360,22 +1467,28 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const HttpError& e) {
     responseStatus = e.status();
     exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::protocol});
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::syntax});
   } catch (const QueryAlreadyInUseError& e) {
     // No `OwningQueryId` exists for this request (creation was rejected).
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::inUse});
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::timeout});
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
+    // TODO<qup42> this includes missing/wrong access token which should be 403
+    metrics_->sparqlErrors_->Add(1, {SparqlErrorType::internal});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
   //  optional<errorMsg> and optional<metadata> and does this logic
@@ -1506,38 +1619,87 @@ Server::createMessageSender<http::request<http::string_body>>(
     std::string_view);
 
 // _____________________________________________________________________________
-Awaitable<void> Server::rebuildIndex(const std::string& indexBaseName) {
-  auto indexAndViews = indexAndViewsSnapshot();
-  auto& index = indexAndViews->index_;
-  if (qlever::util::doesDirectoryContainFileWithBasename(indexBaseName)) {
-    throw std::runtime_error{absl::StrCat(
-        "Can't build index with base name \"", indexBaseName,
-        "\" because there are already files with the same base name "
-        "in the same directory")};
-  }
-  if (!qlever::util::isSubdirectoryOf(indexBaseName, index.getOnDiskBase())) {
-    throw std::runtime_error{absl::StrCat(
-        "Can't build index with base name \"", indexBaseName,
-        "\" because it is not located in the same directory as the "
-        "current index")};
-  }
+Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
+    std::optional<std::string> rebuildTmpDir,
+    std::optional<std::string> rebuildPreviousIndexDir) {
   // There is no mechanism to actually cancel the handle.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto& [index, oldManager] = *indexAndViews;
+
+  // Turn the two directories that can be set via command parameters into the
+  // base names of the indexes involved in the rebuild. The new index ends up at
+  // the base name `index` is currently served from (which is the base name the
+  // server was started on, because a rebuild re-anchors the new index to
+  // exactly that place, see `Qlever::moveRebuiltIndexIntoPlace`), so that a
+  // later restart loads it.
+  auto config = qlever::Qlever::makeIndexRebuildConfig(
+      index, std::move(rebuildTmpDir), std::move(rebuildPreviousIndexDir));
+
+  // Warn if state that won't carry over to the rebuilt index was previously
+  // loaded: the new index never calls `addTextFromOnDiskIndex()` and is paired
+  // with a fresh, empty `MaterializedViewsManager`.
+  if (index.getNofTextRecords() > 0) {
+    AD_LOG_WARN << "A text index was loaded for the current index, but text "
+                   "search will no longer work after the rebuild completes. "
+                   "Restart the server using the original index to re-enable "
+                   "text search."
+                << std::endl;
+  }
+  if (oldManager.hasLoadedViews()) {
+    AD_LOG_WARN
+        << "Materialized views were loaded for the current index, but they "
+           "will no longer be available after the rebuild completes. You'll "
+           "have to recompute them on the rebuilt index."
+        << std::endl;
+  }
+  // NOTE: We deliberately use the plain `runFunctionOnExecutor` and not
+  // `computeInNewThread` here: the latter wraps the awaitable in
+  // `ad_utility::interruptible`, whose cancellation-check timer is useless on
+  // this path (the `handle` above can never be cancelled) and whose
+  // timer/parallel-group machinery was the prime suspect in a rare, hard to
+  // reproduce case where a completed rebuild never resumed this coroutine
+  // (all rebuild work done, all threads idle, "Registered ..." never logged).
+  //
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
-  auto coroutine = computeInNewThread(
-      queryThreadPool_,
-      [&index, &handle, &indexBaseName] {
-        auto logFileName = indexBaseName + ".rebuild-index-log.txt";
-        auto [currentSnapshot, localVocabCopy, ownedBlocks] =
-            index.deltaTriplesManager()
-                .getCurrentLocatedTriplesSharedStateWithVocab();
-        qlever::materializeToIndex(index.getImpl(), indexBaseName,
-                                   currentSnapshot, localVocabCopy, ownedBlocks,
-                                   handle, logFileName);
+  auto coroutine = ad_utility::runFunctionOnExecutor(
+      queryThreadPool_.get_executor(),
+      [this, &index, &handle, &config] {
+        return qlever().rebuildIndexToDisk(index, config, handle);
       },
-      handle);
-  co_await std::move(coroutine);
+      net::use_awaitable);
+  auto rebuildResult = co_await std::move(coroutine);
+  // It is important that the swap is done in the update thread pool, because it
+  // prevents other updates from being applied while the diff is computed for
+  // the new index. Otherwise, the new index would be out of sync with the
+  // current index.
+  auto swapRoutine = ad_utility::runFunctionOnExecutor(
+      updateThreadPool_.get_executor(),
+      [this, &index, &oldManager, rebuildResult = std::move(rebuildResult),
+       &handle, &config]() mutable {
+        // The swap below moves all files of the old index to a different base
+        // name and installs the new index at the base name of the old one. Any
+        // view file that `oldManager` created after that point would silently
+        // become a view of the NEW index, even though its `Id`s refer to the
+        // vocabulary of the old one. `oldManager` outlives the swap (queries
+        // that started before it still hold a snapshot of it), so close it for
+        // writing first. This blocks until a concurrent
+        // `write-materialized-view` or `delete-materialized-view` has finished;
+        // the files it created are then moved along with the rest of the old
+        // index.
+        //
+        // NOTE: The other on-disk state of the old index (its persisted delta
+        // triples and allocated graph names) needs no such protection, because
+        // it is only written from this very executor, which has a single
+        // thread.
+        oldManager.retireOnDiskFiles();
+        qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
+                                    config);
+      },
+      net::use_awaitable);
+  co_await std::move(swapRoutine);
+  co_return config;
 }
 
 // For helper function `Server::onlyForTestingProcess`
