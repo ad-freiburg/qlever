@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -54,10 +55,13 @@ class NibbleEncoder {
   static_assert(NumBitsEncoding % NibbleSize == 0);
   static_assert(NumDigits > 0);
 
-  // Encode `numberStr` (which may only consist of digits, and of at most
-  // `NumDigits` of them) into a 64-bit number.
-  static constexpr uint64_t encode(std::string_view numberStr) {
-    AD_CORRECTNESS_CHECK(numberStr.size() <= NumDigits);
+  // Encode `numberStr` (which may only consist of digits) into a 64-bit number,
+  // or return `std::nullopt` if it has more than `NumDigits` digits and
+  // therefore does not fit.
+  static constexpr std::optional<uint64_t> encode(std::string_view numberStr) {
+    if (numberStr.size() > NumDigits) {
+      return std::nullopt;
+    }
 
     uint64_t result = 0;
 

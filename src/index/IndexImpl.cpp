@@ -2094,13 +2094,6 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
-    std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ =
-      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
-}
-
-// _____________________________________________________________________________
-void IndexImpl::setPrefixesForEncodedValues(
     std::vector<encodedIris::PrefixWithConstraints> prefixesWithConstraints) {
   encodedIriManager_ = EncodedIriManager::fromPrefixesWithConstraints(
       std::move(prefixesWithConstraints));

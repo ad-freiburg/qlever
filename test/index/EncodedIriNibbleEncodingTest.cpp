@@ -48,7 +48,8 @@ TEST(NibbleEncoder, roundTrip) {
   auto testNumber = [](uint64_t number, ad_utility::source_location l =
                                             AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    EXPECT_EQ(number, Encoder::decode(Encoder::encode(std::to_string(number))));
+    EXPECT_EQ(number,
+              Encoder::decode(Encoder::encode(std::to_string(number)).value()));
   };
   uint64_t MAX = std::stoull(std::string(Encoder::NumDigits, '9'));
   testNumber(0);
@@ -64,16 +65,16 @@ TEST(NibbleEncoder, decodeToStringPreservesLeadingZeros) {
   // In contrast to `decode`, the string-based decoding recovers the digits
   // exactly, including leading zeros.
   std::string result;
-  Encoder::decodeToString(result, Encoder::encode("007"));
+  Encoder::decodeToString(result, Encoder::encode("007").value());
   EXPECT_EQ(result, "007");
-  EXPECT_EQ(Encoder::decode(Encoder::encode("007")), 7u);
+  EXPECT_EQ(Encoder::decode(Encoder::encode("007").value()), 7u);
 }
 
 // ____________________________________________________________________________
 TEST(NibbleEncoder, toStringWithGivenPrefix) {
-  EXPECT_EQ(
-      Encoder::toStringWithGivenPrefix(Encoder::encode("7643"), "<blibb_"),
-      "<blibb_7643>");
+  EXPECT_EQ(Encoder::toStringWithGivenPrefix(Encoder::encode("7643").value(),
+                                             "<blibb_"),
+            "<blibb_7643>");
 }
 
 // ____________________________________________________________________________

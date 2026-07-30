@@ -16,6 +16,7 @@
 #include <string_view>
 #include <vector>
 
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "util/BitUtils.h"
 #include "util/json.h"
@@ -47,6 +48,10 @@ namespace encodedIris {
 // encodable numbers have the same number of digits, and the two orders
 // coincide.
 struct BitRangeConstraint {
+  // A normalized range of constraints, as the static member functions below
+  // take it. See `normalizeAndValidate` for what "normalized" means.
+  using BitRangeConstraints = ql::span<const BitRangeConstraint>;
+
   // The number of bits of the number that a constraint applies to.
   static constexpr size_t numBitsTotal = 64;
 
@@ -90,25 +95,24 @@ struct BitRangeConstraint {
   //
   // PRECONDITION: `constraints` is nonempty and normalized, see
   // `normalizeAndValidate`.
-  static std::optional<uint64_t> encode(
-      std::string_view numString,
-      const std::vector<BitRangeConstraint>& constraints,
-      size_t numBitsAvailable);
+  static std::optional<uint64_t> encode(std::string_view numString,
+                                        BitRangeConstraints constraints,
+                                        size_t numBitsAvailable);
 
   // Remove all bits that are covered by one of the `constraints` from `value`,
   // moving the remaining bits down so that no gaps remain. The order of the
   // remaining bits is preserved.
   //
   // PRECONDITION: `constraints` is normalized, see `normalizeAndValidate`.
-  static uint64_t removeConstrainedBits(
-      uint64_t value, const std::vector<BitRangeConstraint>& constraints);
+  static uint64_t removeConstrainedBits(uint64_t value,
+                                        BitRangeConstraints constraints);
 
   // The inverse of `removeConstrainedBits`: move the bits of `payload` back to
   // their original positions and re-insert the values of the `constraints`.
   //
   // PRECONDITION: `constraints` is normalized, see `normalizeAndValidate`.
-  static uint64_t reinsertConstrainedBits(
-      uint64_t payload, const std::vector<BitRangeConstraint>& constraints);
+  static uint64_t reinsertConstrainedBits(uint64_t payload,
+                                          BitRangeConstraints constraints);
 
   friend void to_json(nlohmann::json& j, const BitRangeConstraint& c) {
     j = nlohmann::json{
@@ -125,26 +129,6 @@ struct BitRangeConstraint {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BitRangeConstraint, start_, end_,
                                               value_)
-};
-
-// A prefix for the encoding of IRIs, together with the (possibly empty) list of
-// constraints on the number that follows it. With an empty list of constraints
-// the prefix behaves exactly as a prefix that is specified as a plain string:
-// the digits that follow the prefix are stored one nibble per digit (see
-// `EncodedIriNibbleEncoding.h`), which preserves the lexicographic order of the
-// IRIs and their leading zeros, but limits the number to the few digits that
-// fit into the payload of an `Id`.
-struct PrefixWithConstraints {
-  std::string prefix_;
-  std::vector<BitRangeConstraint> constraints_;
-
-  // Create a prefix without constraints.
-  explicit PrefixWithConstraints(std::string prefix)
-      : prefix_{std::move(prefix)} {}
-
-  PrefixWithConstraints(std::string prefix,
-                        std::vector<BitRangeConstraint> constraints)
-      : prefix_{std::move(prefix)}, constraints_{std::move(constraints)} {}
 };
 }  // namespace encodedIris
 

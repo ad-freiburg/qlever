@@ -91,8 +91,7 @@ void BitRangeConstraint::normalizeAndValidate(
 
 // ____________________________________________________________________________
 std::optional<uint64_t> BitRangeConstraint::encode(
-    std::string_view numString,
-    const std::vector<BitRangeConstraint>& constraints,
+    std::string_view numString, BitRangeConstraints constraints,
     size_t numBitsAvailable) {
   AD_CORRECTNESS_CHECK(!constraints.empty());
   // Reject leading zeros. The constrained encoding stores the number, not the
@@ -121,7 +120,7 @@ std::optional<uint64_t> BitRangeConstraint::encode(
 
 // ____________________________________________________________________________
 uint64_t BitRangeConstraint::removeConstrainedBits(
-    uint64_t value, const std::vector<BitRangeConstraint>& constraints) {
+    uint64_t value, BitRangeConstraints constraints) {
   uint64_t result = 0;
   size_t outputBitPos = 0;
   size_t inputBitPos = 0;
@@ -147,7 +146,7 @@ uint64_t BitRangeConstraint::removeConstrainedBits(
 
 // ____________________________________________________________________________
 uint64_t BitRangeConstraint::reinsertConstrainedBits(
-    uint64_t payload, const std::vector<BitRangeConstraint>& constraints) {
+    uint64_t payload, BitRangeConstraints constraints) {
   uint64_t result = 0;
   size_t inputBitPos = 0;
   size_t outputBitPos = 0;

@@ -233,7 +233,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                      : VocabularyType::random());
     if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
       index.getImpl().setPrefixesForEncodedValues(
-          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+          encodedIris::toPrefixesWithoutConstraints(
+              std::move(c.encodedPrefixesWithoutAngleBrackets.value())));
     }
     index.createFromFiles({spec});
     if (c.createTextIndex) {

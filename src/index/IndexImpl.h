@@ -311,14 +311,10 @@ class IndexImpl {
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
-  // Set the prefixes of the IRIs that will be encoded directly into
-  // the `Id`; see `EncodedIriManager` for details.
-  void setPrefixesForEncodedValues(
-      std::vector<std::string> prefixesWithoutAngleBrackets);
-
-  // Same as above, but the prefixes may carry constraints on the number that
-  // follows them; see `encodedIris::BitRangeConstraint`. Constrained prefixes
-  // can encode numbers that need more than `NumBitsEncoding` bits.
+  // Set the prefixes of the IRIs that will be encoded directly into the `Id`;
+  // see `EncodedIriManager` for details. A prefix may carry constraints on the
+  // number that follows it; see `encodedIris::BitRangeConstraint`. Constrained
+  // prefixes can encode numbers that need more than `NumBitsEncoding` bits.
   void setPrefixesForEncodedValues(
       std::vector<encodedIris::PrefixWithConstraints> prefixesWithConstraints);
 

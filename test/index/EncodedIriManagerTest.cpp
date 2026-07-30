@@ -146,7 +146,7 @@ TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
 TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
   EncodedIriManager em{{"blabb", "blubb"}};
   auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
-      1, EncodedIriManager::NibbleEncoder::encode("7643"));
+      1, EncodedIriManager::NibbleEncoder::encode("7643").value());
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
 
