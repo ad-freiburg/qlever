@@ -190,7 +190,7 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
   std::vector<ColumnIndex> result;
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
@@ -200,6 +200,12 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
       result.push_back(numVariables_ + i);
     }
   }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+  auto result = variableAndGraphColumns();
 
   if (varsToKeep_.has_value()) {
     auto permutation = getSubsetForStrippedColumns();
@@ -216,51 +222,43 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 bool IndexScan::isDistinctByImpl(
     const std::vector<ColumnIndex>& distinctIndices) const {
-  // The result of an index scan contains every matching triple (or quad, if a
-  // graph column is present) exactly once: duplicate triples are removed during
-  // scanning. The columns that uniquely identify a result row are the triple's
-  // variable columns plus the graph column (if the scan carries one); all other
-  // (payload) columns, e.g. the `pattern` column, are functionally determined
-  // by them. The result is therefore distinct wrt `distinctIndices` iff all of
-  // these identifying columns are still present in the (possibly stripped)
-  // result and are contained in `distinctIndices`.
-
-  // The identifying columns (in the original, unstripped column layout): the
-  // triple's variable columns plus the graph column, if the scan carries one.
-  // This is exactly `resultSortedOn()` of the unstripped scan.
-  std::vector<ColumnIndex> identifyingColumns;
-  for (ColumnIndex col = 0; col < numVariables_; ++col) {
-    identifyingColumns.push_back(col);
+  // Duplicate triples are removed during scanning, so the result contains every
+  // matching triple (or quad, if a graph column is present) exactly once. Its
+  // rows are therefore uniquely identified by the triple's variable columns
+  // plus the graph column; all other (payload) columns, e.g. the `pattern`
+  // column, are functionally determined by those. The scan is thus distinct wrt
+  // `distinctIndices` iff all identifying columns are contained in
+  // `distinctIndices`.
+  //
+  // Exception: For materialized views the deduplication during scanning is
+  // deliberately deactivated (see the `MaterializedView` constructor), so a
+  // view scan may well contain duplicate rows.
+  if (permutation().permutationType() == Permutation::Type::MATERIALIZED_VIEW) {
+    return false;
   }
-  for (const auto& [i, column] :
-       ::ranges::views::enumerate(additionalColumns_)) {
-    if (column == ADDITIONAL_COLUMN_GRAPH_ID) {
-      identifyingColumns.push_back(numVariables_ + i);
+
+  auto identifyingColumns = variableAndGraphColumns();
+
+  // The identifying columns above refer to the unstripped result, so translate
+  // them into the columns of the actual (possibly stripped) result. An
+  // identifying column that was stripped away is not part of the result at all,
+  // which makes the scan non-distinct: the columns that remain don't identify a
+  // row uniquely.
+  if (varsToKeep_.has_value()) {
+    auto subset = getSubsetForStrippedColumns();
+    for (ColumnIndex& col : identifyingColumns) {
+      auto it = ql::ranges::find(subset, col);
+      if (it == subset.end()) {
+        return false;
+      }
+      col = it - subset.begin();
     }
   }
 
-  // Map a result column back to its column index in the unstripped scan.
-  // Without stripping this is the identity, otherwise
-  // `getSubsetForStrippedColumns` maps result column `i` to its original column
-  // index. Because the graph filtering and duplicate removal happen on the full
-  // triple/quad *before* columns are stripped, an identifying column that was
-  // stripped away is simply absent from this mapping, which correctly makes the
-  // scan non-distinct.
-  std::optional<std::vector<ColumnIndex>> strippedSubset =
-      varsToKeep_.has_value() ? std::optional{getSubsetForStrippedColumns()}
-                              : std::nullopt;
-  auto toOriginalColumn = [&strippedSubset](ColumnIndex resultColumn) {
-    return strippedSubset.has_value() ? strippedSubset.value().at(resultColumn)
-                                      : resultColumn;
-  };
-
-  // Distinct iff every identifying column is among the (original) columns that
-  // `distinctIndices` selects.
-  return ql::ranges::all_of(identifyingColumns, [&](ColumnIndex identifying) {
-    return ql::ranges::any_of(distinctIndices, [&](ColumnIndex resultColumn) {
-      return toOriginalColumn(resultColumn) == identifying;
-    });
-  });
+  return ql::ranges::all_of(identifyingColumns,
+                            [&distinctIndices](ColumnIndex col) {
+                              return ad_utility::contains(distinctIndices, col);
+                            });
 }
 
 // _____________________________________________________________________________

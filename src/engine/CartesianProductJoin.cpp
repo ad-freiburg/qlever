@@ -459,9 +459,8 @@ CartesianProductJoin::perChildDistinctIndices(
 // _____________________________________________________________________________
 bool CartesianProductJoin::isDistinctByImpl(
     const std::vector<ColumnIndex>& distinctIndices) const {
-  auto perChild = perChildDistinctIndices(distinctIndices);
   return ql::ranges::all_of(
-      ::ranges::views::zip(children_, perChild),
+      ::ranges::views::zip(children_, perChildDistinctIndices(distinctIndices)),
       [](const auto& childAndIndices) {
         const auto& [child, childIndices] = childAndIndices;
         return child->getRootOperation()->isDistinctBy(childIndices);
@@ -485,14 +484,14 @@ CartesianProductJoin::makeDistinctTree(
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
-  auto perChild = perChildDistinctIndices(distinctIndices);
-  Children newChildren;
-  newChildren.reserve(children_.size());
-  for (const auto& [child, childIndices] :
-       ::ranges::views::zip(children_, perChild)) {
-    newChildren.push_back(
-        QueryExecutionTree::createDistinctTree(child, childIndices));
-  }
+  auto newChildren =
+      ::ranges::views::zip(children_,
+                           perChildDistinctIndices(distinctIndices)) |
+      ql::views::transform([](const auto& childAndIndices) {
+        const auto& [child, childIndices] = childAndIndices;
+        return QueryExecutionTree::createDistinctTree(child, childIndices);
+      }) |
+      ::ranges::to<Children>();
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }

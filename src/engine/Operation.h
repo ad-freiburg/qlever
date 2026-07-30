@@ -449,21 +449,13 @@ class Operation {
   // no-op. Any result with at most one row is trivially distinct wrt any
   // columns; beyond that, the per-class `isDistinctByImpl` decides.
   virtual bool isDistinctBy(
-      const std::vector<ColumnIndex>& distinctIndices) const final {
-    const auto& limit = getLimitOffset()._limit;
-    if (limit.has_value() && limit.value() <= 1) {
-      return true;
-    }
-    return isDistinctByImpl(distinctIndices);
-  }
+      const std::vector<ColumnIndex>& distinctIndices) const final;
 
   // Per-class component of `isDistinctBy` (see above). The default
   // conservatively returns `false`. Subclasses that can guarantee distinctness
   // (e.g. a full `IndexScan` for `?s ?p ?o`) should override this.
   virtual bool isDistinctByImpl(
-      [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
-    return false;
-  }
+      const std::vector<ColumnIndex>& distinctIndices) const;
 
   // Try to create a version of this operation with a `DISTINCT` over the given
   // `distinctIndices` pushed down into the tree, if that makes the operation
@@ -472,14 +464,11 @@ class Operation {
   // of it. The default implementation returns `std::nullopt`, meaning that the
   // `DISTINCT` cannot be pushed down and has to be applied externally
   // (typically via a `Distinct` operation). Subclasses may override this to
-  // provide more optimal ways to ensure distinct values.
+  // provide more optimal ways to ensure distinct values. This function must
+  // only be called on operations that are not already distinct wrt
+  // `distinctIndices`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
-      const std::vector<ColumnIndex>& distinctIndices) const {
-    // This function should only be called on operations that do not already
-    // fulfill this criteria.
-    AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
-    return std::nullopt;
-  }
+      const std::vector<ColumnIndex>& distinctIndices) const;
 
   // Try to create a version of this operation that only contains the given
   // `variables`, and therefore strips away all other columns. The default

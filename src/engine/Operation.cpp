@@ -824,6 +824,29 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
 }
 
 // _____________________________________________________________________________
+bool Operation::isDistinctBy(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  const auto& limit = getLimitOffset()._limit;
+  if (limit.has_value() && limit.value() <= 1) {
+    return true;
+  }
+  return isDistinctByImpl(distinctIndices);
+}
+
+// _____________________________________________________________________________
+bool Operation::isDistinctByImpl(
+    [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
+  return false;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
