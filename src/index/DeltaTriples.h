@@ -333,16 +333,6 @@ class DeltaTriples {
   static void remapId(
       const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
       LocalVocab& localVocab, const IndexImpl& index);
-
- public:
-  // Non-inlined wrapper around `remapId` so that the unit tests (which live in
-  // a different translation unit) have a symbol to link against. Inlining is
-  // irrelevant for testing.
-  static void remapIdForTesting(
-      const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
-      LocalVocab& localVocab, const IndexImpl& index);
-
- private:
 #endif
 
   // Call `consolidateAll()` iff `consolidate` is `Consolidate::Yes`. Used by
@@ -421,6 +411,7 @@ class DeltaTriples {
       ad_utility::SharedCancellationHandle cancellationHandle);
 
   friend class DeltaTriplesManager;
+  FRIEND_TEST(DeltaTriplesTest, remapId);
 };
 
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding

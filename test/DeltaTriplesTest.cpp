@@ -1067,7 +1067,7 @@ TEST_F(DeltaTriplesTest, remapId) {
   Id entryId = Id::makeFromLocalVocabIndex(&sourceEntry);
 
   auto remap = [&idMapping, &localVocab, &index](Id id) {
-    DeltaTriples::remapIdForTesting(idMapping, id, localVocab, index);
+    DeltaTriples::remapId(idMapping, id, localVocab, index);
     return id;
   };
 

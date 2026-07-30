@@ -141,6 +141,73 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 }
 
 // _____________________________________________________________________________
+namespace {
+// Compute by what offset `value` needs to be increased to fit in the new index.
+size_t computeIndexOffset(VocabIndex value,
+                          const InsertionPositions& insertionPositions) {
+  return ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, value, std::less{}));
+}
+
+// Apply `offset` to `value` and return the new `Id` resulting from this.
+Id applyOffset(VocabIndex value, size_t offset) {
+  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
+}
+}  // namespace
+
+// _____________________________________________________________________________
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  auto value = original.getVocabIndex();
+  return applyOffset(value, computeIndexOffset(value, insertionPositions));
+}
+
+// _____________________________________________________________________________
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions,
+                size_t& hint) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  AD_EXPENSIVE_CHECK(hint <= insertionPositions.size(),
+                     "Hint must be a valid index into the insertion positions "
+                     "or equal to its size.");
+  auto value = original.getVocabIndex();
+  auto isUpperBound = [value, &insertionPositions](size_t candidate) {
+    return candidate == insertionPositions.size() ||
+           insertionPositions[candidate] > value;
+  };
+
+  // Update `hint` to the correct upper bound for `value`. Avoid writing `hint`
+  // in cases where that's not necessary.
+  [&hint, &isUpperBound, &value, &insertionPositions]() {
+    // Check if the cached hint is still the upper bound for `value`.
+    if (isUpperBound(hint)) [[likely]] {
+      // `hint` is an upper bound, so check if `hint - 1` is not an upper bound.
+      if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
+        // `hint` still is the correct upper bound, so there is nothing to do.
+        return;
+      }
+    } else {
+      // Check if `hint + 1` is an upper bound. This is the case when we just
+      // move the hint forward by one position.
+      size_t next = hint + 1;
+      if (isUpperBound(next)) [[likely]] {
+        hint = next;
+        return;
+      }
+    }
+
+    // Fallback and write the hint for the next iteration.
+    hint = computeIndexOffset(value, insertionPositions);
+  }();
+
+  return applyOffset(value, hint);
+}
+
+// _____________________________________________________________________________
 std::optional<Id> tryRemapBlankNodeId(Id original,
                                       const BlankNodeBlocks& blankNodeBlocks,
                                       uint64_t minBlankNodeIndex) {

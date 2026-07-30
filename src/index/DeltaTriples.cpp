@@ -788,7 +788,7 @@ void DeltaTriples::addFromSnapshotDiff(
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE void DeltaTriples::remapId(
+void DeltaTriples::remapId(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
     LocalVocab& localVocab, const IndexImpl& index) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
@@ -828,13 +828,6 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
       id = value.value();
     }
   }
-}
-
-// _____________________________________________________________________________
-void DeltaTriples::remapIdForTesting(
-    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
-    LocalVocab& localVocab, const IndexImpl& index) {
-  remapId(idMapping, id, localVocab, index);
 }
 #endif
 

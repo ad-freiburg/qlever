@@ -19,12 +19,12 @@ add_subdirectory(vocabulary)
 # TODO<joka921> Decouple `LocalVocabEntry` from `IndexImpl`, then move these
 # files into a proper library of their own.
 add_library(index
-        Index.cpp IndexImpl.cpp IndexImpl.Text.cpp EncodedIriManager.cpp
+        Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
-        Vocabulary.cpp ../parser/RdfParser.cpp
+        ../parser/RdfParser.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
-        PrefixHeuristic.cpp CompressedRelation.cpp
+        CompressedRelation.cpp
         PatternCreator.cpp ScanSpecification.cpp ../parser/TripleComponent.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp

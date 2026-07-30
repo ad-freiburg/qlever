@@ -5,29 +5,33 @@
 #ifndef QLEVER_COMPILEREXTENSIONS_H
 #define QLEVER_COMPILEREXTENSIONS_H
 
-// A generic macro that forces the inlining of the annotated function where the
-// compiler supports it. It always expands to (at least) `inline`, so every
-// caller must see the definition: a function that is defined in a `.cpp` file
-// but called from other translation units must not use this macro (the link
-// would break, loudly; forced inlining would be impossible for such a function
-// anyway).
+// A generic macro that forces inlining during compilation across compilers
 #ifdef QLEVER_BUILD_SHARED_LIBRARIES
 // In a shared-library build the request to always inline cannot be honored for
-// a function whose body may be replaced at link time. GCC rejects such a
-// definition with `error: inlining failed in call to 'always_inline' ...:
-// function body can be overwritten at link time`, preceded by a `-Wattributes`
-// warning. The macro hence expands to only `inline` here, and the compiler
-// inlines at its own discretion.
-#define AD_ALWAYS_INLINE inline
-#elif defined(__GNUC__) || \
-    defined(__clang__)  // clang defines __GNUC__ too, but be explicit; it also
-                        // understands the `gnu::` spelling of the attribute.
-#define AD_ALWAYS_INLINE [[gnu::always_inline]] inline
+// a function whose body may be replaced at link time (which is the case for
+// every function with external linkage in a shared library). GCC therefore
+// rejects such a definition with `error: inlining failed in call to
+// 'always_inline' ...: function body can be overwritten at link time`, preceded
+// by a `-Wattributes` warning. The macro hence expands to nothing here.
+//
+// NOTE: It must not expand to `inline` either. An `inline` function must be
+// defined in every translation unit that uses it (and the compiler need not
+// emit an out-of-line symbol for it), so for a function that is declared in a
+// header but defined in a `.cpp` file, `inline` would break the callers in
+// other translation units. Instead, every use of the macro must be on a
+// function that is already implicitly or explicitly `inline` (GCC emits a
+// `-Wattributes` warning otherwise, because it cannot force the inlining of
+// an out-of-line function into other translation units).
+#define AD_ALWAYS_INLINE
+#elif defined(__clang__)
+#define AD_ALWAYS_INLINE [[clang::always_inline]]
+#elif __GNUC__
+#define AD_ALWAYS_INLINE [[gnu::always_inline]]
 #else
 #warning \
     "For this compiler we don't know how to force the inlining of functions. \
 There might be some performance degradations."
-#define AD_ALWAYS_INLINE inline
+#define AD_ALWAYS_INLINE
 #endif
 
 // A macro for the `[[clang::lifetimebound]]` attribute, which marks a function
