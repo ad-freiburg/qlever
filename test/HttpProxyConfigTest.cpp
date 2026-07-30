@@ -12,7 +12,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdlib>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "util/GTestHelpers.h"
 #include "util/http/HttpProxyConfig.h"
@@ -128,6 +132,10 @@ TEST(ParseProxyUrl, malformedUrlsAreRejected) {
                                HasSubstr("only supports plain HTTP proxies"));
   AD_EXPECT_THROW_WITH_MESSAGE(parseProxyUrl("http://proxy:3128/some/path"),
                                HasSubstr("must not have a path"));
+  AD_EXPECT_THROW_WITH_MESSAGE(parseProxyUrl("http://proxy:3128?a=b"),
+                               HasSubstr("must not have a query or fragment"));
+  AD_EXPECT_THROW_WITH_MESSAGE(parseProxyUrl("http://proxy:3128#frag"),
+                               HasSubstr("must not have a query or fragment"));
   AD_EXPECT_THROW_WITH_MESSAGE(parseProxyUrl("http://"),
                                HasSubstr("does not specify a host"));
   AD_EXPECT_THROW_WITH_MESSAGE(parseProxyUrl("http://proxy:not-a-port"),

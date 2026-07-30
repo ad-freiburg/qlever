@@ -829,9 +829,9 @@ TEST(HttpProxy, plainHttpRequestUsesAbsoluteFormTarget) {
             "http://example.org:8080/sparql?query=X\nexample.org");
 }
 
-// A target that does not start with a `/` still yields a well-formed absolute
-// form target.
-TEST(HttpProxy, plainHttpRequestWithTargetWithoutLeadingSlash) {
+// The default port 80 is omitted from the absolute-form target, and a target
+// that does not start with a `/` still yields a well-formed one.
+TEST(HttpProxy, plainHttpRequestOmitsDefaultPortAndAddsMissingSlash) {
   auto proxyServer = makeProxyEchoServer();
   proxyServer.runInOwnThread();
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -843,7 +843,7 @@ TEST(HttpProxy, plainHttpRequestWithTargetWithoutLeadingSlash) {
                                           "example.org", "sparql", handle);
   EXPECT_EQ(response.status_, status::ok);
   EXPECT_EQ(toString(std::move(response.body_)),
-            "http://example.org:80/sparql\nexample.org");
+            "http://example.org/sparql\nexample.org");
 }
 
 // Without a proxy, the request target stays in origin form.

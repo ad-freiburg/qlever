@@ -66,9 +66,9 @@ class HttpClientImpl {
   // request is then relayed to `host`:`port` by the proxy. For HTTP this means
   // sending the request in absolute form (see `sendRequest`), for HTTPS it
   // means establishing a tunnel with the `CONNECT` method before the TLS
-  // handshake (see `establishProxyTunnel`). Note that `sendHttpOrHttpsRequest`
-  // below determines the proxy automatically; an explicit `proxy` is mostly
-  // useful for tests.
+  // handshake (see `establishProxyTunnel` in `HttpClient.cpp`). Note that
+  // `sendHttpOrHttpsRequest` below determines the proxy automatically; an
+  // explicit `proxy` is mostly useful for tests.
   HttpClientImpl(
       std::string_view host, std::string_view port,
       std::optional<ad_utility::httpProxy::Proxy> proxy = std::nullopt);
@@ -95,7 +95,11 @@ class HttpClientImpl {
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain");
 
-  // Simple way to establish a websocket connection
+  // Simple way to establish a websocket connection.
+  //
+  // Note: unlike `sendRequest`, this does not support going through a proxy;
+  // `target` is always sent in origin form. QLever only uses this to talk to
+  // its own websocket endpoint, which is never proxied.
   boost::beast::http::response<boost::beast::http::string_body>
   sendWebSocketHandshake(const boost::beast::http::verb& method,
                          std::string_view host, std::string_view target);

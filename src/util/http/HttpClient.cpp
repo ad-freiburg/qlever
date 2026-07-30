@@ -182,10 +182,15 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   std::string absoluteTarget;
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
     if (client->proxy_.has_value()) {
+      // Omit the default port, as `curl` does, so that the target we send is
+      // the most conventional spelling and no proxy can trip over a redundant
+      // `:80`. Note that `Url::port()` is never empty, it defaults to `80`.
+      std::string port =
+          client->port_ == "80" ? "" : absl::StrCat(":", client->port_);
       // `Url::target()` always starts with a `/`, but `sendRequest` is also
       // called directly with targets that don't, so be lenient here.
       absoluteTarget =
-          absl::StrCat("http://", host, ":", client->port_,
+          absl::StrCat("http://", host, port,
                        absl::StartsWith(target, "/") ? "" : "/", target);
       target = absoluteTarget;
     }

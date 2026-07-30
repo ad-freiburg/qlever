@@ -20,6 +20,7 @@
 #include <boost/url/parse.hpp>
 #include <boost/url/url_view.hpp>
 #include <cstdlib>
+#include <initializer_list>
 #include <stdexcept>
 
 #include "backports/algorithm.h"
@@ -34,19 +35,23 @@ namespace {
 // empty string", which `parseProxyUrl` then maps to "no proxy". This makes
 // `https_proxy=` a working way to disable a proxy inherited from a parent
 // process, as it is with other tools.
-std::optional<std::string_view> getEnv(const char* name) {
+//
+// We copy the value instead of returning a `std::string_view` into the
+// environment block, which POSIX allows a later `setenv` or `putenv` to
+// invalidate.
+std::optional<std::string> getEnv(const char* name) {
   const char* value = std::getenv(name);
   if (value == nullptr) {
     return std::nullopt;
   }
-  return std::string_view{value};
+  return std::string{value};
 }
 
 // Return the value of the first of the given environment variables that is set,
 // or `std::nullopt` if none of them is. Note that "set to the empty string" and
 // "not set" must be kept apart here, because only the latter may fall back to
 // `all_proxy`, see `ProxyConfiguration::fromEnvironment`.
-std::optional<std::string_view> firstEnvThatIsSet(
+std::optional<std::string> firstEnvThatIsSet(
     std::initializer_list<const char*> variableNames) {
   for (const char* name : variableNames) {
     if (auto value = getEnv(name); value.has_value()) {
@@ -107,12 +112,16 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
     throw std::runtime_error(absl::StrCat("The proxy URL \"", proxyUrl,
                                           "\" does not specify a host"));
   }
-  // A proxy URL is an authority, not a resource; a path would silently be
-  // ignored, so reject it instead of pretending to honor it.
+  // A proxy URL is an authority, not a resource; a path, query or fragment
+  // would silently be ignored, so reject it instead of pretending to honor it.
   if (!url.path().empty() && url.path() != "/") {
     throw std::runtime_error(absl::StrCat("The proxy URL \"", proxyUrl,
                                           "\" must not have a path, but has \"",
                                           url.path(), "\""));
+  }
+  if (url.has_query() || url.has_fragment()) {
+    throw std::runtime_error(absl::StrCat(
+        "The proxy URL \"", proxyUrl, "\" must not have a query or fragment"));
   }
 
   Proxy proxy;
@@ -191,14 +200,15 @@ ProxyConfiguration ProxyConfiguration::fromEnvironment() {
   // `all_proxy` only applies if no scheme-specific variable is set at all. In
   // particular, `https_proxy=` (set but empty) means "no proxy for HTTPS" and
   // must not fall back to `all_proxy`.
-  auto orElseAllProxy = [&allProxy](std::optional<std::string_view> value) {
-    return value.has_value() ? value.value()
-                             : allProxy.value_or(std::string_view{});
+  auto orElseAllProxy =
+      [&allProxy](std::optional<std::string> value) -> std::string {
+    return value.has_value() ? std::move(value).value()
+                             : allProxy.value_or(std::string{});
   };
   return ProxyConfiguration{
       orElseAllProxy(firstEnvThatIsSet({"http_proxy"})),
       orElseAllProxy(firstEnvThatIsSet({"https_proxy", "HTTPS_PROXY"})),
-      firstEnvThatIsSet({"no_proxy", "NO_PROXY"}).value_or(std::string_view{})};
+      firstEnvThatIsSet({"no_proxy", "NO_PROXY"}).value_or(std::string{})};
 }
 
 // ____________________________________________________________________________
