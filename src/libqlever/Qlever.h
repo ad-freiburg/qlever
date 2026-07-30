@@ -25,6 +25,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/EncodedIriScheme.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
@@ -76,6 +77,23 @@ struct CommonConfig {
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
   // word in the literal. This is useful for keyword search in literals.
   bool addHasWordTriples_ = false;
+
+  // User-defined schemes for encoding IRIs directly into the internal ID, see
+  // `src/index/EncodedIriScheme.h`. In contrast to
+  // `IndexBuilderConfig::prefixesForIdEncodedIris_` (which can only encode a
+  // fixed prefix followed by a sequence of digits), such a scheme may encode
+  // arbitrarily structured IRIs, for example
+  // `<somePrefix://num_123_anotherNum_24>`, where only the `123` and the `24`
+  // are load-bearing. Each scheme reserves a number of the (in total 256)
+  // available prefix slots.
+  //
+  // NOTE: The schemes are stored in the index. When loading an index that was
+  // built with schemes, the schemes are restored from the index via the global
+  // `qlever::EncodedIriSchemeRegistry`, so every scheme class has to be
+  // registered via `qlever::registerEncodedIriScheme` before the index is
+  // loaded, else the loading fails. If the schemes are additionally specified
+  // here, they have to be exactly the ones that the index was built with.
+  std::vector<qlever::EncodedIriSchemePtr> encodedIriSchemes_;
 };
 
 // Configuration for relocating a runtime-rebuilt index. It bundles the four

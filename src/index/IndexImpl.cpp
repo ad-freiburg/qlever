@@ -1507,6 +1507,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
 
   loadDataMember("encoded-iri-prefixes", encodedIriManager_,
                  EncodedIriManager{});
+  // The schemes of the index (which were restored from the JSON above) are
+  // authoritative. If the user has also configured schemes, then they have to
+  // be exactly the same, else the encoding of IRIs would silently differ
+  // between the index building and the query processing.
+  if (!encodedIriSchemes_.empty()) {
+    encodedIriManager_.checkSchemesMatch(encodedIriSchemes_);
+  }
   loadDataMember("graphNameManager", graphNameManager_,
                  GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX), 1));
 }
@@ -2090,8 +2097,8 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
     std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ =
-      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+  encodedIriManager_ = EncodedIriManager{
+      std::move(prefixesWithoutAngleBrackets), encodedIriSchemes_};
 }
 
 // _____________________________________________________________________________

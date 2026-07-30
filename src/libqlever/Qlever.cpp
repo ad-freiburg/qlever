@@ -72,6 +72,10 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
   index.usePatterns() = enablePatternTrick_;
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.doNotLoadPermutations() = config.doNotLoadPermutations_;
+  // The schemes are only used to validate that the index was built with
+  // exactly these schemes, the actual schemes are restored from the index (see
+  // `IndexImpl::setEncodedIriSchemes`).
+  index.getImpl().setEncodedIriSchemes(config.encodedIriSchemes_);
   index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
   if (config.loadTextIndex_) {
     index.addTextFromOnDiskIndex();
@@ -127,6 +131,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  // NOTE: The schemes have to be set before the prefixes, because the
+  // `EncodedIriManager` is built by the latter call.
+  index.getImpl().setEncodedIriSchemes(config.encodedIriSchemes_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(config.blankNodeIriRegexes_);
 

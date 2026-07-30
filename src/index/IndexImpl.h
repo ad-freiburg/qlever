@@ -118,6 +118,10 @@ class IndexImpl {
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   EncodedIriManager encodedIriManager_;
+  // The user-defined encoding schemes for IRIs, see `EncodedIriScheme.h`. They
+  // are used to build the `encodedIriManager_` during index building, and to
+  // validate the schemes that are stored in the index when it is loaded.
+  std::vector<qlever::EncodedIriSchemePtr> encodedIriSchemes_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -312,9 +316,20 @@ class IndexImpl {
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
   // Set the prefixes of the IRIs that will be encoded directly into
-  // the `Id`; see `EncodedIriManager` for details.
+  // the `Id`; see `EncodedIriManager` for details. The encoding schemes that
+  // have previously been set via `setEncodedIriSchemes` are also applied, so
+  // that function has to be called first.
   void setPrefixesForEncodedValues(
       std::vector<std::string> prefixesWithoutAngleBrackets);
+
+  // Set the user-defined encoding schemes for IRIs; see `EncodedIriScheme.h`
+  // for details. This has to be called before `setPrefixesForEncodedValues`
+  // (when building an index) resp. before `createFromOnDiskIndex` (when
+  // loading an index, in which case the schemes are only used to validate
+  // that the index was built with exactly these schemes).
+  void setEncodedIriSchemes(std::vector<qlever::EncodedIriSchemePtr> schemes) {
+    encodedIriSchemes_ = std::move(schemes);
+  }
 
   // Set the regexes for IRIs that should be treated as blank nodes during index
   // building. Each entry is an `RE2` regex; an IRI that is fully matched by any
