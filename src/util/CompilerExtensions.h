@@ -14,9 +14,12 @@
 // 'always_inline' ...: function body can be overwritten at link time`, preceded
 // by a `-Wattributes` warning. The macro hence expands to nothing here.
 //
-// NOTE: It must not expand to `inline` either, because that would silently
-// change the linkage of the annotated function. Instead, every use must be on
-// a function that is implicitly or explicitly `inline` (GCC emits a
+// NOTE: It must not expand to `inline` either. An `inline` function must be
+// defined in every translation unit that uses it (and the compiler need not
+// emit an out-of-line symbol for it), so for a function that is declared in a
+// header but defined in a `.cpp` file, `inline` would break the callers in
+// other translation units. Instead, every use of the macro must be on a
+// function that is already implicitly or explicitly `inline` (GCC emits a
 // `-Wattributes` warning otherwise, because it cannot force the inlining of
 // an out-of-line function into other translation units).
 #define AD_ALWAYS_INLINE
