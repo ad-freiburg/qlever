@@ -240,6 +240,25 @@ class LazyGroupByRange
 
 using groupBy::detail::VectorOfAggregationData;
 
+namespace {
+// A flat view of all the variables that are visible inside one of the `EXISTS`
+// expressions of the `alias` that are not nested inside an aggregate.
+auto variablesInExists(const Alias& alias) {
+  using sparqlExpression::ExistsExpression;
+  auto tr = ql::views::transform;
+  return alias._expression.getExistsExpressions() |
+         tr([](const sparqlExpression::SparqlExpression* expression)
+                -> const auto& {
+           return dynamic_cast<const ExistsExpression&>(*expression);
+         }) |
+         ql::views::filter(std::not_fn(&ExistsExpression::isInsideAggregate)) |
+         tr([](const ExistsExpression& exists) -> const auto& {
+           return exists.argument().getVisibleVariables();
+         }) |
+         ql::views::join;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                          vector<Variable> groupByVariables,
@@ -267,28 +286,11 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   // An `EXISTS` *inside* an aggregate (e.g. `SUM(IF(EXISTS {...}, ...))`) is
   // evaluated once per row and may therefore use all variables, just like in a
   // `FILTER`.
-  using sparqlExpression::ExistsExpression;
-  auto tr = ql::views::transform;
   for (const auto& alias : _aliases) {
-    // A flat view of all the variables that are visible inside one of the
-    // alias's `EXISTS` expressions that is not nested inside an aggregate.
-    // Note: The `EXISTS` is correlated with the outer query via those of its
-    // variables that also occur in the subtree; variables that only occur
+    // Note that the `EXISTS` is correlated with the outer query via those of
+    // its variables that also occur in the subtree; variables that only occur
     // inside the `EXISTS` are irrelevant here.
-    auto variablesInExists =
-        alias._expression.getExistsExpressions() |
-        tr([](const sparqlExpression::SparqlExpression* expression)
-               -> const ExistsExpression& {
-          return dynamic_cast<const ExistsExpression&>(*expression);
-        }) |
-        ql::views::filter([](const ExistsExpression& exists) {
-          return !exists.isInsideAggregate();
-        }) |
-        tr([](const ExistsExpression& exists) -> const std::vector<Variable>& {
-          return exists.argument().getVisibleVariables();
-        }) |
-        ql::views::join;
-    for (const Variable& variable : variablesInExists) {
+    for (const Variable& variable : variablesInExists(alias)) {
       if (subtree->getVariableColumns().contains(variable) &&
           !ad_utility::contains(_groupByVariables, variable)) {
         throw std::runtime_error{absl::StrCat(
