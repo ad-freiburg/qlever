@@ -146,6 +146,19 @@ class alignas(16) LocalVocabEntry
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
+  // Two entries are equal if and only if their string representations are, so
+  // forward to the base class instead of going through `compareThreeWay`, which
+  // would use the much more expensive collation of the vocabulary. This is what
+  // happens implicitly anyway (the operators defined by the macro above do not
+  // include `operator==`), but state it explicitly so that it doesn't silently
+  // change when `compareThreeWay` does.
+  bool operator==(const LocalVocabEntry& rhs) const {
+    return static_cast<const Base&>(*this) == static_cast<const Base&>(rhs);
+  }
+  // Declaring `operator==` above hides the ones inherited from `Base`, which
+  // would otherwise make comparisons against a plain `LiteralOrIri` ill-formed.
+  using Base::operator==;
+
   // Expose `context_` for testing.
   const LocalVocabContext& getContextForTesting() const { return *context_; }
 

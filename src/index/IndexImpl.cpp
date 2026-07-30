@@ -2264,28 +2264,3 @@ nlohmann::json IndexImpl::recomputeStatistics(
   // allocation start value during the next index rebuild.
   return configuration;
 }
-
-// ____________________________________________________________________________
-int IndexImpl::LocalVocabContextImpl::compareWords(std::string_view a,
-                                                   std::string_view b) const {
-  return index_->getVocab().getCaseComparator().compare(
-      a, b, LocaleManager::Level::TOTAL);
-}
-
-// ____________________________________________________________________________
-auto IndexImpl::LocalVocabContextImpl::getPositionOfWord(
-    std::string_view word) const -> VocabBounds {
-  return index_->getVocab().getPositionOfWord(word);
-}
-
-// ____________________________________________________________________________
-std::optional<Id> IndexImpl::LocalVocabContextImpl::encodeAsId(
-    std::string_view word) const {
-  return index_->encodedIriManager().encode(word);
-}
-
-// ____________________________________________________________________________
-ad_utility::BlankNodeManager*
-IndexImpl::LocalVocabContextImpl::getBlankNodeManager() const {
-  return index_->getBlankNodeManager();
-}

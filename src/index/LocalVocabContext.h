@@ -34,8 +34,8 @@ class BlankNodeManager;
 // `LocalVocabEntry`. Keeping this interface abstract and minimal is what allows
 // those libraries to be independent of the (much larger) `index` library.
 //
-// The only implementation of this interface is in `IndexImpl`. There must be
-// exactly one instance of it per index, because
+// The only implementation of this interface is `LocalVocabContextImpl`. There
+// must be exactly one instance of it per index, because
 // `LocalVocabEntry::compareThreeWay` checks that two entries belong to the same
 // index by comparing the context POINTERS.
 class LocalVocabContext {

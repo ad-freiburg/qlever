@@ -12,7 +12,8 @@ add_subdirectory(vocabulary)
 # `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), so every
 # translation unit that compares `Id`s needs `LocalVocabEntry`. This used to be
 # a dependency on all of `IndexImpl`, but is now abstracted away by the minimal
-# `LocalVocabContext` interface, of which `IndexImpl` is the only implementation.
+# `LocalVocabContext` interface, whose only implementation is
+# `LocalVocabContextImpl`.
 # TODO<joka921> Move the conversions of a `TripleComponent` that require an index
 # out of `TripleComponent`, then move these files into a proper library of their
 # own.
@@ -26,7 +27,7 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp ../parser/TripleComponent.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
-        IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp LocalVocabContext.cpp
+        IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp LocalVocabContext.cpp LocalVocabContextImpl.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
         InputFileSpecification.cpp ../parser/AsyncFileBlockDriver.cpp)
 qlever_target_link_libraries(index qlever_util basicParser vocabulary global)

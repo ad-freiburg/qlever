@@ -31,7 +31,7 @@
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
-#include "index/LocalVocabContext.h"
+#include "index/LocalVocabContextImpl.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
@@ -206,25 +206,12 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
-  // The implementation of the `LocalVocabContext` interface, which simply
-  // forwards to the vocabulary and the `EncodedIriManager` of the enclosing
-  // `IndexImpl`. NOTE: `IndexImpl` deliberately does not implement that
-  // interface itself, so that it doesn't become a polymorphic type.
-  class LocalVocabContextImpl : public LocalVocabContext {
-   private:
-    const IndexImpl* index_;
-
-   public:
-    explicit LocalVocabContextImpl(const IndexImpl* index) : index_{index} {}
-
-    int compareWords(std::string_view a, std::string_view b) const override;
-    VocabBounds getPositionOfWord(std::string_view word) const override;
-    std::optional<Id> encodeAsId(std::string_view word) const override;
-    ad_utility::BlankNodeManager* getBlankNodeManager() const override;
-  };
-
-  // There must be exactly one of these per index, see `LocalVocabContext.h`.
-  LocalVocabContextImpl localVocabContext_{this};
+  // The implementation of the `LocalVocabContext` interface for this index.
+  // NOTE: `IndexImpl` deliberately does not implement that interface itself, so
+  // that it doesn't become a polymorphic type. There must be exactly one of
+  // these per index, see `LocalVocabContext.h`.
+  LocalVocabContextImpl localVocabContext_{&vocab_, &encodedIriManager_,
+                                           &blankNodeManager_};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
