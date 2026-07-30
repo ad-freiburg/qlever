@@ -95,10 +95,7 @@ auto mapOffsetsToStringViews(ql::span<const uint64_t> offsets,
                              std::string_view data) {
   AD_CORRECTNESS_CHECK(!offsets.empty());
   auto initialStart = offsets.front();
-  // `std::views::sliding` is not available in C++20, and also not in range-v3,
-  // so we use `zip` with a dropped view instead, which is equivalent to a
-  // sliding view of size 2.
-  return ::ranges::views::zip(offsets, offsets | ::ranges::views::drop(1)) |
+  return ad_utility::pairwiseView(offsets) |
          ql::views::transform([data, initialStart](const auto& pair) {
            auto [begin, end] = pair;
            return std::string_view{data.data() + begin - initialStart,

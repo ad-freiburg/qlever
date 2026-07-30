@@ -193,6 +193,9 @@ int main(int argc, char** argv) {
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
+  // The command-line option only supports plain prefixes without constraints,
+  // so it is parsed into a local variable and converted below.
+  std::vector<string> prefixesForIdEncodedIris;
   std::string materializedViewsJson;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
@@ -277,7 +280,7 @@ int main(int argc, char** argv) {
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
   add("encode-as-id",
-      po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
+      po::value(&prefixesForIdEncodedIris)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "
       "IRIs that start with one of these prefixes, followed by a sequence of "
       "digits, do not require a vocabulary entry, but are directly encoded "
@@ -369,6 +372,9 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+    config.prefixesForIdEncodedIris_ =
+        encodedIris::toPrefixesWithoutConstraints(
+            std::move(prefixesForIdEncodedIris));
     config.validate();
     // For index building, use more threads for writing permutations than the
     // default (which is optimized for `rebuild-index`, where six permutations

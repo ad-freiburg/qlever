@@ -25,6 +25,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/EncodedIriManager.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
@@ -180,10 +181,16 @@ struct IndexBuilderConfig : CommonConfig {
   // vocabulary (see above) and the time for exporting results involving
   // such IRIs.
   //
+  // A prefix may additionally carry constraints on the number that follows it;
+  // see `encodedIris::BitRangeConstraint`. Constraining bits that are known to
+  // be constant makes it possible to encode numbers that need more bits than
+  // are available in an `Id`, because the constrained bits are not stored. A
+  // prefix with an empty list of constraints behaves exactly as a plain prefix.
+  //
   // NOTE: Read the description of
   // https://github.com/ad-freiburg/qlever/pull/2299 for the details and
   // limitations regarding the correctness of FILTER and ORDER BY.
-  std::vector<std::string> prefixesForIdEncodedIris_;
+  std::vector<encodedIris::PrefixWithConstraints> prefixesForIdEncodedIris_;
 
   // The remaining members of this class, are only relevant if a full-text
   // index is built in addition to the RDF index. By default, no fulltext index

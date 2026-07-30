@@ -36,7 +36,9 @@ namespace {
 // failure of the running test. This is deliberately not an `EXPECT_NO_THROW`,
 // which would let the test continue with a nonexistent index.
 EngineConfig buildTestIndex(std::string_view turtleContents,
-                            std::string_view suffix = "") {
+                            std::string_view suffix = "",
+                            std::vector<encodedIris::PrefixWithConstraints>
+                                prefixesForIdEncodedIris = {}) {
   std::string basename = absl::StrCat(gtestCurrentTestName(), suffix);
   std::string filename = absl::StrCat(basename, ".ttl");
   ad_utility::makeOfstream(filename) << turtleContents;
@@ -45,6 +47,7 @@ EngineConfig buildTestIndex(std::string_view turtleContents,
   IndexBuilderConfig config;
   config.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
   config.baseName_ = basename;
+  config.prefixesForIdEncodedIris_ = std::move(prefixesForIdEncodedIris);
   Qlever::buildIndex(config);
   return EngineConfig{config};
 }
@@ -839,4 +842,98 @@ TEST(LibQlever, clearCache) {
   // the same cache as the non-`const` one.
   const Qlever& constEngine = engine;
   EXPECT_EQ(&constEngine.namedResultCache(), &engine.namedResultCache());
+}
+
+// _____________________________________________________________________________
+// End-to-end test for ID-encoded IRIs whose prefix carries bit constraints (see
+// `encodedIris::BitRangeConstraint`). The numbers are typical of the use case
+// that motivated the feature: external 64-bit IDs whose top three bits are the
+// constant tag `001` and which have a window of zero bits, so that 12 of the 64
+// bits carry no information and the remaining 52 fit exactly into the payload
+// of an `Id`.
+TEST(LibQlever, idEncodedIrisWithConstraints) {
+  static constexpr std::string_view prefix = "http://example.org/lane_";
+  // Bits [61, 64) are `001` and bits [23, 32) are zero, so 3 + 9 = 12 bits are
+  // constrained.
+  uint64_t base = 1ULL << 61;
+  // A number whose free bits are all zero, so its payload becomes `0`.
+  uint64_t smallest = base;
+  uint64_t middle = base | 12345ULL;
+  // A real 64-bit ID. It needs 62 bits, so it could not be encoded at all
+  // without the constraints.
+  uint64_t largest = 2343140642651111426ULL;
+  ASSERT_EQ((largest >> 61) & 0b111, 0b001u);
+  ASSERT_EQ((largest >> 23) & 0x1FFu, 0u);
+  // A number that violates the constraints (bits [61, 64) are `000`), so this
+  // IRI is not encoded but stored in the vocabulary as usual.
+  uint64_t violating = 42;
+
+  auto iri = [](uint64_t number) {
+    return absl::StrCat("<", prefix, number, ">");
+  };
+  // The violating IRI gets its own predicate, so that the `ORDER BY` below only
+  // has to compare encoded IRIs among themselves. The order between encoded and
+  // non-encoded IRIs is explicitly not guaranteed.
+  std::string turtle = absl::StrCat(iri(middle), " <p> \"middle\" .\n",
+                                    iri(largest), " <p> \"largest\" .\n",
+                                    iri(smallest), " <p> \"smallest\" .\n",
+                                    iri(violating), " <q> \"violating\" .\n");
+
+  EngineConfig ec = buildTestIndex(
+      turtle, "",
+      {encodedIris::PrefixWithConstraints{std::string{prefix},
+                                          {{61, 64, 0b001}, {23, 32, 0u}}}});
+
+  // First check that the constraints really took effect, so that the queries
+  // below cannot pass trivially: without them, none of these numbers could be
+  // encoded (they have far more than `NumDigits` digits), the IRIs would end up
+  // in the vocabulary, and the queries would still return the same results.
+  {
+    auto manager = fileToJson<nlohmann::json>(
+                       absl::StrCat(gtestCurrentTestName(), CONFIGURATION_FILE))
+                       .at("encoded-iri-prefixes")
+                       .get<EncodedIriManager>();
+    for (uint64_t number : {smallest, middle, largest}) {
+      auto id = manager.encode(iri(number));
+      ASSERT_TRUE(id.has_value()) << number;
+      EXPECT_EQ(id.value().getDatatype(), Datatype::EncodedVal);
+      // The full 64-bit number is recovered, although only 52 bits are stored.
+      EXPECT_EQ(manager.getNumberOfConstrainedId(id.value()), number);
+    }
+    // The violating number is not encoded.
+    EXPECT_FALSE(manager.encode(iri(violating)).has_value());
+  }
+
+  Qlever engine{ec};
+
+  // The IRIs are recovered exactly, including the 62-bit number, and the
+  // encoded values are ordered numerically.
+  EXPECT_EQ(engine.query("SELECT ?s WHERE { ?s <p> ?o } ORDER BY ?s",
+                         ad_utility::MediaType::tsv),
+            absl::StrCat("?s\n", iri(smallest), "\n", iri(middle), "\n",
+                         iri(largest), "\n"));
+
+  // Querying *for* a constrained IRI exercises the encoding direction at query
+  // time: the IRI in the query has to be encoded into the same `Id`.
+  for (uint64_t number : {smallest, middle, largest}) {
+    EXPECT_EQ(engine.query(
+                  absl::StrCat("SELECT ?o WHERE { ", iri(number), " <p> ?o }"),
+                  ad_utility::MediaType::csv),
+              absl::StrCat("o\n",
+                           number == smallest ? "smallest"
+                           : number == middle ? "middle"
+                                              : "largest",
+                           "\n"))
+        << number;
+  }
+
+  // The IRI that violates the constraints is not encoded, but is still stored
+  // and queryable as an ordinary IRI, so no information is lost.
+  EXPECT_EQ(engine.query(
+                absl::StrCat("SELECT ?o WHERE { ", iri(violating), " <q> ?o }"),
+                ad_utility::MediaType::csv),
+            "o\nviolating\n");
+  EXPECT_EQ(
+      engine.query("SELECT ?s WHERE { ?s <q> ?o }", ad_utility::MediaType::tsv),
+      absl::StrCat("?s\n", iri(violating), "\n"));
 }

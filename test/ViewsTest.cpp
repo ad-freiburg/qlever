@@ -349,3 +349,50 @@ TEST(Views, combinedConcepts) {
   static_assert(!ql::ranges::forward_range<V>);
   static_assert(ranges::viewable_range<V>);
 }
+
+// _____________________________________________________________________________
+TEST(Views, pairwiseView) {
+  using namespace ::testing;
+  using V = std::vector<int>;
+  auto toPairs = [](auto& range) {
+    std::vector<std::pair<int, int>> result;
+    for (const auto& [a, b] : ad_utility::pairwiseView(range)) {
+      result.emplace_back(a, b);
+    }
+    return result;
+  };
+
+  // A range with fewer than two elements has no adjacent pairs at all.
+  V empty{};
+  EXPECT_THAT(toPairs(empty), IsEmpty());
+  V single{42};
+  EXPECT_THAT(toPairs(single), IsEmpty());
+
+  // For `n` elements there are exactly `n - 1` pairs, each consisting of an
+  // element and its successor.
+  V two{1, 2};
+  EXPECT_THAT(toPairs(two), ElementsAre(Pair(1, 2)));
+  V several{1, 2, 3, 4};
+  EXPECT_THAT(toPairs(several),
+              ElementsAre(Pair(1, 2), Pair(2, 3), Pair(3, 4)));
+
+  // The view also works on a `const` range.
+  const V& constSeveral = several;
+  EXPECT_THAT(toPairs(constSeveral),
+              ElementsAre(Pair(1, 2), Pair(2, 3), Pair(3, 4)));
+
+  // The elements are referred to and not copied, so modifying the underlying
+  // range through the view is possible.
+  for (auto&& [a, b] : ad_utility::pairwiseView(several)) {
+    (void)b;
+    a += 10;
+  }
+  EXPECT_THAT(several, ElementsAre(11, 12, 13, 4));
+
+  // The result fulfills the `range` and `view` concepts, also in C++17 mode
+  // (see the comment on `Views.combinedConcepts` above).
+  using P = decltype(ad_utility::pairwiseView(several));
+  static_assert(ql::ranges::range<P>);
+  static_assert(ql::ranges::view<P>);
+  static_assert(ql::ranges::forward_range<P>);
+}

@@ -5,14 +5,17 @@
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
 
-#include <absl/numeric/bits.h>
+#include <absl/strings/str_cat.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/EncodedIriBitConstraint.h"
+#include "index/EncodedIriNibbleEncoding.h"
 #include "util/BitUtils.h"
 #include "util/Log.h"
+#include "util/Views.h"
 #include "util/json.h"
 
 namespace detail {
@@ -36,10 +39,13 @@ std::optional<std::string_view> matchDigitsPrefix(std::string_view repr);
 //
 // The digits are encoded in the following non-standard way, which makes sure
 // that the order of the encoded values corresponds to the lexical order of the
-// original IRIs. Each decimal digit is encoded as a 4-bit nibble, where digit
-// `i` is encoded as `i+1` and converted to a hexadecimal number. The nibbles
-// are stored left-aligned (not right-aligned) and filled on the right with
-// zeroes.
+// original IRIs. NOTE: This holds for prefixes without constraints. A prefix
+// with constraints (see `encodedIris::BitRangeConstraint`) stores the number
+// itself, so its encoded values are ordered numerically, which is the lexical
+// order only among numbers of equal length. Each decimal digit is encoded as a
+// 4-bit nibble, where digit `i` is encoded as `i+1` and converted to a
+// hexadecimal number. The nibbles are stored left-aligned (not right-aligned)
+// and filled on the right with zeroes.
 //
 // For example, here are a few example encodings, with `NumBitsTotal = 40` and
 // `NumBitsTags = 8`. The prefix is `http://example.org/` and encoded in 8
@@ -63,6 +69,41 @@ struct NoHardcodedPrefixes {
   static constexpr std::array<std::string_view, 0> value = {};
 };
 
+namespace encodedIris {
+// A prefix for the encoding of IRIs, together with the (possibly empty) list of
+// constraints on the number that follows it. With an empty list of constraints
+// the prefix behaves exactly as a prefix that is specified as a plain string:
+// the digits that follow the prefix are stored one nibble per digit (see
+// `EncodedIriNibbleEncoding.h`), which preserves the lexicographic order of the
+// IRIs and their leading zeros, but limits the number to the few digits that
+// fit into the payload of an `Id`.
+struct PrefixWithConstraints {
+  std::string prefix_;
+  std::vector<BitRangeConstraint> constraints_;
+
+  // Create a prefix without constraints.
+  explicit PrefixWithConstraints(std::string prefix)
+      : prefix_{std::move(prefix)} {}
+
+  PrefixWithConstraints(std::string prefix,
+                        std::vector<BitRangeConstraint> constraints)
+      : prefix_{std::move(prefix)}, constraints_{std::move(constraints)} {}
+};
+
+// Wrap plain prefixes (specified without any brackets) into
+// `PrefixWithConstraints` without constraints. Use this wherever prefixes come
+// from an interface that has no notion of constraints, for example the
+// `--encode-as-id` command-line option.
+inline std::vector<PrefixWithConstraints> toPrefixesWithoutConstraints(
+    std::vector<std::string> prefixesWithoutAngleBrackets) {
+  return ::ranges::to_vector(
+      ad_utility::RvalueView{prefixesWithoutAngleBrackets} |
+      ql::views::transform([](std::string&& prefix) {
+        return PrefixWithConstraints{std::move(prefix)};
+      }));
+}
+}  // namespace encodedIris
+
 template <size_t NumBitsTotal, size_t NumBitsTags,
           typename HardcodedPrefixesT = NoHardcodedPrefixes>
 class EncodedIriManagerImpl {
@@ -71,17 +112,30 @@ class EncodedIriManagerImpl {
  public:
   static constexpr size_t NumBitsEncoding = NumBitsTotal - NumBitsTags;
 
-  // We use 4-bit nibbles per digit in the encoding.
-  static constexpr size_t NibbleSize = 4;
-  static constexpr size_t NumDigits = NumBitsEncoding / NibbleSize;
-  static_assert(NumBitsEncoding % NibbleSize == 0);
+  using BitRangeConstraint = encodedIris::BitRangeConstraint;
+  using PrefixWithConstraints = encodedIris::PrefixWithConstraints;
+
+  // The encoding of the digits for prefixes without constraints, see
+  // `EncodedIriNibbleEncoding.h`.
+  using NibbleEncoder = encodedIris::NibbleEncoder<NumBitsEncoding>;
+  static constexpr size_t NibbleSize = NibbleEncoder::NibbleSize;
+  static constexpr size_t NumDigits = NibbleEncoder::NumDigits;
 
   static_assert(NumBitsTotal <= 64);
   static_assert(NumBitsTags <= 64);
-  static_assert(NumDigits > 0);
 
   // The prefixes of the IRIs that will be encoded.
   std::vector<std::string> prefixes_;
+
+  // The constraints for each of the `prefixes_`, in the same order and with the
+  // same size. An empty entry means that the corresponding prefix has no
+  // constraints, so almost all entries are typically empty. See
+  // `encodedIris::BitRangeConstraint`.
+  //
+  // NOTE: This is a separate vector (and not a member of a combined struct), so
+  // that the JSON representation of `prefixes_`, which is part of the index
+  // metadata of every existing index, stays exactly as it was.
+  std::vector<std::vector<BitRangeConstraint>> constraintsPerPrefix_;
 
   static constexpr auto maxNumPrefixes_ = 1ULL << NumBitsTags;
 
@@ -100,28 +154,88 @@ class EncodedIriManagerImpl {
   // deserialization from JSON to initialize the EncodedIriManager. See the
   // note in `from_json`.
   explicit EncodedIriManagerImpl(
-      std::vector<std::string> prefixesWithoutAngleBrackets) {
-    // Add hardcoded prefixes.
+      std::vector<std::string> prefixesWithoutAngleBrackets)
+      : EncodedIriManagerImpl{ConstraintsTag{},
+                              encodedIris::toPrefixesWithoutConstraints(
+                                  std::move(prefixesWithoutAngleBrackets))} {}
+
+  // Construct from a list of prefixes with constraints (see
+  // `encodedIris::PrefixWithConstraints`). The prefixes have to be specified
+  // without any brackets, exactly as for the constructor above.
+  //
+  // NOTE: This is a named factory and not a constructor, because a constructor
+  // taking a `std::vector<PrefixWithConstraints>` would be ambiguous with the
+  // one above for a braced initializer such as `{{"a", "b"}}`.
+  static EncodedIriManagerImpl fromPrefixesWithConstraints(
+      std::vector<PrefixWithConstraints> prefixesWithConstraints) {
+    return EncodedIriManagerImpl{ConstraintsTag{},
+                                 std::move(prefixesWithConstraints)};
+  }
+
+ private:
+  // Tag to distinguish the constructor below from the public one above.
+  struct ConstraintsTag {};
+
+  EncodedIriManagerImpl(
+      ConstraintsTag,
+      std::vector<PrefixWithConstraints> prefixesWithConstraints) {
+    // Add hardcoded prefixes. They never have constraints.
     for (const auto& prefix : HardcodedPrefixes) {
       // Adding a hardcoded prefix a second time in the constructor is an error.
       AD_CONTRACT_CHECK(
-          !ad_utility::contains(prefixesWithoutAngleBrackets, prefix));
-      prefixesWithoutAngleBrackets.emplace_back(prefix);
+          ql::ranges::find(prefixesWithConstraints, prefix,
+                           &PrefixWithConstraints::prefix_) ==
+              prefixesWithConstraints.end(),
+          "The prefix \"", prefix,
+          "\" for the encoding of IRIs is always added automatically and must "
+          "not be specified explicitly");
+      prefixesWithConstraints.emplace_back(std::string{prefix});
     }
-    if (prefixesWithoutAngleBrackets.empty()) {
+    if (prefixesWithConstraints.empty()) {
       return;
     }
     // Sort the prefixes lexicographically to make the ordering deterministic
-    // (provided that the prefixes do not end with digits).
-    ql::ranges::sort(prefixesWithoutAngleBrackets);
+    // (provided that the prefixes do not end with digits). The constraints are
+    // moved along with their prefix.
+    ql::ranges::sort(prefixesWithConstraints, std::less<>{},
+                     &PrefixWithConstraints::prefix_);
 
-    // Remove duplicates.
-    //
+    // Validate the constraints of each prefix, and normalize them into the form
+    // that the (de)compression requires, see
+    // `BitRangeConstraint::normalizeAndValidate`.
+    for (auto& [prefix, constraints] : prefixesWithConstraints) {
+      BitRangeConstraint::normalizeAndValidate(constraints, NumBitsEncoding,
+                                               prefix);
+    }
+
+    // Remove duplicates. A prefix that is specified more than once with
+    // different constraints is an error, because there would be no way to
+    // decide which of them to apply.
+    for (const auto& [a, b] :
+         ad_utility::pairwiseView(prefixesWithConstraints)) {
+      if (a.prefix_ == b.prefix_ && a.constraints_ != b.constraints_) {
+        throw std::runtime_error(absl::StrCat(
+            "The prefix \"", a.prefix_,
+            "\" for the encoding of IRIs was specified more than once, but "
+            "with different constraints"));
+      }
+    }
     // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the
     // return types between `std::ranges` and `range-v3`.
-    prefixesWithoutAngleBrackets.erase(
-        ::ranges::unique(prefixesWithoutAngleBrackets),
-        prefixesWithoutAngleBrackets.end());
+    prefixesWithConstraints.erase(
+        ::ranges::unique(prefixesWithConstraints, std::equal_to<>{},
+                         &PrefixWithConstraints::prefix_),
+        prefixesWithConstraints.end());
+
+    // Split the prefixes and their constraints into the two parallel vectors
+    // that this class stores. Both passes move out of
+    // `prefixesWithConstraints`, but each of them only touches one of the two
+    // members, so they do not interfere.
+    auto prefixesWithoutAngleBrackets =
+        ::ranges::to_vector(prefixesWithConstraints |
+                            ql::views::transform([](PrefixWithConstraints& p) {
+                              return std::move(p.prefix_);
+                            }));
 
     if (prefixesWithoutAngleBrackets.size() > maxNumPrefixes_) {
       throw std::runtime_error(absl::StrCat(
@@ -130,10 +244,8 @@ class EncodedIriManagerImpl {
           "the maximum is ", maxNumPrefixes_));
     }
 
-    // TODO<C++23> use `std::views::adjacent`.
-    for (size_t i = 0; i < prefixesWithoutAngleBrackets.size() - 1; ++i) {
-      const auto& a = prefixesWithoutAngleBrackets.at(i);
-      const auto& b = prefixesWithoutAngleBrackets.at(i + 1);
+    for (const auto& [a, b] :
+         ad_utility::pairwiseView(prefixesWithoutAngleBrackets)) {
       if (ql::starts_with(b, a)) {
         throw std::runtime_error(absl::StrCat(
             "None of the prefixes specified with `--encode-as-id` "
@@ -151,8 +263,17 @@ class EncodedIriManagerImpl {
       }
       prefixes_.push_back(absl::StrCat("<", prefix));
     }
+    // Only now that the input is known to be valid, move the constraints
+    // directly into their member.
+    constraintsPerPrefix_.reserve(prefixesWithConstraints.size());
+    ql::ranges::move(
+        prefixesWithConstraints |
+            ql::views::transform(&PrefixWithConstraints::constraints_),
+        std::back_inserter(constraintsPerPrefix_));
+    AD_CORRECTNESS_CHECK(constraintsPerPrefix_.size() == prefixes_.size());
   }
 
+ public:
   // Try to encode the given string as an `Id`. If the encoding fails, return
   // `std::nullopt`. This happens in one of the following cases:
   //
@@ -160,6 +281,12 @@ class EncodedIriManagerImpl {
   // 2. The string does not start with any of the `prefixes_`
   // 3. After the matching prefix, there are characters other than `[0-9]`
   // 4. There are more digits than fit into `NumBitsEncoding` (4 bits / digit)
+  //
+  // For a prefix with constraints (see `encodedIris::BitRangeConstraint`), 4.
+  // is replaced by the following cases: the number does not fit into 64 bits,
+  // it has leading zeros, it violates one of the constraints, or the bits that
+  // remain after removing the constrained ones do not fit into
+  // `NumBitsEncoding`.
   std::optional<Id> encode(std::string_view repr) const {
     // Find the matching prefix.
     auto it = ql::ranges::find_if(prefixes_, [&repr](std::string_view prefix) {
@@ -177,14 +304,20 @@ class EncodedIriManagerImpl {
       return std::nullopt;
     }
     std::string_view numString = numStringOpt.value();
-    if (numString.size() > NumDigits) {
+    auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
+    const auto& constraints = constraintsPerPrefix_.at(prefixIndex);
+
+    // Prefixes with constraints use the constrained encoding, see
+    // `BitRangeConstraint::encode`. Note that they have a completely different
+    // payload layout, so the digit-based limit does not apply to them.
+    auto payload = constraints.empty()
+                       ? NibbleEncoder::encode(numString)
+                       : BitRangeConstraint::encode(numString, constraints,
+                                                    NumBitsEncoding);
+    if (!payload.has_value()) {
       return std::nullopt;
     }
-
-    // Get the index of the used prefix, and run the actual encoding.
-    auto prefixIndex = static_cast<size_t>(it - prefixes_.begin());
-    return makeIdFromPrefixIdxAndPayload(prefixIndex,
-                                         encodeDecimalToNBit(numString));
+    return makeIdFromPrefixIdxAndPayload(prefixIndex, payload.value());
   }
 
   // combine the integer representation of the prefix and of the payload into a
@@ -200,21 +333,38 @@ class EncodedIriManagerImpl {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
     // Get only the rightmost bits that represent the digits.
     auto [prefixIdx, digitEncoding] = splitIntoPrefixIdxAndPayload(id);
-    return toStringWithGivenPrefix(digitEncoding, prefixes_.at(prefixIdx));
+    const auto& constraints = constraintsPerPrefix_.at(prefixIdx);
+    if (!constraints.empty()) {
+      return absl::StrCat(prefixes_.at(prefixIdx),
+                          BitRangeConstraint::reinsertConstrainedBits(
+                              digitEncoding, constraints),
+                          ">");
+    }
+    return NibbleEncoder::toStringWithGivenPrefix(digitEncoding,
+                                                  prefixes_.at(prefixIdx));
   }
 
-  // The second half of `toString` above: combine the integer encoding of the
-  // payload and the prefix string into a result string that represents an IRI.
-  // Note: This function expects, that the prefix starts with `<`.
-  static std::string toStringWithGivenPrefix(uint64_t digitEncoding,
-                                             std::string_view prefix) {
-    AD_EXPENSIVE_CHECK(ql::starts_with(prefix, '<'));
-    std::string result;
-    result.reserve(prefix.size() + NumDigits + 1);
-    result = prefix;
-    decodeDecimalFrom64Bit(result, digitEncoding);
-    result.push_back('>');
-    return result;
+  // Return the number that is encoded in `id`, provided that the prefix of `id`
+  // has constraints. This is the exact inverse of the number that was parsed
+  // from the IRI, which makes it possible to recover a number that does not fit
+  // into `NumBitsEncoding` bits.
+  //
+  // NOTE: This function has no caller inside QLever. It is part of the public
+  // interface for outside applications (in particular BMW), which use the
+  // constrained encoding precisely to get their original 64-bit IDs back out of
+  // an `Id` without going through the string representation. Do not remove it
+  // just because it looks unused.
+  //
+  // PRECONDITION: `id` was encoded by this manager, using a prefix that has
+  // constraints.
+  uint64_t getNumberOfConstrainedId(Id id) const {
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::EncodedVal);
+    auto [prefixIdx, payload] = splitIntoPrefixIdxAndPayload(id);
+    const auto& constraints = constraintsPerPrefix_.at(prefixIdx);
+    AD_CONTRACT_CHECK(!constraints.empty(),
+                      "`getNumberOfConstrainedId` was called for an `Id` whose "
+                      "prefix has no constraints");
+    return BitRangeConstraint::reinsertConstrainedBits(payload, constraints);
   }
 
   // From the `Id` (which is expected to be of type `EncodedVal`, else an
@@ -237,7 +387,7 @@ class EncodedIriManagerImpl {
   static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndDecodedPayload(
       Id id) {
     auto [prefix, payload] = splitIntoPrefixIdxAndPayload(id);
-    return {prefix, decodeDecimalFrom64Bit(payload)};
+    return {prefix, NibbleEncoder::decode(payload)};
   }
 
   // The index of a prefix. This is the same prefix that is used for
@@ -254,11 +404,23 @@ class EncodedIriManagerImpl {
   }
 
   // Conversion to and from JSON.
-  static constexpr const char* jsonKey_ =
+  static constexpr std::string_view prefixesJsonKey_ =
       "prefixes-with-leading-angle-brackets";
+  // The JSON key for the constraints. It is separate from `prefixesJsonKey_`
+  // and optional, so that indexes that were built before the constraints
+  // existed (and indexes without any constraints) can still be read, see
+  // `from_json`.
+  static constexpr std::string_view constraintsJsonKey_ =
+      "prefix-bit-constraints";
   friend void to_json(nlohmann::json& j,
                       const EncodedIriManagerImpl& encodedIriManager) {
-    j[jsonKey_] = encodedIriManager.prefixes_;
+    j[prefixesJsonKey_] = encodedIriManager.prefixes_;
+    // Only write the constraints if there are any, so that the metadata of an
+    // index without constraints is unchanged.
+    if (ql::ranges::any_of(encodedIriManager.constraintsPerPrefix_,
+                           [](const auto& c) { return !c.empty(); })) {
+      j[constraintsJsonKey_] = encodedIriManager.constraintsPerPrefix_;
+    }
   }
   friend void from_json(const nlohmann::json& j,
                         EncodedIriManagerImpl& encodedIriManager) {
@@ -272,75 +434,44 @@ class EncodedIriManagerImpl {
     // go through the normal constructor and use the current hardcoded
     // prefixes.
     encodedIriManager.prefixes_ =
-        static_cast<std::vector<std::string>>(j[jsonKey_]);
+        static_cast<std::vector<std::string>>(j[prefixesJsonKey_]);
+    // The constraints are optional; an index that was built without them (or
+    // without any constrained prefix) simply has no constrained prefixes.
+    if (j.contains(constraintsJsonKey_)) {
+      encodedIriManager.constraintsPerPrefix_ =
+          j[constraintsJsonKey_]
+              .template get<std::vector<std::vector<BitRangeConstraint>>>();
+      if (encodedIriManager.constraintsPerPrefix_.size() !=
+          encodedIriManager.prefixes_.size()) {
+        throw std::runtime_error(absl::StrCat(
+            "The index metadata specifies ", encodedIriManager.prefixes_.size(),
+            " prefixes for the encoding of IRIs, but ",
+            encodedIriManager.constraintsPerPrefix_.size(),
+            " lists of constraints for them; the index is corrupted"));
+      }
+      // Validate and normalize, so that a broken set of constraints is reported
+      // here and not later from deep inside the parser or the exporter.
+      for (size_t i = 0; i < encodedIriManager.prefixes_.size(); ++i) {
+        BitRangeConstraint::normalizeAndValidate(
+            encodedIriManager.constraintsPerPrefix_.at(i), NumBitsEncoding,
+            encodedIriManager.prefixes_.at(i));
+      }
+    } else {
+      encodedIriManager.constraintsPerPrefix_.assign(
+          encodedIriManager.prefixes_.size(), {});
+    }
   }
 
   // Hash support for use in `TestIndexConfig`.
   template <typename H>
   friend H AbslHashValue(H h, const EncodedIriManagerImpl& manager) {
-    return H::combine(std::move(h), manager.prefixes_);
+    return H::combine(std::move(h), manager.prefixes_,
+                      manager.constraintsPerPrefix_);
   }
 
   // Equality operator for use in `TestIndexConfig`.
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_)
-
-  // Encode the `numberStr` (which may only consist of digits) into a 64-bit
-  // number.
-  static constexpr uint64_t encodeDecimalToNBit(std::string_view numberStr) {
-    auto len = numberStr.size();
-    AD_CORRECTNESS_CHECK(len <= NumDigits);
-
-    uint64_t result = 0;
-
-    // Compute the starting shift (for the first digit).
-    uint64_t shift = NumBitsEncoding - NibbleSize;
-
-    for (const char digitChar : numberStr) {
-      // Deliberately encode [0, ..., 9] as [1, ..., A], so that the padding
-      // nibble `0`is smaller than any valid digit encoding.
-      uint8_t digit = (digitChar - '0') + 1;
-      result |= static_cast<uint64_t>(digit) << shift;
-      shift -= NibbleSize;
-    }
-    return result;
-  }
-
-  // Helper for decoding numbers. Calls `F` for every digit (from high to low)
-  // in the decoded representation of `encoded`.
-  template <typename F>
-  static void decodeDecimalFrom64BitHelper(F processDigit, uint64_t encoded) {
-    size_t shift = NumBitsEncoding - NibbleSize;
-    auto numTrailingZeros = absl::countr_zero(encoded);
-    size_t numTrailingZeroNibbles = numTrailingZeros / NibbleSize;
-    size_t len = NumDigits - numTrailingZeroNibbles;
-    for (size_t i = 0; i < len; ++i) {
-      processDigit(((encoded >> shift) & 0xF) - 1);
-      shift -= NibbleSize;
-    }
-  }
-
-  // The inverse of `encodeDecimalToNBit`. The result is appended to the
-  // `result` string.
-  static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
-    decodeDecimalFrom64BitHelper(
-        [&result](auto digit) {
-          result.push_back(static_cast<char>(digit + '0'));
-        },
-        encoded);
-  }
-
-  // Overload of `decodeDecimalFrom64Bit` that returns the result as a
-  // `uint64_t`.
-  static uint64_t decodeDecimalFrom64Bit(uint64_t encoded) {
-    uint64_t result = 0;
-    decodeDecimalFrom64BitHelper(
-        [&result](auto digit) {
-          result *= 10;
-          result += digit;
-        },
-        encoded);
-    return result;
-  }
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(EncodedIriManagerImpl, prefixes_,
+                                              constraintsPerPrefix_)
 };
 
 // The default encoder for IRIs in QLever: 60 bits are used for the complete
