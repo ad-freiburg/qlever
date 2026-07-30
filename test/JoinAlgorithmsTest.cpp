@@ -610,12 +610,14 @@ struct IdRowAdder {
   IdTableView<0> rightTable_{2, ad_utility::testing::makeAllocator()};
 
   // Called by cartesian product path with materialized tables.
-  void setInput(const auto& left, const auto& right) {
+  template <typename Left, typename Right>
+  void setInput(const Left& left, const Right& right) {
     leftTable_ = left.template asStaticView<0>();
     rightTable_ = right.template asStaticView<0>();
   }
 
-  void setOnlyLeftInputForOptionalJoin(const auto& left) {
+  template <typename Left>
+  void setOnlyLeftInputForOptionalJoin(const Left& left) {
     leftTable_ = left.template asStaticView<0>();
   }
 

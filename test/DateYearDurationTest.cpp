@@ -188,7 +188,6 @@ testing::Matcher<std::optional<DateYearOrDuration>> expectDuration(
   return Optional(
       AllOf(AD_PROPERTY(DateYearOrDuration, isDayTimeDuration, IsTrue()),
             Eq(expected)));
-}
 }  // namespace
 
 TEST(Date, OrderRandomValues) {
@@ -536,39 +535,47 @@ TEST(Date, parseErrors) {
 TEST(Date, toEpoch) {
   {
     using namespace std::chrono;
-    auto ns = [](sys_time<nanoseconds> v) {
+
+    // Turns the seconds timestamp into number of milliseconds
+    auto ms = [](sys_time<milliseconds> v) {
       return v.time_since_epoch().count();
     };
 
-    Date date = Date(1970, 1, 1, 0, 0, 0);
-    sys_time<std::chrono::nanoseconds> timestamp =
-        sys_time<std::chrono::nanoseconds>{nanoseconds{0}};
+    Date date = Date(1344, 2, 11, 10, 12, 0);
+    sys_time<std::chrono::milliseconds> timestamp =
+        sys_time<std::chrono::milliseconds>{seconds{-19'751'089'680}};
     auto result = date.toEpoch();
     ASSERT_TRUE(result);
-    EXPECT_EQ(ns(timestamp), ns(result.value()));
+    EXPECT_EQ(ms(timestamp), ms(result.value()));
+
+    date = Date(1970, 1, 1, 0, 0, 0);
+    timestamp = sys_time<std::chrono::milliseconds>{seconds{0}};
+    result = date.toEpoch();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(ms(timestamp), ms(result.value()));
 
     date = Date(1969, 12, 31, 23, 59, 20);
-    timestamp = sys_time<nanoseconds>{seconds{-40}};
+    timestamp = sys_time<milliseconds>{seconds{-40}};
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_EQ(ns(timestamp), ns(date.toEpoch().value()));
+    EXPECT_EQ(ms(timestamp), ms(date.toEpoch().value()));
 
     date = Date(1970, 1, 1, 1, 1, 1);
-    timestamp = sys_time<nanoseconds>{seconds{3661}};
+    timestamp = sys_time<milliseconds>{seconds{3661}};
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_EQ(ns(timestamp), ns(date.toEpoch().value()));
+    EXPECT_EQ(ms(timestamp), ms(date.toEpoch().value()));
 
     date = Date(1970, 1, 1, 0, 0, 20.235);
     auto second = duration<double>{20.235};
-    timestamp = sys_time<nanoseconds>{duration_cast<nanoseconds>(second)};
+    timestamp = sys_time<milliseconds>{duration_cast<seconds>(second)};
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_NEAR(ns(timestamp), ns(date.toEpoch().value()), 500000);
+    EXPECT_NEAR(ms(timestamp), ms(date.toEpoch().value()), 500000);
 
     date = Date(1999, 2, 1, 8, 15, 13.098);
     second = duration<double>{13.098};
-    timestamp = sys_time<nanoseconds>{seconds{917856900}} +
-                duration_cast<nanoseconds>(second);
+    timestamp = sys_time<milliseconds>{seconds{917856900}} +
+                duration_cast<seconds>(second);
     ASSERT_TRUE(date.toEpoch());
-    EXPECT_NEAR(ns(timestamp), ns(date.toEpoch().value()), 500000);
+    EXPECT_NEAR(ms(timestamp), ms(date.toEpoch().value()), 500000);
 
     // Test invalid `Date`.
     date = Date(1970, 11, 31, 13, 24, 24);
@@ -582,8 +589,8 @@ TEST(Date, toEpoch) {
     Date date1 = Date(1999, 10, 11, 10, 5, 30);  // UTC.
     for (int i = 1; i < 24; i++) {
       Date date2 = Date(1999, 10, 11, 10, 5, 30, i);  // UTC + i.
-      // Difference in hours is converted to ns to be compared.
-      long long expected = static_cast<long long>(i) * 60 * 60 * 1'000'000'000;
+      // Difference in hours is converted to milliseconds to be compared.
+      long long expected = static_cast<long long>(i) * 60 * 60 * 1'000;
       EXPECT_EQ(expected,
                 (date1.toEpoch().value() - date2.toEpoch().value()).count());
       date2 = Date(1999, 10, 11, 10, 5, 30, -i);  // UTC - i
@@ -956,10 +963,17 @@ TEST(DateYearOrDuration, Subtraction) {
         DayTimeDuration(DayTimeDuration::Type::Positive, 10, 0, 0, 0));
     EXPECT_THAT(date - duration,
                 Optional(Eq(DateYearOrDuration(Date(2004, 5, 6, 0, 0, 0)))));
+
+    // Result stored as `LargeYear`.
+    date = DateYearOrDuration(Date(-9'999, 1, 1, 0, 0, 0));
+    duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 50, 0, 0, 0));
+    EXPECT_THAT(date - duration,
+                Optional(Eq(DateYearOrDuration(
+                    -10'000, DateYearOrDuration::Type::Year))));
   }
   {
     // Test for `LargeYear` - `LargeYear`.
-    using namespace testing;
     DateYearOrDuration year1 =
         DateYearOrDuration(12'000, DateYearOrDuration::Type::Year);
     DateYearOrDuration year2 =
@@ -993,6 +1007,26 @@ TEST(DateYearOrDuration, Subtraction) {
     duration = DateYearOrDuration(
         DayTimeDuration(DayTimeDuration::Type::Positive, 0, 20, 10, 33));
     EXPECT_EQ(date - duration, std::nullopt);
+  }
+  {
+    // Test too large `DayTimeDuration` results (>1'048'575 days).
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 1, 30, 10, 33));
+    DateYearOrDuration duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Negative, 1'048'575, 0, 0, 0));
+    EXPECT_EQ(duration2 - duration, std::nullopt);
+
+    DateYearOrDuration date1 =
+        DateYearOrDuration(Date(5800, 12, 22, 12, 6, 12));
+    DateYearOrDuration date2 =
+        DateYearOrDuration(Date(-1200, 12, 20, 15, 15, 59));
+    EXPECT_EQ(date1 - date2, std::nullopt);
+
+    DateYearOrDuration year1 =
+        DateYearOrDuration(25800, DateYearOrDuration::Type::Year);
+    DateYearOrDuration year2 =
+        DateYearOrDuration(11200, DateYearOrDuration::Type::Year);
+    EXPECT_EQ(year1 - year2, std::nullopt);
   }
 }
 
@@ -1070,7 +1104,7 @@ TEST(DateYearOrDuration, Addition) {
         Optional(Eq(DateYearOrDuration(Date(2000, 4, 19, 6, 20, 0, -4)))));
   }
   {
-    // Test invalid subtractions.
+    // Test invalid additions.
     // Invalid `Date`.
     DateYearOrDuration date =
         DateYearOrDuration(Date(1989, 02, 30, 20, 10, 33));
@@ -1092,5 +1126,14 @@ TEST(DateYearOrDuration, Addition) {
         DateYearOrDuration(11'000, DateYearOrDuration::Type::Year);
     EXPECT_EQ(year1 + year2, std::nullopt);
   }
+  {
+    // Test too large `DayTimeDuration` results (>1'048'575 days).
+    DateYearOrDuration duration = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 1, 30, 10, 33));
+    DateYearOrDuration duration2 = DateYearOrDuration(
+        DayTimeDuration(DayTimeDuration::Type::Positive, 1'048'575, 0, 0, 0));
+    EXPECT_EQ(duration2 + duration, std::nullopt);
+  }
+}
 }
 #endif

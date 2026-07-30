@@ -44,7 +44,7 @@ inline auto getUniqueElements = [](const EvaluationContext* context,
   // We mitigate this issue by using the `filter` from range-v3 +
   // `ForceInputView`, which disallows multiple calls to `begin`.
   return ad_utility::ForceInputView(
-      ad_utility::OwningView(std::move(operandGenerator)) |
+      std::move(operandGenerator) |
       ::ranges::views::filter(
           [set = std::move(uniqueHashSet)](auto& operand) mutable {
             return set.insert(operand).second;
@@ -91,6 +91,10 @@ class AggregateExpression : public SparqlExpression {
   // Needed for the pattern trick, see `SparqlExpression.h`.
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
   getVariableForCount() const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return _child->isDeterministic();
+  }
 
  private:
   // _________________________________________________________________________

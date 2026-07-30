@@ -204,8 +204,7 @@ class CompressedExternalIdTableWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return ql::views::join(
-        ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
+    return ql::views::join(makeGeneratorForIdTable<N>(index));
   }
 
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -564,6 +563,8 @@ class CompressedExternalIdTableSorterTypeErased {
  public:
   // Push a complete block at once.
   virtual void pushBlock(const IdTableStatic<0>& block) = 0;
+  // Push a complete block given as a non-owning view at once.
+  virtual void pushBlock(const IdTableView<0>& block) = 0;
   // Get the sorted output after all blocks have been pushed. If `blocksize ==
   // nullopt`, the size of the returned blocks will be chosen automatically.
   virtual ad_utility::InputRangeTypeErased<IdTableStatic<0>> getSortedOutput(
@@ -676,9 +677,7 @@ class CompressedExternalIdTableSorter
   // output phase and return a generator that yields the sorted elements one by
   // one. Either this function or the following function must be called exactly
   // once.
-  auto sortedView() {
-    return ql::views::join(ad_utility::OwningView{getSortedBlocks()});
-  }
+  auto sortedView() { return ql::views::join(getSortedBlocks()); }
 
   // Similar to `sortedView` (see above), but the elements are yielded in
   // blocks. The size of the blocks is `blocksize` if specified, otherwise it
@@ -709,10 +708,12 @@ class CompressedExternalIdTableSorter
   // The implementation of the type-erased interface. Push a complete block at
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
-    AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    ql::ranges::for_each(block,
-                         [ptr = this](const auto& row) { ptr->push(row); });
+    pushBlockImpl(block);
   }
+
+  // The implementation of the type-erased interface. Push a complete block
+  // given as a non-owning view at once.
+  void pushBlock(const IdTableView<0>& block) override { pushBlockImpl(block); }
 
   // The implementation of the type-erased interface. Get the sorted blocks as
   // dynamic IdTables.
@@ -722,6 +723,14 @@ class CompressedExternalIdTableSorter
   }
 
  private:
+  // Common implementation for the two `pushBlock` overloads above.
+  template <typename IdTableLike>
+  void pushBlockImpl(const IdTableLike& block) {
+    AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
+    ql::ranges::for_each(block,
+                         [ptr = this](const auto& row) { ptr->push(row); });
+  }
+
   template <typename RowGenVectorType, typename CompType>
   struct SortState
       : ad_utility::InputRangeMixin<SortState<RowGenVectorType, CompType>> {

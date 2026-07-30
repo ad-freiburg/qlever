@@ -219,10 +219,28 @@ class DateYearOrDuration {
       const DateYearOrDuration& rhs) const;
   [[nodiscard]] std::optional<DateYearOrDuration> operator+(
       const DateYearOrDuration& rhs) const;
+
+  // From a Unix Epoch timestamp, construct the corresponding `Date` or
+  // `LargeYear`.
+  static DateYearOrDuration makeFromEpoch(Date::Milliseconds timestamp,
+                                          Date::TimeZone tz);
 #endif
 };
 #ifdef QLEVER_CPP_17
 static_assert(std::is_default_constructible_v<DateYearOrDuration>);
+#endif
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// Calculates `Date` that is time of the `DayTimeDuration` earlier. If the
+// resulting dates year is not in [-9999,9999] this will return a `LargeYear`.
+// Therefore the return type is `DateYearOrDuration`.
+std::optional<DateYearOrDuration> operator-(const Date lhs,
+                                            const DayTimeDuration& rhs);
+
+// Calculates `Date` that is time of the `DayTimeDuration` later. As seen
+// above this can result in a `LargeYear`.
+std::optional<DateYearOrDuration> operator+(const Date lhs,
+                                            const DayTimeDuration& rhs);
 #endif
 
 #endif  //  QLEVER_DATES_AND_DURATION_H

@@ -149,7 +149,7 @@ TEST(Distinct, nonLazy) {
         distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
     ASSERT_TRUE(result->isFullyMaterialized());
     EXPECT_EQ(
-        result->idTable(),
+        result->idTableView(),
         makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
   }
 
@@ -157,7 +157,7 @@ TEST(Distinct, nonLazy) {
     auto result = distinct.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
     ASSERT_TRUE(result->isFullyMaterialized());
     EXPECT_EQ(
-        result->idTable(),
+        result->idTableView(),
         makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
   }
 }
@@ -182,7 +182,7 @@ TEST(Distinct, nonLazyWithLazyInputs) {
 
   auto result = distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
-  EXPECT_EQ(result->idTable(),
+  EXPECT_EQ(result->idTableView(),
             makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
 }
 

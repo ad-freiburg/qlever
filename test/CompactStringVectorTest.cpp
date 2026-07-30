@@ -9,12 +9,14 @@
 #include <algorithm>
 
 #include "backports/iterator.h"
-#include "global/Pattern.h"
+#include "util/CompactStringVector.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
 // _____________________________________________________________________________
-auto iterablesEqual(const auto& a, const auto& b) {
+template <typename A, typename B>
+auto iterablesEqual(const A& a, const B& b) {
   ASSERT_EQ(a.size(), b.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);
@@ -288,6 +290,45 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
   vectorsEqual(input, compactVector);
 
   ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, ZeroCopyDeserialization) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  CompactVector original;
+  original.build(input);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << original;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = CompactVector::fromZeroCopyDeserializer(readSerializer);
+
+  vectorsEqual(input, view);
+  vectorsEqual(view, original);
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, ZeroCopyViewCannotBeMutated) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  CompactVector original;
+  original.build(input);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << original;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = CompactVector::fromZeroCopyDeserializer(readSerializer);
+
+  // A non-owning, zero-copy view must not be mutated via `build()`, which
+  // requires owned storage.
+  EXPECT_ANY_THROW(view.build(input));
 }
 
 // _____________________________________________________________________________

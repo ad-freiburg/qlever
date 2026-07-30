@@ -5,14 +5,17 @@
 #ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
 #define QLEVER_SRC_UTIL_STRINGUTILS_H
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/keywords.h"
+#include "backports/span.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
+#include "util/UnicodeSupport.h"
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -34,15 +37,23 @@ bool strIsLangTag(const std::string& strLangTag);
 // Implements a case insensitive `language-range` to `language-tag`comparison.
 bool isLanguageMatch(std::string& languageTag, std::string& languageRange);
 
-/*
- * @brief convert a UTF-8 String to lowercase according to the held locale
- * @param s UTF-8 encoded string
- * @return The lowercase version of s, also encoded as UTF-8
- */
-std::string utf8ToLower(std::string_view s);
+// Encode the single Unicode `codepoint` as UTF-8 and append the resulting bytes
+// to `output`. Codepoints that are not valid Unicode scalar values (larger than
+// 0x10FFFF, or in the surrogate range 0xD800-0xDFFF) are encoded as the Unicode
+// replacement character U+FFFD. This function does not depend on ICU.
+void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
 
-// Get the uppercase value. For details see `utf8ToLower` above
-std::string utf8ToUpper(std::string_view s);
+// Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used
+// for locale-specific case folding (e.g. "tr" for Turkish); the default empty
+// string uses the locale-independent root rules. If `useICU == false`, only
+// ASCII characters are lowercased (each byte is treated individually) and
+// `localeName` is ignored.
+template <bool useICU = useICUDefault>
+std::string utf8ToLower(std::string_view s, const char* localeName = "");
+
+// Get the uppercase value. For details see `utf8ToLower` above.
+template <bool useICU = useICUDefault>
+std::string utf8ToUpper(std::string_view s, const char* localeName = "");
 
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
@@ -74,6 +85,9 @@ std::string_view getUTF8Substring(const std::string_view str, size_t start);
  * @param prefixLength The number of Unicode codepoints we want to extract.
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
  * codepoints of sv, encoded as UTF-8
+ *
+ * NOTE: Counting codepoints only requires the byte structure of UTF-8, so this
+ * function is ICU-free and does not depend on the build configuration.
  */
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
                                                   size_t prefixLength);
@@ -161,13 +175,13 @@ std::string insertThousandSeparator(const std::string_view str,
 // and compare the hashes instead of the actual strings.
 inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
                                             std::string_view view2) {
-  using byte_view = std::basic_string_view<volatile std::byte>;
+  using byte_view = ql::span<const volatile std::byte>;
   auto impl = [](byte_view str1, byte_view str2) {
-    if (str1.length() != str2.length()) {
+    if (str1.size() != str2.size()) {
       return false;
     }
     volatile std::byte mismatchFound{0};
-    for (size_t i = 0; i < str1.length(); ++i) {
+    for (size_t i = 0; i < str1.size(); ++i) {
       // In C++20 compound assignment of volatile variables causes a warning,
       // so we can't use 'mismatchFound |=' until compiling with C++23 where it
       // is fine again. mismatchFound can be interpreted as bool and "is false"
@@ -177,12 +191,12 @@ inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
     return !static_cast<bool>(mismatchFound);
   };
   auto toVolatile = [](std::string_view view) constexpr -> byte_view {
-    // Casting is safe because both types have the same size
+    // Casting is safe because both types have the same size.
     static_assert(sizeof(std::string_view::value_type) ==
                   sizeof(byte_view::value_type));
-    return {
-        static_cast<const std::byte*>(static_cast<const void*>(view.data())),
-        view.size()};
+    return byte_view(static_cast<const volatile std::byte*>(
+                         static_cast<const void*>(view.data())),
+                     view.size());
   };
   return impl(toVolatile(view1), toVolatile(view2));
 }

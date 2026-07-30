@@ -7,10 +7,11 @@
 #include <cmath>
 #include <optional>
 
+#include "global/Constants.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
-#include "util/GeoSparqlHelpers.h"
 
 // _____________________________________________________________________________
 GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {

@@ -98,7 +98,7 @@ Result Distinct::computeResult(bool requestLaziness) {
   if (subRes->isFullyMaterialized()) {
     IdTable idTable =
         ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
-          return self->outOfPlaceDistinct<width>(subRes->idTable());
+          return self->outOfPlaceDistinct<width>(subRes->idTableView());
         });
     AD_LOG_DEBUG << "Distinct result computation done." << endl;
     return {std::move(idTable), resultSortedOn(),
@@ -178,7 +178,7 @@ IdTable Distinct::distinct(
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
+IdTable Distinct::outOfPlaceDistinct(const IdTableView<0>& dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
   AD_LOG_DEBUG << "Distinct on " << dynInput.size() << " elements.\n";
   auto inputView = dynInput.asStaticView<WIDTH>();
@@ -227,6 +227,6 @@ std::unique_ptr<Operation> Distinct::cloneImpl() const {
 IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
   size_t width = input.numColumns();
   return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
-    return self->outOfPlaceDistinct<width>(input);
+    return self->outOfPlaceDistinct<width>(input.asStaticView<0>());
   });
 }

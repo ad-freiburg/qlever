@@ -193,8 +193,7 @@ Needed, because there is no `std` division function, that takes unconverted
 however, should be about as precise as possible, when having the return type
 `double`.
 */
-constexpr static double sizeTDivision(const size_t dividend,
-                                      const size_t divisor) {
+constexpr double sizeTDivision(const size_t dividend, const size_t divisor) {
   size_t quotient = dividend / divisor;
   return static_cast<double>(quotient) +
          static_cast<double>(dividend % divisor) / static_cast<double>(divisor);

@@ -124,7 +124,7 @@ class TransitivePathTest
           aggregateTables(result.idTables(), expected.numColumns());
       EXPECT_THAT(idTable, UnorderedElementsAreArray(expected));
     } else {
-      EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));
+      EXPECT_THAT(result.idTableView(), UnorderedElementsAreArray(expected));
     }
   }
 

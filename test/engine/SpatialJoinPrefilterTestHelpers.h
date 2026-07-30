@@ -27,11 +27,11 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/RuntimeParameters.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "rdfTypes/Literal.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/SourceLocation.h"
 
 // _____________________________________________________________________________
@@ -255,13 +255,13 @@ inline void runParsingAndSweeper(
     auto varToCol = spatialJoin->computeVariableToColumnMap();
     auto leftCol = varToCol.at(varLeft).columnIndex_;
     auto rightCol = varToCol.at(varRight).columnIndex_;
-    auto resultNumRows = result.idTable().numRows();
+    auto resultNumRows = result.idTableView().numRows();
     testResult = SweeperTestResult{};
     testResult.results_.reserve(resultNumRows);
-    for (size_t i = 0; i < result.idTable().numRows(); i++) {
+    for (size_t i = 0; i < result.idTableView().numRows(); i++) {
       testResult.results_.emplace_back(sjTask.joinType_,
-                                       result.idTable().at(i, leftCol),
-                                       result.idTable().at(i, rightCol), 0);
+                                       result.idTableView().at(i, leftCol),
+                                       result.idTableView().at(i, rightCol), 0);
     }
     if (spatialJoin->runtimeInfo().details_.contains(
             "num-geoms-dropped-by-prefilter")) {

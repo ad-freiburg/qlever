@@ -15,6 +15,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/VectorWithMemoryLimit.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
@@ -127,8 +128,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
-                ad_utility::OwningView{leftRes->idTables()} |
-                ql::views::transform([exists = !rightRes->idTable().empty(),
+                leftRes->idTables() |
+                ql::views::transform([exists = !rightRes->idTableView().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
                   // completely consumed.
@@ -145,8 +146,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     return lazyExistsJoin(std::move(leftRes), std::move(rightRes),
                           requestLaziness);
   }
-  const auto& right = rightRes->idTable();
-  const auto& left = leftRes->idTable();
+  const auto& right = rightRes->idTableView();
+  const auto& left = leftRes->idTableView();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
   // callbacks: one for each matching pair of rows from `left` and `right`, and
@@ -186,8 +187,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
 
   // Store the indices of rows for which the value of the `EXISTS` (in the added
   // Boolean column) should be `false`.
-  std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
-      allocator()};
+  ad_utility::VectorWithMemoryLimit<size_t> notExistsIndices{allocator()};
   // Helper lambda for computing the exists join with `callFixedSizeVi`, which
   // makes the number of join columns a template parameter.
   auto runForNumJoinCols = [&notExistsIndices, isCheap, &noopRowAdder,
@@ -314,12 +314,11 @@ std::optional<Result> ExistsJoin::tryLeftIndexNestedLoopJoinIfSuitable() {
 
   auto [leftRes, rightRes] = std::move(optionalResults).value();
 
-  IdTable result = leftRes->idTable().clone();
+  IdTable result = leftRes->cloneIdTable();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
       joinColumns_, std::move(leftRes), std::move(rightRes)};
-  addExistsColumn(
-      result, ad_utility::OwningView{nestedLoopJoin.computeLeftExistance()});
+  addExistsColumn(result, nestedLoopJoin.computeLeftExistance());
   return std::optional{
       Result{std::move(result), resultSortedOn(), std::move(localVocab)}};
 }
@@ -343,8 +342,7 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
       joinColumns_, std::move(leftRes), std::move(rightRes)};
   auto result = nestedLoopJoin.computeRightExistance(
       [this](auto&& idTable, LocalVocab localVocab,
-             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
-                 matchingTracker) {
+             const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {
         IdTable resultTable = AD_FWD(idTable).moveOrClone();
         addExistsColumn(resultTable, matchingTracker);
         return Result::IdTableVocabPair{std::move(resultTable),
@@ -419,9 +417,9 @@ struct LazyExistsJoinImpl
   static Result::LazyResult toOwnedRange(
       const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
-      return ad_utility::InputRangeTypeErased{std::array{
-          Result::IdTableVocabPair{IdTable{result->idTable().clone()},
-                                   result->getCopyOfLocalVocab()}}};
+      return ad_utility::InputRangeTypeErased{
+          std::array{Result::IdTableVocabPair{result->cloneIdTable(),
+                                              result->getCopyOfLocalVocab()}}};
     }
     return result->idTables();
   }

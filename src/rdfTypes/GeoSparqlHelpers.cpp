@@ -3,7 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>,
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "util/GeoSparqlHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 
 #include <absl/strings/charconv.h>
 #include <s2/s2earth.h>
@@ -60,6 +60,12 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 // _____________________________________________________________________________
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
   return utilGeomToWkt(getGeometryN(wkt, n));
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
+  auto [type, parsed] = parseGeoPointOrWkt(wkt);
+  return utilGeomToWkt(simplifyGeometry(parsed, tolerance));
 }
 
 // _____________________________________________________________________________

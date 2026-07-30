@@ -3,16 +3,20 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
+#include <re2/re2.h>
 
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "./util/IdTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/filesystem.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -22,6 +26,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
+#include "util/File.h"
 #include "util/GTestHelpers.h"
 
 using namespace ad_utility::vocabulary_merger;
@@ -42,6 +47,22 @@ bool vocabTestCompare(const IdMap& a, const std::vector<std::pair<Id, Id>>& b) {
 }
 
 auto V = ad_utility::testing::VocabId;
+
+// Write the given `words` as a partial vocabulary file at `path`, assigning
+// them consecutive local ids `0, 1, ...` in the given order and marking all of
+// them as not external.
+template <typename Range>
+void writePartialVocabularyFile(const std::string& path, const Range& words) {
+  ad_utility::serialization::FileWriteSerializer partialVocab(path);
+  partialVocab << words.size();
+  size_t localIdx = 0;
+  for (const auto& word : words) {
+    partialVocab << std::string_view{word};
+    partialVocab << false;
+    partialVocab << localIdx;
+    ++localIdx;
+  }
+}
 }  // namespace
 
 // Test fixture that sets up the binary files for partial vocabulary and
@@ -74,16 +95,16 @@ class MergeVocabularyTest : public ::testing::Test {
     _path0 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(0));
     _path1 = std::string(PARTIAL_VOCAB_WORDS_INFIX + std::to_string(1));
 
-    // create random subdirectory in /tmp
-    std::string tempPath = "";
-    _basePath = tempPath + _basePath + "/";
-    if (system(("mkdir -p " + _basePath).c_str())) {
-      // system should return 0 on success
-      std::cerr << "Could not create subfolder of tmp for test. this might "
-                   "lead to test failures\n";
+    // Create a subdirectory for the test files in the working directory.
+    _basePath = _basePath + "/";
+    ql::error_code errorCode;
+    ql::filesystem::create_directories(_basePath, errorCode);
+    if (errorCode) {
+      std::cerr << "Could not create the directory for the test files. This "
+                   "might lead to test failures\n";
     }
 
-    // make paths absolute under created tmp directory
+    // Prepend the created directory to the paths.
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
 
@@ -136,7 +157,7 @@ class MergeVocabularyTest : public ::testing::Test {
             w.index_ = localIdx;
             partialVocab << w;
             if (mapping) {
-              if (w.isBlankNode()) {
+              if (w.isBlankNode({})) {
                 mapping->emplace_back(
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
@@ -159,8 +180,9 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // __________________________________________________________________
   ~MergeVocabularyTest() {
-    // TODO: shall we delete the tmp files? doing so is cleaner, but makes it
-    // harder to debug test failures
+    // Delete the test files (to debug a test failure, comment this out).
+    ql::error_code errorCode;
+    ql::filesystem::remove_all(_basePath, errorCode);
   }
 
   // read all bytes from a file (e.g. to check equality of small test files)
@@ -239,24 +261,14 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
   auto callback = [](const auto&, bool) { return uint64_t{0}; };
 
-  std::string basePath = "MergeVocabulary.mergeVocabularyAssertion";
+  std::string basePath = gtestCurrentTestName();
 
-  auto writeUnorderedFile = [](const auto& path) {
-    ad_utility::serialization::FileWriteSerializer partialVocab(path);
-    // Intentionally in wrong order.
-    std::array<std::string_view, 3> strings{"\"c\"", "\"b\"", "\"a\""};
-    partialVocab << strings.size();
-    size_t localIdx = 0;
-    for (auto s : strings) {
-      partialVocab << s;
-      partialVocab << false;
-      partialVocab << localIdx;
-      localIdx++;
-    }
-  };
-
-  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0));
-  writeUnorderedFile(absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1));
+  // Intentionally in wrong order, so that the merge detects a violated order.
+  std::array<std::string_view, 3> unorderedWords{"\"c\"", "\"b\"", "\"a\""};
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0), unorderedWords);
+  writePartialVocabularyFile(
+      absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 1), unorderedWords);
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(
@@ -266,6 +278,77 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
           },
           callback, 1_GB),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+// Test that IRIs fully matched by one of the `blankNodeIriRegexes` are treated
+// as blank nodes during `mergeVocabulary` (not passed to the vocabulary word
+// callback, and mapped to blank node `Id`s), while non-matching IRIs and
+// literals are left untouched. In particular, matching is a *full* match, so a
+// regex that only matches a prefix of an IRI does not convert it.
+TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
+  std::string basePath = gtestCurrentTestName();
+  std::string wordsFile = absl::StrCat(basePath, PARTIAL_VOCAB_WORDS_INFIX, 0);
+  std::string idMapFile = absl::StrCat(basePath, PARTIAL_VOCAB_IDMAP_INFIX, 0);
+  absl::Cleanup cleanup = [&wordsFile, &idMapFile] {
+    ad_utility::deleteFile(wordsFile, false);
+    ad_utility::deleteFile(idMapFile, false);
+  };
+
+  // A single partial vocabulary. The words must be in ascending order according
+  // to the comparator used below (plain `std::less`); note that literals (which
+  // start with `"`) sort before IRIs (which start with `<`).
+  std::array<std::string_view, 5> words{"\"bn_lit\"", "<http://ex/apple>",
+                                        "<http://ex/bn_1>", "<http://ex/bn_2>",
+                                        "<http://ex/cherry>"};
+  writePartialVocabularyFile(wordsFile, words);
+
+  // Collect the words that are actually written to the vocabulary (i.e. not
+  // treated as blank nodes), together with the vocabulary index they get.
+  std::vector<std::string> vocabularyWords;
+  auto wordCallback = [&vocabularyWords](std::string_view word,
+                                         bool) -> uint64_t {
+    vocabularyWords.emplace_back(word);
+    return vocabularyWords.size() - 1;
+  };
+
+  // Two (compiled) regexes:
+  // - `<http://ex/bn_.*>` fully matches the two `bn_` IRIs (and neither the
+  //   `"bn_lit"` literal, which is not an IRI, nor the other IRIs).
+  // - `<http://ex/apple` only matches a prefix of `<http://ex/apple>` (the
+  //   closing `>` is missing), so with *full* match it converts nothing. With a
+  //   partial match it would have wrongly converted `<http://ex/apple>`.
+  std::vector<std::unique_ptr<re2::RE2>> blankNodeIriRegexes;
+  for (const char* pattern : {"<http://ex/bn_.*>", "<http://ex/apple"}) {
+    blankNodeIriRegexes.push_back(std::make_unique<re2::RE2>(pattern));
+  }
+  mergeVocabulary(
+      basePath, 1,
+      [](std::string_view a, bool, std::string_view b, bool) {
+        return std::less{}(a, b);
+      },
+      wordCallback, 1_GB, blankNodeIriRegexes);
+
+  // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
+  // literal remain in the vocabulary, in sorted order.
+  EXPECT_THAT(vocabularyWords,
+              ::testing::ElementsAre("\"bn_lit\"", "<http://ex/apple>",
+                                     "<http://ex/cherry>"));
+
+  // Check the exact id mapping. The local ids `0..4` are assigned in the input
+  // (sorted) order above; the two `bn_` IRIs get consecutive, distinct blank
+  // node ids, the other three words get vocabulary ids in their appearance
+  // order.
+  auto BN = [](uint64_t index) {
+    return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(index));
+  };
+  IdMap idMap = getIdMapFromFile(idMapFile);
+  EXPECT_THAT(idMap, ::testing::ElementsAreArray(std::vector<std::pair<Id, Id>>{
+                         {V(0), V(0)},     // "bn_lit"
+                         {V(1), V(1)},     // <http://ex/apple>
+                         {V(2), BN(0)},    // <http://ex/bn_1>
+                         {V(3), BN(1)},    // <http://ex/bn_2>
+                         {V(4), V(2)}}));  // <http://ex/cherry>
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {

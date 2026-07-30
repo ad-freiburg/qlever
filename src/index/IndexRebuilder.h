@@ -28,21 +28,81 @@ namespace qlever {
 
 namespace indexRebuilder {
 
+namespace detail {
+// Compute by what offset `value` needs to be increased to fit in the new index.
+AD_ALWAYS_INLINE size_t computeIndexOffset(
+    VocabIndex value, const InsertionPositions& insertionPositions) {
+  return ql::ranges::distance(
+      insertionPositions.begin(),
+      ql::ranges::upper_bound(insertionPositions, value, std::less{}));
+}
+
+// Apply `offset` to `value` and return the new `Id` resulting from this.
+AD_ALWAYS_INLINE Id applyOffset(VocabIndex value, size_t offset) {
+  return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
+}
+}  // namespace detail
+
 // Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`. This is the  most performance critical code of the
-// rebuild. To make `AD_ALWAYS_INLINE` work properly, this function has to be
-// defined in the header.
+// `insertionPositions`. This is the most performance critical code of the
+// rebuild; the definitions live in this header so that the forced inlining
+// also works for callers in other translation units.
+// If the extra `hint` argument is provided, first optimistically check whether
+// `hint` (confirmed against `hint - 1`) or `hint + 1` is already the right
+// position before doing binary search. This can significantly speed up
+// remapping when there are long sequences of ids that are mostly monotonically
+// increasing. Once the call returns, `hint` will be updated to the position of
+// the remapped id, so that the next call can use it as a hint.
 AD_ALWAYS_INLINE Id remapVocabId(Id original,
                                  const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
-  size_t offset = ql::ranges::distance(
-      insertionPositions.begin(),
-      ql::ranges::upper_bound(insertionPositions, original.getVocabIndex(),
-                              std::less{}));
-  return Id::makeFromVocabIndex(
-      VocabIndex::make(original.getVocabIndex().get() + offset));
+  auto value = original.getVocabIndex();
+  return detail::applyOffset(
+      value, detail::computeIndexOffset(value, insertionPositions));
+}
+
+AD_ALWAYS_INLINE Id remapVocabId(Id original,
+                                 const InsertionPositions& insertionPositions,
+                                 size_t& hint) {
+  AD_EXPENSIVE_CHECK(
+      original.getDatatype() == Datatype::VocabIndex,
+      "Only ids resembling a vocab index can be remapped with this function.");
+  AD_EXPENSIVE_CHECK(hint <= insertionPositions.size(),
+                     "Hint must be a valid index into the insertion positions "
+                     "or equal to its size.");
+  auto value = original.getVocabIndex();
+  auto isUpperBound = [value, &insertionPositions](size_t candidate) {
+    return candidate == insertionPositions.size() ||
+           insertionPositions[candidate] > value;
+  };
+
+  // Update `hint` to the correct upper bound for `value`. Avoid writing `hint`
+  // in cases where that's not necessary.
+  [&hint, &isUpperBound, &value, &insertionPositions]() {
+    // Check if the cached hint is still the upper bound for `value`.
+    if (isUpperBound(hint)) [[likely]] {
+      // `hint` is an upper bound, so check if `hint - 1` is not an upper bound.
+      if (hint == 0 || !isUpperBound(hint - 1)) [[likely]] {
+        // `hint` still is the correct upper bound, so there is nothing to do.
+        return;
+      }
+    } else {
+      // Check if `hint + 1` is an upper bound. This is the case when we just
+      // move the hint forward by one position.
+      size_t next = hint + 1;
+      if (isUpperBound(next)) [[likely]] {
+        hint = next;
+        return;
+      }
+    }
+
+    // Fallback and write the hint for the next iteration.
+    hint = detail::computeIndexOffset(value, insertionPositions);
+  }();
+
+  return detail::applyOffset(value, hint);
 }
 
 // Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the

@@ -14,11 +14,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 
+#include "backports/filesystem.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Log.h"
@@ -96,6 +97,38 @@ class File {
 
   //! checks if the file is open.
   [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
+
+  //! Return the underlying file descriptor.
+  [[nodiscard]] int fd() const {
+    assert(file_);
+    return fileno(file_);
+  }
+
+  // Return a new `File` for the same underlying file by duplicating the file
+  // descriptor. In contrast to opening the file again by name, this also
+  // works when the file has been renamed since it was opened (which happens
+  // to the files of the active index when a rebuilt index is swapped in at
+  // runtime, see #2832).
+  //
+  // NOTE: The duplicate shares the file offset with the original, so on the
+  // two `File`s only the positioned `read` overload (which uses `pread`) can
+  // be used independently; the sequential `read`/`seek` interface must not
+  // be mixed across duplicates.
+  [[nodiscard]] File duplicateForReading() const {
+    AD_CONTRACT_CHECK(isOpen());
+    int newFd = ::dup(fd());
+    AD_CONTRACT_CHECK(newFd != -1, "Duplicating the file descriptor for file ",
+                      name_, " failed");
+    FILE* newFile = ::fdopen(newFd, "r");
+    if (newFile == nullptr) {
+      ::close(newFd);
+    }
+    AD_CONTRACT_CHECK(newFile != nullptr);
+    File result;
+    result.name_ = name_;
+    result.file_ = newFile;
+    return result;
+  }
 
   //! Close file.
   bool close() {
@@ -184,15 +217,16 @@ class File {
     return sizeOfFile;
   }
 
-  // returns the byte offset of the last off_t
-  // the off_t itself is passed back by reference
-  off_t getLastOffset(off_t* lastOffset) {
-    assert(file_);
-    // read the last off_t
+  // Return the byte offset of the last offset and
+  // the offset itself.
+  std::pair<off_t, off_t> getLastOffset() {
+    AD_CONTRACT_CHECK(file_);
+    // Read the last off_t.
     const off_t lastOffsetOffset = sizeOfFile() - sizeof(off_t);
-    read(lastOffset, sizeof(off_t), lastOffsetOffset);
+    off_t lastOffset;
+    read(&lastOffset, sizeof(off_t), lastOffsetOffset);
 
-    return lastOffsetOffset;
+    return {lastOffsetOffset, lastOffset};
   }
 };
 
@@ -200,9 +234,9 @@ class File {
  * @brief Delete the file at a given path
  * @param path
  */
-inline void deleteFile(const std::filesystem::path& path,
+inline void deleteFile(const ql::filesystem::path& path,
                        bool warnOnFailure = true) {
-  if (!std::filesystem::remove(path)) {
+  if (!ql::filesystem::remove(path)) {
     if (warnOnFailure) {
       AD_LOG_WARN << "Deletion of file '" << path << "' was not successful"
                   << std::endl;
@@ -211,8 +245,8 @@ inline void deleteFile(const std::filesystem::path& path,
 }
 
 namespace detail {
-template <typename Stream, bool forWriting>
-Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
+template <typename Stream, bool forWriting, typename... Args>
+Stream makeFilestream(const ql::filesystem::path& path, Args&&... args) {
   Stream stream{path.string(), AD_FWD(args)...};
   std::string_view mode = forWriting ? "for writing" : "for reading";
   if (!stream.is_open()) {
@@ -220,7 +254,7 @@ Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
         absl::StrCat("Could not open file \"", path.string(), "\" ", mode,
                      ". Possible causes: The file does not exist or the "
                      "permissions are insufficient. The absolute path is \"",
-                     std::filesystem::absolute(path).string(), "\".");
+                     ql::filesystem::absolute(path).string(), "\".");
     throw std::runtime_error{error};
   }
   return stream;
@@ -230,12 +264,14 @@ Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
 // Open and return a std::ifstream from a given filename and optional
 // additional `args`. Throw an exception stating the filename and the absolute
 // path when the file can't be opened.
-std::ifstream makeIfstream(const std::filesystem::path& path, auto&&... args) {
+template <typename... Args>
+std::ifstream makeIfstream(const ql::filesystem::path& path, Args&&... args) {
   return detail::makeFilestream<std::ifstream, false>(path, AD_FWD(args)...);
 }
 
 // Similar to `makeIfstream`, but returns `std::ofstream`
-std::ofstream makeOfstream(const std::filesystem::path& path, auto&&... args) {
+template <typename... Args>
+std::ofstream makeOfstream(const ql::filesystem::path& path, Args&&... args) {
   return detail::makeFilestream<std::ofstream, true>(path, AD_FWD(args)...);
 }
 
