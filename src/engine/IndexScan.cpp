@@ -227,8 +227,12 @@ bool IndexScan::isDistinctByImpl(
   // rows are therefore uniquely identified by the triple's variable columns
   // plus the graph column; all other (payload) columns, e.g. the `pattern`
   // column, are functionally determined by those. The scan is thus distinct wrt
-  // `distinctIndices` iff all identifying columns are contained in
-  // `distinctIndices`.
+  // `distinctIndices` iff `distinctIndices` is a superset of the identifying
+  // columns. Note that it does not have to be equal to them: additional columns
+  // in `distinctIndices` can only make two rows differ in more places, so they
+  // never destroy distinctness. Conversely, a `distinctIndices` that misses
+  // even one identifying column (e.g. `DISTINCT ?s` for `?s ?p ?o`) makes this
+  // function return `false`, because the remaining columns may well repeat.
   //
   // Exception: For materialized views the deduplication during scanning is
   // deliberately deactivated (see the `MaterializedView` constructor), so a

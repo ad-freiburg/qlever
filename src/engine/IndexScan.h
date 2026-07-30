@@ -291,8 +291,8 @@ class IndexScan final : public Operation {
 
   // Return the columns of the "full" result (without any columns stripped) that
   // hold the variables of the scan triple and the graph, in this order. These
-  // are exactly the columns by which the full result is sorted, and also
-  // exactly the columns that uniquely identify one of its rows.
+  // are exactly the columns by which the full result is sorted. The combination
+  // of the values in these columns is unique for each row of the full result.
   std::vector<ColumnIndex> variableAndGraphColumns() const;
 
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
