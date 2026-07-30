@@ -5,33 +5,33 @@
 #ifndef QLEVER_COMPILEREXTENSIONS_H
 #define QLEVER_COMPILEREXTENSIONS_H
 
-// A generic macro that forces inlining during compilation across compilers
-#ifdef QLEVER_BUILD_SHARED_LIBRARIES
-// In a shared-library build the request to always inline cannot be honored for
-// a function whose body may be replaced at link time (which is the case for
-// every function with external linkage in a shared library). GCC therefore
-// rejects such a definition with `error: inlining failed in call to
-// 'always_inline' ...: function body can be overwritten at link time`, preceded
-// by a `-Wattributes` warning. The macro hence expands to nothing here.
+// A generic macro that forces inlining during compilation across compilers.
 //
-// NOTE: It must not expand to `inline` either. An `inline` function must be
-// defined in every translation unit that uses it (and the compiler need not
-// emit an out-of-line symbol for it), so for a function that is declared in a
-// header but defined in a `.cpp` file, `inline` would break the callers in
-// other translation units. Instead, every use of the macro must be on a
-// function that is already implicitly or explicitly `inline` (GCC emits a
-// `-Wattributes` warning otherwise, because it cannot force the inlining of
-// an out-of-line function into other translation units).
-#define AD_ALWAYS_INLINE
-#elif defined(__clang__)
-#define AD_ALWAYS_INLINE [[clang::always_inline]]
-#elif __GNUC__
-#define AD_ALWAYS_INLINE [[gnu::always_inline]]
+// The macro always expands to (at least) `inline`, so it must only be used on a
+// function whose definition is visible in every translation unit that calls it.
+// That is not a restriction, but the precondition for forcing the inlining in
+// the first place: a function that is declared in a header but defined in a
+// `.cpp` file cannot be inlined into its callers in other translation units,
+// and annotating such a definition only earns a `-Wattributes` warning from GCC
+// (`'always_inline' function might not be inlinable unless also declared
+// 'inline'`). With the `inline` in the macro, that mistake now breaks the link
+// instead of silently doing nothing.
+//
+// The `inline` is also what keeps the attribute usable in a shared-library
+// build. GCC refuses to force the inlining of a function whose body may be
+// replaced at link time (`error: inlining failed in call to 'always_inline'
+// ...: function body can be overwritten at link time`), which applies to
+// functions with external linkage in a shared library, but not to `inline`
+// functions: those are emitted as COMDAT and bind to the definition at hand.
+#if defined(__GNUC__) || defined(__clang__)
+// NOTE: Clang defines `__GNUC__` as well and understands the `gnu::` spelling
+// of the attribute, so a single branch covers both compilers.
+#define AD_ALWAYS_INLINE [[gnu::always_inline]] inline
 #else
 #warning \
     "For this compiler we don't know how to force the inlining of functions. \
 There might be some performance degradations."
-#define AD_ALWAYS_INLINE
+#define AD_ALWAYS_INLINE inline
 #endif
 
 // A macro for the `[[clang::lifetimebound]]` attribute, which marks a function
