@@ -1,0 +1,136 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The default configuration of QLever's Bazel build. The individual build
+# settings are declared in `//bazel:BUILD.bazel`; this file only sets the
+# defaults and defines shorthands for the combinations that are used often.
+# Machine-specific overrides belong into `user.bazelrc`, which is imported at
+# the very end and is not checked in.
+
+###############################################################################
+# Defaults
+###############################################################################
+
+# QLever is a C++20 project. This has to be a global flag and not a per-target
+# `copt`, because the third-party dependencies have to be compiled with the same
+# standard as QLever itself.
+build --cxxopt=-std=c++20
+build --host_cxxopt=-std=c++20
+
+# Write the git hash and the build time into `CompilationInfo.cpp`, see
+# `//bazel:compilation_info.bzl`.
+build --workspace_status_command=bazel/workspace_status.sh
+
+# Treat the headers of the third-party dependencies as system headers, so that
+# they do not produce warnings. This is the equivalent of the `SYSTEM` keyword
+# in the `FetchContent_Declare` calls of `CMakeLists.txt`.
+build --features=external_include_paths
+
+# `WITH_ABI_VERSION_2 ON` / `WITH_ABI_VERSION_1 OFF` of `CMakeLists.txt`. QLever's
+# metrics use `opentelemetry::metrics::Gauge` and `Meter::CreateInt64Gauge`,
+# which only exist in ABI version 2. The Bazel module defaults to version 1.
+build --@opentelemetry-cpp//api:abi_version_no=2
+
+# `boost.asio` defaults to being built without TLS support, in which case it does
+# not compile `boost/asio/ssl/impl/src.hpp` into its separate-compilation
+# translation unit, and `HttpClient.cpp` fails to link against
+# `boost::asio::error::get_ssl_category()`. QLever needs TLS, so the support has
+# to be switched on. Of the two possible values this has to be `boringssl`,
+# because that is the module that `MODULE.bazel` redirects to the system OpenSSL;
+# the value `openssl` would instead pull in a second, source-built OpenSSL and
+# reintroduce exactly the header mixing that the redirect avoids.
+build --@boost.asio//:ssl=boringssl
+
+# Bazel 9 removed the native C++ rules, so a `BUILD` file has to `load()` them
+# from `rules_cc`. QLever's own `BUILD` files do, but some of its transitive
+# dependencies in the Bazel Central Registry do not yet, in particular
+# `prometheus-cpp` (1.3.0), which the OpenTelemetry Prometheus exporter needs.
+# This re-enables the automatic loading for them. Remove it once those modules
+# have been updated.
+common --incompatible_autoload_externally=+cc_library,+cc_binary,+cc_test,+cc_import,+cc_shared_library,+cc_proto_library
+
+# Show why a test failed without having to open the log file.
+test --test_output=errors
+test --test_summary=terse
+
+###############################################################################
+# Build types, the equivalent of `CMAKE_BUILD_TYPE`
+###############################################################################
+
+# `CMAKE_BUILD_TYPE=Debug`. This is what `--compilation_mode=dbg` does anyway
+# and is listed here for symmetry with the other build types.
+build:debug --compilation_mode=dbg
+
+# `CMAKE_BUILD_TYPE=Release`.
+build:release --compilation_mode=opt
+build:release --copt=-O3
+
+# `CMAKE_BUILD_TYPE=RelWithDebInfo`.
+build:relwithdebinfo --compilation_mode=opt
+build:relwithdebinfo --copt=-g
+
+# `CMAKE_BUILD_TYPE=ASAN`, i.e. AddressSanitizer plus UndefinedBehaviorSanitizer,
+# with the same flags as `CMAKE_CXX_FLAGS_ASAN` in `CMakeLists.txt`.
+build:asan --copt=-fsanitize=address
+build:asan --copt=-fsanitize=undefined
+build:asan --copt=-fno-optimize-sibling-calls
+build:asan --copt=-fsanitize-address-use-after-scope
+build:asan --copt=-fno-omit-frame-pointer
+build:asan --copt=-g
+build:asan --copt=-O1
+build:asan --linkopt=-fsanitize=address
+build:asan --linkopt=-fsanitize=undefined
+
+build:tsan --copt=-fsanitize=thread
+build:tsan --copt=-fno-omit-frame-pointer
+build:tsan --copt=-g
+build:tsan --copt=-O1
+build:tsan --linkopt=-fsanitize=thread
+
+###############################################################################
+# Shorthands for the QLever build settings
+###############################################################################
+
+# `BUILD_SHARED_LIBS=ON`. Bazel has no global switch between static and shared
+# libraries; `--dynamic_mode=fully` is the equivalent, it links every
+# `cc_library` into a shared library that is loaded at runtime. This is useful
+# in particular for debug builds, where the individual libraries are large
+# because of the debug symbols and are linked into almost every test binary.
+build:shared --dynamic_mode=fully
+build:shared --//bazel:build_shared_libraries
+
+# `CHEAPER_COMPILATION=ON`, for local development.
+build:cheap --//bazel:cheaper_compilation
+
+# `USE_CPP_17_BACKPORTS=ON` together with C++17 itself. The C++ standard has to
+# be overridden rather than appended, which works because a later `-std=` wins
+# over the earlier one from the defaults above.
+build:cpp17 --//bazel:use_cpp_17_backports
+build:cpp17 --cxxopt=-std=c++17
+build:cpp17 --host_cxxopt=-std=c++17
+
+# `REDUCED_FEATURE_SET_FOR_CPP17=ON`. This excludes the features that have not
+# been migrated to C++17 yet, and with them the `http` library.
+build:reduced --config=cpp17
+build:reduced --//bazel:reduced_feature_set_for_cpp17
+
+# `QLEVER_NO_UNICODE=ON`, i.e. build without a dependency on ICU.
+build:no-unicode --//bazel:no_unicode
+
+# `RUN_EXPENSIVE_TESTS=true`, only recommended together with `--config=release`.
+build:expensive-tests --//bazel:run_expensive_tests
+
+# `ENABLE_EXPENSIVE_CHECKS=true`.
+build:expensive-checks --//bazel:enable_expensive_checks
+
+###############################################################################
+# Machine-specific overrides, not checked in
+###############################################################################
+
+try-import %workspace%/user.bazelrc

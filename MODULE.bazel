@@ -1,0 +1,146 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel module definition of QLever. This is the counterpart of the
+# `FetchContent_Declare` and `find_package` calls in the top-level
+# `CMakeLists.txt`. Dependencies come from three sources:
+#
+# 1. The Bazel Central Registry (`bazel_dep` below), which is the equivalent of
+#    the `FetchContent_Declare` calls for everything that is already packaged
+#    for Bazel.
+# 2. Hand-written `http_archive` repositories in `bazel/third_party`, for the
+#    dependencies that are not in the registry, or where QLever needs a fork
+#    (see `bazel/third_party/extensions.bzl`).
+# 3. The system, via `pkg-config`, for the heavy C libraries that the CMake
+#    build also takes from the system via `find_package`/`pkg_check_modules`
+#    (see `bazel/system_library.bzl`).
+
+module(
+    name = "qlever",
+    version = "0.0.0",
+)
+
+###############################################################################
+# Bazel rules and helpers
+###############################################################################
+
+bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+bazel_dep(name = "platforms", version = "1.1.0")
+
+###############################################################################
+# Dependencies that the CMake build declares via `FetchContent`
+###############################################################################
+
+# Tag 20260107.1 (LTS 2026-01-07), see `CMakeLists.txt`.
+bazel_dep(name = "abseil-cpp", version = "20260107.1", repo_name = "com_google_absl")
+bazel_dep(name = "re2", version = "2025-11-05.bcr.1")
+bazel_dep(name = "googletest", version = "1.17.0.bcr.2")
+
+# Pin GoogleTest to the same commit as `FetchContent_Declare(googletest ...)` in
+# `CMakeLists.txt`, so that both build systems test against the same framework;
+# the newest version in the registry is older than that. Update the two together.
+# Like every override this only takes effect in the root module, and it applies
+# to the other modules that depend on GoogleTest as well.
+archive_override(
+    module_name = "googletest",
+    integrity = "sha256-gdHZjzPzzi3oWRkJVTlLelo1j3h9SxNu1nDwxG+mBwc=",
+    strip_prefix = "googletest-973323ed64a05b128418e7eab67016db5ba049df",
+    urls = ["https://github.com/google/googletest/archive/973323ed64a05b128418e7eab67016db5ba049df.tar.gz"],
+)
+
+bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.1")
+bazel_dep(name = "antlr4-cpp-runtime", version = "4.13.2.bcr.2")
+
+# Tag v0.13.1, see `CMakeLists.txt`.
+bazel_dep(name = "s2geometry", version = "0.13.1")
+bazel_dep(name = "opentelemetry-cpp", version = "1.27.0")
+
+# A transitive dependency of the OpenTelemetry Prometheus exporter, which
+# `src/util/metrics/Metrics.cpp` also includes directly.
+bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.2")
+
+# Boost. `CMakeLists.txt` only names the components that need to be linked;
+# here we additionally list the header-only libraries that QLever includes
+# directly, because Bazel requires every direct dependency to be declared.
+bazel_dep(name = "boost.asio", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.beast", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.container", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.filesystem", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.foreach", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.functional", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.geometry", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.iostreams", version = "1.90.0.bcr.2")
+bazel_dep(name = "boost.math", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.mp11", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.optional", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.program_options", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.system", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.url", version = "1.90.0.bcr.1")
+bazel_dep(name = "boost.uuid", version = "1.90.0.bcr.1")
+
+###############################################################################
+# Only one OpenSSL
+###############################################################################
+# `@s2geometry//s2/util/math/exactfloat` depends on the `boringssl` module for
+# `BIGNUM`, and `@boost.asio` can be built against it too. That puts BoringSSL's
+# `openssl/` headers on the include path of every QLever translation unit, next
+# to the system OpenSSL headers that QLever itself and `boost::asio::ssl` use.
+# The two trees then get mixed: BoringSSL contributes `openssl/opensslconf.h`,
+# the system contributes `openssl/ssl.h`, and the OpenSSL API-compatibility
+# macros reject the combination.
+#
+# Rather than depending on the order in which the include paths happen to be
+# emitted, this override makes the whole build use exactly one OpenSSL, namely
+# the system one, which is also what the CMake build does. `exactfloat` only
+# needs `BIGNUM`, which OpenSSL provides under the same name; it is compiled
+# against OpenSSL in the CMake build as well.
+#
+# Note that a `local_path_override` only takes effect in the root module, so this
+# does not affect anyone who depends on QLever as a Bazel module.
+local_path_override(
+    module_name = "boringssl",
+    path = "bazel/openssl_as_boringssl",
+)
+
+###############################################################################
+# Dependencies that are not in the Bazel Central Registry
+###############################################################################
+# `range-v3` (QLever's fork), `ctre`, `fsst`, `uriparser`, `spatialjoin` and
+# `pbutil`. The commits are kept in sync with the `FetchContent_Declare` calls
+# in `CMakeLists.txt`; see `bazel/third_party/extensions.bzl`.
+
+qlever_third_party = use_extension("//bazel/third_party:extensions.bzl", "qlever_third_party")
+use_repo(
+    qlever_third_party,
+    "ctre",
+    "fsst",
+    "pbutil",
+    "range-v3",
+    "spatialjoin",
+    "uriparser",
+)
+
+###############################################################################
+# Dependencies that are taken from the system, like `find_package` in CMake
+###############################################################################
+# ICU, OpenSSL and zstd are required; jemalloc and io_uring are optional and
+# degrade to an empty library when `pkg-config` cannot find them, exactly like
+# the corresponding `find_package`/`pkg_check_modules` calls in
+# `CMakeLists.txt`.
+
+qlever_system = use_extension("//bazel:system_library.bzl", "qlever_system")
+use_repo(
+    qlever_system,
+    "icu",
+    "jemalloc",
+    "liburing",
+    "openssl",
+    "zstd",
+)

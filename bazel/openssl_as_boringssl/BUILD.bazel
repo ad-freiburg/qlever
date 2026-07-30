@@ -1,0 +1,32 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The two targets that BoringSSL's dependents in QLever's dependency graph refer
+# to, backed by the system OpenSSL. Only `:crypto` is actually used, by
+# `@s2geometry//s2/util/math/exactfloat`, which needs `BIGNUM`; `:ssl` exists
+# because `@boost.asio` refers to it when it is built against BoringSSL, which
+# QLever does not do.
+#
+# The headers do not have to be declared: they live in a directory that the C++
+# toolchain searches by default, exactly as in `//bazel:system_library.bzl`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "crypto",
+    linkopts = ["-lcrypto"],
+)
+
+cc_library(
+    name = "ssl",
+    linkopts = ["-lssl"],
+    deps = [":crypto"],
+)
