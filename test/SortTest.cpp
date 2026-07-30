@@ -73,7 +73,7 @@ void testSort(IdTable input, const IdTable& expected,
       randomShuffle(permutedInput.begin(), permutedInput.end());
       Sort s = makeSort(permutedInput.clone(), sortColumns);
       auto result = s.getResult();
-      const auto& resultTable = result->idTable();
+      const auto& resultTable = result->idTableView();
       ASSERT_EQ(resultTable, permutedExpected);
     }
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
@@ -278,7 +278,7 @@ TEST(Sort, externalSortLazyInput) {
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
@@ -323,7 +323,7 @@ TEST(Sort, externalSortMaterializedInput) {
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
@@ -380,7 +380,7 @@ TEST(Sort, externalSortLazyOutput) {
   }
 
   // Compare with in-memory result.
-  EXPECT_EQ(inMemoryResult->idTable(), externalResultIdTable);
+  EXPECT_EQ(inMemoryResult->idTableView(), externalResultIdTable);
 }
 
 // Test in-memory sorting with fully materialized input (exercises the code path
@@ -416,7 +416,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
   auto result = inMemorySort.getResult();
 
   // Verify the result is sorted correctly.
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   EXPECT_EQ(100u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
@@ -441,5 +441,30 @@ TEST(Sort, limitOffsetIsPropagated) {
   EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),
             LimitOffsetClause(2, 1));
   // We expect that the original subtree is unchanged.
+  EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
+
+// _____________________________________________________________________________
+TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars);
+
+  auto tree = QueryExecutionTree::createSortedTree(subtree, {0}, true);
+  auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+  ASSERT_NE(sort, nullptr);
+  EXPECT_EQ(sort->handlesLimitOffset(), LimitOffsetHandling::NONE);
+
+  sort->applyLimitOffset({2, 1});
+
+  EXPECT_EQ(sort->getLimitOffset(), LimitOffsetClause(2, 1));
+  EXPECT_TRUE(sort->getChildren()
+                  .at(0)
+                  ->getRootOperation()
+                  ->getLimitOffset()
+                  .isUnconstrained());
   EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
 }

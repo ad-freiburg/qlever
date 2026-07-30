@@ -6,10 +6,9 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#include <unicode/ustream.h>
 
+#include <charconv>
 #include <ctre-unicode.hpp>
-#include <sstream>
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -28,15 +27,17 @@ constexpr ctll::fixed_string csvSpecialCharsRegex = "[\r\n\",]";
 constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
 constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
-/// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
-/// into the corresponding UTF-8 string (e.g. "ä").
-std::string hexadecimalCharactersToUtf8(std::string_view hex) {
-  UChar32 x;
-  std::stringstream sstream;
-  sstream << std::hex << hex;
-  sstream >> x;
+// _____________________________________________________________________________
+std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
+  // The input encodes a single Unicode codepoint, so it is at most 8 hex digits
+  // long (the length of a `\UXXXXXXXX` escape).
+  AD_CONTRACT_CHECK(hex.size() <= 8);
+  uint32_t codepoint = 0;
+  auto result =
+      std::from_chars(hex.data(), hex.data() + hex.size(), codepoint, 16);
+  AD_CORRECTNESS_CHECK(result.ec == std::errc{});
   std::string res;
-  icu::UnicodeString(x).toUTF8String(res);
+  ad_utility::utf8EncodeCodepoint(codepoint, res);
   return res;
 }
 
@@ -90,8 +91,12 @@ void unescapeStringAndNumericEscapes(std::string_view input,
                                                            size_t length) {
     if constexpr (!acceptOnlyBackslashAndNewline) {
       AD_CONTRACT_CHECK(iterator + length <= endIterator);
-      auto unesc =
-          hexadecimalCharactersToUtf8(std::string_view(iterator, length));
+      // Use `&*iterator` to obtain a raw pointer rather than passing the
+      // iterator directly: newer libc++ wraps the string-view iterator in
+      // `__wrap_iter` and no longer converts it implicitly to `const char*`.
+      // `length` is always positive here, so dereferencing is safe.
+      auto unesc = hexadecimalCharactersToUtf8Codepoint(
+          std::string_view(&*iterator, length));
       std::copy(unesc.begin(), unesc.end(), outputIterator);
     } else {
       (void)outputIterator;

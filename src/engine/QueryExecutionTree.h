@@ -173,10 +173,14 @@ class QueryExecutionTree {
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
-  // sorted accordingly, it is simply returned.
+  // sorted accordingly, it is simply returned. If `explicitSort` is `true` and
+  // a `Sort` operation has to be created, that `Sort` will not propagate a
+  // `LIMIT`/`OFFSET` to its subtree. This is used for explicit `INTERNAL SORT
+  // BY` clauses, where the complete sorted result is requested and the
+  // limit-pushdown optimization is undesired.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns);
+      const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
@@ -240,8 +244,8 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimitOffset() const {
-    return getRootOperation()->supportsLimitOffset();
+  LimitOffsetHandling handlesLimitOffset() const {
+    return getRootOperation()->handlesLimitOffset();
   }
 
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the

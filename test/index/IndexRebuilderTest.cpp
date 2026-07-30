@@ -4,6 +4,8 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/strings/str_cat.h>
+#include <absl/time/time.h>
 #include <gmock/gmock.h>
 
 #include <boost/asio/awaitable.hpp>
@@ -11,17 +13,28 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
-#include <filesystem>
+#include <future>
+#include <optional>
+#include <string>
+#include <string_view>
 
+#include "../util/AsioTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/Server.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
+#include "util/SourceLocation.h"
 
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
@@ -85,7 +98,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
       "materializeEmptyLocalVocab", std::move(config));
-  std::string vocabPrefix = "/tmp/materializeEmptyLocalVocab";
+  std::string vocabPrefix = gtestCurrentTestName();
   std::string vocabFileName = vocabPrefix + VOCAB_SUFFIX;
   absl::Cleanup removeVocabFiles{[&vocabFileName, &type] {
     deleteVocabFiles(vocabFileName, type.value());
@@ -111,7 +124,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
                                                      std::move(config));
-  std::string vocabPrefix = "/tmp/materializeLocalVocab";
+  std::string vocabPrefix = gtestCurrentTestName();
   absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
@@ -216,6 +229,69 @@ TEST(IndexRebuilder, remapVocabId) {
   EXPECT_EQ(remapVocabId(V(0), insertionPositionsB), V(1));
   EXPECT_EQ(remapVocabId(V(1), insertionPositionsB), V(3));
   EXPECT_EQ(remapVocabId(V(2), insertionPositionsB), V(4));
+}
+
+// _____________________________________________________________________________
+// Same expected values as `remapVocabId`, but exercising the hinted overload.
+// The hint is intentionally reused across all calls (the same way the
+// production call site does it) and across non-monotone inputs to verify that
+// it self-corrects.
+TEST(IndexRebuilder, remapVocabIdHinted) {
+  std::vector insertionPositionsA{VocabIndex::make(3), VocabIndex::make(5),
+                                  VocabIndex::make(7)};
+
+  size_t hint = 0;
+  // Monotone forward sweep.
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsA, hint), V(0));
+  EXPECT_EQ(0, hint);
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsA, hint), V(1));
+  EXPECT_EQ(0, hint);
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsA, hint), V(2));
+  EXPECT_EQ(0, hint);
+  EXPECT_EQ(remapVocabId(V(3), insertionPositionsA, hint), V(4));
+  EXPECT_EQ(1, hint);
+  EXPECT_EQ(remapVocabId(V(4), insertionPositionsA, hint), V(5));
+  EXPECT_EQ(1, hint);
+  EXPECT_EQ(remapVocabId(V(5), insertionPositionsA, hint), V(7));
+  EXPECT_EQ(2, hint);
+  EXPECT_EQ(remapVocabId(V(6), insertionPositionsA, hint), V(8));
+  EXPECT_EQ(2, hint);
+  EXPECT_EQ(remapVocabId(V(7), insertionPositionsA, hint), V(10));
+  EXPECT_EQ(3, hint);
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+
+  // Backward jump (hint is now too high) - must self-correct.
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsA, hint), V(2));
+  EXPECT_EQ(0, hint);
+  // Forward jump that lands several insertions later.
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+  // Repeated value (hint already correct).
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+  EXPECT_EQ(remapVocabId(V(8), insertionPositionsA, hint), V(11));
+  EXPECT_EQ(3, hint);
+
+  // Independent insertion-position vector with a fresh hint.
+  std::vector insertionPositionsB{VocabIndex::make(0), VocabIndex::make(1)};
+  size_t hintB = 0;
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsB, hintB), V(1));
+  EXPECT_EQ(1, hintB);
+  EXPECT_EQ(remapVocabId(V(1), insertionPositionsB, hintB), V(3));
+  EXPECT_EQ(2, hintB);
+  EXPECT_EQ(remapVocabId(V(2), insertionPositionsB, hintB), V(4));
+  EXPECT_EQ(2, hintB);
+
+  // Empty insertion positions: every id is unchanged regardless of pattern.
+  std::vector<VocabIndex> insertionPositionsEmpty;
+  size_t hintE = 0;
+  EXPECT_EQ(remapVocabId(V(0), insertionPositionsEmpty, hintE), V(0));
+  EXPECT_EQ(0, hintE);
+  EXPECT_EQ(remapVocabId(V(42), insertionPositionsEmpty, hintE), V(42));
+  EXPECT_EQ(0, hintE);
+  EXPECT_EQ(remapVocabId(V(7), insertionPositionsEmpty, hintE), V(7));
+  EXPECT_EQ(0, hintE);
 }
 
 // _____________________________________________________________________________
@@ -401,7 +477,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   auto* qec = ad_utility::testing::getQec("<a> <b> <c> . <d> <e> _:f .");
   const auto& index = qec->getIndex();
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
-  std::string prefix = "/tmp/createPermutationWriterTask";
+  std::string prefix = gtestCurrentTestName();
   std::array<std::string_view, 4> suffixes{".index.pos", ".index.pos.meta",
                                            ".index.pso", ".index.pso.meta"};
   newIndex.setOnDiskBase(prefix);
@@ -420,7 +496,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
-    EXPECT_FALSE(std::filesystem::exists(prefix + suffix))
+    EXPECT_FALSE(ql::filesystem::exists(prefix + suffix))
         << "File " << prefix + suffix
         << " should not exist before the task is executed.";
   }
@@ -437,7 +513,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   net::co_spawn(threadPool, std::move(task), net::detached);
   threadPool.join();
   for (std::string_view suffix : suffixes) {
-    EXPECT_TRUE(std::filesystem::exists(prefix + suffix));
+    EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
     EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
               fileToBuffer(prefix + suffix));
   }
@@ -447,7 +523,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
 TEST(IndexRebuilder, materializeToIndex) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  std::string baseFolder = "/tmp/materializeToIndex";
+  std::string baseFolder = gtestCurrentTestName();
   std::string newIndexName = baseFolder + "/index";
   std::string logFile = newIndexName + ".log";
 
@@ -475,18 +551,34 @@ TEST(IndexRebuilder, materializeToIndex) {
         index.deltaTriplesManager()
             .getCurrentLocatedTriplesSharedStateWithVocab();
 
-    std::filesystem::create_directory(baseFolder);
+    ql::filesystem::create_directory(baseFolder);
     absl::Cleanup removeIndexFiles{
-        [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+
+    auto sourceDate = index.getImpl().dateOfIndexBuild();
 
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(std::filesystem::exists(logFile));
+    EXPECT_TRUE(ql::filesystem::exists(logFile));
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
     newIndex.createFromOnDiskIndex(newIndexName, false);
+
+    // The rebuilt index gets its own, more recent build date. Both dates are
+    // recorded with second resolution, so the rebuild may happen within the
+    // same second as the original build; hence we only assert "not older".
+    auto parseDate = [](const std::string& date) {
+      absl::Time result;
+      std::string error;
+      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                  absl::UTCTimeZone(), &result, &error))
+          << error;
+      return result;
+    };
+    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+
     EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
               index.getBlankNodeManager()->minIndex_ +
                   ad_utility::BlankNodeManager::blockSize_);
@@ -511,8 +603,8 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   // and does not rely on the source index's allocator.
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  std::string sourceIndexName = "materializeToIndexWithZeroMemorySourceIndex";
-  std::string baseFolder = "/tmp/" + sourceIndexName;
+  std::string sourceIndexName = gtestCurrentTestName();
+  std::string baseFolder = absl::StrCat(sourceIndexName, "-new");
   std::string newIndexName = baseFolder + "/index";
   std::string logFile = newIndexName + ".log";
 
@@ -540,9 +632,9 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  std::filesystem::create_directory(baseFolder);
+  ql::filesystem::create_directory(baseFolder);
   absl::Cleanup removeIndexFiles{
-      [&baseFolder] { std::filesystem::remove_all(baseFolder); }};
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
   EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
                                              state, vocab, blankNodes,
@@ -572,51 +664,102 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 }
 
 namespace {
-// Get rid of previous files with the specified prefix.
-void cleanFilesWithPrefix(std::string_view prefix) {
+// Return the directories in the current directory whose name starts with
+// `prefix`.
+std::vector<std::filesystem::path> dirsWithPrefix(std::string_view prefix) {
   namespace fs = std::filesystem;
+  std::vector<fs::path> result;
   for (const auto& entry : fs::directory_iterator(".")) {
-    std::string name = entry.path().filename().string();
-    if (ql::starts_with(name, prefix)) {
-      ad_utility::deleteFile(name);
+    if (entry.is_directory() &&
+        ql::starts_with(entry.path().filename().string(), prefix)) {
+      result.push_back(entry.path());
     }
+  }
+  return result;
+}
+
+// Remove all directories in the current directory whose name starts with
+// `prefix` (e.g. the `previous.*` directories created by the rebuild-index
+// tests below).
+void cleanDirsWithPrefix(std::string_view prefix) {
+  AD_CONTRACT_CHECK(!prefix.empty(),
+                    "This function is not meant to delete all directories in "
+                    "the current directory. Please specify a prefix.");
+  for (const auto& dir : dirsWithPrefix(prefix)) {
+    std::filesystem::remove_all(dir);
   }
 }
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegration) {
-  cleanFilesWithPrefix("my-name");
-  cleanFilesWithPrefix("new_index");
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
+  namespace fs = std::filesystem;
+  cleanDirsWithPrefix("previous.");
+  cleanDirsWithPrefix("rebuild.");
+  cleanDirsWithPrefix("serverIntegration.");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
   std::string indexName = "IndexRebuilder_serverIntegration";
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
-  Server server{4321, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  server.initialize(indexName, false);
-  auto performRequest = [&threadPool, &server](auto& request) {
-    using ResT = ad_utility::httpUtils::ResponseT;
-    auto task =
-        server.template onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                              ResT>(request);
-    return net::co_spawn(threadPool, std::move(task), net::use_future);
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  constexpr std::string_view accessToken = "accessToken";
+  Server server{4321, 1, std::string{accessToken}, config};
+
+  // Create a GET request that triggers a rebuild of the index. The
+  // `additionalParameters` are appended to the URL as they are, and the access
+  // token is added unless `withAccessToken` is false.
+  auto makeRebuildRequest = [accessToken](
+                                std::string_view additionalParameters = "",
+                                bool withAccessToken = true) {
+    return ad_utility::testing::makeGetRequest(absl::StrCat(
+        "/?cmd=rebuild-index", additionalParameters,
+        withAccessToken ? absl::StrCat("&access-token=", accessToken) : ""));
+  };
+
+  // Create the coroutine that lets the `server` process the given `request`.
+  auto makeTask = [&server](auto& request) {
+    return server.template onlyForTestingProcess<
+        std::decay_t<decltype(request)>, ad_utility::httpUtils::ResponseT>(
+        request);
+  };
+
+  // Perform the given `request` on the `threadPool` and return a future for the
+  // response.
+  auto performRequest = [&threadPool, &makeTask](auto& request) {
+    return net::co_spawn(threadPool, makeTask(request), net::use_future);
+  };
+
+  // Perform the given `request` on the `threadPool`, expect it to fail, and
+  // check the message of the resulting exception against the `matcher`. NOTE:
+  // The exception must not be handed out of the coroutine (in particular not
+  // via `net::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
+  // `AsioTestHelpers.h` for the reason.
+  auto expectRequestFailsWith = [&threadPool, &makeTask](
+                                    auto& request, const auto& matcher,
+                                    ad_utility::source_location location =
+                                        AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
+                    threadPool, makeTask(request)),
+                ::testing::Optional(matcher));
   };
 
   // Without access token this operation is not allowed!
-  auto request0 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(performRequest(request0).get(),
-                               ::testing::HasSubstr("access token"));
+  auto request0 = makeRebuildRequest("", false);
+  expectRequestFailsWith(request0, ::testing::HasSubstr("access token"));
 
-  auto request1 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name&access-token="
-      "accessToken");
+  // Two rebuilds with default parameters at the same time: the first
+  // succeeds, the second is rejected because a rebuild is in progress.
+  auto request1 = makeRebuildRequest();
   auto future1 = performRequest(request1);
-  auto request2 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&index-name=my-name&access-token="
-      "accessToken");
+  auto request2 = makeRebuildRequest();
   auto future2 = performRequest(request2);
 
   auto response1 = future1.get();
@@ -626,37 +769,139 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
 
-  // We use this config as a proxy for the index rebuilder having finished
-  // successfully.
-  EXPECT_TRUE(std::filesystem::exists("my-name.meta-data.json"));
+  // With the default parameters, the old index was moved to a
+  // `previous.<datetime>` directory, the new index took over the base name of
+  // the old index, and the temporary rebuild directory was removed again.
+  EXPECT_TRUE(fs::exists(indexName + ".meta-data.json"));
+  auto previousDirs = dirsWithPrefix("previous.");
+  ASSERT_EQ(previousDirs.size(), 1u);
+  EXPECT_TRUE(
+      fs::exists(previousDirs.front() / (indexName + ".meta-data.json")));
+  EXPECT_TRUE(dirsWithPrefix("rebuild.").empty());
 
-  auto request3 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
+  // Rebuild with explicitly given directories.
+  auto request3 = makeRebuildRequest(
+      "&rebuild-tmp-dir=serverIntegration.tmp"
+      "&rebuild-previous-index-dir=serverIntegration.old");
   auto response3 = performRequest(request3).get();
   EXPECT_EQ(response3.base().result(), boost::beast::http::status::ok);
-  // By default QLever should assign a default name for the new index.
-  EXPECT_TRUE(std::filesystem::exists("new_index.meta-data.json"));
+  EXPECT_TRUE(fs::exists(fs::path{"serverIntegration.old"} /
+                         (indexName + ".meta-data.json")));
+  EXPECT_FALSE(fs::exists("serverIntegration.tmp"));
 
-  // The index with the same name already exists, so we don't want to overwrite
-  // it.
-  auto request4 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request4).get(),
-      ::testing::HasSubstr("already files with the same base name"));
+  // The directory for the old index must be empty or non-existing.
+  auto request4 =
+      makeRebuildRequest("&rebuild-previous-index-dir=serverIntegration.old");
+  expectRequestFailsWith(
+      request4, ::testing::HasSubstr("already exists and is not empty"));
 
-  // The index has to reside within the same directory as the original index.
-  auto request5 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=%2Fmy-name");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request5).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  // The directories must be relative paths and located inside the directory
+  // of the current index.
+  auto request5 =
+      makeRebuildRequest("&rebuild-previous-index-dir=%2Fabsolute-path");
+  expectRequestFailsWith(request5,
+                         ::testing::HasSubstr("must be a relative path"));
 
-  auto request6 = ad_utility::testing::makeGetRequest(
-      "/?cmd=rebuild-index&access-token=accessToken&index-name=..%2Fother");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      performRequest(request6).get(),
-      ::testing::HasSubstr("not located in the same directory"));
+  auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
+  expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
 
   threadPool.join();
+  cleanDirsWithPrefix("previous.");
+  cleanDirsWithPrefix("serverIntegration.");
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
+  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  cleanDirsWithPrefix("droppedState.");
+  namespace net = boost::asio;
+  net::thread_pool threadPool{1};
+
+  std::string indexName =
+      "IndexRebuilder_serverIntegrationDroppedStateWarnings";
+  ad_utility::testing::TestIndexConfig indexConfig{
+      "<a> <b> \"some literal text\" ."};
+  indexConfig.createTextIndex = true;
+  ad_utility::testing::makeTestIndex(indexName, std::move(indexConfig));
+
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  config.persistUpdates_ = false;
+
+  // Write a materialized view to disk so it can be preloaded below.
+  {
+    qlever::Qlever engine{config};
+    engine.writeMaterializedView("droppedView", "SELECT * { ?s ?p ?o }");
+  }
+
+  // Load both the text index and the materialized view, so the rebuild warns
+  // that they will be dropped.
+  config.loadTextIndex_ = true;
+  config.preloadMaterializedViews_ = {"droppedView"};
+  Server server{4321, 1, "accessToken", config};
+
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto request = ad_utility::testing::makeGetRequest(
+      "/?cmd=rebuild-index&access-token=accessToken"
+      "&rebuild-tmp-dir=droppedState.tmp"
+      "&rebuild-previous-index-dir=droppedState.old");
+  using ResT = ad_utility::httpUtils::ResponseT;
+  auto response =
+      net::co_spawn(
+          threadPool,
+          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
+              request),
+          net::use_future)
+          .get();
+  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("text search will no longer work"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("Materialized views were loaded"));
+
+  threadPool.join();
+  cleanDirsWithPrefix("droppedState.");
+}
+
+// _____________________________________________________________________________
+// The thread-count override for the rebuild's scans must be set on the
+// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
+// the permutation's shared reader, which is used by the query scans, must
+// never carry an override.
+TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
+  auto index = ad_utility::testing::makeTestIndex("lazyScanNumThreadsOverride",
+                                                  "<a> <b> <c> .");
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::PSO);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+
+  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
+    return permutation.lazyScanWithUnlimitedReader(
+        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
+        cancellationHandle, *state, numThreadsOverride);
+  };
+  auto [reader, scan] = scanWithOverride(3);
+  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
+  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
+  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
+  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
+
+  // Recomputing the statistics with the throttle set must give exactly the
+  // same result as with the default (0, which means "fall back to
+  // `lazy-index-scan-num-threads`"). This exercises the translation of the
+  // runtime parameter to the override at both of its use sites.
+  auto statsDefault = index.getImpl().recomputeStatistics(state);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
+  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
 }

@@ -68,11 +68,9 @@ class AllocationMemoryLeft {
   [[nodiscard]] MemorySize amountMemoryLeft() const { return free_; }
 };
 
-/*
- * Threadsafe Wrapper around AllocationMemoryLeft.
- * Copies of objects of this class will refer to the same AllocationMemoryLeft
- * object Concurrent access is handled via ad_utility::Synchronized.
- */
+// Threadsafe Wrapper around `AllocationMemoryLeft`.
+// Copies of objects of this class will refer to the same `AllocationMemoryLeft`
+// object. Concurrent access is handled via `ad_utility::Synchronized`.
 class AllocationMemoryLeftThreadsafe {
  public:
   AllocationMemoryLeftThreadsafe() = delete;
@@ -92,8 +90,8 @@ class AllocationMemoryLeftThreadsafe {
 };
 }  // namespace detail
 
-// setup a shared Allocation state. For the usage see documentation of the
-// Limited Allocator class
+// Set up a shared allocation state. For the usage see documentation of the
+// Limited Allocator class.
 inline detail::AllocationMemoryLeftThreadsafe
 makeAllocationMemoryLeftThreadsafeObject(MemorySize n) {
   return detail::AllocationMemoryLeftThreadsafe{std::make_shared<
@@ -136,6 +134,12 @@ inline ClearOnAllocation noClearOnAllocation = [](MemorySize) {};
  * // now the total amount of memory allocated by limitedIntVec and
  * limitedStringVec may never exceed limitInBytes
  *
+ * NOTE: For `std::vector` in particular, prefer the wrapper
+ * `ad_utility::VectorWithMemoryLimit` (see `VectorWithMemoryLimit.h`) over
+ * using this allocator directly as in the example above: it works around a
+ * libc++ problem with the deleted default constructor and prevents accidental
+ * copies.
+ *
  * @tparam T the type of Elements that this allocator allocates
  */
 template <typename T>
@@ -171,6 +175,13 @@ class AllocatorWithLimit {
   AllocatorWithLimit<U> as() const {
     return AllocatorWithLimit<U>(memoryLeft_);
   }
+
+  // This allocator has no default constructor, as it always requires a memory
+  // limit. Note that some standard-library implementations (in particular
+  // libc++) sometimes behave strangely with non-default-constructible
+  // allocators; in particular, the default constructors of some
+  // standard-library containers are then no longer SFINAE-friendly. See
+  // `VectorWithMemoryLimit.h` for details.
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))

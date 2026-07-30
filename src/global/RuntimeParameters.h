@@ -24,6 +24,9 @@ struct RuntimeParameters {
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
   using SpaceSeparatedStrings =
       ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
+  using DeduplicationModeParameter =
+      ad_utility::detail::parameterShortNames::DeduplicationModeParameter;
 
   using LogLevelParameter =
       ad_utility::Parameter<LogLevel, LogLevel::FromString, LogLevel::ToString>;
@@ -53,6 +56,17 @@ struct RuntimeParameters {
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
   SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of threads used to read and decompress blocks when scanning
+  // permutations during a runtime index rebuild (see `IndexRebuilder`), both
+  // for the main scan of the old permutations and for the statistics
+  // recomputation. This read/decompress work dominates the rebuild's CPU
+  // usage, so lowering it reduces the rebuild's peak CPU without affecting
+  // query scans. The default of 2 keeps a rebuild on a live server from
+  // starving concurrent queries of CPU (measured on Wikidata on a 16-core
+  // server: peak CPU drops from ~26 to ~16 cores for ~18% more wall time).
+  // A value of 0 falls back to `lazy-index-scan-num-threads`, the same value
+  // as for query scans, which gives the fastest rebuild.
+  SizeT rebuildIndexScanNumThreads_{2, "rebuild-index-scan-num-threads"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
@@ -178,6 +192,14 @@ struct RuntimeParameters {
   LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
                               "log-level"};
 
+  // Controls deduplication of triples in CONSTRUCT query results.
+  // "false" (default): no deduplication, every triple is emitted.
+  // "global": a triple is emitted at most once across the entire result.
+  // N (positive integer): deduplicate against the N most recently seen unique
+  // triples (per template triple); bounded memory, partial deduplication.
+  DeduplicationModeParameter constructDeduplication_{
+      DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
@@ -197,6 +219,12 @@ struct RuntimeParameters {
   // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
                      const std::string& value);
+
+  // Set a parameter from a single string of the form `<name>=<value>` (split
+  // at the first `=`). Throws if the string contains no `=`, if the parameter
+  // does not exist, or if the value is invalid. Used for the
+  // `--set-runtime-parameter` option of `qlever-server`.
+  void setFromAssignment(const std::string& assignment);
 
   // Get all parameter names.
   std::vector<std::string> getKeys() const;

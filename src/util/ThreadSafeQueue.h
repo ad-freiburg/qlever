@@ -40,6 +40,9 @@ class ThreadSafeQueue {
   using value_type = T;
   explicit ThreadSafeQueue(size_t maxSize) : maxSize_{maxSize} {}
 
+  // Return the maximal size of the queue.
+  size_t maxSize() const { return maxSize_; }
+
   // We can neither copy nor move this class
   ThreadSafeQueue(const ThreadSafeQueue&) = delete;
   const ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;

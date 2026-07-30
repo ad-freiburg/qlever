@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
 #include "engine/Join.h"
@@ -108,7 +109,7 @@ class GroupByImpl : public Operation {
   // Helper function to create evaluation contexts in various places for the
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
-      LocalVocab& localVocab, const IdTable& idTable) const;
+      LocalVocab& localVocab, const IdTableView<0>& idTable) const;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -163,7 +164,8 @@ class GroupByImpl : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+  IdTable doGroupBy(const IdTableView<0>& inTable,
+                    const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
@@ -578,7 +580,7 @@ class GroupByImpl : public Operation {
     // the JOIN, etc. `SPO` if the variable that joins the three variable triple
     // and the rest of the query body is the subject of the three variable
     // triple, `PSO` if it is the predicate, `OSP` if it is the object.
-    Permutation::Enum permutation_;
+    const Permutation& permutation_;
     // The column index wrt the `otherSubtree_` of the variable that joins the
     // three variable triple and the rest of the query body.
     size_t subtreeColumnIndex_;
@@ -593,12 +595,12 @@ class GroupByImpl : public Operation {
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and
   // `variableThatMustBeContained`. (They might be the same). If this check
-  // fails, `std::nullopt` is returned. Else the permutation corresponding to
-  // `variableByWhichToSort` is returned, for example `SPO` if the
+  // fails, an empty optional is returned. Else the permutation corresponding
+  // to `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
-  static std::optional<Permutation::Enum> getPermutationForThreeVariableTriple(
+  boost::optional<const Permutation&> getPermutationForThreeVariableTriple(
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
-      const Variable& variableThatMustBeContained);
+      const Variable& variableThatMustBeContained) const;
 
   // If this GROUP BY has exactly one alias, and that alias is a non-distinct
   // count of a single variable, return that variable. Else return
@@ -618,6 +620,14 @@ class GroupByImpl : public Operation {
 
  public:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+ private:
+  // Returns false if any alias expression is non-deterministic.
+  [[nodiscard]] bool isDeterministicImpl() const override {
+    return ql::ranges::all_of(_aliases, [](const Alias& alias) {
+      return alias._expression.isDeterministic();
+    });
+  }
 
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.

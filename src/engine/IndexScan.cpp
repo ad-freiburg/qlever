@@ -156,21 +156,29 @@ string IndexScan::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::canResultBeCachedImpl() const {
+bool IndexScan::resultDoesMatchCacheKey() const {
   return !scanSpecAndBlocksIsPrefiltered_;
 };
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  auto additionalVars = absl::StrJoin(
-      additionalVariables_ |
+  auto isNotStripped = [this](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  auto triple = ::ranges::views::concat(ql::ranges::views::single(subject_),
+                                        ql::ranges::views::single(predicate_),
+                                        ql::ranges::views::single(object_));
+  auto components = ::ranges::views::concat(
+      // All IRIs/literals and non-stripped variables from the scan triple.
+      triple | ql::views::filter([&isNotStripped](const TripleComponent& tc) {
+        return !tc.isVariable() || isNotStripped(tc.getVariable());
+      }) | ql::views::transform(&TripleComponent::toString),
+      // All non-stripped additional variables.
+      additionalVariables_ | ql::views::filter(isNotStripped) |
           ql::views::transform(
-              [](const auto& var) -> decltype(auto) { return var.name(); }),
-      " ");
+              [](const auto& var) -> decltype(auto) { return var.name(); }));
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
-                      subject_.toString(), " ", predicate_.toString(), " ",
-                      object_.toString(), additionalVars.empty() ? "" : " ",
-                      additionalVars);
+                      absl::StrJoin(components.begin(), components.end(), " "));
 }
 
 // _____________________________________________________________________________
@@ -462,11 +470,9 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       cancellationHandle_, locatedTriplesState(), getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
-      ad_utility::CachingTransformInputRange<
-          ad_utility::OwningView<
-              CompressedRelationReader::IdTableGeneratorInputRange>,
-          decltype(makeApplyColumnSubset()), LazyScanMetadata>{
-          std::move(lazyScanAllCols), makeApplyColumnSubset()}};
+      ad_utility::CachingTransformInputRange{
+          std::move(lazyScanAllCols), makeApplyColumnSubset(),
+          ql::type_identity<LazyScanMetadata>{}}};
 };
 
 // _____________________________________________________________________________

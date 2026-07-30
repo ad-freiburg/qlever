@@ -6,6 +6,14 @@
 
 #include "index/TextIndexBuilder.h"
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+
+#include <charconv>
+
+#include "backports/filesystem.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Postings.h"
 #include "index/TextIndexReadWrite.h"
 
@@ -17,7 +25,7 @@ void TextIndexBuilder::buildTextIndexFile(
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   AD_LOG_INFO << std::endl;
   AD_LOG_INFO << "Adding text index ..." << std::endl;
-  std::string indexFilename = onDiskBase_ + ".text.index";
+  std::string indexFilename = absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX);
   bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
   const auto& [wordsFile, docsFile] =
       !addFromWordAndDocsFile ? std::pair{"", ""} : wordsAndDocsFile.value();
@@ -79,7 +87,8 @@ size_t TextIndexBuilder::processWordsForVocabulary(
       distinctWords.insert(line.word_);
     }
   }
-  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
+  textVocab_.createFromSet(distinctWords,
+                           absl::StrCat(onDiskBase_, TEXT_VOCAB_FILE_SUFFIX));
   return numLines;
 }
 
@@ -494,11 +503,22 @@ void TextIndexBuilder::calculateBlockBoundaries() {
 // _____________________________________________________________________________
 void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   AD_LOG_INFO << "Building DocsDB...\n";
+  // If the file doesn't exist, `std::getline` does nothing.
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
-  // To avoid excessive use of RAM,
-  // we write the offsets to and `ad_utility::MmapVector` first;
-  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
+  std::ofstream ofs = ad_utility::makeOfstream(
+      absl::StrCat(onDiskBase_, TEXT_DOCS_DB_FILE_SUFFIX));
+  // To avoid excessive use of RAM, we stream the offsets into a temporary file
+  // and append them to the end of the docsDB file once all text records have
+  // been written.
+  ql::filesystem::path offsetsFilename = onDiskBase_ + ".text.docsDB.tmp";
+  absl::Cleanup deleteOffsetsFile{[&offsetsFilename]() {
+    ad_utility::deleteFile(offsetsFilename, /*warnOnFailure=*/false);
+  }};
+  std::ofstream offsets =
+      ad_utility::makeOfstream(offsetsFilename, std::ios::binary);
+  auto writeOffset = [&offsets](off_t offset) {
+    offsets.write(reinterpret_cast<const char*>(&offset), sizeof(off_t));
+  };
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
   std::string line;
@@ -513,16 +533,21 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
     lineView = lineView.substr(tab + 1);
     ofs << lineView;
     while (currentContextId < contextId) {
-      offsets.push_back(currentOffset);
+      writeOffset(currentOffset);
       currentContextId++;
     }
-    offsets.push_back(currentOffset);
+    writeOffset(currentOffset);
     currentContextId++;
     currentOffset += static_cast<off_t>(lineView.size());
   }
-  offsets.push_back(currentOffset);
-  ofs.write(reinterpret_cast<const char*>(offsets.data()),
-            sizeof(off_t) * offsets.size());
+  writeOffset(currentOffset);
+  // Append the offsets stored in the temporary file to the docsDB file. We
+  // always wrote at least one offset above, so the temporary file is never
+  // empty (which would otherwise set the failbit on `rdbuf` insertion).
+  offsets.close();
+  std::ifstream offsetsIn =
+      ad_utility::makeIfstream(offsetsFilename, std::ios::binary);
+  ofs << offsetsIn.rdbuf();
   AD_LOG_INFO << "DocsDB done.\n";
 }
 

@@ -41,7 +41,8 @@ TEST(EngineTest, multiColumnJoinTest) {
   // a have to equal those of column 2 of b and vice versa).
   MultiColumnJoin{qec, idTableToExecutionTree(qec, a),
                   idTableToExecutionTree(qec, b)}
-      .computeMultiColumnJoin(a, b, jcls, &res);
+      .computeMultiColumnJoin(a.asStaticView<0>(), b.asStaticView<0>(), jcls,
+                              &res);
 
   auto expected = makeIdTableFromVector({{2, 1, 3, 3}, {1, 3, 1, 1}});
   ASSERT_EQ(expected, res);
@@ -64,7 +65,8 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   MultiColumnJoin{qec, idTableToExecutionTree(qec, a),
                   idTableToExecutionTree(qec, b)}
-      .computeMultiColumnJoin(va, vb, jcls, &vres);
+      .computeMultiColumnJoin(va.asStaticView<0>(), vb.asStaticView<0>(), jcls,
+                              &vres);
 
   ASSERT_EQ(4u, vres.size());
   ASSERT_EQ(7u, vres.numColumns());

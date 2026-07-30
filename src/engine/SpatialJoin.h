@@ -26,12 +26,13 @@ using SpatialJoinBoundingBoxColumns =
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
-  const IdTable* const idTableLeft_;
+  const IdTableView<0>* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
-  const IdTable* const idTableRight_;
+  const IdTableView<0>* const idTableRight_;
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
+  std::vector<ColumnIndex> leftSelectedCols_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
   std::optional<double> maxDist_;
@@ -181,6 +182,8 @@ class SpatialJoin : public Operation {
       const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // helper function to generate a variable to column map from `childRight_`

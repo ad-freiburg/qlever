@@ -9,6 +9,7 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -187,7 +188,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // case the `selectColumns` operation is a no-op. Note sure when this is not
   // the case, but better safe than sorry.
   auto result = join->getResult();
-  IdTable resultTable = result->idTable().clone();
+  IdTable resultTable = result->cloneIdTable();
   ColumnIndex s = join->getVariableColumn(V{"?subject"});
   ColumnIndex p = join->getVariableColumn(V{"?predicate"});
   ColumnIndex o = join->getVariableColumn(V{"?object"});
@@ -219,7 +220,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       if (!column.has_value()) {
         continue;
       }
-      for (Id id : result.idTable().getColumn(column.value())) {
+      for (Id id : result.idTableView().getColumn(column.value())) {
         idsToDescribe.insert(id);
       }
     }

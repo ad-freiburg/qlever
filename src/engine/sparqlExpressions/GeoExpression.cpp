@@ -14,8 +14,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -77,6 +77,10 @@ NARY_EXPRESSION(MetricLengthExpression, 1,
 NARY_EXPRESSION(
     GeometryNExpression, 2,
     FV<ad_utility::WktGeometryN, GeoPointOrWktValueGetter, IntValueGetter>);
+
+NARY_EXPRESSION(
+    SimplifyGeometryExpression, 2,
+    FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
@@ -176,6 +180,13 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2) {
   return std::make_unique<GeometryNExpression>(std::move(child1),
                                                std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeSimplifyGeometryExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2) {
+  return std::make_unique<SimplifyGeometryExpression>(std::move(child1),
+                                                      std::move(child2));
 }
 
 // _____________________________________________________________________________

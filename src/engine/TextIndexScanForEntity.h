@@ -71,6 +71,8 @@ class TextIndexScanForEntity : public Operation {
   }
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   const VocabIndex& getVocabIndexOfFixedEntity() const {

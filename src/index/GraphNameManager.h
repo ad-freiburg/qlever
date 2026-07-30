@@ -10,8 +10,10 @@
 #ifndef QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 #define QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H
 
+#include <gtest/gtest_prod.h>
+
+#include "backports/filesystem.h"
 #include "global/Constants.h"
-#include "gtest/gtest_prod.h"
 #include "rdfTypes/Iri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Serializer/SerializeAtomic.h"
@@ -22,6 +24,7 @@
 
 // Generates new graphs with a fixed prefix that don't exist yet. Currently,
 // the graphs are of the form `{prefix}/{ascending number}`.
+// NOTE: this is currently not actively used.
 class GraphNameManager {
   std::string prefixWithoutBraces_ = std::string(QLEVER_NEW_GRAPH_PREFIX);
   // The smallest number such that the graph for this number and all after it
@@ -29,7 +32,11 @@ class GraphNameManager {
   // there may be "gaps" in the actually used graphs.
   ad_utility::CopyableAtomic<uint64_t> nextUnallocatedGraph_ = 1;
 
+  // File where the state is persisted to.
+  std::optional<ql::filesystem::path> filenameForPersisting_;
+
   FRIEND_TEST(GraphNameManager, storeAndRestoreData);
+  FRIEND_TEST(GraphNameManager, readFromDisk);
   FRIEND_TEST(IndexImpl, graphNameManagerIntegration);
 
  public:
@@ -54,10 +61,26 @@ class GraphNameManager {
     return os;
   }
 
+  // Write the state to disk to persist it between restarts.
+  void writeToDisk() const;
+  // Read the state from disk to restore it after a restart.
+  void readFromDisk();
+  // Set the file where the state is persisted to. If `readFromDisk` is `true`,
+  // the already persisted state is additionally read back from disk; if
+  // `false`, only the filename is set (used when the persistence file of an
+  // already loaded index is moved, see `Qlever::moveRebuiltIndexIntoPlace`).
+  void setFilenameForPersisting(ql::filesystem::path filename,
+                                bool readFromDisk);
+
   AD_SERIALIZE_FRIEND_FUNCTION(GraphNameManager) {
     serializer | arg.prefixWithoutBraces_;
     serializer | arg.nextUnallocatedGraph_;
   }
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphNameManager,
+                                              prefixWithoutBraces_,
+                                              nextUnallocatedGraph_,
+                                              filenameForPersisting_);
 };
 
 #endif  // QLEVER_SRC_INDEX_GRAPHNAMEMANAGER_H

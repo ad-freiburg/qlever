@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/EncodedIriManager.h"
 #include "parser/RdfParser.h"
+#include "util/ParsedUri.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {
@@ -114,23 +115,22 @@ const Iri& extractIri(const IdOrLocalVocabEntry& litOrIri) {
 }
 
 struct ApplyBaseIfPresent {
-  IdOrLiteralOrIri operator()(IdOrLocalVocabEntry iri,
-                              const IdOrLocalVocabEntry& base) const {
+  IdOrLiteralOrIri operator()(
+      IdOrLocalVocabEntry iri,
+      const std::optional<qlever::util::ParsedUri>& base) const {
     if (std::holds_alternative<Id>(iri)) {
       AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
       return std::get<Id>(iri);
     }
-    const auto& baseIri = extractIri(base);
-    if (baseIri.empty()) {
-      return std::get<LocalVocabEntry>(iri);
+    if (!base.has_value()) {
+      return std::get<LocalVocabEntry>(std::move(iri));
     }
-    // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
     return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
-        baseIri.getBaseIri(true))};
+        extractIri(iri).toStringRepresentation(), base.value())};
   }
 };
-using IriOrUriExpression = NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter>>;
+using IriOrUriExpression =
+    NARY<2, FV<ApplyBaseIfPresent, IriOrUriValueGetter, ParsedUriGetter>>;
 
 // STRLEN
 struct Strlen {
@@ -158,10 +158,26 @@ struct UpperOrLowerCaseImpl {
   }
 };
 
+// `ad_utility::utf8ToLower` and `ad_utility::utf8ToUpper` have an optional
+// locale argument, so their addresses cannot be used directly as the
+// (single-argument) non-type template argument of `UpperOrLowerCaseImpl`. Wrap
+// them in functions with the exact required signature.
+// TODO<RobinTF> These use the locale-independent (root) case conversion, as
+// `LCASE` and `UCASE` always have. Note that this can differ from the
+// (locale-dependent) lowercasing the index uses for its vocabulary, which could
+// in principle lead to missed lookups; revisit once a locale can be wired into
+// the n-ary string expressions.
+inline std::string utf8ToLowerRootLocale(std::string_view s) {
+  return ad_utility::utf8ToLower(s);
+}
+inline std::string utf8ToUpperRootLocale(std::string_view s) {
+  return ad_utility::utf8ToUpper(s);
+}
+
 using UppercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&utf8ToUpperRootLocale>>;
 using LowercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToLower>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&utf8ToLowerRootLocale>>;
 
 // SUBSTR
 class SubstrImpl {

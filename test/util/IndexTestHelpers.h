@@ -114,11 +114,19 @@ inline Index makeTestIndex(std::string turtle) {
   return makeTestIndex(gtestCurrentTestName(), std::move(turtle));
 }
 
-// Return a static  `QueryExecutionContext` that refers to an index that was
+// Return a static `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
 QueryExecutionContext* getQec(TestIndexConfig config);
+
+// Return a static `QueryExecutionContext` that refers to an index that was
+// build using `makeTestIndex` (see above) at a basename derived from
+// `indexBasenamePrefix` by suffixing it with the test name and the context-map
+// size (see implementation). Use this overload if the test needs control over
+// the on-disk location (e.g. to verify behaviour on an absolute path).
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                              TestIndexConfig config);
 
 // Overload of `getQec` for the simple case where we only care about the turtle
 // input. All other settings are left at their default values.
