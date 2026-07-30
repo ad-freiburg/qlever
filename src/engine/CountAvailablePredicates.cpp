@@ -4,9 +4,6 @@
 
 #include "engine/CountAvailablePredicates.h"
 
-#include <atomic>
-#include <thread>
-
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
@@ -200,17 +197,26 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   *dynResult = std::move(result).toDynamic();
 }
 
-// A HashMap that supports merging by adding values for corresponding keys.
+namespace {
+// A HashMap from `T` to `size_t` that can be merged with another such map by
+// adding the counts of corresponding keys. This is what
+// `computeInParallelChunks` (see below) requires of its result type.
 template <typename T>
-class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
- public:
-  MergeableHashMap& operator%=(const MergeableHashMap& rhs) {
-    for (const auto& [key, value] : rhs) {
-      (*this)[key] += value;
+struct CountMap : ad_utility::HashMap<T, size_t> {
+  void mergeWith(const CountMap& other) {
+    for (const auto& [key, count] : other) {
+      (*this)[key] += count;
     }
-    return *this;
   }
 };
+
+// The minimal number of rows (patterns) that a single thread processes in the
+// first (second) loop of `computePatternTrick`. Smaller inputs are handled by a
+// single thread, because then the work is dominated by the cost of spawning
+// threads and of merging the partial results.
+constexpr size_t MIN_ROWS_PER_THREAD = 500'000;
+constexpr size_t MIN_PATTERNS_PER_THREAD = 100'000;
+}  // namespace
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
@@ -223,94 +229,73 @@ void CountAvailablePredicates::computePatternTrick(
   AD_LOG_DEBUG << "For " << input.size() << " entities in column "
                << subjectColumnIdx << std::endl;
 
-  MergeableHashMap<Id> predicateCounts;
-  MergeableHashMap<size_t> patternCounts;
+  CountMap<Id> predicateCounts;
+  CountMap<size_t> patternCounts;
 
   // These variables are used to gather additional statistics
   size_t numEntitiesWithPatterns = 0;
+  // the number of distinct predicates in patterns
   size_t numPatternPredicates = 0;
+  // the number of predicates counted without patterns
   size_t numListPredicates = 0;
 
-  const size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
-
-  if (input.size() > 0) {
-    decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
-    decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
-    const size_t chunkSize = (input.size() + numThreads - 1) / numThreads;
-    std::vector<MergeableHashMap<size_t>> localPatternCounts(numThreads);
-    {
-      std::vector<std::packaged_task<void()>> tasks;
-      for (size_t t = 0; t < numThreads; ++t) {
-        const size_t start = t * chunkSize;
-        const size_t end = std::min(start + chunkSize, input.size());
-        if (start >= end) break;
-        tasks.emplace_back([&localPatternCounts, &subjectColumn, &patternColumn,
-                            t, start, end]() {
-          for (size_t i = start; i < end; ++i) {
-            if (i > 0 && subjectColumn[i] == subjectColumn[i - 1]) continue;
-            localPatternCounts[t][patternColumn[i].getInt()]++;
+  decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
+  decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
+  ad_utility::computeInParallelChunks(
+      input.size(), MIN_ROWS_PER_THREAD, patternCounts,
+      [&subjectColumn, &patternColumn](CountMap<size_t>& counts, size_t begin,
+                                       size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+          // Skip over elements with the same subject (don't count them twice).
+          // Note: The element before the first one of a chunk is read, but
+          // never written, so this is safe to do in parallel.
+          if (i > 0 && subjectColumn[i] == subjectColumn[i - 1]) {
+            continue;
           }
-        });
-      }
-      ad_utility::runTasksInParallel(std::move(tasks));
-    }
-    for (auto& local : localPatternCounts) {
-      patternCounts %= local;
-    }
-  }
+          counts[patternColumn[i].getInt()]++;
+        }
+      });
   AD_LOG_DEBUG << "Using " << patternCounts.size()
                << " patterns for computing the result." << std::endl;
+  // the number of predicates counted with patterns
   size_t numPredicatesSubsumedInPatterns = 0;
 
+  // flatten into a vector, to make iterable
   AD_LOG_DEBUG << "Converting PatternMap to vector" << std::endl;
   const std::vector<std::pair<size_t, size_t>> patternVec(patternCounts.begin(),
                                                           patternCounts.end());
 
+  // Gather the statistics, and check that all the pattern indices are valid.
+  // Both are cheap enough (they only look at the size of each pattern) to be
+  // done sequentially.
+  for (auto [patternIndex, patternCount] : patternVec) {
+    if (patternIndex >= patterns.size()) {
+      AD_CONTRACT_CHECK(patternIndex == Pattern::NoPattern);
+      continue;
+    }
+    size_t patternSize = patterns[patternIndex].size();
+    numPatternPredicates += patternSize;
+    numPredicatesSubsumedInPatterns += patternCount * patternSize;
+  }
+
+  // resolve the patterns to predicate counts
   AD_LOG_DEBUG << "Start translating pattern counts to predicate counts"
                << std::endl;
-  bool illegalPatternIndexFound = false;
-  if (!patternVec.empty()) {
-    const size_t chunkSize = (patternVec.size() + numThreads - 1) / numThreads;
-    std::vector<MergeableHashMap<Id>> localPredicateCounts(numThreads);
-    std::vector<size_t> localSubsumed(numThreads, 0);
-    std::vector<size_t> localPatternPredicates(numThreads, 0);
-    std::atomic<bool> illegalFound{false};
-    {
-      std::vector<std::packaged_task<void()>> tasks;
-      for (size_t t = 0; t < numThreads; ++t) {
-        const size_t start = t * chunkSize;
-        const size_t end = std::min(start + chunkSize, patternVec.size());
-        if (start >= end) break;
-        tasks.emplace_back([&localPredicateCounts, &localSubsumed,
-                            &localPatternPredicates, &illegalFound, &patternVec,
-                            &patterns, t, start, end]() {
-          for (size_t i = start; i < end; ++i) {
-            auto [patternIndex, patternCount] = patternVec[i];
-            if (patternIndex >= patterns.size()) {
-              if (patternIndex != Pattern::NoPattern) {
-                illegalFound.store(true, std::memory_order_relaxed);
-              }
-              continue;
-            }
-            const auto& pattern = patterns[patternIndex];
-            localPatternPredicates[t] += pattern.size();
-            for (const auto& predicate : pattern) {
-              localPredicateCounts[t][predicate] += patternCount;
-              localSubsumed[t] += patternCount;
-            }
+  ad_utility::computeInParallelChunks(
+      patternVec.size(), MIN_PATTERNS_PER_THREAD, predicateCounts,
+      [&patternVec, &patterns](CountMap<Id>& counts, size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+          auto [patternIndex, patternCount] = patternVec[i];
+          // Entities without a pattern contribute no predicates. All other
+          // pattern indices have been checked above.
+          if (patternIndex >= patterns.size()) {
+            continue;
           }
-        });
-      }
-      ad_utility::runTasksInParallel(std::move(tasks));
-    }
-    for (size_t t = 0; t < numThreads; ++t) {
-      predicateCounts %= localPredicateCounts[t];
-      numPredicatesSubsumedInPatterns += localSubsumed[t];
-      numPatternPredicates += localPatternPredicates[t];
-    }
-    illegalPatternIndexFound = illegalFound.load();
-  }
-  AD_CONTRACT_CHECK(!illegalPatternIndexFound);
+          for (Id predicate : patterns[patternIndex]) {
+            counts[predicate] += patternCount;
+          }
+        }
+      });
   AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
                << std::endl;
   // write the predicate counts to the result
