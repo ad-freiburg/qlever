@@ -59,14 +59,26 @@ struct RuntimeParameters {
   // The number of threads used to read and decompress blocks when scanning
   // permutations during a runtime index rebuild (see `IndexRebuilder`), both
   // for the main scan of the old permutations and for the statistics
-  // recomputation. This read/decompress work dominates the rebuild's CPU
-  // usage, so lowering it reduces the rebuild's peak CPU without affecting
-  // query scans. The default of 2 keeps a rebuild on a live server from
-  // starving concurrent queries of CPU (measured on Wikidata on a 16-core
-  // server: peak CPU drops from ~26 to ~16 cores for ~18% more wall time).
-  // A value of 0 falls back to `lazy-index-scan-num-threads`, the same value
-  // as for query scans, which gives the fastest rebuild.
-  SizeT rebuildIndexScanNumThreads_{2, "rebuild-index-scan-num-threads"};
+  // recomputation. Lowering it reduces the rebuild's CPU usage without
+  // affecting query scans. The default of 1 keeps a rebuild on a live server
+  // from starving concurrent queries of CPU, at nearly no cost in wall time:
+  // the bottleneck of each permutation pipeline is its single sequential
+  // remap thread, so additional scan threads mostly add contention (measured
+  // on Wikidata on an otherwise idle 16-core server, where the wall time was
+  // the same for 1, 2, and 4 threads). A value of 0 falls back to
+  // `lazy-index-scan-num-threads`, the same value as for query scans.
+  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
+  // The number of threads per permutation that compress and write blocks
+  // during a runtime index rebuild. Like the scan parameter above, this
+  // exists so that a rebuild on a live server leaves as much CPU as possible
+  // to concurrent queries: the default of 1 reduces the CPU work of the
+  // permutation phase by ~20% at nearly no cost in wall time (same
+  // measurement setup as above). A value of 0 falls back to
+  // `permutation-writer-num-threads`, which is also used when building an
+  // index from scratch and when writing materialized views, and which this
+  // parameter deliberately leaves untouched.
+  SizeT rebuildPermutationWriterNumThreads_{
+      1, "rebuild-permutation-writer-num-threads"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{

@@ -634,10 +634,12 @@ class IndexImpl {
                                         bool internal) const;
 
   // Create a `CompressedRelationWriter` and a callback that adds the metadata
-  // of large relations to the `metaData` object.
+  // of large relations to the `metaData` object. If `numWriterThreads` is
+  // set, it overrides the number of compress/write threads of the writer
+  // (see the `CompressedRelationWriter` constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
-      IndexMetaData& metaData, size_t numColumns,
-      const std::string& fileName) const;
+      IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
+      std::optional<size_t> numWriterThreads = std::nullopt) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -651,12 +653,14 @@ class IndexImpl {
   // columns in the relation (usually 4, sometimes 6 with patterns).
   // `fileName` is the base name of the files to write to (without suffixes).
   // `sortedTriples` is an input range that provides the triples in the correct
-  // order.
+  // order. If `numWriterThreads` is set, it overrides the number of
+  // compress/write threads (see `getWriterAndCallback`).
   // Return the number of triples written and the metadata for the written
   // permutation.
   std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      std::optional<size_t> numWriterThreads = std::nullopt);
 
  protected:
   // _______________________________________________________________________

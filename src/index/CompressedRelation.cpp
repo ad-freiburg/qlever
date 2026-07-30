@@ -1506,9 +1506,10 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue() {
-  auto threadCount = static_cast<uint32_t>(
-      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
+ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
+    std::optional<size_t> numThreadsOverride) {
+  auto threadCount = static_cast<uint32_t>(numThreadsOverride.value_or(
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>()));
   if (threadCount == 0) {
     threadCount = std::thread::hardware_concurrency();
   } else {
