@@ -6,18 +6,16 @@ add_subdirectory(vocabulary)
 # cyclic dependency:
 # 1. The `index` library needs them, because `IndexImpl` builds an index from
 #    RDF input files.
-# 2. They in turn need the `index` library. `TripleComponent::toValueId` and
-#    friends look words up in the vocabulary of an `IndexImpl` directly. More
-#    fundamentally, comparing two `Id`s calls `LocalVocabEntry::compareThreeWay`
-#    and `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), and the
-#    implementation of `LocalVocabEntry` again requires an `IndexImpl` (see
-#    `LocalVocabEntry.cpp`). Every translation unit that compares `Id`s
-#    therefore depends on the `index` library.
-# Untangling this requires decoupling `LocalVocabEntry` from `IndexImpl` (for
-# example via an abstract interface for the vocabulary lookup), which is a much
-# larger change that also touches one of the hottest code paths of the engine.
-# TODO<joka921> Decouple `LocalVocabEntry` from `IndexImpl`, then move these
-# files into a proper library of their own.
+# 2. They in turn need the `index` library, because `TripleComponent::toValueId`
+#    and friends look words up in the vocabulary of an `IndexImpl` directly.
+# Note: Comparing two `Id`s calls `LocalVocabEntry::compareThreeWay` and
+# `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), so every
+# translation unit that compares `Id`s needs `LocalVocabEntry`. This used to be
+# a dependency on all of `IndexImpl`, but is now abstracted away by the minimal
+# `LocalVocabContext` interface, of which `IndexImpl` is the only implementation.
+# TODO<joka921> Move the conversions of a `TripleComponent` that require an index
+# out of `TripleComponent`, then move these files into a proper library of their
+# own.
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp EncodedIriManager.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
@@ -28,7 +26,7 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp ../parser/TripleComponent.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
-        IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp
+        IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp LocalVocabContext.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
         InputFileSpecification.cpp ../parser/AsyncFileBlockDriver.cpp)
 qlever_target_link_libraries(index qlever_util basicParser vocabulary global)

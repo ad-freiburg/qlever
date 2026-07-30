@@ -293,3 +293,6 @@ GraphNameManager& Index::graphNameManager() {
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
 }
+
+// ____________________________________________________________________________
+const LocalVocabContext& Index::getLocalVocabContext() const { return *pimpl_; }

@@ -18,8 +18,10 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
-class IndexImpl;
-using LocalVocabContext = IndexImpl;
+// The interface that this class needs from the index it belongs to. Only
+// forward-declared here, because its definition requires `global/Id.h`, which
+// in turn requires this header (see the note on `IdProxy` below).
+class LocalVocabContext;
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
