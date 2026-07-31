@@ -321,9 +321,9 @@ TEST_F(HasPredicateScanTest, patternTrickEntitiesWithoutPatternWiderInput) {
 
 // ____________________________________________________________
 TEST_F(HasPredicateScanTest, patternTrickWithLargeInput) {
-  // An input that is large enough to be processed by several threads, the
-  // partial results of which then have to be merged (see `MIN_ROWS_PER_THREAD`
-  // in `CountAvailablePredicates.cpp`).
+  // An input that is large enough to be split into several chunks that are
+  // processed in parallel, the partial results of which then have to be merged
+  // (see `CHUNK_SIZE_ROWS` in `CountAvailablePredicates.cpp`).
   auto Voc = ad_utility::testing::VocabId;
   const auto& patterns = qec->getIndex().getPatterns();
   // The patterns of the index of this fixture, see above: `x -> p p2`,
@@ -332,10 +332,10 @@ TEST_F(HasPredicateScanTest, patternTrickWithLargeInput) {
 
   // Each subject appears twice (the duplicates must not be counted twice), and
   // each of the patterns is used by the same number of subjects. The number of
-  // rows has to exceed `2 * MIN_ROWS_PER_THREAD` for the input to be split.
+  // rows has to exceed `CHUNK_SIZE_ROWS` for the input to be split.
   constexpr size_t numSubjects = 501'000;
   static_assert(numSubjects % 3 == 0);
-  static_assert(2 * numSubjects > 2 * 500'000);
+  static_assert(2 * numSubjects > 500'000);
   IdTable input{2, makeAllocator()};
   input.reserve(2 * numSubjects);
   for (size_t i = 0; i < numSubjects; ++i) {

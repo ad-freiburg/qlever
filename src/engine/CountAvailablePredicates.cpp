@@ -4,6 +4,7 @@
 
 #include "engine/CountAvailablePredicates.h"
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
@@ -210,12 +211,12 @@ struct CountMap : ad_utility::HashMap<T, size_t> {
   }
 };
 
-// The minimal number of rows (patterns) that a single thread processes in the
-// first (second) loop of `computePatternTrick`. Smaller inputs are handled by a
-// single thread, because then the work is dominated by the cost of spawning
-// threads and of merging the partial results.
-constexpr size_t MIN_ROWS_PER_THREAD = 500'000;
-constexpr size_t MIN_PATTERNS_PER_THREAD = 100'000;
+// The number of rows (patterns) that make up a single chunk of work in the
+// first (second) loop of `computePatternTrick`. Inputs that are not larger than
+// this are handled by a single thread, because then the work is dominated by
+// the cost of spawning threads and of merging the partial results.
+constexpr size_t CHUNK_SIZE_ROWS = 500'000;
+constexpr size_t CHUNK_SIZE_PATTERNS = 100'000;
 }  // namespace
 
 // _____________________________________________________________________________
@@ -229,9 +230,6 @@ void CountAvailablePredicates::computePatternTrick(
   AD_LOG_DEBUG << "For " << input.size() << " entities in column "
                << subjectColumnIdx << std::endl;
 
-  CountMap<Id> predicateCounts;
-  CountMap<size_t> patternCounts;
-
   // These variables are used to gather additional statistics
   size_t numEntitiesWithPatterns = 0;
   // the number of distinct predicates in patterns
@@ -241,10 +239,10 @@ void CountAvailablePredicates::computePatternTrick(
 
   decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
   decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
-  ad_utility::computeInParallelChunks(
-      input.size(), MIN_ROWS_PER_THREAD, patternCounts,
-      [&subjectColumn, &patternColumn](CountMap<size_t>& counts, size_t begin,
-                                       size_t end) {
+  CountMap<size_t> patternCounts = ad_utility::computeInParallelChunks(
+      input.size(), CHUNK_SIZE_ROWS,
+      [&subjectColumn, &patternColumn](size_t begin, size_t end) {
+        CountMap<size_t> counts;
         for (size_t i = begin; i < end; ++i) {
           // Skip over elements with the same subject (don't count them twice).
           // Note: The element before the first one of a chunk is read, but
@@ -254,6 +252,7 @@ void CountAvailablePredicates::computePatternTrick(
           }
           counts[patternColumn[i].getInt()]++;
         }
+        return counts;
       });
   AD_LOG_DEBUG << "Using " << patternCounts.size()
                << " patterns for computing the result." << std::endl;
@@ -281,11 +280,12 @@ void CountAvailablePredicates::computePatternTrick(
   // resolve the patterns to predicate counts
   AD_LOG_DEBUG << "Start translating pattern counts to predicate counts"
                << std::endl;
-  ad_utility::computeInParallelChunks(
-      patternVec.size(), MIN_PATTERNS_PER_THREAD, predicateCounts,
-      [&patternVec, &patterns](CountMap<Id>& counts, size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) {
-          auto [patternIndex, patternCount] = patternVec[i];
+  CountMap<Id> predicateCounts = ad_utility::computeInParallelChunks(
+      patternVec.size(), CHUNK_SIZE_PATTERNS,
+      [&patternVec, &patterns](size_t begin, size_t end) {
+        CountMap<Id> counts;
+        for (auto [patternIndex, patternCount] : ql::ranges::subrange(
+                 patternVec.begin() + begin, patternVec.begin() + end)) {
           // Entities without a pattern contribute no predicates. All other
           // pattern indices have been checked above.
           if (patternIndex >= patterns.size()) {
@@ -295,6 +295,7 @@ void CountAvailablePredicates::computePatternTrick(
             counts[predicate] += patternCount;
           }
         }
+        return counts;
       });
   AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
                << std::endl;
