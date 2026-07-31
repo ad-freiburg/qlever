@@ -1,0 +1,45 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# `uriparser`, an RFC 3986 URI parsing library written in C. The CMake build
+# sets `URIPARSER_BUILD_WCHAR_T=OFF`, which is `URI_NO_UNICODE` here, and
+# `URIPARSER_BUILD_{TESTS,DOCS,TOOLS}=OFF`, which simply means that we only
+# build the library.
+#
+# `src/UriConfig.h`, which CMake generates from `src/UriConfig.h.in`, is created
+# by the `patch_cmds` of the `http_archive` in `extensions.bzl`. It has to be a
+# real file next to the sources rather than a `genrule` output, because
+# `UriMemory.c` includes it as `"UriConfig.h"`, i.e. relative to itself.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+exports_files(["COPYING"])
+
+cc_library(
+    name = "uriparser",
+    srcs = glob([
+        "src/*.c",
+        "src/*.h",
+    ]),
+    hdrs = glob(["include/uriparser/*.h"]),
+    # Warnings in third-party code are not QLever's business.
+    copts = ["-Wno-all"],
+    defines = [
+        # The wide-character API is not built, see above.
+        "URI_NO_UNICODE",
+        # QLever links `uriparser` into its own libraries rather than using a
+        # shared library, so its symbols must not be declared `dllimport`.
+        "URI_STATIC_BUILD",
+    ],
+    strip_include_prefix = "include",
+)

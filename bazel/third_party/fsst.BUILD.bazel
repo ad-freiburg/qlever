@@ -1,0 +1,48 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# FSST, a string compression library. This mirrors the `fsst` target of the
+# upstream `CMakeLists.txt`, i.e. `libfsst.cpp` plus the AVX-512 kernel; the
+# `fsst`/`fsst12` command line tools and the `fsst12` library are not built,
+# because QLever only includes `<fsst.h>`.
+#
+# Two differences to the upstream CMake build, both deliberate:
+# - Upstream adds `-march=native` if the compiler supports it. That makes the
+#   build non-reproducible and the artifacts non-portable, so it is omitted
+#   here. `fsst_avx512.cpp` guards its intrinsics behind runtime CPU detection
+#   and compiles fine without it.
+# - Upstream compiles `fsst_avx512.cpp` at `-O1` in release builds. Add that
+#   here via `copts` if the AVX-512 kernel ever turns out to be miscompiled at
+#   higher optimization levels.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+cc_library(
+    name = "fsst",
+    srcs = [
+        "fsst_avx512.cpp",
+        "libfsst.cpp",
+        "libfsst.hpp",
+    ],
+    hdrs = ["fsst.h"],
+    # Warnings in third-party code are not QLever's business; the CMake build
+    # silences them via `target_compile_options(fsst PRIVATE -Wno-extra ...)`.
+    copts = [
+        "-Wno-all",
+        "-Wno-extra",
+    ],
+    includes = ["."],
+    # The AVX-512 kernel `#include`s these in the middle of a function body, so
+    # they are textual headers rather than regular ones.
+    textual_hdrs = glob(["*.inc"]),
+)

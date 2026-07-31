@@ -1,0 +1,37 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `test/engine/idTable/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory. Unlike QLever's own headers these are not on any
+# include path: the tests include their helpers relative to themselves, for
+# example as `../util/GTestHelpers.h`. Declaring them is still necessary, because
+# Bazel only makes declared files visible to a compile action. They are collected
+# by `//test:headers`, which `qlever_cc_test` adds to every test.
+cc_library(
+    name = "headers",
+    # `allow_empty` because not every test directory has helper headers.
+    hdrs = glob(
+        ["**/*.h"],
+        allow_empty = True,
+    ),
+)
+
+qlever_cc_test(
+    name = "CompressedExternalIdTableTest",
+    deps = [
+        "//src/engine",
+        "//src/index",
+    ],
+)

@@ -1,0 +1,85 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `test/backports/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_binary", "qlever_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory. Unlike QLever's own headers these are not on any
+# include path: the tests include their helpers relative to themselves, for
+# example as `../util/GTestHelpers.h`. Declaring them is still necessary, because
+# Bazel only makes declared files visible to a compile action. They are collected
+# by `//test:headers`, which `qlever_cc_test` adds to every test.
+cc_library(
+    name = "headers",
+    # `allow_empty` because not every test directory has helper headers.
+    hdrs = glob(
+        ["**/*.h"],
+        allow_empty = True,
+    ),
+)
+
+# The one test whose source file is not named after the test.
+qlever_cc_test(
+    name = "AlgorithmBackportTests",
+    srcs = ["algorithmTest.cpp"],
+    test_utils = False,
+)
+
+# Not a test but a manual debugging aid with a `main` of its own, hence a
+# `cc_binary` without `gtest_main`.
+qlever_cc_binary(name = "DebugJoinView")
+
+qlever_cc_test(
+    name = "AtomicFlagTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "BackportIteratorTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ConceptsTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "EndsWithTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "FunctionalTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ShiftTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "StartsWithTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ThreeWayComparisonTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "ValueIdentityTest",
+    test_utils = False,
+)

@@ -1,0 +1,49 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/rdfTypes/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+qlever_cc_library(
+    name = "rdfEscaping",
+    srcs = ["RdfEscaping.cpp"],
+    deps = ["//src/util:stringUtils"],
+)
+
+qlever_cc_library(
+    name = "rdfTypes",
+    srcs = [
+        "GeoPoint.cpp",
+        "GeoSparqlHelpers.cpp",
+        "GeometryInfo.cpp",
+        "Iri.cpp",
+        "Literal.cpp",
+        "Variable.cpp",
+    ],
+    deps = [
+        ":rdfEscaping",
+        "//src/parser/sparqlParser",
+        "//src/util:antlrErrorHandling",
+        "@pbutil//:pb_util",
+        "@pbutil//:pb_util_geo",
+        "@pbutil//:pb_util_json",
+        "@s2geometry//:s2",
+    ],
+)

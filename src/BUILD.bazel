@@ -1,0 +1,196 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# This is the counterpart of the part of the top-level `CMakeLists.txt` that
+# comes after `include_directories(src)`: the headers of QLever, the
+# `compilationInfo` library, and the executables whose `main` function lives
+# directly in `src/`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:compilation_info.bzl", "compilation_info")
+load("//bazel:qlever.bzl", "qlever_cc_binary", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+###############################################################################
+# The headers of QLever
+###############################################################################
+# `include_directories(src)` in `CMakeLists.txt` makes every header of QLever
+# visible to every translation unit, and QLever relies on that: taken as a
+# whole, the `#include` graph of `src/**/*.h` is one big cycle. To name just
+# three of the edges, `util/JoinAlgorithms/IndexNestedLoopJoin.h` includes
+# `engine/idTable/IdTable.h`, `global/IdTriple.h` includes
+# `index/CompressedRelation.h`, and `rdfTypes/Iri.h` includes
+# `parser/NormalizedString.h`. CMake does not care, because only the *link*
+# graph has to be acyclic there, and it is (which is why QLever can be built
+# with `BUILD_SHARED_LIBS=ON`).
+#
+# Bazel, in contrast, forbids dependency cycles outright, and a header may only
+# be included by a target that has the header's owner in its transitive `deps`.
+# The two are reconciled by giving each directory a `headers` target that
+# carries exactly its own headers and has no dependencies at all, and by
+# aggregating those into the single `qlever_hdrs` target below. Since the
+# `headers` targets do not depend on each other, no cycle can arise, and since
+# every QLever target depends on the aggregate (`qlever_cc_library` and friends
+# add it automatically), every header is visible everywhere, just like with
+# `include_directories(src)`.
+#
+# Note that this only coarsens the *declared* dependencies. Bazel still prunes
+# the inputs of a compile action to the headers that the compiler actually
+# reported in its `.d` file, so touching an unrelated header does not cause a
+# rebuild.
+#
+# The third-party libraries are attached here rather than to the individual
+# `headers` targets, because QLever's headers use them throughout and repeating
+# the list 17 times would only invite it to drift.
+
+# Every third-party library whose headers appear anywhere in `src/`. This is the
+# union of the libraries in `qlever_target_link_libraries` and of the ones that
+# the individual `CMakeLists.txt` files add, restricted to the ones that are
+# needed to *compile* rather than only to link.
+_THIRD_PARTY_HEADERS = [
+    "@antlr4-cpp-runtime",
+    "@boost.asio",
+    "@boost.beast",
+    "@boost.container",
+    "@boost.filesystem",
+    "@boost.foreach",
+    "@boost.functional",
+    "@boost.geometry",
+    "@boost.iostreams",
+    "@boost.math",
+    "@boost.mp11",
+    "@boost.optional",
+    "@boost.program_options",
+    "@boost.system",
+    "@boost.url",
+    "@boost.uuid",
+    "@com_google_absl//absl/base",
+    "@com_google_absl//absl/cleanup",
+    "@com_google_absl//absl/container:flat_hash_map",
+    "@com_google_absl//absl/container:flat_hash_set",
+    "@com_google_absl//absl/container:inlined_vector",
+    "@com_google_absl//absl/container:node_hash_set",
+    "@com_google_absl//absl/functional:any_invocable",
+    "@com_google_absl//absl/functional:bind_front",
+    "@com_google_absl//absl/functional:function_ref",
+    "@com_google_absl//absl/hash",
+    "@com_google_absl//absl/numeric:bits",
+    "@com_google_absl//absl/status",
+    "@com_google_absl//absl/status:statusor",
+    "@com_google_absl//absl/strings",
+    "@com_google_absl//absl/strings:str_format",
+    "@com_google_absl//absl/synchronization",
+    "@com_google_absl//absl/time",
+    "@com_google_absl//absl/types:compare",
+    "@ctre",
+    "@fsst",
+    "@googletest//:gtest",
+    "@liburing",
+    "@nlohmann_json//:json",
+    "@openssl",
+    # `@boringssl` is redirected to the system OpenSSL, see `MODULE.bazel`.
+    "@opentelemetry-cpp//api",
+    "@opentelemetry-cpp//sdk/src/metrics",
+    "@pbutil//:pb_util",
+    "@pbutil//:pb_util_geo",
+    "@pbutil//:pb_util_json",
+    "@range-v3",
+    "@re2",
+    "@s2geometry//:s2",
+    "@spatialjoin",
+    "@uriparser",
+    "@zstd",
+    # jemalloc is not included by anything, but the CMake build links it into
+    # everything via `link_libraries(jemalloc)`, so that it overrides `malloc`.
+    # This is the closest equivalent. If `pkg-config` does not find it, the
+    # target is empty; see `//bazel:system_library.bzl`.
+    "@jemalloc",
+] + select({
+    # `find_package(ICU ...)` is skipped when `QLEVER_NO_UNICODE` is set.
+    "//bazel:no_unicode_enabled": [],
+    "//conditions:default": ["@icu"],
+})
+
+# The headers of `src/` itself and of `src/backports`, which has no
+# `CMakeLists.txt` of its own and therefore no package of its own either.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+# All headers of QLever. Do not use this directly; `qlever_cc_library`,
+# `qlever_cc_binary` and `qlever_cc_test` add it for you.
+cc_library(
+    name = "qlever_hdrs",
+    deps = _THIRD_PARTY_HEADERS + [
+        ":headers",
+        "//src/engine:headers",
+        "//src/engine/sparqlExpressions:headers",
+        "//src/global:headers",
+        "//src/index:headers",
+        "//src/index/vocabulary:headers",
+        "//src/libqlever:headers",
+        "//src/parser:headers",
+        "//src/parser/data:headers",
+        "//src/parser/sparqlParser:headers",
+        "//src/parser/sparqlParser:headers_relative_to_parser",
+        "//src/rdfTypes:headers",
+        "//src/util:headers",
+        "//src/util/ConfigManager:headers",
+        "//src/util/MemorySize:headers",
+        "//src/util/http:headers",
+        "//src/util/http/HttpParser:headers",
+        "//src/util/metrics:headers",
+    ],
+)
+
+###############################################################################
+# The compilation info
+###############################################################################
+
+# The generated `CompilationInfo.cpp`, which is the equivalent of the
+# `add_custom_command` that runs `CompilationInfo.cmake`.
+compilation_info(name = "CompilationInfo")
+
+# The library with the constants declared in `CompilationInfo.h` and defined in
+# the generated `CompilationInfo.cpp`.
+qlever_cc_library(
+    name = "compilationInfo",
+    srcs = [":CompilationInfo"],
+)
+
+###############################################################################
+# The executables
+###############################################################################
+
+qlever_cc_binary(
+    name = "qlever-server",
+    srcs = ["ServerMain.cpp"],
+    deps = [
+        ":compilationInfo",
+        "//src/engine",
+        "//src/engine:server",
+        "@boost.program_options",
+    ],
+)
+
+qlever_cc_binary(
+    name = "VocabularyMergerMain",
+    deps = [
+        "//src/index",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_binary(
+    name = "PrintIndexVersionMain",
+    deps = ["//src/util:qlever_util"],
+)
