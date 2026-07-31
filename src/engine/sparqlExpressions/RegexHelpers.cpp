@@ -16,6 +16,7 @@
 #include <memory>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 
 namespace sparqlExpression::detail {
 
@@ -40,12 +41,8 @@ bool containsWordBoundary(re2::Regexp* regex) {
       regex->op() == re2::kRegexpNoWordBoundary) {
     return true;
   }
-  for (int i = 0; i < regex->nsub(); ++i) {
-    if (containsWordBoundary(regex->sub()[i])) {
-      return true;
-    }
-  }
-  return false;
+  ql::span subexpressions{regex->sub(), static_cast<size_t>(regex->nsub())};
+  return ql::ranges::any_of(subexpressions, containsWordBoundary);
 }
 
 // Return true iff the `regex` may be used to derive a prefix for the prefilter.
