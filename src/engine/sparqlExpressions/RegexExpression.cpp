@@ -145,10 +145,10 @@ class RegexExpression : public RegexExpressionBase {
 // not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
 // current prefilter expressions do not consider this matching logic.
 std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
-    const SparqlExpression::Ptr& string, const SparqlExpression& regex) {
-  bool childIsStrExpression = string->isStrExpression();
+    const SparqlExpression& string, const SparqlExpression& regex) {
+  bool childIsStrExpression = string.isStrExpression();
   const auto* variableExpression = dynamic_cast<const VariableExpression*>(
-      childIsStrExpression ? string->children()[0].get() : string.get());
+      childIsStrExpression ? string.children()[0].get() : &string);
   const auto* stringLiteralExpression =
       dynamic_cast<const StringLiteralExpression*>(&regex);
   if (!variableExpression || !stringLiteralExpression || childIsStrExpression) {
@@ -195,7 +195,7 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
   // moving the arguments into the expression. The actual regex is always
   // evaluated by `RegexExpression`; the prefilter only restricts the scanned
   // blocks.
-  auto prefilterInfo = detail::getRegexPrefilterInfo(string, *regex);
+  auto prefilterInfo = detail::getRegexPrefilterInfo(*string, *regex);
   return std::make_unique<detail::RegexExpression>(
       std::move(string), std::move(regex), std::move(prefilterInfo));
 }
