@@ -8,7 +8,7 @@ add_subdirectory(vocabulary)
 # `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), so EVERY library
 # that compares `Id`s needs the symbols from `LocalVocabEntry.cpp`. That used to
 # require the `index` library, which is why several files that conceptually
-# belong to `parser` had to be compiled into `index`. The dependency on the
+# belong to `src/parser` had to be compiled into `index`. The dependency on the
 # actual index is now abstracted away by the minimal `LocalVocabContext`
 # interface, whose only implementation is `LocalVocabContextImpl`, which is part
 # of the `index` library below.
