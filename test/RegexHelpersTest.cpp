@@ -188,11 +188,10 @@ TEST(RegexHelpers, longPrefixesAreTruncated) {
 class RegexGenerator {
  private:
   std::mt19937 randomEngine_;
-  int remainingBudget_ = 0;
+  int32_t remainingBudget_ = 0;
 
-  int pick(int numAlternatives) {
-    return std::uniform_int_distribution<int>{
-        0, numAlternatives - 1}(randomEngine_);
+  int32_t pick(int32_t numAlternatives) {
+    return std::uniform_int_distribution{0, numAlternatives - 1}(randomEngine_);
   }
 
   std::string atom() {
@@ -202,14 +201,15 @@ class RegexGenerator {
         R"(\.)", R"(\\)", R"(\x61)", R"(\n)", "\n",         R"(\p{L})",
         "$",     R"(\z)", "^",       R"(\A)", R"(\b)",      R"(\B)",
         "(?i)",  "(?s)",  "(?m)",    "(?U)",  R"(\Qa.b\E)", "[[:word:]]"};
-    return atoms[pick(static_cast<int>(atoms.size()))];
+    return atoms[pick(static_cast<int32_t>(atoms.size()))];
   }
 
  public:
-  explicit RegexGenerator(unsigned seed) : randomEngine_{seed} {}
+  explicit RegexGenerator(std::mt19937::result_type seed)
+      : randomEngine_{seed} {}
 
   // Generate a random regex with the given maximum nesting `depth`.
-  std::string generate(int depth) {
+  std::string generate(int32_t depth) {
     if (depth <= 0 || remainingBudget_-- <= 0) {
       return atom();
     }
@@ -226,7 +226,7 @@ class RegexGenerator {
         static const std::vector<std::string> quantifiers = {
             "?", "*", "+", "{2}", "{1,3}", "{0,2}", "{2,}"};
         return "(?:" + generate(depth - 1) + ")" +
-               quantifiers[pick(static_cast<int>(quantifiers.size()))];
+               quantifiers[pick(static_cast<int32_t>(quantifiers.size()))];
       }
       case 5:
         return atom() + generate(depth - 1);
@@ -274,7 +274,12 @@ TEST(RegexHelpers, randomizedSoundness) {
   // Note: This number is a compromise between coverage and test runtime. The
   // property was additionally verified for a much larger number of regexes
   // offline; if this test ever fails, increase the number to reproduce.
-  for (size_t i = 0; i < 1000; ++i) {
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
+  constexpr size_t NUM_GENERATED_REGEXES = 1000;
+#else
+  constexpr size_t NUM_GENERATED_REGEXES = 100;
+#endif
+  for (size_t i = 0; i < NUM_GENERATED_REGEXES; ++i) {
     std::string regexString = generator.generateRegex(i % 2 == 0);
     RE2 regex{regexString, RE2::Quiet};
     // Invalid regexes never reach the prefix analysis in production.
@@ -298,7 +303,7 @@ TEST(RegexHelpers, randomizedSoundness) {
   }
   // Guard against the test silently becoming vacuous, e.g. because the analysis
   // or the generator changed in a way that no prefixes are derived at all.
-  EXPECT_GT(numRegexesWithPrefix, 100u);
+  EXPECT_GT(numRegexesWithPrefix, NUM_GENERATED_REGEXES / 20);
 }
 
 }  // namespace
