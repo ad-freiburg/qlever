@@ -22,10 +22,10 @@ class BlankNodeManager;
 }
 
 // The interface that a `LocalVocabEntry` requires from the index it belongs to.
-// A `LocalVocabEntry` stores a word that is not part of the index's vocabulary,
-// but that still has to be comparable to the words that are. It therefore needs
-// to look up where in the vocabulary the word would be stored, which is what
-// this interface provides.
+// A `LocalVocabEntry` stores a word that has to be comparable to the words in
+// the index's vocabulary, no matter whether it is contained in that vocabulary
+// or not. It therefore needs to look up where in the vocabulary the word is
+// stored, or would be stored, which is what this interface provides.
 //
 // NOTE: This is deliberately restricted to the operations that
 // `LocalVocabEntry` actually performs, and in particular does not expose the
@@ -34,9 +34,10 @@ class BlankNodeManager;
 // `LocalVocabEntry`. Keeping this interface abstract and minimal is what allows
 // those libraries to be independent of the (much larger) `index` library.
 //
-// The only implementation is `IndexImpl`. There must not be a second one,
-// because `LocalVocabEntry::compareThreeWay` checks that two entries have the
-// same context by comparing the context pointers.
+// The only implementation of this interface is `LocalVocabContextImpl`. There
+// must be exactly one instance of it per index, because
+// `LocalVocabEntry::compareThreeWay` checks that two entries belong to the same
+// index by comparing the context POINTERS.
 class LocalVocabContext {
  public:
   // The bounds of the range in the vocabulary in which a word is stored, or in

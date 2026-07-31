@@ -112,7 +112,7 @@ Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
   using Bounds = std::pair<VocabIndex, VocabIndex>;
   AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
   auto [lower, upper] = std::get<Bounds>(idOrBounds);
-  // If `toValueId` could not convert to `Id`, we have a Literal or Iri,
+  // If `toValueIdOrBounds` could not convert to `Id`, we have a Literal or Iri,
   // which we look up in (and potentially add to) our local vocabulary.
   AD_CORRECTNESS_CHECK(tripleComponent.isLiteral() || tripleComponent.isIri());
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -123,7 +123,8 @@ Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
       return LiteralOrIri{std::move(tripleComponent.getIri())};
     }
   };
-  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry(moveWord(), Id::makeFromVocabIndex(lower),
-                      Id::makeFromVocabIndex(upper), index)));
+  return Id::makeFromLocalVocabIndex(
+      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
+          moveWord(), Id::makeFromVocabIndex(lower),
+          Id::makeFromVocabIndex(upper), index.getLocalVocabContext())));
 }

@@ -127,7 +127,7 @@ class TripleComponent {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(TripleComponent, _variant)
 
   // Apply `visitor` to the value that is currently stored. Used by code that
-  // has to handle all the alternatives exhaustively but cannot be a member
+  // has to handle all the alternatives exhaustively, but cannot be a member
   // function, for example the conversions in
   // `index/TripleComponentConversions.h`.
   template <typename Visitor>
@@ -206,10 +206,9 @@ class TripleComponent {
   // Access the underlying variant (mostly used for testing)
   const auto& getVariant() const { return _variant; }
 
-  /// Convert to an RDF literal. `std::strings` will be emitted directly,
-  // NOTE: The conversions that require an index (`toValueId`,
-  // `toValueIdOrBounds`, `toValueIdIfNotString`, and `toRdfLiteral`) used to be
-  // member functions here. They are free functions in
+  // NOTE: The conversions that require an index (`toValueIdIfNotString`,
+  // `toValueIdOrBounds`, `toValueId`, and `toRdfLiteral`) used to be member
+  // functions here. They are free functions in
   // `index/TripleComponentConversions.h` now, so that this purely syntactic
   // parser type does not depend on the `index` library.
 

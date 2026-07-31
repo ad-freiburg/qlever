@@ -7,7 +7,7 @@
 
 #include "parser/TripleComponent.h"
 
-#include <absl/strings/str_cat.h>
+#include <sstream>
 
 #include "rdfTypes/GeoPoint.h"
 

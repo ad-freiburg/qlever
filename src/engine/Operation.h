@@ -609,10 +609,9 @@ class Operation {
   // of the result).
   virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
 
-  // The context of the `LocalVocabEntry`s that belong to this operation's
-  // index.
+  // The context of the `LocalVocabEntry`s that belong to this operation.
   const LocalVocabContext& getLocalVocabContext() const {
-    return getIndex().getLocalVocabContext();
+    return _executionContext->getLocalVocabContext();
   }
 
  private:

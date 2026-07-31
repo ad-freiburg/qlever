@@ -676,8 +676,8 @@ void DeltaTriples::readFromDisk() {
     return;
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
-  auto [vocab, idRanges] =
-      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getLocalVocabContext());
   if (idRanges.empty()) {
     return;
   }
@@ -790,7 +790,7 @@ void DeltaTriples::addFromSnapshotDiff(
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE void DeltaTriples::remapId(
+void DeltaTriples::remapId(
     const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
     LocalVocab& localVocab, const IndexImpl& index) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
@@ -813,7 +813,8 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
       // cache) into the local vocab and rewrite the id, so that no entry of the
       // new index references the old index, which is destroyed after the swap.
       id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index}));
+          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(),
+                          index.getLocalVocabContext()}));
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(

@@ -6,7 +6,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
 

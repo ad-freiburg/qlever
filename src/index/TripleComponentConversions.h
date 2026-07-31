@@ -17,8 +17,8 @@
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
-#include "index/EncodedIriManager.h"
 #include "index/LocalVocab.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 
 class IndexImpl;
@@ -58,8 +58,9 @@ toValueIdOrBounds(const TripleComponent& tripleComponent,
 [[nodiscard]] Id toValueId(TripleComponent&& tripleComponent,
                            const IndexImpl& index, LocalVocab& localVocab);
 
-// Convert `tripleComponent` to an RDF literal, where an `int64_t` becomes an
-// `xsd:integer` literal and a `double` becomes an `xsd:double` literal.
+// Convert `tripleComponent` to an RDF literal, where a `std::string` is emitted
+// directly, an `int64_t` becomes an `xsd:integer` literal, and a `double`
+// becomes an `xsd:double` literal.
 // TODO<joka921> This function is used in only few places and ignores the strong
 // typing of `Literal`s etc. It should be removed and its calls be replaced by
 // calls that work on the strongly typed `TripleComponent` directly.

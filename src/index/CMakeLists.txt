@@ -9,7 +9,9 @@ add_subdirectory(vocabulary)
 # that compares `Id`s needs the symbols from `LocalVocabEntry.cpp`. That used to
 # require the `index` library, which is why several files that conceptually
 # belong to `parser` had to be compiled into `index`. The dependency on the
-# actual index is now abstracted away by `LocalVocabContext`.
+# actual index is now abstracted away by the minimal `LocalVocabContext`
+# interface, whose only implementation is `LocalVocabContextImpl`, which is part
+# of the `index` library below.
 add_library(localVocab LocalVocabEntry.cpp LocalVocabContext.cpp LocalVocab.cpp)
 qlever_target_link_libraries(localVocab basicParser)
 
@@ -22,7 +24,8 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
-        IdTableUtils.cpp ExportIds.cpp TripleComponentConversions.cpp
+        IdTableUtils.cpp ExportIds.cpp LocalVocabContextImpl.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
-        InputFileSpecification.cpp)
+        InputFileSpecification.cpp
+        TripleComponentConversions.cpp)
 qlever_target_link_libraries(index qlever_util basicParser rdfParser vocabulary localVocab global)
