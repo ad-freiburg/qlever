@@ -153,6 +153,22 @@ jobs:
           name: qlever-npm-package
           path: src/libqlever/npm/ad-freiburg-qlever-*.tgz
 
+      # Run a small end-to-end example against the exact tarball that would be
+      # published: install it into a scratch directory, build a tiny index in
+      # the module's virtual filesystem, and run one query (see
+      # `smoke-test.mjs`). This validates the ES module packaging, the loading
+      # of `qlever.wasm`, and the embind bindings, which the C++ unit tests
+      # cannot see. The step runs after the artifact upload, so that a failing
+      # tarball can still be downloaded for debugging, and before the publish
+      # step, so that a broken package is never published.
+      - name: Smoke-test the npm package
+        run: |
+          SMOKE_DIR=$(mktemp -d)
+          cp src/libqlever/npm/smoke-test.mjs "${SMOKE_DIR}"
+          cd "${SMOKE_DIR}"
+          npm install "${GITHUB_WORKSPACE}"/src/libqlever/npm/ad-freiburg-qlever-*.tgz
+          node smoke-test.mjs
+
       # Release tags publish to the default `latest` dist-tag (what a plain
       # `npm install @ad-freiburg/qlever` resolves to). Pushes to master publish the dev
       # version under the `next` dist-tag, which never affects `latest`;
