@@ -155,3 +155,32 @@ TEST(QuadTest, forAllVariables) {
       {{noVars, differentVars, sameVar}, {{{Var("?d"), {differentVars}}}}},
       {Var("?a"), Var("?b"), Var("?c"), Var("?d")});
 }
+
+// _____________________________________________________________________________
+// Two `SparqlTripleSimpleWithGraph` are only equal if all their members are
+// equal, including those of the base class `SparqlTripleSimple`.
+TEST(QuadTest, equalityOfSparqlTripleSimpleWithGraph) {
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  using Triple = SparqlTripleSimpleWithGraph;
+  auto makeTriple =
+      [](std::string_view s, std::string_view p, std::string_view o,
+         const Graph& g,
+         Triple::AdditionalScanColumns additionalScanColumns = {}) {
+        return Triple{iri(s), iri(p), iri(o), g,
+                      std::move(additionalScanColumns)};
+      };
+  const Graph graph{iri("<d>")};
+  const Triple triple = makeTriple("<a>", "<b>", "<c>", graph);
+
+  EXPECT_EQ(triple, makeTriple("<a>", "<b>", "<c>", graph));
+  // Differences in the subject, predicate, object, and additional scan columns
+  // (which are all stored in the base class) must not be ignored.
+  EXPECT_NE(triple, makeTriple("<x>", "<b>", "<c>", graph));
+  EXPECT_NE(triple, makeTriple("<a>", "<x>", "<c>", graph));
+  EXPECT_NE(triple, makeTriple("<a>", "<b>", "<x>", graph));
+  EXPECT_NE(triple,
+            makeTriple("<a>", "<b>", "<c>", graph, {{0, Variable{"?x"}}}));
+  // A difference in the graph of course also makes them unequal.
+  EXPECT_NE(triple, makeTriple("<a>", "<b>", "<c>", Graph{std::monostate{}}));
+  EXPECT_NE(triple, makeTriple("<a>", "<b>", "<c>", Graph{iri("<x>")}));
+}

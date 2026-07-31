@@ -693,6 +693,41 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
   ASSERT_EQ(43, m.numRows_);
 }
 
+// Two `CompressedBlockMetadata` are only equal if all their members are equal,
+// including those of the base class `CompressedBlockMetadataNoBlockIndex`.
+TEST(CompressedBlockMetadata, equalityAlsoConsidersTheBaseClass) {
+  CompressedBlockMetadata block{
+      {{}, 12, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
+  auto equalBlock = block;
+  EXPECT_EQ(block, equalBlock);
+
+  // Each of the following differs from `block` in exactly one member. All but
+  // the last of those members belong to the base class.
+  auto differentNumRows = block;
+  differentNumRows.numRows_ = 13;
+  auto differentFirstTriple = block;
+  differentFirstTriple.firstTriple_ = {V(17), V(0), V(0), g};
+  auto differentLastTriple = block;
+  differentLastTriple.lastTriple_ = {V(38), V(4), V(13), g};
+  auto differentGraphInfo = block;
+  differentGraphInfo.graphInfo_ = std::vector<Id>{g};
+  auto differentDuplicates = block;
+  differentDuplicates.containsDuplicatesWithDifferentGraphs_ = true;
+  auto differentOffsets = block;
+  differentOffsets.offsetsAndCompressedSize_ =
+      std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>{{17, 42}};
+  auto differentBlockIndex = block;
+  differentBlockIndex.blockIndex_ = 1;
+
+  for (const auto& other :
+       {differentNumRows, differentFirstTriple, differentLastTriple,
+        differentGraphInfo, differentDuplicates, differentOffsets,
+        differentBlockIndex}) {
+    EXPECT_NE(block, other);
+    EXPECT_NE(other, block);
+  }
+}
+
 TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   using SpecBlocksBounds = CompressedRelationReader::ScanSpecAndBlocksAndBounds;
   CompressedBlockMetadata block1{
