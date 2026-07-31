@@ -2,7 +2,7 @@ add_subdirectory(vocabulary)
 addLinkAndDiscoverTest(PatternCreatorTest index)
 addLinkAndDiscoverTest(ScanSpecificationTest index)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
-addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest parser)
+addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
 # When the `server` library is not built (Emscripten, see
 # `src/engine/CMakeLists.txt`), the server-integration test is compiled out
