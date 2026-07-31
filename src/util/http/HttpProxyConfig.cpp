@@ -14,67 +14,21 @@
 #include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_split.h>
 
-#include <boost/asio/ip/address.hpp>
 #include <boost/url/parse.hpp>
 #include <boost/url/url_view.hpp>
 #include <cstdlib>
-#include <initializer_list>
 #include <stdexcept>
 
-#include "backports/algorithm.h"
 #include "util/Exception.h"
 
 namespace ad_utility::httpProxy {
 
-namespace {
-
-// Read an environment variable, returning `std::nullopt` if it is not set. Note
-// that we deliberately treat a variable that is set but empty as "set to the
-// empty string", which `parseProxyUrl` then maps to "no proxy". This makes
-// `https_proxy=` a working way to disable a proxy inherited from a parent
-// process, as it is with other tools.
-//
-// We copy the value instead of returning a `std::string_view` into the
-// environment block, which POSIX allows a later `setenv` or `putenv` to
-// invalidate.
-std::optional<std::string> getEnv(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr) {
-    return std::nullopt;
-  }
-  return std::string{value};
+// ____________________________________________________________________________
+std::string Proxy::asStringForLogging() const {
+  return absl::StrCat(host_, ":", port_,
+                      authorization_.empty() ? "" : " (with authentication)");
 }
-
-// Return the value of the first of the given environment variables that is set,
-// or `std::nullopt` if none of them is. Note that "set to the empty string" and
-// "not set" must be kept apart here, because only the latter may fall back to
-// `all_proxy`, see `ProxyConfiguration::fromEnvironment`.
-std::optional<std::string> firstEnvThatIsSet(
-    std::initializer_list<const char*> variableNames) {
-  for (const char* name : variableNames) {
-    if (auto value = getEnv(name); value.has_value()) {
-      return value;
-    }
-  }
-  return std::nullopt;
-}
-
-// Strip an optional `:port` suffix from a `no_proxy` list entry. We only strip
-// what is unambiguously a port, so that an unbracketed IPv6 address (which
-// contains multiple colons) is left alone rather than mangled.
-std::string_view stripPortFromNoProxyEntry(std::string_view entry) {
-  size_t colon = entry.rfind(':');
-  if (colon == std::string_view::npos || entry.find(':') != colon) {
-    return entry;
-  }
-  std::string_view port = entry.substr(colon + 1);
-  bool isPort = !port.empty() && ql::ranges::all_of(port, absl::ascii_isdigit);
-  return isPort ? entry.substr(0, colon) : entry;
-}
-
-}  // namespace
 
 // ____________________________________________________________________________
 std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
@@ -139,114 +93,27 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
 }
 
 // ____________________________________________________________________________
-bool isExcludedByNoProxy(std::string_view host, std::string_view noProxy) {
-  std::string lowerHost = absl::AsciiStrToLower(host);
-  for (std::string_view rawEntry : absl::StrSplit(noProxy, ',')) {
-    std::string_view entry = absl::StripAsciiWhitespace(rawEntry);
-    if (entry.empty()) {
-      continue;
-    }
-    if (entry == "*") {
-      return true;
-    }
-    entry = stripPortFromNoProxyEntry(entry);
-    // A leading dot is conventional but carries no meaning: both `.example.org`
-    // and `example.org` match the domain and all of its subdomains.
-    while (absl::StartsWith(entry, ".")) {
-      entry.remove_prefix(1);
-    }
-    if (entry.empty()) {
-      continue;
-    }
-    std::string lowerEntry = absl::AsciiStrToLower(entry);
-    if (lowerHost == lowerEntry ||
-        absl::EndsWith(lowerHost, absl::StrCat(".", lowerEntry))) {
-      return true;
-    }
-  }
-  return false;
+std::string absoluteFormTarget(std::string_view host, std::string_view port,
+                               std::string_view target) {
+  AD_CONTRACT_CHECK(absl::StartsWith(target, "/"),
+                    "The request target must be in origin form");
+  std::string portSuffix = port == "80" ? "" : absl::StrCat(":", port);
+  return absl::StrCat("http://", host, portSuffix, target);
 }
 
 // ____________________________________________________________________________
-bool isLoopbackHost(std::string_view host) {
-  std::string lowerHost = absl::AsciiStrToLower(host);
-  if (lowerHost == "localhost" || absl::EndsWith(lowerHost, ".localhost")) {
-    return true;
-  }
-  // An IPv6 address may appear in brackets, which `make_address` does not
-  // accept.
-  std::string_view address = lowerHost;
-  if (absl::StartsWith(address, "[") && absl::EndsWith(address, "]")) {
-    address = address.substr(1, address.size() - 2);
-  }
-  boost::system::error_code ec;
-  auto parsedAddress = boost::asio::ip::make_address(address, ec);
-  // A host name that is not an IP address at all is not loopback (we
-  // deliberately do not resolve it, which would be a DNS lookup per request).
-  return !ec && parsedAddress.is_loopback();
+std::optional<Proxy> proxyFromEnvironment() {
+  const char* value = std::getenv("http_proxy");
+  // Note that `parseProxyUrl` maps the empty string to "no proxy", so a
+  // variable that is set but empty needs no special handling here.
+  return parseProxyUrl(value == nullptr ? std::string_view{}
+                                        : std::string_view{value});
 }
 
 // ____________________________________________________________________________
-ProxyConfiguration::ProxyConfiguration(std::string_view httpProxy,
-                                       std::string_view httpsProxy,
-                                       std::string_view noProxy)
-    : httpProxy_{parseProxyUrl(httpProxy)},
-      httpsProxy_{parseProxyUrl(httpsProxy)},
-      noProxy_{noProxy} {}
-
-// ____________________________________________________________________________
-ProxyConfiguration ProxyConfiguration::fromEnvironment() {
-  auto allProxy = firstEnvThatIsSet({"all_proxy", "ALL_PROXY"});
-  // `all_proxy` only applies if no scheme-specific variable is set at all. In
-  // particular, `https_proxy=` (set but empty) means "no proxy for HTTPS" and
-  // must not fall back to `all_proxy`.
-  auto orElseAllProxy =
-      [&allProxy](std::optional<std::string> value) -> std::string {
-    return value.has_value() ? std::move(value).value()
-                             : allProxy.value_or(std::string{});
-  };
-  return ProxyConfiguration{
-      orElseAllProxy(firstEnvThatIsSet({"http_proxy"})),
-      orElseAllProxy(firstEnvThatIsSet({"https_proxy", "HTTPS_PROXY"})),
-      firstEnvThatIsSet({"no_proxy", "NO_PROXY"}).value_or(std::string{})};
-}
-
-// ____________________________________________________________________________
-std::optional<Proxy> ProxyConfiguration::proxyFor(std::string_view scheme,
-                                                  std::string_view host) const {
-  AD_CONTRACT_CHECK(scheme == "http" || scheme == "https");
-  const std::optional<Proxy>& proxy =
-      scheme == "http" ? httpProxy_ : httpsProxy_;
-  if (!proxy.has_value() || isLoopbackHost(host) ||
-      isExcludedByNoProxy(host, noProxy_)) {
-    return std::nullopt;
-  }
+const std::optional<Proxy>& globalProxy() {
+  static const std::optional<Proxy> proxy = proxyFromEnvironment();
   return proxy;
-}
-
-// ____________________________________________________________________________
-std::string ProxyConfiguration::asStringForLogging() const {
-  if (empty()) {
-    return "none";
-  }
-  // Deliberately without `authorization_`, which holds the proxy credentials.
-  auto describe = [](const std::optional<Proxy>& proxy) -> std::string {
-    if (!proxy.has_value()) {
-      return "none";
-    }
-    return absl::StrCat(proxy->host_, ":", proxy->port_,
-                        proxy->authorization_.empty() ? "" : " (with auth)");
-  };
-  return absl::StrCat("HTTP -> ", describe(httpProxy_), ", HTTPS -> ",
-                      describe(httpsProxy_), ", excluded hosts: ",
-                      noProxy_.empty() ? "none (except loopback)" : noProxy_);
-}
-
-// ____________________________________________________________________________
-const ProxyConfiguration& globalProxyConfiguration() {
-  static const ProxyConfiguration configuration =
-      ProxyConfiguration::fromEnvironment();
-  return configuration;
 }
 
 }  // namespace ad_utility::httpProxy

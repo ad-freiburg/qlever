@@ -18,12 +18,14 @@
 #include "backports/three_way_comparison.h"
 
 // Support for routing QLever's outgoing HTTP requests (`SERVICE` and `LOAD`)
-// through an HTTP proxy, configured via the de-facto standard environment
-// variables `http_proxy`, `https_proxy`, `all_proxy` and `no_proxy`. See
-// `ProxyConfiguration::fromEnvironment` for the exact rules.
+// through an HTTP proxy, configured via the `http_proxy` environment variable.
+// If a proxy is configured, then *all* outgoing requests go through it, no
+// matter whether they use HTTP or HTTPS, and no matter which host they address.
+// In particular, the other variables that some tools understand (`HTTP_PROXY`,
+// `https_proxy`, `all_proxy`, `no_proxy`) are deliberately not supported.
 namespace ad_utility::httpProxy {
 
-// An HTTP proxy that a single connection should be routed through.
+// An HTTP proxy to route outgoing requests through.
 struct Proxy {
   // Host and port of the proxy itself (not of the request's target).
   std::string host_;
@@ -31,6 +33,10 @@ struct Proxy {
   // The value for the `Proxy-Authorization` header, or empty if the proxy
   // requires no authentication.
   std::string authorization_;
+
+  // A human-readable description for the startup log. Deliberately does not
+  // contain the credentials encoded in `authorization_`.
+  std::string asStringForLogging() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Proxy, host_, port_,
                                               authorization_)
@@ -51,71 +57,32 @@ struct Proxy {
 // treated as a plain HTTP proxy.
 std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl);
 
-// Return true if `host` is matched by `noProxy`, which is a comma-separated
-// list of host names in the format of the `no_proxy` environment variable.
-// Matching is case-insensitive and ignores a leading dot on list entries. An
-// entry matches if it equals `host`, or if `host` ends with `.` followed by the
-// entry (so `example.org` matches `sparql.example.org`, but not
-// `notexample.org`). The single entry `*` matches every host.
+// The request target for a plain HTTP request that is relayed by a proxy: the
+// proxy needs to know where to relay the request to, so the target has to be
+// given in absolute form (`http://host:port/path`) instead of in the usual
+// origin form (`/path`), see RFC 9112, 3.2.2. The default port 80 is omitted,
+// as `curl` does, so that no proxy can trip over a redundant `:80`. The
+// `target` must be in origin form, that is, start with a `/` (as
+// `Url::target()` does).
 //
-// Note: an optional `:port` suffix on a list entry is stripped and ignored, so
-// `example.org:80` excludes `example.org` on all ports. CIDR notation is not
-// supported; IP addresses only match literally.
-bool isExcludedByNoProxy(std::string_view host, std::string_view noProxy);
+// Note that this is only needed for plain HTTP. An HTTPS connection is tunneled
+// through the proxy via the `CONNECT` method, so the proxy never sees the
+// request itself and the target stays in origin form.
+std::string absoluteFormTarget(std::string_view host, std::string_view port,
+                               std::string_view target);
 
-// Return true if `host` names the loopback interface, i.e. it is `localhost`,
-// a subdomain of `localhost`, or a loopback IP address (`127.0.0.0/8` or
-// `::1`, optionally in brackets). Such hosts always bypass the proxy, see
-// `ProxyConfiguration::proxyFor`.
-bool isLoopbackHost(std::string_view host);
+// Read the proxy from the `http_proxy` environment variable, or return
+// `std::nullopt` if it is unset or empty (setting it to the empty string is the
+// conventional way of undoing a setting inherited from a parent process).
+// Throws if the variable holds a malformed proxy URL, see `parseProxyUrl`.
+// Exposed mostly for testing; production code should use `globalProxy()` below.
+std::optional<Proxy> proxyFromEnvironment();
 
-// The proxy settings for this process. Immutable after construction; obtain the
-// process-wide instance via `globalProxyConfiguration()` below.
-class ProxyConfiguration {
- private:
-  std::optional<Proxy> httpProxy_;
-  std::optional<Proxy> httpsProxy_;
-  std::string noProxy_;
-
- public:
-  // Construct from the raw values of the corresponding environment variables.
-  // Primarily for testing; production code uses `fromEnvironment()`. Throws if
-  // one of the proxy URLs is malformed, see `parseProxyUrl`.
-  ProxyConfiguration(std::string_view httpProxy, std::string_view httpsProxy,
-                     std::string_view noProxy);
-
-  // Read the settings from the environment. For HTTPS targets we consult
-  // `https_proxy`, `HTTPS_PROXY`, `all_proxy`, `ALL_PROXY` in that order; for
-  // HTTP targets `http_proxy`, `all_proxy`, `ALL_PROXY`. The uppercase
-  // `HTTP_PROXY` is deliberately *not* honored, following `curl`: in a CGI
-  // environment it would be settable by a remote client via the `Proxy:`
-  // request header. The exclusion list is taken from `no_proxy`, or else
-  // `NO_PROXY`. Throws if a proxy URL is malformed, see `parseProxyUrl`.
-  static ProxyConfiguration fromEnvironment();
-
-  // The proxy to use for a request to `host` via `scheme` (which must be
-  // `"http"` or `"https"`), or `std::nullopt` to connect directly. Loopback
-  // hosts always connect directly, so that a proxy meant for external traffic
-  // does not break requests to endpoints on the same machine.
-  std::optional<Proxy> proxyFor(std::string_view scheme,
-                                std::string_view host) const;
-
-  // A single-line, human-readable summary for the startup log. Never contains
-  // the proxy credentials.
-  std::string asStringForLogging() const;
-
-  // True if no proxy is configured at all, i.e. `proxyFor` always returns
-  // `std::nullopt`.
-  bool empty() const {
-    return !httpProxy_.has_value() && !httpsProxy_.has_value();
-  }
-};
-
-// The process-wide proxy configuration, read from the environment on first use.
-// Throws if the environment holds a malformed proxy URL; `qlever-server` calls
-// this early during startup so that such a misconfiguration is reported before
-// the index is loaded, rather than on the first federated query.
-const ProxyConfiguration& globalProxyConfiguration();
+// The proxy for this process, read from the environment on first use. Throws if
+// the environment holds a malformed proxy URL; `qlever-server` calls this early
+// during startup so that such a misconfiguration is reported before the index
+// is loaded, rather than on the first federated query.
+const std::optional<Proxy>& globalProxy();
 
 }  // namespace ad_utility::httpProxy
 

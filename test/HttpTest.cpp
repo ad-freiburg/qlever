@@ -748,7 +748,7 @@ auto makeProxyEchoServer() {
 }
 
 // A minimal fake proxy that accepts a single connection, reads one `CONNECT`
-// request from it, stores the raw request bytes in `requestOut`, and replies
+// request from it, remembers the relevant parts of that request, and replies
 // with `response` (which must be a complete HTTP response). It never speaks
 // TLS, so a client that proceeds to the TLS handshake after a successful
 // `CONNECT` will fail there; that is intentional, and lets us verify the
@@ -767,9 +767,9 @@ class FakeConnectProxy {
 
   unsigned short getPort() const { return acceptor_.local_endpoint().port(); }
 
-  // The raw `CONNECT` request that the client sent. Only valid after the
-  // connection has been handled, i.e. after this object has been destroyed or
-  // the client has finished; call `join()` first.
+  // The method, target, `Host` and `Proxy-Authorization` of the `CONNECT`
+  // request that the client sent. Only valid once the connection has been
+  // handled, so call `join()` first.
   const std::string& getRequest() const { return request_; }
 
   void join() {
@@ -810,9 +810,10 @@ class FakeConnectProxy {
 };
 }  // namespace
 
-// A plain HTTP request through a proxy goes to the proxy, and uses the absolute
-// form of the request target while keeping `Host` pointed at the target server.
-TEST(HttpProxy, plainHttpRequestUsesAbsoluteFormTarget) {
+// A plain HTTP request that is relayed by a proxy connects to the proxy instead
+// of to the target host, and names its target in absolute form while keeping
+// `Host` pointed at the target server.
+TEST(HttpProxy, plainHttpRequestIsRelayedByTheProxy) {
   auto proxyServer = makeProxyEchoServer();
   proxyServer.runInOwnThread();
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -820,44 +821,12 @@ TEST(HttpProxy, plainHttpRequestUsesAbsoluteFormTarget) {
   Proxy proxy{"localhost", std::to_string(proxyServer.getPort()), ""};
   // Note that the target host `example.org` is never contacted; the connection
   // goes to the proxy, which is our echo server here.
-  auto client =
-      std::make_unique<HttpClient>("example.org", "8080", std::move(proxy));
-  auto response = HttpClient::sendRequest(
-      std::move(client), verb::get, "example.org", "/sparql?query=X", handle);
+  auto response = sendHttpOrHttpsRequestWithProxy(
+      Url{"http://example.org:8080/sparql?query=X"}, handle, verb::get, "",
+      "text/plain", "text/plain", 0, proxy);
   EXPECT_EQ(response.status_, status::ok);
   EXPECT_EQ(toString(std::move(response.body_)),
             "http://example.org:8080/sparql?query=X\nexample.org");
-}
-
-// The default port 80 is omitted from the absolute-form target, and a target
-// that does not start with a `/` still yields a well-formed one.
-TEST(HttpProxy, plainHttpRequestOmitsDefaultPortAndAddsMissingSlash) {
-  auto proxyServer = makeProxyEchoServer();
-  proxyServer.runInOwnThread();
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-
-  Proxy proxy{"localhost", std::to_string(proxyServer.getPort()), ""};
-  auto client =
-      std::make_unique<HttpClient>("example.org", "80", std::move(proxy));
-  auto response = HttpClient::sendRequest(std::move(client), verb::get,
-                                          "example.org", "sparql", handle);
-  EXPECT_EQ(response.status_, status::ok);
-  EXPECT_EQ(toString(std::move(response.body_)),
-            "http://example.org/sparql\nexample.org");
-}
-
-// Without a proxy, the request target stays in origin form.
-TEST(HttpProxy, withoutProxyTheTargetStaysInOriginForm) {
-  auto server = makeProxyEchoServer();
-  server.runInOwnThread();
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-
-  auto client = std::make_unique<HttpClient>("localhost",
-                                             std::to_string(server.getPort()));
-  auto response = HttpClient::sendRequest(std::move(client), verb::get,
-                                          "localhost", "/sparql", handle);
-  EXPECT_EQ(response.status_, status::ok);
-  EXPECT_EQ(toString(std::move(response.body_)), "/sparql\nlocalhost");
 }
 
 // For HTTPS, the client first asks the proxy for a tunnel via `CONNECT`. Check

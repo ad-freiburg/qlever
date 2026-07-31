@@ -62,16 +62,16 @@ template <typename StreamType>
 class HttpClientImpl {
  public:
   // The constructor sets up the connection to the client. If `proxy` is set,
-  // the TCP connection goes to the proxy instead of to `host`:`port`; the
-  // request is then relayed to `host`:`port` by the proxy. For HTTP this means
-  // sending the request in absolute form (see `sendRequest`), for HTTPS it
-  // means establishing a tunnel with the `CONNECT` method before the TLS
-  // handshake (see `establishProxyTunnel` in `HttpClient.cpp`). Note that
-  // `sendHttpOrHttpsRequest` below determines the proxy automatically; an
-  // explicit `proxy` is mostly useful for tests.
+  // the TCP connection goes to the proxy instead of to `host`:`port`, and it is
+  // the proxy that connects to `host`:`port` on our behalf. For HTTPS this
+  // requires establishing a tunnel with the `CONNECT` method before the TLS
+  // handshake (see `establishProxyTunnel` in `HttpClient.cpp`). For plain HTTP
+  // nothing else has to happen here, but the request target passed to
+  // `sendRequest` then has to be in absolute form (see `absoluteFormTarget` in
+  // `HttpProxyConfig.h`), which `sendHttpOrHttpsRequest` below takes care of.
   HttpClientImpl(
       std::string_view host, std::string_view port,
-      std::optional<ad_utility::httpProxy::Proxy> proxy = std::nullopt);
+      const std::optional<ad_utility::httpProxy::Proxy>& proxy = std::nullopt);
 
   // The destructor closes the connection.
   ~HttpClientImpl();
@@ -83,10 +83,10 @@ class HttpClientImpl {
   // for only one request, as the client is moved to the content yielding
   // coroutine.
   //
-  // For a plain HTTP request through a proxy, `target` is rewritten from
-  // origin form (`/sparql`) to absolute form (`http://host:port/sparql`), as
-  // required by RFC 9112, 3.2.2. The `Host` header always names `host`, never
-  // the proxy.
+  // Note that `host` only determines the `Host` header; where the request
+  // actually goes was already decided by the constructor. With a proxy, `Host`
+  // hence still names the target server, and `target` has to be in absolute
+  // form, see there.
   static HttpOrHttpsResponse sendRequest(
       std::unique_ptr<HttpClientImpl> client,
       const boost::beast::http::verb& method, std::string_view host,
@@ -95,23 +95,12 @@ class HttpClientImpl {
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain");
 
-  // Simple way to establish a websocket connection.
-  //
-  // Note: unlike `sendRequest`, this does not support going through a proxy;
-  // `target` is always sent in origin form. QLever only uses this to talk to
-  // its own websocket endpoint, which is never proxied.
+  // Simple way to establish a websocket connection
   boost::beast::http::response<boost::beast::http::string_body>
   sendWebSocketHandshake(const boost::beast::http::verb& method,
                          std::string_view host, std::string_view target);
 
  private:
-  // The target host and port, i.e. the server we want to talk to. With a proxy
-  // these differ from the host and port we are actually connected to.
-  std::string host_;
-  std::string port_;
-  // The proxy to relay through, or `std::nullopt` for a direct connection.
-  std::optional<ad_utility::httpProxy::Proxy> proxy_;
-
   // The connection stream and associated objects. See the implementation of
   // `openStream` for why we need all of them, and not just `stream_`.
   boost::asio::io_context ioContext_;
@@ -144,7 +133,8 @@ using SendRequestType = std::function<HttpOrHttpsResponse(
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
 // `requestBody` is the payload sent for POST requests (default: empty). If
 // `maxRedirects` is greater than 0, the function will automatically follow
-// redirects (301, 302, 307, 308) up to the specified limit.
+// redirects (301, 302, 307, 308) up to the specified limit. All requests are
+// routed through the proxy configured for this process, see `globalProxy()`.
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
@@ -152,6 +142,19 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
     std::string_view acceptHeader = "text/plain", size_t maxRedirects = 0);
+
+// Same as above, but route the requests through `proxy` (or directly, if it is
+// `std::nullopt`) instead of through the proxy configured for this process.
+// Mostly useful for tests, as the latter is read from the environment only once
+// per process. Note that this deliberately is not an overload of the above,
+// which could then no longer be converted to a `SendRequestType`.
+HttpOrHttpsResponse sendHttpOrHttpsRequestWithProxy(
+    const ad_utility::httpUtils::Url& url,
+    ad_utility::SharedCancellationHandle handle,
+    const boost::beast::http::verb& method, std::string_view postData,
+    std::string_view contentTypeHeader, std::string_view acceptHeader,
+    size_t maxRedirects,
+    const std::optional<ad_utility::httpProxy::Proxy>& proxy);
 
 #endif
 #endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H

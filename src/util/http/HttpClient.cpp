@@ -7,7 +7,6 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/HttpClient.h"
 
-#include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
 
 #include <boost/url/url.hpp>
@@ -74,7 +73,7 @@ void establishProxyTunnel(tcp::socket& socket, const Proxy& proxy,
         "> and responded with: ", status, " ", toStd(response.reason()),
         status == 407 ? ". Note that credentials for the proxy can be given as "
                         "part of the proxy URL, as in "
-                        "`https_proxy=http://user:password@proxy:3128`"
+                        "`http_proxy=http://user:password@proxy:3128`"
                       : ""));
   }
 
@@ -94,16 +93,14 @@ void establishProxyTunnel(tcp::socket& socket, const Proxy& proxy,
 
 // ____________________________________________________________________________
 template <typename StreamType>
-HttpClientImpl<StreamType>::HttpClientImpl(
-    std::string_view host, std::string_view port,
-    std::optional<ad_utility::httpProxy::Proxy> proxy)
-    : host_{host}, port_{port}, proxy_{std::move(proxy)} {
+HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
+                                           std::string_view port,
+                                           const std::optional<Proxy>& proxy) {
   // With a proxy, the TCP connection goes to the proxy, and it is the proxy
-  // that connects to `host_`:`port_` on our behalf. Everything below is
-  // otherwise identical to the direct case, except for the `CONNECT` tunnel for
-  // HTTPS.
-  std::string_view connectHost = proxy_.has_value() ? proxy_->host_ : host_;
-  std::string_view connectPort = proxy_.has_value() ? proxy_->port_ : port_;
+  // that connects to `host`:`port` on our behalf. Everything below is otherwise
+  // identical to the direct case, except for the `CONNECT` tunnel for HTTPS.
+  std::string_view connectHost = proxy.has_value() ? proxy->host_ : host;
+  std::string_view connectPort = proxy.has_value() ? proxy->port_ : port;
 
   // IMPORTANT implementation note: Although we need only `stream_` later, it
   // is important that we also keep `io_context_` and `ssl_context_` alive.
@@ -116,7 +113,7 @@ HttpClientImpl<StreamType>::HttpClientImpl(
     auto const results = resolver.resolve(connectHost, connectPort);
     stream_->connect(results);
     // No tunnel needed: a plain HTTP request is relayed by the proxy based on
-    // the absolute-form request target that `sendRequest` produces.
+    // the absolute form of its request target, see `absoluteFormTarget`.
   } else {
     static_assert(std::is_same_v<StreamType, ssl::stream<tcp::socket>>,
                   "StreamType must be either boost::beast::tcp_stream or "
@@ -127,15 +124,16 @@ HttpClientImpl<StreamType>::HttpClientImpl(
     stream_ = std::make_unique<StreamType>(ioContext_, *ssl_context_);
     // Note that the SNI host is the target host, also when going through a
     // proxy: the TLS session is with the target, the proxy only forwards bytes.
-    if (!SSL_set_tlsext_host_name(stream_->native_handle(), host_.c_str())) {
+    if (!SSL_set_tlsext_host_name(stream_->native_handle(),
+                                  std::string{host}.c_str())) {
       boost::system::error_code ec{static_cast<int>(::ERR_get_error()),
                                    boost::asio::error::get_ssl_category()};
       throw boost::system::system_error{ec};
     }
     auto const results = resolver.resolve(connectHost, connectPort);
     boost::asio::connect(stream_->next_layer(), results.begin(), results.end());
-    if (proxy_.has_value()) {
-      establishProxyTunnel(stream_->next_layer(), proxy_.value(), host_, port_);
+    if (proxy.has_value()) {
+      establishProxyTunnel(stream_->next_layer(), proxy.value(), host, port);
     }
     stream_->handshake(ssl::stream_base::client);
   }
@@ -175,32 +173,10 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   // Check that we have a stream (created in the constructor).
   AD_CORRECTNESS_CHECK(client->stream_);
 
-  // A plain HTTP request through a proxy must use the absolute form of the
-  // request target, so that the proxy knows where to relay it to (RFC 9112,
-  // 3.2.2). For HTTPS we tunnel via `CONNECT` instead, and the proxy never
-  // sees the request, so the target stays in origin form.
-  std::string absoluteTarget;
-  if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
-    if (client->proxy_.has_value()) {
-      // Omit the default port, as `curl` does, so that the target we send is
-      // the most conventional spelling and no proxy can trip over a redundant
-      // `:80`. Note that `Url::port()` is never empty, it defaults to `80`.
-      std::string port =
-          client->port_ == "80" ? "" : absl::StrCat(":", client->port_);
-      // `Url::target()` always starts with a `/`, but `sendRequest` is also
-      // called directly with targets that don't, so be lenient here.
-      absoluteTarget =
-          absl::StrCat("http://", host, port,
-                       absl::StartsWith(target, "/") ? "" : "/", target);
-      target = absoluteTarget;
-    }
-  }
-
   // Set up the request.
   http::request<http::string_body> request;
   request.method(method);
   request.target(target);
-  // Note: the `Host` header always names the target server, never the proxy.
   request.set(http::field::host, host);
   request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
   request.set(http::field::accept, acceptHeader);
@@ -306,19 +282,37 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     ad_utility::SharedCancellationHandle handle, const http::verb& method,
     std::string_view requestData, std::string_view contentTypeHeader,
     std::string_view acceptHeader, size_t maxRedirects) {
+  return sendHttpOrHttpsRequestWithProxy(
+      url, std::move(handle), method, requestData, contentTypeHeader,
+      acceptHeader, maxRedirects, ad_utility::httpProxy::globalProxy());
+}
+
+// ____________________________________________________________________________
+HttpOrHttpsResponse sendHttpOrHttpsRequestWithProxy(
+    const ad_utility::httpUtils::Url& url,
+    ad_utility::SharedCancellationHandle handle, const http::verb& method,
+    std::string_view requestData, std::string_view contentTypeHeader,
+    std::string_view acceptHeader, size_t maxRedirects,
+    const std::optional<Proxy>& proxy) {
   auto sendRequest = [&](const Url& currentUrl,
                          auto ti) -> HttpOrHttpsResponse {
     using Client = typename decltype(ti)::type;
-    // Determine the proxy per request and not once for the whole call, so that
-    // a redirect to a host that is excluded via `no_proxy` (or that switches
-    // between HTTP and HTTPS) is handled correctly.
-    auto client = std::make_unique<Client>(
-        currentUrl.host(), currentUrl.port(),
-        ad_utility::httpProxy::globalProxyConfiguration().proxyFor(
-            currentUrl.protocolAsString(), currentUrl.host()));
+    auto client =
+        std::make_unique<Client>(currentUrl.host(), currentUrl.port(), proxy);
+    // A plain HTTP request that is relayed by a proxy has to name its target in
+    // absolute form, so that the proxy knows where to relay it to. For HTTPS
+    // the connection is tunneled through the proxy, which then never sees the
+    // request, so the target stays in origin form.
+    std::string target = currentUrl.target();
+    if constexpr (std::is_same_v<Client, HttpClient>) {
+      if (proxy.has_value()) {
+        target = ad_utility::httpProxy::absoluteFormTarget(
+            currentUrl.host(), currentUrl.port(), target);
+      }
+    }
     return Client::sendRequest(std::move(client), method, currentUrl.host(),
-                               currentUrl.target(), handle, requestData,
-                               contentTypeHeader, acceptHeader);
+                               target, handle, requestData, contentTypeHeader,
+                               acceptHeader);
   };
 
   using namespace ad_utility::use_type_identity;

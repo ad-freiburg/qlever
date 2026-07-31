@@ -297,20 +297,19 @@ int main(int argc, char** argv) {
                 << std::endl;
   }
 
-  // Read the proxy settings for outgoing requests (`SERVICE` and `LOAD`) from
-  // the environment. We do this eagerly so that a malformed proxy URL fails the
+  // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
+  // environment. We do this eagerly so that a malformed proxy URL fails the
   // startup with a readable message, instead of only surfacing on the first
-  // federated query. Only log the settings if a proxy is actually configured,
-  // to not add noise for the common case.
+  // federated query. Only log if a proxy is actually configured, to not add
+  // noise for the common case.
   try {
-    const auto& proxyConfiguration =
-        ad_utility::httpProxy::globalProxyConfiguration();
-    if (!proxyConfiguration.empty()) {
+    const auto& proxy = ad_utility::httpProxy::globalProxy();
+    if (proxy.has_value()) {
       AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
-                  << proxyConfiguration.asStringForLogging() << std::endl;
+                  << proxy->asStringForLogging() << std::endl;
     }
   } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Invalid proxy configuration in the environment: "
+    AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
                  << e.what() << std::endl;
     return EXIT_FAILURE;
   }

@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,28 +27,25 @@ using ::testing::HasSubstr;
 using ::testing::Optional;
 
 namespace {
-// The environment variables that `ProxyConfiguration::fromEnvironment` looks
-// at.
-constexpr std::array proxyEnvironmentVariables{
-    "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
-    "all_proxy",  "ALL_PROXY",  "no_proxy",    "NO_PROXY"};
-
 // Matcher for a `Proxy` with the given host and port and no authentication.
 auto isProxy(std::string_view host, std::string_view port) {
   return Optional(Proxy{std::string{host}, std::string{port}, ""});
 }
 }  // namespace
 
-// A fixture that clears all proxy-related environment variables, so that the
+// A fixture that clears the proxy-related environment variables, so that the
 // tests are independent of the environment they happen to run in, and restores
-// them afterwards.
+// them afterwards. Note that `HTTP_PROXY` is cleared as well, although it is
+// never read, so that `uppercaseHttpProxyIsIgnored` also holds when it happens
+// to be set in the environment.
 class ProxyEnvironmentTest : public ::testing::Test {
  private:
+  static constexpr std::array variableNames_{"http_proxy", "HTTP_PROXY"};
   std::vector<std::pair<std::string, std::string>> savedValues_;
 
  protected:
   void SetUp() override {
-    for (const char* name : proxyEnvironmentVariables) {
+    for (const char* name : variableNames_) {
       if (const char* value = std::getenv(name); value != nullptr) {
         savedValues_.emplace_back(name, value);
       }
@@ -56,7 +54,7 @@ class ProxyEnvironmentTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    for (const char* name : proxyEnvironmentVariables) {
+    for (const char* name : variableNames_) {
       ::unsetenv(name);
     }
     for (const auto& [name, value] : savedValues_) {
@@ -143,226 +141,71 @@ TEST(ParseProxyUrl, malformedUrlsAreRejected) {
 }
 
 // _____________________________________________________________________________
-TEST(IsExcludedByNoProxy, exactAndSuffixMatches) {
-  EXPECT_TRUE(isExcludedByNoProxy("example.org", "example.org"));
-  EXPECT_TRUE(isExcludedByNoProxy("sparql.example.org", "example.org"));
-  EXPECT_TRUE(isExcludedByNoProxy("a.b.example.org", "example.org"));
-  // A leading dot on the entry is conventional and carries no extra meaning.
-  EXPECT_TRUE(isExcludedByNoProxy("sparql.example.org", ".example.org"));
-  EXPECT_TRUE(isExcludedByNoProxy("example.org", ".example.org"));
+TEST(Proxy, asStringForLoggingHidesCredentials) {
+  EXPECT_EQ(parseProxyUrl("http://proxy:3128")->asStringForLogging(),
+            "proxy:3128");
+  // The default port is spelled out, so that the log is unambiguous.
+  EXPECT_EQ(parseProxyUrl("proxy")->asStringForLogging(), "proxy:80");
 
-  // Matching is on domain-label boundaries, not plain string suffixes.
-  EXPECT_FALSE(isExcludedByNoProxy("notexample.org", "example.org"));
-  EXPECT_FALSE(isExcludedByNoProxy("example.org.evil.com", "example.org"));
-  EXPECT_FALSE(isExcludedByNoProxy("example.com", "example.org"));
-}
-
-// _____________________________________________________________________________
-TEST(IsExcludedByNoProxy, listHandling) {
-  std::string_view list = "example.org, foo.com ,, bar.net";
-  EXPECT_TRUE(isExcludedByNoProxy("example.org", list));
-  EXPECT_TRUE(isExcludedByNoProxy("x.foo.com", list));
-  EXPECT_TRUE(isExcludedByNoProxy("bar.net", list));
-  EXPECT_FALSE(isExcludedByNoProxy("other.org", list));
-
-  // An empty list excludes nothing.
-  EXPECT_FALSE(isExcludedByNoProxy("example.org", ""));
-  EXPECT_FALSE(isExcludedByNoProxy("example.org", " , , "));
-
-  // `*` excludes everything.
-  EXPECT_TRUE(isExcludedByNoProxy("example.org", "*"));
-  EXPECT_TRUE(isExcludedByNoProxy("anything.at.all", "foo.com,*"));
-}
-
-// _____________________________________________________________________________
-TEST(IsExcludedByNoProxy, caseInsensitiveAndPortIsIgnored) {
-  EXPECT_TRUE(isExcludedByNoProxy("EXAMPLE.org", "example.ORG"));
-  EXPECT_TRUE(isExcludedByNoProxy("Sparql.Example.Org", "example.org"));
-  // A port on the entry is stripped, so it matches on all ports.
-  EXPECT_TRUE(isExcludedByNoProxy("example.org", "example.org:80"));
-  EXPECT_TRUE(isExcludedByNoProxy("example.org", "example.org:443"));
-  // A colon that is not a port is left alone (an IPv6 address).
-  EXPECT_TRUE(isExcludedByNoProxy("fe80::1", "fe80::1"));
-}
-
-// _____________________________________________________________________________
-TEST(IsLoopbackHost, namesAndAddresses) {
-  EXPECT_TRUE(isLoopbackHost("localhost"));
-  EXPECT_TRUE(isLoopbackHost("LOCALHOST"));
-  EXPECT_TRUE(isLoopbackHost("foo.localhost"));
-  EXPECT_TRUE(isLoopbackHost("127.0.0.1"));
-  EXPECT_TRUE(isLoopbackHost("127.1.2.3"));
-  EXPECT_TRUE(isLoopbackHost("::1"));
-  EXPECT_TRUE(isLoopbackHost("[::1]"));
-
-  EXPECT_FALSE(isLoopbackHost("example.org"));
-  EXPECT_FALSE(isLoopbackHost("notlocalhost"));
-  EXPECT_FALSE(isLoopbackHost("localhost.example.org"));
-  EXPECT_FALSE(isLoopbackHost("10.0.0.1"));
-  EXPECT_FALSE(isLoopbackHost("128.0.0.1"));
-  EXPECT_FALSE(isLoopbackHost(""));
-}
-
-// _____________________________________________________________________________
-TEST(ProxyConfiguration, schemeSelectsTheProxy) {
-  ProxyConfiguration configuration{"http://http-proxy:3128",
-                                   "http://https-proxy:3129", ""};
-  EXPECT_THAT(configuration.proxyFor("http", "example.org"),
-              isProxy("http-proxy", "3128"));
-  EXPECT_THAT(configuration.proxyFor("https", "example.org"),
-              isProxy("https-proxy", "3129"));
-  EXPECT_FALSE(configuration.empty());
-}
-
-// _____________________________________________________________________________
-TEST(ProxyConfiguration, onlyOneSchemeConfigured) {
-  ProxyConfiguration onlyHttps{"", "http://https-proxy:3129", ""};
-  EXPECT_EQ(onlyHttps.proxyFor("http", "example.org"), std::nullopt);
-  EXPECT_THAT(onlyHttps.proxyFor("https", "example.org"),
-              isProxy("https-proxy", "3129"));
-  EXPECT_FALSE(onlyHttps.empty());
-
-  ProxyConfiguration none{"", "", ""};
-  EXPECT_EQ(none.proxyFor("http", "example.org"), std::nullopt);
-  EXPECT_EQ(none.proxyFor("https", "example.org"), std::nullopt);
-  EXPECT_TRUE(none.empty());
-}
-
-// _____________________________________________________________________________
-TEST(ProxyConfiguration, noProxyAndLoopbackBypassTheProxy) {
-  ProxyConfiguration configuration{"http://proxy:3128", "http://proxy:3128",
-                                   "internal.example.org"};
-  EXPECT_THAT(configuration.proxyFor("https", "example.org"),
-              isProxy("proxy", "3128"));
-  EXPECT_EQ(configuration.proxyFor("https", "internal.example.org"),
-            std::nullopt);
-  EXPECT_EQ(configuration.proxyFor("https", "sub.internal.example.org"),
-            std::nullopt);
-  // Loopback always bypasses the proxy, even when not listed in `no_proxy`.
-  EXPECT_EQ(configuration.proxyFor("http", "localhost"), std::nullopt);
-  EXPECT_EQ(configuration.proxyFor("http", "127.0.0.1"), std::nullopt);
-}
-
-// _____________________________________________________________________________
-TEST(ProxyConfiguration, invalidSchemeIsAContractViolation) {
-  ProxyConfiguration configuration{"http://proxy:3128", "http://proxy:3128",
-                                   ""};
-  EXPECT_ANY_THROW(configuration.proxyFor("ftp", "example.org"));
-}
-
-// _____________________________________________________________________________
-TEST(ProxyConfiguration, asStringForLoggingHidesCredentials) {
-  ProxyConfiguration configuration{"http://user:secret@proxy:3128",
-                                   "http://proxy:3129", "example.org"};
-  std::string logged = configuration.asStringForLogging();
-  EXPECT_THAT(logged, HasSubstr("proxy:3128"));
-  EXPECT_THAT(logged, HasSubstr("(with auth)"));
-  EXPECT_THAT(logged, HasSubstr("proxy:3129"));
-  EXPECT_THAT(logged, HasSubstr("example.org"));
+  std::string withAuth =
+      parseProxyUrl("http://user:secret@proxy:3128")->asStringForLogging();
+  EXPECT_THAT(withAuth, HasSubstr("proxy:3128"));
+  EXPECT_THAT(withAuth, HasSubstr("(with authentication)"));
   // Neither the password nor its encoding may appear in the log.
-  EXPECT_THAT(logged, ::testing::Not(HasSubstr("secret")));
-  EXPECT_THAT(logged,
+  EXPECT_THAT(withAuth, ::testing::Not(HasSubstr("secret")));
+  EXPECT_THAT(withAuth,
               ::testing::Not(HasSubstr(absl::Base64Escape("user:secret"))));
-
-  EXPECT_EQ(ProxyConfiguration("", "", "").asStringForLogging(), "none");
 }
 
 // _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, emptyEnvironmentMeansNoProxy) {
-  auto configuration = ProxyConfiguration::fromEnvironment();
-  EXPECT_TRUE(configuration.empty());
-  EXPECT_EQ(configuration.proxyFor("http", "example.org"), std::nullopt);
-  EXPECT_EQ(configuration.proxyFor("https", "example.org"), std::nullopt);
+TEST(AbsoluteFormTarget, portIsOmittedOnlyForTheDefault) {
+  EXPECT_EQ(absoluteFormTarget("example.org", "8080", "/sparql?query=X"),
+            "http://example.org:8080/sparql?query=X");
+  EXPECT_EQ(absoluteFormTarget("example.org", "80", "/sparql"),
+            "http://example.org/sparql");
+  // The target must be in origin form.
+  EXPECT_ANY_THROW(absoluteFormTarget("example.org", "80", "sparql"));
 }
 
 // _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, schemeSpecificVariables) {
-  setEnv("http_proxy", "http://http-proxy:3128");
-  setEnv("https_proxy", "http://https-proxy:3129");
-  auto configuration = ProxyConfiguration::fromEnvironment();
-  EXPECT_THAT(configuration.proxyFor("http", "example.org"),
-              isProxy("http-proxy", "3128"));
-  EXPECT_THAT(configuration.proxyFor("https", "example.org"),
-              isProxy("https-proxy", "3129"));
+TEST_F(ProxyEnvironmentTest, unsetOrEmptyMeansNoProxy) {
+  EXPECT_EQ(proxyFromEnvironment(), std::nullopt);
+  // Setting the variable to the empty string is the conventional way of undoing
+  // a proxy setting inherited from a parent process.
+  setEnv("http_proxy", "");
+  EXPECT_EQ(proxyFromEnvironment(), std::nullopt);
 }
 
 // _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, uppercaseHttpsProxyIsHonored) {
-  setEnv("HTTPS_PROXY", "http://https-proxy:3129");
-  EXPECT_THAT(
-      ProxyConfiguration::fromEnvironment().proxyFor("https", "example.org"),
-      isProxy("https-proxy", "3129"));
-}
-
-// _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, lowercaseWinsOverUppercase) {
-  setEnv("https_proxy", "http://lower:1");
-  setEnv("HTTPS_PROXY", "http://upper:2");
-  EXPECT_THAT(
-      ProxyConfiguration::fromEnvironment().proxyFor("https", "example.org"),
-      isProxy("lower", "1"));
+TEST_F(ProxyEnvironmentTest, proxyIsReadFromHttpProxy) {
+  setEnv("http_proxy", "http://proxy:3128");
+  EXPECT_THAT(proxyFromEnvironment(), isProxy("proxy", "3128"));
 }
 
 // _____________________________________________________________________________
 TEST_F(ProxyEnvironmentTest, uppercaseHttpProxyIsIgnored) {
-  // `HTTP_PROXY` is deliberately not honored, see the comment on
-  // `ProxyConfiguration::fromEnvironment`.
+  // `HTTP_PROXY` is deliberately not honored, following `curl`: in a CGI
+  // environment it would be settable by a remote client via the `Proxy:`
+  // request header.
   setEnv("HTTP_PROXY", "http://should-be-ignored:3128");
-  auto configuration = ProxyConfiguration::fromEnvironment();
-  EXPECT_TRUE(configuration.empty());
-  EXPECT_EQ(configuration.proxyFor("http", "example.org"), std::nullopt);
-}
-
-// _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, allProxyIsTheFallbackForBothSchemes) {
-  setEnv("all_proxy", "http://all-proxy:1080");
-  auto configuration = ProxyConfiguration::fromEnvironment();
-  EXPECT_THAT(configuration.proxyFor("http", "example.org"),
-              isProxy("all-proxy", "1080"));
-  EXPECT_THAT(configuration.proxyFor("https", "example.org"),
-              isProxy("all-proxy", "1080"));
-
-  // A scheme-specific variable takes precedence over `all_proxy`.
-  setEnv("https_proxy", "http://https-proxy:3129");
-  auto withHttps = ProxyConfiguration::fromEnvironment();
-  EXPECT_THAT(withHttps.proxyFor("http", "example.org"),
-              isProxy("all-proxy", "1080"));
-  EXPECT_THAT(withHttps.proxyFor("https", "example.org"),
-              isProxy("https-proxy", "3129"));
-}
-
-// _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, emptyVariableDisablesAnInheritedProxy) {
-  // Setting a variable to the empty string is the conventional way of undoing a
-  // proxy setting inherited from a parent process. Note that it must also
-  // override `all_proxy`, not fall back to it.
-  setEnv("all_proxy", "http://all-proxy:1080");
-  setEnv("https_proxy", "");
-  auto configuration = ProxyConfiguration::fromEnvironment();
-  EXPECT_THAT(configuration.proxyFor("http", "example.org"),
-              isProxy("all-proxy", "1080"));
-  EXPECT_EQ(configuration.proxyFor("https", "example.org"), std::nullopt);
-}
-
-// _____________________________________________________________________________
-TEST_F(ProxyEnvironmentTest, noProxyFromEnvironment) {
-  setEnv("https_proxy", "http://proxy:3128");
-  setEnv("no_proxy", "internal.example.org");
-  auto configuration = ProxyConfiguration::fromEnvironment();
-  EXPECT_EQ(configuration.proxyFor("https", "internal.example.org"),
-            std::nullopt);
-  EXPECT_THAT(configuration.proxyFor("https", "external.example.org"),
-              isProxy("proxy", "3128"));
-
-  setEnv("NO_PROXY", "other.example.org");
-  ::unsetenv("no_proxy");
-  auto upperCase = ProxyConfiguration::fromEnvironment();
-  EXPECT_EQ(upperCase.proxyFor("https", "other.example.org"), std::nullopt);
+  EXPECT_EQ(proxyFromEnvironment(), std::nullopt);
 }
 
 // _____________________________________________________________________________
 TEST_F(ProxyEnvironmentTest, malformedEnvironmentValueThrows) {
-  setEnv("https_proxy", "socks5://proxy:1080");
-  AD_EXPECT_THROW_WITH_MESSAGE(ProxyConfiguration::fromEnvironment(),
+  setEnv("http_proxy", "socks5://proxy:1080");
+  AD_EXPECT_THROW_WITH_MESSAGE(proxyFromEnvironment(),
                                HasSubstr("only supports plain HTTP proxies"));
+}
+
+// _____________________________________________________________________________
+// Note: this is the only test that touches `globalProxy()`, which is important
+// because it reads the environment only once per process.
+TEST_F(ProxyEnvironmentTest, globalProxyIsReadOnlyOnce) {
+  setEnv("http_proxy", "http://proxy:3128");
+  EXPECT_THAT(globalProxy(), isProxy("proxy", "3128"));
+  // A later change of the environment has no effect anymore.
+  setEnv("http_proxy", "http://other-proxy:3129");
+  EXPECT_THAT(globalProxy(), isProxy("proxy", "3128"));
+  EXPECT_THAT(proxyFromEnvironment(), isProxy("other-proxy", "3129"));
 }
