@@ -7,6 +7,7 @@
 
 #include <string_view>
 
+#include "index/TripleComponentConversions.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
@@ -89,7 +90,7 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
             "Only one variable is allowed per search side");
       }
       LocalVocab lv;
-      auto id = TripleComponent{comp}.toValueId(index, lv);
+      auto id = toValueId(TripleComponent{comp}, index, lv);
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         throw PathSearchException("No vocabulary entry for " + comp.toString());
       } else {
