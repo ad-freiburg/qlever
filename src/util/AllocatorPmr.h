@@ -53,9 +53,8 @@ class LimitedMemoryResource : public ql::pmr::memory_resource {
   ql::pmr::memory_resource* upstream_;
 
  public:
-  LimitedMemoryResource(
-      MemorySize limit, ql::pmr::memory_resource* upstream,
-      ClearOnAllocation clearOnAllocation = noClearOnAllocation)
+  LimitedMemoryResource(MemorySize limit, ql::pmr::memory_resource* upstream,
+                        ClearOnAllocation clearOnAllocation = ad_utility::noop)
       : tracker_{limit, std::move(clearOnAllocation)},
         upstream_{upstream == nullptr ? ql::pmr::get_default_resource()
                                       : upstream} {}
@@ -234,7 +233,7 @@ class PmrAllocator {
   // Limited: create a LimitedMemoryResource over the default upstream.
   static PmrAllocator makeLimited(
       MemorySize limit,
-      ClearOnAllocation clearOnAllocation = noClearOnAllocation) {
+      ClearOnAllocation clearOnAllocation = ad_utility::noop) {
     // The `LimitedMemoryResource` control block is intentionally sourced from
     // the global heap via `make_shared` rather than from the upstream via
     // `allocate_shared`: the upstream here is always the default resource, and
@@ -254,7 +253,7 @@ template <typename T>
 PmrAllocator<T> makePmrAllocatorWithLimit(
     MemorySize limit,
     ql::pmr::memory_resource* upstream = ql::pmr::get_default_resource(),
-    ClearOnAllocation clearOnAllocation = noClearOnAllocation) {
+    ClearOnAllocation clearOnAllocation = ad_utility::noop) {
   // The control block is deliberately sourced from the global heap (not from
   // `upstream` via `allocate_shared`): its few tens of bytes are engine
   // bookkeeping that should live and die independently of the (possibly

@@ -93,7 +93,7 @@ class AllocatorWithLimit {
   /// makeAllocationMemoryLeftThreadsafeObject()
   explicit AllocatorWithLimit(
       detail::AllocationMemoryLeftThreadsafe ml,
-      ClearOnAllocation clearOnAllocation = noClearOnAllocation)
+      ClearOnAllocation clearOnAllocation = ad_utility::noop)
       : tracker_{std::move(ml), std::move(clearOnAllocation)} {}
 
   /// Obtain an AllocatorWithLimit<OtherType> that refers to the same limit.
@@ -172,7 +172,7 @@ class AllocatorWithLimit {
   }
   static AllocatorWithLimit makeLimited(
       MemorySize limit,
-      ClearOnAllocation clearOnAllocation = noClearOnAllocation) {
+      ClearOnAllocation clearOnAllocation = ad_utility::noop) {
     return AllocatorWithLimit{makeAllocationMemoryLeftThreadsafeObject(limit),
                                std::move(clearOnAllocation)};
   }

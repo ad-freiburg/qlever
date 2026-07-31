@@ -64,7 +64,7 @@ Allocator<T> makeUnlimitedAllocator() {
 template <typename T>
 Allocator<T> makeAllocatorWithLimit(
     ad_utility::MemorySize limit,
-    ad_utility::ClearOnAllocation c = ad_utility::noClearOnAllocation) {
+    ad_utility::ClearOnAllocation c = ad_utility::noop) {
   return Allocator<T>::makeLimited(limit, std::move(c));
 }
 

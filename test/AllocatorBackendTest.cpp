@@ -10,8 +10,7 @@
 //   ad_utility::allocatorImpl::AllocatorWithLimit<int>  (limit backend)
 //   ad_utility::PmrAllocator<int>                       (PMR backend)
 //
-// Backend-specific behaviour lives in AllocatorWithLimitTest.cpp and
-// AllocatorPmrTest.cpp respectively.
+// Backend-specific behaviour (if any) lives in AllocatorPmrTest.cpp.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
