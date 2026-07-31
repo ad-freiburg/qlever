@@ -139,7 +139,7 @@ ExpressionResult PrefixMatchExpression::evaluate(
   // evaluate the prefix match).
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
-  AD_CONTRACT_CHECK(end <= context->_inputTable.end());
+  AD_CORRECTNESS_CHECK(end <= context->_inputTable.end());
 
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
