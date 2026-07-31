@@ -7,8 +7,8 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_H
-#define QLEVER_SRC_INDEX_VOCABULARY_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
 
 #include <cassert>
 #include <optional>
@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -352,4 +352,4 @@ using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
 using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
                                   SimpleStringComparator, WordVocabIndex>;
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
