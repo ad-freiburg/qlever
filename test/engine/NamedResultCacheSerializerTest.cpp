@@ -39,7 +39,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
     NamedResultCache::Value result;
     result.allocatorForSerialization_ = std::move(allocator);
-    result.contextForSerialization_ = &qec_->getIndex().getImpl();
+    result.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> result;
     return result;
   }
@@ -136,7 +136,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
 
   NamedResultCache::Value deserializedValue;
   deserializedValue.allocatorForSerialization_ = alloc_;
-  deserializedValue.contextForSerialization_ = &qec_->getIndex().getImpl();
+  deserializedValue.contextForSerialization_ =
+      &qec_->getIndex().getLocalVocabContext();
   readSerializer >> deserializedValue;
 
   ASSERT_TRUE(

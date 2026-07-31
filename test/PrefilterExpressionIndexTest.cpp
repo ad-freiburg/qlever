@@ -14,6 +14,10 @@
 
 #include "./PrefilterExpressionTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
+// The prefiltering takes the `IndexImpl` itself (it needs the vocabulary), and
+// converting it to a `LocalVocabContext` for `LVE` below requires the complete
+// type.
+#include "index/IndexImpl.h"
 #include "util/GTestHelpers.h"
 
 using ad_utility::testing::BlankNodeId;
@@ -124,6 +128,8 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // active Index + global vocabulary is required.
   QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
   const LocalVocabContext& lvc = qet->getLocalVocabContext();
+  // The prefiltering itself needs the vocabulary and therefore the `IndexImpl`.
+  const IndexImpl& indexImpl = qet->getIndex().getImpl();
   std::function<Id(const std::string&)> getVocabId =
       ad_utility::testing::makeGetId(qet->getIndex());
   LocalVocab vocab{};
@@ -415,7 +421,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                           size_t evaluationColumn = 2) {
     std::vector<CompressedBlockMetadata> testBlocks = input;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        expr->evaluate(lvc, testBlocks, evaluationColumn),
+        expr->evaluate(indexImpl, testBlocks, evaluationColumn),
         ::testing::HasSubstr(expected));
   }
 
@@ -439,7 +445,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(toVec(expr->evaluate(lvc, testBlocks, 2)),
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, testBlocks, 2)),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -464,9 +470,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         testIsIriOrIsLit
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
-    ASSERT_EQ(toVec(expr->evaluate(
-                  lvc, input.empty() ? allTestBlocksIsDatatype : input, 2)),
-              adjustedExpected);
+    ASSERT_EQ(
+        toVec(expr->evaluate(
+            indexImpl, input.empty() ? allTestBlocksIsDatatype : input, 2)),
+        adjustedExpected);
   }
 
   // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
@@ -508,13 +515,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(lvc, dateBlocks, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, dateBlocks, 2)), expected);
   }
 
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(lvc, blocksRegexTest, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, blocksRegexTest, 2)), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -1006,7 +1013,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // `isIri` must keep the regular vocabulary IRI block and the encoded IRI
   // block (before the fix, `blockEncodedIri` was incorrectly pruned), as well
   // as both mixed blocks.
-  EXPECT_EQ(toVec(isIri()->evaluate(lvc, blocks, 2)),
+  EXPECT_EQ(toVec(isIri()->evaluate(indexImpl, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{
                 blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
                 blockEncodedIri}));
@@ -1024,7 +1031,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   ASSERT_EQ(prefilterVec.size(), 1u);
   const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
   EXPECT_EQ(
-      toVec(isEncodedIriPrefilter->evaluate(lvc, blocks, 2)),
+      toVec(isEncodedIriPrefilter->evaluate(indexImpl, blocks, 2)),
       (std::vector<CompressedBlockMetadata>{
           blockIntAndVocabIri, blockVocabAndEncodedIri, blockEncodedIri}));
 
@@ -1037,7 +1044,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // excludes them too). It keeps the numeric block and, as always, the mixed
   // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
   // part of the result of both `isIri` and `!isIri`.
-  EXPECT_EQ(toVec(isIri(true)->evaluate(lvc, blocks, 2)),
+  EXPECT_EQ(toVec(isIri(true)->evaluate(indexImpl, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
                                                   blockVocabAndEncodedIri}));
 
@@ -1045,7 +1052,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
   // everything else, in particular the pure vocabulary IRI block and the mixed
   // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
   // part of the result of both `isEncodedIri` and `!isEncodedIri`.
-  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(lvc, blocks, 2)),
+  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(indexImpl, blocks, 2)),
             (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
                                                   blockVocabIri,
                                                   blockVocabAndEncodedIri}));
@@ -1291,7 +1298,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 // Test the (full) invariant check of `ScanSpecAndBlocks` constructor.
 TEST_F(PrefilterExpressionOnMetadataTest,
        testScanSpecAndBlocksConstructionFromPrefilteredBlocks) {
-  auto blockRanges = gt(IntId(0))->evaluate(lvc, blocks, 2);
+  auto blockRanges = gt(IntId(0))->evaluate(indexImpl, blocks, 2);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
@@ -1313,16 +1320,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<CompressedBlockMetadata> input = {b16};
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 0)), input);
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 1)), input);
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 2)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 0)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 1)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 2)), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 2)),
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 2)),
             (std::vector<CompressedBlockMetadata>{b15, b16}));
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 1)),
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 1)),
             std::vector<CompressedBlockMetadata>{});
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 0)),
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 0)),
             std::vector<CompressedBlockMetadata>{});
 }
 

@@ -30,7 +30,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 
   template <typename Data>
   Id calculate(const Data& data) {
-    return data.calculateResult(qec_->getIndex(), &localVocab_);
+    return data.calculateResult(qec_->getLocalVocabContext(), &localVocab_);
   }
 
   template <typename T>

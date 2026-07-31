@@ -31,10 +31,10 @@ TEST(StringMapping, remapId) {
   };
 
   const auto& index = qec->getIndex();
-  LocalVocabEntry testWord =
-      LocalVocabEntry::fromStringRepresentation("\"abc\"", index);
-  LocalVocabEntry duplicateWord =
-      LocalVocabEntry::fromStringRepresentation("<b>", index);
+  LocalVocabEntry testWord = LocalVocabEntry::fromStringRepresentation(
+      "\"abc\"", index.getLocalVocabContext());
+  LocalVocabEntry duplicateWord = LocalVocabEntry::fromStringRepresentation(
+      "<b>", index.getLocalVocabContext());
   StringMapping mapping;
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
@@ -68,8 +68,8 @@ TEST(StringMapping, flush) {
   StringMapping mapping;
 
   const auto& index = qec->getIndex();
-  LocalVocabEntry testWord =
-      LocalVocabEntry::fromStringRepresentation("\"abc\"", index);
+  LocalVocabEntry testWord = LocalVocabEntry::fromStringRepresentation(
+      "\"abc\"", index.getLocalVocabContext());
   Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
