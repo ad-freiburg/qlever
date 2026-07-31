@@ -263,7 +263,7 @@ void addAllStrings(std::string_view alphabet, size_t maxLength,
 TEST(RegexHelpers, randomizedSoundness) {
   std::vector<std::string> testStrings;
   addAllStrings("abc\n", 3, testStrings);
-  for (const std::string& string :
+  for (const char* string :
        {"", "aaaaaaaaaa", "abcabc", "ABC", "AbC", "a.b", R"(a\b)", " a", "a ",
         "a\tb", "über", "\xff", "a\xff b"}) {
     testStrings.push_back(string);
