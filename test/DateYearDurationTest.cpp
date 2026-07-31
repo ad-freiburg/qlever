@@ -488,8 +488,25 @@ TEST(Date, parseLargeYear) {
   testLargeYearDate("2039481726-01-01", 2039481726);
   testLargeYearDate("-2039481726-01-01", -2039481726);
 
-  testLargeYearDatetime("2039481726-01-01T00:00:00", 2039481726);
-  testLargeYearDatetime("-2039481726-01-01T00:00:00", -2039481726);
+  // NOTE: Only the year is stored, so the export is always in the canonical
+  // UTC form (with the `Z`), also when the input has no timezone.
+  testLargeYearDatetime("2039481726-01-01T00:00:00Z", 2039481726);
+  testLargeYearDatetime("-2039481726-01-01T00:00:00Z", -2039481726);
+  testLargeYearDatetime("2039481726-01-01T00:00:00", 2039481726,
+                        "2039481726-01-01T00:00:00Z");
+  testLargeYearDatetime("-2039481726-01-01T00:00:00", -2039481726,
+                        "-2039481726-01-01T00:00:00Z");
+
+  // Test the boundary of the year range of the `Date` class: `-9999` and
+  // `9999` are stored as a regular `Date` (which keeps its timezone), while
+  // `-10000` and `10000` are stored as a large year (where the export is
+  // always in the canonical UTC form).
+  testDatetime("9999-01-01T00:00:00Z", 9999, 1, 1, 0, 0, 0.0,
+               Date::TimeZoneZ{});
+  testDatetime("-9999-01-01T00:00:00Z", -9999, 1, 1, 0, 0, 0.0,
+               Date::TimeZoneZ{});
+  testLargeYearDatetime("10000-01-01T00:00:00Z", 10000);
+  testLargeYearDatetime("-10000-01-01T00:00:00Z", -10000);
 }
 
 TEST(Date, parseLargeYearCornerCases) {
@@ -511,11 +528,11 @@ TEST(Date, parseLargeYearCornerCases) {
   testLargeYearDate("-2039481726-02-05", -2039481726, "-2039481726-01-01");
 
   testLargeYearDatetime("2039481726-01-01T12:00:00", 2039481726,
-                        "2039481726-01-01T00:00:00");
+                        "2039481726-01-01T00:00:00Z");
   testLargeYearDatetime("2039481726-01-01T00:13:00", 2039481726,
-                        "2039481726-01-01T00:00:00");
+                        "2039481726-01-01T00:00:00Z");
   testLargeYearDatetime("-2039481726-01-01T00:00:14", -2039481726,
-                        "-2039481726-01-01T00:00:00");
+                        "-2039481726-01-01T00:00:00Z");
 }
 
 TEST(Date, parseErrors) {
