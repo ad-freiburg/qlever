@@ -10,6 +10,7 @@
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -1043,8 +1044,10 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
 
   auto getId = [&index](std::string_view iri) {
-    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
-        .toValueId(index)
+    return toValueId(
+               TripleComponent{
+                   ad_utility::triple_component::Iri::fromIriref(iri)},
+               index)
         .value();
   };
   auto a = getId("<a>");

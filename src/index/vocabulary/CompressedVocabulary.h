@@ -7,9 +7,9 @@
 
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/PrefixHeuristic.h"
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/PrefixHeuristic.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"

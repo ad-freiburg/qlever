@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "index/TripleComponentConversions.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
@@ -134,7 +135,7 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
       const TripleComponent& tc = row[colIdx];
       // TODO<joka921> We don't want to move, but also don't want to
       // unconditionally copy.
-      Id id = TripleComponent{tc}.toValueId(getIndex(), *localVocab);
+      Id id = toValueId(TripleComponent{tc}, getIndex(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
