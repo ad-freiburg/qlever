@@ -480,10 +480,14 @@ class ConcurrentProgress {
 
   // Write a final line with the total number of processed steps (typically
   // showing 100%).
-  void finish() { print(processed_.load()); }
+  void finish() { print(processed_.load(), true); }
 
  private:
-  void print(size_t processed) {
+  // Like `ad_utility::ProgressBar` with `ReuseLine`, intermediate updates end
+  // with `\r`, so that a viewer of the log file (e.g. `qlever rebuild-index`)
+  // shows them on one line that updates in place; only the final line of a
+  // phase ends with `\n`.
+  void print(size_t processed, bool final = false) {
     double seconds = static_cast<double>(timer_.msecs().count()) / 1000.0;
     double percentage = std::min(100.0, 100.0 * static_cast<double>(processed) /
                                             static_cast<double>(totalSteps_));
@@ -497,7 +501,7 @@ class ConcurrentProgress {
              << absl::StrFormat(" (%.1f%%)", percentage) << " [average speed "
              << DEFAULT_SPEED_DESCRIPTION_FUNCTION(
                     static_cast<double>(processed) / std::max(seconds, 0.001))
-             << "]" << std::endl;
+             << "]" << (final ? "\n" : "\r") << std::flush;
   }
 
   std::ostream& logFile_;
