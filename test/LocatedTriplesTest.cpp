@@ -19,6 +19,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
@@ -1008,7 +1009,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   using TC = TripleComponent;
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto getId = [&lv, &index](TC&& tc) {
-    return std::move(tc).toValueId(index, lv);
+    return toValueId(std::move(tc), index, lv);
   };
   auto defaultGraph = getId(Iri(DEFAULT_GRAPH_IRI));
   auto makeTriple = [&getId, &defaultGraph](TC&& s, TC&& p,
