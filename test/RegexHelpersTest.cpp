@@ -280,7 +280,7 @@ TEST(RegexHelpers, randomizedSoundness) {
   constexpr size_t NUM_GENERATED_REGEXES = 100;
 #endif
   for (size_t i = 0; i < NUM_GENERATED_REGEXES; ++i) {
-    std::string regexString = generator.generateRegex(i % 2 == 0);
+    std::string regexString = generator.generateRegex(i % 4 != 0);
     RE2 regex{regexString, RE2::Quiet};
     // Invalid regexes never reach the prefix analysis in production.
     if (!regex.ok()) {
@@ -303,7 +303,7 @@ TEST(RegexHelpers, randomizedSoundness) {
   }
   // Guard against the test silently becoming vacuous, e.g. because the analysis
   // or the generator changed in a way that no prefixes are derived at all.
-  EXPECT_GT(numRegexesWithPrefix, NUM_GENERATED_REGEXES / 20);
+  EXPECT_GT(numRegexesWithPrefix, NUM_GENERATED_REGEXES / 10);
 }
 
 }  // namespace
