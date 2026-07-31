@@ -26,6 +26,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "index/TripleComponentConversions.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -1070,15 +1071,18 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
 
   // Left side: two columns with UNDEF in second column.
   IdTable leftTable{2, makeAllocator()};
-  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
-                .toValueId(qec2->getIndex())
-                .value();
-  auto s3 = TripleComponent{TripleComponent::Iri::fromIriref("<s3>")}
-                .toValueId(qec2->getIndex())
-                .value();
-  auto o1 = TripleComponent{TripleComponent::Iri::fromIriref("<o1>")}
-                .toValueId(qec2->getIndex())
-                .value();
+  auto s1 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s1>")},
+                  qec2->getIndex())
+          .value();
+  auto s3 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s3>")},
+                  qec2->getIndex())
+          .value();
+  auto o1 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<o1>")},
+                  qec2->getIndex())
+          .value();
 
   leftTable.push_back({s1, o1});  // matches 1 row
   leftTable.push_back({s3, U});   // matches 1 row.
@@ -1192,12 +1196,14 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   config.blocksizePermutations = 8_B;
   auto qec2 = getQec(std::move(config));
 
-  auto s1 = TripleComponent{TripleComponent::Iri::fromIriref("<s1>")}
-                .toValueId(qec2->getIndex())
-                .value();
-  auto s2 = TripleComponent{TripleComponent::Iri::fromIriref("<s2>")}
-                .toValueId(qec2->getIndex())
-                .value();
+  auto s1 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s1>")},
+                  qec2->getIndex())
+          .value();
+  auto s2 =
+      ::toValueId(TripleComponent{TripleComponent::Iri::fromIriref("<s2>")},
+                  qec2->getIndex())
+          .value();
   auto o1 = Id::makeFromInt(2);
   auto o3 = Id::makeFromInt(4);
 

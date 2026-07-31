@@ -17,6 +17,7 @@
 #include "index/Permutation.h"
 #include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
