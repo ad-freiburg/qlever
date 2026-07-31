@@ -822,11 +822,10 @@ TEST(IndexRebuilder, serverIntegration) {
 #endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
@@ -878,6 +877,7 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   threadPool.join();
   cleanDirsWithPrefix("droppedState.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 // The thread-count override for the rebuild's scans must be set on the
