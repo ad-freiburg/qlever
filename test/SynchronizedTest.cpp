@@ -15,6 +15,7 @@ TEST(Synchronized, TypeTraits) {
   static_assert(!ad_utility::AllowsLocking<float>::value);
   static_assert(ad_utility::AllowsSharedLocking<std::shared_mutex>::value);
   static_assert(!ad_utility::AllowsSharedLocking<std::mutex>::value);
+  static_assert(!Synchronized<int>::isShared);
 }
 
 TEST(Synchronized, Exclusive) {
@@ -175,18 +176,18 @@ struct AllowsConstExclusiveAccess<
     : public std::true_type {};
 
 template <typename T, typename = void>
-struct AllowsConstSharedAccess : public std::false_type {};
+struct AllowsConstReadAccess : public std::false_type {};
 
 template <typename T>
-struct AllowsConstSharedAccess<
+struct AllowsConstReadAccess<
     T, std::void_t<decltype(std::declval<T>().rlock()->size())>>
     : public std::true_type {};
 
 template <typename T, typename = void>
-struct AllowsNonConstSharedAccess : public std::false_type {};
+struct AllowsNonConstReadAccess : public std::false_type {};
 
 template <typename T>
-struct AllowsNonConstSharedAccess<
+struct AllowsNonConstReadAccess<
     T, std::void_t<decltype(std::declval<T>().rlock()->push_back(3))>>
     : public std::true_type {};
 
@@ -220,18 +221,18 @@ struct AllowsConstExclusiveAccessLambda<
     : public std::true_type {};
 
 template <typename T, typename = void>
-struct AllowsConstSharedAccessLambda : public std::false_type {};
+struct AllowsConstReadAccessLambda : public std::false_type {};
 
 template <typename T>
-struct AllowsConstSharedAccessLambda<
+struct AllowsConstReadAccessLambda<
     T, std::void_t<decltype(std::declval<T>().withReadLock(std::declval<C>()))>>
     : public std::true_type {};
 
 template <typename T, typename = void>
-struct AllowsNonConstSharedAccessLambda : public std::false_type {};
+struct AllowsNonConstReadAccessLambda : public std::false_type {};
 
 template <typename T>
-struct AllowsNonConstSharedAccessLambda<
+struct AllowsNonConstReadAccessLambda<
     T,
     std::void_t<decltype(std::declval<T>().withReadLock(std::declval<NC>()))>>
     : public std::true_type {};
@@ -242,7 +243,9 @@ TEST(Synchronized, SFINAE) {
       AllowsNonConstExclusiveAccess<Synchronized<Vec, std::mutex>>::value);
   static_assert(
       AllowsConstExclusiveAccess<Synchronized<Vec, std::mutex>>::value);
-  static_assert(!AllowsConstSharedAccess<Synchronized<Vec, std::mutex>>::value);
+  static_assert(AllowsConstReadAccess<Synchronized<Vec, std::mutex>>::value);
+  static_assert(
+      !AllowsNonConstReadAccess<Synchronized<Vec, std::mutex>>::value);
   static_assert(
       AllowsNonConstExclusiveAccess<Synchronized<Vec, std::mutex>>::value);
   static_assert(AllowsNonConstExclusiveAccessLambda<
@@ -250,7 +253,9 @@ TEST(Synchronized, SFINAE) {
   static_assert(
       AllowsConstExclusiveAccessLambda<Synchronized<Vec, std::mutex>>::value);
   static_assert(
-      !AllowsConstSharedAccessLambda<Synchronized<Vec, std::mutex>>::value);
+      AllowsConstReadAccessLambda<Synchronized<Vec, std::mutex>>::value);
+  static_assert(
+      !AllowsNonConstReadAccessLambda<Synchronized<Vec, std::mutex>>::value);
   static_assert(AllowsNonConstExclusiveAccessLambda<
                 Synchronized<Vec, std::mutex>>::value);
 
@@ -259,25 +264,25 @@ TEST(Synchronized, SFINAE) {
   static_assert(
       AllowsConstExclusiveAccess<Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(
-      AllowsConstSharedAccess<Synchronized<Vec, std::shared_mutex>>::value);
+      AllowsConstReadAccess<Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(
-      !AllowsNonConstSharedAccess<Synchronized<Vec, std::shared_mutex>>::value);
+      !AllowsNonConstReadAccess<Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(AllowsNonConstExclusiveAccessLambda<
                 Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 Synchronized<Vec, std::shared_mutex>>::value);
-  static_assert(AllowsConstSharedAccessLambda<
-                Synchronized<Vec, std::shared_mutex>>::value);
-  static_assert(!AllowsNonConstSharedAccessLambda<
+  static_assert(
+      AllowsConstReadAccessLambda<Synchronized<Vec, std::shared_mutex>>::value);
+  static_assert(!AllowsNonConstReadAccessLambda<
                 Synchronized<Vec, std::shared_mutex>>::value);
 
   static_assert(!AllowsNonConstExclusiveAccess<
                 const Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(AllowsConstExclusiveAccess<
                 const Synchronized<Vec, std::shared_mutex>>::value);
-  static_assert(AllowsConstSharedAccess<
-                const Synchronized<Vec, std::shared_mutex>>::value);
-  static_assert(!AllowsNonConstSharedAccess<
+  static_assert(
+      AllowsConstReadAccess<const Synchronized<Vec, std::shared_mutex>>::value);
+  static_assert(!AllowsNonConstReadAccess<
                 const Synchronized<Vec, std::shared_mutex>>::value);
 
   // Outcommenting this does not compile and cannot be brought to compile
@@ -287,9 +292,9 @@ TEST(Synchronized, SFINAE) {
   // std::shared_mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 const Synchronized<Vec, std::shared_mutex>>::value);
-  static_assert(AllowsConstSharedAccessLambda<
+  static_assert(AllowsConstReadAccessLambda<
                 const Synchronized<Vec, std::shared_mutex>>::value);
-  static_assert(!AllowsNonConstSharedAccessLambda<
+  static_assert(!AllowsNonConstReadAccessLambda<
                 const Synchronized<Vec, std::shared_mutex>>::value);
 
   static_assert(!AllowsNonConstExclusiveAccess<
@@ -297,9 +302,9 @@ TEST(Synchronized, SFINAE) {
   static_assert(
       AllowsConstExclusiveAccess<const Synchronized<Vec, std::mutex>>::value);
   static_assert(
-      !AllowsConstSharedAccess<const Synchronized<Vec, std::mutex>>::value);
+      AllowsConstReadAccess<const Synchronized<Vec, std::mutex>>::value);
   static_assert(
-      !AllowsNonConstSharedAccess<const Synchronized<Vec, std::mutex>>::value);
+      !AllowsNonConstReadAccess<const Synchronized<Vec, std::mutex>>::value);
 
   // Outcommenting this does not compile and cannot be brought to compile
   // without making usage of the Synchronized classes "withWriteLock" method
@@ -308,8 +313,8 @@ TEST(Synchronized, SFINAE) {
   // std::mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 const Synchronized<Vec, std::mutex>>::value);
-  static_assert(!AllowsConstSharedAccessLambda<
-                const Synchronized<Vec, std::mutex>>::value);
-  static_assert(!AllowsNonConstSharedAccessLambda<
+  static_assert(
+      AllowsConstReadAccessLambda<const Synchronized<Vec, std::mutex>>::value);
+  static_assert(!AllowsNonConstReadAccessLambda<
                 const Synchronized<Vec, std::mutex>>::value);
 }
