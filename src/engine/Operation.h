@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"
@@ -133,6 +134,18 @@ class Operation {
   /// Execution Trees as trees
   virtual std::vector<QueryExecutionTree*> getChildren() = 0;
 
+  // Allocator-aware variant of `getChildren()` above. This is a plain,
+  // non-virtual convenience wrapper (built on top of the existing pure
+  // virtual `getChildren()`), so no subclass needs to be touched to obtain a
+  // `std::vector` that participates in QLever's memory limit tracking via
+  // `qlever::Allocator`.
+  std::vector<QueryExecutionTree*, qlever::Allocator<QueryExecutionTree*>>
+  getChildrenWithAllocator() {
+    auto children = getChildren();
+    return {children.begin(), children.end(),
+            allocator().as<QueryExecutionTree*>()};
+  }
+
   /// get non-owning constant pointers to all the held subtrees to actually use
   /// the Execution Trees as trees
   virtual std::vector<const QueryExecutionTree*> getChildren() const final {
@@ -159,6 +172,17 @@ class Operation {
    * @return A list of columns on which the result of this operation is sorted.
    */
   const std::vector<ColumnIndex>& getResultSortedOn() const;
+
+  // Allocator-aware variant of `getResultSortedOn()` above. This is a plain,
+  // non-virtual convenience wrapper (built on top of the existing pure
+  // virtual `resultSortedOn()`), so no subclass needs to be touched to
+  // obtain a `std::vector` that participates in QLever's memory limit
+  // tracking via `qlever::Allocator`.
+  std::vector<ColumnIndex, qlever::Allocator<ColumnIndex>>
+  getResultSortedOnWithAllocator() const {
+    const auto& sortedOn = getResultSortedOn();
+    return {sortedOn.begin(), sortedOn.end(), allocator().as<ColumnIndex>()};
+  }
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
@@ -478,6 +502,18 @@ class Operation {
   // operation? The the result wouldn't have to be `optional`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
+
+  // Allocator-aware overload of `makeTreeWithStrippedColumns` above. This is
+  // a plain (non-virtual) overload, not an override, so no subclass needs to
+  // be touched: it simply converts the allocator-aware set into the default
+  // `std::set<Variable>` expected by the virtual method and forwards to it.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable, std::less<Variable>,
+                     qlever::Allocator<Variable>>& variables) const {
+    return makeTreeWithStrippedColumns(
+        std::set<Variable>(variables.begin(), variables.end()));
+  }
 
   // Try to create a version of this operation with an additional column from a
   // `BIND` pushed down into the tree. The default is to disallow push down. All

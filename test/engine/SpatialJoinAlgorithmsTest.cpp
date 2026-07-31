@@ -15,6 +15,7 @@
 #include <thread>
 #include <variant>
 
+#include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
@@ -1075,7 +1076,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   // bounding box, is really more than 'maxDistanceInMeters' away from
   // 'startPoint'
   auto checkOutside = [&](const Point& point1, const Point& startPoint,
-                          const std::vector<Box>& bbox,
+                          const std::vector<Box, qlever::Allocator<Box>>& bbox,
                           SpatialJoinAlgorithms* spatialJoinAlg) {
     // check if the point is contained in any bounding box
     bool within = spatialJoinAlg->isContainedInBoundingBoxes(bbox, point1);
@@ -1090,7 +1091,8 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   SpatialJoinAlgorithms spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting(maxDistInMeters);
 
-  std::vector<Box> bbox = spatialJoinAlgs.computeQueryBox(startPoint);
+  std::vector<Box, qlever::Allocator<Box>> bbox =
+      spatialJoinAlgs.computeQueryBox(startPoint);
   // broad grid test
   for (int lon = -180; lon < 180; lon += 20) {
     for (int lat = -90; lat < 90; lat += 20) {
@@ -1169,13 +1171,13 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
   // note that none of the boxes is overlapping, therefore we can check, that
   // none of the points which should be contained in one box are contained in
   // another box
-  std::vector<Box> boxes = {
-      Box(Point(20, 40), Point(40, 60)),
-      Box(Point(-180, -20), Point(-150, 30)),  // touching left border
-      Box(Point(50, -30), Point(180, 10)),     // touching right border
-      Box(Point(-30, 50), Point(10, 90)),      // touching north pole
-      Box(Point(-45, -90), Point(0, -45))      // touching south pole
-  };
+  std::vector<Box, qlever::Allocator<Box>> boxes{
+      {Box(Point(20, 40), Point(40, 60)),
+       Box(Point(-180, -20), Point(-150, 30)),  // touching left border
+       Box(Point(50, -30), Point(180, 10)),     // touching right border
+       Box(Point(-30, 50), Point(10, 90)),      // touching north pole
+       Box(Point(-45, -90), Point(0, -45))},    // touching south pole
+      ad_utility::testing::makeAllocator()};
 
   // the first entry in this vector is a vector of points, which is contained
   // in the first box, the second entry contains points, which are contained in
@@ -1204,7 +1206,8 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
       for (size_t c = 0; a <= 1; a++) {
         for (size_t d = 0; a <= 1; a++) {
           for (size_t e = 0; a <= 1; a++) {
-            std::vector<Box> toTest;  // the set of bounding boxes
+            std::vector<Box, qlever::Allocator<Box>> toTest{
+                ad_utility::testing::makeAllocator()};  // the set of bounding boxes
             std::vector<std::vector<Point>> shouldBeContained;
             std::vector<std::vector<Point>> shouldNotBeContained;
             if (a == 1) {  // box nr. 0 is contained in the set of boxes
