@@ -13,7 +13,9 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <fstream>
 #include <future>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -567,6 +569,19 @@ TEST(IndexRebuilder, materializeToIndex) {
     qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(ql::filesystem::exists(logFile));
+
+    // Each phase writes at least its final progress line (with a percentage
+    // and an average speed) to the rebuild's log file.
+    {
+      std::ifstream logStream{logFile};
+      std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+      using ::testing::HasSubstr;
+      EXPECT_THAT(logContent, HasSubstr("Words written: "));
+      EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
+      EXPECT_THAT(logContent, HasSubstr("Triples written: "));
+      EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
+      EXPECT_THAT(logContent, HasSubstr("[average speed "));
+    }
 
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;

@@ -987,9 +987,12 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state.
+  // triples shared state. If `progress` is nonempty, it is called (possibly
+  // from several threads) with the number of newly scanned rows; this is used
+  // by the index rebuild for progress reporting.
   nlohmann::json recomputeStatistics(
-      const LocatedTriplesSharedState& locatedTriplesSharedState) const;
+      const LocatedTriplesSharedState& locatedTriplesSharedState,
+      const std::function<void(size_t)>& progress = {}) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
