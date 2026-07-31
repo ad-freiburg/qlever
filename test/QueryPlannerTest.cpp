@@ -2555,6 +2555,82 @@ TEST(QueryPlanner, DatasetClause) {
           scan("<e>", "?p", "<z3>", {}, g1)));
 }
 
+// ___________________________________________________________________________
+TEST(QueryPlanner, unionGraphAsDefaultGraphRuntimeParameter) {
+  auto scan = h::IndexScanFromStrings;
+  using Graphs = ad_utility::HashSet<std::string>;
+  auto varG = std::vector{Variable{"?g"}};
+  std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
+  std::string defaultGraph{DEFAULT_GRAPH_IRI};
+
+  // With `union-graph-as-default-graph` set to its default value `true`, a
+  // query without a dataset clause scans all graphs.
+  h::expect("SELECT * WHERE { ?x ?y ?z }", scan("?x", "?y", "?z"));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::unionGraphAsDefaultGraph_>(
+          false);
+
+  // With the parameter set to `false`, only the unnamed default graph is
+  // scanned, both in the top-level query and in a subquery.
+  h::expect("SELECT * WHERE { ?x ?y ?z }",
+            scan("?x", "?y", "?z", {}, Graphs{defaultGraph}));
+  h::expect("SELECT * { SELECT * {?x ?y ?z }}",
+            scan("?x", "?y", "?z", {}, Graphs{defaultGraph}));
+
+  // `GRAPH` clauses are unaffected: all named graphs stay available, exactly as
+  // if the parameter was `true`. This is the crucial difference to an explicit
+  // `FROM ql:default-graph`, which would leave no named graphs at all (see
+  // the last two assertions of this test).
+  h::expect("SELECT * WHERE { GRAPH <z> {?x ?y ?z }}",
+            scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+  h::expect("SELECT * WHERE { GRAPH ?g { <a> <b> <c> }}",
+            scan("<a>", "<b>", "<c>", {}, NamedTag{}, varG, graphCol));
+
+  // An explicit dataset clause still takes precedence.
+  h::expect("SELECT * FROM <x> WHERE { ?x ?y ?z }",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>"}));
+  h::expect("SELECT * FROM <x> FROM NAMED <z> WHERE { GRAPH <z> { ?x ?y ?z }}",
+            scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+  h::expect(absl::StrCat("SELECT * FROM ", defaultGraph, " WHERE { ?x ?y ?z }"),
+            scan("?x", "?y", "?z", {}, Graphs{defaultGraph}));
+  h::expect(absl::StrCat("SELECT * FROM ", defaultGraph,
+                         " WHERE { GRAPH ?g { <a> <b> <c> }}"),
+            scan("<a>", "<b>", "<c>", {}, Graphs{}, varG, graphCol));
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, ContainsWordWithImplicitDefaultGraph) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::unionGraphAsDefaultGraph_>(
+          false);
+  // The *implicit* default graph that is used when
+  // `union-graph-as-default-graph` is disabled must not make `ql:contains-word`
+  // throw, because that would disable text search altogether on such a server.
+  // The text index stores no graph information, so the restriction to the
+  // default graph simply is not applied to text matches.
+  {
+    auto qp = makeQueryPlanner();
+    auto query = parseQuery(
+        "SELECT * { ?t "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+        "\"Test\" }");
+    EXPECT_NO_THROW(qp.createExecutionTree(query));
+  }
+  // Explicit dataset clauses are still rejected.
+  {
+    auto qp = makeQueryPlanner();
+    auto query = parseQuery(
+        "SELECT * FROM <my-iri> WHERE { ?t "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+        "\"Test\" }");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        qp.createExecutionTree(query),
+        ::testing::HasSubstr("contains-word is not allowed"),
+        ad_utility::Exception);
+  }
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, graphVariablesWithinPattern) {
   auto scan = h::IndexScanFromStrings;

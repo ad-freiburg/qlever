@@ -475,10 +475,30 @@ const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
 }
 
 // ____________________________________________________________________________________
+const parsedQuery::DatasetClauses&
+SparqlQleverVisitor::setAndGetDatasetClausesForQuery(
+    const std::vector<DatasetClause>& clauses) {
+  // If the `unionGraphAsDefaultGraph_` `RuntimeParameter` is set to `false`,
+  // then a query without an explicit dataset clause implicitly uses only
+  // `ql:default-graph` as its default graph, instead of the union of all
+  // graphs. Note that all named graphs stay available inside `GRAPH` clauses,
+  // so this is deliberately not the same as an explicit `FROM
+  // ql:default-graph` (for details see
+  // `DatasetClauses::fromImplicitDefaultGraph`).
+  if (clauses.empty() && !datasetsAreFixed_ &&
+      !getRuntimeParameter<&RuntimeParameters::unionGraphAsDefaultGraph_>()) {
+    activeDatasetClauses_ =
+        parsedQuery::DatasetClauses::fromImplicitDefaultGraph();
+    return activeDatasetClauses_;
+  }
+  return setAndGetDatasetClauses(clauses);
+}
+
+// ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
   query.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClausesForQuery(visitVector(ctx->datasetClause()));
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -521,7 +541,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
 
   // Parse the FROM and FROM NAMED clauses.
   describeClause.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClausesForQuery(visitVector(ctx->datasetClause()));
 
   // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
   // *`, add each visible variable as a resource to describe.
@@ -568,7 +588,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
 ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   parsedQuery_._clause = ParsedQuery::AskClause{};
   parsedQuery_.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClausesForQuery(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   // NOTE: It can make sense to have solution modifiers with an ASK query, for
   // example, a GROUP BY with a HAVING.
@@ -1555,7 +1575,7 @@ void Visitor::visit(Parser::PrefixDeclContext* ctx) {
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
   parsedQuery_.datasetClauses_ =
-      setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
+      setAndGetDatasetClausesForQuery(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
                                     makeInternalVariableGenerator());

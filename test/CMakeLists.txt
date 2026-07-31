@@ -161,6 +161,8 @@ addLinkAndDiscoverTest(ValueIdComparatorsTest qlever_util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
+addLinkAndDiscoverTest(DatasetClausesTest parser)
+
 addLinkAndDiscoverTest(VariableCounterTest parser engine)
 
 addLinkAndDiscoverTest(StringUtilsTest qlever_util)

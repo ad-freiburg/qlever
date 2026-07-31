@@ -4,6 +4,8 @@
 
 #include "parser/DatasetClauses.h"
 
+#include "global/Constants.h"
+
 namespace parsedQuery {
 
 // _____________________________________________________________________________
@@ -25,7 +27,16 @@ DatasetClauses DatasetClauses::fromWithClause(
     const TripleComponent::Iri& withGraph) {
   DatasetClauses result;
   result.defaultGraphs_.emplace({withGraph});
-  result.defaultGraphSpecifiedUsingWith_ = true;
+  result.defaultGraphKind_ = DefaultGraphKind::With;
+  return result;
+}
+
+// _____________________________________________________________________________
+DatasetClauses DatasetClauses::fromImplicitDefaultGraph() {
+  DatasetClauses result;
+  result.defaultGraphs_.emplace(
+      {TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)});
+  result.defaultGraphKind_ = DefaultGraphKind::Implicit;
   return result;
 }
 
@@ -36,8 +47,22 @@ DatasetClauses::DatasetClauses(Graphs defaultGraphs, Graphs namedGraphs)
 
 // _____________________________________________________________________________
 bool DatasetClauses::isUnconstrainedOrWithClause() const {
-  return (defaultGraphSpecifiedUsingWith_ || !defaultGraphs_.has_value()) &&
+  return (defaultGraphKind_ == DefaultGraphKind::With ||
+          !defaultGraphs_.has_value()) &&
          !namedGraphs_.has_value();
+}
+
+// _____________________________________________________________________________
+bool DatasetClauses::namedGraphsAreUnconstrained() const {
+  return (defaultGraphKind_ != DefaultGraphKind::FromOrUsing ||
+          !defaultGraphs_.has_value()) &&
+         !namedGraphs_.has_value();
+}
+
+// _____________________________________________________________________________
+bool DatasetClauses::defaultGraphsAreExplicitlyRestricted() const {
+  return defaultGraphKind_ != DefaultGraphKind::Implicit &&
+         activeDefaultGraphs().has_value();
 }
 
 // _____________________________________________________________________________
@@ -49,7 +74,7 @@ auto DatasetClauses::activeDefaultGraphs() const -> const Graphs& {
 
 // _____________________________________________________________________________
 auto DatasetClauses::namedGraphs() const -> const Graphs& {
-  return isUnconstrainedOrWithClause() || namedGraphs_.has_value()
+  return namedGraphsAreUnconstrained() || namedGraphs_.has_value()
              ? namedGraphs_
              : emptyDummy_;
 }
@@ -57,7 +82,7 @@ auto DatasetClauses::namedGraphs() const -> const Graphs& {
 // _____________________________________________________________________________
 bool DatasetClauses::isCompatibleNamedGraph(
     const TripleComponent::Iri& graph) const {
-  return isUnconstrainedOrWithClause() || namedGraphs().value().contains(graph);
+  return namedGraphsAreUnconstrained() || namedGraphs().value().contains(graph);
 }
 
 // _____________________________________________________________________________
