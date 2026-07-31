@@ -486,22 +486,28 @@ class ConcurrentProgress {
   // Like `ad_utility::ProgressBar` with `ReuseLine`, intermediate updates end
   // with `\r`, so that a viewer of the log file (e.g. `qlever rebuild-index`)
   // shows them on one line that updates in place; only the final line of a
-  // phase ends with `\n`.
+  // phase ends with `\n`. When a line is shorter than its predecessor (e.g.
+  // because the average speed dropped by a digit), it is padded with spaces
+  // to the widest line so far, so that the `\r` overwrites all of it and no
+  // leftover characters remain.
   void print(size_t processed, bool final = false) {
     double seconds = static_cast<double>(timer_.msecs().count()) / 1000.0;
     double percentage = std::min(100.0, 100.0 * static_cast<double>(processed) /
                                             static_cast<double>(totalSteps_));
+    std::string line = absl::StrCat(
+        prefix_,
+        ad_utility::insertThousandSeparator(std::to_string(processed), ','),
+        " of ",
+        ad_utility::insertThousandSeparator(std::to_string(totalSteps_), ','),
+        absl::StrFormat(" (%.1f%%)", percentage), " [average speed ",
+        DEFAULT_SPEED_DESCRIPTION_FUNCTION(static_cast<double>(processed) /
+                                           std::max(seconds, 0.001)),
+        "]");
     std::lock_guard lock{mutex_};
-    logFile_ << ad_utility::Log::getTimeStamp() << " - INFO: " << prefix_
-             << ad_utility::insertThousandSeparator(std::to_string(processed),
-                                                    ',')
-             << " of "
-             << ad_utility::insertThousandSeparator(std::to_string(totalSteps_),
-                                                    ',')
-             << absl::StrFormat(" (%.1f%%)", percentage) << " [average speed "
-             << DEFAULT_SPEED_DESCRIPTION_FUNCTION(
-                    static_cast<double>(processed) / std::max(seconds, 0.001))
-             << "]" << (final ? "\n" : "\r") << std::flush;
+    maxLineWidth_ = std::max(maxLineWidth_, line.size());
+    line.resize(maxLineWidth_, ' ');
+    logFile_ << ad_utility::Log::getTimeStamp() << " - INFO: " << line
+             << (final ? "\n" : "\r") << std::flush;
   }
 
   std::ostream& logFile_;
@@ -512,6 +518,9 @@ class ConcurrentProgress {
   std::atomic<size_t> nextPrintAt_;
   ad_utility::Timer timer_{ad_utility::Timer::Started};
   std::mutex mutex_;
+  // The width of the widest line printed so far, used to pad shorter lines so
+  // that a `\r` update leaves no leftover characters (see `print`).
+  size_t maxLineWidth_ = 0;
 };
 }  // namespace
 
