@@ -1696,6 +1696,10 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
         oldManager.retireOnDiskFiles();
         qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
                                     config);
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+        metrics_->indexLoadMetric_->Record(now);
       },
       net::use_awaitable);
   co_await std::move(swapRoutine);
