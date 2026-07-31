@@ -35,7 +35,21 @@ class ExistsExpression : public SparqlExpression {
   // To evaluate, just return the variable of the column computed by the
   // `ExistsJoin`.
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    AD_CONTRACT_CHECK(context->_variableToColumnMap.contains(variable_));
+    auto column = context->getColumnIndexForVariable(variable_);
+    AD_CONTRACT_CHECK(column.has_value(),
+                      "The internal exists variable does not exist.");
+    // Mimic the behaviour of `VariableExpression`.
+    if (worksOnAggregatedData(context)) {
+      const auto& table = context->_inputTable;
+      auto columnData = table.getColumn(column.value());
+      auto constantValue = columnData[context->_beginIndex];
+      AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+          columnData.subspan(context->_beginIndex, context->size()),
+          [&constantValue](const auto& value) {
+            return value == constantValue;
+          }));
+      return constantValue;
+    }
     return variable_;
   }
 

@@ -842,7 +842,9 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
       parsedQuery::BasicGraphPattern{
           {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
-  // Only add ?a to see if ?b remains hidden.
+  // Only add ?a (and select it via `*`, exactly as the parser does) to see if
+  // ?b remains hidden.
+  query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
   sparqlExpression::SparqlExpressionPimpl pimpl{
@@ -875,6 +877,8 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
           {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
 
+  // Select the visible variables via `*`, exactly as the parser does.
+  query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
   sparqlExpression::SparqlExpressionPimpl pimpl1{
