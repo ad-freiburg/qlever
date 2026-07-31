@@ -164,6 +164,74 @@ std::vector<NumericValue> getNumericBatchInt(
   return result;
 }
 
+//speculative integer
+std::optional<sparqlExpression::VectorWithMemoryLimit<ValueId>>
+tryAddIntegerVectorsDirect(
+    const sparqlExpression::VectorWithMemoryLimit<ValueId>& left,
+    const sparqlExpression::VectorWithMemoryLimit<ValueId>& right,
+    sparqlExpression::EvaluationContext* context) {
+    auto datatypeName = [](Datatype datatype) -> std::string_view {
+    switch (datatype) {
+      case Datatype::Double:
+        return "Double";
+      case Datatype::Int:
+        return "Int";
+      case Datatype::Bool:
+        return "Bool";
+      case Datatype::Undefined:
+        return "Undefined";
+      case Datatype::EncodedVal:
+        return "EncodedVal";
+      case Datatype::VocabIndex:
+        return "VocabIndex";
+      case Datatype::LocalVocabIndex:
+        return "LocalVocabIndex";
+      case Datatype::TextRecordIndex:
+        return "TextRecordIndex";
+      case Datatype::WordVocabIndex:
+        return "WordVocabIndex";
+      case Datatype::Date:
+        return "Date";
+      case Datatype::GeoPoint:
+        return "GeoPoint";
+      case Datatype::BlankNodeIndex:
+        return "BlankNodeIndex";
+    }
+
+    return "Unknown";
+  };
+  AD_CONTRACT_CHECK(left.size() == right.size());
+
+  sparqlExpression::VectorWithMemoryLimit<ValueId> result{
+      context->_allocator};
+  result.reserve(left.size());
+
+  for (size_t i = 0; i < left.size(); ++i) {
+    const auto& leftId = left[i];
+    const auto& rightId = right[i];
+
+    const auto leftType = leftId.getDatatype();
+    const auto rightType = rightId.getDatatype();
+
+    if (leftType != Datatype::Int || rightType != Datatype::Int) {
+      std::cerr << "SPECULATIVE MISMATCH at index " << i << '\n';
+      std::cerr << "Left datatype: "
+                << datatypeName(leftType) << '\n';
+      std::cerr << "Right datatype: "
+                << datatypeName(rightType) << '\n';
+      return std::nullopt;
+    }
+
+    const auto sum =
+        static_cast<double>(leftId.getInt()) +
+        static_cast<double>(rightId.getInt());
+
+    result.push_back(ValueId::makeFromDouble(sum));
+  }
+
+  return result;
+}
+
 //integer fast path
 __attribute__((noinline))
 sparqlExpression::VectorWithMemoryLimit<ValueId> addIntegerVectorsDirect(
@@ -331,24 +399,55 @@ class BatchedAddExpression : public SparqlExpression {
           auto t4 = Clock::now();
 
           std::cerr << "DEBUG: Direct integer addition path\n";
-          std::cerr << "TIMING child evaluate us = "
-                    << ms(t0, t1) << "\n";
+          std::cerr << "ROWS = " << leftVec->size() << "\n";
+          // std::cerr << "TIMING child evaluate us = "
+          //           << ms(t0, t1) << "\n";
           std::cerr << "TIMING integer type checks us = "
                     << ms(t2, t3) << "\n";
           std::cerr << "TIMING direct integer addition us = "
                     << ms(t3, t4) << "\n";
+          std::cerr << "TIMING total old integer path us = "
+                    << ms(t2, t4) << "\n";
 
           return result;
         }
+        
+        //speculative integer path
+        // auto speculativeStart = Clock::now();
+
+        // auto speculativeResult =
+        //     tryAddIntegerVectorsDirect(*leftVec, *rightVec, context);
+
+        // auto speculativeEnd  = Clock::now();
+
+        // if (speculativeResult.has_value()) {
+        //   std::cerr << "ROWS = " << leftVec->size() << "\n";
+        //   // std::cerr << "DEBUG: Speculative integer path succeeded\n";
+        //   // std::cerr << "TIMING child evaluate us = "
+        //   //           << ms(t0, t1) << "\n";
+        //   std::cerr << "TIMING setup/vector check us = "
+        //             << ms(t1, t2) << "\n";
+        //   std::cerr << "TIMING speculative integer loop us = "
+        //             << ms(speculativeStart, speculativeEnd) << "\n";
+
+        //   return std::move(*speculativeResult);
+        // }
+
+        // std::cerr << "DEBUG: Speculative integer path failed; "
+        //             "using generic fallback\n";
+        // std::cerr << "TIMING failed speculative attempt us = "
+        //           << ms(speculativeStart, speculativeEnd) << "\n";
 
         //Generic path
         sparqlExpression::VectorWithMemoryLimit<ValueId> result{context->_allocator};
         result.reserve(leftVec->size());
 
+        auto genericStart = Clock::now();
+
         auto leftNumericBatch = getNumericBatch(*leftVec, context);
         auto rightNumericBatch = getNumericBatch(*rightVec, context);
 
-        auto t3 = Clock::now();
+        auto batchesReady  = Clock::now();
 
         for (size_t i = 0; i < leftNumericBatch.size(); ++i) {
           auto added = std::visit(
@@ -368,13 +467,13 @@ class BatchedAddExpression : public SparqlExpression {
           result.push_back(makeNumericId(added));
         }
 
-      auto t4 = Clock::now();
+      auto genericEnd  = Clock::now();
 
       std::cerr << "DEBUG: Generic variant path\n";
       std::cerr << "TIMING child evaluate us = " << ms(t0, t1) << "\n";
       std::cerr << "TIMING setup/vector check us = " << ms(t1, t2) << "\n";
-      std::cerr << "TIMING getNumericBatch us = " << ms(t2, t3) << "\n";
-      std::cerr << "TIMING addition loop us = " << ms(t3, t4) << "\n";
+      std::cerr << "TIMING getNumericBatch us = " << ms(genericStart, batchesReady) << "\n";
+      std::cerr << "TIMING addition loop us = " << ms(batchesReady, genericEnd) << "\n";
 
       return result;
     }
