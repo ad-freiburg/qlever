@@ -56,6 +56,16 @@ class LocalVocabContext {
   // Return the bounds of `word` in the vocabulary, see `VocabBounds`.
   virtual VocabBounds getPositionOfWord(std::string_view word) const = 0;
 
+  // Look up `word` in the auxiliary vocabulary of this index (see
+  // `index/vocabulary/AuxVocabulary.h`). Return `std::nullopt` if it is not
+  // contained there, and in particular also if the index has no auxiliary
+  // vocabulary at all. Note that the auxiliary vocabulary is disjoint from the
+  // vocabulary of the main index, so this only has to be called if
+  // `getPositionOfWord` above has already reported that `word` is not contained
+  // in the latter.
+  virtual std::optional<AuxVocabIndex> getAuxVocabIndex(
+      std::string_view word) const = 0;
+
   // Try to encode `word` directly in an `Id` instead of looking it up in the
   // vocabulary (see the `EncodedIriManager`). Return `std::nullopt` if `word`
   // cannot be encoded that way.

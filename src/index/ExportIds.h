@@ -171,7 +171,8 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
-    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
+    if (!(datatype == VocabIndex || datatype == LocalVocabIndex ||
+          datatype == AuxVocabIndex)) {
       return std::nullopt;
     }
   }
@@ -189,6 +190,7 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
     case VocabIndex:
     case LocalVocabIndex:
+    case AuxVocabIndex:
       return formatLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:

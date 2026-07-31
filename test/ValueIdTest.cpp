@@ -153,6 +153,7 @@ TEST_F(ValueIdTest, Indices) {
   testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
+  testRandomIds(&makeAuxVocabId, &getAuxVocabIndex, Datatype::AuxVocabIndex);
 }
 
 TEST_F(ValueIdTest, Undefined) {
@@ -198,6 +199,7 @@ TEST_F(ValueIdTest, IndexOrdering) {
   testOrder(&makeVocabId, &getVocabIndex);
   testOrder(&makeLocalVocabId, &getLocalVocabIndex);
   testOrder(&makeWordVocabId, &getWordVocabIndex);
+  testOrder(&makeAuxVocabId, &getAuxVocabIndex);
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 

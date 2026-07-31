@@ -16,6 +16,7 @@
 
 #include "global/Id.h"
 #include "index/LocalVocabContext.h"
+#include "index/vocabulary/AuxVocabulary.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "util/BlankNodeManager.h"
@@ -30,23 +31,33 @@ class LocalVocabContextImpl : public LocalVocabContext {
  private:
   using BlankNodeManagerPtr = std::unique_ptr<ad_utility::BlankNodeManager>;
 
+  using AuxVocabularyPtr = std::shared_ptr<const AuxVocabulary>;
+
   const RdfsVocabulary* vocabulary_;
   const EncodedIriManager* encodedIriManager_;
   // NOTE: This is a pointer to the owning `std::unique_ptr` and not to the
   // manager itself, because the manager is only created while the index is
   // being read, long after this object has been constructed.
   const BlankNodeManagerPtr* blankNodeManager_;
+  // NOTE: This also is a pointer to the owning smart pointer, because the
+  // auxiliary vocabulary is only set while the index is being read, see
+  // `IndexImpl::auxVocab()`.
+  const AuxVocabularyPtr* auxVocab_;
 
  public:
   LocalVocabContextImpl(const RdfsVocabulary* vocabulary,
                         const EncodedIriManager* encodedIriManager,
-                        const BlankNodeManagerPtr* blankNodeManager)
+                        const BlankNodeManagerPtr* blankNodeManager,
+                        const AuxVocabularyPtr* auxVocab)
       : vocabulary_{vocabulary},
         encodedIriManager_{encodedIriManager},
-        blankNodeManager_{blankNodeManager} {}
+        blankNodeManager_{blankNodeManager},
+        auxVocab_{auxVocab} {}
 
   int compareWords(std::string_view a, std::string_view b) const override;
   VocabBounds getPositionOfWord(std::string_view word) const override;
+  std::optional<AuxVocabIndex> getAuxVocabIndex(
+      std::string_view word) const override;
   std::optional<Id> encodeAsId(std::string_view word) const override;
   ad_utility::BlankNodeManager* getBlankNodeManager() const override;
 };

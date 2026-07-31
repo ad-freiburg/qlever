@@ -423,6 +423,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+      // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
+      // `AuxVocabIndex` type: the comparison via bits is only correct for
+      // equality, because the words of the auxiliary vocabulary are all sorted
+      // after the words of the main vocabulary, no matter what they are.
+    case Datatype::AuxVocabIndex:
       // For `Date` the trivial comparison via bits is also correct.
       return detail::simplifyRanges(
           detail::getRangesForIndexTypes(begin, end, valueId, comparison),
@@ -465,6 +470,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
+    case Datatype::AuxVocabIndex:
       return detail::simplifyRanges(detail::getRangesForIndexTypes(
           begin, end, valueIdBegin, valueIdEnd, comparison));
   }

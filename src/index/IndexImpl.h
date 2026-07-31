@@ -36,6 +36,7 @@
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabulary/AuxVocabulary.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/RdfParser.h"
@@ -206,12 +207,15 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
+  // The auxiliary vocabulary, see `auxVocab()`.
+  std::shared_ptr<const AuxVocabulary> auxVocab_;
+
   // The implementation of the `LocalVocabContext` interface for this index.
   // NOTE: `IndexImpl` deliberately does not implement that interface itself, so
   // that it doesn't become a polymorphic type. There must be exactly one of
   // these per index, see `LocalVocabContext.h`.
   LocalVocabContextImpl localVocabContext_{&vocab_, &encodedIriManager_,
-                                           &blankNodeManager_};
+                                           &blankNodeManager_, &auxVocab_};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -269,6 +273,23 @@ class IndexImpl {
 
   const auto& getVocab() const { return vocab_; };
   auto& getNonConstVocabForTesting() { return vocab_; }
+
+  // Return the auxiliary vocabulary of this index (see
+  // `index/vocabulary/AuxVocabulary.h`), or `nullptr` if it has none. Note that
+  // this member is immutable once the index has been loaded, because the `Id`s
+  // of an auxiliary vocabulary are only valid for the very vocabulary that they
+  // were created for.
+  //
+  // TODO<joka921> Nothing sets this yet. It will be set when the index is read
+  // from disk, together with the auxiliary index that the words belong to;
+  // until then the only way to obtain an auxiliary vocabulary is
+  // `setAuxVocabForTesting`.
+  const AuxVocabulary* auxVocab() const { return auxVocab_.get(); }
+
+  // Set the auxiliary vocabulary, see above.
+  void setAuxVocabForTesting(std::shared_ptr<const AuxVocabulary> auxVocab) {
+    auxVocab_ = std::move(auxVocab);
+  }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly
   // into `serializer`'s buffer. See `Vocabulary::loadFromZeroCopyDeserializer`

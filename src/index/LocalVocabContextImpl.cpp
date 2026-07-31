@@ -25,6 +25,16 @@ auto LocalVocabContextImpl::getPositionOfWord(std::string_view word) const
 }
 
 // ____________________________________________________________________________
+std::optional<AuxVocabIndex> LocalVocabContextImpl::getAuxVocabIndex(
+    std::string_view word) const {
+  const auto& auxVocab = *auxVocab_;
+  if (auxVocab == nullptr) {
+    return std::nullopt;
+  }
+  return auxVocab->getId(word);
+}
+
+// ____________________________________________________________________________
 std::optional<Id> LocalVocabContextImpl::encodeAsId(
     std::string_view word) const {
   return encodedIriManager_->encode(word);

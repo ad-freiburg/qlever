@@ -360,6 +360,8 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(LocalVocabEntryTest index)
 
+addLinkAndDiscoverTest(AuxVocabularyTest index engine)
+
 addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(ServiceTest engine)
