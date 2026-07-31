@@ -76,7 +76,8 @@ class alignas(16) LocalVocabEntry
   // the first *larger* word in the vocabulary. Note that the position may also
   // be in the auxiliary vocabulary of the index, in which case it is an `Id` of
   // type `Datatype::AuxVocabIndex` — see the warning in the class comment above
-  // for why that makes this position unsuitable for semantic comparisons.
+  // for why that makes this position currently unsuitable for semantic
+  // comparisons.
   // Note: we store the cache as three separate atomics to avoid mutexes. The
   // downside is, that in parallel code multiple threads might look up the
   // position concurrently, which wastes a bit of resources. However, we don't
@@ -148,6 +149,14 @@ class alignas(16) LocalVocabEntry
   // Note: We use `lowerBound` and `upperBound` because depending on the Local
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
+  //
+  // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or `AuxVocabIndex`
+  // (the latter only if the index has an auxiliary vocabulary that contains
+  // this word, see the warning in the class comment above), and this entry
+  // compares exactly like an `Id` at that position. In particular this also
+  // holds when it is compared to an `Id` of an unrelated datatype like `Int` or
+  // `Date`, which is what makes the comparison of `Id`s a valid strict weak
+  // ordering, see `ValueId::compareThreeWay`.
   struct PositionInVocab {
     IdProxy lowerBound_;
     IdProxy upperBound_;

@@ -14,8 +14,10 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
+#include "index/vocabulary/AuxVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -318,5 +320,65 @@ inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
 }
 
 }  // namespace geoInfoVGTestHelpers
+
+// Helpers for testing the value getters with `Id`s of type
+// `Datatype::AuxVocabIndex`, that is, with the words of the auxiliary
+// vocabulary of an index (see `index/vocabulary/AuxVocabulary.h`).
+namespace auxVocabVGTestHelpers {
+
+using namespace valueGetterTestHelpers;
+
+// The words of the auxiliary vocabulary that the tests use, in the order in
+// which an `AuxVocabulary` stores them. NOTE: That order is the one of
+// `std::string`, whereas the actual implementation will use the collation of
+// the vocabulary of the main index. These words are deliberately chosen such
+// that the two orders agree (verified against the vocabulary of a test index),
+// so that the tests do not encode a wrong assumption about the order.
+inline const std::vector<std::string> auxVocabWords{
+    "\"\"",
+    "\"LINESTRING(6 6, 8 8)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+    "\"noAuxType\"",
+    "\"someAuxType\"^^<someType>",
+    "\"withAuxLang\"@en",
+    "<https://example.com/aux>"};
+
+// Names for the words of `auxVocabWords`, to be used with the helpers below.
+inline const std::string auxEmptyLiteral = auxVocabWords.at(0);
+inline const std::string auxWktLiteral = auxVocabWords.at(1);
+inline const std::string auxPlainLiteral = auxVocabWords.at(2);
+inline const std::string auxTypedLiteral = auxVocabWords.at(3);
+inline const std::string auxLangLiteral = auxVocabWords.at(4);
+inline const std::string auxIri = auxVocabWords.at(5);
+
+// A test context whose index has an auxiliary vocabulary that holds
+// `auxVocabWords`.
+//
+// NOTE: The knowledge graph deliberately contains none of those words (an
+// auxiliary vocabulary is disjoint from the vocabulary of the main index) and
+// is used by no other test. The latter matters because `getQec` caches its
+// indices by the knowledge graph, so the auxiliary vocabulary that is set here
+// would otherwise leak into unrelated tests.
+struct AuxVocabTestContext : TestContextWithGivenTTl {
+  AuxVocabTestContext()
+      : TestContextWithGivenTTl{"<x> <y> \"onlyForTheAuxVocabTests\" .\n"} {
+    // `getQec` only hands out a `const Index&`, but setting the auxiliary
+    // vocabulary is a deliberate test-only mutation of that very index.
+    const_cast<Index&>(qec->getIndex())
+        .getImpl()
+        .setAuxVocabForTesting(std::make_shared<AuxVocabulary>(auxVocabWords));
+  }
+
+  // The `Id` of the given word of the auxiliary vocabulary. The word has to be
+  // one of `auxVocabWords`.
+  Id auxId(const std::string& word) const {
+    auto index = qec->getIndex().getImpl().auxVocab()->getId(word);
+    AD_CONTRACT_CHECK(index.has_value(),
+                      "The given word is not one of `auxVocabWords`");
+    return Id::makeFromAuxVocabIndex(index.value());
+  }
+};
+
+}  // namespace auxVocabVGTestHelpers
 
 #endif  // QLEVER_TEST_VALUEGETTERTESTHELPERS_H

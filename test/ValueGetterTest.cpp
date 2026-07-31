@@ -15,6 +15,7 @@ namespace {
 using namespace valueGetterTestHelpers;
 using namespace unitVGTestHelpers;
 using namespace geoInfoVGTestHelpers;
+using namespace auxVocabVGTestHelpers;
 
 // _____________________________________________________________________________
 TEST(LiteralValueGetterWithStrFunction, OperatorWithId) {
@@ -318,5 +319,161 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", isNotNumeric);
   t.checkFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                            isNotNumeric);
+}
+
+// The tests below cover the value getters for `Id`s of type
+// `Datatype::AuxVocabIndex`, that is, for the words of the auxiliary vocabulary
+// of an index. Those words are literals and IRIs just like the words of the
+// main vocabulary, so the getters have to treat them in exactly the same way.
+
+// _____________________________________________________________________________
+TEST(ValueGettersWithAuxVocab, numericGetters) {
+  AuxVocabTestContext t;
+  using namespace sparqlExpression::detail;
+  // A word of a vocabulary is never a numeric value, no matter which vocabulary
+  // it comes from.
+  for (const auto& word : auxVocabWords) {
+    auto id = t.auxId(word);
+    EXPECT_THAT(NumericValueGetter{}(id, &t.context),
+                VariantWith<NotNumeric>(_))
+        << word;
+    EXPECT_THAT(NumericOrDateValueGetter{}(id, &t.context),
+                VariantWith<NotNumeric>(_))
+        << word;
+    EXPECT_EQ(IntValueGetter{}(id, &t.context), std::nullopt) << word;
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ValueGettersWithAuxVocab, effectiveBooleanValueGetter) {
+  AuxVocabTestContext t;
+  using Result = sparqlExpression::detail::EffectiveBooleanValueGetter::Result;
+  auto getEbv = [&t](const std::string& word) {
+    return sparqlExpression::detail::EffectiveBooleanValueGetter{}(
+        t.auxId(word), &t.context);
+  };
+  // A word with empty content is `false`, everything else is `true`.
+  EXPECT_EQ(getEbv(auxEmptyLiteral), Result::False);
+  EXPECT_EQ(getEbv(auxPlainLiteral), Result::True);
+  EXPECT_EQ(getEbv(auxTypedLiteral), Result::True);
+  EXPECT_EQ(getEbv(auxLangLiteral), Result::True);
+  EXPECT_EQ(getEbv(auxWktLiteral), Result::True);
+  EXPECT_EQ(getEbv(auxIri), Result::True);
+}
+
+// _____________________________________________________________________________
+TEST(ValueGettersWithAuxVocab, literalAndDatatypeGetters) {
+  AuxVocabTestContext t;
+  using namespace sparqlExpression::detail;
+  using Iri = ad_utility::triple_component::Iri;
+
+  // `LiteralValueGetter` with and without the semantics of the `STR` function.
+  auto getLiteralWithStr = [&t](const std::string& word) {
+    return LiteralValueGetterWithStrFunction{}(t.auxId(word), &t.context);
+  };
+  auto getLiteralWithoutStr = [&t](const std::string& word) {
+    return LiteralValueGetterWithoutStrFunction{}(t.auxId(word), &t.context);
+  };
+  checkLiteralContentAndDatatype(getLiteralWithStr(auxPlainLiteral),
+                                 "noAuxType", std::nullopt);
+  checkLiteralContentAndDatatype(getLiteralWithStr(auxIri),
+                                 "https://example.com/aux", std::nullopt);
+  checkLiteralContentAndDatatype(getLiteralWithStr(auxTypedLiteral),
+                                 "someAuxType", std::nullopt);
+  // Without the `STR` function, only literals with an `xsd:string` datatype (or
+  // no datatype at all) are returned.
+  checkLiteralContentAndDatatype(getLiteralWithoutStr(auxPlainLiteral),
+                                 "noAuxType", std::nullopt);
+  checkLiteralContentAndDatatype(getLiteralWithoutStr(auxIri), std::nullopt,
+                                 std::nullopt);
+  checkLiteralContentAndDatatype(getLiteralWithoutStr(auxTypedLiteral),
+                                 std::nullopt, std::nullopt);
+
+  // `DatatypeValueGetter`.
+  auto getDatatype = [&t](const std::string& word) {
+    return DatatypeValueGetter{}(t.auxId(word), &t.context);
+  };
+  EXPECT_EQ(getDatatype(auxTypedLiteral),
+            Iri::fromIrirefWithoutBrackets("someType"));
+  EXPECT_EQ(getDatatype(auxPlainLiteral),
+            Iri::fromIrirefWithoutBrackets(XSD_STRING));
+  EXPECT_EQ(getDatatype(auxLangLiteral),
+            Iri::fromIrirefWithoutBrackets(RDF_LANGTAG_STRING));
+  // An IRI has no datatype.
+  EXPECT_EQ(getDatatype(auxIri), std::nullopt);
+
+  // `LanguageTagValueGetter`.
+  auto getLanguageTag = [&t](const std::string& word) {
+    return LanguageTagValueGetter{}(t.auxId(word), &t.context);
+  };
+  EXPECT_THAT(getLanguageTag(auxLangLiteral), Optional(std::string{"en"}));
+  EXPECT_THAT(getLanguageTag(auxPlainLiteral), Optional(std::string{""}));
+  EXPECT_EQ(getLanguageTag(auxIri), std::nullopt);
+
+  // `ToNumericValueGetter` falls back to the string representation.
+  auto toNumeric = [&t](const std::string& word) {
+    return ToNumericValueGetter{}(t.auxId(word), &t.context);
+  };
+  EXPECT_THAT(toNumeric(auxPlainLiteral),
+              VariantWith<std::string>("noAuxType"));
+  EXPECT_THAT(toNumeric(auxTypedLiteral),
+              VariantWith<std::string>("someAuxType"));
+  // An IRI is not a literal, so there is nothing to convert.
+  EXPECT_THAT(toNumeric(auxIri), VariantWith<std::monostate>(_));
+}
+
+// _____________________________________________________________________________
+TEST(ValueGettersWithAuxVocab, isIriAndIsLiteralGetters) {
+  AuxVocabTestContext t;
+  using namespace sparqlExpression::detail;
+  auto isIri = [&t](const std::string& word) {
+    return IsIriValueGetter{}(t.auxId(word), &t.context);
+  };
+  auto isLiteral = [&t](const std::string& word) {
+    return IsLiteralValueGetter{}(t.auxId(word), &t.context);
+  };
+  EXPECT_EQ(isIri(auxIri), Id::makeFromBool(true));
+  EXPECT_EQ(isLiteral(auxIri), Id::makeFromBool(false));
+  for (const auto& literal : {auxEmptyLiteral, auxPlainLiteral, auxTypedLiteral,
+                              auxLangLiteral, auxWktLiteral}) {
+    EXPECT_EQ(isIri(literal), Id::makeFromBool(false)) << literal;
+    EXPECT_EQ(isLiteral(literal), Id::makeFromBool(true)) << literal;
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ValueGettersWithAuxVocab, iriOrUriValueGetter) {
+  AuxVocabTestContext t;
+  // The getter turns its argument into an IRI, which is a `LocalVocabEntry`
+  // because it does not have to be contained in any vocabulary of the index.
+  auto result = sparqlExpression::detail::IriOrUriValueGetter{}(t.auxId(auxIri),
+                                                                &t.context);
+  ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(result));
+  EXPECT_EQ(std::get<LocalVocabEntry>(result).toStringRepresentation(), auxIri);
+}
+
+// _____________________________________________________________________________
+TEST(ValueGettersWithAuxVocab, geometryGetters) {
+  AuxVocabTestContext t;
+  using namespace sparqlExpression::detail;
+  auto wktId = t.auxId(auxWktLiteral);
+  auto plainId = t.auxId(auxPlainLiteral);
+
+  // The WKT literal of the auxiliary vocabulary is parsed just like one of the
+  // main vocabulary. Note that the placeholder `AuxVocabulary` stores no
+  // precomputed `GeometryInfo`, so it is computed from the string here.
+  EXPECT_THAT(GeoPointOrWktValueGetter{}(wktId, &t.context),
+              geoInfoVGTestHelpers::geoPointOrWktMatcher(auxWktLiteral));
+  EXPECT_THAT(GeoPointOrWktValueGetter{}(plainId, &t.context),
+              geoInfoVGTestHelpers::geoPointOrWktMatcher(std::nullopt));
+
+  auto info =
+      GeometryInfoValueGetter<ad_utility::GeometryInfo>{}(wktId, &t.context);
+  ASSERT_TRUE(info.has_value());
+  // `2` is the WKT type of a `LINESTRING`, as in the tests above.
+  EXPECT_EQ(info.value().getWktType(), ad_utility::GeometryType{2});
+  EXPECT_EQ((GeometryInfoValueGetter<ad_utility::GeometryInfo>{}(plainId,
+                                                                 &t.context)),
+            std::nullopt);
 }
 };  // namespace

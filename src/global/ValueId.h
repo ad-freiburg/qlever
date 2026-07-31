@@ -43,12 +43,7 @@ enum struct Datatype {
   BlankNodeIndex,
   EncodedVal,
   // An index into the auxiliary vocabulary of an index (see
-  // `index/vocabulary/AuxVocabulary.h`). Because the datatype bits are the most
-  // significant bits, all IDs of this type are larger than all IDs of the other
-  // types. Words that are added by updates after the main index was built
-  // therefore are sorted after all words of the main vocabulary when comparing
-  // IDs bitwise, which is what makes the words of the auxiliary vocabulary
-  // mergeable into a scan of the main index.
+  // `index/vocabulary/AuxVocabulary.h`).
   AuxVocabIndex,
   MaxValue = AuxVocabIndex
   // Note: Unfortunately, we cannot easily get the size of an enum.
@@ -205,13 +200,12 @@ class ValueId {
   // NOTE: An `Id` of type `LocalVocabIndex` does not carry its value in its
   // bits (they are a pointer), so it is ordered by the position that its word
   // has in the vocabularies of the index (see
-  // `LocalVocabEntry::positionInVocab`). That position is an `Id` of type
-  // `VocabIndex`, `EncodedVal`, or `AuxVocabIndex`, and the local vocab entry
-  // compares exactly like an `Id` at that position. In particular this also
-  // holds for the comparison against `Id`s of an unrelated datatype like `Int`
-  // or `Date`, which is required for the comparison to be a valid strict weak
-  // ordering (see `compareOtherTypeToLocalVocab`).
-  constexpr auto compareThreeWay(const ValueId& other) const {
+  // `LocalVocabEntry::positionInVocab`).
+  // NOTE: This is only `constexpr` in C++20 mode. GCC 8, which the C++17 CI job
+  // uses, rejects the trailing `if` statement below in a relaxed-constexpr
+  // function ("expression `<statement>` is not a constant expression"), and
+  // nothing compares `Id`s at compile time anyway.
+  QL_CONSTEXPR auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
@@ -238,12 +232,16 @@ class ValueId {
       return ql::compareThreeWay(0, inverseOrder);
     }
   }
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(ValueId)
+  // NOTE: All the comparison operators are `QL_CONSTEXPR` and not `constexpr`,
+  // because they call `compareThreeWay` above, see the note there.
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(ValueId)
 
-  friend constexpr bool operator==(const ValueId& left, const ValueId& right) {
+  friend QL_CONSTEXPR bool operator==(const ValueId& left,
+                                      const ValueId& right) {
     return ql::compareThreeWay(left, right) == 0;
   }
-  friend constexpr bool operator!=(const ValueId& left, const ValueId& right) {
+  friend QL_CONSTEXPR bool operator!=(const ValueId& left,
+                                      const ValueId& right) {
     return !(left == right);
   }
 
@@ -558,8 +556,8 @@ class ValueId {
 
  private:
   // Compare the bits of an `Id` of an arbitrary type other than
-  // `LocalVocabIndex` with the range that the position of a local vocab entry
-  // in the vocabularies of the index spans, see `compareThreeWay` above.
+  // `LocalVocabIndex` with a `LocalVocabIndex`. For details see
+  // `LocalVocabEntry::positionInVocab()`.
   static ql::strong_ordering compareOtherTypeToLocalVocab(
       LocalVocabEntry::IdProxy otherId, ::LocalVocabIndex localVocabIndex) {
     auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
