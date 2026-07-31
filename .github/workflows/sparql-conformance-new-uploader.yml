@@ -10,16 +10,33 @@ permissions:
   actions: read
   contents: read
 
+# Serialize uploads for the same commit so two runs cannot race on the server.
+# Never cancel: a queued upload still carries a complete report.
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.workflow_run.head_sha }}'
+  cancel-in-progress: false
+
 jobs:
   upload:
     env:
       SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_V2_UPLOADER_URL }}
       API_KEY: ${{ secrets.SPARQL_CONFORMANCE_V2_TOKEN }}
+      # Trusted metadata, taken from the `workflow_run` payload rather than from
+      # the artifact: the triggering workflow builds and runs code from
+      # (possibly forked) pull requests, so every file in the artifact must be
+      # treated as attacker-controlled.
+      WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+      WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 10
+    if: >-
+      github.repository == 'ad-freiburg/qlever' &&
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Download conformance report
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: conformance-report
           path: conformance-report
@@ -28,26 +45,60 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
       - name: "Submit data to new server"
         run: |
+          set -euo pipefail
+
           if [[ -z "$SERVER_URL" || -z "$API_KEY" ]]; then
-            echo "The conformance upload URL and API key secrets must both be configured."
+            echo "The conformance upload URL and API key secrets must both be configured." >&2
             exit 1
           fi
 
           metadata_dir="$GITHUB_WORKSPACE/conformance-report"
+          IFS= read -r reported_sha < "$metadata_dir/sha"
           IFS= read -r run_title < "$metadata_dir/run_title"
           IFS= read -r pr_number < "$metadata_dir/pr"
-          IFS= read -r commit_sha < "$metadata_dir/sha"
-          IFS= read -r repo_full_name < "$metadata_dir/github_repository"
-          IFS= read -r ref_name < "$metadata_dir/ref_name"
-          IFS= read -r head_ref < "$metadata_dir/head_ref"
-          IFS= read -r ref_kind < "$metadata_dir/ref_kind"
           IFS= read -r engine_version < "$metadata_dir/engine_version"
 
-          result_file="$metadata_dir/$commit_sha.json.bz2"
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Refusing to proceed: the triggering run's head sha is not a commit ID." >&2
+            exit 1
+          fi
+          # The artifact names the commit it claims to describe. It must agree
+          # with the sha GitHub recorded for the triggering run, otherwise the
+          # report was tampered with and we would attribute results to an
+          # arbitrary commit -- including one on master.
+          if [[ "$reported_sha" != "$HEAD_SHA" ]]; then
+            echo "Refusing to proceed: report claims commit '$reported_sha', but the triggering run's head sha is '$HEAD_SHA'." >&2
+            exit 1
+          fi
+          if [[ ! "$WORKFLOW_EVENT" =~ ^(push|pull_request|merge_group)$ ]]; then
+            echo "Refusing to proceed: unexpected event '$WORKFLOW_EVENT'." >&2
+            exit 1
+          fi
+          if [[ ! "$pr_number" =~ ^[0-9]{0,10}$ ]]; then
+            echo "Refusing to proceed: 'pr' is not a number." >&2
+            exit 1
+          fi
+
+          # An anchored, whole-string match already rejects embedded newlines,
+          # but reject every control character (and absurd lengths) so no value
+          # can inject or smuggle an additional HTTP header.
+          validate_header_value() {
+            local name="$1"
+            local value="$2"
+            if [[ "$value" =~ [[:cntrl:]] || "${#value}" -gt 1024 ]]; then
+              echo "Refusing to proceed: '$name' is not a safe HTTP header value." >&2
+              exit 1
+            fi
+          }
+          validate_header_value "run_title" "$run_title"
+          validate_header_value "engine_version" "$engine_version"
+          validate_header_value "head_branch" "$HEAD_BRANCH"
+
+          result_file="$metadata_dir/$HEAD_SHA.json.bz2"
           test -s "$result_file"
 
           upload_url="${SERVER_URL%/}/api/upload"
-          artifact_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
+          artifact_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID"
           curl_args=(
             --location
             --silent
@@ -55,15 +106,22 @@ jobs:
             --fail-with-body
             --output temp_response.txt
             --write-out "%{http_code}"
+            --connect-timeout 15
+            --max-time 300
             --header "x-api-key: $API_KEY"
-            --header "x-repo-full-name: $repo_full_name"
-            --header "x-commit-sha: $commit_sha"
+            --header "x-repo-full-name: $GITHUB_REPOSITORY"
+            --header "x-commit-sha: $HEAD_SHA"
             --header "x-engine-name: qlever"
             --header "x-engine-version: $engine_version"
-            --header "x-ref-name: $ref_name"
-            --header "x-ref-kind: $ref_kind"
+            --header "x-ref-name: $HEAD_BRANCH"
+            # Always a branch: the triggering workflow runs on pushes to
+            # `master`, on pull requests (`refs/pull/N/merge`) and on merge
+            # groups (`refs/heads/gh-readonly-queue/...`). Its `push` trigger is
+            # filtered to `branches: [master]` and has no `tags:` filter, so a
+            # tag push cannot start it. Revisit if a `tags:` trigger is added.
+            --header "x-ref-kind: branch"
             --header "x-run-title: $run_title"
-            --header "x-workflow-run-id: ${{ github.event.workflow_run.id }}"
+            --header "x-workflow-run-id: $WORKFLOW_RUN_ID"
             --header "x-artifact-url: $artifact_url"
             --header "x-upload-source: ci"
             --form "file=@$result_file"
@@ -72,8 +130,8 @@ jobs:
           if [[ -n "$pr_number" ]]; then
             curl_args+=(--header "x-pr-number: $pr_number")
           fi
-          if [[ -n "$head_ref" ]]; then
-            curl_args+=(--header "x-head-ref: $head_ref")
+          if [[ "$WORKFLOW_EVENT" == "pull_request" && -n "$HEAD_BRANCH" ]]; then
+            curl_args+=(--header "x-head-ref: $HEAD_BRANCH")
           fi
 
           : > temp_response.txt
@@ -85,6 +143,7 @@ jobs:
           echo "Server response:"
           cat temp_response.txt
           echo "HTTP Status: $response"
+          # The current upload contract returns exactly 200 on success.
           if [[ "$curl_status" -ne 0 || "$response" != "200" ]]; then
             echo "Upload failed (curl status $curl_status, HTTP status $response)."
             exit 1
