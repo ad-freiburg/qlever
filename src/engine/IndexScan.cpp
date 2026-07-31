@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
@@ -130,7 +131,7 @@ string IndexScan::getCacheKeyImpl() const {
     os << "SCAN " << permutationString << " with ";
     auto addKey = [&os, &permutationString, this](size_t idx) {
       auto keyString = permutationString.at(idx);
-      const auto& key = getPermutedTriple().at(idx)->toRdfLiteral();
+      const auto& key = toRdfLiteral(*getPermutedTriple().at(idx));
       os << keyString << " = \"" << key << "\"";
     };
     for (size_t i = 0; i < 3 - numVariables_; ++i) {
@@ -146,7 +147,7 @@ string IndexScan::getCacheKeyImpl() const {
   }
 
   os << " ";
-  graphsToFilter_.format(os, &TripleComponent::toRdfLiteral);
+  graphsToFilter_.format(os, &toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
     os << " column subset "

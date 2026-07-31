@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "index/TripleComponentConversions.h"
 #include "util/TypeTraits.h"
 
 namespace sparqlExpression {
@@ -52,7 +53,7 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       TripleComponent tc{s};
-      std::optional<Id> id = tc.toValueId(context->_qec.getIndex());
+      std::optional<Id> id = toValueId(tc, context->_qec.getIndex());
       IdOrLocalVocabEntry result =
           id.has_value() ? IdOrLocalVocabEntry{id.value()}
                          : IdOrLocalVocabEntry{LocalVocabEntry{

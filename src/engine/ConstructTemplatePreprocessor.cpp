@@ -11,6 +11,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
@@ -26,7 +27,7 @@ namespace qlever::constructExport {
 // used for the deduplication of CONSTRUCT results.
 ValueId ConstructTemplatePreprocessor::resolveConstantDedupId(
     TripleComponent tripleComponent) {
-  return std::move(tripleComponent).toValueId(index_, localVocab_);
+  return toValueId(std::move(tripleComponent), index_, localVocab_);
 }
 
 namespace {

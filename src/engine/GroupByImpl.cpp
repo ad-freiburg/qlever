@@ -30,6 +30,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -859,7 +860,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
-  std::optional<Id> col0Id = permutedTriple[0]->toValueId(getIndex());
+  std::optional<Id> col0Id = toValueId(*permutedTriple[0], getIndex());
   if (!col0Id.has_value()) {
     return std::nullopt;
   }

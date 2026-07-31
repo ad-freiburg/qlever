@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -697,11 +698,11 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_EQ(blankNodeMap.size(), 0);
 
   const EncodedIriManager encodedIriManager;
-  Id a = bTTC({{"type", "bnode"}, {"value", "A"}})
-             .toValueIdIfNotString(&encodedIriManager)
+  Id a = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "A"}}),
+                              &encodedIriManager)
              .value();
-  Id b = bTTC({{"type", "bnode"}, {"value", "B"}})
-             .toValueIdIfNotString(&encodedIriManager)
+  Id b = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "B"}}),
+                              &encodedIriManager)
              .value();
   EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
@@ -710,8 +711,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_EQ(blankNodeMap.size(), 2);
 
   // This BlankNode exists already, known Id will be used.
-  Id a2 = bTTC({{"type", "bnode"}, {"value", "A"}})
-              .toValueIdIfNotString(&encodedIriManager)
+  Id a2 = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "A"}}),
+                               &encodedIriManager)
               .value();
   EXPECT_EQ(a, a2);
 

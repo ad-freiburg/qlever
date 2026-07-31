@@ -8,6 +8,7 @@
 #include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
@@ -148,7 +149,7 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   LocalVocab lv;
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   auto toId = [this, &lv](TripleComponent&& tc) {
-    return std::move(tc).toValueId(getIndex(), lv);
+    return toValueId(std::move(tc), getIndex(), lv);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(
