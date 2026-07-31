@@ -280,10 +280,10 @@ class IndexImpl {
   // of an auxiliary vocabulary are only valid for the very vocabulary that they
   // were created for.
   //
-  // TODO<joka921> Nothing sets this yet. It will be set when the index is read
-  // from disk, together with the auxiliary index that the words belong to;
-  // until then the only way to obtain an auxiliary vocabulary is
-  // `setAuxVocabForTesting`.
+  // TODO<joka921> Nothing sets this yet, except for unit tests. It will be set
+  // when the index is read from disk, together with the auxiliary index that
+  // the words belong to; until then the only way to obtain an auxiliary
+  // vocabulary is `setAuxVocabForTesting`.
   const AuxVocabulary* auxVocab() const { return auxVocab_.get(); }
 
   // Set the auxiliary vocabulary, see above.

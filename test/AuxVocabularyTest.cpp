@@ -28,10 +28,19 @@ namespace {
 using ::testing::HasSubstr;
 using ::testing::Optional;
 
-// The words of the auxiliary vocabulary that the tests below use. `<b>` is
-// sorted between the words `<a>` and `<c>` of the main vocabulary (see
-// `makeIndexWithAuxVocab`), `"lit"` after all of them.
-const std::vector<std::string> auxWords{"<b>", "\"lit\""};
+// The words of the auxiliary vocabulary that the tests below use. In the order
+// of the main vocabulary (see `makeIndexWithAuxVocab`), `"a"` is sorted before
+// all of its words, `<b>` between `<a>` and `<c>`, and `<d>` between `<c>` and
+// `<p>`.
+//
+// NOTE: An `AuxVocabulary` requires its words to be sorted with respect to
+// `std::string`'s comparison, whereas the actual implementation will use the
+// collation of the vocabulary of the main index (see `AuxVocabulary`). These
+// words are deliberately chosen such that the two orders agree: their content
+// is a single ASCII letter, for which the collation is the byte order, and `"`
+// (the first byte of a literal) sorts before `<` (the first byte of an IRI) in
+// both.
+const std::vector<std::string> auxWords{"\"a\"", "<b>", "<d>"};
 
 // The `Id` of the word of the auxiliary vocabulary at the given index.
 Id auxId(uint64_t index) {
@@ -51,13 +60,19 @@ Index makeIndexWithAuxVocab() {
 // ____________________________________________________________________________
 TEST(AuxVocabulary, wordsAndLookup) {
   AuxVocabulary vocab{auxWords};
-  EXPECT_EQ(vocab.numWords(), 2);
-  EXPECT_EQ(vocab[AuxVocabIndex::make(0)], "<b>");
-  EXPECT_EQ(vocab[AuxVocabIndex::make(1)], "\"lit\"");
-  EXPECT_EQ(vocab.getId("<b>"), AuxVocabIndex::make(0));
-  EXPECT_EQ(vocab.getId("\"lit\""), AuxVocabIndex::make(1));
-  EXPECT_EQ(vocab.getId("<a>"), std::nullopt);
-  AD_EXPECT_THROW_WITH_MESSAGE(vocab[AuxVocabIndex::make(2)],
+  EXPECT_EQ(vocab.numWords(), 3);
+  EXPECT_EQ(vocab[AuxVocabIndex::make(0)], "\"a\"");
+  EXPECT_EQ(vocab[AuxVocabIndex::make(1)], "<b>");
+  EXPECT_EQ(vocab[AuxVocabIndex::make(2)], "<d>");
+  EXPECT_EQ(vocab.getId("\"a\""), AuxVocabIndex::make(0));
+  EXPECT_EQ(vocab.getId("<b>"), AuxVocabIndex::make(1));
+  EXPECT_EQ(vocab.getId("<d>"), AuxVocabIndex::make(2));
+  // Words that are not contained, before, between, and after the contained
+  // ones.
+  EXPECT_EQ(vocab.getId("\"A\""), std::nullopt);
+  EXPECT_EQ(vocab.getId("<c>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<e>"), std::nullopt);
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab[AuxVocabIndex::make(3)],
                                HasSubstr("index.get() < words_.size()"));
 
   // A default-constructed vocabulary is empty, which is how an index without an
@@ -65,6 +80,16 @@ TEST(AuxVocabulary, wordsAndLookup) {
   AuxVocabulary empty{};
   EXPECT_EQ(empty.numWords(), 0);
   EXPECT_EQ(empty.getId("<b>"), std::nullopt);
+}
+
+// ____________________________________________________________________________
+TEST(AuxVocabulary, wordsHaveToBeSortedAndDistinct) {
+  // The words are looked up by binary search, so unsorted or duplicate words
+  // are a programming error.
+  AD_EXPECT_THROW_WITH_MESSAGE((AuxVocabulary{{"<d>", "<b>"}}),
+                               HasSubstr("have to be sorted"));
+  AD_EXPECT_THROW_WITH_MESSAGE((AuxVocabulary{{"<b>", "<b>"}}),
+                               HasSubstr("have to be distinct"));
 }
 
 // ____________________________________________________________________________
@@ -115,13 +140,17 @@ TEST(AuxVocabIndex, sortsAfterAllOtherDatatypes) {
 }
 
 // ____________________________________________________________________________
+// NOTE: All the comparisons in this test are in the *internal* order, that is,
+// the order in which the index scans emit their `Id`s. That order deliberately
+// is not the semantic (by string value) order as soon as an index has an
+// auxiliary vocabulary, see the warning in `index/LocalVocabEntry.h`.
 TEST(AuxVocabIndex, localVocabEntryInAuxVocabulary) {
   Index index = makeIndexWithAuxVocab();
   auto getId = ad_utility::testing::makeGetId(index);
   const auto& context = index.getImpl().getLocalVocabContext();
 
   // `<b>` is a word of the auxiliary vocabulary, `<e>` is contained in neither
-  // vocabulary and would be sorted between `<c>` and `<p>`.
+  // vocabulary and would be sorted between `<c>` and `<p>` of the main one.
   auto entryB = LocalVocabEntry::fromIriref("<b>", context);
   auto entryE = LocalVocabEntry::fromIriref("<e>", context);
   auto idB = Id::makeFromLocalVocabIndex(&entryB);
@@ -130,10 +159,11 @@ TEST(AuxVocabIndex, localVocabEntryInAuxVocabulary) {
   // A local vocab entry that is stored in the auxiliary vocabulary is
   // positioned at the `Id` of that vocabulary, and hence compares equal to it.
   auto position = entryB.positionInVocab();
-  EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), auxId(0));
+  EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), auxId(1));
   EXPECT_NE(position.lowerBound_, position.upperBound_);
-  EXPECT_EQ(idB, auxId(0));
-  EXPECT_LT(idB, auxId(1));
+  EXPECT_EQ(idB, auxId(1));
+  EXPECT_LT(auxId(0), idB);
+  EXPECT_LT(idB, auxId(2));
 
   // It is greater than all `Id`s of the main vocabulary, and also greater than
   // all `Id`s of the unrelated datatypes, because those all have smaller
@@ -181,12 +211,12 @@ TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
 }
 
 // ____________________________________________________________________________
-TEST(AuxVocabIndex, export) {
+TEST(AuxVocabIndex, exportOfAuxVocabIds) {
   Index index = makeIndexWithAuxVocab();
   LocalVocab localVocab{};
 
-  auto iriId = auxId(0);
-  auto literalId = auxId(1);
+  auto iriId = auxId(1);
+  auto literalId = auxId(0);
   auto toStringRepresentation = [](const auto& literalOrIri) {
     return literalOrIri.toStringRepresentation();
   };
@@ -196,7 +226,7 @@ TEST(AuxVocabIndex, export) {
       Optional(::testing::ResultOf(toStringRepresentation, "<b>")));
   EXPECT_THAT(
       ql::exportIds::idToLiteralOrIri(index.getImpl(), literalId, localVocab),
-      Optional(::testing::ResultOf(toStringRepresentation, "\"lit\"")));
+      Optional(::testing::ResultOf(toStringRepresentation, "\"a\"")));
 
   // `idToLiteral` strips the angle brackets of an IRI and keeps a literal as it
   // is.
@@ -204,7 +234,7 @@ TEST(AuxVocabIndex, export) {
               Optional(::testing::ResultOf(toStringRepresentation, "\"b\"")));
   EXPECT_THAT(
       ql::exportIds::idToLiteral(index.getImpl(), literalId, localVocab),
-      Optional(::testing::ResultOf(toStringRepresentation, "\"lit\"")));
+      Optional(::testing::ResultOf(toStringRepresentation, "\"a\"")));
   // With `onlyReturnLiteralsWithXsdString`, the IRI is dropped, but the literal
   // is still returned.
   EXPECT_EQ(
@@ -212,20 +242,20 @@ TEST(AuxVocabIndex, export) {
       std::nullopt);
   EXPECT_THAT(
       ql::exportIds::idToLiteral(index.getImpl(), literalId, localVocab, true),
-      Optional(::testing::ResultOf(toStringRepresentation, "\"lit\"")));
+      Optional(::testing::ResultOf(toStringRepresentation, "\"a\"")));
 
   using StringAndType = std::pair<std::string, const char*>;
   EXPECT_THAT(ql::exportIds::idToStringAndType(index, iriId, localVocab),
               Optional(StringAndType{"<b>", nullptr}));
   EXPECT_THAT(ql::exportIds::idToStringAndType(index, literalId, localVocab),
-              Optional(StringAndType{"\"lit\"", nullptr}));
+              Optional(StringAndType{"\"a\"", nullptr}));
   // `returnOnlyLiterals` also has to work for the auxiliary vocabulary.
   EXPECT_EQ(
       (ql::exportIds::idToStringAndType<true, true>(index, iriId, localVocab)),
       std::nullopt);
   EXPECT_THAT((ql::exportIds::idToStringAndType<true, true>(index, literalId,
                                                             localVocab)),
-              Optional(StringAndType{"lit", nullptr}));
+              Optional(StringAndType{"a", nullptr}));
 }
 
 // ____________________________________________________________________________

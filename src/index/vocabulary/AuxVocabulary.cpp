@@ -16,7 +16,12 @@
 
 // ____________________________________________________________________________
 AuxVocabulary::AuxVocabulary(std::vector<std::string> words)
-    : words_{std::move(words)} {}
+    : words_{std::move(words)} {
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(words_),
+                    "The words of an auxiliary vocabulary have to be sorted");
+  AD_CONTRACT_CHECK(ql::ranges::adjacent_find(words_) == words_.end(),
+                    "The words of an auxiliary vocabulary have to be distinct");
+}
 
 // ____________________________________________________________________________
 std::string_view AuxVocabulary::operator[](AuxVocabIndex index) const {
@@ -26,11 +31,8 @@ std::string_view AuxVocabulary::operator[](AuxVocabIndex index) const {
 
 // ____________________________________________________________________________
 std::optional<AuxVocabIndex> AuxVocabulary::getId(std::string_view word) const {
-  // NOTE: A linear scan is fine, because this class currently only holds the
-  // handful of words that a unit test explicitly puts into it. The actual
-  // implementation will perform a binary search in the vocabulary on disk.
-  auto it = ql::ranges::find(words_, word);
-  if (it == words_.end()) {
+  auto it = ql::ranges::lower_bound(words_, word);
+  if (it == words_.end() || *it != word) {
     return std::nullopt;
   }
   return AuxVocabIndex::make(static_cast<uint64_t>(it - words_.begin()));

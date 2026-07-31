@@ -29,6 +29,32 @@ class LocalVocabContext;
 // used for efficient comparisons between entries in the local and global
 // vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
+//
+// WARNING: The order that `positionInVocab()` and `compareThreeWay()` implement
+// is the order in which the index scans emit their `Id`s (call it the
+// *internal* order, see `ValueId::compareThreeWay`). Without an auxiliary
+// vocabulary (see `index/vocabulary/AuxVocabulary.h`) that order coincides with
+// the semantic (that is, by string value) order, but as soon as an index has
+// such a vocabulary, the two differ: a word of the auxiliary vocabulary is
+// positioned after *all* words of the main vocabulary, no matter what it is. An
+// entry whose word is stored in the auxiliary vocabulary therefore compares
+// greater than every word of the main vocabulary, and greater than every entry
+// that is contained in neither vocabulary — even if its string value is
+// smaller. Both `compareThreeWay()` and the `Id` comparison then deviate
+// *silently* from the semantics that SPARQL requires, which breaks all kinds of
+// semantic comparisons (`FILTER`, `ORDER BY`, the range filters and
+// prefilters), see the detailed note at
+// `valueIdComparators::detail::compareIdsImpl`.
+//
+// This is deliberate for now: nothing but a unit test can currently create an
+// auxiliary vocabulary (see `IndexImpl::setAuxVocabForTesting`), so no query is
+// affected. It has to be fixed *before* the auxiliary index is wired up, most
+// likely by keeping the position in the main vocabulary (which is what a
+// semantic comparison needs, and which can always be computed from the word)
+// separately from the position in the internal order, and by exposing the two
+// orders as two explicitly named comparisons instead of a single
+// `compareThreeWay`.
+// TODO<joka921> Do that in a follow-up PR.
 class alignas(16) LocalVocabEntry
     : public ad_utility::triple_component::LiteralOrIri {
  public:
@@ -48,8 +74,9 @@ class alignas(16) LocalVocabEntry
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
   // the first *larger* word in the vocabulary. Note that the position may also
-  // be in the auxiliary vocabulary of the index (see `AuxVocabulary`), in which
-  // case it is an `Id` of type `Datatype::AuxVocabIndex`.
+  // be in the auxiliary vocabulary of the index, in which case it is an `Id` of
+  // type `Datatype::AuxVocabIndex` — see the warning in the class comment above
+  // for why that makes this position unsuitable for semantic comparisons.
   // Note: we store the cache as three separate atomics to avoid mutexes. The
   // downside is, that in parallel code multiple threads might look up the
   // position concurrently, which wastes a bit of resources. However, we don't
@@ -146,14 +173,16 @@ class alignas(16) LocalVocabEntry
     return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
-  // Compare two entries. Note that this first compares the positions in the
-  // vocabularies (see `positionInVocab()`) and only falls back to the
-  // (expensive) comparison of the strings if those are equal. Comparing the
-  // strings alone would not be a valid strict weak ordering: for example, a
-  // word that is stored in the auxiliary vocabulary of the index is positioned
-  // after all words of the main vocabulary (see `AuxVocabulary`), so comparing
-  // it to a word that is in neither vocabulary has to yield the same result as
-  // comparing the corresponding `Id`s, which are compared by their positions.
+  // Compare two entries in the internal order (see the warning in the class
+  // comment above; in particular this is NOT a semantic comparison as soon as
+  // the index has an auxiliary vocabulary). Note that this first compares the
+  // positions in the vocabularies (see `positionInVocab()`) and only falls back
+  // to the (expensive) comparison of the strings if those are equal. Comparing
+  // the strings alone would not be a valid strict weak ordering: a word that is
+  // stored in the auxiliary vocabulary of the index is positioned after all
+  // words of the main vocabulary, so comparing it to a word that is in neither
+  // vocabulary has to yield the same result as comparing the corresponding
+  // `Id`s, which are compared by their positions.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 

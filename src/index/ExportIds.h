@@ -47,6 +47,15 @@ using Literal = ad_utility::triple_component::Literal;
 // non-`xsd:string` datatypes (including encoded IDs) return `std::nullopt`.
 // These semantics are useful for the string expressions in
 // StringExpressions.cpp.
+//
+// All datatypes are handled, in one of the following ways: the words of the
+// vocabularies (`VocabIndex`, `LocalVocabIndex`, `AuxVocabIndex`) and the
+// encoded IRIs (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex`
+// resp. `encodedIdToLiteralOrIri` and then processed as described above; the
+// words of the text index (`WordVocabIndex`, `TextRecordIndex`) always are
+// plain literals; and for all remaining datatypes, which encode their value
+// directly in the `Id`, that value is turned into a literal, see
+// `idToLiteralForEncodedValue`.
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
     bool onlyReturnLiteralsWithXsdString = false);
@@ -101,9 +110,11 @@ std::optional<std::string_view> blankNodeIriToString(
     const IriType& iri AD_LIFETIMEBOUND);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
-// is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
-// should only be called with suitable `Datatype` Ids, otherwise `AD_FAIL()` is
-// called.
+// is of type `VocabIndex`, `LocalVocabIndex`, `AuxVocabIndex`, or `EncodedVal`.
+// This function should only be called with suitable `Datatype` Ids, otherwise
+// `AD_FAIL()` is called. Note that an `Id` of type `AuxVocabIndex` requires the
+// `index` to have an auxiliary vocabulary (see `IndexImpl::auxVocab`), which is
+// checked.
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab);
 

@@ -210,7 +210,7 @@ class ValueId {
   // compares exactly like an `Id` at that position. In particular this also
   // holds for the comparison against `Id`s of an unrelated datatype like `Int`
   // or `Date`, which is required for the comparison to be a valid strict weak
-  // ordering (see `compareVocabAndLocalVocab`).
+  // ordering (see `compareOtherTypeToLocalVocab`).
   constexpr auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
@@ -227,11 +227,11 @@ class ValueId {
     // compared to the position of the local vocab entry in the vocabularies,
     // see the note above.
     if (otherType == LocalVocabIndex) {
-      return compareVocabAndLocalVocab(
+      return compareOtherTypeToLocalVocab(
           LocalVocabEntry::IdProxy::make(getBits()),
           other.getLocalVocabIndex());
     } else {
-      auto inverseOrder = compareVocabAndLocalVocab(
+      auto inverseOrder = compareOtherTypeToLocalVocab(
           LocalVocabEntry::IdProxy::make(other.getBits()),
           getLocalVocabIndex());
 
@@ -557,13 +557,15 @@ class ValueId {
   }
 
  private:
-  // Compares a vocabulary index with a local vocabulary index range.
-  static ql::strong_ordering compareVocabAndLocalVocab(
-      LocalVocabEntry::IdProxy vocabIndex, ::LocalVocabIndex localVocabIndex) {
+  // Compare the bits of an `Id` of an arbitrary type other than
+  // `LocalVocabIndex` with the range that the position of a local vocab entry
+  // in the vocabularies of the index spans, see `compareThreeWay` above.
+  static ql::strong_ordering compareOtherTypeToLocalVocab(
+      LocalVocabEntry::IdProxy otherId, ::LocalVocabIndex localVocabIndex) {
     auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
-    if (vocabIndex < lowerBound) {
+    if (otherId < lowerBound) {
       return ql::strong_ordering::less;
-    } else if (vocabIndex >= upperBound) {
+    } else if (otherId >= upperBound) {
       return ql::strong_ordering::greater;
     } else {
       return ql::strong_ordering::equal;

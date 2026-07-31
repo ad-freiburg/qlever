@@ -425,8 +425,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::BlankNodeIndex:
       // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
       // `AuxVocabIndex` type: the comparison via bits is only correct for
-      // equality, because the words of the auxiliary vocabulary are all sorted
-      // after the words of the main vocabulary, no matter what they are.
+      // equality, because the words of an auxiliary vocabulary are all sorted
+      // after the words of the main vocabulary, no matter what they are. This
+      // is not yet finally correct and will be corrected in a follow-up PR,
+      // which adds the semantically correct comparison of those words (see the
+      // detailed note in `compareIdsImpl` below).
     case Datatype::AuxVocabIndex:
       // For `Date` the trivial comparison via bits is also correct.
       return detail::simplifyRanges(
@@ -470,6 +473,10 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
+      // TODO<joka921> For the `AuxVocabIndex` type this is not yet finally
+      // correct (for the same reason as in `getRangesForId` above), but will be
+      // corrected in a follow-up PR, see the detailed note in `compareIdsImpl`
+      // below.
     case Datatype::AuxVocabIndex:
       return detail::simplifyRanges(detail::getRangesForIndexTypes(
           begin, end, valueIdBegin, valueIdEnd, comparison));
@@ -517,6 +524,36 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
 
   // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
   // on ValueIds already does the right thing.
+  //
+  // WARNING: This only holds as long as the index has no auxiliary vocabulary
+  // (see `index/vocabulary/AuxVocabulary.h`). `ValueId::compareThreeWay`
+  // implements the order in which the index scans emit their `Id`s (call it the
+  // *internal* order), in which the words of an auxiliary vocabulary are all
+  // greater than all words of the main vocabulary, no matter what they are. As
+  // soon as an index has such a vocabulary, that order is no longer the
+  // semantic (that is, by string value) order that this function is supposed to
+  // implement, and the deviation is *silent*: it affects
+  // 1. `Id`s of type `AuxVocabIndex`, which this function compares by their
+  //    bits, and
+  // 2. `Id`s of type `LocalVocabIndex` whose word happens to be stored in the
+  //    auxiliary vocabulary, because `LocalVocabEntry::positionInVocab` then
+  //    reports the position in *that* vocabulary (see the detailed note in
+  //    `index/LocalVocabEntry.h`). Such an entry compares greater than every
+  //    word of the main vocabulary, and greater than every local vocab entry
+  //    that is in neither vocabulary.
+  // So with an auxiliary vocabulary present, all kinds of semantic comparisons
+  // (`FILTER`, `ORDER BY`, the range filters above, and the prefilters in
+  // `PrefilterExpressionIndex.cpp`) silently yield wrong results.
+  //
+  // This is deliberate for now: nothing but a unit test can currently create an
+  // auxiliary vocabulary (see `IndexImpl::setAuxVocabForTesting`), so no query
+  // is affected. It has to be fixed *before* the auxiliary index is wired up.
+  // The fix requires the semantically correct position of each word of the
+  // auxiliary vocabulary within the main vocabulary, which the auxiliary
+  // vocabulary will store, and it will most likely mean that this function must
+  // not use `ValueId::compareThreeWay` (the internal order) for the string
+  // types, but a separate, explicitly semantic comparison.
+  // TODO<joka921> Implement that comparison in a follow-up PR.
   if (a.getDatatype() == Datatype::LocalVocabIndex ||
       b.getDatatype() == Datatype::LocalVocabIndex) {
     return fromBool(std::invoke(comparator, a, b));

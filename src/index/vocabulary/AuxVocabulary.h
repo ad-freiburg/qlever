@@ -35,16 +35,22 @@
 // needs; it follows together with the auxiliary index itself.
 class AuxVocabulary {
  private:
-  // The words, sorted by the comparator of the vocabulary of the main index at
-  // the `TOTAL` level.
+  // The words, in strictly ascending order, see the constructor.
   std::vector<std::string> words_;
 
  public:
   AuxVocabulary() = default;
 
-  // Create a vocabulary that holds the given `words`, which have to be sorted
-  // (see `words_`) and none of which may be contained in the vocabulary of the
-  // main index.
+  // Create a vocabulary that holds the given `words`, none of which may be
+  // contained in the vocabulary of the main index. The words have to be in
+  // strictly ascending order with respect to `std::string`'s comparison, which
+  // is checked, so that they can be looked up by binary search.
+  //
+  // NOTE: The actual implementation will instead order its words by the
+  // comparator of the vocabulary of the main index at the `TOTAL` level, which
+  // this placeholder has no access to. The two orders do not agree in general,
+  // so the words that the unit tests use are deliberately chosen such that they
+  // do (see `test/AuxVocabularyTest.cpp`).
   explicit AuxVocabulary(std::vector<std::string> words);
 
   // Return the number of words.
