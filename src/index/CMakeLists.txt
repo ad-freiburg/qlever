@@ -6,17 +6,16 @@ add_subdirectory(vocabulary)
 # cyclic dependency:
 # 1. The `index` library needs them, because `IndexImpl` builds an index from
 #    RDF input files.
-# 2. They in turn need the `index` library, because `TripleComponent::toValueId`
-#    and friends look words up in the vocabulary of an `IndexImpl` directly.
+# 2. They in turn needed the `index` library. This is resolved by now: the
+#    conversions of a `TripleComponent` that require an index are meanwhile
+#    free functions in `TripleComponentConversions.h/.cpp`.
 # Note: Comparing two `Id`s calls `LocalVocabEntry::compareThreeWay` and
 # `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), so every
 # translation unit that compares `Id`s needs `LocalVocabEntry`. This used to be
 # a dependency on all of `IndexImpl`, but is now abstracted away by the minimal
 # `LocalVocabContext` interface, whose only implementation is
 # `LocalVocabContextImpl`.
-# TODO<joka921> Move the conversions of a `TripleComponent` that require an index
-# out of `TripleComponent`, then move these files into a proper library of their
-# own.
+# TODO<joka921> Move these files into a proper library of their own.
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
