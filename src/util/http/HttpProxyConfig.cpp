@@ -80,10 +80,7 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
 
   Proxy proxy;
   proxy.host_ = url.host();
-  // Note the two-step conversion: `url.port()` is a `boost::core::string_view`,
-  // which converts to `std::string_view` but not directly to `std::string`.
-  proxy.port_ =
-      url.has_port() ? std::string{std::string_view{url.port()}} : "80";
+  proxy.port_ = url.has_port() ? url.port() : "80";
   if (url.has_userinfo()) {
     proxy.authorization_ = absl::StrCat(
         "Basic ",
@@ -106,8 +103,7 @@ std::optional<Proxy> proxyFromEnvironment() {
   const char* value = std::getenv("http_proxy");
   // Note that `parseProxyUrl` maps the empty string to "no proxy", so a
   // variable that is set but empty needs no special handling here.
-  return parseProxyUrl(value == nullptr ? std::string_view{}
-                                        : std::string_view{value});
+  return parseProxyUrl(value == nullptr ? "" : value);
 }
 
 // ____________________________________________________________________________

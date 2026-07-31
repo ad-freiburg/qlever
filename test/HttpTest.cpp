@@ -741,10 +741,10 @@ auto makeProxyEchoServer() {
   auto handler = [](auto req, auto&& send,
                     auto...) -> boost::asio::awaitable<void> {
     co_await send(createOkResponse(
-        absl::StrCat(toStd(req.target()), "\n", toStd(req[http::field::host])),
-        req, ad_utility::MediaType::textPlain));
+        absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host])), req,
+        ad_utility::MediaType::textPlain));
   };
-  return TestHttpServer<decltype(handler)>(std::move(handler));
+  return TestHttpServer{std::move(handler)};
 }
 
 // A minimal fake proxy that accepts a single connection, reads one `CONNECT`
@@ -796,12 +796,11 @@ class FakeConnectProxy {
     if (ec) {
       return;
     }
-    request_ =
-        absl::StrCat(toStd(to_string(parser.get().method())), " ",
-                     toStd(parser.get().target()),
-                     "\nhost: ", toStd(parser.get()[http::field::host]),
-                     "\nproxy-authorization: ",
-                     toStd(parser.get()[http::field::proxy_authorization]));
+    request_ = absl::StrCat(toStd(to_string(parser.get().method())), " ",
+                            toStd(parser.get().target()),
+                            "\nhost: ", toStd(parser.get()[field::host]),
+                            "\nproxy-authorization: ",
+                            toStd(parser.get()[field::proxy_authorization]));
     net::write(socket, net::buffer(response_), ec);
     // Keep the socket open briefly so the client can attempt its handshake and
     // observe a TLS error rather than a premature EOF on the read above.
