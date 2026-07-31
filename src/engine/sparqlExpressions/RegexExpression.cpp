@@ -17,9 +17,9 @@
 #include <cmath>
 #include <utility>
 
-#include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RegexHelpers.h"
 #include "engine/sparqlExpressions/SimpleLiteralHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
@@ -84,132 +84,15 @@ struct RegexImpl {
 using RegexExpressionBase =
     string_expressions::StringExpressionImpl<2, RegexImpl, RegexValueGetter>;
 
-namespace {
-// The regex characters that have a special meaning. An unescaped occurrence
-// terminates a literal prefix, and an escaped occurrence (e.g. `\.`) denotes
-// the corresponding literal character (the backslash is included so that `\\`
-// denotes a literal backslash).
-constexpr std::string_view regexSpecialChars = R"(\^$.|?*+()[]{})";
-
-// Return true iff `regex` (which must be a valid regex) contains an alternation
-// (`|`) at the top level, i.e. outside of any group `(...)` or character class
-// `[...]`. Such an alternation invalidates any prefix guarantee, e.g. `^ab|cd`
-// also matches "cd...".
-bool hasTopLevelAlternation(std::string_view regex) {
-  size_t parenDepth = 0;
-  bool inCharClass = false;
-  for (size_t i = 0; i < regex.size(); ++i) {
-    char c = regex[i];
-    if (c == '\\') {
-      ++i;  // Skip the escaped character.
-      continue;
-    }
-    if (inCharClass) {
-      if (c == ']') {
-        inCharClass = false;
-      }
-      continue;
-    }
-    switch (c) {
-      case '[':
-        inCharClass = true;
-        break;
-      case '(':
-        ++parenDepth;
-        break;
-      case ')':
-        if (parenDepth > 0) {
-          --parenDepth;
-        }
-        break;
-      case '|':
-        if (parenDepth == 0) {
-          return true;
-        }
-        break;
-      default:
-        break;
-    }
-  }
-  return false;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-std::optional<std::string> getPrefixRegex(std::string_view regex) {
-  if (!ql::starts_with(regex, '^')) {
-    return std::nullopt;
-  }
-  // A top-level alternation means that not every match starts with the leading
-  // literal (e.g. `^abc.*|def` also matches "Xdef"), so we cannot derive a
-  // prefix. This has to be a full scan of the whole regex up front: the
-  // accumulation loop below stops at the first special character, so it would
-  // not notice a `|` that appears later (as in `^abc.*|def`).
-  if (hasTopLevelAlternation(regex.substr(1))) {
-    return std::nullopt;
-  }
-
-  // Accumulate the guaranteed literal prefix, starting after the leading `^`.
-  std::string prefix;
-  for (size_t i = 1; i < regex.size();) {
-    char c = regex[i];
-    // The literal character that is a candidate for the prefix, and the index
-    // of the character following it (used to peek for a following quantifier).
-    char literal = '\0';
-    size_t next = 0;
-    if (c == '\\') {
-      // A trailing backslash cannot occur in a valid regex.
-      if (i + 1 >= regex.size()) {
-        break;
-      }
-      char escaped = regex[i + 1];
-      // Only escapes of special characters (e.g. `\.` or `\\`) denote a literal
-      // character. Other escapes (e.g. `\d`, `\b`) are character classes or
-      // assertions and terminate the prefix.
-      if (regexSpecialChars.find(escaped) == std::string_view::npos) {
-        break;
-      }
-      literal = escaped;
-      next = i + 2;
-    } else if (regexSpecialChars.find(c) != std::string_view::npos) {
-      // An unescaped special character terminates the literal prefix.
-      break;
-    } else {
-      literal = c;
-      next = i + 1;
-    }
-
-    // Peek at the following character to correctly handle quantifiers, which
-    // bind to the preceding (literal) character.
-    char quantifier = next < regex.size() ? regex[next] : '\0';
-    if (quantifier == '?' || quantifier == '*' || quantifier == '{') {
-      // The preceding character is optional or repeated a variable number of
-      // times (possibly zero), so it is not part of the guaranteed prefix.
-      break;
-    }
-    prefix.push_back(literal);
-    if (quantifier == '+') {
-      // The character is guaranteed at least once, but the repetition means we
-      // cannot extend the prefix any further.
-      break;
-    }
-    i = next;
-  }
-
-  if (prefix.empty()) {
-    return std::nullopt;
-  }
-  return prefix;
-}
-
 // A `RegexExpressionBase` that additionally supports prefiltering when the
 // regex is a prefix regex (e.g. `^prefix`) applied to a plain variable. The
 // prefilter only restricts the blocks that are scanned; the actual regex is
 // still evaluated on the remaining rows by the base class.
 class RegexExpression : public RegexExpressionBase {
  private:
-  // The variable and the guaranteed literal prefix (see `getPrefixRegex`) if
-  // the regex is a prefix regex on a plain variable, `std::nullopt` otherwise.
+  // The variable and the guaranteed literal prefix (see
+  // `getLiteralPrefixOfRegex`) if the regex is a prefix regex on a plain
+  // variable, `std::nullopt` otherwise.
   std::optional<std::pair<Variable, std::string>> prefix_;
 
  public:
@@ -253,9 +136,10 @@ class RegexExpression : public RegexExpressionBase {
   }
 };
 
-// If `string` is a plain variable and `regex` is a constant prefix regex (see
-// `getPrefixRegex`), return the variable and the extracted prefix, which
-// enables prefiltering. Return `std::nullopt` otherwise.
+// If `string` is a plain variable and `regex` is a constant regex with a
+// guaranteed literal prefix (see `getLiteralPrefixOfRegex`), return the
+// variable and that prefix, which enables prefiltering. Return `std::nullopt`
+// otherwise.
 //
 // Note: Prefiltering `STR(?var)` is deliberately not supported, since we would
 // not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
@@ -270,12 +154,14 @@ std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
   if (!variableExpression || !stringLiteralExpression || childIsStrExpression) {
     return std::nullopt;
   }
-  std::optional<std::string> prefixRegex = getPrefixRegex(
+  std::string prefix = getLiteralPrefixOfRegex(
       asStringViewUnsafe(stringLiteralExpression->value().getContent()));
-  if (!prefixRegex.has_value()) {
+  // An empty prefix would not restrict the scanned blocks at all, so there is
+  // no point in adding a prefilter for it.
+  if (prefix.empty()) {
     return std::nullopt;
   }
-  return std::pair{variableExpression->value(), std::move(prefixRegex.value())};
+  return std::pair{variableExpression->value(), std::move(prefix)};
 }
 
 }  // namespace sparqlExpression::detail

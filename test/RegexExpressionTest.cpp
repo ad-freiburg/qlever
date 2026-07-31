@@ -226,7 +226,7 @@ TEST(RegexExpression, prefixRegexRunsRealRegex) {
   test("?vocab", "^al", {F, T, F});
   test("?vocab", "^äl", {F, F, T});
   // A prefix regex with trailing special syntax (which still allows
-  // prefiltering, see `getPrefixRegex`) is evaluated as a real regex.
+  // prefiltering, see `getLiteralPrefixOfRegex`) is evaluated as a real regex.
   test("?vocab", "^al[abcp]", {F, T, F});
   test("?vocab", "^[aä]lpha", {F, T, T});
 }
@@ -337,53 +337,8 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
                         {T, F, T, T, T, U, U}, true);
 }
 
-namespace sparqlExpression {
-// Test the `getPrefixRegex` function, which returns a guaranteed literal prefix
-// of a regex (or `std::nullopt` if there is none). Note that this is a
-// best-effort scan and not a full regex parse, so the prefix may be shorter
-// than what a complete analysis could derive.
-TEST(RegexExpression, getPrefixRegex) {
-  using detail::getPrefixRegex;
-  // No leading `^` -> no prefix.
-  ASSERT_EQ(std::nullopt, getPrefixRegex("alpha"));
-  // A plain prefix regex yields the full prefix.
-  ASSERT_EQ("alpha", getPrefixRegex("^alpha"));
-  // Trailing special syntax only shortens the prefix, it no longer disables the
-  // optimization completely.
-  ASSERT_EQ("al", getPrefixRegex("^al.ha"));
-  ASSERT_EQ("al", getPrefixRegex("^alh*"));
-  ASSERT_EQ("a", getPrefixRegex("^a(lh)"));
-  ASSERT_EQ("Abc", getPrefixRegex("^Abc[def]"));
-  // A quantifier makes the preceding character optional (`?`, `*`) or repeated
-  // (`+`); this is handled when computing the guaranteed prefix.
-  ASSERT_EQ("abc", getPrefixRegex("^abcd?"));
-  ASSERT_EQ("abc", getPrefixRegex("^abcd*"));
-  ASSERT_EQ("abcd", getPrefixRegex("^abcd+"));
-  // Escaped special characters are part of the prefix (the backslash is
-  // removed).
-  ASSERT_EQ(R"(\al*ph.a()", getPrefixRegex(R"(^\\al\*ph\.a\()"));
-  // Escapes of non-special characters (e.g. `\"` or `\d`) are character classes
-  // or literal escapes handled by RE2 in the general regex path; the prefix
-  // scan simply stops there.
-  ASSERT_EQ(std::nullopt, getPrefixRegex(R"(^\")"));
-  ASSERT_EQ("abc", getPrefixRegex(R"(^abc\d)"));
-  // An alternation inside a group is fine, but a top-level alternation breaks
-  // the prefix guarantee.
-  ASSERT_EQ("abc", getPrefixRegex("^abc(d|e)"));
-  ASSERT_EQ(std::nullopt, getPrefixRegex("^abc|def"));
-  ASSERT_EQ(std::nullopt, getPrefixRegex("^abc.*|def"));
-  // An empty prefix is not useful for prefiltering.
-  ASSERT_EQ(std::nullopt, getPrefixRegex("^"));
-  // Inside `\Q...\E` (which RE2 interprets as literal text) a `)` can appear
-  // without a matching `(`. The scan for a top-level alternation must not
-  // "underflow" the nesting depth because of it, so the `|` here is still
-  // recognized as being at the top level.
-  ASSERT_EQ(std::nullopt, getPrefixRegex(R"(^a\Qb)c\E|d)"));
-  // A trailing backslash cannot occur in a valid regex, but the scan must not
-  // read past the end of the string because of it.
-  ASSERT_EQ("ab", getPrefixRegex(R"(^ab\)"));
-}
-}  // namespace sparqlExpression
+// NOTE: The extraction of the literal prefix of a regex (which drives the
+// prefiltering below) is tested separately in `RegexHelpersTest.cpp`.
 
 // _____________________________________________________________________________
 TEST(RegexExpression, getCacheKey) {
