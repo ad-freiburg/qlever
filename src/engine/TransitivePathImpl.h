@@ -262,7 +262,7 @@ class TransitivePathImpl : public TransitivePathBase {
     bool bothSidesBoundVar = lhs_.isBoundVariable() && rhs_.isBoundVariable();
     bool targetNodesAreBound = targetNodes.has_value() && bothSidesBoundVar;
 
-                               auto expandUndef = [&](auto pair) {
+    auto expandUndef = [&](auto pair) {
       return TableColumnWithVocab::expandUndef(pair, edges,
                                                graphVariable_.has_value());
     };
