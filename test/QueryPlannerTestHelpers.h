@@ -492,6 +492,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
+// Match a subtree that matches the `actualMatcher` and additionally has the
+// given `LIMIT`/`OFFSET` attached to its root operation.
+inline QetMatcher WithLimitOffset(const LimitOffsetClause& limitOffset,
+                                  const QetMatcher& actualMatcher) {
+  return AllOf(RootOperationBase(
+                   AD_PROPERTY(::Operation, getLimitOffset, Eq(limitOffset))),
+               actualMatcher);
+}
+
 // Match a `DISTINCT` operation.
 constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
                              const QetMatcher& childMatcher) {

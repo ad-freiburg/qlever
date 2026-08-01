@@ -190,8 +190,19 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
+    const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
+    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumns));
     AD_CORRECTNESS_CHECK(
-        sortedQet.value()->getRootOperation()->isSortedBy(sortColumns));
+        sortedRootOperation->getLimitOffset().isUnconstrained(),
+        "`LIMIT` and `OFFSET` are applied by "
+        "`QueryExecutionTree::createSortedTree` not by the individual "
+        "implementations.");
+    // We cannot use `applyLimitOffset` here, because this might get propagated
+    // to children of this operation, where the limit/offset has already been
+    // set correctly. We just reapply a previously set limit which was removed
+    // by the re-sorting.
+    sortedRootOperation->setLimitOffsetDirectlyWithoutTriggeringHooks(
+        rootOperation->getLimitOffset());
     return std::move(sortedQet).value();
   }
 

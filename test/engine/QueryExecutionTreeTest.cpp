@@ -135,6 +135,47 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = getQec();
+
+  LimitOffsetClause limitOffset{2, 3};
+
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}}), Vars{Var{"?a"}});
+
+  // `Union` natively supports creating a sorted variant of itself, which
+  // replaces the root operation and therefore has to restore the limit.
+  auto unionTree = ad_utility::makeExecutionTree<Union>(qec, leftT, rightT);
+  unionTree->applyLimitOffset(limitOffset);
+
+  auto sortedTree = QueryExecutionTree::createSortedTree(unionTree, {0});
+  ASSERT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
+  const auto& sortedLimitOffset =
+      sortedTree->getRootOperation()->getLimitOffset();
+  EXPECT_EQ(sortedLimitOffset._limit, limitOffset._limit);
+  EXPECT_EQ(sortedLimitOffset._offset, limitOffset._offset);
+
+  // `ValuesForTesting` doesn't support this natively, so an additional `Sort`
+  // is added on top and the limit stays where it is.
+  auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}, {0}}), Vars{Var{"?a"}});
+  valuesForTesting->applyLimitOffset(limitOffset);
+
+  auto sortedValues =
+      QueryExecutionTree::createSortedTree(valuesForTesting, {0});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<Sort>(sortedValues->getRootOperation()));
+  EXPECT_TRUE(
+      sortedValues->getRootOperation()->getLimitOffset().isUnconstrained());
+  EXPECT_EQ(valuesForTesting->getRootOperation()->getLimitOffset()._offset,
+            limitOffset._offset);
+}
+
+// _____________________________________________________________________________
 TEST(QueryExecutionTree, strippingColumnsIsNoOpWhenAllVariablesAreKept) {
   using Vars = std::vector<std::optional<Variable>>;
   Vars vars{std::nullopt, std::nullopt, std::nullopt};

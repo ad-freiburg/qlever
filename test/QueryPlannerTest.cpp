@@ -3046,6 +3046,27 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
+  // Make sure that the optimization is enabled, so that this test actually
+  // tests something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/3162. The
+  // `LIMIT` of the subquery applies to the `UNION` as a whole. Pushing the join
+  // into the children of the `UNION` would drop the `LIMIT` and thus change the
+  // semantics of the query, so the `UNION` has to be kept intact.
+  h::expect(
+      "SELECT * { VALUES ?s { <x> } "
+      "{ SELECT * { { ?s <label> ?o } UNION { ?s <is-a> ?o } } LIMIT 1 } }",
+      h::Join(h::Sort(h::ValuesClause("VALUES (?s) { (<x>) }")),
+              h::WithLimitOffset(
+                  LimitOffsetClause{1},
+                  h::Union(h::IndexScanFromStrings("?s", "<label>", "?o"),
+                           h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."

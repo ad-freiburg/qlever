@@ -2476,6 +2476,14 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
       return;
     }
 
+    // Don't distribute over a UNION that has a LIMIT or OFFSET attached to it.
+    // Such a LIMIT/OFFSET applies to the union of both children and can neither
+    // be pushed into the individual children nor be applied to the result of
+    // the join, so the optimization is simply not applicable here.
+    if (!unionOperation->getLimitOffset().isUnconstrained()) {
+      return;
+    }
+
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {

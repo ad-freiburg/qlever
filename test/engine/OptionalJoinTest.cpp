@@ -557,6 +557,57 @@ TEST(OptionalJoin, clone) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto makeOptionalJoin = [&qec, &a]() {
+    return OptionalJoin{qec, idTableToExecutionTree(qec, a),
+                        idTableToExecutionTree(qec, a)};
+  };
+  auto expectChildLimits = [](OptionalJoin& optionalJoin,
+                              std::optional<uint64_t> limit) {
+    auto children = optionalJoin.getChildren();
+    const auto& limitOffset =
+        children.at(0)->getRootOperation()->getLimitOffset();
+    EXPECT_EQ(limitOffset._limit, limit);
+    EXPECT_EQ(limitOffset._offset, 0);
+    // The right side is optional, so reducing it could drop matches.
+    EXPECT_TRUE(
+        children.at(1)->getRootOperation()->getLimitOffset().isUnconstrained());
+  };
+
+  {
+    // The left child only has to supply `limit + offset` rows.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({2, 3});
+    expectChildLimits(optionalJoin, 5);
+  }
+  {
+    // A `LIMIT`/`OFFSET` that is applied on top of a previous one (which
+    // happens for nested subqueries) must not shrink the limit of the left
+    // child too much. Here the result consists of the rows 5 and 6, so the
+    // left child still has to supply 7 rows.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({10, 5});
+    expectChildLimits(optionalJoin, 15);
+    optionalJoin.applyLimitOffset({2, 0});
+    expectChildLimits(optionalJoin, 7);
+  }
+  {
+    // Adding up the limit and the offset must not overflow.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    expectChildLimits(optionalJoin, std::nullopt);
+  }
+  {
+    // Without a limit there is no bound that could be pushed down.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({std::nullopt, 8});
+    expectChildLimits(optionalJoin, std::nullopt);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoin) {
   std::vector<IdTable> expected;
   expected.push_back(makeIdTableFromVector({{V(1), V(11), U},

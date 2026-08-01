@@ -27,7 +27,8 @@ using ad_utility::source_location;
 namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
-Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
+Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns,
+              bool explicitSort = false) {
   std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
@@ -35,7 +36,7 @@ Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return Sort{qec, subtree, sortColumns};
+  return Sort{qec, subtree, sortColumns, explicitSort};
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
@@ -207,6 +208,20 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
         *operation.value()->getRootOperation()->getChildren().at(0);
     EXPECT_NE(typeid(childReference), typeid(Sort));
   }
+}
+
+// _____________________________________________________________________________
+TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
+  VectorTable input{{0, 0}, {1, 1}};
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  Sort sort = makeSort(std::move(inputTable), {0, 1}, true);
+  // Without a `LIMIT`/`OFFSET` the sort order of an explicit `INTERNAL SORT BY`
+  // is not observable, so it may be replaced by a different one.
+  EXPECT_TRUE(sort.makeSortedTree({1, 0}).has_value());
+  // With a `LIMIT` the sort order determines which rows are part of the result,
+  // so an additional `Sort` has to be placed on top of this operation instead.
+  sort.applyLimitOffset({1});
+  EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
 }
 
 // _____________________________________________________________________________

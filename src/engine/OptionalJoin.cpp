@@ -94,7 +94,12 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
+  // Note that we use the merged `getLimitOffset()` and not the clause that was
+  // passed in, which only holds the increment that was just added. The bound
+  // below depends on the total limit and offset, so for nested subqueries the
+  // increment alone would be too small.
+  const auto& limitOffset = getLimitOffset();
   if (limitOffset._limit.has_value()) {
     std::optional<uint64_t> safeLimit = std::nullopt;
     auto limit = limitOffset._limit.value();
