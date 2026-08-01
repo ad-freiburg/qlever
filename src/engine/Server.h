@@ -238,10 +238,6 @@ class Server {
           const ad_utility::url_parser::ParamValueMap& params,
           const RequestT& request);
   FRIEND_TEST(ServerTest, determineMediaType);
-  // Determine whether the subtrees and the result should be pinned.
-  static std::pair<bool, bool> determineResultPinning(
-      const ad_utility::url_parser::ParamValueMap& params);
-  FRIEND_TEST(ServerTest, determineResultPinning);
   // Describe the pinning of a named result (and, if applicable, of its geo
   // index) for the request log line, e.g. `" [pin result with name
   // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty

@@ -59,18 +59,6 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
 };
 
 }  // namespace
-TEST(ServerTest, determineResultPinning) {
-  EXPECT_THAT(Server::determineResultPinning(
-                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
-              testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
-              testing::Pair(false, true));
-  EXPECT_THAT(
-      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
-      testing::Pair(false, false));
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, determineMediaType) {
   auto MakeRequest = [](const std::optional<std::string>& accept,
                         const http::verb method = http::verb::get,

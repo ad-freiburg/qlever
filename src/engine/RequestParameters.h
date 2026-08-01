@@ -26,6 +26,9 @@ std::optional<double> parsePinGeoIndexSimplification(
 std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
     const ad_utility::url_parser::ParamValueMap& params);
 
+// Determine whether the subtrees and the result should be pinned.
+std::pair<bool, bool> determineResultPinning(
+    const ad_utility::url_parser::ParamValueMap& params);
 }  // namespace ad_utility::request_parameters
 
 #endif  // QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
