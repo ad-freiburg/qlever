@@ -483,12 +483,10 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
                    << std::endl;
 
-  // The phase headers say in parentheses what exactly is being processed, so
-  // that the totals of the progress lines below are self-explanatory.
+  // Phase 1: write the new vocabulary.
   REBUILD_LOG_INFO << "Writing new vocabulary (merging existing and new "
                       "words) ..."
                    << std::endl;
-
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
   ad_utility::ConcurrentProgressBar vocabProgress{
       logFile, "Words written: ", index.getVocab().size() + entries.size()};
@@ -497,31 +495,30 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       [&vocabProgress](size_t numWords) { vocabProgress.add(numWords); });
   vocabProgress.finish();
 
+  // Phase 2: recompute statistics.
+  //
+  // NOTE: The totals for the progress bar are taken from the statistics
+  // of the old index; they are exact up to the delta triples, which is good
+  // enough for a progress bar.
   REBUILD_LOG_INFO << "Recomputing statistics (from "
                    << (index.hasAllPermutations()
                            ? "4 permutations, 3 normal and 1 internal"
                            : "2 permutations, 1 normal and 1 internal")
                    << ") ..." << std::endl;
-
-  // The totals for the progress reports below are taken from the statistics
-  // of the old index; they are exact up to the delta triples, which is good
-  // enough for a percentage. The statistics phase scans the PSO permutation,
-  // its internal counterpart, and (if present) the SPO and OSP permutations.
   auto numTriplesOld = index.numTriples();
   size_t statsTotal =
       (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
       numTriplesOld.internal;
-  ad_utility::ConcurrentProgressBar statsProgress{logFile,
-                                               "Triples counted: ", statsTotal};
+  ad_utility::ConcurrentProgressBar statsProgress{
+      logFile, "Triples counted: ", statsTotal};
   auto newStats = index.recomputeStatistics(
       locatedTriplesSharedState,
       [&statsProgress](size_t numRows) { statsProgress.add(numRows); });
   statsProgress.finish();
   newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
-  auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
-
   // Set newer lower bound for dynamic blank node indices.
+  auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
   newStats["num-blank-nodes-total"] =
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
@@ -533,14 +530,12 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
+  // Phase 3: write the new index (permutations and patterns).
   REBUILD_LOG_INFO << "Writing new index ("
                    << (index.hasAllPermutations()
                            ? "8 permutations, 6 normal and 2 internal"
                            : "4 permutations, 2 normal and 2 internal")
                    << ") ..." << std::endl;
-
-  // Each of the (up to 6) normal permutations writes all normal triples,
-  // each of the two internal permutations all internal triples.
   size_t permutationsTotal =
       (index.hasAllPermutations() ? 6 : 2) * numTriplesOld.normal +
       2 * numTriplesOld.internal;
