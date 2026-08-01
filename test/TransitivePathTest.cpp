@@ -363,7 +363,7 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, varTovar) {
+TEST_P(TransitivePathTest, varToVar) {
   auto sub = makeIdTableFromVector({
       {0, 1},
       {1, 2},
@@ -607,6 +607,16 @@ TEST_P(TransitivePathTest, boundToVarWithUndef) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// TODO<schaetzr>
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWithUndef) {}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWithUndefWithGraph) {}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWithUndefGraph) {}
+
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, boundToVarWithUndefWithGraph) {
   auto sub = makeIdTableFromVector({
@@ -780,6 +790,62 @@ TEST_P(TransitivePathTest, bothBoundToVar) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWrongParams) {
+  // Similar to `bothBoundToVar` but tries to explicitly set the wrong
+  // parameters to test behaviour when the side tables are not correctly bound.
+  // TODO<schaetzr>: Currently only for testing and understanding purposes,
+  // might be removed later.
+  auto sub = makeIdTableFromVector({
+      {0, 5},
+      {1, 2},
+      {1, 4},
+      {4, 3},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {10, 0},
+      {11, 1},
+      {12, 2},
+  });
+  auto rightOpTable = makeIdTableFromVector({
+      {2, 20},
+      {3, 21},
+      {4, 22},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 3, 11, 21},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  TransitivePathSide leftNoBound(std::nullopt, 0, V(30), 0);
+  TransitivePathSide rightNoBound(std::nullopt, 1, V(31), 1);
+
+  for (auto& [l, r] :
+       {std::pair{left, rightNoBound}, std::pair{leftNoBound, right},
+        std::pair{leftNoBound, rightNoBound}}) {
+    auto testCaseFunc = [&](auto tableVariant, auto secondTableVariant,
+                            bool forceFullyMaterialized) {
+      auto T = makePathBoundOnBothSides(
+          sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+          std::move(tableVariant), std::move(secondTableVariant), 1, 0,
+          {Variable{"?side1"}, Variable{"?startx"}},
+          {Variable{"?targetx"}, Variable{"?side2"}}, l, r, 1,
+          std::numeric_limits<size_t>::max(), forceFullyMaterialized);
+
+      auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+      assertResultMatchesIdTable(resultTable, expected);
+    };
+
+    // We cannot move away the same tables twice, hence we clone them before
+    // moving them into the test execution.
+    runTestWithForcedSideTableScenariosOnBothSides(
+        testCaseFunc, leftOpTable.clone(), rightOpTable.clone());
+  }
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
   auto sub = makeIdTableFromVector({
       {1, 2},
@@ -817,15 +883,32 @@ TEST_P(TransitivePathTest, emptySideTable) {
 
   auto expected = makeIdTableFromVector({});
 
-  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
-  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePathBound(true, sub.clone(),
-                         {Variable{"?start"}, Variable{"?target"}},
-                         std::vector<IdTable>{}, 0, {Variable{"?start"}}, left,
-                         right, 0, std::numeric_limits<size_t>::max());
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    // Single side bound to empty side table.
+    auto T = makePathBound(true, sub.clone(),
+                           {Variable{"?start"}, Variable{"?target"}},
+                           std::vector<IdTable>{}, 0, {Variable{"?start"}},
+                           left, right, 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-  assertResultMatchesIdTable(resultTable, expected);
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    // Both sides bound to empty side table.
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::vector<IdTable>{}, std::vector<IdTable>{}, 0, 0,
+        {Variable{"?start"}}, {Variable{"?target"}}, left, right, 0,
+        std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
 }
 
 // _____________________________________________________________________________
@@ -1306,6 +1389,17 @@ TEST_P(TransitivePathTest, sameVariableOnBothSidesBound) {
                            {Variable{"?internal1"}, Variable{"?internal2"}},
                            split(sideTable), 0, {Variable{"?var"}}, left, right,
                            1, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?var"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?var"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}},
+        split(sideTable), split(sideTable), 0, 0, {Variable{"?var"}},
+        {Variable{"?var"}}, left, right, 0, std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
