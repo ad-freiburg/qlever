@@ -59,7 +59,7 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
     throw std::runtime_error(absl::StrCat(
         "The proxy URL \"", proxyUrl, "\" uses the scheme \"",
         std::string_view{url.scheme()},
-        "\", but QLever only supports plain HTTP proxies (scheme \"http\"). "
+        R"(", but QLever only supports plain HTTP proxies (scheme "http"). )"
         "Note that a plain HTTP proxy can still relay HTTPS requests; it is "
         "only the connection to the proxy itself that must not use TLS."));
   }
