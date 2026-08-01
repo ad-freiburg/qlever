@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: "ad-freiburg/sparql-conformance"
+          ref: "7482f394873558d4d1ca3a5a3f91f593865e2a82"
           path: qlever-test-suite
       - name: Set up Python
         uses: actions/setup-python@v6

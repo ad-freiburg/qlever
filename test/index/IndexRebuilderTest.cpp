@@ -32,6 +32,7 @@
 #include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
@@ -130,7 +131,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
+    return LocalVocabEntry{ad_utility::testing::iri(str),
+                           oldIndex.getLocalVocabContext()};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -345,15 +347,18 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
 
-  auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                               DEFAULT_GRAPH_IRI)}
-               .toValueId(index)
-               .value();
+  auto g =
+      toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    DEFAULT_GRAPH_IRI)},
+                index)
+          .value();
 
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<a2>", index);
-        LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<d2>", index);
+        LocalVocabEntry entry1 =
+            LocalVocabEntry::fromIriref("<a2>", index.getLocalVocabContext());
+        LocalVocabEntry entry2 =
+            LocalVocabEntry::fromIriref("<d2>", index.getLocalVocabContext());
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(
@@ -538,10 +543,12 @@ TEST(IndexRebuilder, materializeToIndex) {
                                                     std::move(config));
     index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
                                                  DeltaTriples& deltaTriples) {
-      auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                                   DEFAULT_GRAPH_IRI)}
-                   .toValueId(index)
-                   .value();
+      auto g =
+          toValueId(
+              TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                  DEFAULT_GRAPH_IRI)},
+              index)
+              .value();
       deltaTriples.insertTriples(
           cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
                                IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
@@ -616,17 +623,18 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   index.createFromOnDiskIndex(sourceIndexName, false);
 
-  index.deltaTriplesManager().modify<void>(
-      [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                                     DEFAULT_GRAPH_IRI)}
-                     .toValueId(index)
-                     .value();
-        deltaTriples.insertTriples(
-            cancellationHandle,
-            {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
-                                    Id::makeFromInt(3), g}}});
-      });
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                      DEFAULT_GRAPH_IRI)},
+                  index)
+            .value();
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                Id::makeFromInt(3), g}}});
+  });
 
   auto [state, vocab, blankNodes] =
       index.deltaTriplesManager()
