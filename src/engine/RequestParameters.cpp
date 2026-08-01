@@ -48,3 +48,15 @@ ad_utility::request_parameters::determineMediaTypesFromParam(
 
   return mediaType;
 }
+
+// ____________________________________________________________________________
+std::pair<bool, bool> ad_utility::request_parameters::determineResultPinning(
+    const ad_utility::url_parser::ParamValueMap& params) {
+  const bool pinSubresults =
+      ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
+          .has_value();
+  const bool pinResult =
+      ad_utility::url_parser::checkParameter(params, "pin-result", "true")
+          .has_value();
+  return {pinSubresults, pinResult};
+}

@@ -318,7 +318,8 @@ auto Server::prepareOperation(
 
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
-  auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  auto [pinSubtrees, pinResult] =
+      ad_utility::request_parameters::determineResultPinning(params);
   std::optional<std::string> pinResultWithName =
       ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
                                              {});
@@ -870,18 +871,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
       requestTimer, request, send, plannedQuery);
-}
-
-// ____________________________________________________________________________
-std::pair<bool, bool> Server::determineResultPinning(
-    const ad_utility::url_parser::ParamValueMap& params) {
-  const bool pinSubresults =
-      ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
-          .has_value();
-  const bool pinResult =
-      ad_utility::url_parser::checkParameter(params, "pin-result", "true")
-          .has_value();
-  return {pinSubresults, pinResult};
 }
 
 // ____________________________________________________________________________
