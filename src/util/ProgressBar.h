@@ -239,7 +239,7 @@ class ConcurrentProgress {
   // is padded with spaces to the widest line so far, so that the `\r`
   // overwrites all of it and no leftover characters remain.
   void print(bool final) {
-    double seconds = static_cast<double>(timer_.msecs().count()) / 1000.0;
+    double seconds = Timer::toSeconds(timer_.value());
     // A phase with a total of zero steps is trivially complete.
     double percentage =
         totalSteps_ == 0
