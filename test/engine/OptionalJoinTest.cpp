@@ -565,7 +565,10 @@ TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
                         idTableToExecutionTree(qec, a)};
   };
   auto expectChildLimits = [](OptionalJoin& optionalJoin,
-                              std::optional<uint64_t> limit) {
+                              std::optional<uint64_t> limit,
+                              ad_utility::source_location loc =
+                                  AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
     auto children = optionalJoin.getChildren();
     EXPECT_EQ(children.at(0)->getRootOperation()->getLimitOffset(),
               LimitOffsetClause{limit});

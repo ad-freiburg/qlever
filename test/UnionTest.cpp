@@ -785,14 +785,19 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
         Vars{Var{"?a"}});
     return Union{qec, std::move(leftT), std::move(rightT)};
   };
-  auto expectChildLimits = [](Union& unionOperation,
-                              std::optional<uint64_t> limit) {
-    for (const auto* child : unionOperation.getChildren()) {
-      EXPECT_EQ(child->getRootOperation()->getLimitOffset(),
-                LimitOffsetClause{limit});
-    }
-  };
-  auto expectResult = [qec](Union& unionOperation, const IdTable& expected) {
+  auto expectChildLimits =
+      [](Union& unionOperation, std::optional<uint64_t> limit,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (const auto* child : unionOperation.getChildren()) {
+          EXPECT_EQ(child->getRootOperation()->getLimitOffset(),
+                    LimitOffsetClause{limit});
+        }
+      };
+  auto expectResult = [qec](Union& unionOperation, const IdTable& expected,
+                            ad_utility::source_location loc =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
     qec->getQueryTreeCache().clearAll();
     EXPECT_EQ(unionOperation.getResult(false)->idTableView(), expected);
   };
