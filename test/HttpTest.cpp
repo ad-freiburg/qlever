@@ -887,3 +887,16 @@ TEST(HttpProxy, connectTunnelRequiresAuthentication) {
       ::testing::AllOf(HasSubstr("407"),
                        HasSubstr("user:password@proxy:3128")));
 }
+
+// Bytes that follow the response to the `CONNECT` request immediately would
+// already belong to the tunneled TLS session, which we cannot forward into the
+// TLS stream, so this is rejected instead of silently corrupting the handshake.
+TEST(HttpProxy, connectTunnelWithUnexpectedTrailingBytes) {
+  FakeConnectProxy fakeProxy{
+      "HTTP/1.1 200 Connection established\r\n\r\nsurprise"};
+  Proxy proxy{"localhost", std::to_string(fakeProxy.getPort()), ""};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HttpsClient("example.org", "443", proxy),
+      ::testing::AllOf(HasSubstr("sent 8 unexpected byte(s)"),
+                       HasSubstr("cannot forward into the TLS session")));
+}
