@@ -166,6 +166,30 @@ TEST(RegexHelpers, invalidRegexesHaveNoPrefix) {
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^ab\Kc)"), IsEmpty());
 }
 
+// For a regex that matches arbitrary bytes, an upper bound would have to be
+// larger than every possible string. RE2 cannot express that and reports no
+// range at all. The empty prefix is the correct answer for such a regex anyway.
+TEST(RegexHelpers, regexesWithoutAnUpperBoundHaveNoPrefix) {
+  // `\C` matches an arbitrary byte.
+  EXPECT_THAT(getLiteralPrefixOfRegex(R"(^\C*)"), IsEmpty());
+  EXPECT_THAT(getLiteralPrefixOfRegex(R"(^\C+)"), IsEmpty());
+}
+
+// A regex that is too large to be compiled is not analysed. Note that this is
+// different from an invalid regex: the regex below is perfectly valid, it just
+// does not fit into the memory budget for the compiled program.
+TEST(RegexHelpers, regexesThatAreTooLargeHaveNoPrefix) {
+  // The character class `\p{L}` alone already compiles to hundreds of
+  // instructions, so a thousand repetitions of it blow the budget.
+  std::string_view regex = R"(^\p{L}{1000})";
+  EXPECT_THAT(getLiteralPrefixOfRegex(regex), IsEmpty());
+  // Verify that the regex is indeed rejected because of its size and not
+  // because of a syntax error, which would exercise a different code path.
+  RE2 compiled{regex, RE2::Quiet};
+  EXPECT_FALSE(compiled.ok());
+  EXPECT_EQ(compiled.error_code(), RE2::ErrorPatternTooLarge);
+}
+
 // Very long prefixes are truncated (see `maxPrefixLength`), which is sound
 // because a shorter prefix is always a valid answer.
 TEST(RegexHelpers, longPrefixesAreTruncated) {

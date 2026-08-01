@@ -17,10 +17,16 @@
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "util/Exception.h"
 
 namespace sparqlExpression::detail {
 
 namespace {
+// Hardcode the maximum length of the derived prefix. Longer prefixes bring
+// diminishing benefit for prefiltering. Note that a smaller bound can only
+// shorten the resulting prefix, it can never make it unsound.
+constexpr int maxPrefixLength = 16;
+
 // Return the longest common prefix of `a` and `b`.
 std::string_view longestCommonPrefix(std::string_view a, std::string_view b) {
   auto mismatchInA = ql::ranges::mismatch(a, b).in1;
@@ -51,10 +57,15 @@ bool containsWordBoundary(re2::Regexp* regex) {
 // is matched as well. Conversely, regexes like `(?:^ab)c` are recognized as
 // anchored although they do not start with a `^`.
 bool isSuitableForPrefixExtraction(re2::Regexp* regex) {
-  bool isAnchoredAtStart = regex->op() == re2::kRegexpConcat &&
-                           regex->nsub() > 0 &&
-                           regex->sub()[0]->op() == re2::kRegexpBeginText;
-  return isAnchoredAtStart && !containsWordBoundary(regex);
+  if (regex->op() != re2::kRegexpConcat) {
+    return false;
+  }
+  // RE2's parser never creates a concatenation with fewer than two
+  // subexpressions: shorter ones are collapsed into their single subexpression
+  // or into `kRegexpEmptyMatch` (see `Regexp::ConcatOrAlternate`).
+  AD_CORRECTNESS_CHECK(regex->nsub() > 0);
+  return regex->sub()[0]->op() == re2::kRegexpBeginText &&
+         !containsWordBoundary(regex);
 }
 
 }  // namespace
@@ -79,13 +90,13 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
       re2::Regexp::Parse(regex, parseFlags, &status), decref};
   // This is also the case for an invalid regex.
   if (parsed == nullptr) {
-    return {};
+    return "";
   }
 
   // Do the structural check before compiling: most regexes are rejected here
   // (e.g. because they are not anchored) and then never have to be compiled.
   if (!isSuitableForPrefixExtraction(parsed.get())) {
-    return {};
+    return "";
   }
 
   // `PossibleMatchRange` needs a compiled program, because it works by walking
@@ -95,7 +106,7 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
   std::unique_ptr<re2::Prog> program{
       parsed->CompileToProg(RE2::Options{RE2::Quiet}.max_mem() * 2 / 3)};
   if (program == nullptr) {
-    return {};
+    return "";
   }
 
   // `PossibleMatchRange` computes bounds such that every matched string `s`
@@ -107,11 +118,10 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
   std::string lower;
   std::string upper;
 
-  // Hardcode the maximum length of the derived prefix. Longer prefixes bring
-  // diminishing benefit for prefiltering. Note that a smaller bound can only
-  // shorten the resulting prefix, it can never make it unsound.
-  if (!program->PossibleMatchRange(&lower, &upper, 16)) {
-    return {};
+  // `PossibleMatchRange` fails if there is no upper bound that it could report,
+  // which is the case if the regex matches arbitrary bytes (e.g. `^\C*`).
+  if (!program->PossibleMatchRange(&lower, &upper, maxPrefixLength)) {
+    return "";
   }
   return std::string{longestCommonPrefix(lower, upper)};
 }
