@@ -29,6 +29,11 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
 // Determine whether the subtrees and the result should be pinned.
 std::pair<bool, bool> determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params);
+
+// Parse the `send` parameter (historical name): the maximum number of
+// bindings to export. Returns `std::nullopt` if not set.
+std::optional<uint64_t> parseSendLimit(
+    const ad_utility::url_parser::ParamValueMap& params);
 }  // namespace ad_utility::request_parameters
 
 #endif  // QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H

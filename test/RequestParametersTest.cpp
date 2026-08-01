@@ -40,3 +40,12 @@ TEST(RequestParametersTest, determineResultPinning) {
   EXPECT_THAT(determineResultPinning({{"pin-subresults", {"otherValue"}}}),
               testing::Pair(false, false));
 }
+
+// _____________________________________________________________________________
+TEST(RequestParametersTest, parseSendLimit) {
+  EXPECT_EQ(parseSendLimit({}), std::nullopt);
+  EXPECT_THAT(parseSendLimit({{"send", {"12"}}}), testing::Optional(12ul));
+  EXPECT_THROW(ad_utility::request_parameters::parseSendLimit(
+                   {{"send", {"not-a-number"}}}),
+               std::invalid_argument);
+}

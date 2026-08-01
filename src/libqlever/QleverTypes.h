@@ -8,6 +8,7 @@
 #define QLEVER_SRC_LIBQLEVER_QLEVERTYPES_H
 
 #include <memory>
+#include <optional>
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -79,6 +80,10 @@ struct PlannedQuery {
             std::make_shared<QueryExecutionTree>(std::move(qet))} {
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
+
+  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
+  void adjustParsedQueryLimitOffset(const ad_utility::MediaType& mediaType,
+                                    std::optional<uint64_t> sendLimit);
 
   const ParsedQuery& parsedQuery() const { return parsedQuery_; }
   ParsedQuery& parsedQuery() { return parsedQuery_; }
