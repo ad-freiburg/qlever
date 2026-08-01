@@ -44,7 +44,7 @@ endif()
 # boost::beast HTTP session coroutine produces irreducible control flow
 # containing EH pads — the same LLVM bug that disables `HttpTest`).
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
-    add_library(server Server.cpp)
+        add_library(server Server.cpp HttpApiHelpers.cpp)
     qlever_target_link_libraries(server engine qlever_util index sparqlParser global http
     sortPerformanceEstimator qlever metrics)
 endif ()

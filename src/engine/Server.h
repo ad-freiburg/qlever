@@ -242,14 +242,6 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
-  // meters for the simplification of geometries before indexing) from its
-  // string representation. Return `std::nullopt` if `simplificationStr` is
-  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
-  // floating-point number.
-  static std::optional<double> parsePinGeoIndexSimplification(
-      const std::optional<std::string>& simplificationStr);
-  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
   // Describe the pinning of a named result (and, if applicable, of its geo
   // index) for the request log line, e.g. `" [pin result with name
   // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
