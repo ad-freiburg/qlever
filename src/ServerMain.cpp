@@ -168,10 +168,12 @@ int main(int argc, char** argv) {
       po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
       "When to rebuild the index from the current data (including updates). "
       "\"manual\" (the default): only when explicitly requested via the "
-      "`cmd=rebuild-index` HTTP request. A non-negative number: additionally "
-      "trigger a rebuild automatically in the background whenever the number "
-      "of delta triples (inserted plus deleted) after an update exceeds that "
-      "number.");
+      "`cmd=rebuild-index` HTTP request. \"min:max:fraction\": additionally "
+      "trigger a rebuild automatically in the background after an update, once "
+      "the number of delta triples (inserted plus deleted) reaches the given "
+      "`fraction` (a number greater than 0) of the number of index triples, "
+      "but never below `min` and always at `max` (e.g. "
+      "\"10000:1000000:0.1\").");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -308,18 +310,16 @@ int main(int argc, char** argv) {
   // Resolve the `--rebuild-index-strategy` option. A bad value fails the
   // startup with a readable message, before the index is loaded.
   try {
-    config.rebuildIndexDeltaTriplesThreshold_ =
-        Server::parseRebuildIndexStrategy(rebuildIndexStrategy);
+    config.rebuildIndexStrategy_ =
+        qlever::RebuildIndexStrategy::parse(rebuildIndexStrategy);
   } catch (const std::exception& e) {
     AD_LOG_ERROR << "Invalid argument to --rebuild-index-strategy: " << e.what()
                  << std::endl;
     return EXIT_FAILURE;
   }
-  if (config.rebuildIndexDeltaTriplesThreshold_.has_value()) {
-    AD_LOG_INFO << "Automatic index rebuild whenever the number of delta "
-                   "triples exceeds "
-                << config.rebuildIndexDeltaTriplesThreshold_.value()
-                << std::endl;
+  if (config.rebuildIndexStrategy_.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
+                << rebuildIndexStrategy << ")" << std::endl;
   }
 
   try {

@@ -10,7 +10,6 @@
 #include "engine/Server.h"
 
 #include <absl/functional/bind_front.h>
-#include <absl/strings/numbers.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
@@ -62,8 +61,7 @@ Server::Server(
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
       queryThreadPool_{numThreads},
-      rebuildIndexDeltaTriplesThreshold_(
-          config.rebuildIndexDeltaTriplesThreshold_),
+      rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
@@ -1411,12 +1409,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       static_cast<double>(requestTimer.msecs().count()),
       {OperationType::update});
   metrics_->finishedSparqlOperations_->Add(1, {OperationType::update});
-  // With `--rebuild-index-strategy <number>`, an update can push the number
-  // of delta triples over the threshold, in which case an index rebuild is
+  // With `--rebuild-index-strategy` set, an update can bring the delta triples
+  // to a state where the strategy asks for a rebuild, in which case one is
   // started in the background here (without delaying the response below).
   if (!metadatas.empty() && metadatas.back().countAfter_.has_value()) {
-    triggerRebuildIfDeltaTriplesThresholdExceeded(
-        metadatas.back().countAfter_.value());
+    auto numIndexTriples = static_cast<size_t>(
+        indexAndViewsSnapshot()->index_.numTriples().normal);
+    triggerRebuildIfStrategySaysSo(metadatas.back().countAfter_.value(),
+                                   numIndexTriples);
   }
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
@@ -1724,31 +1724,15 @@ Server::rebuildIndexUnlessInProgress(
 }
 
 // _____________________________________________________________________________
-std::optional<size_t> Server::parseRebuildIndexStrategy(
-    std::string_view strategy) {
-  if (strategy == "manual") {
-    return std::nullopt;
-  }
-  size_t threshold = 0;
-  if (!absl::SimpleAtoi(strategy, &threshold)) {
-    throw std::runtime_error(absl::StrCat(
-        "The value \"", strategy,
-        "\" is neither \"manual\" nor a non-negative number of delta "
-        "triples"));
-  }
-  return threshold;
-}
-
-// _____________________________________________________________________________
-void Server::triggerRebuildIfDeltaTriplesThresholdExceeded(
-    const DeltaTriplesCount& count) {
-  if (!rebuildIndexDeltaTriplesThreshold_.has_value()) {
+void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
+                                            size_t numIndexTriples) {
+  if (!rebuildIndexStrategy_.has_value()) {
     return;
   }
-  size_t threshold = rebuildIndexDeltaTriplesThreshold_.value();
   auto numDeltaTriples =
       static_cast<size_t>(count.triplesInserted_ + count.triplesDeleted_);
-  if (numDeltaTriples <= threshold) {
+  if (!rebuildIndexStrategy_->shouldTriggerRebuild(numDeltaTriples,
+                                                   numIndexTriples)) {
     return;
   }
   // Cheap early return while a rebuild is running, so that the updates that
@@ -1762,8 +1746,11 @@ void Server::triggerRebuildIfDeltaTriplesThresholdExceeded(
   }
   AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
                  "triples ("
-              << numDeltaTriples << ") exceeds the threshold (" << threshold
-              << ")" << std::endl;
+              << numDeltaTriples << ") has reached the threshold ("
+              << static_cast<size_t>(
+                     rebuildIndexStrategy_->rebuildThreshold(numIndexTriples))
+              << ") for the current index size (" << numIndexTriples
+              << " triples)" << std::endl;
   net::co_spawn(
       queryThreadPool_,
       [this]() -> Awaitable<void> {

@@ -980,22 +980,3 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
   EXPECT_EQ(end.at("qid").get<std::string>(),
             start.at("qid").get<std::string>());
 }
-
-// _____________________________________________________________________________
-TEST(ServerTest, parseRebuildIndexStrategy) {
-  using ::testing::HasSubstr;
-  using ::testing::Optional;
-  EXPECT_EQ(Server::parseRebuildIndexStrategy("manual"), std::nullopt);
-  EXPECT_THAT(Server::parseRebuildIndexStrategy("0"), Optional(0u));
-  EXPECT_THAT(Server::parseRebuildIndexStrategy("500000"), Optional(500'000u));
-  auto expectThrows = [](std::string_view strategy) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        Server::parseRebuildIndexStrategy(strategy),
-        HasSubstr("neither \"manual\" nor a non-negative number"));
-  };
-  expectThrows("");
-  expectThrows("automatic");
-  expectThrows("-5");
-  expectThrows("10x");
-  expectThrows("1.5");
-}

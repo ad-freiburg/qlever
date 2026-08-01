@@ -932,9 +932,10 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   qlever::EngineConfig config;
   config.baseName_ = indexName;
   config.persistUpdates_ = false;
-  // Corresponds to `--rebuild-index-strategy 2`: trigger an automatic rebuild
-  // as soon as there are more than two delta triples.
-  config.rebuildIndexDeltaTriplesThreshold_ = 2;
+  // `min == max == 3` makes the threshold a fixed three delta triples,
+  // independent of the index size: trigger an automatic rebuild as soon as the
+  // number of delta triples reaches three.
+  config.rebuildIndexStrategy_ = qlever::RebuildIndexStrategy{3, 3, 1.0};
   serverTestHelpers::ServerForTesting server{1, "accessToken", config};
 
   auto performUpdate = [&server](std::string_view update) {
@@ -955,7 +956,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
     return inserted + deleted;
   };
 
-  // Two delta triples do not exceed the threshold of two, so no rebuild is
+  // Two delta triples do not reach the threshold of three, so no rebuild is
   // triggered. This is checked race-free: the trigger decision is made before
   // the response is sent, so after the update has returned, the flag can only
   // be set if a rebuild was started.
@@ -964,7 +965,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   EXPECT_FALSE(server.server().rebuildInProgress_.load());
   EXPECT_TRUE(dirsWithPrefix("previous.").empty());
 
-  // The third delta triple exceeds the threshold and triggers a rebuild in
+  // The third delta triple reaches the threshold and triggers a rebuild in
   // the background. Wait until it has completed, which is observable by the
   // delta triples being merged into the new index (their number drops to
   // zero) and the old index appearing in a `previous.<datetime>` directory.

@@ -91,15 +91,6 @@ class Server {
   static json composeStatsJson(const Index& index);
   json composeCacheStatsJson() const;
 
-  // Parse the value of the `--rebuild-index-strategy` option of
-  // `qlever-server`: "manual" yields `std::nullopt` (rebuilds are only
-  // triggered via the `cmd=rebuild-index` HTTP request), a non-negative
-  // number yields that number (a rebuild is additionally triggered
-  // automatically when the number of delta triples exceeds it). Throws
-  // `std::runtime_error` for any other value.
-  static std::optional<size_t> parseRebuildIndexStrategy(
-      std::string_view strategy);
-
  private:
   qlever::Qlever qlever_;
   const size_t numThreads_;
@@ -125,11 +116,10 @@ class Server {
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
 
-  // If set, an index rebuild is triggered automatically whenever the number
-  // of delta triples after an update exceeds this threshold, see
-  // `triggerRebuildIfDeltaTriplesThresholdExceeded`. Set via the
-  // `--rebuild-index-strategy` option of `qlever-server`.
-  std::optional<size_t> rebuildIndexDeltaTriplesThreshold_;
+  // If set, an index rebuild is triggered automatically after an update
+  // whenever the strategy says so, see `triggerRebuildIfStrategySaysSo`. Set
+  // via the `--rebuild-index-strategy` option of `qlever-server`.
+  std::optional<qlever::RebuildIndexStrategy> rebuildIndexStrategy_;
 
   // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
   // disabled (--enable-metrics not passed).
@@ -412,12 +402,13 @@ class Server {
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
 
-  // If `rebuildIndexDeltaTriplesThreshold_` is set and `count` (the number of
-  // delta triples after an update) exceeds it, trigger an index rebuild in
-  // the background, unless one is already in progress. Returns immediately;
-  // the rebuild runs detached and logs its success or failure.
-  void triggerRebuildIfDeltaTriplesThresholdExceeded(
-      const DeltaTriplesCount& count);
+  // If `rebuildIndexStrategy_` is set and it says a rebuild should be
+  // triggered for `count` (the number of delta triples after an update) and
+  // the given number of triples in the current index, trigger an index
+  // rebuild in the background, unless one is already in progress. Returns
+  // immediately; the rebuild runs detached and logs its success or failure.
+  void triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
+                                      size_t numIndexTriples);
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }
