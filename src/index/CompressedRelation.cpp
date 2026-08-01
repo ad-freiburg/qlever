@@ -1508,14 +1508,15 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 // _____________________________________________________________________________
 ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
     std::optional<size_t> numThreadsOverride) {
-  auto threadCount = static_cast<uint32_t>(numThreadsOverride.value_or(
-      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>()));
-  if (threadCount == 0) {
-    threadCount = std::thread::hardware_concurrency();
-  } else {
-    threadCount =
-        std::min<uint32_t>(threadCount, std::thread::hardware_concurrency());
-  }
+  size_t requestedThreads = numThreadsOverride.value_or(
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
+  // Clamp in `size_t` BEFORE casting, so that a huge requested value cannot
+  // truncate to a small (or zero) thread count.
+  uint32_t threadCount =
+      requestedThreads == 0
+          ? std::thread::hardware_concurrency()
+          : static_cast<uint32_t>(std::min<size_t>(
+                requestedThreads, std::thread::hardware_concurrency()));
   // Allow at least up to 4 tasks in the queue.
   uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
   return ad_utility::TaskQueue<false>{queueSize, threadCount};
