@@ -565,18 +565,16 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(json, request);
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
     requireValidAccessToken("rebuild-index");
-
-    if (rebuildInProgress_.exchange(true)) {
+    logCommand(cmd, "rebuilding index");
+    auto config = co_await rebuildIndexUnlessInProgress(
+        checkParameter("rebuild-tmp-dir", std::nullopt),
+        checkParameter("rebuild-previous-index-dir", std::nullopt));
+    if (config.has_value()) {
+      response = createJsonResponse(config->successResponseAsJson(), request);
+    } else {
       response = createHttpResponseFromString(
           "Another rebuild is currently in progress!",
           http::status::too_many_requests, request, MediaType::textPlain);
-    } else {
-      absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
-      logCommand(cmd, "rebuilding index");
-      auto config = co_await rebuildIndex(
-          checkParameter("rebuild-tmp-dir", std::nullopt),
-          checkParameter("rebuild-previous-index-dir", std::nullopt));
-      response = createJsonResponse(config.successResponseAsJson(), request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
@@ -1713,6 +1711,19 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
 }
 
 // _____________________________________________________________________________
+Awaitable<std::optional<qlever::IndexRebuildConfig>>
+Server::rebuildIndexUnlessInProgress(
+    std::optional<std::string> rebuildTmpDir,
+    std::optional<std::string> rebuildPreviousIndexDir) {
+  if (rebuildInProgress_.exchange(true)) {
+    co_return std::nullopt;
+  }
+  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+  co_return co_await rebuildIndex(std::move(rebuildTmpDir),
+                                  std::move(rebuildPreviousIndexDir));
+}
+
+// _____________________________________________________________________________
 std::optional<size_t> Server::parseRebuildIndexStrategy(
     std::string_view strategy) {
   if (strategy == "manual") {
@@ -1740,12 +1751,13 @@ void Server::triggerRebuildIfDeltaTriplesThresholdExceeded(
   if (numDeltaTriples <= threshold) {
     return;
   }
-  // The same guard as for the `cmd=rebuild-index` HTTP request, so that a
-  // manual and an automatic rebuild can never run concurrently. If a rebuild
-  // is already in progress, do nothing; the delta triples that accumulate
-  // while it runs are carried over into the new index by the swap, and the
-  // next update after the swap re-evaluates the threshold.
-  if (rebuildInProgress_.exchange(true)) {
+  // Cheap early return while a rebuild is running, so that the updates that
+  // arrive during it (whose delta triples are carried over into the new index
+  // by the swap) do not each spawn a coroutine only to find the guard taken.
+  // The authoritative check is the guard in `rebuildIndexUnlessInProgress`,
+  // which is shared with the `cmd=rebuild-index` HTTP request, so that a
+  // manual and an automatic rebuild can never run concurrently.
+  if (rebuildInProgress_.load()) {
     return;
   }
   AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
@@ -1755,11 +1767,17 @@ void Server::triggerRebuildIfDeltaTriplesThresholdExceeded(
   net::co_spawn(
       queryThreadPool_,
       [this]() -> Awaitable<void> {
-        absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
-        co_await rebuildIndex(std::nullopt, std::nullopt);
-        AD_LOG_INFO << "Automatic index rebuild completed, the new index has "
-                       "been swapped in"
-                    << std::endl;
+        auto config =
+            co_await rebuildIndexUnlessInProgress(std::nullopt, std::nullopt);
+        if (config.has_value()) {
+          AD_LOG_INFO << "Automatic index rebuild completed, the new index "
+                         "has been swapped in"
+                      << std::endl;
+        } else {
+          AD_LOG_INFO << "Automatic index rebuild skipped, another rebuild "
+                         "started concurrently"
+                      << std::endl;
+        }
       },
       [](std::exception_ptr exception) {
         if (!exception) {

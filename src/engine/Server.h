@@ -402,11 +402,20 @@ class Server {
       std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
 
+  // Like `rebuildIndex` above, but do nothing and return `std::nullopt` if
+  // another rebuild is currently in progress (the `rebuildInProgress_` flag
+  // is held for the duration of the rebuild). This is the common
+  // implementation behind the two ways of triggering a rebuild: the manual
+  // `cmd=rebuild-index` HTTP request and the automatic trigger below.
+  Awaitable<std::optional<qlever::IndexRebuildConfig>>
+  rebuildIndexUnlessInProgress(
+      std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
+
   // If `rebuildIndexDeltaTriplesThreshold_` is set and `count` (the number of
   // delta triples after an update) exceeds it, trigger an index rebuild in
   // the background, unless one is already in progress. Returns immediately;
-  // the rebuild (the same operation as for the `cmd=rebuild-index` HTTP
-  // request) runs detached and logs its success or failure.
+  // the rebuild runs detached and logs its success or failure.
   void triggerRebuildIfDeltaTriplesThresholdExceeded(
       const DeltaTriplesCount& count);
 
