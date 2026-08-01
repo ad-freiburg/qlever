@@ -483,7 +483,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
                    << std::endl;
 
-  REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
+  // The phase headers say in parentheses what exactly is being processed, so
+  // that the totals of the progress lines below are self-explanatory.
+  REBUILD_LOG_INFO << "Writing new vocabulary (merging existing and new "
+                      "words) ..."
+                   << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
   ad_utility::ConcurrentProgress vocabProgress{
@@ -493,7 +497,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       [&vocabProgress](size_t numWords) { vocabProgress.add(numWords); });
   vocabProgress.finish();
 
-  REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
+  REBUILD_LOG_INFO << "Recomputing statistics (from "
+                   << (index.hasAllPermutations()
+                           ? "4 permutations, 3 normal and 1 internal"
+                           : "2 permutations, 1 normal and 1 internal")
+                   << ") ..." << std::endl;
 
   // The totals for the progress reports below are taken from the statistics
   // of the old index; they are exact up to the delta triples, which is good
@@ -525,7 +533,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
-  REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
+  REBUILD_LOG_INFO << "Writing new index ("
+                   << (index.hasAllPermutations()
+                           ? "8 permutations, 6 normal and 2 internal"
+                           : "4 permutations, 2 normal and 2 internal")
+                   << ") ..." << std::endl;
 
   // Each of the (up to 6) normal permutations writes all normal triples,
   // each of the two internal permutations all internal triples.
