@@ -1042,11 +1042,8 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   // of its permutation writers so that a rebuild on a live server leaves most
   // of the CPU to concurrent queries. A value of 0 means "fall back to
   // `permutation-writer-num-threads`".
-  auto rebuildWriterThreads = getRuntimeParameter<
+  auto numWriterThreads = getRuntimeParameterAsOptional<
       &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
-  std::optional<size_t> numWriterThreads =
-      rebuildWriterThreads == 0 ? std::nullopt
-                                : std::optional<size_t>{rebuildWriterThreads};
   auto metaData = createPermutationImpl(
       numColumns, fileName, std::move(sortedTriples), numWriterThreads);
 
@@ -2205,11 +2202,8 @@ std::packaged_task<void()> computeStatistics(
     // `rebuild-index-scan-num-threads` (several permutations are scanned in
     // parallel, so without the throttle this short phase has a high peak
     // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto rebuildScanThreads =
-        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
-    std::optional<size_t> numThreadsOverride =
-        rebuildScanThreads == 0 ? std::nullopt
-                                : std::optional<size_t>{rebuildScanThreads};
+    auto numThreadsOverride = getRuntimeParameterAsOptional<
+        &RuntimeParameters::rebuildIndexScanNumThreads_>();
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,

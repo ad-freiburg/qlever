@@ -6,6 +6,7 @@
 #define QLEVER_RUNTIMEPARAMETERS_H
 
 #include <algorithm>
+#include <optional>
 
 #include "util/Log.h"
 #include "util/Parameters.h"
@@ -271,6 +272,16 @@ auto getRuntimeParameter() {
   // destroyed. This is achieved by directly returning a copy of the parameter
   // value (the function returns `auto`, see above).
   return std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+}
+
+// Get the current value of the numeric runtime parameter specified by the
+// `ParameterPtr`, translated to an optional override: the value 0, which for
+// such parameters means "fall back to the corresponding general parameter",
+// becomes `std::nullopt`.
+template <auto ParameterPtr>
+std::optional<size_t> getRuntimeParameterAsOptional() {
+  size_t value = getRuntimeParameter<ParameterPtr>();
+  return value == 0 ? std::nullopt : std::optional<size_t>{value};
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H
