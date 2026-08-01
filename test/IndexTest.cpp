@@ -8,24 +8,34 @@
 #include <absl/time/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <re2/re2.h>
 
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 
+#include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "engine/MaterializedViews.h"
+#include "global/Constants.h"
+#include "global/FileSuffixConstants.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
+#include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/UnicodeSupport.h"
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -102,31 +112,6 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
-
-// Create a temporary directory inside the Google Test temporary directory
-// with the given `name`. The directory and all its contents are deleted when
-// the returned `absl::Cleanup` is destroyed.
-auto makeTemporaryDirectory(std::string_view name) {
-  std::string directory = ::testing::TempDir();
-  if (!ql::ends_with(directory, "/")) {
-    directory.push_back('/');
-  }
-  AD_CORRECTNESS_CHECK(!ql::starts_with(name, '/'));
-  directory += name;
-  // Create directory.
-  ql::filesystem::create_directory(directory);
-
-  // Remove all files in directory when done.
-  absl::Cleanup cleanup{[directory]() {
-    ql::error_code ec;
-    ql::filesystem::remove_all(directory, ec);
-    if (ec) {
-      AD_LOG(ERROR) << "Could not remove temporary directory " << directory
-                    << ": " << ec.message();
-    }
-  }};
-  return std::make_pair(std::move(directory), std::move(cleanup));
-}
 }  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
@@ -517,6 +502,33 @@ TEST(IndexTest, processTriple) {
 }
 
 // _____________________________________________________________________________
+// The regexes passed to `setBlankNodeIriRegexes` must describe full IRIs (and
+// therefore have to start with `<`) and must be valid regular expressions;
+// otherwise the setter throws. Valid regexes are compiled and stored.
+TEST(IndexTest, setBlankNodeIriRegexesRequiresValidIriPatterns) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+
+  // A regex that does not start with `<` cannot describe a (full) IRI and is
+  // rejected, even if other regexes in the same call are valid.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setBlankNodeIriRegexes({"<http://ex/ok.*>", "http://ex/bad.*"}),
+      ::testing::HasSubstr("must therefore start with `<`"));
+
+  // A regex that is not a valid regular expression is reported with a
+  // user-readable message (here: an unclosed group).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setBlankNodeIriRegexes({"<http://ex/(unclosed"}),
+      ::testing::HasSubstr("not a valid regular expression"));
+
+  // Valid IRI regexes are accepted, compiled, and stored (in order).
+  index.setBlankNodeIriRegexes({"<http://ex/bn_.*>", "<http://ex/other>"});
+  const auto& regexes = index.getBlankNodeIriRegexes();
+  ASSERT_EQ(regexes.size(), 2);
+  EXPECT_EQ(regexes.at(0)->pattern(), "<http://ex/bn_.*>");
+  EXPECT_EQ(regexes.at(1)->pattern(), "<http://ex/other>");
+}
+
+// _____________________________________________________________________________
 TEST(IndexTest, ZeroCopyVocabularyBlob) {
   IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
   auto& vocab = index.getNonConstVocabForTesting();
@@ -637,6 +649,34 @@ TEST(IndexTest, trivialGettersAndSetters) {
   index.parserBufferSize() = 8_kB;
   EXPECT_EQ(index.parserBufferSize(), 8_kB);
   EXPECT_EQ(std::as_const(index).parserBufferSize(), 8_kB);
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, destructorLogsUnloading) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  // An `Index` that still owns its `IndexImpl` logs on destruction.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Index at someIndexBase was unloaded"));
+  }
+  // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
+  // silent on destruction. We reset it while `movedInto` is still alive, so no
+  // unload message may be logged at that point.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    Index movedInto{std::move(index).value()};
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
+  }
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
@@ -776,9 +816,10 @@ TEST(IndexImpl, recomputeStatistics) {
   index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
-    LocalVocabEntry literal =
-        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
+    LocalVocabEntry zzz =
+        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
+        "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.
@@ -970,12 +1011,48 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   // The version written to disk will also have these fields.
   stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
   stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["has-icu-support"] = ad_utility::useICUDefault;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, icuSupportConfigurationMustMatch) {
+  auto index =
+      makeTestIndex("icuSupportConfigurationMustMatch", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records whether the current binary has ICU support.
+  ASSERT_TRUE(indexImpl.configurationJson().contains("has-icu-support"));
+  EXPECT_EQ(indexImpl.configurationJson()["has-icu-support"],
+            ad_utility::useICUDefault);
+  const auto originalConfig = indexImpl.configurationJson();
+
+  // Applying a configuration whose ICU-support flag disagrees with the current
+  // binary must throw.
+  auto mismatchedConfig = originalConfig;
+  mismatchedConfig["has-icu-support"] = !ad_utility::useICUDefault;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(mismatchedConfig),
+      ::testing::HasSubstr(
+          "different string collations and are not interchangeable"));
+
+  // An index built before this flag existed is assumed to have ICU support, so
+  // it loads iff the current binary also has ICU support.
+  auto legacyConfig = originalConfig;
+  legacyConfig.erase("has-icu-support");
+  if constexpr (ad_utility::useICUDefault) {
+    EXPECT_NO_THROW(indexImpl.applyConfiguration(legacyConfig));
+  } else {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        indexImpl.applyConfiguration(legacyConfig),
+        ::testing::HasSubstr(
+            "different string collations and are not interchangeable"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -1027,4 +1104,96 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}
+
+// _____________________________________________________________________________
+// Checks that `IndexImpl::allIndexFiles` lists exactly the on-disk files that
+// belong to an index: no phantom entries, all components (including the
+// optional ones) present, and no file that shares the base name but is not an
+// index file (build logs, materialized-view files, input files).
+TEST(IndexImpl, allIndexFilesAreListed) {
+  auto [directory, cleanup] = makeTemporaryDirectory("allIndexFilesAreListed");
+  std::string base = directory + "/index";
+  makeTestIndex(base, "<a> <b> <c> . <a> <b> <d> . <d> <e> <f> .");
+
+  auto touch = [](const std::string& f) {
+    std::ofstream out{f};
+    out << "x";
+  };
+  // Optional index files that a plain build does not create; once present, they
+  // must be listed.
+  std::string settings = absl::StrCat(base, SETTINGS_FILE_SUFFIX);
+  std::string updates = absl::StrCat(base, UPDATE_TRIPLES_SUFFIX);
+  std::string graphs = absl::StrCat(base, ALLOCATED_GRAPHS_SUFFIX);
+  for (const auto& f : {settings, updates, graphs}) {
+    touch(f);
+  }
+  // Files that share the base name but are NOT index files; they must not be
+  // listed.
+  std::string indexLog = absl::StrCat(base, INDEX_LOG_SUFFIX);
+  std::string rebuildLog = absl::StrCat(base, REBUILD_INDEX_LOG_SUFFIX);
+  std::string viewFile = MaterializedView::getFilenameBase(base, "myView");
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    touch(f);
+  }
+
+  auto listedPaths = IndexImpl::allIndexFiles(base);
+  std::vector<std::string> listed;
+  listed.reserve(listedPaths.size());
+  for (const auto& path : listedPaths) {
+    listed.push_back(path.string());
+  }
+  ad_utility::HashSet<std::string> listedSet(listed.begin(), listed.end());
+
+  // No phantom entries.
+  for (const auto& f : listed) {
+    EXPECT_TRUE(ql::filesystem::exists(f)) << f;
+  }
+
+  // All core components and the optional files we created are listed.
+  EXPECT_THAT(
+      listedSet,
+      ::testing::IsSupersetOf(
+          {absl::StrCat(base, CONFIGURATION_FILE),
+           absl::StrCat(base, PATTERNS_FILE_SUFFIX),
+           absl::StrCat(base, ".index.pso"),
+           absl::StrCat(base, ".index.pso.meta"),
+           absl::StrCat(base, QLEVER_INTERNAL_INDEX_INFIX, ".index.pso"),
+           settings, updates, graphs}));
+  // At least one vocabulary file is listed (the exact set depends on the
+  // vocabulary type).
+  EXPECT_TRUE(ql::ranges::any_of(listed, [](const std::string& f) {
+    return ql::starts_with(ql::pathFilename(f).string(),
+                           absl::StrCat("index", VOCAB_SUFFIX));
+  }));
+
+  // The non-index files are not listed.
+  for (const auto& f : {indexLog, rebuildLog, viewFile}) {
+    EXPECT_FALSE(listedSet.contains(f)) << f;
+  }
+
+  // Exhaustiveness: every regular file in the directory that shares the base
+  // name is either listed as an index file or one of the files that are
+  // deliberately left out: the build/rebuild logs, the materialized-view files
+  // (`.view.` infix), and the input files left over from the build
+  // (`<base>.ttl` and the settings input `<base>.ttl.settings.json`).
+  std::string baseName = ql::pathFilename(base).string();
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    std::string name = entry.path().filename().string();
+    if (!ql::starts_with(name, baseName) ||
+        listedSet.contains(entry.path().string())) {
+      continue;
+    }
+    std::string_view rest{name};
+    rest.remove_prefix(baseName.size());
+    bool isAllowedNonIndexFile =
+        rest == INDEX_LOG_SUFFIX || rest == REBUILD_INDEX_LOG_SUFFIX ||
+        ql::starts_with(rest, ".view.") || ql::starts_with(rest, ".ttl");
+    EXPECT_TRUE(isAllowedNonIndexFile)
+        << "File is neither an index file nor an allowed exclusion: "
+        << entry.path().string();
+  }
 }

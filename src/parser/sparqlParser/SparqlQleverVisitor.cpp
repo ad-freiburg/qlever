@@ -37,6 +37,7 @@
 #include "generated/SparqlAutomaticParser.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
@@ -1736,7 +1737,10 @@ template <typename Context>
 void Visitor::warnOrThrowIfUnboundVariables(
     Context* ctx, const SparqlExpressionPimpl& expression,
     std::string_view clauseName) {
-  for (const auto& var : expression.containedVariables()) {
+  // Note: We pass `excludeExists = true`, because the variables that occur only
+  // inside the body of an `EXISTS` live in their own scope and thus need not be
+  // bound by the surrounding query.
+  for (const auto& var : expression.containedVariables(true)) {
     if (!ad_utility::contains(visibleVariables_, *var)) {
       auto message = absl::StrCat(
           "The variable ", var->name(), " was used in the expression of a ",
@@ -2616,7 +2620,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
-          tripleComponent.toValueIdIfNotString(encodedIriManager_).value());
+          toValueIdIfNotString(tripleComponent, encodedIriManager_).value());
     }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {

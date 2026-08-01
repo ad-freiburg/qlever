@@ -61,10 +61,12 @@ struct RuntimeParameters {
   // for the main scan of the old permutations and for the statistics
   // recomputation. This read/decompress work dominates the rebuild's CPU
   // usage, so lowering it reduces the rebuild's peak CPU without affecting
-  // query scans. A value of 0 (the default) falls back to
-  // `lazy-index-scan-num-threads`, the same value as for query scans, which is
-  // the historical behavior.
-  SizeT rebuildIndexScanNumThreads_{0, "rebuild-index-scan-num-threads"};
+  // query scans. The default of 2 keeps a rebuild on a live server from
+  // starving concurrent queries of CPU (measured on Wikidata on a 16-core
+  // server: peak CPU drops from ~26 to ~16 cores for ~18% more wall time).
+  // A value of 0 falls back to `lazy-index-scan-num-threads`, the same value
+  // as for query scans, which gives the fastest rebuild.
+  SizeT rebuildIndexScanNumThreads_{2, "rebuild-index-scan-num-threads"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
@@ -217,6 +219,12 @@ struct RuntimeParameters {
   // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
                      const std::string& value);
+
+  // Set a parameter from a single string of the form `<name>=<value>` (split
+  // at the first `=`). Throws if the string contains no `=`, if the parameter
+  // does not exist, or if the value is invalid. Used for the
+  // `--set-runtime-parameter` option of `qlever-server`.
+  void setFromAssignment(const std::string& assignment);
 
   // Get all parameter names.
   std::vector<std::string> getKeys() const;

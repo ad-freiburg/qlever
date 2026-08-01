@@ -19,12 +19,18 @@ endfunction()
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
 # Link the executable `basename` against `gmock_main`,threading library,
 # and all `additionLibraries` which are passed as arguments.
-# Then run `gtest_discover_tests` to add the tests cases from the executable.
+# Then register the test cases from the executable with `ctest` (see
+# `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
+# possible regimes).
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    endif ()
 endfunction()
 
 # Same as `linkAndDiscoverTest`, but marks the discovered tests as
@@ -35,8 +41,13 @@ endfunction()
 # issues should be fixed via per-test unique filenames instead.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-            TRUE LABELS "${basename}")
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+        set_tests_properties(${basename} PROPERTIES RUN_SERIAL TRUE)
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
+                TRUE LABELS "${basename}")
+    endif ()
 endfunction()
 
 if (SINGLE_TEST_BINARY)
@@ -173,6 +184,8 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 addLinkAndDiscoverTest(IndexTest index)
 
+addLinkAndDiscoverTest(PermutationTest index)
+
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
@@ -213,13 +226,13 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 qlever_util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser qlever_util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 qlever_util)
+    linkAndDiscoverTest(TokenTest parser qlever_util)
 endif ()
 
-addLinkAndDiscoverTest(RdfParserTest parser re2)
+addLinkAndDiscoverTestNoLibs(RdfParserTest index)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -237,7 +250,9 @@ addLinkAndDiscoverTest(UriParserUriTest)
 
 addLinkAndDiscoverTest(ParsedUriTest)
 
-addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
+addLinkAndDiscoverTestNoLibs(StringSortComparatorTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(LocaleManagerTest stringUtils)
 
 addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
 
@@ -247,6 +262,8 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
+addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
+
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
@@ -254,12 +271,12 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
-#addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator parser)
+#addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
-addLinkAndDiscoverTestNoLibs(ParametersTest)
+addLinkAndDiscoverTestNoLibs(ParametersTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
@@ -291,7 +308,7 @@ addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
-addLinkAndDiscoverTest(VocabularyTest index)
+addLinkAndDiscoverTest(VocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
@@ -309,9 +326,9 @@ addLinkAndDiscoverTest(BitUtilsTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
-addLinkAndDiscoverTest(GeoPointTest)
+addLinkAndDiscoverTestNoLibs(GeoPointTest rdfTypes)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest qlever_util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
@@ -321,7 +338,7 @@ addLinkAndDiscoverTest(DateYearDurationTest qlever_util parser)
 
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
-addLinkAndDiscoverTest(TripleComponentTest parser)
+addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest qlever_util)
 
@@ -472,6 +489,8 @@ addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
 
+addLinkAndDiscoverTest(RuntimeParametersTest global)
+
 addLinkAndDiscoverTest(JThreadTest)
 
 addLinkAndDiscoverTest(ChunkedForLoopTest)
@@ -541,6 +560,8 @@ addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
+addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
+
 addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 
 addLinkAndDiscoverTest(LogTest)
@@ -548,5 +569,7 @@ addLinkAndDiscoverTest(LogTest)
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
+
+addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)

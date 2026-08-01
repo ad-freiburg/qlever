@@ -21,6 +21,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
@@ -159,7 +160,7 @@ void testLazyScanForJoinWithColumn(
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex()).value());
+    column.push_back(toValueId(entry, qec->getIndex()).value());
   }
 
   auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
@@ -177,7 +178,7 @@ void testLazyScanWithColumnThrows(
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(entry.toValueId(qec->getIndex()).value());
+    column.push_back(toValueId(entry, qec->getIndex()).value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -1625,7 +1626,7 @@ TEST(IndexScanTest, StripColumns) {
       return resultTable;
     };
     EXPECT_THAT(lazyResToTable(
-                    ad_utility::OwningView{res->idTables()} |
+                    res->idTables() |
                     ql::views::transform(&Result::IdTableVocabPair::idTable_)),
                 matchesIdTable(expectedResult.clone()));
 
@@ -2159,7 +2160,7 @@ TEST_P(IndexScanWithLazyJoin,
   // immediately re-yield the left side if it is consumed first.
   size_t numBlocksReadJoinSide = 0;
   auto joinSideWithCounter =
-      ad_utility::OwningView{std::move(joinSide)} |
+      std::move(joinSide) |
       ql::views::transform([&numBlocksReadJoinSide](P& block) {
         ++numBlocksReadJoinSide;
         return std::move(block);

@@ -15,9 +15,11 @@
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "global/FileSuffixConstants.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
@@ -416,7 +418,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = literalOrIri.toValueId(index);
+    auto id = toValueId(literalOrIri, index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

@@ -27,6 +27,7 @@ class ServerMetrics {
   ServerMetrics& operator=(const ServerMetrics&) = delete;
 
   // Synchronous instruments recorded directly by Server.
+  std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> buildInfoMetric_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> startTimeMetric_;
   std::unique_ptr<opentelemetry::metrics::Gauge<int64_t>> indexLoadMetric_;
   std::unique_ptr<opentelemetry::metrics::Counter<uint64_t>>
@@ -45,6 +46,7 @@ class ServerMetrics {
                 absl::AnyInvocable<int64_t() const> getMemoryLeft,
                 absl::AnyInvocable<int64_t() const> getCacheUsed,
                 absl::AnyInvocable<int64_t() const> getCacheLimit,
+                absl::AnyInvocable<int64_t() const> getRebuildInProgress,
                 std::optional<ad_utility::MemorySize> maxMem);
   void registerCallbacks();
 
@@ -59,6 +61,7 @@ class ServerMetrics {
   absl::AnyInvocable<int64_t() const> getMemoryLeft_;
   absl::AnyInvocable<int64_t() const> getCacheUsed_;
   absl::AnyInvocable<int64_t() const> getCacheLimit_;
+  absl::AnyInvocable<int64_t() const> getRebuildInProgress_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -70,6 +73,8 @@ class ServerMetrics {
       memoryCacheUsed_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       memoryCacheLimit_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      rebuildInProgressMetric_;
 };
 
 #endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H

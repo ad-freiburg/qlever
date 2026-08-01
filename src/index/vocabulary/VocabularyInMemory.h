@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/CompactStringVector.h"
@@ -65,6 +65,14 @@ class VocabularyInMemory
 
   // Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
+
+  // Default fallback iteration over all words.
+  auto scanAll() const {
+    return ad_utility::integerRange(static_cast<uint64_t>(size())) |
+           ql::views::transform([this](uint64_t index) {
+             return IndexAndWord{index, (*this)[index]};
+           });
+  }
 
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {

@@ -9,13 +9,12 @@
 #include "engine/ConstructBatchEvaluator.h"
 
 #include "index/ExportIds.h"
-#include "util/Views.h"
 
 namespace qlever::constructExport {
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
-    ql::span<const size_t> variableColumnIndices,
+    ql::span<const ColumnIndex> variableColumnIndices,
     const BatchEvaluationContext& evaluationContext,
     const LocalVocab& localVocab, const Index& index, IdCache& idCache) {
   BatchEvaluationResult batchResult;
@@ -35,11 +34,10 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 // _____________________________________________________________________________
 std::optional<EvaluatedTerm>
 ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-    std::optional<std::pair<std::string, const char*>> optStringAndType) {
+    std::optional<std::pair<std::string, const char*>>&& optStringAndType) {
   if (!optStringAndType.has_value()) return std::nullopt;
   auto& [str, type] = optStringAndType.value();
-  return std::make_shared<const EvaluatedTermData>(
-      EvaluatedTermData{std::move(str), type});
+  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
 
 // _____________________________________________________________________________
@@ -71,9 +69,16 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   for (const auto& [rowInBatch, id] : sortedIndices) {
     auto cached = idCache.tryGet(id);
     if (cached) {
-      // A hit can never be a `LocalVocabIndex` Id (see the comment in Phase 2
-      // for why such Ids are not inserted into `idCache`).
-      AD_EXPENSIVE_CHECK(id.getDatatype() != Datatype::LocalVocabIndex);
+      // Note that a `LocalVocabIndex` Id may well produce a hit here, even
+      // though such Ids are never inserted into `idCache` (see the comment in
+      // Phase 2). `Id`s do not compare and hash bitwise: a `LocalVocabIndex`
+      // Id whose term also exists in the index vocabulary compares equal to,
+      // and hashes like, the corresponding `VocabIndex` Id (see
+      // `ValueId::compareThreeWay` and `AbslHashValue` in `ValueId.h`). Such a
+      // hit is safe, because the matched entry was inserted under a
+      // `VocabIndex` key and therefore does not point into any block-local
+      // `LocalVocab`; and it is correct, because equal `Id`s denote the same
+      // RDF term.
       result[rowInBatch] = cached.value();
     } else if (!missIds.empty() && missIds.back() == id) {
       missRows.back().push_back(static_cast<size_t>(rowInBatch));
@@ -101,11 +106,11 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
     };
-    std::optional<EvaluatedTerm> evaluated =
+    const std::optional<EvaluatedTerm> evaluated =
         id.getDatatype() == Datatype::LocalVocabIndex
             ? evaluate(id)
             : idCache.getOrCompute(id, evaluate);
-    for (size_t row : rows) {
+    for (const size_t row : rows) {
       result[row] = evaluated;
     }
   }

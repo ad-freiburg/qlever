@@ -1462,6 +1462,11 @@ TEST(ParserTest, HandlesBasicUnicodeEscapeSequences) {
   // Ensure we don't double-unescape, \u sequences are not allowed in literals
   EXPECT_THROW(parseQuery(R"(SELECT * WHERE { "\u005Cu2764" ?p 1. })"),
                InvalidSparqlQueryException);
+
+  // A full code point beyond U+10FFFF is not valid Unicode and is encoded as
+  // the Unicode replacement character (U+FFFD).
+  ParsedQuery q5 = parseQuery(R"(SELECT * WHERE { ?s ?p "\UFFFFFFFF" . })");
+  EXPECT_EQ(getFirstTriple(q5), "{s: ?s, p: ?p, o: \"\uFFFD\"}");
 }
 
 // _____________________________________________________________________________

@@ -5,8 +5,9 @@
 // Only performs the "mergeVocabulary" step of the IndexBuilder pipeline
 // Can be used e.g. for benchmarking this step to develop faster IndexBuilders.
 
-#include "index/Vocabulary.h"
+#include "global/FileSuffixConstants.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabulary/Vocabulary.h"
 
 // ____________________________________________________________________________________________________
 int main(int argc, char** argv) {
