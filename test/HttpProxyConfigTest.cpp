@@ -37,6 +37,12 @@ auto isProxy(std::string_view host, std::string_view port) {
 // them afterwards. Note that `HTTP_PROXY` is cleared as well, although it is
 // never read, so that `uppercaseHttpProxyIsIgnored` also holds when it happens
 // to be set in the environment.
+//
+// The cache of `globalProxy()` is reset as well, both before and after each
+// test. Before, because in the configuration where all unit tests are linked
+// into a single binary, an unrelated test that sends an HTTP request may
+// already have called `globalProxy()` and thus fixed its value. After, so that
+// this fixture leaves no trace beyond the restored environment.
 class ProxyEnvironmentTest : public ::testing::Test {
  private:
   static constexpr std::array variableNames_{"http_proxy", "HTTP_PROXY"};
@@ -50,6 +56,7 @@ class ProxyEnvironmentTest : public ::testing::Test {
       }
       ASSERT_EQ(::unsetenv(name), 0);
     }
+    resetGlobalProxyForTesting();
   }
 
   void TearDown() override {
@@ -59,6 +66,7 @@ class ProxyEnvironmentTest : public ::testing::Test {
     for (const auto& [name, value] : savedValues_) {
       ::setenv(name.c_str(), value.c_str(), 1);
     }
+    resetGlobalProxyForTesting();
   }
 
   static void setEnv(const char* name, const char* value) {
@@ -198,12 +206,19 @@ TEST_F(ProxyEnvironmentTest, malformedEnvironmentValueThrows) {
 }
 
 // _____________________________________________________________________________
-// Note: this is the only test that touches `globalProxy()`, which is important
-// because it reads the environment only once per process.
-TEST_F(ProxyEnvironmentTest, globalProxyIsReadOnlyOnce) {
+TEST_F(ProxyEnvironmentTest, globalProxyReadsTheEnvironmentOnFirstUse) {
+  // The fixture has cleared the environment, so there is no proxy. This also
+  // shows that the fixture's reset works: no value cached by an earlier test
+  // (in this file or elsewhere in the same binary) leaks into this one.
+  EXPECT_EQ(globalProxy(), std::nullopt);
+  // Setting the variable now has no effect anymore, the value is already read.
   setEnv("http_proxy", "http://proxy:3128");
+  EXPECT_EQ(globalProxy(), std::nullopt);
+
+  resetGlobalProxyForTesting();
   EXPECT_THAT(globalProxy(), isProxy("proxy", "3128"));
-  // A later change of the environment has no effect anymore.
+  // Again, a later change of the environment has no effect, although the
+  // environment itself of course reflects it.
   setEnv("http_proxy", "http://other-proxy:3129");
   EXPECT_THAT(globalProxy(), isProxy("proxy", "3128"));
   EXPECT_THAT(proxyFromEnvironment(), isProxy("other-proxy", "3129"));

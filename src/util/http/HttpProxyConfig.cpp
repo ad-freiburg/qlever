@@ -18,6 +18,7 @@
 #include <boost/url/parse.hpp>
 #include <boost/url/url_view.hpp>
 #include <cstdlib>
+#include <mutex>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -106,10 +107,31 @@ std::optional<Proxy> proxyFromEnvironment() {
   return parseProxyUrl(value == nullptr ? "" : value);
 }
 
+namespace {
+// The value cached by `globalProxy()`. The outer `optional` records whether the
+// environment has been read yet, the inner one whether it configured a proxy.
+// Note that a plain function-local `static` would be simpler, but could not be
+// reset by `resetGlobalProxyForTesting`.
+std::mutex globalProxyMutex;
+std::optional<std::optional<Proxy>> globalProxyCache;
+}  // namespace
+
 // ____________________________________________________________________________
 const std::optional<Proxy>& globalProxy() {
-  static const std::optional<Proxy> proxy = proxyFromEnvironment();
-  return proxy;
+  std::lock_guard lock{globalProxyMutex};
+  if (!globalProxyCache.has_value()) {
+    globalProxyCache = proxyFromEnvironment();
+  }
+  // Returning a reference to the cached value is safe without holding the lock,
+  // because it is only ever written once (an exception above leaves the cache
+  // empty, so a failed read is simply retried on the next call).
+  return globalProxyCache.value();
+}
+
+// ____________________________________________________________________________
+void resetGlobalProxyForTesting() {
+  std::lock_guard lock{globalProxyMutex};
+  globalProxyCache.reset();
 }
 
 }  // namespace ad_utility::httpProxy
