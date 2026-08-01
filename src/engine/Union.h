@@ -92,7 +92,17 @@ class Union : public Operation {
   std::optional<ColumnIndex> getOriginalColumn(bool leftChild,
                                                ColumnIndex unionColumn) const;
 
+  // We propagate part of the `LimitOffsetClause` to both children to
+  // potentially speed them up and save memory, but `Union` does not actually
+  // apply its own `LimitOffsetClause` to itself, this still needs to be done by
+  // the `Operation` base class.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::PARTIAL;
+  }
+
  private:
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   std::unique_ptr<Operation> cloneImpl() const override;
