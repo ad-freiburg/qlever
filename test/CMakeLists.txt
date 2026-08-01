@@ -146,6 +146,8 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ServerTest engine server)
 
+    addLinkAndDiscoverTest(RequestParametersTest server)
+
     addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
     addLinkAndDiscoverTest(UrlParserTest)

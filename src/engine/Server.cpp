@@ -26,6 +26,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RequestParameters.h"
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
@@ -283,21 +284,6 @@ auto Server::setupCancellationHandle(
 }
 
 // ____________________________________________________________________________
-std::optional<double> Server::parsePinGeoIndexSimplification(
-    const std::optional<std::string>& simplificationStr) {
-  if (!simplificationStr.has_value()) {
-    return std::nullopt;
-  }
-  try {
-    return std::stod(simplificationStr.value());
-  } catch (...) {
-    throw std::runtime_error(
-        "Invalid value for `pin-geo-index-simplification`: must be a "
-        "floating-point number of meters.");
-  }
-}
-
-// ____________________________________________________________________________
 std::string Server::describePinResultWithNameForLog(
     const std::optional<std::string>& pinResultWithName,
     const std::optional<std::string>& pinNamedGeoIndex,
@@ -343,7 +329,8 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(
           params, "pin-geo-index-simplification", {});
   std::optional<double> geoIndexSimplificationInMeters =
-      parsePinGeoIndexSimplification(pinGeoIndexSimplificationStr);
+      ad_utility::request_parameters::parsePinGeoIndexSimplification(
+          pinGeoIndexSimplificationStr);
   AD_LOG_INFO << "Processing the following " << operationName
               << (clientIp.empty() ? std::string{}
                                    : absl::StrCat(" from ", clientIp))
@@ -1065,30 +1052,15 @@ CPP_template_def(typename RequestT)(
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
   // for QLever-historical reasons).
-  std::optional<MediaType> mediaType = std::nullopt;
-
   // The explicit `action=..._export` parameter have precedence over the
   // `Accept:...` header field
-  if (checkParameter(params, "action", "csv_export")) {
-    mediaType = MediaType::csv;
-  } else if (checkParameter(params, "action", "tsv_export")) {
-    mediaType = MediaType::tsv;
-  } else if (checkParameter(params, "action", "qlever_json_export")) {
-    mediaType = MediaType::qleverJson;
-  } else if (checkParameter(params, "action", "sparql_json_export")) {
-    mediaType = MediaType::sparqlJson;
-  } else if (checkParameter(params, "action", "turtle_export")) {
-    mediaType = MediaType::turtle;
-  } else if (checkParameter(params, "action", "binary_export")) {
-    mediaType = MediaType::octetStream;
-  }
-
-  std::string_view acceptHeader = request.base()[http::field::accept];
-
+  auto mediaType =
+      ad_utility::request_parameters::determineMediaTypesFromParam(params);
   if (mediaType.has_value()) {
     return {mediaType.value()};
   }
 
+  std::string_view acceptHeader = request.base()[http::field::accept];
   try {
     return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
   } catch (const std::exception& e) {
@@ -1354,8 +1326,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
                 auto updateMetadata = this->qlever().processUpdateImpl(
-                    index, plannedUpdate.value(), cancellationHandle,
-                    deltaTriples, tracer);
+                    plannedUpdate.value(), cancellationHandle, deltaTriples,
+                    tracer);
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
