@@ -567,10 +567,8 @@ TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
   auto expectChildLimits = [](OptionalJoin& optionalJoin,
                               std::optional<uint64_t> limit) {
     auto children = optionalJoin.getChildren();
-    const auto& limitOffset =
-        children.at(0)->getRootOperation()->getLimitOffset();
-    EXPECT_EQ(limitOffset._limit, limit);
-    EXPECT_EQ(limitOffset._offset, 0);
+    EXPECT_EQ(children.at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause{limit});
     // The right side is optional, so reducing it could drop matches.
     EXPECT_TRUE(
         children.at(1)->getRootOperation()->getLimitOffset().isUnconstrained());

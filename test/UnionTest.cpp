@@ -788,9 +788,8 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
   auto expectChildLimits = [](Union& unionOperation,
                               std::optional<uint64_t> limit) {
     for (const auto* child : unionOperation.getChildren()) {
-      const auto& limitOffset = child->getRootOperation()->getLimitOffset();
-      EXPECT_EQ(limitOffset._limit, limit);
-      EXPECT_EQ(limitOffset._offset, 0);
+      EXPECT_EQ(child->getRootOperation()->getLimitOffset(),
+                LimitOffsetClause{limit});
     }
   };
   auto expectResult = [qec](Union& unionOperation, const IdTable& expected) {

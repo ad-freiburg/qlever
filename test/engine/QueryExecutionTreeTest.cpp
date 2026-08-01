@@ -154,10 +154,7 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
 
   auto sortedTree = QueryExecutionTree::createSortedTree(unionTree, {0});
   ASSERT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
-  const auto& sortedLimitOffset =
-      sortedTree->getRootOperation()->getLimitOffset();
-  EXPECT_EQ(sortedLimitOffset._limit, limitOffset._limit);
-  EXPECT_EQ(sortedLimitOffset._offset, limitOffset._offset);
+  EXPECT_EQ(sortedTree->getRootOperation()->getLimitOffset(), limitOffset);
 
   // `ValuesForTesting` doesn't support this natively, so an additional `Sort`
   // is added on top and the limit stays where it is.
@@ -171,8 +168,8 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
       std::dynamic_pointer_cast<Sort>(sortedValues->getRootOperation()));
   EXPECT_TRUE(
       sortedValues->getRootOperation()->getLimitOffset().isUnconstrained());
-  EXPECT_EQ(valuesForTesting->getRootOperation()->getLimitOffset()._offset,
-            limitOffset._offset);
+  EXPECT_EQ(valuesForTesting->getRootOperation()->getLimitOffset(),
+            limitOffset);
 }
 
 // _____________________________________________________________________________
