@@ -194,14 +194,14 @@ class ProgressBar {
 // `ProgressBar` above for the case where the total is known in advance,
 // several threads contribute, and the output goes to a dedicated stream
 // (e.g. the log file of a runtime index rebuild).
-class ConcurrentProgress {
+class ConcurrentProgressBar {
  public:
   // Construct with the output stream, a prefix for each line (e.g. "Words
   // written: "), and the total number of steps. A `batchSize` of `0` (the
   // default) means: choose automatically, namely such that about 50 lines
   // are written per phase, but at least every
   // `DEFAULT_PROGRESS_BAR_BATCH_SIZE` steps.
-  ConcurrentProgress(std::ostream& out, std::string prefix, size_t totalSteps,
+  ConcurrentProgressBar(std::ostream& out, std::string prefix, size_t totalSteps,
                      size_t batchSize = 0)
       : out_{out},
         prefix_{std::move(prefix)},

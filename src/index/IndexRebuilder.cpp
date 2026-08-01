@@ -57,7 +57,7 @@ namespace {
 // The number of processed steps (e.g. written words) that are accumulated
 // locally before they are reported to a progress callback. Each report is a
 // mutex-protected addition on a shared counter (see
-// `ad_utility::ConcurrentProgress`), so reporting every single step would be
+// `ad_utility::ConcurrentProgressBar`), so reporting every single step would be
 // needlessly expensive. The exact value is not important; it only has to be
 // large enough to amortize the callback and small enough for smooth progress
 // output.
@@ -490,7 +490,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
                    << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  ad_utility::ConcurrentProgress vocabProgress{
+  ad_utility::ConcurrentProgressBar vocabProgress{
       logFile, "Words written: ", index.getVocab().size() + entries.size()};
   auto [insertionPositions, localVocabMapping] = materializeLocalVocab(
       entries, index.getVocab(), newIndexName,
@@ -511,7 +511,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t statsTotal =
       (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
       numTriplesOld.internal;
-  ad_utility::ConcurrentProgress statsProgress{logFile,
+  ad_utility::ConcurrentProgressBar statsProgress{logFile,
                                                "Triples counted: ", statsTotal};
   auto newStats = index.recomputeStatistics(
       locatedTriplesSharedState,
@@ -544,7 +544,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t permutationsTotal =
       (index.hasAllPermutations() ? 6 : 2) * numTriplesOld.normal +
       2 * numTriplesOld.internal;
-  ad_utility::ConcurrentProgress permutationsProgress{
+  ad_utility::ConcurrentProgressBar permutationsProgress{
       logFile, "Triples written: ", permutationsTotal};
   auto permutationsProgressCallback = [&permutationsProgress](size_t numRows) {
     permutationsProgress.add(numRows);

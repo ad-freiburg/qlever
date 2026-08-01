@@ -100,14 +100,14 @@ TEST(ProgressBar, getTimer) {
 }
 
 // _____________________________________________________________________________
-// Tests for `ConcurrentProgress`, see `ProgressBar.h`.
+// Tests for `ConcurrentProgressBar`, see `ProgressBar.h`.
 
 // Single-threaded: lines are printed when the batch size is crossed, with the
 // correct counts and percentages; intermediate lines end with `\r`, only the
 // final line with `\n`.
-TEST(ConcurrentProgress, singleThreaded) {
+TEST(ConcurrentProgressBar, singleThreaded) {
   std::ostringstream out;
-  ad_utility::ConcurrentProgress progress{out, "Steps: ", 100, 10};
+  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 100, 10};
   progress.add(5);
   EXPECT_TRUE(out.str().empty());
   progress.add(5);
@@ -122,18 +122,18 @@ TEST(ConcurrentProgress, singleThreaded) {
 }
 
 // A phase with a total of zero steps is reported as trivially complete.
-TEST(ConcurrentProgress, zeroTotalIsComplete) {
+TEST(ConcurrentProgressBar, zeroTotalIsComplete) {
   std::ostringstream out;
-  ad_utility::ConcurrentProgress progress{out, "Steps: ", 0};
+  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 0};
   progress.finish();
   EXPECT_THAT(out.str(), ::testing::HasSubstr("Steps: 0 of 0 (100.0%)"));
 }
 
 // Concurrent `add` calls from several threads are summed up correctly.
-TEST(ConcurrentProgress, concurrentAdds) {
+TEST(ConcurrentProgressBar, concurrentAdds) {
   std::ostringstream out;
   // Batch size larger than the total, so only `finish` prints.
-  ad_utility::ConcurrentProgress progress{out, "Steps: ", 1000, 100'000};
+  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 1000, 100'000};
   std::vector<std::thread> threads;
   for (size_t i = 0; i < 4; ++i) {
     threads.emplace_back([&progress]() {
@@ -152,12 +152,12 @@ TEST(ConcurrentProgress, concurrentAdds) {
 
 // A line that is shorter than its predecessor is padded with spaces, so that
 // the `\r` overwrites all leftover characters of the previous line.
-TEST(ConcurrentProgress, shorterLinesArePadded) {
+TEST(ConcurrentProgressBar, shorterLinesArePadded) {
   std::ostringstream out;
   // The line for 1,000 of 1,000,000 is longer than the final line would
   // naturally be for the prefix and count alone, so the final line must be
   // padded to at least the same width.
-  ad_utility::ConcurrentProgress progress{out, "Steps: ", 1'000'000, 1'000};
+  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 1'000'000, 1'000};
   progress.add(1'000);
   progress.finish();
   std::string s = out.str();
