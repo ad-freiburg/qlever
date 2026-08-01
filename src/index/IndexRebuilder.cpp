@@ -55,11 +55,12 @@ namespace qlever::indexRebuilder {
 namespace {
 
 // The number of processed steps (e.g. written words) that are accumulated
-// locally before they are reported to a progress callback. Each report is an
-// atomic addition on a shared counter (see `ConcurrentProgress` below), so
-// reporting every single step would be needlessly expensive. The exact value
-// is not important; it only has to be large enough to amortize the callback
-// and small enough for smooth progress output.
+// locally before they are reported to a progress callback. Each report is a
+// mutex-protected addition on a shared counter (see
+// `ad_utility::ConcurrentProgress`), so reporting every single step would be
+// needlessly expensive. The exact value is not important; it only has to be
+// large enough to amortize the callback and small enough for smooth progress
+// output.
 constexpr size_t PROGRESS_REPORTING_BATCH_SIZE = 65536;
 
 // Helper struct that stores where a local vocab entry should be inserted into
@@ -458,83 +459,6 @@ boost::asio::awaitable<void> createPermutationWriterTask(
 
 // _____________________________________________________________________________
 namespace qlever {
-namespace {
-// Thread-safe progress reporting for one phase of the index rebuild.
-// Aggregates the number of processed steps over concurrent workers and
-// writes a line with a percentage and the average speed to the rebuild's
-// log file roughly every `batchSize_` steps (about 50 lines per phase, but
-// at least every `DEFAULT_PROGRESS_BAR_BATCH_SIZE` steps). This is a
-// sibling of `ad_utility::ProgressBar` (which the normal index build uses)
-// for the case where the total is known in advance, several threads
-// contribute, and the output goes to a dedicated log file.
-class ConcurrentProgress {
- public:
-  ConcurrentProgress(std::ostream& logFile, std::string prefix,
-                     size_t totalSteps)
-      : logFile_{logFile},
-        prefix_{std::move(prefix)},
-        totalSteps_{std::max<size_t>(totalSteps, 1)},
-        batchSize_{std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE, totalSteps_ / 50)},
-        nextPrintAt_{batchSize_} {}
-
-  // Report `numSteps` newly processed steps. Threadsafe.
-  void add(size_t numSteps) {
-    size_t processed =
-        processed_.fetch_add(numSteps, std::memory_order_relaxed) + numSteps;
-    size_t nextPrintAt = nextPrintAt_.load(std::memory_order_relaxed);
-    if (processed >= nextPrintAt &&
-        nextPrintAt_.compare_exchange_strong(
-            nextPrintAt, (processed / batchSize_ + 1) * batchSize_)) {
-      print(processed);
-    }
-  }
-
-  // Write a final line with the total number of processed steps (typically
-  // showing 100%).
-  void finish() { print(processed_.load(), true); }
-
- private:
-  // Like `ad_utility::ProgressBar` with `ReuseLine`, intermediate updates end
-  // with `\r`, so that a viewer of the log file (e.g. `qlever rebuild-index`)
-  // shows them on one line that updates in place; only the final line of a
-  // phase ends with `\n`. When a line is shorter than its predecessor (e.g.
-  // because the average speed dropped by a digit), it is padded with spaces
-  // to the widest line so far, so that the `\r` overwrites all of it and no
-  // leftover characters remain.
-  void print(size_t processed, bool final = false) {
-    double seconds = static_cast<double>(timer_.msecs().count()) / 1000.0;
-    double percentage = std::min(100.0, 100.0 * static_cast<double>(processed) /
-                                            static_cast<double>(totalSteps_));
-    std::string line = absl::StrCat(
-        prefix_,
-        ad_utility::insertThousandSeparator(std::to_string(processed), ','),
-        " of ",
-        ad_utility::insertThousandSeparator(std::to_string(totalSteps_), ','),
-        absl::StrFormat(" (%.1f%%)", percentage), " [average speed ",
-        DEFAULT_SPEED_DESCRIPTION_FUNCTION(static_cast<double>(processed) /
-                                           std::max(seconds, 0.001)),
-        "]");
-    std::lock_guard lock{mutex_};
-    maxLineWidth_ = std::max(maxLineWidth_, line.size());
-    line.resize(maxLineWidth_, ' ');
-    logFile_ << ad_utility::Log::getTimeStamp() << " - INFO: " << line
-             << (final ? "\n" : "\r") << std::flush;
-  }
-
-  std::ostream& logFile_;
-  std::string prefix_;
-  size_t totalSteps_;
-  size_t batchSize_;
-  std::atomic<size_t> processed_ = 0;
-  std::atomic<size_t> nextPrintAt_;
-  ad_utility::Timer timer_{ad_utility::Timer::Started};
-  std::mutex mutex_;
-  // The width of the widest line printed so far, used to pad shorter lines so
-  // that a `\r` update leaves no leftover characters (see `print`).
-  size_t maxLineWidth_ = 0;
-};
-}  // namespace
-
 indexRebuilder::IndexRebuildMapping materializeToIndex(
     const IndexImpl& index, const std::string& newIndexName,
     const LocatedTriplesSharedState& locatedTriplesSharedState,
@@ -562,7 +486,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
 
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  ConcurrentProgress vocabProgress{
+  ad_utility::ConcurrentProgress vocabProgress{
       logFile, "Words written: ", index.getVocab().size() + entries.size()};
   auto [insertionPositions, localVocabMapping] = materializeLocalVocab(
       entries, index.getVocab(), newIndexName,
@@ -579,7 +503,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t statsTotal =
       (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
       numTriplesOld.internal;
-  ConcurrentProgress statsProgress{logFile, "Triples counted: ", statsTotal};
+  ad_utility::ConcurrentProgress statsProgress{logFile,
+                                               "Triples counted: ", statsTotal};
   auto newStats = index.recomputeStatistics(
       locatedTriplesSharedState,
       [&statsProgress](size_t numRows) { statsProgress.add(numRows); });
@@ -607,7 +532,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t permutationsTotal =
       (index.hasAllPermutations() ? 6 : 2) * numTriplesOld.normal +
       2 * numTriplesOld.internal;
-  ConcurrentProgress permutationsProgress{
+  ad_utility::ConcurrentProgress permutationsProgress{
       logFile, "Triples written: ", permutationsTotal};
   auto permutationsProgressCallback = [&permutationsProgress](size_t numRows) {
     permutationsProgress.add(numRows);

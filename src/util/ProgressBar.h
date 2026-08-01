@@ -8,9 +8,13 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
+#include <algorithm>
+#include <mutex>
+#include <ostream>
 #include <string>
 
 #include "util/Exception.h"
+#include "util/Log.h"
 #include "util/StringUtils.h"
 #include "util/Timer.h"
 
@@ -180,6 +184,92 @@ class ProgressBar {
   Timer::Duration minBatchDuration_ = Timer::Duration::max();
   // Duration of slowest batch.
   Timer::Duration maxBatchDuration_ = Timer::Duration::min();
+};
+
+// Thread-safe progress reporting for a phase of a computation whose total
+// number of steps is known in advance. Several threads concurrently report
+// their processed steps via `add`; roughly every `batchSize` steps, a line
+// with the number of processed steps, the percentage of the total, and the
+// average speed is written to the given output stream. This is a sibling of
+// `ProgressBar` above for the case where the total is known in advance,
+// several threads contribute, and the output goes to a dedicated stream
+// (e.g. the log file of a runtime index rebuild).
+class ConcurrentProgress {
+ public:
+  // Construct with the output stream, a prefix for each line (e.g. "Words
+  // written: "), and the total number of steps. A `batchSize` of `0` (the
+  // default) means: choose automatically, namely such that about 50 lines
+  // are written per phase, but at least every
+  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE` steps.
+  ConcurrentProgress(std::ostream& out, std::string prefix, size_t totalSteps,
+                     size_t batchSize = 0)
+      : out_{out},
+        prefix_{std::move(prefix)},
+        totalSteps_{totalSteps},
+        batchSize_{batchSize != 0 ? batchSize
+                                  : std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE,
+                                             totalSteps / 50)},
+        nextPrintAt_{batchSize_} {}
+
+  // Report `numSteps` newly processed steps. Threadsafe. NOTE: this takes a
+  // lock, so callers in hot loops should accumulate steps locally and report
+  // them in batches.
+  void add(size_t numSteps) {
+    std::lock_guard lock{mutex_};
+    processed_ += numSteps;
+    if (processed_ >= nextPrintAt_) {
+      nextPrintAt_ = (processed_ / batchSize_ + 1) * batchSize_;
+      print(false);
+    }
+  }
+
+  // Write a final line with the total number of processed steps (typically
+  // showing 100%), ended by a newline. Threadsafe.
+  void finish() {
+    std::lock_guard lock{mutex_};
+    print(true);
+  }
+
+ private:
+  // Write one progress line; requires that `mutex_` is held. Like
+  // `ProgressBar` with `ReuseLine`, intermediate updates end with `\r`, so
+  // that a viewer of the stream shows them on one line that updates in
+  // place; only the final line ends with `\n`. When a line is shorter than
+  // its predecessor (e.g. because the average speed dropped by a digit), it
+  // is padded with spaces to the widest line so far, so that the `\r`
+  // overwrites all of it and no leftover characters remain.
+  void print(bool final) {
+    double seconds = static_cast<double>(timer_.msecs().count()) / 1000.0;
+    // A phase with a total of zero steps is trivially complete.
+    double percentage =
+        totalSteps_ == 0
+            ? 100.0
+            : std::min(100.0, 100.0 * static_cast<double>(processed_) /
+                                  static_cast<double>(totalSteps_));
+    std::string line = absl::StrCat(
+        prefix_, insertThousandSeparator(std::to_string(processed_), ','),
+        " of ", insertThousandSeparator(std::to_string(totalSteps_), ','),
+        absl::StrFormat(" (%.1f%%)", percentage), " [average speed ",
+        DEFAULT_SPEED_DESCRIPTION_FUNCTION(static_cast<double>(processed_) /
+                                           std::max(seconds, 0.001)),
+        "]");
+    maxLineWidth_ = std::max(maxLineWidth_, line.size());
+    line.resize(maxLineWidth_, ' ');
+    out_ << Log::getTimeStamp() << " - INFO: " << line << (final ? "\n" : "\r")
+         << std::flush;
+  }
+
+  std::ostream& out_;
+  std::string prefix_;
+  size_t totalSteps_;
+  size_t batchSize_;
+  size_t nextPrintAt_;
+  size_t processed_ = 0;
+  Timer timer_{Timer::Started};
+  std::mutex mutex_;
+  // The width of the widest line printed so far, used to pad shorter lines,
+  // see `print`.
+  size_t maxLineWidth_ = 0;
 };
 
 }  // namespace ad_utility

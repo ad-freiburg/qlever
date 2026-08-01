@@ -2,10 +2,14 @@
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
+#include <sstream>
 #include <thread>
+#include <vector>
 
 #include "../test/util/GTestHelpers.h"
 #include "util/ProgressBar.h"
@@ -93,4 +97,73 @@ TEST(ProgressBar, getTimer) {
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
               MatchesRegex(expectedUpdateRegex));
+}
+
+// _____________________________________________________________________________
+// Tests for `ConcurrentProgress`, see `ProgressBar.h`.
+
+// Single-threaded: lines are printed when the batch size is crossed, with the
+// correct counts and percentages; intermediate lines end with `\r`, only the
+// final line with `\n`.
+TEST(ConcurrentProgress, singleThreaded) {
+  std::ostringstream out;
+  ad_utility::ConcurrentProgress progress{out, "Steps: ", 100, 10};
+  progress.add(5);
+  EXPECT_TRUE(out.str().empty());
+  progress.add(5);
+  progress.add(90);
+  progress.finish();
+  std::string s = out.str();
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 10 of 100 (10.0%)"));
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 100 of 100 (100.0%)"));
+  EXPECT_EQ(std::count(s.begin(), s.end(), '\r'), 2);
+  EXPECT_EQ(std::count(s.begin(), s.end(), '\n'), 1);
+  EXPECT_EQ(s.back(), '\n');
+}
+
+// A phase with a total of zero steps is reported as trivially complete.
+TEST(ConcurrentProgress, zeroTotalIsComplete) {
+  std::ostringstream out;
+  ad_utility::ConcurrentProgress progress{out, "Steps: ", 0};
+  progress.finish();
+  EXPECT_THAT(out.str(), ::testing::HasSubstr("Steps: 0 of 0 (100.0%)"));
+}
+
+// Concurrent `add` calls from several threads are summed up correctly.
+TEST(ConcurrentProgress, concurrentAdds) {
+  std::ostringstream out;
+  // Batch size larger than the total, so only `finish` prints.
+  ad_utility::ConcurrentProgress progress{out, "Steps: ", 1000, 100'000};
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < 4; ++i) {
+    threads.emplace_back([&progress]() {
+      for (size_t j = 0; j < 250; ++j) {
+        progress.add(1);
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  progress.finish();
+  EXPECT_THAT(out.str(),
+              ::testing::HasSubstr("Steps: 1,000 of 1,000 (100.0%)"));
+}
+
+// A line that is shorter than its predecessor is padded with spaces, so that
+// the `\r` overwrites all leftover characters of the previous line.
+TEST(ConcurrentProgress, shorterLinesArePadded) {
+  std::ostringstream out;
+  // The line for 1,000 of 1,000,000 is longer than the final line would
+  // naturally be for the prefix and count alone, so the final line must be
+  // padded to at least the same width.
+  ad_utility::ConcurrentProgress progress{out, "Steps: ", 1'000'000, 1'000};
+  progress.add(1'000);
+  progress.finish();
+  std::string s = out.str();
+  size_t carriageReturn = s.find('\r');
+  ASSERT_NE(carriageReturn, std::string::npos);
+  size_t newline = s.find('\n');
+  ASSERT_NE(newline, std::string::npos);
+  EXPECT_GE(newline - carriageReturn - 1, carriageReturn);
 }
