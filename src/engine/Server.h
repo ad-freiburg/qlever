@@ -64,7 +64,6 @@ class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
-  FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
@@ -254,10 +253,6 @@ class Server {
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk,
                         std::string_view clientIp);
-  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
-  static void adjustParsedQueryLimitOffset(
-      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-      const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored

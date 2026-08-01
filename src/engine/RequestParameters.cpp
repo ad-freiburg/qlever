@@ -7,9 +7,10 @@
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
+namespace ad_utility::request_parameters {
+
 // __________________________________________________________________________
-std::optional<double>
-ad_utility::request_parameters::parsePinGeoIndexSimplification(
+std::optional<double> parsePinGeoIndexSimplification(
     const std::optional<std::string>& simplificationStr) {
   if (!simplificationStr.has_value()) {
     return std::nullopt;
@@ -24,8 +25,7 @@ ad_utility::request_parameters::parsePinGeoIndexSimplification(
 }
 
 // __________________________________________________________________________
-std::optional<ad_utility::MediaType>
-ad_utility::request_parameters::determineMediaTypesFromParam(
+std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
     const ad_utility::url_parser::ParamValueMap& params) {
   using namespace ad_utility::url_parser;
   using ad_utility::MediaType;
@@ -50,7 +50,7 @@ ad_utility::request_parameters::determineMediaTypesFromParam(
 }
 
 // ____________________________________________________________________________
-std::pair<bool, bool> ad_utility::request_parameters::determineResultPinning(
+std::pair<bool, bool> determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params) {
   const bool pinSubresults =
       ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
@@ -60,3 +60,17 @@ std::pair<bool, bool> ad_utility::request_parameters::determineResultPinning(
           .has_value();
   return {pinSubresults, pinResult};
 }
+
+// ____________________________________________________________________________
+std::optional<uint64_t> parseSendLimit(
+    const ad_utility::url_parser::ParamValueMap& params) {
+  auto sendParameter =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
+  if (sendParameter.has_value()) {
+    return std::stoul(sendParameter.value());
+  } else {
+    return std::nullopt;
+  }
+}
+
+}  // namespace ad_utility::request_parameters
