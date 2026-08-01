@@ -253,6 +253,13 @@ struct EngineConfig : CommonConfig {
   // simply delete this file.
   bool persistUpdates_ = true;
 
+  // If set, an index rebuild (the same operation as the `cmd=rebuild-index`
+  // HTTP request) is triggered automatically in the background as soon as the
+  // total number of delta triples (inserted plus deleted) after an update
+  // exceeds this threshold. If `nullopt` (the default), rebuilds are only
+  // triggered manually.
+  std::optional<size_t> rebuildIndexDeltaTriplesThreshold_ = std::nullopt;
+
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
   // executed (e.g., queries that only compute constant expressions, or query

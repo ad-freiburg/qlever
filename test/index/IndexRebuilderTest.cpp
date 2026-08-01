@@ -13,11 +13,14 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <chrono>
 #include <future>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 
+#include "../ServerTestHelpers.h"
 #include "../util/AsioTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
@@ -912,4 +915,79 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
   EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
+}
+
+// _____________________________________________________________________________
+TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
+#ifdef __EMSCRIPTEN__
+  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
+                  "integration).";
+#endif
+  cleanDirsWithPrefix("previous.");
+  cleanDirsWithPrefix("rebuild.");
+
+  std::string indexName = "IndexRebuilder_serverIntegrationAutomaticRebuild";
+  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
+
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  config.persistUpdates_ = false;
+  // Corresponds to `--rebuild-index-strategy 2`: trigger an automatic rebuild
+  // as soon as there are more than two delta triples.
+  config.rebuildIndexDeltaTriplesThreshold_ = 2;
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+
+  auto performUpdate = [&server](std::string_view update) {
+    auto request = ad_utility::testing::makePostRequest(
+        "/?access-token=accessToken", "application/sparql-update",
+        std::string{update});
+    auto response = server.process(request);
+    EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  };
+
+  // The number of delta triples of the currently active index.
+  auto numDeltaTriples = [&server]() -> int64_t {
+    auto counts = server.deltaTriplesManager()
+                      .getCurrentLocatedTriplesSharedState()
+                      ->counts_;
+    AD_CORRECTNESS_CHECK(counts.has_value());
+    auto [inserted, deleted] = counts.value();
+    return inserted + deleted;
+  };
+
+  // Two delta triples do not exceed the threshold of two, so no rebuild is
+  // triggered. This is checked race-free: the trigger decision is made before
+  // the response is sent, so after the update has returned, the flag can only
+  // be set if a rebuild was started.
+  performUpdate("INSERT DATA { <d> <e> <f> . <g> <h> <i> . }");
+  EXPECT_EQ(numDeltaTriples(), 2);
+  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_TRUE(dirsWithPrefix("previous.").empty());
+
+  // The third delta triple exceeds the threshold and triggers a rebuild in
+  // the background. Wait until it has completed, which is observable by the
+  // delta triples being merged into the new index (their number drops to
+  // zero) and the old index appearing in a `previous.<datetime>` directory.
+  performUpdate("INSERT DATA { <j> <k> <l> . }");
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
+  while (
+      (numDeltaTriples() != 0 || server.server().rebuildInProgress_.load()) &&
+      std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  EXPECT_EQ(numDeltaTriples(), 0);
+  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_EQ(dirsWithPrefix("previous.").size(), 1u);
+  EXPECT_TRUE(std::filesystem::exists(indexName + ".meta-data.json"));
+
+  // The rebuilt index answers queries and contains the update triples.
+  auto request = ad_utility::testing::makeGetRequest(
+      "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Cj%3E%20%3Fp%20%3Fo%20%7D");
+  auto response = server.process(request);
+  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  EXPECT_THAT(
+      serverTestHelpers::responseBodyToString(std::move(response.body())),
+      ::testing::HasSubstr("\"value\":\"l\""));
+
+  cleanDirsWithPrefix("previous.");
 }

@@ -10,6 +10,7 @@
 #include "engine/Server.h"
 
 #include <absl/functional/bind_front.h>
+#include <absl/strings/numbers.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
@@ -61,6 +62,8 @@ Server::Server(
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
       queryThreadPool_{numThreads},
+      rebuildIndexDeltaTriplesThreshold_(
+          config.rebuildIndexDeltaTriplesThreshold_),
       metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
@@ -1410,6 +1413,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       static_cast<double>(requestTimer.msecs().count()),
       {OperationType::update});
   metrics_->finishedSparqlOperations_->Add(1, {OperationType::update});
+  // With `--rebuild-index-strategy <number>`, an update can push the number
+  // of delta triples over the threshold, in which case an index rebuild is
+  // started in the background here (without delaying the response below).
+  if (!metadatas.empty() && metadatas.back().countAfter_.has_value()) {
+    triggerRebuildIfDeltaTriplesThresholdExceeded(
+        metadatas.back().countAfter_.value());
+  }
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
@@ -1700,6 +1710,68 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
       net::use_awaitable);
   co_await std::move(swapRoutine);
   co_return config;
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> Server::parseRebuildIndexStrategy(
+    std::string_view strategy) {
+  if (strategy == "manual") {
+    return std::nullopt;
+  }
+  size_t threshold = 0;
+  if (!absl::SimpleAtoi(strategy, &threshold)) {
+    throw std::runtime_error(absl::StrCat(
+        "The value \"", strategy,
+        "\" is neither \"manual\" nor a non-negative number of delta "
+        "triples"));
+  }
+  return threshold;
+}
+
+// _____________________________________________________________________________
+void Server::triggerRebuildIfDeltaTriplesThresholdExceeded(
+    const DeltaTriplesCount& count) {
+  if (!rebuildIndexDeltaTriplesThreshold_.has_value()) {
+    return;
+  }
+  size_t threshold = rebuildIndexDeltaTriplesThreshold_.value();
+  auto numDeltaTriples =
+      static_cast<size_t>(count.triplesInserted_ + count.triplesDeleted_);
+  if (numDeltaTriples <= threshold) {
+    return;
+  }
+  // The same guard as for the `cmd=rebuild-index` HTTP request, so that a
+  // manual and an automatic rebuild can never run concurrently. If a rebuild
+  // is already in progress, do nothing; the delta triples that accumulate
+  // while it runs are carried over into the new index by the swap, and the
+  // next update after the swap re-evaluates the threshold.
+  if (rebuildInProgress_.exchange(true)) {
+    return;
+  }
+  AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
+                 "triples ("
+              << numDeltaTriples << ") exceeds the threshold (" << threshold
+              << ")" << std::endl;
+  net::co_spawn(
+      queryThreadPool_,
+      [this]() -> Awaitable<void> {
+        absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+        co_await rebuildIndex(std::nullopt, std::nullopt);
+        AD_LOG_INFO << "Automatic index rebuild completed, the new index has "
+                       "been swapped in"
+                    << std::endl;
+      },
+      [](std::exception_ptr exception) {
+        if (!exception) {
+          return;
+        }
+        try {
+          std::rethrow_exception(exception);
+        } catch (const std::exception& e) {
+          AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what()
+                       << std::endl;
+        }
+      });
 }
 
 // For helper function `Server::onlyForTestingProcess`

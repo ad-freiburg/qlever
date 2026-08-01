@@ -58,6 +58,7 @@ int main(int argc, char** argv) {
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
+  std::string rebuildIndexStrategy = "manual";
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -163,6 +164,14 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("rebuild-index-strategy",
+      po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
+      "When to rebuild the index from the current data (including updates). "
+      "\"manual\" (the default): only when explicitly requested via the "
+      "`cmd=rebuild-index` HTTP request. A non-negative number: additionally "
+      "trigger a rebuild automatically in the background whenever the number "
+      "of delta triples (inserted plus deleted) after an update exceeds that "
+      "number.");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -293,6 +302,23 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
     AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
+                << std::endl;
+  }
+
+  // Resolve the `--rebuild-index-strategy` option. A bad value fails the
+  // startup with a readable message, before the index is loaded.
+  try {
+    config.rebuildIndexDeltaTriplesThreshold_ =
+        Server::parseRebuildIndexStrategy(rebuildIndexStrategy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid argument to --rebuild-index-strategy: " << e.what()
+                 << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (config.rebuildIndexDeltaTriplesThreshold_.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild whenever the number of delta "
+                   "triples exceeds "
+                << config.rebuildIndexDeltaTriplesThreshold_.value()
                 << std::endl;
   }
 
