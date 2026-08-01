@@ -498,13 +498,40 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
   // The defaults are: build the new index in `rebuild.<current datetime>.tmp`
   // and move the old index to `previous.<datetime of the build of the current
   // index>`.
+  //
+  // The datetime of the index build has a granularity of one second, so when
+  // rebuilds happen in quick succession (e.g. automatic rebuilds on a small
+  // index, see `--rebuild-index-strategy`), two index generations can carry
+  // the same datetime, and the default directory for the second of them is
+  // then already taken. Append `.1`, `.2`, ... in that case (like the
+  // numbered backups of `logrotate`). Without this, the rebuild would fail,
+  // and since a failed rebuild does not swap (and hence does not re-stamp the
+  // datetime of the served index), all subsequent rebuilds would fail the
+  // same way. Only the default name is uniquified; an explicitly given
+  // directory that is taken remains an error (see the checks below). NOTE:
+  // the check-then-use is not atomic; this is fine because rebuilds are
+  // serialized (see `Server::rebuildInProgress_`).
+  auto uniquify = [](const std::string& directory) {
+    std::string candidate = directory;
+    for (size_t i = 1; fs::exists(candidate); ++i) {
+      if (i > 99) {
+        throw std::runtime_error{absl::StrCat(
+            "The directories \"", directory, "\" and \"", directory,
+            ".1\" through \"", directory,
+            ".99\" all already exist; remove some of them or specify a "
+            "directory explicitly via `rebuild-previous-index-dir`")};
+      }
+      candidate = absl::StrCat(directory, ".", i);
+    }
+    return candidate;
+  };
   std::string baseNameForRebuild = resolveBaseName(
       std::move(rebuildTmpDir),
       absl::StrCat("rebuild.", IndexImpl::formatIndexBuildTime(absl::Now()),
                    ".tmp"));
   std::string baseNameForOldIndex = resolveBaseName(
       std::move(rebuildPreviousIndexDir),
-      absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
+      uniquify(absl::StrCat("previous.", index.getImpl().dateOfIndexBuild())));
 
   // Check the two base names that were derived from the arguments: they must be
   // relative (they are resolved against the working directory of the engine,
