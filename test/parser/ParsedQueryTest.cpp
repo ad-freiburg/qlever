@@ -6,8 +6,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "engine/QueryPlanner.h"
-#include "engine/RequestParameters.h"
 #include "libqlever/QleverTypes.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 
 namespace {
@@ -27,7 +27,7 @@ auto parseQuery(std::string query,
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(QleverTypesTest, adjustParsedQueryLimitOffset) {
+TEST(ParsedQueryTest, adjustLimitOffset) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
     ParsedQuery parsed = parseQuery(std::move(operation));
@@ -46,7 +46,7 @@ TEST(QleverTypesTest, adjustParsedQueryLimitOffset) {
           ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));
-        pq.adjustParsedQueryLimitOffset(mediaType, sendLimit);
+        pq.parsedQuery().adjustLimitOffset(mediaType, sendLimit);
         EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
                     testing::Eq(limit));
       };

@@ -28,6 +28,7 @@
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "util/http/MediaTypes.h"
 #include "util/http/ResponseMiddleware.h"
 #endif
 
@@ -253,6 +254,10 @@ class ParsedQuery {
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
+
+  // Sets the export limit (`send` parameter) and offset.
+  void adjustLimitOffset(const ad_utility::MediaType& mediaType,
+                         std::optional<uint64_t> sendLimit);
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H
