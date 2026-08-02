@@ -211,7 +211,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
 // called once per full batch plus once for the remainder, and the reported
 // numbers add up to the total number of written words.
 TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
-  // Must match `PROGRESS_REPORTING_BATCH_SIZE` in `IndexRebuilder.cpp`.
+  // Must match the reporting batch size in `mergeVocabs` in
+  // `IndexRebuilder.cpp`.
   constexpr size_t batchSize = 65'536;
   constexpr size_t numEntries = batchSize + 1'000;
 

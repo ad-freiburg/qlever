@@ -54,15 +54,6 @@ namespace qlever::indexRebuilder {
 
 namespace {
 
-// The number of processed steps (e.g. written words) that are accumulated
-// locally before they are reported to a progress callback. Each report is a
-// mutex-protected addition on a shared counter (see
-// `ad_utility::ConcurrentProgressBar`), so reporting every single step would be
-// needlessly expensive. The exact value is not important; it only has to be
-// large enough to amortize the callback and small enough for smooth progress
-// output.
-constexpr size_t PROGRESS_REPORTING_BATCH_SIZE = 65536;
-
 // Helper struct that stores where a local vocab entry should be inserted into
 // the original vocab and what the original `Id` of the local vocab entry was
 // (so that we can create the mapping from old.
@@ -85,14 +76,16 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
                               const std::function<void(size_t)>& progress) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
   LocalVocabMapping localVocabMapping;
-  // Report the number of written words to `progress` in batches, see
-  // `PROGRESS_REPORTING_BATCH_SIZE`.
+  // Report the number of written words to `progress` in batches: each report
+  // is a mutex-protected addition on a shared counter (see
+  // `ad_utility::ConcurrentProgressBar`), so reporting every single word
+  // would be needlessly expensive. The exact batch size is not important.
   size_t wordsSinceLastProgress = 0;
   auto noteWord = [&progress, &wordsSinceLastProgress]() {
     if (!progress) {
       return;
     }
-    if (++wordsSinceLastProgress == PROGRESS_REPORTING_BATCH_SIZE) {
+    if (++wordsSinceLastProgress == 65536) {
       progress(wordsSinceLastProgress);
       wordsSinceLastProgress = 0;
     }
