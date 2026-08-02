@@ -20,6 +20,7 @@
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
 #include "util/SortedSequence.h"
+#include "util/SortedSequencePlus.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
@@ -106,7 +107,10 @@ struct LocatedTriple {
   }
 };
 
-using SortedLocatedTriplesVector = ad_utility::SortedSequence<
+// NOTE: `SortedSequencePlus` is a drop-in replacement for
+// `ad_utility::SortedSequence` with a different internal design (sorted
+// blocks instead of two sorted parts), see its documentation.
+using SortedLocatedTriplesVector = ad_utility::SortedSequencePlus<
     LocatedTriple, std::less<>,
     ad_utility::MemberProjection<&LocatedTriple::triple_>>;
 

@@ -194,6 +194,8 @@ addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
+addLinkAndDiscoverTestNoLibs(SortedSequencePlusTest)
+
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
