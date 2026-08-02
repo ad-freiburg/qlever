@@ -186,14 +186,10 @@ class ProgressBar {
   Timer::Duration maxBatchDuration_ = Timer::Duration::min();
 };
 
-// Thread-safe progress reporting for a phase of a computation whose total
-// number of steps is known in advance. Several threads concurrently report
-// their processed steps via `add`; roughly every `batchSize` steps, a line
-// with the number of processed steps, the percentage of the total, and the
-// average speed is written to the given output stream. This is a sibling of
-// `ProgressBar` above for the case where the total is known in advance,
-// several threads contribute, and the output goes to a dedicated stream
-// (e.g. the log file of a runtime index rebuild).
+// A class for the same general goal as `ProgressBar` above (reporting progress
+// of a long-running computation), but with two differences: (1) the total
+// number of steps is known in advance, and (2) the computation is done by
+// several threads that concurrently report their progress.
 class ConcurrentProgressBar {
  public:
   // Construct with the output stream, a prefix for each line (e.g. "Words
@@ -201,8 +197,8 @@ class ConcurrentProgressBar {
   // default) means: choose automatically, namely such that about 50 lines
   // are written per phase, but at least every
   // `DEFAULT_PROGRESS_BAR_BATCH_SIZE` steps.
-  ConcurrentProgressBar(std::ostream& out, std::string prefix, size_t totalSteps,
-                     size_t batchSize = 0)
+  ConcurrentProgressBar(std::ostream& out, std::string prefix,
+                        size_t totalSteps, size_t batchSize = 0)
       : out_{out},
         prefix_{std::move(prefix)},
         totalSteps_{totalSteps},
