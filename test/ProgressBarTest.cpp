@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <sstream>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -102,17 +103,30 @@ TEST(ProgressBar, getTimer) {
 // _____________________________________________________________________________
 // Tests for `ConcurrentProgressBar`, see `ProgressBar.h`.
 
-// Single-threaded: lines are printed when the batch size is crossed, with the
-// correct counts and percentages; intermediate lines end with `\r`, only the
-// final line with `\n`.
+// Single-threaded: an `Update` is returned exactly when the batch size is
+// crossed, with the correct counts and percentages; intermediate progress
+// strings end with `\r`, only the final one with `\n`.
 TEST(ConcurrentProgressBar, singleThreaded) {
   std::ostringstream out;
-  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 100, 10};
-  progress.add(5);
-  EXPECT_TRUE(out.str().empty());
-  progress.add(5);
-  progress.add(90);
-  progress.finish();
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 100, 10};
+  progressBar.add(5);
+  EXPECT_FALSE(progressBar.update().has_value());
+  progressBar.add(5);
+  {
+    auto update = progressBar.update();
+    ASSERT_TRUE(update.has_value());
+    out << update->getProgressString();
+  }
+  // The display for this batch has been claimed, so no further `Update` is
+  // returned before the next multiple of the batch size is reached.
+  EXPECT_FALSE(progressBar.update().has_value());
+  progressBar.add(90);
+  {
+    auto update = progressBar.update();
+    ASSERT_TRUE(update.has_value());
+    out << update->getProgressString();
+  }
+  out << progressBar.getFinalProgressString();
   std::string s = out.str();
   EXPECT_THAT(s, ::testing::HasSubstr("Steps: 10 of 100 (10.0%)"));
   EXPECT_THAT(s, ::testing::HasSubstr("Steps: 100 of 100 (100.0%)"));
@@ -121,49 +135,68 @@ TEST(ConcurrentProgressBar, singleThreaded) {
   EXPECT_EQ(s.back(), '\n');
 }
 
-// A phase with a total of zero steps is reported as trivially complete.
+// A computation with a total of zero steps is reported as trivially complete.
 TEST(ConcurrentProgressBar, zeroTotalIsComplete) {
-  std::ostringstream out;
-  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 0};
-  progress.finish();
-  EXPECT_THAT(out.str(), ::testing::HasSubstr("Steps: 0 of 0 (100.0%)"));
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 0};
+  EXPECT_THAT(progressBar.getFinalProgressString(),
+              ::testing::HasSubstr("Steps: 0 of 0 (100.0%)"));
 }
 
-// Concurrent `add` calls from several threads are summed up correctly.
-TEST(ConcurrentProgressBar, concurrentAdds) {
+// Concurrent `add` and `update` calls from several threads: the counts are
+// summed up correctly, the `Update` objects serialize the writes to the
+// shared stream, and the displayed counts never decrease.
+TEST(ConcurrentProgressBar, concurrentAddsAndUpdates) {
   std::ostringstream out;
-  // Batch size larger than the total, so only `finish` prints.
-  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 1000, 100'000};
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 1000, 100};
   std::vector<std::thread> threads;
   for (size_t i = 0; i < 4; ++i) {
-    threads.emplace_back([&progress]() {
+    threads.emplace_back([&progressBar, &out]() {
       for (size_t j = 0; j < 250; ++j) {
-        progress.add(1);
+        progressBar.add(1);
+        if (auto update = progressBar.update()) {
+          out << update->getProgressString();
+        }
       }
     });
   }
   for (auto& thread : threads) {
     thread.join();
   }
-  progress.finish();
-  EXPECT_THAT(out.str(),
-              ::testing::HasSubstr("Steps: 1,000 of 1,000 (100.0%)"));
+  out << progressBar.getFinalProgressString();
+  std::string s = out.str();
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 1,000 of 1,000 (100.0%)"));
+  // Every progress string is intact (in particular, not interleaved with
+  // another one), and the displayed counts never decrease.
+  size_t previousCount = 0;
+  size_t numProgressStrings = 0;
+  for (std::string_view rest{s}; !rest.empty();) {
+    size_t lineEnd = rest.find_first_of("\r\n");
+    ASSERT_NE(lineEnd, std::string_view::npos);
+    std::string_view line = rest.substr(0, lineEnd);
+    rest.remove_prefix(lineEnd + 1);
+    if (line.empty()) {
+      continue;  // Padding of a `\r` string that was followed by another.
+    }
+    ASSERT_TRUE(line.starts_with("Steps: "));
+    std::string countString{line.substr(7, line.find(" of ") - 7)};
+    std::erase(countString, ',');
+    size_t count = std::stoul(countString);
+    EXPECT_GE(count, previousCount);
+    previousCount = count;
+    ++numProgressStrings;
+  }
+  EXPECT_GE(numProgressStrings, 2u);
 }
 
-// A line that is shorter than its predecessor is padded with spaces, so that
-// the `\r` overwrites all leftover characters of the previous line.
-TEST(ConcurrentProgressBar, shorterLinesArePadded) {
-  std::ostringstream out;
-  // The line for 1,000 of 1,000,000 is longer than the final line would
-  // naturally be for the prefix and count alone, so the final line must be
-  // padded to at least the same width.
-  ad_utility::ConcurrentProgressBar progress{out, "Steps: ", 1'000'000, 1'000};
-  progress.add(1'000);
-  progress.finish();
-  std::string s = out.str();
-  size_t carriageReturn = s.find('\r');
-  ASSERT_NE(carriageReturn, std::string::npos);
-  size_t newline = s.find('\n');
-  ASSERT_NE(newline, std::string::npos);
-  EXPECT_GE(newline - carriageReturn - 1, carriageReturn);
+// A progress string that is shorter than its predecessor is padded with
+// spaces, so that the `\r` overwrites all leftover characters.
+TEST(ConcurrentProgressBar, shorterStringsArePadded) {
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 1'000'000, 1'000};
+  progressBar.add(1'000);
+  auto update = progressBar.update();
+  ASSERT_TRUE(update.has_value());
+  size_t firstWidth = update->getProgressString().size();
+  update.reset();
+  std::string finalString = progressBar.getFinalProgressString();
+  EXPECT_GE(finalString.size(), firstWidth);
 }

@@ -483,17 +483,29 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
                    << std::endl;
 
+  // Pass `numSteps` newly processed steps on to `progressBar` and write a
+  // progress line to the rebuild's log file whenever one is due.
+  auto logProgress = [&logFile](ad_utility::ConcurrentProgressBar& progressBar,
+                                size_t numSteps) {
+    progressBar.add(numSteps);
+    if (auto update = progressBar.update()) {
+      REBUILD_LOG_INFO << update->getProgressString() << std::flush;
+    }
+  };
+
   // Phase 1: write the new vocabulary.
   REBUILD_LOG_INFO << "Writing new vocabulary (merging existing and new "
                       "words) ..."
                    << std::endl;
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
   ad_utility::ConcurrentProgressBar vocabProgress{
-      logFile, "Words written: ", index.getVocab().size() + entries.size()};
-  auto [insertionPositions, localVocabMapping] = materializeLocalVocab(
-      entries, index.getVocab(), newIndexName,
-      [&vocabProgress](size_t numWords) { vocabProgress.add(numWords); });
-  vocabProgress.finish();
+      "Words written: ", index.getVocab().size() + entries.size()};
+  auto [insertionPositions, localVocabMapping] =
+      materializeLocalVocab(entries, index.getVocab(), newIndexName,
+                            [&logProgress, &vocabProgress](size_t numWords) {
+                              logProgress(vocabProgress, numWords);
+                            });
+  REBUILD_LOG_INFO << vocabProgress.getFinalProgressString() << std::flush;
 
   // Phase 2: recompute statistics.
   //
@@ -509,12 +521,14 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t statsTotal =
       (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
       numTriplesOld.internal;
-  ad_utility::ConcurrentProgressBar statsProgress{
-      logFile, "Triples counted: ", statsTotal};
-  auto newStats = index.recomputeStatistics(
-      locatedTriplesSharedState,
-      [&statsProgress](size_t numRows) { statsProgress.add(numRows); });
-  statsProgress.finish();
+  ad_utility::ConcurrentProgressBar statsProgress{"Triples counted: ",
+                                                  statsTotal};
+  auto newStats =
+      index.recomputeStatistics(locatedTriplesSharedState,
+                                [&logProgress, &statsProgress](size_t numRows) {
+                                  logProgress(statsProgress, numRows);
+                                });
+  REBUILD_LOG_INFO << statsProgress.getFinalProgressString() << std::flush;
   newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
   // Set newer lower bound for dynamic blank node indices.
@@ -539,10 +553,11 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t permutationsTotal =
       (index.hasAllPermutations() ? 6 : 2) * numTriplesOld.normal +
       2 * numTriplesOld.internal;
-  ad_utility::ConcurrentProgressBar permutationsProgress{
-      logFile, "Triples written: ", permutationsTotal};
-  auto permutationsProgressCallback = [&permutationsProgress](size_t numRows) {
-    permutationsProgress.add(numRows);
+  ad_utility::ConcurrentProgressBar permutationsProgress{"Triples written: ",
+                                                         permutationsTotal};
+  auto permutationsProgressCallback = [&logProgress,
+                                       &permutationsProgress](size_t numRows) {
+    logProgress(permutationsProgress, numRows);
   };
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
@@ -600,7 +615,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
 
   threadPool.join();
   exceptionCollector.rethrowIfException();
-  permutationsProgress.finish();
+  REBUILD_LOG_INFO << permutationsProgress.getFinalProgressString()
+                   << std::flush;
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
