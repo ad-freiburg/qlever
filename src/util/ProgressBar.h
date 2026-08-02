@@ -258,7 +258,12 @@ class ConcurrentProgressBar {
         totalSteps_(totalSteps),
         statisticsBatchSize_(statisticsBatchSize),
         getSpeedDescription_(std::move(getSpeedDescription)),
-        displayUpdateOptions_(displayUpdateOptions) {}
+        displayUpdateOptions_(displayUpdateOptions) {
+    // NOTE: `update()` divides by the batch size.
+    AD_CONTRACT_CHECK(statisticsBatchSize_ > 0,
+                      "The batch size of a `ConcurrentProgressBar` must not "
+                      "be zero");
+  }
 
   // Call this whenever one or more units have been processed (threadsafe).
   //

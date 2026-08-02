@@ -199,3 +199,10 @@ TEST(ConcurrentProgressBar, shorterStringsArePadded) {
   std::string finalString = progressBar.getFinalProgressString();
   EXPECT_GE(finalString.size(), firstWidth);
 }
+
+// A batch size of zero is rejected (`update()` divides by it).
+TEST(ConcurrentProgressBar, zeroBatchSizeIsRejected) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::ConcurrentProgressBar("Steps: ", 100, 0),
+      ::testing::HasSubstr("must not be zero"));
+}
