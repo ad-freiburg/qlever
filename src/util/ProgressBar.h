@@ -29,6 +29,12 @@ inline std::string DEFAULT_SPEED_DESCRIPTION_FUNCTION(double stepsPerSecond) {
 
 namespace ad_utility {
 
+// Format `number` with thousand separators (e.g., 1234567 becomes
+// "1,234,567"), as used in the progress strings of the two classes below.
+inline std::string withThousandSeparators(size_t number) {
+  return insertThousandSeparator(std::to_string(number), ',');
+}
+
 // A class that keeps track of the progress of a long-running computation which
 // proceeds in (typically many and small) steps (for example, the lines of a
 // large input file or the triples of a permutation). The total number of steps
@@ -106,10 +112,7 @@ class ProgressBar {
   // Progress string with statistics.
   std::string getProgressString() const {
     bool notYetFinished = timer_.isRunning();
-    // Two helper functions.
-    auto withThousandSeparators = [](size_t number) {
-      return ad_utility::insertThousandSeparator(std::to_string(number), ',');
-    };
+    // Helper function for the speed description.
     auto speed = [this](size_t numSteps, Timer::Duration duration) {
       return this->getSpeedDescription_(static_cast<double>(numSteps) /
                                         Timer::toSeconds(duration));
@@ -257,10 +260,10 @@ class ConcurrentProgressBar {
         getSpeedDescription_(std::move(getSpeedDescription)),
         displayUpdateOptions_(displayUpdateOptions) {}
 
-  // Call this whenever one or more units have been processed. Threadsafe.
+  // Call this whenever one or more units have been processed (threadsafe).
   //
-  // IMPORTANT: Each call takes a lock, so callers in hot loops should
-  // accumulate steps locally and report them in larger batches.
+  // NOTE: Each call takes a lock, so callers in hot loops should accumulate
+  // steps locally and report them in larger batches.
   void add(size_t numSteps) {
     std::lock_guard lock{countMutex_};
     numStepsProcessed_ += numSteps;
@@ -322,9 +325,6 @@ class ConcurrentProgressBar {
             ? 100.0
             : std::min(100.0, 100.0 * static_cast<double>(numStepsProcessed) /
                                   static_cast<double>(totalSteps_));
-    auto withThousandSeparators = [](size_t number) {
-      return ad_utility::insertThousandSeparator(std::to_string(number), ',');
-    };
     std::string progressString = absl::StrCat(
         displayStringPrefix_, withThousandSeparators(numStepsProcessed), " of ",
         withThousandSeparators(totalSteps_),
