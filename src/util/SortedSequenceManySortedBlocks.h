@@ -12,8 +12,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_SORTEDSEQUENCEPLUS_H
-#define QLEVER_SRC_UTIL_SORTEDSEQUENCEPLUS_H
+#ifndef QLEVER_SRC_UTIL_SORTEDSEQUENCEMANYSORTEDBLOCKS_H
+#define QLEVER_SRC_UTIL_SORTEDSEQUENCEMANYSORTEDBLOCKS_H
 
 #include <gtest/gtest_prod.h>
 
@@ -31,9 +31,9 @@
 
 namespace ad_utility {
 
-// Drop-in replacement for `SortedSequence` with a different internal design
-// (based on the `BlockSortedLocatedTriplesVector` from the history of PR
-// #2792): the elements are stored in a sequence of sorted, non-overlapping
+// Implementation of `SortedSequence` (see `util/SortedSequence.h`), based on
+// the `BlockSortedLocatedTriplesVector` from the history of PR #2792: the
+// elements are stored in a sequence of sorted, non-overlapping
 // blocks of at most `BlockSize` elements each, plus a small buffer of pending
 // insertions. `consolidate` sorts and deduplicates the pending buffer and
 // merges it into the affected blocks (splitting blocks that become too
@@ -41,19 +41,20 @@ namespace ad_utility {
 // instead of a hierarchy of inner nodes, which suffices for the block counts
 // that occur here.
 //
-// The key difference to `SortedSequence` (which keeps one vector split into a
-// large and a small sorted part and merges them on the fly during iteration):
+// The key difference to `SortedSequenceTwoSortedRanges` (which keeps one vector
+// split into a large and a small sorted part and merges them on the fly during
+// iteration):
 // after `consolidate`, iteration is a plain sequential traversal of the
 // blocks with no comparisons at all, and a consolidate only rewrites the
 // blocks that the pending elements actually touch, not the whole small part.
 //
-// As for `SortedSequence`: elements are sorted by the `Projection` applied to
-// each element and compared using `Compare`; only the last inserted element
-// for each projected key is retained; after inserting, `consolidate` must be
-// called before reading.
+// As for `SortedSequenceTwoSortedRanges`: elements are sorted by the
+// `Projection` applied to each element and compared using `Compare`; only the
+// last inserted element for each projected key is retained; after inserting,
+// `consolidate` must be called before reading.
 template <typename ValueType, typename Compare = std::less<>,
           typename Projection = ql::identity, size_t BlockSize = 16384>
-class SortedSequencePlus {
+class SortedSequenceManySortedBlocks {
   static_assert(BlockSize >= 2);
   using Block = std::vector<ValueType>;
   std::vector<Block> blocks_;
@@ -87,7 +88,7 @@ class SortedSequencePlus {
 
   // For the range `rangeToSort` contained in `elements` sort it by the
   // projected key and keep the last element for each projected key (this is
-  // the same procedure as in `SortedSequence`).
+  // the same procedure as in `SortedSequenceTwoSortedRanges`).
   CPP_template_2(typename R)(
       requires ql::ranges::range<
           R>) void sortAndRemoveDuplicates(std::vector<ValueType>& elements,
@@ -228,21 +229,19 @@ class SortedSequencePlus {
     }
   }
 
-  FRIEND_TEST(SortedSequencePlusTest, internals);
-
  public:
-  SortedSequencePlus() = default;
+  SortedSequenceManySortedBlocks() = default;
 
   // Create a `SortedSequencePlus` from already sorted and deduplicated
   // elements.
-  static SortedSequencePlus fromSorted(std::vector<ValueType> sortedElements,
-                                       Compare comp = {},
-                                       Projection proj = {}) {
+  static SortedSequenceManySortedBlocks fromSorted(
+      std::vector<ValueType> sortedElements, Compare comp = {},
+      Projection proj = {}) {
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElements, comp, proj));
     // No duplicate elements (elements with the same projected key).
     AD_EXPENSIVE_CHECK(ql::ranges::adjacent_find(sortedElements, {}, proj) ==
                        sortedElements.end());
-    SortedSequencePlus seq;
+    SortedSequenceManySortedBlocks seq;
     seq.comp_ = std::move(comp);
     seq.proj_ = std::move(proj);
     seq.numItems_ = sortedElements.size();
@@ -259,10 +258,10 @@ class SortedSequencePlus {
   // `consolidate` must be called before any read access after inserting new
   // items. After calling `consolidate` `isConsolidated` will be true.
   //
-  // NOTE: The `threshold` parameter exists for drop-in compatibility with
-  // `SortedSequence` and is ignored: a consolidate always merges the pending
-  // elements into their blocks (which only rewrites the affected blocks, so
-  // there is no separate cheaper mode).
+  // NOTE: The `threshold` parameter exists for interface compatibility with
+  // `SortedSequenceTwoSortedRanges` and is ignored: a consolidate always merges
+  // the pending elements into their blocks (which only rewrites the affected
+  // blocks, so there is no separate cheaper mode).
   void consolidate([[maybe_unused]] double threshold = 0.25) {
     if (pending_.empty()) {
       return;
@@ -418,7 +417,7 @@ class SortedSequencePlus {
   // This operator is only for debugging and testing. It returns a
   // human-readable representation. Requires `isConsolidated` to be true.
   friend std::ostream& operator<<(std::ostream& os,
-                                  const SortedSequencePlus& sv) {
+                                  const SortedSequenceManySortedBlocks& sv) {
     os << "{ ";
     ql::ranges::copy(sv.getSortedView(),
                      std::ostream_iterator<ValueType>(os, " "));
@@ -429,4 +428,4 @@ class SortedSequencePlus {
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_SORTEDSEQUENCEPLUS_H
+#endif  // QLEVER_SRC_UTIL_SORTEDSEQUENCEMANYSORTEDBLOCKS_H
