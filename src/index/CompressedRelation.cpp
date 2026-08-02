@@ -1510,13 +1510,16 @@ ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
     std::optional<size_t> numThreadsOverride) {
   size_t requestedThreads = numThreadsOverride.value_or(
       getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
+  // `hardware_concurrency` may return 0 when it cannot determine the number
+  // of hardware threads; fall back to 1, so that the queue always has a
+  // worker (with 0 workers, the tasks would never run).
+  uint32_t hardwareThreads = std::max(1u, std::thread::hardware_concurrency());
   // Clamp in `size_t` BEFORE casting, so that a huge requested value cannot
   // truncate to a small (or zero) thread count.
-  uint32_t threadCount =
-      requestedThreads == 0
-          ? std::thread::hardware_concurrency()
-          : static_cast<uint32_t>(std::min<size_t>(
-                requestedThreads, std::thread::hardware_concurrency()));
+  uint32_t threadCount = requestedThreads == 0
+                             ? hardwareThreads
+                             : static_cast<uint32_t>(std::min<size_t>(
+                                   requestedThreads, hardwareThreads));
   // Allow at least up to 4 tasks in the queue.
   uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
   return ad_utility::TaskQueue<false>{queueSize, threadCount};
