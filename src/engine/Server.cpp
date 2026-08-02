@@ -1161,7 +1161,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
   // offset is not applied twice when exporting the query.
-  plannedQuery->adjustParsedQueryLimitOffset(
+  plannedQuery->parsedQuery().adjustLimitOffset(
       mediaType, ad_utility::request_parameters::parseSendLimit(params));
 
   // This actually processes the query and sends the result in the

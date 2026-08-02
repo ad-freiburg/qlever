@@ -20,6 +20,7 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
+#include "util/http/MediaTypes.h"
 
 using std::string;
 using std::vector;
@@ -380,6 +381,26 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
   } else {
     static const std::vector<Alias> dummyForConstructClause;
     return dummyForConstructClause;
+  }
+}
+
+// ____________________________________________________________________________
+void ParsedQuery::adjustLimitOffset(const ad_utility::MediaType& mediaType,
+                                    std::optional<uint64_t> sendLimit) {
+  // Read the export limit from the `send` parameter (historical name). This
+  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
+  //
+  // NOTE: This was originally designed exclusively for `qlever-results+json`.
+  // However, when the runtime parameter `sparql-results-json-with-time` is set
+  // (which is the default), we now also apply it to `sparql-results+json`.
+  using ad_utility::MediaType;
+  auto& exportLimit = _limitOffset.exportLimit_;
+  bool considerSendParameter =
+      mediaType == MediaType::qleverJson ||
+      (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>() &&
+       mediaType == MediaType::sparqlJson);
+  if (sendLimit.has_value() && considerSendParameter) {
+    exportLimit = std::move(sendLimit);
   }
 }
 

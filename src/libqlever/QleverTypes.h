@@ -81,10 +81,6 @@ struct PlannedQuery {
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
 
-  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
-  void adjustParsedQueryLimitOffset(const ad_utility::MediaType& mediaType,
-                                    std::optional<uint64_t> sendLimit);
-
   const ParsedQuery& parsedQuery() const { return parsedQuery_; }
   ParsedQuery& parsedQuery() { return parsedQuery_; }
 
