@@ -6,6 +6,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -80,14 +81,81 @@ TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
 }
 #endif
 
+#if defined(__linux__)
+// _____________________________________________________________________________
+TEST(ResourceMonitor, IoStallSecondsFromPressureParsesTheSomeLine) {
+  using ad_utility::resource_monitor::ioStallSecondsFromPressure;
+  // The shape of `/proc/pressure/io`.
+  std::istringstream valid{
+      "some avg10=0.06 avg60=0.20 avg300=0.19 total=32102297014\n"
+      "full avg10=0.04 avg60=0.14 avg300=0.17 total=30474640775\n"};
+  auto seconds = ioStallSecondsFromPressure(valid);
+  ASSERT_TRUE(seconds.has_value());
+  EXPECT_DOUBLE_EQ(seconds.value(), 32102.297014);
+
+  std::istringstream noSomeLine{"full avg10=0.04 total=30474640775\n"};
+  EXPECT_FALSE(ioStallSecondsFromPressure(noSomeLine).has_value());
+  std::istringstream noTotal{"some avg10=0.06 avg60=0.20 avg300=0.19\n"};
+  EXPECT_FALSE(ioStallSecondsFromPressure(noTotal).has_value());
+  std::istringstream garbage{"some avg10=0.06 total=notanumber\n"};
+  EXPECT_FALSE(ioStallSecondsFromPressure(garbage).has_value());
+  std::istringstream empty{""};
+  EXPECT_FALSE(ioStallSecondsFromPressure(empty).has_value());
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, IoBytesFromProcIoParsesReadAndWriteBytes) {
+  using ad_utility::resource_monitor::ioBytesFromProcIo;
+  // The shape of `/proc/self/io`.
+  std::istringstream valid{
+      "rchar: 3232\nwchar: 111\nsyscr: 55\nsyscw: 66\n"
+      "read_bytes: 12345\nwrite_bytes: 67890\ncancelled_write_bytes: 0\n"};
+  auto bytes = ioBytesFromProcIo(valid);
+  ASSERT_TRUE(bytes.has_value());
+  EXPECT_EQ(bytes.value().readBytes_, 12345u);
+  EXPECT_EQ(bytes.value().writeBytes_, 67890u);
+
+  std::istringstream missingWrite{"read_bytes: 12345\n"};
+  EXPECT_FALSE(ioBytesFromProcIo(missingWrite).has_value());
+  std::istringstream empty{""};
+  EXPECT_FALSE(ioBytesFromProcIo(empty).has_value());
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, CachedBytesFromMeminfoParsesTheCachedLine) {
+  using ad_utility::resource_monitor::cachedBytesFromMeminfo;
+  // The shape of `/proc/meminfo` (note the `kB` unit suffixes and that
+  // `SwapCached:` must not match).
+  std::istringstream valid{
+      "MemTotal:       197465884 kB\nMemFree:        33285968 kB\n"
+      "SwapCached:     123 kB\nCached:         101672752 kB\n"};
+  auto bytes = cachedBytesFromMeminfo(valid);
+  ASSERT_TRUE(bytes.has_value());
+  EXPECT_EQ(bytes.value(), 101672752ull * 1024);
+
+  std::istringstream noCachedLine{"MemTotal: 197465884 kB\n"};
+  EXPECT_FALSE(cachedBytesFromMeminfo(noCachedLine).has_value());
+  std::istringstream garbage{"Cached: notanumber kB\n"};
+  EXPECT_FALSE(cachedBytesFromMeminfo(garbage).has_value());
+}
+#endif
+
 // _____________________________________________________________________________
 TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
-  EXPECT_EQ(formatTsvRow(1.0, 1000, 2048u, 50.0), "1.0\t1000\t2048\t50.0\n");
-  EXPECT_EQ(formatTsvRow(1.0, 1000, std::nullopt, 50.0), "1.0\t1000\t\t50.0\n");
-  EXPECT_EQ(formatTsvRow(1.0, 1000, 2048u, std::nullopt),
-            "1.0\t1000\t2048\t\n");
-  EXPECT_EQ(formatTsvRow(1.0, 1000, std::nullopt, std::nullopt),
-            "1.0\t1000\t\t\n");
+  using ad_utility::resource_monitor::IoBytes;
+  EXPECT_EQ(formatTsvRow(1.0, 1000, 2048u, 50.0, 3.5, IoBytes{100, 200}, 4096u),
+            "1.0\t1000\t2048\t50.0\t3.5\t100\t200\t4096\n");
+  // Each missing reading becomes an empty cell (a missing `IoBytes` two of
+  // them), and the number of cells never changes.
+  EXPECT_EQ(formatTsvRow(1.0, 1000, std::nullopt, 50.0, std::nullopt,
+                         IoBytes{100, 200}, std::nullopt),
+            "1.0\t1000\t\t50.0\t\t100\t200\t\n");
+  EXPECT_EQ(
+      formatTsvRow(1.0, 1000, 2048u, std::nullopt, 3.5, std::nullopt, 4096u),
+      "1.0\t1000\t2048\t\t3.5\t\t\t4096\n");
+  EXPECT_EQ(formatTsvRow(1.0, 1000, std::nullopt, std::nullopt, std::nullopt,
+                         std::nullopt, std::nullopt),
+            "1.0\t1000\t\t\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
@@ -176,17 +244,20 @@ TEST(ResourceMonitor, TruncateModeWritesHeader) {
   }
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 1u);
-  EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
+  EXPECT_EQ(lines[0],
+            "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tio_stall_percent"
+            "\tread_bytes\twrite_bytes\tcached_bytes");
 }
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AppendModeKeepsExistingHeader) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  // A log left over from an earlier run: a header plus one data row.
+  // A log left over from an earlier run OF THE SAME FORMAT: the current
+  // header plus one data row.
   {
     std::ofstream existing{path};
-    existing << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n";
-    existing << "0.0\t1000\t2048\t10.0\n";
+    existing << ad_utility::resource_monitor::tsvHeader << "\n";
+    existing << "0.0\t1000\t2048\t10.0\t0.5\t100\t200\t4096\n";
   }
   {
     ResourceMonitor monitor;
@@ -196,8 +267,39 @@ TEST(ResourceMonitor, AppendModeKeepsExistingHeader) {
   }
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 2u);
-  EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
-  EXPECT_EQ(lines[1], "0.0\t1000\t2048\t10.0");
+  EXPECT_EQ(lines[0],
+            "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tio_stall_percent"
+            "\tread_bytes\twrite_bytes\tcached_bytes");
+  EXPECT_EQ(lines[1], "0.0\t1000\t2048\t10.0\t0.5\t100\t200\t4096");
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, AppendModeRotatesFileOfOlderFormat) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  // A log left over from an older QLever version: fewer columns. Appending
+  // current-format rows to it would produce a file whose rows do not match
+  // its header, so it is moved to `<path>.old` and a fresh file is started.
+  {
+    std::ofstream existing{path};
+    existing << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n";
+    existing << "0.0\t1000\t2048\t10.0\n";
+  }
+  auto rotated = path;
+  rotated += ".old";
+  absl::Cleanup removeRotated{[&rotated] { fs::remove(rotated); }};
+  {
+    ResourceMonitor monitor;
+    // Long interval so no data row is written; the fresh file holds only
+    // the new header.
+    monitor.start(path, ResourceMonitor::Mode::Append, std::chrono::hours{1});
+  }
+  auto lines = readLines(path);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(lines[0], ad_utility::resource_monitor::tsvHeader);
+  auto rotatedLines = readLines(rotated);
+  ASSERT_EQ(rotatedLines.size(), 2u);
+  EXPECT_EQ(rotatedLines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
+  EXPECT_EQ(rotatedLines[1], "0.0\t1000\t2048\t10.0");
 }
 
 // _____________________________________________________________________________
@@ -213,7 +315,9 @@ TEST(ResourceMonitor, AppendModeWritesHeaderWhenFileIsEmptyOrMissing) {
     }
     auto lines = readLines(path);
     ASSERT_EQ(lines.size(), 1u);
-    EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
+    EXPECT_EQ(lines[0],
+              "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tio_stall_percent"
+              "\tread_bytes\twrite_bytes\tcached_bytes");
   };
 
   auto [missing, cleanup1] = ad_utility::testing::filenameForTesting();
@@ -238,12 +342,14 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   auto lines = readLines(path);
   // The header plus at least one sampled row.
   ASSERT_GE(lines.size(), 2u);
-  EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
-  // Each data row has the header's four tab-separated columns (three tabs),
-  // even when an individual reading was empty.
+  EXPECT_EQ(lines[0],
+            "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tio_stall_percent"
+            "\tread_bytes\twrite_bytes\tcached_bytes");
+  // Each data row has the header's eight tab-separated columns (seven
+  // tabs), even when an individual reading was empty.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 3)
-        << "row does not have 4 columns: " << *it;
+    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 7)
+        << "row does not have 8 columns: " << *it;
   }
 }
 
