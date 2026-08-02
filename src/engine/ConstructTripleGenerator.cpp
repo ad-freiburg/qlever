@@ -28,15 +28,36 @@ IdCache ConstructTripleGenerator::makeIdCache(
 
 namespace {
 
-// Bundles the pieces `computeBatch` needs beyond the batch itself: the
-// preprocessed template, the index, the ID cache, the cancellation handle,
-// and (optionally) the deduplicator to consult while instantiating.
+// Bundles the pieces `computeBatch` needs beyond the batch itself.
 struct BatchEvalContext {
+  BatchEvalContext(const PreprocessedConstructTemplate& preprocessedTemplate,
+                   const Index& index, IdCache& cache,
+                   const CancellationHandle& cancellationHandle,
+                   const std::shared_ptr<ConstructDeduplicator>& deduplicator)
+      : preprocessedTemplate_{preprocessedTemplate},
+        index_{index},
+        cache_{cache},
+        cancellationHandle_{cancellationHandle},
+        deduplicator_{deduplicator} {}
+
   const PreprocessedConstructTemplate& preprocessedTemplate_;
   const Index& index_;
   IdCache& cache_;
   const CancellationHandle& cancellationHandle_;
-  std::optional<std::reference_wrapper<ConstructDeduplicator>> deduplicator_;
+  const std::shared_ptr<ConstructDeduplicator>& deduplicator_;
+};
+
+// Bundles the reference parameters that the per-chunk lambda in
+// `processTableBatches` needs, so the lambda captures a single object instead
+// of listing every reference individually.
+struct SharedTableRefs {
+  const TableWithRange& table_;
+  const PreprocessedConstructTemplate& preprocessedTemplate_;
+  const Index& index_;
+  const CancellationHandle& cancellationHandle_;
+  IdCache& cache_;
+  const std::shared_ptr<ConstructDeduplicator>& deduplicator_;
+  size_t tableRowOffset_;
 };
 
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
@@ -62,7 +83,8 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
       tableWithVocab.localVocab(), context.index_, context.cache_);
 
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
-  std::optional<DeduplicationParams> deduplication;
+
+  std::optional<DeduplicationParams> deduplication{std::nullopt};
   if (context.deduplicator_) {
     deduplication.emplace(DeduplicationParams{*context.deduplicator_, ctx});
   }
@@ -70,29 +92,24 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
                           blankNodeBaseId, deduplication);
 }
 
-// Chunks `table.view_` into batches and evaluates each one. Rebuilds the
-// (cheap) deduplicator reference per chunk so no reference into this
-// function's locals is captured beyond the chunk's own evaluation.
+// Chunks `table.view_` into batches and evaluates each one.
 auto processTableBatches(
     const TableWithRange& table,
     const PreprocessedConstructTemplate& preprocessedTemplate,
     const Index& index, const CancellationHandle& cancellationHandle,
     IdCache& cache, const std::shared_ptr<ConstructDeduplicator>& deduplicator,
     size_t tableRowOffset) {
+  SharedTableRefs refs{
+      table, preprocessedTemplate, index,         cancellationHandle,
+      cache, deduplicator,         tableRowOffset};
   return ranges::views::chunk(table.view_,
                               ConstructTripleGenerator::BATCH_SIZE) |
-         ql::views::transform([&table, &preprocessedTemplate, &index, &cache,
-                               cancellationHandle, &deduplicator,
-                               tableRowOffset](auto chunkView) {
-           std::optional<std::reference_wrapper<ConstructDeduplicator>>
-               deduplicatorRef;
-           if (deduplicator) {
-             deduplicatorRef.emplace(*deduplicator);
-           }
-           BatchEvalContext context{preprocessedTemplate, index, cache,
-                                    cancellationHandle, deduplicatorRef};
-           return computeBatch(table.tableWithVocab_, chunkView, context,
-                               tableRowOffset);
+         ql::views::transform([refs](auto chunkView) {
+           BatchEvalContext context{refs.preprocessedTemplate_, refs.index_,
+                                    refs.cache_, refs.cancellationHandle_,
+                                    refs.deduplicator_};
+           return computeBatch(refs.table_.tableWithVocab_, chunkView, context,
+                               refs.tableRowOffset_);
          }) |
          ql::views::join;
 }
@@ -101,8 +118,8 @@ auto processTableBatches(
 //______________________________________________________________________________
 InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
-    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-    size_t rowOffset, EvaluationConfig config) {
+    InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
+    EvaluationConfig config) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
       templateTriples, variableColumns, config.index_);
   IdCache cache = makeIdCache(preprocessedTemplate);

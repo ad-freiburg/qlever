@@ -32,9 +32,7 @@ using IdCache =
 using StringTriple = QueryExecutionTree::StringTriple;
 
 // Bundles the pieces shared by `evaluateTables`, `generateStringTriples`, and
-// `generateFormattedTriples`: the index to resolve IDs against, the
-// cancellation handle checked between batches, the owning query execution
-// context, and the deduplication mode.
+// `generateFormattedTriples`.
 struct EvaluationConfig {
   const Index& index_;
   CancellationHandle cancellationHandle_;

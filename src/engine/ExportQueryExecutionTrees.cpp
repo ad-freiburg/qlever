@@ -264,6 +264,17 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 }
 
 // _____________________________________________________________________________
+qlever::constructExport::EvaluationConfig
+ExportQueryExecutionTrees::makeConstructEvaluationConfig(
+    const QueryExecutionTree& qet, CancellationHandle cancellationHandle) {
+  const auto mode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
+  return qlever::constructExport::EvaluationConfig{
+      qet.getQec()->getIndex(), std::move(cancellationHandle), *qet.getQec(),
+      mode};
+}
+
+// _____________________________________________________________________________
 auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
@@ -277,16 +288,11 @@ auto ExportQueryExecutionTrees::constructQueryResultToStringTriples(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
-  const auto mode =
-      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
-
   return qlever::constructExport::ConstructTripleGenerator::
       generateStringTriples(
           constructTriples, qet.getVariableColumns(), std::move(rowIndices),
           limitAndOffset._offset,
-          qlever::constructExport::EvaluationConfig{
-              qet.getQec()->getIndex(), std::move(cancellationHandle),
-              *qet.getQec(), mode});
+          makeConstructEvaluationConfig(qet, std::move(cancellationHandle)));
 }
 
 // _____________________________________________________________________________
@@ -785,16 +791,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
-  const auto mode =
-      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
-
   auto triples = qlever::constructExport::ConstructTripleGenerator::
       generateFormattedTriples(
           constructTriples, qet.getVariableColumns(), std::move(rowIndices),
           limitAndOffset._offset, format,
-          qlever::constructExport::EvaluationConfig{
-              qet.getQec()->getIndex(), std::move(cancellationHandle),
-              *qet.getQec(), mode});
+          makeConstructEvaluationConfig(qet, std::move(cancellationHandle)));
 
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
