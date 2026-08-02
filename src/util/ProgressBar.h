@@ -187,20 +187,20 @@ class ProgressBar {
 };
 
 // A class for the same general goal as `ProgressBar` above (reporting the
-// progress of a long-running computation), but with two differences: (1) the
-// total number of steps is known in advance, so the progress is also shown as
-// a percentage of the total, and (2) the computation is done by several
-// threads that concurrently report their progress. The counter therefore
-// lives inside this class, and the progress string is only handed out via a
-// lock-holding `Update` object, so that the output of concurrent updates can
-// neither interleave nor overtake each other.
+// progress of a long-running computation), but with two differences:
 //
-// NOTE: Unlike for `ProgressBar`, only the average speed is shown. Statistics
-// per batch (last, fastest, slowest) are not meaningful here, because a batch
-// boundary is crossed by whichever thread happens to report next.
+// 1. The total number of steps is known in advance, so the progress can be
+// shown as a percentage of the total, together with the average speed; no need
+// to show the last, fastest, and slowest batch speeds like for `ProgressBar`.
 //
-// Typical usage (note the `std::flush` at the end of the `AD_LOG_INFO` calls
-// in order to ensure a flush for lines ending in `\r` instead of `\n`):
+// 2. The computation is done by several threads that concurrently report their
+// progress. The progress counter therefore lives inside this class, and the
+// progress string is only handed out via a lock-holding `Update` object, so
+// that the output of concurrent updates can neither interleave nor overtake
+// each other.
+//
+// Typical usage, analogous to the usage of `ProgressBar` above; in particular,
+// the `std::flush` at the end of the `AD_LOG_INFO` calls is important.
 //
 // ad_utility::ConcurrentProgressBar progressBar("Triples processed: ",
 //                                               numTriplesTotal);
@@ -245,24 +245,15 @@ class ConcurrentProgressBar {
   };
 
   // Create and initialize a concurrent progress bar.
-  //
-  // NOTE: A `statisticsBatchSize` of `0` (the default) means that the batch
-  // size is chosen automatically, namely such that about 50 progress strings
-  // are produced in total, but at least one every
-  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE` steps. This is possible here (and not
-  // for `ProgressBar`) because the total number of steps is known.
   ConcurrentProgressBar(
       std::string displayStringPrefix, size_t totalSteps,
-      size_t statisticsBatchSize = 0,
+      size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
       SpeedDescriptionFunction getSpeedDescription =
           DEFAULT_SPEED_DESCRIPTION_FUNCTION,
       DisplayUpdateOptions displayUpdateOptions = ProgressBar::ReuseLine)
       : displayStringPrefix_(std::move(displayStringPrefix)),
         totalSteps_(totalSteps),
-        statisticsBatchSize_(
-            statisticsBatchSize != 0
-                ? statisticsBatchSize
-                : std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE, totalSteps / 50)),
+        statisticsBatchSize_(statisticsBatchSize),
         getSpeedDescription_(std::move(getSpeedDescription)),
         displayUpdateOptions_(displayUpdateOptions) {}
 
