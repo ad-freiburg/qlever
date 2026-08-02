@@ -27,8 +27,8 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/MediaTypes.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/ResponseMiddleware.h"
 #endif
 
@@ -255,7 +255,7 @@ class ParsedQuery {
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 
-  // Sets the export limit (`send` parameter) and offset.
+  // Sets the export limit (`send` parameter).
   void adjustLimitOffset(const ad_utility::MediaType& mediaType,
                          std::optional<uint64_t> sendLimit);
 };

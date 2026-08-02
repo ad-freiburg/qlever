@@ -10,6 +10,7 @@
 
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -32,17 +33,6 @@ namespace {
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
-                                  datasets);
-}
-
 // Expect that `call()` throws an `HttpError` with status 403 Forbidden and
 // with a message that matches `messageMatcher`.
 auto expectForbiddenError = [](auto call, auto messageMatcher,
@@ -57,7 +47,6 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
     EXPECT_THAT(e.what(), messageMatcher);
   }
 };
-
 }  // namespace
 TEST(ServerTest, determineMediaType) {
   auto MakeRequest = [](const std::optional<std::string>& accept,

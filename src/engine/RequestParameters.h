@@ -8,7 +8,7 @@
 #include "util/http/UrlParser.h"
 
 /**
- * /brief Helpers that interpret already-parsed URL parameters into typed,
+ * \brief Helpers that interpret already-parsed URL parameters into typed,
  * validated request settings for QLever's SPARQL endpoint.
  */
 namespace ad_utility::request_parameters {
