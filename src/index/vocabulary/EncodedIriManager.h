@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
-#define QLEVER_SRC_INDEX_ENCODEDVALUES_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
+#define QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H
 
 #include <absl/numeric/bits.h>
 
@@ -354,4 +354,4 @@ struct AlwaysOnPrefixes {
 using EncodedIriManager =
     EncodedIriManagerImpl<Id::numDataBits, 8, AlwaysOnPrefixes>;
 
-#endif  // QLEVER_SRC_INDEX_ENCODEDVALUES_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H

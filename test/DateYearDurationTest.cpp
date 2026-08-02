@@ -8,6 +8,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "global/Constants.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/DateYearDuration.h"
@@ -315,7 +316,7 @@ auto testDatetimeImpl(F parseFunction, std::string_view input, const char* type,
   TripleComponent parsedAsTurtle =
       RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
-  auto optionalId = parsedAsTurtle.toValueIdIfNotString(encodedIriManager());
+  auto optionalId = toValueIdIfNotString(parsedAsTurtle, encodedIriManager());
   ASSERT_TRUE(optionalId.has_value());
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);
@@ -435,7 +436,7 @@ auto testLargeYearImpl(F parseFunction, std::string_view input,
   TripleComponent parsedAsTurtle =
       RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
-  auto optionalId = parsedAsTurtle.toValueIdIfNotString(encodedIriManager());
+  auto optionalId = toValueIdIfNotString(parsedAsTurtle, encodedIriManager());
   ASSERT_TRUE(optionalId.has_value());
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);

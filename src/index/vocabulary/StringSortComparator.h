@@ -4,8 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_STRINGSORTCOMPARATOR_H
-#define QLEVER_STRINGSORTCOMPARATOR_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_STRINGSORTCOMPARATOR_H
+#define QLEVER_SRC_INDEX_VOCABULARY_STRINGSORTCOMPARATOR_H
 
 #include <cstring>
 #include <limits>
@@ -13,7 +13,7 @@
 #include <string_view>
 #include <utility>
 
-#include "index/LocaleManager.h"
+#include "index/vocabulary/LocaleManager.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
@@ -25,8 +25,8 @@
  * defined below.
  *
  * The actual comparison logic is handled via the `LocaleManagerT` (see
- * `LocaleManager.h`), which performs proper Unicode collation when built with
- * ICU, or a plain bytewise comparison otherwise.
+ * `index/vocabulary/LocaleManager.h`), which performs proper Unicode collation
+ * when built with ICU, or a plain bytewise comparison otherwise.
  */
 template <typename LocaleManagerT>
 class SimpleStringComparatorImpl {
@@ -151,8 +151,8 @@ class SimpleStringComparatorImpl {
  * and then by the language tag.
  *
  * The actual comparison logic is handled via the `LocaleManagerT` (see
- * `LocaleManager.h`), which performs proper Unicode collation when built with
- * ICU, or a plain bytewise comparison otherwise.
+ * `index/vocabulary/LocaleManager.h`), which performs proper Unicode collation
+ * when built with ICU, or a plain bytewise comparison otherwise.
  */
 template <typename LocaleManagerT>
 class TripleComponentComparatorImpl {
@@ -438,8 +438,9 @@ using TripleComponentComparatorNoICU =
     TripleComponentComparatorImpl<LocaleManagerNoICU>;
 
 // The comparators used throughout QLever. `LocaleManager` already resolves to
-// the right locale manager for the build configuration (see `LocaleManager.h`).
+// the right locale manager for the build configuration (see
+// `index/vocabulary/LocaleManager.h`).
 using SimpleStringComparator = SimpleStringComparatorImpl<LocaleManager>;
 using TripleComponentComparator = TripleComponentComparatorImpl<LocaleManager>;
 
-#endif  // QLEVER_STRINGSORTCOMPARATOR_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_STRINGSORTCOMPARATOR_H

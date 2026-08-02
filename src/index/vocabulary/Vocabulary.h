@@ -7,8 +7,8 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_H
-#define QLEVER_SRC_INDEX_VOCABULARY_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
 
 #include <cassert>
 #include <optional>
@@ -18,12 +18,13 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -251,64 +252,82 @@ class Vocabulary {
     }
   }
 
-  // Replace the currently held vocabulary with a `VocabularyInMemory` built
-  // as a non-owning, zero-copy view directly into `serializer`'s buffer (see
-  // `VocabularyInMemory::fromZeroCopyDeserializer`). This switches the active
-  // vocabulary implementation to `VocabularyInMemory`, regardless of what was
-  // previously loaded. Only possible if `UnderlyingVocabulary` is
-  // `PolymorphicVocabulary` or `VocabularyInMemory` itself; for any other
-  // vocabulary implementation, this fails to compile (via a `static_assert`).
-  // The returned vocabulary is only valid as long as the memory backing
-  // `serializer`'s buffer is valid and unchanged.
+  // Replace the words of the currently held vocabulary with a non-owning,
+  // zero-copy view directly into `serializer`'s buffer (see e.g.
+  // `VocabularyInMemory::fromZeroCopyDeserializer`). This only works for
+  // vocabulary implementations that support zero-copy deserialization (see
+  // `VocabularySupportsZeroCopy`): a bare `VocabularyInMemory`, or a
+  // `CompressedVocabulary` wrapping such a vocabulary. If
+  // `UnderlyingVocabulary` is a `PolymorphicVocabulary`, the currently active
+  // alternative is deserialized in place (the caller has to ensure via
+  // `resetToType` that the active alternative matches the blob's format); if it
+  // is a concrete type that does not support zero-copy, this fails to compile
+  // (via a `static_assert`). Note that the wrapping `UnicodeVocabulary` is
+  // bypassed via `getUnderlyingVocabulary()`, so its comparator is left
+  // untouched and is not part of the blob. The vocabulary is only valid as long
+  // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::ZeroCopyReadSerializer<
           Serializer>) void loadFromZeroCopyDeserializer(Serializer&
                                                              serializer) {
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
-      // `vocabulary_.getUnderlyingVocabulary()` returns the
-      // `PolymorphicVocabulary`, whose own `getUnderlyingVocabulary()` in
-      // turn returns a reference to the `std::variant` of the concrete
-      // vocabulary implementations that it can hold (see
-      // `PolymorphicVocabulary::getUnderlyingVocabulary`). Assigning a
-      // `VocabularyInMemory` to that variant switches the active
-      // implementation, which requires that `VocabularyInMemory` is one of
-      // the variant's alternatives (currently always true, see
-      // `PolymorphicVocabulary`'s `Variant` type alias).
-      vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary() =
-          VocabularyInMemory::fromZeroCopyDeserializer(serializer);
-    } else {
-      static_assert(std::is_same_v<UnderlyingVocabulary, VocabularyInMemory>,
-                    "`loadFromZeroCopyDeserializer` requires an in-memory or "
-                    "polymorphic vocabulary implementation");
-      vocabulary_.getUnderlyingVocabulary() =
-          VocabularyInMemory::fromZeroCopyDeserializer(serializer);
-    }
+    applyToUnderlyingZeroCopyVocab(
+        *this, "Loading a vocabulary from", [&serializer](auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          vocab = T::fromZeroCopyDeserializer(serializer);
+        });
   }
 
   // Serialize the currently held vocabulary to `serializer`, in a format that
   // can later be read back via `loadFromZeroCopyDeserializer`. Only possible
-  // if the vocabulary implementation currently in use is `VocabularyInMemory`
-  // (which is always the case if `UnderlyingVocabulary` is `VocabularyInMemory`
-  // itself, and is the case for a `PolymorphicVocabulary` only after
-  // `loadFromZeroCopyDeserializer` or `resetToType` with
-  // `VocabularyType::Enum::InMemoryUncompressed` was called); throws
-  // otherwise.
+  // if the vocabulary implementation currently in use supports zero-copy
+  // deserialization (see `VocabularySupportsZeroCopy`). For a
+  // `PolymorphicVocabulary`, this depends on the currently active alternative
+  // (as set via `resetToType`/`open`) and throws otherwise; for a concrete
+  // `UnderlyingVocabulary` that does not support zero-copy, this fails to
+  // compile (via a `static_assert`). The written format is exactly the
+  // vocabulary's regular (aligned) serialization; the zero-copy read path just
+  // reads it back without copying the (large) word data.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::WriteSerializer<
           Serializer>) void writeAsZeroCopyBlob(Serializer& serializer) const {
+    applyToUnderlyingZeroCopyVocab(
+        *this, "Writing a vocabulary to",
+        [&serializer](const auto& vocab) { serializer << vocab; });
+  }
+
+ private:
+  // Apply `function` to the vocabulary that actually holds the words, i.e. to
+  // the vocabulary below the wrapping `UnicodeVocabulary` (whose comparator
+  // plays no role for a zero-copy blob and is therefore neither written nor
+  // read). If `UnderlyingVocabulary` is a `PolymorphicVocabulary`, delegate to
+  // its `applyToZeroCopyCapableVocabulary`, which dispatches to the currently
+  // active alternative and throws if that alternative does not support
+  // zero-copy; `operation` describes the attempted operation and is expected to
+  // read like `"Loading a vocabulary from"`.
+  // Otherwise `UnderlyingVocabulary` is a concrete type that has to support
+  // zero-copy, which is checked via a `static_assert`. The vocabulary is passed
+  // to `function` as a reference, so that `function` can either read from it
+  // (for writing a blob) or overwrite it (for reading a blob). `self` is a
+  // deduced (possibly `const`) reference to `*this`, so that a single
+  // implementation serves both directions.
+  template <typename Self, typename Function>
+  static void applyToUnderlyingZeroCopyVocab(Self& self,
+                                             std::string_view operation,
+                                             Function function) {
+    auto& underlyingVocabulary = self.vocabulary_.getUnderlyingVocabulary();
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
-      const auto& variant =
-          vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
-      AD_CORRECTNESS_CHECK(
-          std::holds_alternative<VocabularyInMemory>(variant),
-          "Writing a vocabulary to a combined blob currently requires the "
-          "in-memory, uncompressed vocabulary implementation");
-      serializer << std::get<VocabularyInMemory>(variant);
+      // The dispatch to the currently active alternative (including the throw
+      // for those alternatives that don't support zero-copy) is the
+      // `PolymorphicVocabulary`'s own business.
+      underlyingVocabulary.applyToZeroCopyCapableVocabulary(
+          operation, std::move(function));
     } else {
-      static_assert(std::is_same_v<UnderlyingVocabulary, VocabularyInMemory>,
-                    "`writeAsZeroCopyBlob` requires an in-memory or "
-                    "polymorphic vocabulary implementation");
-      serializer << vocabulary_.getUnderlyingVocabulary();
+      static_assert(VocabularySupportsZeroCopy<UnderlyingVocabulary>,
+                    "The zero-copy (de)serialization of a vocabulary requires "
+                    "a vocabulary implementation that supports zero-copy "
+                    "deserialization (in-memory, or a compressed vocabulary "
+                    "wrapping such a vocabulary) or a polymorphic vocabulary");
+      function(underlyingVocabulary);
     }
   }
 };
@@ -333,4 +352,4 @@ using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
 using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
                                   SimpleStringComparator, WordVocabIndex>;
 
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H

@@ -50,6 +50,75 @@ endif ()
 # developers.
 add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
+# Optionally build shared instead of static libraries. This is useful in
+# particular for Debug or RelWithDebugInfo builds, where the individual
+# libraries are rather large because of the debug symbols and are linked
+# into almost every test binary.
+# Note: This option magically influences the behavior of `add_library`, see
+# https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html for
+# details.
+# Note on tests: With BUILD_SHARED_LIBS=ON, each test binary is smaller because
+# shared libraries are loaded at runtime rather than linked statically. However,
+# every test process now has to load those libraries at startup, which makes the
+# per-test-case regime much more expensive; consider combining this option with
+# `QLEVER_ONE_TEST_CASE_PER_FILE` below.
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+if(BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    add_compile_options(-fPIC -fno-semantic-interposition)
+    # Let the code detect that it is compiled into shared libraries, see
+    # `AD_ALWAYS_INLINE` in `CompilerExtensions.h` for the only current use.
+    add_compile_definitions(QLEVER_BUILD_SHARED_LIBRARIES)
+endif()
+
+# Link QLever's shared libraries with `--no-undefined`, such that a library that
+# is missing one of its dependencies fails to link right away. Without this, such
+# a library links successfully and the missing dependency only shows up (much
+# later) when an executable is linked against it, and only with those linkers
+# that reject undefined symbols from shared libraries. In particular `mold`,
+# which we use in the CI, silently accepts them, so without this check a missing
+# dependency can pass the CI and still break the build for everyone who uses the
+# default linker.
+# The default is `ON`, except in the following cases:
+# - The Apple linker doesn't know `--no-undefined` (its default behavior already
+#   is to report undefined symbols).
+# - Emscripten resolves symbols differently and doesn't support this.
+# - The sanitizer runtimes are linked into the executable and not into the
+#   individual shared libraries, so instrumented shared libraries legitimately
+#   have undefined `__asan_*`, `__ubsan_*`, or `__tsan_*` symbols.
+# NOTE: The sanitizer flags may arrive through any of several channels, and none
+# of them has been applied to `CMAKE_CXX_FLAGS` yet at this point in the file. We
+# therefore inspect all of them: `CMAKE_CXX_FLAGS` itself (for example set by one
+# of the `toolchains`), `ADDITIONAL_COMPILER_FLAGS` (which is how the CI passes
+# them and which is only appended to `CMAKE_CXX_FLAGS` much further below), and
+# the flags of the selected build type. For the last one we additionally match
+# the name of the build type, because QLever defines `CMAKE_CXX_FLAGS_ASAN`
+# itself, also only further below.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" QLEVER_BUILD_TYPE_UPPERCASE)
+set(QLEVER_ALL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS} ${CMAKE_CXX_FLAGS_${QLEVER_BUILD_TYPE_UPPERCASE}}")
+if (QLEVER_ALL_CXX_FLAGS MATCHES "-fsanitize" OR QLEVER_BUILD_TYPE_UPPERCASE STREQUAL "ASAN")
+    set(QLEVER_SANITIZER_ENABLED ON)
+else ()
+    set(QLEVER_SANITIZER_ENABLED OFF)
+endif ()
+if (BUILD_SHARED_LIBS AND NOT APPLE AND NOT EMSCRIPTEN AND
+        NOT QLEVER_SANITIZER_ENABLED)
+    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT ON)
+else ()
+    set(QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT OFF)
+endif ()
+option(QLEVER_NO_UNDEFINED_SYMBOLS "Require that all symbols of a shared library can be resolved when it is linked" ${QLEVER_NO_UNDEFINED_SYMBOLS_DEFAULT})
+message(STATUS "QLEVER_NO_UNDEFINED_SYMBOLS is ${QLEVER_NO_UNDEFINED_SYMBOLS}")
+
+# Choose how `ctest` addresses the test cases of a test binary. When `OFF` (the
+# default), `gtest_discover_tests` registers every single gtest case as its own
+# `ctest` test. When `ON`, each test binary becomes a single `ctest` test that
+# runs all of its cases at once.
+# Note: `ON` is much faster together with `BUILD_SHARED_LIBS=ON`, because the
+# per-case regime starts one subprocess per case, and each of those subprocesses
+# has to load all the shared libraries again.
+option(QLEVER_ONE_TEST_CASE_PER_FILE "Register one `ctest` test per test binary instead of one per gtest case" OFF)
+
 # Disable nlohmann implicit conversions (e.g. json → std::string) globally so
 # all TUs, including those compiled via PCH, see the same flag value.
 add_compile_definitions(JSON_USE_IMPLICIT_CONVERSIONS=0)
@@ -201,8 +270,13 @@ FetchContent_Declare(
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
+if (BUILD_SHARED_LIBS)
+  set(ANTLR_BUILD_STATIC OFF CACHE BOOL "Only build shared antlr4 library")
+else()
+  set(ANTLR_BUILD_SHARED OFF CACHE BOOL "Only build static antlr4 library")
+endif()
+
 set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-set(ANTLR_BUILD_SHARED OFF CACHE BOOL "We're only interested in the static library")
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
@@ -356,16 +430,27 @@ function(qlever_target_link_libraries target)
     else()
         set(QLEVER_BOOST_FILESYSTEM_LIB "")
     endif()
-    target_link_libraries(${target} ${ARGN} absl::compare absl::flat_hash_map
-            absl::flat_hash_set absl::strings absl::str_format
-            OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json Boost::container ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
+    target_link_libraries(${target} PUBLIC ${ARGN}
+            absl::base absl::compare absl::flat_hash_map absl::flat_hash_set
+            absl::strings absl::str_format absl::status absl::statusor absl::time
+            absl::hash absl::synchronization
+            re2 OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock
+            fsst nlohmann_json::nlohmann_json Boost::container
+            ${QLEVER_BOOST_FILESYSTEM_LIB} uriparser)
     if (NOT QLEVER_NO_UNICODE)
-      target_link_libraries(${target} ICU::uc ICU::i18n)
+        target_link_libraries(${target} PUBLIC ICU::uc ICU::i18n)
     endif()
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
-        target_link_libraries(${target} memorySize)
+        target_link_libraries(${target} PUBLIC memorySize)
+    endif ()
+
+    # If this is a shared library, then require that all of its symbols can
+    # already be resolved when it is linked, see `QLEVER_NO_UNDEFINED_SYMBOLS`.
+    if (QLEVER_NO_UNDEFINED_SYMBOLS)
+        target_link_options(${target} PRIVATE
+                $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>:-Wl,--no-undefined>)
     endif ()
 endfunction()
 
@@ -431,7 +516,7 @@ FetchContent_Declare(
 # ABSEIL
 ################################
 set(ABSL_ENABLE_INSTALL ON)
-set(ABSL_USE_SYSTEM_INCLUDES ON)
+set(ABSL_USE_SYSTEM_INCLUDES ON CACHE BOOL "Treat `abseil` headers as system headers, i.e. don't emit warnings from them" FORCE)
 set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
@@ -527,6 +612,7 @@ FetchContent_Declare(
         GIT_TAG 04d8b8df5e0c6bf6c06e472540c015943a613bd2 # 1.0.0
         GIT_SHALLOW TRUE
         OVERRIDE_FIND_PACKAGE
+        SYSTEM
         EXCLUDE_FROM_ALL
 )
 
@@ -570,7 +656,19 @@ FetchContent_Declare(
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
 endif ()
-FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp)
+FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
+
+# Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
+# a static library target. Define the alias `antlr4_umbrella` such that the rest
+# of the build can link against the correct one without further case
+# distinctions.
+if (BUILD_SHARED_LIBS)
+    target_compile_options(antlr4_shared PRIVATE -fPIC -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+    add_library(antlr4_umbrella ALIAS antlr4_shared)
+else ()
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+    add_library(antlr4_umbrella ALIAS antlr4_static)
+endif ()
 # Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
@@ -582,7 +680,6 @@ target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(SYSTEM ${fsst_SOURCE_DIR})
 include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)
-target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
@@ -728,14 +825,14 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
     add_executable(qlever-server src/ServerMain.cpp)
-    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+    qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
     endif()
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever absl::strings)
+qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})

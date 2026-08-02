@@ -17,7 +17,12 @@ Index::Index(Index&&) noexcept = default;
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
-Index::~Index() = default;
+Index::~Index() {
+  if (pimpl_) {
+    AD_LOG_INFO << "Index at " << pimpl_->getOnDiskBase() << " was unloaded."
+                << std::endl;
+  }
+}
 
 // ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase,
@@ -292,4 +297,9 @@ GraphNameManager& Index::graphNameManager() {
 // ____________________________________________________________________________
 const GraphNameManager& Index::graphNameManager() const {
   return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const LocalVocabContext& Index::getLocalVocabContext() const {
+  return pimpl_->getLocalVocabContext();
 }
