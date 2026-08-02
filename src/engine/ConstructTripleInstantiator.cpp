@@ -76,7 +76,7 @@ std::optional<EvaluatedTriple> tryInstantiateTriple(
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    std::optional<DeduplicationParams> deduplication) {
+    std::optional<DeduplicationParams> deduplicationParams) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
@@ -86,7 +86,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
          ::ranges::views::enumerate(tmpl.preprocessedTriples_)) {
       if (auto instantiated = tryInstantiateTriple(
               triple, batchResult, rowInBatch, blankNodeRowId,
-              static_cast<size_t>(tripleIdx), tmpl, deduplication)) {
+              static_cast<size_t>(tripleIdx), tmpl, deduplicationParams)) {
         triples.push_back(std::move(*instantiated));
       }
     }

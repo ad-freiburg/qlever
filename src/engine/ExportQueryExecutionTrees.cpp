@@ -269,9 +269,10 @@ ExportQueryExecutionTrees::makeConstructEvaluationConfig(
     const QueryExecutionTree& qet, CancellationHandle cancellationHandle) {
   const auto mode =
       getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
-  return qlever::constructExport::EvaluationConfig{
+  qlever::constructExport::EvaluationConfig config{
       qet.getQec()->getIndex(), std::move(cancellationHandle), *qet.getQec(),
       mode};
+  return config;
 }
 
 // _____________________________________________________________________________

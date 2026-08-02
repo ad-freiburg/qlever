@@ -49,7 +49,7 @@ struct DeduplicationParams {
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,
-    std::optional<DeduplicationParams> deduplication = std::nullopt);
+    std::optional<DeduplicationParams> deduplicationParams = std::nullopt);
 
 // Format a single term to its string form.
 // `includeDataType=false`: integers, decimals

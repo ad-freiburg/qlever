@@ -2147,8 +2147,8 @@ TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
   }
 }
 
-// VALUES clause that emits the identical triple 3 times — a minimal smoke
-// test that the deduplication is wired end-to-end.
+// A minimal smoke test that the deduplication is wired end-to-end. VALUES
+// clause that emits the identical triple 3 times.
 TEST(ExportQueryExecutionTrees,
      ConstructDeduplicationValuesNoneKeepsDuplicates) {
   const std::string kg = "";
@@ -2184,8 +2184,8 @@ TEST(ExportQueryExecutionTrees,
 }
 
 // A-B-A pattern with a batch-wise window of 1: A inserted, B inserted
-// (evicts A), A inserted again (evicts B, A is new again) — all three are
-// distinct insertions from the deduplicator's point of view, so all three
+// (evicts A), A inserted again (evicts B, A is new again). All three insertions
+// are distinct insertions from the deduplicator's point of view, so all three
 // are emitted.
 TEST(ExportQueryExecutionTrees,
      ConstructDeduplicationValuesBatchWiseAbaPatternEvictsAndReemits) {
@@ -2213,8 +2213,9 @@ static std::string batchWiseWindowTriple(char c) {
                       "> <ex:", std::string(1, c), "> .\n");
 }
 
-// Batchwise dedup with a stream of 5 unique triples repeated twice → 10
-// triples total. The window size controls how many duplicates survive.
+// Batchwise deduplication with a stream of 5 unique triples, each repeated
+// twice. Thus we expect 10 triples total. The window size controls how many
+// duplicates survive.
 struct BatchWiseWindowParam {
   size_t windowSize;
   // The letters (each standing for one `<ex:c> <ex:c> <ex:c>` triple)
@@ -2254,13 +2255,15 @@ TEST_P(ConstructDeduplicationBatchWiseWindowTest, window) {
 INSTANTIATE_TEST_SUITE_P(
     WindowSizes, ConstructDeduplicationBatchWiseWindowTest,
     ::testing::Values(
-        // window 4: A is 5 positions back when it reappears → evicted →
-        // emitted. All 10 triples survive (window is too small to catch any
-        // repeat).
+        // window 4: A is 5 positions back when it reappears. Thus, it has
+        // already been evicted from the deduplication window when it re-appears
+        // in the triple stream and is thus emitted. All 10 triples survive
+        // (window is too small to catch any repeating triples).
         BatchWiseWindowParam{4, "abcdeabcde"},
-        // window 5: the second 'a' is only 5 positions after the first —
-        // still in cache. Suppressed. 'b'-'e' repeats hit the same window
+        // window 5: the second 'a' is only 5 positions after the first.
+        // Thus, this triple is still in the deduplication cache when it
+        // re-appears. Suppressed. 'b'-'e' repeats hit the same window
         // and are suppressed too. Result: 5 unique triples.
         BatchWiseWindowParam{5, "abcde"},
-        // window 10: all duplicates caught, 5 unique triples.
+        // window 10: all duplicates are caught, 5 unique triples remain.
         BatchWiseWindowParam{10, "abcde"}));
