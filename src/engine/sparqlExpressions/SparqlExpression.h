@@ -145,6 +145,18 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isExistsExpression() const;
 
+  // Returns true iff evaluating this expression reads all the columns that are
+  // visible in the query body, without mentioning any of the corresponding
+  // variables explicitly (currently only `COUNT(DISTINCT *)` does this).
+  // Default implementation returns `false`. Note that `COUNT(*)` does not
+  // belong here: it only looks at the number of rows, not at their contents.
+  virtual bool readsAllVisibleColumns() const;
+
+  // Return true iff the expression tree contains an expression for which
+  // `readsAllVisibleColumns()` holds. Such expressions inhibit optimizations
+  // that strip columns which no variable in the query refers to.
+  virtual bool containsExpressionThatReadsAllVisibleColumns() const final;
+
   // Return non-null pointers to all `EXISTS` expressions in expression tree.
   // The result is passed in as a reference to simplify the recursive
   // implementation.

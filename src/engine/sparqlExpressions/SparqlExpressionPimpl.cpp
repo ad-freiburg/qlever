@@ -118,6 +118,12 @@ bool SparqlExpressionPimpl::containsAggregate() const {
   return _pimpl->containsAggregate();
 }
 
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::containsExpressionThatReadsAllVisibleColumns()
+    const {
+  return _pimpl->containsExpressionThatReadsAllVisibleColumns();
+}
+
 // ______________________________________________________________________________
 SparqlExpressionPimpl SparqlExpressionPimpl::makeVariableExpression(
     const Variable& variable) {
