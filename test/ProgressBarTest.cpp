@@ -206,3 +206,28 @@ TEST(ConcurrentProgressBar, zeroBatchSizeIsRejected) {
       ad_utility::ConcurrentProgressBar("Steps: ", 100, 0),
       ::testing::HasSubstr("must not be zero"));
 }
+
+// With `UseNewLine`, every progress string ends with `\n` (and no padding is
+// needed).
+TEST(ConcurrentProgressBar, useNewLine) {
+  ad_utility::ConcurrentProgressBar progressBar{
+      "Steps: ", 100, 10, DEFAULT_SPEED_DESCRIPTION_FUNCTION,
+      ad_utility::ProgressBar::UseNewLine};
+  progressBar.add(10);
+  auto update = progressBar.update();
+  ASSERT_TRUE(update.has_value());
+  EXPECT_THAT(update->getProgressString(),
+              ::testing::HasSubstr("Steps: 10 of 100"));
+  EXPECT_EQ(update->getProgressString().back(), '\n');
+  update.reset();
+  EXPECT_EQ(progressBar.getFinalProgressString().back(), '\n');
+}
+
+// The final progress string may only be requested once.
+TEST(ConcurrentProgressBar, getFinalProgressStringOnlyOnce) {
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 10};
+  progressBar.getFinalProgressString();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      progressBar.getFinalProgressString(),
+      ::testing::HasSubstr("should only be called once"));
+}
