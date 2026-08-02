@@ -259,8 +259,8 @@ class TransitivePathImpl : public TransitivePathBase {
         start.isVariable() && graphVariable_ == start.getVariable();
     // To bind the `targetId` to values, we have to ensure that both sides are
     // bound.
-    bool bothSidesBoundVar = lhs_.isBoundVariable() && rhs_.isBoundVariable();
-    bool targetNodesAreBound = targetNodes.has_value() && bothSidesBoundVar;
+    bool targetNodesAreBound = targetNodes.has_value() &&
+                               lhs_.isBoundVariable() && rhs_.isBoundVariable();
 
     auto expandUndef = [&](auto pair) {
       return TableColumnWithVocab::expandUndef(pair, edges,
