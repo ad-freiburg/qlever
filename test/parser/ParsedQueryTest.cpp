@@ -4,33 +4,17 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/ParsedQuery.h"
-#include "parser/SparqlParser.h"
-
-namespace {
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
-using namespace ad_utility::testing;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
-                                  datasets);
-}
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(ParsedQueryTest, adjustLimitOffset) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
-    ParsedQuery parsed = parseQuery(std::move(operation));
+    ParsedQuery parsed = ad_utility::testing::parseQuery(std::move(operation));
     auto* qec = ad_utility::testing::getQec();
     QueryExecutionTree qet =
         QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}

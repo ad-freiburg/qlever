@@ -8,7 +8,6 @@
 #define QLEVER_SRC_LIBQLEVER_QLEVERTYPES_H
 
 #include <memory>
-#include <optional>
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
