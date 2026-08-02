@@ -493,13 +493,21 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     }
   };
 
+  // Choose the batch size of each phase's progress bar such that about 50
+  // progress lines are written per phase (but no more often than the default
+  // batch size).
+  auto batchSizeFor = [](size_t total) {
+    return std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE, total / 50);
+  };
+
   // Phase 1: write the new vocabulary.
   REBUILD_LOG_INFO << "Writing new vocabulary (merging existing and new "
                       "words) ..."
                    << std::endl;
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
-  ad_utility::ConcurrentProgressBar vocabProgress{
-      "Words written: ", index.getVocab().size() + entries.size()};
+  size_t vocabTotal = index.getVocab().size() + entries.size();
+  ad_utility::ConcurrentProgressBar vocabProgress{"Words written: ", vocabTotal,
+                                                  batchSizeFor(vocabTotal)};
   auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName,
                             [&logProgress, &vocabProgress](size_t numWords) {
@@ -521,12 +529,6 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t statsTotal =
       (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
       numTriplesOld.internal;
-  // For the two phases with very large totals, choose the batch size such
-  // that about 50 progress lines are written per phase (but no more often
-  // than the default batch size).
-  auto batchSizeFor = [](size_t total) {
-    return std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE, total / 50);
-  };
   ad_utility::ConcurrentProgressBar statsProgress{
       "Triples counted: ", statsTotal, batchSizeFor(statsTotal)};
   auto newStats =

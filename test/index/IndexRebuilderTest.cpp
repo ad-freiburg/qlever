@@ -207,7 +207,6 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(16)], "<m>");
 }
 
-// _____________________________________________________________________________
 // With more words than the progress batch size, the progress callback is
 // called once per full batch plus once for the remainder, and the reported
 // numbers add up to the total number of written words.

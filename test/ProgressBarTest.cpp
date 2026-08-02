@@ -100,7 +100,6 @@ TEST(ProgressBar, getTimer) {
               MatchesRegex(expectedUpdateRegex));
 }
 
-// _____________________________________________________________________________
 // Tests for `ConcurrentProgressBar`, see `ProgressBar.h`.
 
 // Single-threaded: an `Update` is returned exactly when the batch size is
