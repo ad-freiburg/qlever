@@ -521,8 +521,14 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t statsTotal =
       (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
       numTriplesOld.internal;
-  ad_utility::ConcurrentProgressBar statsProgress{"Triples counted: ",
-                                                  statsTotal};
+  // For the two phases with very large totals, choose the batch size such
+  // that about 50 progress lines are written per phase (but no more often
+  // than the default batch size).
+  auto batchSizeFor = [](size_t total) {
+    return std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE, total / 50);
+  };
+  ad_utility::ConcurrentProgressBar statsProgress{
+      "Triples counted: ", statsTotal, batchSizeFor(statsTotal)};
   auto newStats =
       index.recomputeStatistics(locatedTriplesSharedState,
                                 [&logProgress, &statsProgress](size_t numRows) {
@@ -553,8 +559,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   size_t permutationsTotal =
       (index.hasAllPermutations() ? 6 : 2) * numTriplesOld.normal +
       2 * numTriplesOld.internal;
-  ad_utility::ConcurrentProgressBar permutationsProgress{"Triples written: ",
-                                                         permutationsTotal};
+  ad_utility::ConcurrentProgressBar permutationsProgress{
+      "Triples written: ", permutationsTotal, batchSizeFor(permutationsTotal)};
   auto permutationsProgressCallback = [&logProgress,
                                        &permutationsProgress](size_t numRows) {
     logProgress(permutationsProgress, numRows);
