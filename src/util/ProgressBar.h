@@ -189,14 +189,36 @@ class ProgressBar {
 // A class for the same general goal as `ProgressBar` above (reporting progress
 // of a long-running computation), but with two differences: (1) the total
 // number of steps is known in advance, and (2) the computation is done by
-// several threads that concurrently report their progress.
+// several threads that concurrently report their progress. Unlike for
+// `ProgressBar`, the counter therefore lives inside the class, and the class
+// writes its output (timestamped lines) to the given stream itself.
+//
+// Typical usage:
+//
+// ad_utility::ConcurrentProgressBar progressBar(
+//     std::cout, "Triples processed: ", numTriplesTotal);
+// std::vector<std::thread> threads;
+// for (size_t i = 0; i < numThreads; ++i) {
+//   threads.emplace_back([&]() {
+//     while (...) {
+//       // Code that processes one chunk of triples.
+//       progressBar.add(chunk.size());
+//     }
+//   });
+// }
+// for (auto& thread : threads) {
+//   thread.join();
+// }
+// progressBar.finish();
 class ConcurrentProgressBar {
  public:
-  // Construct with the output stream, a prefix for each line (e.g. "Words
-  // written: "), and the total number of steps. A `batchSize` of `0` (the
-  // default) means: choose automatically, namely such that about 50 lines
-  // are written per phase, but at least every
-  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE` steps.
+  // Create and initialize a concurrent progress bar that writes its progress
+  // lines to `out`.
+  //
+  // NOTE: A `batchSize` of `0` (the default) means that the batch size is
+  // chosen automatically, namely such that about 50 lines are written in
+  // total, but at least one line every `DEFAULT_PROGRESS_BAR_BATCH_SIZE`
+  // steps.
   ConcurrentProgressBar(std::ostream& out, std::string prefix,
                         size_t totalSteps, size_t batchSize = 0)
       : out_{out},
@@ -207,9 +229,10 @@ class ConcurrentProgressBar {
                                              totalSteps / 50)},
         nextPrintAt_{batchSize_} {}
 
-  // Report `numSteps` newly processed steps. Threadsafe. NOTE: this takes a
-  // lock, so callers in hot loops should accumulate steps locally and report
-  // them in batches.
+  // Call this whenever one or more units have been processed. Threadsafe.
+  //
+  // IMPORTANT: Each call takes a lock, so callers in hot loops should
+  // accumulate steps locally and report them in larger batches.
   void add(size_t numSteps) {
     std::lock_guard lock{mutex_};
     processed_ += numSteps;
@@ -219,8 +242,9 @@ class ConcurrentProgressBar {
     }
   }
 
-  // Write a final line with the total number of processed steps (typically
-  // showing 100%), ended by a newline. Threadsafe.
+  // Write a final progress line with the total number of processed steps
+  // (typically showing 100%), ended by a newline instead of a carriage
+  // return. Should only be called once, after all threads have finished.
   void finish() {
     std::lock_guard lock{mutex_};
     print(true);
@@ -255,13 +279,22 @@ class ConcurrentProgressBar {
          << std::flush;
   }
 
+  // The stream to which the progress lines are written (e.g., the log file
+  // of a runtime index rebuild).
   std::ostream& out_;
+  // The first part of each progress line (e.g., "Triples processed: ").
   std::string prefix_;
+  // The total number of steps, known in advance.
   size_t totalSteps_;
+  // Write a progress line every this many steps.
   size_t batchSize_;
+  // Write the next progress line when this many steps have been processed.
   size_t nextPrintAt_;
+  // The total number of units that have been processed so far.
   size_t processed_ = 0;
+  // Timer that is started as soon as this progress bar is created.
   Timer timer_{Timer::Started};
+  // Mutex that protects the counters above as well as the writes to `out_`.
   std::mutex mutex_;
   // The width of the widest line printed so far, used to pad shorter lines,
   // see `print`.
