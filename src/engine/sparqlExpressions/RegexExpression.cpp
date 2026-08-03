@@ -11,6 +11,7 @@
 
 #include "engine/sparqlExpressions/RegexExpression.h"
 
+#include <absl/strings/str_replace.h>
 #include <re2/re2.h>
 
 #include <algorithm>
@@ -28,39 +29,50 @@ using namespace std::literals;
 
 namespace sparqlExpression::detail {
 
+// Return the content of `expression` if it is a constant string literal, and
+// `std::nullopt` otherwise. Note that the returned view points into the literal
+// that is owned by `expression`, which therefore has to outlive it. In
+// particular this must not be implemented via
+// `getLiteralFromLiteralExpression`, which returns a copy of the literal.
+std::optional<std::string_view> getConstantLiteralContent(
+    const SparqlExpression& expression) {
+  const auto* literalExpression =
+      dynamic_cast<const StringLiteralExpression*>(&expression);
+  if (!literalExpression) {
+    return std::nullopt;
+  }
+  return asStringViewUnsafe(literalExpression->value().getContent());
+}
+
 // _____________________________________________________________________________
 void ensureIsValidRegexIfConstant(const SparqlExpression& expression) {
-  const auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(&expression);
-  if (stringLiteralExpression) {
-    const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
-    RE2 regex{string, RE2::Quiet};
-    if (!regex.ok()) {
-      throw std::runtime_error{absl::StrCat(
-          "The regex \"", string,
-          "\" is not supported by QLever (which uses Google's RE2 library); "
-          "the error from RE2 is: ",
-          regex.error())};
-    }
+  auto string = getConstantLiteralContent(expression);
+  if (!string.has_value()) {
+    return;
+  }
+  RE2 regex{string.value(), RE2::Quiet};
+  if (!regex.ok()) {
+    throw std::runtime_error{absl::StrCat(
+        "The regex \"", string.value(),
+        "\" is not supported by QLever (which uses Google's RE2 library); "
+        "the error from RE2 is: ",
+        regex.error())};
   }
 }
 
 // _____________________________________________________________________________
 void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
-  const auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(&expression);
-  if (stringLiteralExpression) {
-    const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
-    auto firstInvalidFlag = string.find_first_not_of(supportedRegexFlags);
-    if (firstInvalidFlag != std::string::npos) {
-      throw std::runtime_error{absl::StrCat(
-          "Invalid regex flag '", string.substr(firstInvalidFlag, 1),
-          "' found in \"", string,
-          "\". The only supported flags are 'i', 'm', 's', 'U', and any "
-          "combination of them")};
-    }
+  auto string = getConstantLiteralContent(expression);
+  if (!string.has_value()) {
+    return;
+  }
+  auto firstInvalidFlag = string.value().find_first_not_of(supportedRegexFlags);
+  if (firstInvalidFlag != std::string::npos) {
+    throw std::runtime_error{absl::StrCat(
+        "Invalid regex flag '", string.value().substr(firstInvalidFlag, 1),
+        "' found in \"", string.value(),
+        "\". The only supported flags are 'i', 'm', 's', 'U', and any "
+        "combination of them")};
   }
 }
 
@@ -152,26 +164,62 @@ class RegexExpression : public RegexExpressionBase {
   }
 };
 
-// If `string` is a plain variable and `regex` is a constant regex with a
-// guaranteed literal prefix (see `getLiteralPrefixOfRegex`), return the
-// variable and that prefix, which enables prefiltering. Return `std::nullopt`
-// otherwise.
+// Return the regex that the `regex` expression will evaluate to, with the
+// `flags` (which may be `nullptr` if the `REGEX` call has no third argument)
+// merged into it, or `std::nullopt` if either of them is not a constant
+// literal.
+//
+// Merging the flags exactly as `MergeFlagsIntoRegex` does at runtime means that
+// RE2, and not this code, decides what they mean. In particular the `m` flag,
+// which lets `^` match after every newline and hence makes prefiltering
+// unsound, is handled correctly for free.
+//
+// The only flag that is treated specially is `i`, which is dropped: every value
+// that the case-insensitive regex matches is a case variant of a value that the
+// case-sensitive regex matches, and case variants all lie in the same prefix
+// range, because that range is computed on the PRIMARY level of the collation
+// (see `UnicodeVocabulary::prefix_range`). Keeping the flag would yield no
+// prefix at all, as the bounds that RE2 reports for `(?i:^abc)` are "ABC" and
+// "abc", which have no common prefix.
+std::optional<std::string> getConstantRegexWithFlags(
+    const SparqlExpression& regex, const SparqlExpression* flags) {
+  auto regexString = getConstantLiteralContent(regex);
+  if (!regexString.has_value()) {
+    return std::nullopt;
+  }
+  if (flags == nullptr) {
+    return std::string{regexString.value()};
+  }
+  auto flagsString = getConstantLiteralContent(*flags);
+  if (!flagsString.has_value()) {
+    return std::nullopt;
+  }
+  std::string flagsWithoutIgnoreCase =
+      absl::StrReplaceAll(flagsString.value(), {{"i", ""}});
+  return mergeFlagsIntoRegex(std::string{regexString.value()},
+                             flagsWithoutIgnoreCase);
+}
+
+// If `string` is a plain variable and `regex` is a constant regex (see
+// `getConstantRegexWithFlags`) with a guaranteed literal prefix (see
+// `getLiteralPrefixOfRegex`), return the variable and that prefix, which
+// enables prefiltering. Return `std::nullopt` otherwise.
 //
 // Note: Prefiltering `STR(?var)` is deliberately not supported, since we would
 // not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
 // current prefilter expressions do not consider this matching logic.
 std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
-    const SparqlExpression& string, const SparqlExpression& regex) {
+    const SparqlExpression& string, const SparqlExpression& regex,
+    const SparqlExpression* flags) {
   bool childIsStrExpression = string.isStrExpression();
   const auto* variableExpression = dynamic_cast<const VariableExpression*>(
       childIsStrExpression ? string.children()[0].get() : &string);
-  const auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(&regex);
-  if (!variableExpression || !stringLiteralExpression || childIsStrExpression) {
+  auto constantRegex = getConstantRegexWithFlags(regex, flags);
+  if (!variableExpression || !constantRegex.has_value() ||
+      childIsStrExpression) {
     return std::nullopt;
   }
-  std::string prefix = getLiteralPrefixOfRegex(
-      asStringViewUnsafe(stringLiteralExpression->value().getContent()));
+  std::string prefix = getLiteralPrefixOfRegex(constantRegex.value());
   // An empty prefix would not restrict the scanned blocks at all, so there is
   // no point in adding a prefilter for it.
   if (prefix.empty()) {
@@ -190,28 +238,26 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
                                           SparqlExpression::Ptr flags) {
   // The pattern has to be a simple literal, no matter what the other arguments
   // look like.
-  if (const auto* regexLiteralExpression =
-          dynamic_cast<const StringLiteralExpression*>(regex.get())) {
-    detail::ensureIsSimpleLiteral(regexLiteralExpression->value(), "REGEX");
+  if (auto literal = detail::getLiteralFromLiteralExpression(regex.get())) {
+    detail::ensureIsSimpleLiteral(literal.value(), "REGEX");
   }
   detail::ensureIsValidRegexIfConstant(*regex);
+  // Compute the prefilter information (if the regex is a prefix regex) before
+  // the arguments are moved into the expression below. The actual regex is
+  // always evaluated by `RegexExpression`; the prefilter only restricts the
+  // scanned blocks.
+  auto prefilterInfo =
+      detail::getRegexPrefilterInfo(*string, *regex, flags.get());
   if (flags) {
-    if (auto* stringLiteralExpression =
-            dynamic_cast<const StringLiteralExpression*>(flags.get())) {
-      detail::ensureIsSimpleLiteral(stringLiteralExpression->value(), "REGEX");
+    if (auto literal = detail::getLiteralFromLiteralExpression(flags.get())) {
+      detail::ensureIsSimpleLiteral(literal.value(), "REGEX");
     }
     detail::ensureIsValidFlagIfConstant(*flags);
-    // Merge the flags into the regex. The result is no longer a plain string
-    // literal, so a regex with flags will never allow prefiltering (see
-    // `getRegexPrefilterInfo`).
+    // Merge the flags into the regex, which turns it into an expression that is
+    // no longer a plain string literal (hence the prefiltering above).
     regex = makeMergeRegexPatternAndFlagsExpression(std::move(regex),
                                                     std::move(flags));
   }
-  // Compute the prefilter information (if the regex is a prefix regex) before
-  // moving the arguments into the expression. The actual regex is always
-  // evaluated by `RegexExpression`; the prefilter only restricts the scanned
-  // blocks.
-  auto prefilterInfo = detail::getRegexPrefilterInfo(*string, *regex);
   return std::make_unique<detail::RegexExpression>(
       std::move(string), std::move(regex), std::move(prefilterInfo));
 }

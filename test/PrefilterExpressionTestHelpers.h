@@ -225,6 +225,15 @@ std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
 }
 
 //______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makePrefixRegexExpressionWithFlags(
+    VariantArgs varExpr, VariantArgs litExpr, VariantArgs flagsExpr) {
+  return sparqlExpression::makeRegexExpression(
+      std::visit(getExpr, std::move(varExpr)),
+      std::visit(getExpr, std::move(litExpr)),
+      std::visit(getExpr, std::move(flagsExpr)));
+}
+
+//______________________________________________________________________________
 std::unique_ptr<SparqlExpression> makePrefixMatchSparqlExpression(
     VariantArgs varExpr, VariantArgs litExpr) {
   return sparqlExpression::makePrefixMatchExpression(
@@ -302,6 +311,9 @@ constexpr inline auto notSprqlExpr = &makeUnaryNegateExpression;
 constexpr inline auto strStartsSprql = &makeStringStartsWithSparqlExpression;
 // Create SparqlExpression `REGEX`.
 constexpr inline auto regexSparql = &makePrefixRegexExpression;
+// Create SparqlExpression `REGEX` with an explicit third argument (the flags).
+constexpr inline auto regexSparqlWithFlags =
+    &makePrefixRegexExpressionWithFlags;
 // Create SparqlExpression `ql:prefix-match`.
 constexpr inline auto prefixMatchSparql = &makePrefixMatchSparqlExpression;
 // Create SparqlExpression `STR`

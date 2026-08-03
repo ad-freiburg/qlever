@@ -494,10 +494,36 @@ TEST(RegexExpression, getEstimatesForFilterExpression) {
   EXPECT_THAT(
       nonPrefixExpression->getEstimatesForFilterExpression(10000, std::nullopt),
       hasEstimate(10000, 10000));
+
   // The same holds for a prefix regex on `STR(?a)`, which cannot be
   // prefiltered either.
   auto strExpression = makeRegexExpression("?a", "^abc", std::nullopt, true);
   EXPECT_THAT(
       strExpression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
       hasEstimate(10000, 10000));
+
+  // Constant flags are merged into the regex before the prefix is derived, so a
+  // prefix regex with flags is prefiltered (and estimated) as well. The `i`
+  // flag is dropped for that purpose, because the prefix range of the prefilter
+  // ignores case anyway (see `getConstantRegexWithFlags`).
+  for (const std::string& flags : {"", "s", "U", "i", "isU"}) {
+    auto withFlags = makeRegexExpression("?a", "^abc", flags);
+    EXPECT_THAT(withFlags->getEstimatesForFilterExpression(10000, std::nullopt),
+                hasEstimate(10, 10010))
+        << "flags: \"" << flags << "\"";
+  }
+  // With the `m` flag, `^` also matches after a newline, so no prefix can be
+  // derived and nothing is assumed to be filtered out. The same holds for flags
+  // that are not known in advance.
+  for (const std::string& flags : {"m", "im"}) {
+    auto withFlags = makeRegexExpression("?a", "^abc", flags);
+    EXPECT_THAT(withFlags->getEstimatesForFilterExpression(10000, std::nullopt),
+                hasEstimate(10000, 10000))
+        << "flags: \"" << flags << "\"";
+  }
+  auto variableFlagsExpression =
+      makeRegexExpression(variable("?a"), literal("\"^abc\""), variable("?b"));
+  EXPECT_THAT(variableFlagsExpression->getEstimatesForFilterExpression(
+                  10000, std::nullopt),
+              hasEstimate(10000, 10000));
 }

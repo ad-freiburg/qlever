@@ -519,6 +519,32 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   // alternation, cannot be prefiltered.
   evalAndEqualityCheck(regexSparql(varX, L("\"prefix\"")));
   evalAndEqualityCheck(regexSparql(varX, L("\"^prefix|other\"")));
+  // Constant flags are taken into account for the prefiltering. Flags that
+  // don't affect the meaning of the prefix are simply ignored...
+  evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"sU\"")),
+      pr(prefixRegex(L("\"prefix\"")), varX));
+  // ... whereas the `m` flag makes `^` match after every newline, so that a
+  // prefilter would be unsound...
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"m\"")));
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"im\"")));
+  // ... and the `i` flag is dropped before the prefix is derived (see
+  // `getConstantRegexWithFlags`), so the prefix is the one of the regex as
+  // written, including its case. The prefix range of the prefilter ignores case
+  // anyway, which is exactly what makes this sound.
+  evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^PreFix\""), L("\"i\"")),
+                       pr(prefixRegex(L("\"PreFix\"")), varX));
+  evalAndEqualityCheck(
+      regexSparqlWithFlags(varX, L("\"^prefix[0-9]\""), L("\"iU\"")),
+      pr(prefixRegex(L("\"prefix\"")), varX));
+  // Flags that are not known at query planning time also disable the
+  // prefiltering (invalid constant flags are rejected at construction time, see
+  // `RegexExpression, invalidConstruction`).
+  evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^prefix\""), varY));
   // It is currently not possible to prefilter expressions involving STR(?var),
   // since we not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and
   // so on. The current prefilter expressions do not consider this matching
