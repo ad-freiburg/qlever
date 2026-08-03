@@ -34,10 +34,8 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "noType".
   )";
 struct TestContextWithGivenTTl {
-  std::string turtleInput;
-  std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt;
-  QueryExecutionContext* qec =
-      ad_utility::testing::getQec(turtleInput, vocabularyType);
+  ad_utility::testing::TestIndexConfig config;
+  QueryExecutionContext* qec = ad_utility::testing::getQec(config);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
@@ -51,10 +49,22 @@ struct TestContextWithGivenTTl {
       sparqlExpression::EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
+
+  // Create a context for an index that is built from the given `config`. Use
+  // this overload if the index needs more than a knowledge graph, for example a
+  // text index.
+  explicit TestContextWithGivenTTl(ad_utility::testing::TestIndexConfig config)
+      : config{std::move(config)} {}
+
+  // Create a context for an index that is built from the given knowledge graph.
   TestContextWithGivenTTl(
       std::string turtle,
       std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt)
-      : turtleInput{std::move(turtle)}, vocabularyType{vocabularyType} {}
+      : TestContextWithGivenTTl{[&turtle, &vocabularyType]() {
+          ad_utility::testing::TestIndexConfig config{std::move(turtle)};
+          config.vocabularyType = vocabularyType;
+          return config;
+        }()} {}
 };
 
 // Helper function to check literal value and datatype
@@ -141,6 +151,7 @@ inline const std::vector<std::string> auxVocabWords{
     "\"noAuxType\"",
     "\"someAuxType\"^^<someType>",
     "\"withAuxLang\"@en",
+    "<http://qudt.org/vocab/unit/M>",
     "<https://example.com/aux>"};
 
 // Names for the words of `auxVocabWords`, to be used with the helpers below.
@@ -149,19 +160,38 @@ inline const std::string auxWktLiteral = auxVocabWords.at(1);
 inline const std::string auxPlainLiteral = auxVocabWords.at(2);
 inline const std::string auxTypedLiteral = auxVocabWords.at(3);
 inline const std::string auxLangLiteral = auxVocabWords.at(4);
-inline const std::string auxIri = auxVocabWords.at(5);
+inline const std::string auxUnitIri = auxVocabWords.at(5);
+inline const std::string auxIri = auxVocabWords.at(6);
+
+// The words of the vocabulary of the main index of `AuxVocabTestContext`, one
+// per kind of literal and IRI that the value getters distinguish. They are
+// deliberately disjoint from `auxVocabWords`, because the two vocabularies are.
+inline const std::string mainPlainLiteral = "\"noMainType\"";
+inline const std::string mainTypedLiteral = "\"someMainType\"^^<someType>";
+inline const std::string mainLangLiteral = "\"withMainLang\"@en";
+inline const std::string mainWktLiteral =
+    "\"LINESTRING(2 2, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+inline const std::string mainIri = "<https://example.com/main>";
+
+// The prefix of the IRIs that the index of `AuxVocabTestContext` encodes
+// directly in the `Id`, and an IRI that has that prefix.
+inline const std::string encodedIriPrefix = "https://encoded.example.com/";
+inline const std::string encodedIri = "<https://encoded.example.com/123>";
 
 // A test context whose index has an auxiliary vocabulary that holds
-// `auxVocabWords`.
+// `auxVocabWords`. Its knowledge graph holds the `main...` words above, and its
+// index additionally has a text index and encodes the IRIs that start with
+// `encodedIriPrefix` directly in the `Id`, such that an `Id` of every
+// `Datatype` can be created for it (see the fixture in `ValueGetterTest.cpp`).
 //
-// NOTE: The knowledge graph deliberately contains none of those words (an
-// auxiliary vocabulary is disjoint from the vocabulary of the main index) and
-// is used by no other test. The latter matters because `getQec` caches its
-// indices by the knowledge graph, so the auxiliary vocabulary that is set here
+// NOTE: The knowledge graph deliberately contains none of the `auxVocabWords`
+// (an auxiliary vocabulary is disjoint from the vocabulary of the main index)
+// and is used by no other test. The latter matters because `getQec` caches its
+// indices by the configuration, so the auxiliary vocabulary that is set here
 // would otherwise leak into unrelated tests.
 struct AuxVocabTestContext : TestContextWithGivenTTl {
-  AuxVocabTestContext()
-      : TestContextWithGivenTTl{"<x> <y> \"onlyForTheAuxVocabTests\" .\n"} {
+  AuxVocabTestContext() : TestContextWithGivenTTl{makeConfig()} {
     // `getQec` only hands out a `const Index&`, but setting the auxiliary
     // vocabulary is a deliberate test-only mutation of that very index.
     const_cast<Index&>(qec->getIndex())
@@ -176,6 +206,34 @@ struct AuxVocabTestContext : TestContextWithGivenTTl {
     AD_CONTRACT_CHECK(index.has_value(),
                       "The given word is not one of `auxVocabWords`");
     return Id::makeFromAuxVocabIndex(index.value());
+  }
+
+  // The `Id` of `encodedIri`, which the index encodes directly in the `Id`.
+  Id encodedIriId() const {
+    auto id = qec->getIndex().encodedIriManager().encode(encodedIri);
+    AD_CONTRACT_CHECK(id.has_value(), "The IRI could not be encoded");
+    return id.value();
+  }
+
+  // The `Id` of `word` in the local vocabulary of this context. The word has to
+  // be contained in neither vocabulary of the index, else it would not be
+  // stored in a local vocabulary in the first place.
+  Id localVocabId(const std::string& word) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromStringRepresentation(
+            word, qec->getLocalVocabContext())));
+  }
+
+ private:
+  // The configuration of the index, see the class comment.
+  static ad_utility::testing::TestIndexConfig makeConfig() {
+    ad_utility::testing::TestIndexConfig config{absl::StrCat(
+        "<x> <y> ", mainPlainLiteral, " , ", mainTypedLiteral, " , ",
+        mainLangLiteral, " , ", mainWktLiteral, " , ", mainIri, " .\n")};
+    config.createTextIndex = true;
+    config.encodedPrefixesWithoutAngleBrackets =
+        std::vector<std::string>{encodedIriPrefix};
+    return config;
   }
 };
 
@@ -236,6 +294,17 @@ inline void checkUnitValueGetterFromIdEncodedValue(
     ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
   TestContextWithGivenTTl testContext{unitTtl};
   ASSERT_EQ(getter(id, &testContext.context), UnitOfMeasurement::UNKNOWN);
+}
+
+// Helper to test `UnitOfMeasurementValueGetter` on the given word of an
+// auxiliary vocabulary, see `checkUnitValueGetterFromId` above. The word has to
+// be one of `auxVocabWords`.
+inline void checkUnitValueGetterFromAuxVocabId(
+    const std::string& word, UnitOfMeasurement expectedResult,
+    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+  AuxVocabTestContext testContext;
+  ASSERT_EQ(getter(testContext.auxId(word), &testContext.context),
+            expectedResult);
 }
 
 // Helper to test UnitOfMeasurementValueGetter using ValueId input
