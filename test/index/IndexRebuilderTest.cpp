@@ -794,7 +794,7 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 // under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
-  namespace fs = std::filesystem;
+  namespace fs = ql::filesystem;
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("rebuild.");
   cleanDirsWithPrefix("serverIntegration.");
