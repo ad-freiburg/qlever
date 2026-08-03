@@ -20,10 +20,8 @@ namespace ad_utility::request_parameters {
 std::optional<double> parsePinGeoIndexSimplification(
     const std::optional<std::string>& simplificationStr);
 
-// Determines the media type to be used for the result of a query. It resolves
-// the media type depending on the URL parameter "action= ..." (for TSV and CSV
-// export, for QLever-historical reasons).
-std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
+// Determine the media type to be used for the result of a query from the (historical) `?action=[some-export-specification]` HTTP query parameter. Return `nullopt` if no such query parameter is set.
+std::optional<ad_utility::MediaType> determineMediaTypeFromActionParam(
     const ad_utility::url_parser::ParamValueMap& params);
 
 // Determine whether the subtrees and the result should be pinned.
