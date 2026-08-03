@@ -44,8 +44,9 @@ struct DeduplicationParams {
 // every triple in `tmpl.preprocessedTriples_` is instantiated; triples with
 // any unbound term are silently dropped. `batchOffset` is the absolute
 // row ID of the first row in the batch (used to generate unique blank node
-// IDs). If `deduplication` is given, a triple is also dropped when its
-// deduplication key was already seen.
+// IDs). Triples are dropped if they are considered duplicates according to
+// `deduplicationParams->deduplicator_`, see `ConstructDeduplicator.h` for
+// details.
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
     const BatchEvaluationResult& batchResult, size_t batchOffset,

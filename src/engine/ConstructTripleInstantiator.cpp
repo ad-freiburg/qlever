@@ -62,9 +62,10 @@ std::optional<EvaluatedTriple> tryInstantiateTriple(
     return std::nullopt;
   }
   if (deduplication) {
-    const size_t rowIdxInIdTable = deduplication->ctx_.firstRow_ + rowInBatch;
-    if (!deduplication->deduplicator_.isNew(tripleIdx, rowIdxInIdTable, tmpl,
-                                            deduplication->ctx_)) {
+    const size_t rowIdxInIdTable =
+        deduplication.value().ctx_.firstRow_ + rowInBatch;
+    if (!deduplication.value().deduplicator_.isNew(
+            tripleIdx, rowIdxInIdTable, tmpl, deduplication.value().ctx_)) {
       return std::nullopt;
     }
   }
