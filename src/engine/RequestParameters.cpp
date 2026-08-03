@@ -16,6 +16,7 @@
 #include "util/http/UrlParser.h"
 
 namespace qlever::http_api_helpers {
+using namespace ad_utility::url_parser;
 
 // __________________________________________________________________________
 std::optional<double> parsePinGeoIndexSimplification(
@@ -34,8 +35,7 @@ std::optional<double> parsePinGeoIndexSimplification(
 
 // __________________________________________________________________________
 std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
-    const ad_utility::url_parser::ParamValueMap& params) {
-  using namespace ad_utility::url_parser;
+    const ParamValueMap& params) {
   using enum ad_utility::MediaType;
 
   static const std::array<std::pair<std::string, ad_utility::MediaType>, 6>
@@ -57,22 +57,17 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
 }
 
 // ____________________________________________________________________________
-ResultPinning determineResultPinning(
-    const ad_utility::url_parser::ParamValueMap& params) {
+ResultPinning determineResultPinning(const ParamValueMap& params) {
   const bool pinSubresults =
-      ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
-          .has_value();
+      checkParameter(params, "pin-subresults", "true").has_value();
   const bool pinResult =
-      ad_utility::url_parser::checkParameter(params, "pin-result", "true")
-          .has_value();
+      checkParameter(params, "pin-result", "true").has_value();
   return ResultPinning{pinSubresults, pinResult};
 }
 
 // ____________________________________________________________________________
-std::optional<uint64_t> parseSendLimit(
-    const ad_utility::url_parser::ParamValueMap& params) {
-  auto sendParameter =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
+std::optional<uint64_t> parseSendLimit(const ParamValueMap& params) {
+  auto sendParameter = getParameterCheckAtMostOnce(params, "send");
   if (sendParameter.has_value()) {
     return std::stoul(sendParameter.value());
   } else {
