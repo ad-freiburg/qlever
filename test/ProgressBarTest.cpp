@@ -2,10 +2,15 @@
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
+#include <sstream>
+#include <string_view>
 #include <thread>
+#include <vector>
 
 #include "../test/util/GTestHelpers.h"
 #include "util/ProgressBar.h"
@@ -93,4 +98,138 @@ TEST(ProgressBar, getTimer) {
 #endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
               MatchesRegex(expectedUpdateRegex));
+}
+
+// Tests for `ConcurrentProgressBar`, see `ProgressBar.h`.
+
+// Single-threaded: an `Update` is returned exactly when the batch size is
+// crossed, with the correct counts and percentages; intermediate progress
+// strings end with `\r`, only the final one with `\n`.
+TEST(ConcurrentProgressBar, singleThreaded) {
+  std::ostringstream out;
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 100, 10};
+  progressBar.add(5);
+  EXPECT_FALSE(progressBar.update().has_value());
+  progressBar.add(5);
+  {
+    auto update = progressBar.update();
+    ASSERT_TRUE(update.has_value());
+    out << update->getProgressString();
+  }
+  // The display for this batch has been claimed, so no further `Update` is
+  // returned before the next multiple of the batch size is reached.
+  EXPECT_FALSE(progressBar.update().has_value());
+  progressBar.add(90);
+  {
+    auto update = progressBar.update();
+    ASSERT_TRUE(update.has_value());
+    out << update->getProgressString();
+  }
+  out << progressBar.getFinalProgressString();
+  std::string s = std::move(out).str();
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 10 of 100 (10.0%)"));
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 100 of 100 (100.0%)"));
+  EXPECT_EQ(std::count(s.begin(), s.end(), '\r'), 2);
+  EXPECT_EQ(std::count(s.begin(), s.end(), '\n'), 1);
+  EXPECT_EQ(s.back(), '\n');
+}
+
+// A computation with a total of zero steps is reported as trivially complete.
+TEST(ConcurrentProgressBar, zeroTotalIsComplete) {
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 0};
+  EXPECT_THAT(progressBar.getFinalProgressString(),
+              ::testing::HasSubstr("Steps: 0 of 0 (100.0%)"));
+}
+
+// Concurrent `add` and `update` calls from several threads: the counts are
+// summed up correctly, the `Update` objects serialize the writes to the
+// shared stream, and the displayed counts never decrease.
+TEST(ConcurrentProgressBar, concurrentAddsAndUpdates) {
+  std::ostringstream out;
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 3000, 100};
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < 4; ++i) {
+    threads.emplace_back([&progressBar, &out]() {
+      // Varying step sizes (cycling through 1..5, 750 steps per thread in
+      // total), so that single `add` calls also jump over batch boundaries.
+      for (size_t j = 0; j < 250; ++j) {
+        progressBar.add(j % 5 + 1);
+        if (auto update = progressBar.update()) {
+          out << update->getProgressString();
+        }
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  out << progressBar.getFinalProgressString();
+  std::string s = std::move(out).str();
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 3,000 of 3,000 (100.0%)"));
+  // Every progress string is intact (in particular, not interleaved with
+  // another one), and the displayed counts never decrease.
+  size_t previousCount = 0;
+  size_t numProgressStrings = 0;
+  for (std::string_view rest{s}; !rest.empty();) {
+    size_t lineEnd = rest.find_first_of("\r\n");
+    ASSERT_NE(lineEnd, std::string_view::npos);
+    std::string_view line = rest.substr(0, lineEnd);
+    rest.remove_prefix(lineEnd + 1);
+    if (line.empty()) {
+      continue;  // Padding of a `\r` string that was followed by another.
+    }
+    ASSERT_TRUE(line.starts_with("Steps: "));
+    std::string countString{line.substr(7, line.find(" of ") - 7)};
+    std::erase(countString, ',');
+    size_t count = std::stoul(countString);
+    EXPECT_GE(count, previousCount);
+    previousCount = count;
+    ++numProgressStrings;
+  }
+  EXPECT_GE(numProgressStrings, 2u);
+}
+
+// A progress string that is shorter than its predecessor is padded with
+// spaces, so that the `\r` overwrites all leftover characters.
+TEST(ConcurrentProgressBar, shorterStringsArePadded) {
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 1'000'000, 1'000};
+  progressBar.add(1'000);
+  auto update = progressBar.update();
+  ASSERT_TRUE(update.has_value());
+  size_t firstWidth = update->getProgressString().size();
+  update.reset();
+  std::string finalString = progressBar.getFinalProgressString();
+  EXPECT_GE(finalString.size(), firstWidth);
+}
+
+// A batch size of zero is rejected (`update()` divides by it).
+TEST(ConcurrentProgressBar, zeroBatchSizeIsRejected) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::ConcurrentProgressBar("Steps: ", 100, 0),
+      ::testing::HasSubstr("must not be zero"));
+}
+
+// With `UseNewLine`, every progress string ends with `\n` (and no padding is
+// needed).
+TEST(ConcurrentProgressBar, useNewLine) {
+  ad_utility::ConcurrentProgressBar progressBar{
+      "Steps: ", 100, 10, DEFAULT_SPEED_DESCRIPTION_FUNCTION,
+      ad_utility::ProgressBar::UseNewLine};
+  progressBar.add(10);
+  auto update = progressBar.update();
+  ASSERT_TRUE(update.has_value());
+  EXPECT_THAT(update->getProgressString(),
+              ::testing::HasSubstr("Steps: 10 of 100"));
+  EXPECT_EQ(update->getProgressString().back(), '\n');
+  update.reset();
+  EXPECT_EQ(progressBar.getFinalProgressString().back(), '\n');
+}
+
+// The final progress string may only be requested once.
+TEST(ConcurrentProgressBar, getFinalProgressStringOnlyOnce) {
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 10};
+  progressBar.getFinalProgressString();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      progressBar.getFinalProgressString(),
+      ::testing::HasSubstr("should only be called once"));
 }

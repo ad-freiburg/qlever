@@ -2,7 +2,12 @@ name: "Native build to WebAssembly using Conan and Emscripten"
 
 on:
   push:
+    # Pushes to master publish a dev version of the `@ad-freiburg/qlever` npm
+    # package under
+    # the `next` dist-tag; version tags publish the release under `latest`
+    # (see the `publish` job below).
     branches: [ master ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ master ]
   merge_group:
@@ -17,9 +22,13 @@ env:
   # directly (rather than via the Conan recipe) because the Conan Center recipe
   # is outdated. Make sure to also change the version in
   # `conanprofiles/emscripten.profile` when changing this!
-  EMSDK_VERSION: "6.0.2"
+  EMSDK_VERSION: "6.0.5"
 
-# The default GITHUB_TOKEN only needs to read the repository here.
+# The default GITHUB_TOKEN only needs to read the repository here. The `publish`
+# job requests `id-token: write` for itself; that permission is deliberately NOT
+# granted workflow-wide, so that none of the many third-party actions and
+# dependencies in the `build` job can mint an OIDC token (and hence publish to
+# npm) on a run that legitimately has that permission available.
 permissions:
   contents: read
 
@@ -31,6 +40,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # Full history, so that `git describe` can derive the npm package
+          # version of dev builds from the most recent release tag (see the
+          # `Assemble npm package` step).
+          fetch-depth: 0
 
       - name: Set up emsdk ${{ env.EMSDK_VERSION }}
         uses: mymindstorm/setup-emsdk@v14
@@ -43,7 +56,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 25
+          node-version: 26
+
+      # `tsc` is needed by `emcc` at link time to generate the TypeScript
+      # definitions for the `qleverwasm` target, and by the smoke test below to
+      # check the example against them. Pinned, as those definitions are part of
+      # the published package.
+      - name: Install TypeScript
+        run: npm install -g typescript@7
 
       - name: Install conan
         run: pipx install conan
@@ -98,3 +118,143 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel
+
+      # Assemble the `@ad-freiburg/qlever` npm package (see `src/libqlever/npm/`) on every
+      # run, so that pull requests also validate the packaging and the tarball
+      # can be downloaded from any CI run. Publishing happens only on master and
+      # for version tags (see the `publish` job).
+      - name: Assemble npm package
+        working-directory: src/libqlever/npm
+        run: |
+          cp ../../../build/src/libqlever/qlever.mjs ../../../build/src/libqlever/qlever.wasm ../../../build/src/libqlever/qlever.d.ts .
+          # `npm pack` includes `LICENSE*` from the package directory
+          # automatically (no entry in the `files` whitelist needed), but it
+          # does not look outside it, so the license the package declares has
+          # to be copied here.
+          cp ../../../LICENSE .
+          # For a release tag `vX.Y.Z` the package version is `X.Y.Z`. All
+          # other builds get a prerelease of the NEXT patch version, derived
+          # from the most recent release tag, e.g. `0.5.51-dev.17.g473fd17`
+          # (17 commits after `v0.5.50`). Prerelease versions are invisible to
+          # semver range resolution (`^0.5.50`, `~0.5.51`, and even `*` never
+          # match them), so users can only ever get one by asking for it
+          # explicitly, either by exact version or via the `next` dist-tag.
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            DESCRIBE=$(git describe --tags --long --match 'v[0-9]*')
+            if [[ "${DESCRIBE}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-([0-9]+)-g([0-9a-f]+)$ ]]; then
+              VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))-dev.${BASH_REMATCH[4]}.g${BASH_REMATCH[5]}"
+            else
+              echo "::error::Cannot derive a version from 'git describe' output '${DESCRIBE}'"
+              exit 1
+            fi
+          fi
+          echo "Package version: ${VERSION}"
+          npm version --no-git-tag-version "${VERSION}"
+          npm pack
+
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-npm-package
+          path: src/libqlever/npm/ad-freiburg-qlever-*.tgz
+
+      # Run the usage example from `src/libqlever/npm/README.md` against the
+      # exact tarball that would be published: extract it from the README,
+      # type-check it against the `qlever.d.ts` that the package ships, then run
+      # it. It builds a tiny index in the module's virtual filesystem and queries
+      # it, which validates the ES module packaging, the loading of `qlever.wasm`
+      # and the embind bindings, none of which the C++ unit tests can see. Using
+      # the README example rather than a copy of it also keeps the example
+      # honest, as a broken one fails here. The step runs after the artifact
+      # upload, so that a failing tarball can still be downloaded for debugging,
+      # and before the `publish` job, so that a broken package is never
+      # published.
+      - name: Smoke-test the npm package
+        run: |
+          SMOKE_DIR=$(mktemp -d)
+          # Extract the example, which has to be the README's only fenced `js`
+          # block; `awk` exits nonzero for any other number of them.
+          awk '/^```js$/{n++; f=1; next} /^```$/{f=0} f; END{exit n != 1}' \
+            src/libqlever/npm/README.md > "${SMOKE_DIR}/readme-example.mjs" \
+            || { echo "::error::Expected exactly one 'js' block in the npm README"; exit 1; }
+          cd "${SMOKE_DIR}"
+          # A `package.json` of our own keeps `npm` from walking up the tree and
+          # installing into the first ancestor directory that has one.
+          echo '{ "name": "qlever-smoke-test", "private": true }' > package.json
+          npm install --no-audit --no-fund "${GITHUB_WORKSPACE}"/src/libqlever/npm/ad-freiburg-qlever-*.tgz
+          # `--checkJs` makes the pinned `tsc` from the step above check the
+          # plain `.mjs` file, from the types it infers for it; nothing is
+          # emitted, we only want the diagnostics. This catches a stale or broken
+          # `qlever.d.ts` (which is generated at link time and never compiled
+          # against otherwise) as well as an example that no longer matches the
+          # bindings.
+          tsc --noEmit --allowJs --checkJs --strict --target esnext \
+            --module nodenext readme-example.mjs
+          # Run the example (blocking calls are fine here; in a browser they have
+          # to go into a Web Worker, see the README) with `timeout` as a guard
+          # against a hang, e.g. a deadlock in the wasm module.
+          timeout 120s node readme-example.mjs 2>&1 | tee /dev/stderr \
+            | grep -E 'Number of result rows: 3$' > /dev/null \
+            || { echo "::error::The example did not print 'Number of result rows: 3'"; exit 1; }
+
+  # Release tags publish to the default `latest` dist-tag (what a plain
+  # `npm install @ad-freiburg/qlever` resolves to). Pushes to master publish the
+  # dev version under the `next` dist-tag, which never affects `latest`; users
+  # opt in explicitly with `npm install @ad-freiburg/qlever@next`. Pull requests
+  # and merge groups only build and upload the tarball, never publish.
+  #
+  # Authentication uses npm "trusted publishing": the package's settings on
+  # npmjs.com name this repository, this workflow file and the `npm-publish`
+  # environment below as its trusted publisher, and npm authenticates via
+  # GitHub's OIDC provider. No npm token is involved, and provenance
+  # attestations are generated automatically.
+  #
+  # This is a separate job for two reasons. The `id-token: write` permission is
+  # scoped to it, so that nothing in the `build` job can obtain an OIDC token
+  # (see the `permissions` block at the top of the file). And it is the only way
+  # to attach an `environment`, which is what actually keeps a pull request from
+  # publishing: for a `pull_request` event from a branch of this repository,
+  # GitHub runs the workflow file *of that branch*, so the `if` condition and
+  # the `permissions` block below are under the control of whoever opened the
+  # pull request, and neither is a security boundary. The environment is: its
+  # protection rules live in the repository settings, GitHub evaluates them
+  # before the job starts, and npm rejects a token that lacks the environment
+  # claim.
+  publish:
+    needs: build
+    if: github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    runs-on: ubuntu-24.04
+    environment: npm-publish
+    permissions:
+      contents: read
+      # Lets `npm publish` authenticate to npm via GitHub's OIDC provider, and
+      # `--provenance` attest that the package was built by this workflow.
+      id-token: write
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      # Trusted publishing (OIDC) requires `npm` >= 11.5.
+      - name: Install a recent npm
+        run: npm install -g npm@12
+
+      # The tarball built, packed and smoke-tested by the `build` job; it is
+      # published as-is, no checkout or rebuild involved.
+      - name: Download the npm package
+        uses: actions/download-artifact@v7
+        with:
+          name: qlever-npm-package
+
+      - name: Publish to npm
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            DIST_TAG=latest
+          else
+            DIST_TAG=next
+          fi
+          npm publish ad-freiburg-qlever-*.tgz --provenance --access public --tag "${DIST_TAG}"
