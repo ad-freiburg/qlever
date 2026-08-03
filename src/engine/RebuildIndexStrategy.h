@@ -59,9 +59,10 @@ struct RebuildIndexStrategy {
   // current number of index triples, see the class comment. The fractional
   // value is rounded up to a whole number of triples.
   //
-  // NOTE: The comparison with `max` must happen in `double` (casting the raw
-  // value first would be undefined behavior when it exceeds the range of
-  // `size_t`).
+  // NOTE: The `raw >= max` branch is the ordinary clamp to `max` (on a large
+  // index, this is the common case). Comparing in `double` also means that
+  // the cast below only happens for values below `max`, so it cannot be
+  // undefined behavior (which a cast beyond the range of `size_t` would be).
   size_t rebuildThreshold(size_t numIndexTriples) const {
     double raw = fractionOfIndexTriples_ * static_cast<double>(numIndexTriples);
     if (raw >= static_cast<double>(maxDeltaTriples_)) {

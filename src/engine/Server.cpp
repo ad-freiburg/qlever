@@ -1729,8 +1729,10 @@ void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
   if (!rebuildIndexStrategy_.has_value()) {
     return;
   }
-  auto numDeltaTriples =
-      static_cast<size_t>(count.triplesInserted_ + count.triplesDeleted_);
+  // NOTE: Cast before adding: the counts are non-negative here (they are set
+  // sizes), and the unsigned addition cannot overflow.
+  auto numDeltaTriples = static_cast<size_t>(count.triplesInserted_) +
+                         static_cast<size_t>(count.triplesDeleted_);
   if (!rebuildIndexStrategy_->shouldTriggerRebuild(numDeltaTriples,
                                                    numIndexTriples)) {
     return;
