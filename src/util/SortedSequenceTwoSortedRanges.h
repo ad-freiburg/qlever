@@ -44,6 +44,12 @@ class SortedSequenceTwoSortedRanges {
   using Storage = std::vector<ValueType>;
   Storage elements_ = {};
   size_t numItemsLargePart_ = 0;
+  // The number of elements at the beginning of the small part that a previous
+  // `consolidate` has already sorted and deduplicated. Elements inserted since
+  // then form the unsorted tail of the small part; `sortSmallPart` only has to
+  // sort that tail and can merge it with this prefix, instead of re-sorting
+  // the whole small part.
+  size_t numItemsSortedSmallPart_ = 0;
   bool smallPartIsSorted_ = true;
   [[no_unique_address]] Compare comp_ = {};
   [[no_unique_address]] Projection proj_ = {};
@@ -67,17 +73,43 @@ class SortedSequenceTwoSortedRanges {
   // must be sorted before calling this function. Preserves `isConsolidated`.
   void mergeParts() {
     AD_CORRECTNESS_CHECK(smallPartIsSorted_);
-    Storage merged;
-    merged.reserve(elements_.capacity());
-    ql::ranges::move(getSortedView(), std::back_insert_iterator(merged));
-    elements_.swap(merged);
+    // Both parts are sorted and internally unique, but a key may occur in
+    // both, in which case the (newer) element from the small part wins. First
+    // remove the overridden elements from the large part, then merge the two
+    // now disjoint sorted parts in place. Note: `inplace_merge` uses an
+    // internal buffer of the size of the smaller part, in contrast to the
+    // full copy of a merge into a fresh vector.
+    numItemsLargePart_ -= eraseSortedSubRange(largePart(), smallPart());
+    ql::ranges::inplace_merge(elements_, elements_.begin() + numItemsLargePart_,
+                              comp_, proj_);
     numItemsLargePart_ = elements_.size();
+    numItemsSortedSmallPart_ = 0;
     smallPartIsSorted_ = true;
   }
   // Sort and deduplicate the elements in the small part. Afterwards
   // `isConsolidated()` is true.
   void sortSmallPart() {
-    sortAndRemoveDuplicates(elements_, smallPart());
+    // The prefix of the small part (`numItemsSortedSmallPart_` elements) is
+    // already sorted and deduplicated from a previous `consolidate`; only the
+    // tail inserted since then needs sorting. Sort and deduplicate the tail,
+    // remove the prefix elements whose key the (newer) tail overrides, and
+    // merge the two now disjoint sorted ranges in place.
+    auto smallBegin = [this]() {
+      return elements_.begin() + numItemsLargePart_;
+    };
+    sortAndRemoveDuplicates(
+        elements_, ql::ranges::subrange(smallBegin() + numItemsSortedSmallPart_,
+                                        elements_.end()));
+    // NOTE: recompute all iterators after each erase above/below.
+    numItemsSortedSmallPart_ -= eraseSortedSubRange(
+        ql::ranges::subrange(smallBegin(),
+                             smallBegin() + numItemsSortedSmallPart_),
+        ql::ranges::subrange(smallBegin() + numItemsSortedSmallPart_,
+                             elements_.end()));
+    ql::ranges::inplace_merge(
+        ql::ranges::subrange(smallBegin(), elements_.end()),
+        smallBegin() + numItemsSortedSmallPart_, comp_, proj_);
+    numItemsSortedSmallPart_ = elements_.size() - numItemsLargePart_;
     smallPartIsSorted_ = true;
   }
 
@@ -92,6 +124,8 @@ class SortedSequenceTwoSortedRanges {
   // through `elements_.begin() + numItemsLargePart_`.
   bool isConsolidated() const {
     AD_CORRECTNESS_CHECK(numItemsLargePart_ <= elements_.size());
+    AD_CORRECTNESS_CHECK(numItemsLargePart_ + numItemsSortedSmallPart_ <=
+                         elements_.size());
     return smallPartIsSorted_;
   }
 
@@ -273,7 +307,9 @@ class SortedSequenceTwoSortedRanges {
       elements_.erase(iter);
       return 1;
     };
-    deleteInRange(smallPart());
+    // `isConsolidated` holds, so the sorted prefix spans the whole small part
+    // and shrinks along with it.
+    numItemsSortedSmallPart_ -= deleteInRange(smallPart());
     numItemsLargePart_ -= deleteInRange(largePart());
   }
   // Erase multiple elements that may contain duplicates. If the elements to
@@ -292,7 +328,9 @@ class SortedSequenceTwoSortedRanges {
   void eraseSorted(ql::span<ValueType> sortedElems) {
     AD_CONTRACT_CHECK(isConsolidated());
     AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(sortedElems, comp_, proj_));
-    eraseSortedSubRange(smallPart(), sortedElems);
+    // `isConsolidated` holds, so the sorted prefix spans the whole small part
+    // and shrinks along with it.
+    numItemsSortedSmallPart_ -= eraseSortedSubRange(smallPart(), sortedElems);
     numItemsLargePart_ -= eraseSortedSubRange(largePart(), sortedElems);
   }
 
@@ -319,6 +357,7 @@ class SortedSequenceTwoSortedRanges {
   void clear() {
     elements_.clear();
     numItemsLargePart_ = 0;
+    numItemsSortedSmallPart_ = 0;
     smallPartIsSorted_ = true;
   }
 
