@@ -15,7 +15,7 @@
 #include "parser/ParsedQuery.h"
 
 // _____________________________________________________________________________
-TEST(ParsedQueryTest, adjustLimitOffset) {
+TEST(ParsedQueryTest, updateExportLimit) {
   using enum ad_utility::MediaType;
   auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
     ParsedQuery parsed = ad_utility::testing::parseQuery(std::move(operation));
@@ -34,7 +34,7 @@ TEST(ParsedQueryTest, adjustLimitOffset) {
           ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto pq = makePlannedQuery(std::move(operation));
-        pq.parsedQuery().adjustLimitOffset(mediaType, sendLimit);
+        pq.parsedQuery().updateExportLimit(mediaType, sendLimit);
         EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
                     testing::Eq(limit));
       };
