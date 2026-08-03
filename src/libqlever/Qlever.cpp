@@ -508,9 +508,10 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
   // and since a failed rebuild does not swap (and hence does not re-stamp the
   // datetime of the served index), all subsequent rebuilds would fail the
   // same way. Only the default name is uniquified; an explicitly given
-  // directory that is taken remains an error (see the checks below). NOTE:
-  // the check-then-use is not atomic; this is fine because rebuilds are
-  // serialized (see `Server::rebuildInProgress_`).
+  // directory that is taken remains an error (see the checks below).
+  //
+  // NOTE: The check-then-use is not atomic; this is fine because rebuilds
+  // are serialized (see `Server::rebuildInProgress_`).
   auto uniquify = [](const std::string& directory) {
     std::string candidate = directory;
     for (size_t i = 1; fs::exists(candidate); ++i) {
