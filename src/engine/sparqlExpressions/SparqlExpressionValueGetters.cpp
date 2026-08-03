@@ -102,13 +102,7 @@ auto EffectiveBooleanValueGetter::operator()(
       return context->_qec.getIndex().indexToString(index).empty() ? False
                                                                    : True;
     }
-    case Datatype::LocalVocabIndex: {
-      return (context->_localVocab.getWord(id.getLocalVocabIndex())
-                  .getContent()
-                  .empty())
-                 ? False
-                 : True;
-    }
+    case Datatype::LocalVocabIndex:
     case Datatype::AuxVocabIndex:
       return ql::exportIds::getLiteralOrIriFromVocabIndex(
                  context->_qec.getIndex(), id, context->_localVocab)

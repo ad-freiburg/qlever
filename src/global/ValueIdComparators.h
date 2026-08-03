@@ -505,6 +505,40 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 }
 
 // This function is part of the implementation of `compareIds` (see below).
+//
+// WARNING: This function is only semantically correct as long as the index has
+// no auxiliary vocabulary (see `index/vocabulary/AuxVocabulary.h`). As soon as
+// it has one, the deviation from the semantics that SPARQL requires is
+// *silent*, in two different ways:
+// 1. An `Id` of type `AuxVocabIndex` is not a string type, because that type is
+//    deliberately absent from `ValueId::stringTypes_` (see the note there).
+//    Comparing it to a `VocabIndex` or a `LocalVocabIndex` therefore is an
+//    "incompatible types" comparison: it yields `Undef`, resp. compares the two
+//    *datatypes* in the `CompareByType` mode that `ORDER BY` uses. Two `Id`s of
+//    that type are compared to each other by their index, which is correct for
+//    equality (the two vocabularies are disjoint), but not for `<` and `>`.
+// 2. An `Id` of type `LocalVocabIndex` whose word happens to be stored in the
+//    auxiliary vocabulary is compared via `ValueId::compareThreeWay` (see the
+//    corresponding shortcut below). That comparison implements the order in
+//    which the index scans emit their `Id`s (call it the *internal* order), in
+//    which the words of an auxiliary vocabulary are all greater than all words
+//    of the main vocabulary, no matter what they are. Such an entry therefore
+//    compares greater than every word of the main vocabulary, and greater than
+//    every local vocab entry that is in neither vocabulary, see the detailed
+//    note in `index/LocalVocabEntry.h`.
+// So with an auxiliary vocabulary present, all kinds of semantic comparisons
+// (`FILTER`, `ORDER BY`, the range filters above, and the prefilters in
+// `PrefilterExpressionIndex.cpp`) silently yield wrong results.
+//
+// This is deliberate for now: nothing but a unit test can currently create an
+// auxiliary vocabulary (see `IndexImpl::setAuxVocabForTesting`), so no query is
+// affected. It has to be fixed *before* the auxiliary index is wired up. The
+// fix requires the semantically correct position of each word of the auxiliary
+// vocabulary within the main vocabulary, which the auxiliary vocabulary will
+// store, and it will most likely mean that this function must not use
+// `ValueId::compareThreeWay` (the internal order) for the string types, but a
+// separate, explicitly semantic comparison.
+// TODO<joka921> Implement that comparison in a follow-up PR.
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysUndef,
           typename Comparator>
@@ -523,37 +557,8 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   }
 
   // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
-  // on ValueIds already does the right thing.
-  //
-  // WARNING: This only holds as long as the index has no auxiliary vocabulary
-  // (see `index/vocabulary/AuxVocabulary.h`). `ValueId::compareThreeWay`
-  // implements the order in which the index scans emit their `Id`s (call it the
-  // *internal* order), in which the words of an auxiliary vocabulary are all
-  // greater than all words of the main vocabulary, no matter what they are. As
-  // soon as an index has such a vocabulary, that order is no longer the
-  // semantic (that is, by string value) order that this function is supposed to
-  // implement, and the deviation is *silent*: it affects
-  // 1. `Id`s of type `AuxVocabIndex`, which this function compares by their
-  //    bits, and
-  // 2. `Id`s of type `LocalVocabIndex` whose word happens to be stored in the
-  //    auxiliary vocabulary, because `LocalVocabEntry::positionInVocab` then
-  //    reports the position in *that* vocabulary (see the detailed note in
-  //    `index/LocalVocabEntry.h`). Such an entry compares greater than every
-  //    word of the main vocabulary, and greater than every local vocab entry
-  //    that is in neither vocabulary.
-  // So with an auxiliary vocabulary present, all kinds of semantic comparisons
-  // (`FILTER`, `ORDER BY`, the range filters above, and the prefilters in
-  // `PrefilterExpressionIndex.cpp`) silently yield wrong results.
-  //
-  // This is deliberate for now: nothing but a unit test can currently create an
-  // auxiliary vocabulary (see `IndexImpl::setAuxVocabForTesting`), so no query
-  // is affected. It has to be fixed *before* the auxiliary index is wired up.
-  // The fix requires the semantically correct position of each word of the
-  // auxiliary vocabulary within the main vocabulary, which the auxiliary
-  // vocabulary will store, and it will most likely mean that this function must
-  // not use `ValueId::compareThreeWay` (the internal order) for the string
-  // types, but a separate, explicitly semantic comparison.
-  // TODO<joka921> Implement that comparison in a follow-up PR.
+  // on ValueIds already does the right thing. NOTE: This no longer holds if the
+  // index has an auxiliary vocabulary, see case 2 of the warning above.
   if (a.getDatatype() == Datatype::LocalVocabIndex ||
       b.getDatatype() == Datatype::LocalVocabIndex) {
     return fromBool(std::invoke(comparator, a, b));

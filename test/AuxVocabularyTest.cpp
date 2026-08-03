@@ -120,18 +120,30 @@ TEST(AuxVocabIndex, valueIdBasics) {
 
 // ____________________________________________________________________________
 TEST(AuxVocabIndex, sortsAfterAllOtherDatatypes) {
-  // One `Id` per datatype, except for `LocalVocabIndex` (which is not ordered
-  // by its bits and is covered by the test below).
+  // One `Id` per datatype, except for `LocalVocabIndex`, which is not ordered
+  // by its bits and is covered by the test below. If a datatype is added to the
+  // `Datatype` enum, it has to be added here as well, which the check below
+  // enforces.
   std::vector<Id> ids{Id::makeUndefined(),
                       Id::makeFromBool(true),
                       Id::makeFromInt(42),
                       Id::makeFromDouble(3.14),
                       Id::makeFromVocabIndex(VocabIndex::make(12)),
                       Id::makeFromTextRecordIndex(TextRecordIndex::make(3)),
+                      Id::makeFromDate(DateYearOrDuration{Date{2013, 5, 16}}),
+                      Id::makeFromGeoPoint(GeoPoint{3, 4}),
                       Id::makeFromWordVocabIndex(WordVocabIndex::make(3)),
                       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3)),
+                      Id::makeFromEncodedVal(7),
                       auxId(0),
                       auxId(1)};
+  for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
+    auto datatype = static_cast<Datatype>(i);
+    bool isCovered = ql::ranges::any_of(
+        ids, [datatype](Id id) { return id.getDatatype() == datatype; });
+    ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
+        << toString(datatype);
+  }
   ql::ranges::sort(ids);
   // The two `Id`s of the auxiliary vocabulary are the largest ones, in
   // ascending order of their indices.

@@ -53,9 +53,11 @@ using Literal = ad_utility::triple_component::Literal;
 // encoded IRIs (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex`
 // resp. `encodedIdToLiteralOrIri` and then processed as described above; the
 // words of the text index (`WordVocabIndex`, `TextRecordIndex`) always are
-// plain literals; and for all remaining datatypes, which encode their value
-// directly in the `Id`, that value is turned into a literal, see
-// `idToLiteralForEncodedValue`.
+// plain literals; and all remaining datatypes are handled by
+// `idToLiteralForEncodedValue`, which turns the value that the `Id` stores into
+// a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns the
+// label of the blank node (`BlankNodeIndex`), resp. returns `std::nullopt`
+// (`Undefined`).
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
     bool onlyReturnLiteralsWithXsdString = false);
