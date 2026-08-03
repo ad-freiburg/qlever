@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
+#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -82,7 +83,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
   for (const size_t rowInBatch :
-       ql::views::iota(size_t{0}, batchResult.numRows_)) {
+       ad_utility::integerRange(batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (auto&& [tripleIdx, triple] :
          ::ranges::views::enumerate(tmpl.preprocessedTriples_)) {
