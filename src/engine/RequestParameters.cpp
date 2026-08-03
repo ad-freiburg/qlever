@@ -4,9 +4,13 @@
 
 #include "engine/RequestParameters.h"
 
+#include <array>
+#include <boost/url/param.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
@@ -34,23 +38,22 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
   using namespace ad_utility::url_parser;
   using enum ad_utility::MediaType;
 
-  std::optional<ad_utility::MediaType> mediaType = std::nullopt;
+  static const std::array<std::pair<std::string, ad_utility::MediaType>, 6>
+      actionValueToMediaType = {{{"csv_export", csv},
+                                 {"tsv_export", tsv},
+                                 {"qlever_json_export", qleverJson},
+                                 {"sparql_json_export", sparqlJson},
+                                 {"turtle_export", turtle},
+                                 {"binary_export", octetStream}}};
 
-  if (checkParameter(params, "action", "csv_export")) {
-    mediaType = csv;
-  } else if (checkParameter(params, "action", "tsv_export")) {
-    mediaType = tsv;
-  } else if (checkParameter(params, "action", "qlever_json_export")) {
-    mediaType = qleverJson;
-  } else if (checkParameter(params, "action", "sparql_json_export")) {
-    mediaType = sparqlJson;
-  } else if (checkParameter(params, "action", "turtle_export")) {
-    mediaType = turtle;
-  } else if (checkParameter(params, "action", "binary_export")) {
-    mediaType = octetStream;
+  for (const auto& [actionValue, mediaType] : actionValueToMediaType) {
+    if (checkParameter(params, "action", actionValue).has_value()) {
+      return mediaType;
+      break;
+    }
   }
 
-  return mediaType;
+  return std::nullopt;
 }
 
 // ____________________________________________________________________________
