@@ -39,6 +39,8 @@ TEST(ParsedQueryTest, updateExportLimit) {
                     testing::Eq(limit));
       };
 
+  // Use different queries with and without LIMIT/OFFSET to ensure that the
+  // export limit is not affected by query-specific LIMIT/OFFSET clauses.
   std::string complexQuery{
       "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
       "BIND(RAND() as ?r) . } OFFSET 5"};
