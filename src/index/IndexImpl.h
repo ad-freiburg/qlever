@@ -11,6 +11,7 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -44,6 +45,7 @@
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/TransparentFunctors.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -991,9 +993,12 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state.
+  // triples shared state. `progress` is called (possibly from several
+  // threads) with the number of newly scanned rows; this is used by the index
+  // rebuild for progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
-      const LocatedTriplesSharedState& locatedTriplesSharedState) const;
+      const LocatedTriplesSharedState& locatedTriplesSharedState,
+      const std::function<void(size_t)>& progress = ad_utility::noop) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

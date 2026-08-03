@@ -2190,9 +2190,10 @@ namespace {
 template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, CustomAction customAction) {
+    const Permutation& permutation, CustomAction customAction,
+    const std::function<void(size_t)>& progress) {
   return std::packaged_task<void()>{[&counter, &permutation,
-                                     &locatedTriplesSharedState,
+                                     &locatedTriplesSharedState, progress,
                                      customAction = std::move(customAction)]() {
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
@@ -2213,6 +2214,7 @@ std::packaged_task<void()> computeStatistics(
     for (const auto& table : tables) {
       std::invoke(customAction, table);
       IndexImpl::countDistinct(lastCol0, counter, table);
+      progress(table.numRows());
     }
   }};
 }
@@ -2220,7 +2222,8 @@ std::packaged_task<void()> computeStatistics(
 
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
-    const LocatedTriplesSharedState& locatedTriplesSharedState) const {
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const std::function<void(size_t)>& progress) const {
   size_t numTriples = 0;
   size_t numTriplesInternal = 0;
   size_t numSubjects = 0;
@@ -2230,11 +2233,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
   std::vector<std::packaged_task<void()>> tasks;
 
-  auto getCounterTask = [&locatedTriplesSharedState](
+  auto getCounterTask = [&locatedTriplesSharedState, &progress](
                             size_t& counter, const Permutation& permutation,
                             auto customAction) {
     return computeStatistics(locatedTriplesSharedState, counter, permutation,
-                             customAction);
+                             customAction, progress);
   };
 
   tasks.push_back(getCounterTask(
