@@ -1,3 +1,7 @@
+// Copyright 2026, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Tomas Damek <tomas.damek@email.uni-freiburg.de>
+
 #include "engine/RequestParameters.h"
 
 #include <optional>
@@ -30,7 +34,7 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
   using namespace ad_utility::url_parser;
   using enum ad_utility::MediaType;
 
-  std::optional<MediaType> mediaType = std::nullopt;
+  std::optional<ad_utility::MediaType> mediaType = std::nullopt;
 
   if (checkParameter(params, "action", "csv_export")) {
     mediaType = csv;
