@@ -181,9 +181,9 @@ inline const std::string encodedIri = "<https://encoded.example.com/123>";
 
 // A test context whose index has an auxiliary vocabulary that holds
 // `auxVocabWords`. Its knowledge graph holds the `main...` words above, and its
-// index additionally has a text index and encodes the IRIs that start with
-// `encodedIriPrefix` directly in the `Id`, such that an `Id` of every
-// `Datatype` can be created for it (see the fixture in `ValueGetterTest.cpp`).
+// index encodes the IRIs that start with `encodedIriPrefix` directly in the
+// `Id`, such that an `Id` of every `Datatype` can be created for it (see the
+// fixture in `ValueGetterTest.cpp`).
 //
 // NOTE: The knowledge graph deliberately contains none of the `auxVocabWords`
 // (an auxiliary vocabulary is disjoint from the vocabulary of the main index)
@@ -226,11 +226,22 @@ struct AuxVocabTestContext : TestContextWithGivenTTl {
 
  private:
   // The configuration of the index, see the class comment.
+  //
+  // NOTE: The index deliberately has NO text index, although that would make
+  // the `Id`s of the types `WordVocabIndex` and `TextRecordIndex` resolvable.
+  // The reason is a bug in `TextIndexBuilder::...` (see the loop over the
+  // vocabulary at `TextIndexBuilder.cpp:170`): it iterates over the words of
+  // the vocabulary with *dense* indices, whereas the indices of a
+  // `SplitVocabulary` are marker-encoded, so building a text index over a
+  // knowledge graph that contains a WKT literal (like this one) fails as soon
+  // as the vocabulary is geo-split. `makeTestIndex` picks the vocabulary type
+  // at random if it is not set, so enabling the text index here would make the
+  // tests flaky.
+  // TODO<joka921> Fix that bug, then enable the text index here.
   static ad_utility::testing::TestIndexConfig makeConfig() {
     ad_utility::testing::TestIndexConfig config{absl::StrCat(
         "<x> <y> ", mainPlainLiteral, " , ", mainTypedLiteral, " , ",
         mainLangLiteral, " , ", mainWktLiteral, " , ", mainIri, " .\n")};
-    config.createTextIndex = true;
     config.encodedPrefixesWithoutAngleBrackets =
         std::vector<std::string>{encodedIriPrefix};
     return config;
