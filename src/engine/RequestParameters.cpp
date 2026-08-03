@@ -7,7 +7,7 @@
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
-namespace ad_utility::request_parameters {
+namespace qlever::http_api_helpers {
 
 // __________________________________________________________________________
 std::optional<double> parsePinGeoIndexSimplification(
@@ -50,7 +50,7 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
 }
 
 // ____________________________________________________________________________
-std::pair<bool, bool> determineResultPinning(
+ResultPinning determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params) {
   const bool pinSubresults =
       ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
@@ -58,7 +58,7 @@ std::pair<bool, bool> determineResultPinning(
   const bool pinResult =
       ad_utility::url_parser::checkParameter(params, "pin-result", "true")
           .has_value();
-  return {pinSubresults, pinResult};
+  return ResultPinning{pinSubresults, pinResult};
 }
 
 // ____________________________________________________________________________
@@ -73,4 +73,4 @@ std::optional<uint64_t> parseSendLimit(
   }
 }
 
-}  // namespace ad_utility::request_parameters
+}  // namespace qlever::http_api_helpers

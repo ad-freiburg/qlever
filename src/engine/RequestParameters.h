@@ -7,11 +7,9 @@
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
-/**
- * \brief Helpers that interpret already-parsed URL parameters into typed,
- * validated request settings for QLever's SPARQL endpoint.
- */
-namespace ad_utility::request_parameters {
+// Helpers to parse QLever's HTTP api, in particular http query parameters in
+// the ?key=value form.
+namespace qlever::http_api_helpers {
 // Parse the `pin-geo-index-simplification` parameter (the maximum error in
 // meters for the simplification of geometries before indexing) from its
 // string representation. Return `std::nullopt` if `simplificationStr` is
@@ -20,18 +18,28 @@ namespace ad_utility::request_parameters {
 std::optional<double> parsePinGeoIndexSimplification(
     const std::optional<std::string>& simplificationStr);
 
-// Determine the media type to be used for the result of a query from the (historical) `?action=[some-export-specification]` HTTP query parameter. Return `nullopt` if no such query parameter is set.
+// Determine the media type to be used for the result of a query from the
+// (historical) `?action=[some-export-specification]` HTTP query parameter.
+// Return `nullopt` if no such query parameter is set.
 std::optional<ad_utility::MediaType> determineMediaTypeFromActionParam(
     const ad_utility::url_parser::ParamValueMap& params);
 
-// Determine whether the subtrees and the result should be pinned.
-std::pair<bool, bool> determineResultPinning(
+// Help struct defining the pinning of subtrees and the final result of a query
+// into the cache.
+struct ResultPinning {
+  bool pinSubtrees;
+  bool pinResult;
+};
+
+// Determine `ResultPinning` from the `pin-subresults` and `pin-result` URL
+// parameters.
+ResultPinning determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params);
 
 // Parse the `send` parameter (historical name): the maximum number of
 // bindings to export. Returns `std::nullopt` if not set.
 std::optional<uint64_t> parseSendLimit(
     const ad_utility::url_parser::ParamValueMap& params);
-}  // namespace ad_utility::request_parameters
+}  // namespace qlever::http_api_helpers
 
 #endif  // QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
