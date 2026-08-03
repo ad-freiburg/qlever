@@ -10,26 +10,27 @@
 
 // QLever allocator seam.
 //
-// `qlever::Allocator<T>`, `qlever::makeUnlimitedAllocator<T>()`, and
-// `qlever::makeAllocatorWithLimit<T>(limit[, clearOnAllocation])` are the
-// single point through which the engine's allocations are routed. The concrete
-// allocator backend is selected at *compile time*:
+// Implements the type `qlever::Allocator`, as well as the functions
+// `qlever::makeUnlimitedAllocator` and `qlever::makeAllocatorWithLimit` which
+// both return `Allocator`. The actual implementation of `Allocator` can be
+// specified at compile time via CMake from the following:
 //
 //   * LIMIT (default): `ad_utility::allocatorImpl::AllocatorWithLimit<T>` - the
-//     historical behaviour, a stateful allocator that enforces a global memory
-//     limit. The legacy public name `ad_utility::AllocatorWithLimit<T>` is kept
-//     valid as an alias for `qlever::Allocator<T>` (see
-//     `util/AllocatorWithLimit.h`).
+//     historical behaviour, a strongly-typed allocator that enforces a global
+//     memory limit. The legacy name of that implementation,
+//     `ad_utility::AllocatorWithLimit<T>` is now an alias for
+//     `qlever::Allocator<T>` (see `util/AllocatorWithLimit.h`).
 //   * PMR: a `ql::pmr::memory_resource`-based allocator
 //     (`ad_utility::PmrAllocator<T>`). By default it keeps the same
-//     memory-limit semantics via a `LimitedMemoryResource`.
+//     memory-limit semantics as the LIMIT implementation via a
+//     `LimitedMemoryResource`.
 //
 // Selection:
 //   * Define `QLEVER_USE_PMR_ALLOCATOR` (e.g. via the CMake option
 //     `QLEVER_ALLOCATOR_BACKEND=pmr`) to select the PMR backend.
 //
-// NOTE: This header must *not* include `util/AllocatorWithLimit.h`, because that
-// header is a compatibility shim that includes *this* header. Each backend
+// NOTE: This header must *not* include `util/AllocatorWithLimit.h`, because
+// that header is a compatibility shim that includes *this* header. Each backend
 // therefore includes its concrete implementation header directly.
 
 #include <utility>

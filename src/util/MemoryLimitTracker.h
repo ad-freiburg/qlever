@@ -21,15 +21,10 @@
 #include "util/Synchronized.h"
 #include "util/TransparentFunctors.h"
 
-// This header contains the *shared* memory-limit bookkeeping used by both
+// This header contains the memory-limit bookkeeping used by both
 // allocator backends: the classical `allocatorImpl::AllocatorWithLimit` (see
 // `AllocatorWithLimitImpl.h`) and the `ql::pmr`-based `LimitedMemoryResource`
-// (see `AllocatorPmr.h`). It was factored out of `AllocatorWithLimitImpl.h` so
-// that the PMR backend can reuse the tracker without depending on the concrete
-// classical allocator implementation.
-//
-// The types live in their historical namespaces (`ad_utility` and
-// `ad_utility::detail`) so that existing users keep working unchanged.
+// (see `AllocatorPmr.h`).
 
 namespace ad_utility {
 
@@ -166,14 +161,16 @@ class MemoryLimitTracker {
   // Copying a shared_ptr-backed wrapper never throws; assert this so that the
   // noexcept move operations below can copy this member unconditionally.
   AllocationMemoryLeftThreadsafe sharedMemoryLeft_;
-  static_assert(std::is_nothrow_copy_constructible_v<AllocationMemoryLeftThreadsafe>);
-  static_assert(std::is_nothrow_copy_assignable_v<AllocationMemoryLeftThreadsafe>);
+  static_assert(
+      std::is_nothrow_copy_constructible_v<AllocationMemoryLeftThreadsafe>);
+  static_assert(
+      std::is_nothrow_copy_assignable_v<AllocationMemoryLeftThreadsafe>);
 
   // The clear-on-allocation hook, held behind a `shared_ptr` following the SAME
-  // principle as `sharedMemoryLeft_`: the hook is shared (never deep-copied), so
-  // copying/moving a tracker only copies a shared_ptr. This is nothrow, which is
-  // why the move operations need no `terminateIfThrows` guard. The pointee is
-  // `const` because the hook is fixed at construction.
+  // principle as `sharedMemoryLeft_`: the hook is shared (never deep-copied),
+  // so copying/moving a tracker only copies a shared_ptr. This is nothrow,
+  // which is why the move operations need no `terminateIfThrows` guard. The
+  // pointee is `const` because the hook is fixed at construction.
   std::shared_ptr<const ClearOnAllocation> clearOnAllocation_;
   static_assert(std::is_nothrow_copy_constructible_v<
                 std::shared_ptr<const ClearOnAllocation>>);
@@ -202,19 +199,18 @@ class MemoryLimitTracker {
 
   // Move operations deliberately COPY the source rather than steal it, so that
   // the moved-from tracker remains valid and continues to share the same memory
-  // budget and hook. This mirrors the semantics required by AllocatorWithLimit (a
-  //  moved-from allocator must still hold a usable tracker).
+  // budget and hook. This mirrors the semantics required by
+  // `AllocatorWithLimit` (a moved-from allocator must still hold a usable
+  // tracker).
   //
   // These are declared explicitly (rather than left undeclared to fall back
   // on the copy constructor) together with the destructor below so that all
   // five special member functions are declared consistently.
   MemoryLimitTracker(MemoryLimitTracker&& other) noexcept
-      : sharedMemoryLeft_{other.sharedMemoryLeft_},
-        clearOnAllocation_{other.clearOnAllocation_} {}
+      : MemoryLimitTracker(other) {}
+
   MemoryLimitTracker& operator=(MemoryLimitTracker&& other) noexcept {
-    sharedMemoryLeft_ = other.sharedMemoryLeft_;
-    clearOnAllocation_ = other.clearOnAllocation_;
-    return *this;
+    return *this = other;
   }
 
   ~MemoryLimitTracker() = default;

@@ -33,7 +33,6 @@
 // `util/MemoryLimitTracker.h` because they are part of the public API used
 // across the code base.
 
-
 // The concrete memory-limit enforcing allocator. See the file-level comment for
 // why it lives in this dedicated namespace rather than directly in
 // `ad_utility`.
@@ -111,7 +110,7 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
-  AllocatorWithLimit(const AllocatorWithLimit<U>& other)  // NOLINT
+      AllocatorWithLimit(const AllocatorWithLimit<U>& other)  // NOLINT
       : tracker_{other.tracker_} {}
 
   // Defaulted copy operations.
@@ -121,7 +120,8 @@ class AllocatorWithLimit {
   // The tracker's noexcept move operations copy rather than steal (keeping the
   // moved-from allocator valid and sharing the same budget), so defaulting the
   // allocator move operations here is both correct and noexcept.
-  static_assert(std::is_nothrow_move_constructible_v<detail::MemoryLimitTracker>);
+  static_assert(
+      std::is_nothrow_move_constructible_v<detail::MemoryLimitTracker>);
   static_assert(std::is_nothrow_move_assignable_v<detail::MemoryLimitTracker>);
   static_assert(std::is_nothrow_copy_constructible_v<std::allocator<T>>);
   static_assert(std::is_nothrow_copy_assignable_v<std::allocator<T>>);
@@ -174,7 +174,7 @@ class AllocatorWithLimit {
       MemorySize limit,
       ClearOnAllocation clearOnAllocation = ad_utility::noop) {
     return AllocatorWithLimit{makeAllocationMemoryLeftThreadsafeObject(limit),
-                               std::move(clearOnAllocation)};
+                              std::move(clearOnAllocation)};
   }
 };
 

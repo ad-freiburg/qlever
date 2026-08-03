@@ -4,20 +4,11 @@
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
-//
+
 // A `ql::pmr`-based allocator backend for QLever. This mirrors the public
 // surface of `ad_utility::AllocatorWithLimit` (see `AllocatorWithLimit.h`) so
 // that it can be selected as a drop-in replacement behind the
 // `qlever::Allocator<T>` seam (see `Allocator.h`).
-//
-// The design goals (see `foresight-notes/qlever-allocator`):
-//   * Route all allocations through a `ql::pmr::memory_resource` so the target
-//     platform can inject its own memory pools (e.g. "Hi" / "Lo").
-//   * Keep QLever's existing *memory-limit* semantics by default: a
-//     `LimitedMemoryResource` counts bytes and throws when a configured limit
-//     is exceeded, exactly like `AllocatorWithLimit`.
-//   * Allow the platform to instead supply a plain upstream resource with no
-//     limit enforcement.
 
 #ifndef QLEVER_SRC_UTIL_ALLOCATORPMR_H
 #define QLEVER_SRC_UTIL_ALLOCATORPMR_H
@@ -41,9 +32,9 @@ class PmrAllocator;
 // `AllocationExceedsLimitException` is thrown - identical behaviour to
 // `AllocatorWithLimit`.
 //
-// Instances are shared (via `std::shared_ptr`, see the factory functions
-// below) so that all allocators referring to the same resource count against
-// the same budget. Access to the counter is synchronized.
+// The memory limit is shared via `std::shared_ptr`, so that all allocators
+// referring to the same resource count against the same limit. Access to the
+// memory limit is threadsafe (see `util/MemoryLimitTracker.h`).
 class LimitedMemoryResource : public ql::pmr::memory_resource {
  private:
   template <typename U>
@@ -92,10 +83,10 @@ class LimitedMemoryResource : public ql::pmr::memory_resource {
 // `ql::pmr::memory_resource` (it holds a *pointer* to the resource and, on
 // copy/move/swap, that pointer travels with the container - matching
 // `AllocatorWithLimit`), and additionally
-//   * keeps the referenced resource alive via an optional owning
-//     `shared_ptr` (so factory-created resources are not dangling), and
-//   * exposes `amountMemoryLeft()` and `.as<U>()`, which parts of the engine
-//     rely on.
+//   * optionally keeps the referenced resource alive via a
+//     `shared_ptr` (to avoid dangling of non-global resources), and
+//   * exposes `amountMemoryLeft()` and `.as<U>()`, which are part of the
+//     interface of `AllocatorWithLimit`.
 template <typename T>
 class PmrAllocator {
  private:
@@ -108,28 +99,23 @@ class PmrAllocator {
   //     caller to keep the resource alive.
   //
   //   * `owner_` (shared pointer) *optionally* co-owns that resource, purely to
-  //     manage its lifetime. Ownership is a per-instance (runtime) property, not
-  //     a separate type, because the engine bakes a single allocator type into
-  //     its container types (e.g. `IdTable`'s `DefaultAllocator`): an
-  //     owning and a non-owning allocator must remain interchangeable as the
-  //     same `qlever::Allocator<T>`.
-  //
+  //     manage its lifetime.
   // Two cases:
   //
   //   1. QLever-created resources (via the `makePmrAllocator*` factories, e.g.
   //      the default construction path). These `LimitedMemoryResource`s have no
   //      external owner, yet the allocator is copied into many long-lived
   //      containers that outlive the factory call. Here `owner_` holds the
-  //      `shared_ptr` so the resource stays alive for as long as any copy of the
-  //      allocator (and therefore any buffer allocated from it) exists. This is
-  //      the PMR equivalent of how `AllocatorWithLimit` shares its
+  //      `shared_ptr` so the resource stays alive for as long as any copy of
+  //      the allocator (and therefore any buffer allocated from it) exists.
+  //      This is the PMR equivalent of how `AllocatorWithLimit` shares its
   //      `AllocationMemoryLeft` state via a `shared_ptr`.
   //
   //   2. Platform-provided resources (via `makePmrAllocatorFromResource`, e.g.
-  //      an externally injected pool). Their lifetime is owned and guaranteed by
-  //      the platform (typically static), so QLever must NOT take ownership: in
-  //      this case `owner_ == nullptr` and only the raw `resource_` pointer is
-  //      used - exactly the standard non-owning `polymorphic_allocator`
+  //      an externally injected pool). Their lifetime is owned and guaranteed
+  //      by the platform (typically static), so QLever must NOT take ownership:
+  //      in this case `owner_ == nullptr` and only the raw `resource_` pointer
+  //      is used - exactly the standard non-owning `polymorphic_allocator`
   //      contract.
   std::shared_ptr<ql::pmr::memory_resource> owner_;
   ql::pmr::memory_resource* resource_;
@@ -185,19 +171,19 @@ class PmrAllocator {
   // allocator that ever referred to an owned resource keeps that resource alive
   // for its whole lifetime. This can only extend a resource's lifetime, never
   // shorten it, so the resource always outlives all buffers allocated from it.
-  PmrAllocator(PmrAllocator&& other) noexcept
-      : PmrAllocator(other) {}
+  PmrAllocator(PmrAllocator&& other) noexcept : PmrAllocator(other) {}
   PmrAllocator& operator=(PmrAllocator&& other) noexcept {
     return *this = other;
   }
 
   // Obtain an allocator for another type sharing the same resource.
   template <typename U>
-  PmrAllocator<U> as() const { return PmrAllocator<U>{*this}; }
+  PmrAllocator<U> as() const {
+    return PmrAllocator<U>{*this};
+  }
 
   T* allocate(std::size_t n) {
-    return static_cast<T*>(
-        resource_->allocate(n * sizeof(T), alignof(T)));
+    return static_cast<T*>(resource_->allocate(n * sizeof(T), alignof(T)));
   }
 
   void deallocate(T* p, std::size_t n) {
@@ -242,8 +228,8 @@ class PmrAllocator {
     // for the (also deliberately global-heap) custom-upstream case.
     auto resource = std::make_shared<LimitedMemoryResource>(
         limit, ql::pmr::get_default_resource(), std::move(clearOnAllocation));
-    return PmrAllocator{
-        std::static_pointer_cast<ql::pmr::memory_resource>(std::move(resource))};
+    return PmrAllocator{std::static_pointer_cast<ql::pmr::memory_resource>(
+        std::move(resource))};
   }
 };
 
