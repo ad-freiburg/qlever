@@ -34,9 +34,9 @@ using StringTriple = QueryExecutionTree::StringTriple;
 // Bundles the pieces shared by `evaluateTables`, `generateStringTriples`, and
 // `generateFormattedTriples`.
 struct EvaluationConfig {
-  const Index& index_;
+  std::reference_wrapper<const Index> index_;
   CancellationHandle cancellationHandle_;
-  const QueryExecutionContext& qec_;
+  std::reference_wrapper<const QueryExecutionContext> qec_;
   ad_utility::DeduplicationMode mode_ = ad_utility::DeduplicationMode::none();
 };
 
@@ -57,7 +57,8 @@ class ConstructTripleGenerator {
   // lazy range of triples serialized according to `mediaType`.
   // Duplicate triples are handled according to `config.mode_`.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
-      const Triples& templateTriples, const VariableToColumnMap& variableColums,
+      const Triples& templateTriples,
+      const VariableToColumnMap& variableColumns,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
       ad_utility::MediaType mediaType, EvaluationConfig config);
 

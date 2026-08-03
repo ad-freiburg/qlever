@@ -115,7 +115,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
 
   auto processTable =
       [preprocessedTemplate = std::move(preprocessedTemplatePtr),
-       index = &config.index_, cancellationHandle = config.cancellationHandle_,
+       index = &config.index_.get(),
+       cancellationHandle = config.cancellationHandle_,
        cache = std::move(cache), deduplicator = std::move(deduplicator),
        accumulatedRowOffset = rowOffset](const TableWithRange& table) mutable {
         const size_t numRowsOfTable = ql::ranges::size(table.view_);
@@ -123,8 +124,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
         const size_t tableRowOffset = accumulatedRowOffset;
         accumulatedRowOffset += numRowsOfTable;
 
-        BatchEvalContext context{*preprocessedTemplate, *index, cache,
-                                 cancellationHandle, deduplicator};
+        const BatchEvalContext context{*preprocessedTemplate, *index, cache,
+                                       cancellationHandle, deduplicator};
         return processTableBatches(table, context, tableRowOffset);
       };
 
