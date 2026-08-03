@@ -1015,4 +1015,36 @@ TEST(Qlever, makeIndexRebuildConfig) {
   // ... and must lie inside the directory of the current index.
   AD_EXPECT_THROW_WITH_MESSAGE(makeConfig("../outside", std::nullopt),
                                HasSubstr("not a subdirectory"));
+
+  // The default directory for the old index is `previous.<datetime of the
+  // build of the current index>`, which has a granularity of one second. When
+  // that directory is already taken by a previous rebuild (e.g. rebuilds in
+  // quick succession with `--rebuild-index-strategy`), `.1`, `.2`, ... is
+  // appended; an occupied directory must not fail the rebuild, because the
+  // datetime of the served index only changes on a successful swap, so all
+  // subsequent rebuilds would fail with the same name.
+  {
+    std::string defaultPreviousDir =
+        absl::StrCat("previous.", index.getImpl().dateOfIndexBuild());
+    ql::filesystem::create_directory(defaultPreviousDir);
+    ad_utility::makeOfstream(defaultPreviousDir + "/index.meta-data.json")
+        << "occupied";
+    EXPECT_EQ(makeConfig(std::nullopt, std::nullopt).oldIndexTarget(),
+              absl::StrCat(defaultPreviousDir, ".1/index"));
+    ql::filesystem::create_directory(defaultPreviousDir + ".1");
+    ad_utility::makeOfstream(defaultPreviousDir + ".1/index.meta-data.json")
+        << "occupied";
+    EXPECT_EQ(makeConfig(std::nullopt, std::nullopt).oldIndexTarget(),
+              absl::StrCat(defaultPreviousDir, ".2/index"));
+
+    // After `.99`, the rebuild fails with a readable message.
+    for (size_t i = 2; i <= 99; ++i) {
+      ql::filesystem::create_directory(
+          absl::StrCat(defaultPreviousDir, ".", i));
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        makeConfig(std::nullopt, std::nullopt),
+        AllOf(HasSubstr("all already exist"),
+              HasSubstr("rebuild-previous-index-dir")));
+  }
 }
