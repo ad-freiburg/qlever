@@ -33,18 +33,19 @@ struct BatchEvalContext {
   BatchEvalContext(const PreprocessedConstructTemplate& preprocessedTemplate,
                    const Index& index, IdCache& cache,
                    const CancellationHandle& cancellationHandle,
-                   const std::shared_ptr<ConstructDeduplicator>& deduplicator)
+                   std::shared_ptr<ConstructDeduplicator> deduplicator)
       : preprocessedTemplate_{preprocessedTemplate},
         index_{index},
         cache_{cache},
         cancellationHandle_{cancellationHandle},
-        deduplicator_{deduplicator} {}
+        deduplicator_{std::move(deduplicator)} {}
 
-  const PreprocessedConstructTemplate& preprocessedTemplate_;
-  const Index& index_;
-  IdCache& cache_;
-  const CancellationHandle& cancellationHandle_;
-  const std::shared_ptr<ConstructDeduplicator>& deduplicator_;
+  std::reference_wrapper<const PreprocessedConstructTemplate>
+      preprocessedTemplate_;
+  std::reference_wrapper<const Index> index_;
+  std::reference_wrapper<IdCache> cache_;
+  std::reference_wrapper<const CancellationHandle> cancellationHandle_;
+  std::shared_ptr<ConstructDeduplicator> deduplicator_;
 };
 
 // Evaluate the rows covered by `batch.view_`. Cancellation is checked once at
@@ -55,7 +56,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
     std::vector<EvaluatedTriple> computeBatch(
         const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
         const BatchEvalContext& context, size_t tableRowOffset) {
-  context.cancellationHandle_->throwIfCancelled();
+  context.cancellationHandle_.get()->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
   const size_t batchBegin = *ql::ranges::begin(batch);
@@ -66,7 +67,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
                                    batchEnd};
 
   auto batchResult = ConstructBatchEvaluator::evaluateBatch(
-      context.preprocessedTemplate_.uniqueVariableColumns_, ctx,
+      context.preprocessedTemplate_.get().uniqueVariableColumns_, ctx,
       tableWithVocab.localVocab(), context.index_, context.cache_);
 
   const size_t blankNodeBaseId = tableRowOffset + batchBegin;
@@ -75,7 +76,7 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
   if (context.deduplicator_) {
     deduplication.emplace(DeduplicationParams{*context.deduplicator_, ctx});
   }
-  return instantiateBatch(context.preprocessedTemplate_, batchResult,
+  return instantiateBatch(context.preprocessedTemplate_.get(), batchResult,
                           blankNodeBaseId, deduplication);
 }
 
