@@ -14,13 +14,10 @@
 #ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 #define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 
-// #include <functional>
-
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
-// #include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
