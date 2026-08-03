@@ -138,9 +138,9 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
 
-  // Helper function that builds the `EvaluationConfig` used by the CONSTRUCT
-  // triple generators (reads the `constructDeduplication_` runtime parameter
-  // and combines it with the given `qet` and `cancellationHandle`).
+  // Return a `qlever::constructExport::EvaluationConfig` for
+  // `ConstructTripleGenerator`, including
+  // `RuntimeParameters::constructDeduplication_`.
   static qlever::constructExport::EvaluationConfig
   makeConstructEvaluationConfig(const QueryExecutionTree& qet,
                                 CancellationHandle cancellationHandle);
