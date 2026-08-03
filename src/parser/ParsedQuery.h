@@ -255,8 +255,14 @@ class ParsedQuery {
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 
-  // Sets the export limit (`send` parameter).
-  void adjustLimitOffset(const ad_utility::MediaType& mediaType,
+  // Update the export limit based on the `send` parameter (historical name).
+  // The limit controls the maximum number of bindings exported by
+  // `ExportQueryExecutionTrees` and is only applied for supported media types.
+  //
+  // NOTE: This was originally designed exclusively for `qlever-results+json`.
+  // However, when the runtime parameter `sparql-results-json-with-time` is set
+  // (which is the default), we now also apply it to `sparql-results+json`.
+  void updateExportLimit(const ad_utility::MediaType& mediaType,
                          std::optional<uint64_t> sendLimit);
 };
 
