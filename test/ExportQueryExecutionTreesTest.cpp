@@ -2205,13 +2205,15 @@ TEST(ExportQueryExecutionTrees,
             absl::StrCat(a, b, a));
 }
 
+namespace {
 // ____________________________________________________________________________
 // Formats the single triple `<ex:c> <ex:c> <ex:c> .` for one lowercase
 // letter `c`, used by `ConstructDeduplicationBatchWiseWindowTest`.
-static std::string batchWiseWindowTriple(char c) {
+std::string batchWiseWindowTriple(char c) {
   return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
                       "> <ex:", std::string(1, c), "> .\n");
 }
+}  // namespace
 
 // Batchwise deduplication with a stream of 5 unique triples, each repeated
 // twice. Thus we expect 10 triples total. The window size controls how many
