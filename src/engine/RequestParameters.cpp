@@ -28,22 +28,22 @@ std::optional<double> parsePinGeoIndexSimplification(
 std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
     const ad_utility::url_parser::ParamValueMap& params) {
   using namespace ad_utility::url_parser;
-  using ad_utility::MediaType;
+  using enum ad_utility::MediaType;
 
   std::optional<MediaType> mediaType = std::nullopt;
 
   if (checkParameter(params, "action", "csv_export")) {
-    mediaType = MediaType::csv;
+    mediaType = csv;
   } else if (checkParameter(params, "action", "tsv_export")) {
-    mediaType = MediaType::tsv;
+    mediaType = tsv;
   } else if (checkParameter(params, "action", "qlever_json_export")) {
-    mediaType = MediaType::qleverJson;
+    mediaType = qleverJson;
   } else if (checkParameter(params, "action", "sparql_json_export")) {
-    mediaType = MediaType::sparqlJson;
+    mediaType = sparqlJson;
   } else if (checkParameter(params, "action", "turtle_export")) {
-    mediaType = MediaType::turtle;
+    mediaType = turtle;
   } else if (checkParameter(params, "action", "binary_export")) {
-    mediaType = MediaType::octetStream;
+    mediaType = octetStream;
   }
 
   return mediaType;
