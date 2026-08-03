@@ -33,19 +33,30 @@ ad_utility::MemorySize memorySizeFromMegabytes(double numMegabytes) {
 // The resulting module exposes the configuration structs from `Qlever.h`
 // (`IndexBuilderConfig`, `EngineConfig`, ...) as well as the `Qlever` class
 // itself. Typical usage from JavaScript (inside a Web Worker, as index
-// building and querying are blocking calls):
+// building and querying are blocking calls); see `npm/README.md` for the same
+// example with more explanation:
 //
 //   const qlever = await createQleverModule();
 //   qlever.FS.writeFile("/input.ttl", turtleData);
-//   const config = new qlever.IndexBuilderConfig();
+//   using config = new qlever.IndexBuilderConfig();
 //   config.baseName = "/index";
-//   const file = new qlever.InputFileSpecification();
+//   using file = new qlever.InputFileSpecification();
 //   file.filename = "/input.ttl";
 //   file.filetype = qlever.Filetype.Turtle;
-//   config.inputFiles.push_back(file);
+//   using files = new qlever.InputFileSpecificationVector();
+//   files.push_back(file);
+//   config.inputFiles = files;
 //   qlever.Qlever.buildIndex(config);
-//   const engine = new qlever.Qlever(new qlever.EngineConfig(config));
-//   const result = engine.query("SELECT * { ?s ?p ?o }");
+//   using engineConfig = new qlever.EngineConfig(config);
+//   using engine = new qlever.Qlever(engineConfig);
+//   const result = engine.query("SELECT * { ?s ?p ?o }",
+//                               qlever.MediaType.sparqlJson);
+//
+// Two things to note about the memory management, both of which the example
+// above relies on. First, objects created with `new` own memory in the
+// WebAssembly heap, which the JavaScript garbage collector does not free; the
+// `using` declarations release them at the end of the enclosing block (embind
+// aliases `Symbol.dispose` to its `delete()`).
 EMSCRIPTEN_BINDINGS(qlever) {
   // Helper types used by the configuration structs below.
   register_optional<std::string>();

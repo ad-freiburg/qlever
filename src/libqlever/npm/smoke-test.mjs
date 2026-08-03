@@ -51,17 +51,20 @@ if (isMainThread) {
     '<http://example.org/b> <http://example.org/q> <http://example.org/c> .\n',
   );
 
-  const config = new qlever.IndexBuilderConfig();
+  // Declared with `using`, as the README recommends, so that the smoke test
+  // also covers the release of the WebAssembly memory these objects own.
+  using config = new qlever.IndexBuilderConfig();
   config.baseName = "/index";
-  const file = new qlever.InputFileSpecification();
+  using file = new qlever.InputFileSpecification();
   file.filename = "/input.ttl";
   file.filetype = qlever.Filetype.Turtle;
-  const files = new qlever.InputFileSpecificationVector();
+  using files = new qlever.InputFileSpecificationVector();
   files.push_back(file);
   config.inputFiles = files;
   qlever.Qlever.buildIndex(config);
 
-  const engine = new qlever.Qlever(new qlever.EngineConfig(config));
+  using engineConfig = new qlever.EngineConfig(config);
+  using engine = new qlever.Qlever(engineConfig);
   const result = JSON.parse(
     engine.query("SELECT * WHERE { ?s ?p ?o }", qlever.MediaType.sparqlJson),
   );

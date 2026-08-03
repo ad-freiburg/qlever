@@ -12,6 +12,11 @@ worker thread (Node.js).
 
 The package is an ES module; its default export is the module factory.
 
+Objects created with `new` own memory in the WebAssembly heap, which JavaScript's garbage collector does not free, so
+they have to be released explicitly: either with a `using` declaration as below, which releases them at the end of the
+enclosing block (Chrome/Edge ≥ 134, Firefox ≥ 141, Node.js ≥ 24; TypeScript and esbuild compile it down for older
+targets, Safari included), or with `.delete()` in a `finally` block.
+
 ```js
 import createQleverModule from "@ad-freiburg/qlever";
 
@@ -21,18 +26,19 @@ const qlever = await createQleverModule();
 qlever.FS.writeFile("/input.ttl", turtleData);
 
 // Build an index.
-const config = new qlever.IndexBuilderConfig();
+using config = new qlever.IndexBuilderConfig();
 config.baseName = "/index";
-const file = new qlever.InputFileSpecification();
+using file = new qlever.InputFileSpecification();
 file.filename = "/input.ttl";
 file.filetype = qlever.Filetype.Turtle;
-const files = new qlever.InputFileSpecificationVector();
+using files = new qlever.InputFileSpecificationVector();
 files.push_back(file);
 config.inputFiles = files;
 qlever.Qlever.buildIndex(config);
 
 // Load the index and query it.
-const engine = new qlever.Qlever(new qlever.EngineConfig(config));
+using engineConfig = new qlever.EngineConfig(config);
+using engine = new qlever.Qlever(engineConfig);
 const result = engine.query(
     "SELECT * WHERE { ?s ?p ?o }", qlever.MediaType.sparqlJson);
 console.log(JSON.parse(result));
