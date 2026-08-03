@@ -59,10 +59,11 @@ jobs:
           node-version: 26
 
       # `tsc` is needed by `emcc` at link time to generate the TypeScript
-      # definitions for the `qleverwasm` target. A recent `npm` (>= 11.5) is
-      # needed by the `Publish to npm` step for trusted publishing (OIDC).
-      - name: Install TypeScript and a recent npm
-        run: npm install -g typescript@7 npm@12
+      # definitions for the `qleverwasm` target, and by the smoke test below to
+      # check the example against them. Pinned, as those definitions are part of
+      # the published package.
+      - name: Install TypeScript
+        run: npm install -g typescript@7
 
       - name: Install conan
         run: pipx install conan
@@ -159,21 +160,44 @@ jobs:
           name: qlever-npm-package
           path: src/libqlever/npm/ad-freiburg-qlever-*.tgz
 
-      # Run a small end-to-end example against the exact tarball that would be
-      # published: install it into a scratch directory, build a tiny index in
-      # the module's virtual filesystem, and run one query (see
-      # `smoke-test.mjs`). This validates the ES module packaging, the loading
-      # of `qlever.wasm`, and the embind bindings, which the C++ unit tests
-      # cannot see. The step runs after the artifact upload, so that a failing
-      # tarball can still be downloaded for debugging, and before the `publish`
-      # job, so that a broken package is never published.
+      # Run the usage example from `src/libqlever/npm/README.md` against the
+      # exact tarball that would be published: extract it from the README,
+      # type-check it against the `qlever.d.ts` that the package ships, then run
+      # it. It builds a tiny index in the module's virtual filesystem and queries
+      # it, which validates the ES module packaging, the loading of `qlever.wasm`
+      # and the embind bindings, none of which the C++ unit tests can see. Using
+      # the README example rather than a copy of it also keeps the example
+      # honest, as a broken one fails here. The step runs after the artifact
+      # upload, so that a failing tarball can still be downloaded for debugging,
+      # and before the `publish` job, so that a broken package is never
+      # published.
       - name: Smoke-test the npm package
         run: |
           SMOKE_DIR=$(mktemp -d)
-          cp src/libqlever/npm/smoke-test.mjs "${SMOKE_DIR}"
+          # Extract the example, which has to be the README's only fenced `js`
+          # block; `awk` exits nonzero for any other number of them.
+          awk '/^```js$/{n++; f=1; next} /^```$/{f=0} f; END{exit n != 1}' \
+            src/libqlever/npm/README.md > "${SMOKE_DIR}/readme-example.mjs" \
+            || { echo "::error::Expected exactly one 'js' block in the npm README"; exit 1; }
           cd "${SMOKE_DIR}"
-          npm install "${GITHUB_WORKSPACE}"/src/libqlever/npm/ad-freiburg-qlever-*.tgz
-          node smoke-test.mjs
+          # A `package.json` of our own keeps `npm` from walking up the tree and
+          # installing into the first ancestor directory that has one.
+          echo '{ "name": "qlever-smoke-test", "private": true }' > package.json
+          npm install --no-audit --no-fund "${GITHUB_WORKSPACE}"/src/libqlever/npm/ad-freiburg-qlever-*.tgz
+          # `--checkJs` makes the pinned `tsc` from the step above check the
+          # plain `.mjs` file, from the types it infers for it; nothing is
+          # emitted, we only want the diagnostics. This catches a stale or broken
+          # `qlever.d.ts` (which is generated at link time and never compiled
+          # against otherwise) as well as an example that no longer matches the
+          # bindings.
+          tsc --noEmit --allowJs --checkJs --strict --target esnext \
+            --module nodenext readme-example.mjs
+          # Run the example (blocking calls are fine here; in a browser they have
+          # to go into a Web Worker, see the README) with `timeout` as a guard
+          # against a hang, e.g. a deadlock in the wasm module.
+          timeout 120s node readme-example.mjs 2>&1 | tee /dev/stderr \
+            | grep -E 'Number of result rows: 3$' > /dev/null \
+            || { echo "::error::The example did not print 'Number of result rows: 3'"; exit 1; }
 
   # Release tags publish to the default `latest` dist-tag (what a plain
   # `npm install @ad-freiburg/qlever` resolves to). Pushes to master publish the

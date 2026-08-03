@@ -23,6 +23,11 @@ import createQleverModule from "@ad-freiburg/qlever";
 const qlever = await createQleverModule();
 
 // Put the input data into the in-memory filesystem.
+const turtleData = `
+<http://example.org/a> <http://example.org/p> <http://example.org/b> .
+<http://example.org/a> <http://example.org/p> "some literal" .
+<http://example.org/b> <http://example.org/q> <http://example.org/c> .
+`;
 qlever.FS.writeFile("/input.ttl", turtleData);
 
 // Build an index.
@@ -41,7 +46,8 @@ using engineConfig = new qlever.EngineConfig(config);
 using engine = new qlever.Qlever(engineConfig);
 const result = engine.query(
     "SELECT * WHERE { ?s ?p ?o }", qlever.MediaType.sparqlJson);
-console.log(JSON.parse(result));
+const bindings = JSON.parse(result).results.bindings;
+console.log(`Number of result rows: ${bindings.length}`);
 ```
 
 ## Browser deployment notes
