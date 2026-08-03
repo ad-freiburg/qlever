@@ -80,15 +80,15 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
 }
 
 // Chunks `table.view_` into batches and evaluates each one.
-auto processTableBatches(const TableWithRange& table,
-                         BatchEvalContext context, size_t tableRowOffset) {
+auto processTableBatches(const TableWithRange& table, BatchEvalContext context,
+                         size_t tableRowOffset) {
   return ranges::views::chunk(table.view_,
                               ConstructTripleGenerator::BATCH_SIZE) |
-         ql::views::transform([&table, context, tableRowOffset](
-                                  auto chunkView) {
-           return computeBatch(table.tableWithVocab_, chunkView, context,
-                               tableRowOffset);
-         }) |
+         ql::views::transform(
+             [&table, context, tableRowOffset](auto chunkView) {
+               return computeBatch(table.tableWithVocab_, chunkView, context,
+                                   tableRowOffset);
+             }) |
          ql::views::join;
 }
 }  // namespace
