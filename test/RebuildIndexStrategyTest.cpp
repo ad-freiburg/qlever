@@ -27,14 +27,14 @@ TEST(RebuildIndexStrategy, parseManual) {
 
 // _____________________________________________________________________________
 TEST(RebuildIndexStrategy, parseMinMaxFraction) {
-  EXPECT_THAT(RebuildIndexStrategy::parse("10000:1000000:0.1"),
+  EXPECT_THAT(RebuildIndexStrategy::parse("automatic:10000:1000000:0.1"),
               Optional(RebuildIndexStrategy{10'000, 1'000'000, 0.1}));
   // `min` may be zero, and the fraction may exceed 1 (the delta can be larger
   // than the index, e.g. after many deletes).
-  EXPECT_THAT(RebuildIndexStrategy::parse("0:100:2.5"),
+  EXPECT_THAT(RebuildIndexStrategy::parse("automatic:0:100:2.5"),
               Optional(RebuildIndexStrategy{0, 100, 2.5}));
   // `min == max` makes the threshold a fixed number of delta triples.
-  EXPECT_THAT(RebuildIndexStrategy::parse("500:500:1"),
+  EXPECT_THAT(RebuildIndexStrategy::parse("automatic:500:500:1"),
               Optional(RebuildIndexStrategy{500, 500, 1.0}));
 }
 
@@ -44,21 +44,27 @@ TEST(RebuildIndexStrategy, parseErrors) {
     AD_EXPECT_THROW_WITH_MESSAGE(RebuildIndexStrategy::parse(strategy),
                                  HasSubstr(message));
   };
-  // Anything that is not "manual" and not three colon-separated parts.
+  // Anything that is not "manual" and not "automatic:" plus three
+  // colon-separated parts.
   expectThrows("", "neither \"manual\" nor");
-  expectThrows("automatic", "neither \"manual\" nor");
   expectThrows("500000", "neither \"manual\" nor");
   expectThrows("10:20", "neither \"manual\" nor");
+  // The old form without the "automatic:" prefix is rejected.
+  expectThrows("10000:1000000:0.1", "neither \"manual\" nor");
   expectThrows("10:20:30:40", "neither \"manual\" nor");
+  expectThrows("manual:10:20:0.1", "neither \"manual\" nor");
+  // A plain "automatic" (with default values) is reserved, but not
+  // supported yet, and gets a dedicated error message.
+  expectThrows("automatic", "not supported yet");
   // `min` and `max` must be non-negative numbers.
-  expectThrows("x:20:0.1", "for `min`");
-  expectThrows("10:y:0.1", "for `max`");
+  expectThrows("automatic:x:20:0.1", "for `min`");
+  expectThrows("automatic:10:y:0.1", "for `max`");
   // The fraction must be a number greater than zero.
-  expectThrows("10:20:0", "greater than 0");
-  expectThrows("10:20:-1", "greater than 0");
-  expectThrows("10:20:abc", "greater than 0");
+  expectThrows("automatic:10:20:0", "greater than 0");
+  expectThrows("automatic:10:20:-1", "greater than 0");
+  expectThrows("automatic:10:20:abc", "greater than 0");
   // `min` must not be larger than `max`.
-  expectThrows("100:10:0.1", "must not be larger than");
+  expectThrows("automatic:100:10:0.1", "must not be larger than");
 }
 
 // _____________________________________________________________________________

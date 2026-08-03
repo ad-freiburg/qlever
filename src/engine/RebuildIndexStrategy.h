@@ -28,7 +28,7 @@ namespace qlever {
 
 // Strategy for automatically rebuilding the index from the current data
 // (including updates), configured via the `--rebuild-index-strategy` option of
-// `qlever-server`.
+// `qlever-server` (`manual` or `automatic:min:max:fraction`, see `parse`).
 //
 // The idea is a single threshold on the number of delta triples (inserted plus
 // deleted): a rebuild is triggered once the delta triples reach that many. The
@@ -81,24 +81,34 @@ struct RebuildIndexStrategy {
   // Parse the value of the `--rebuild-index-strategy` option:
   // - "manual": returns `std::nullopt`, i.e. rebuilds are only triggered
   //   manually via the `cmd=rebuild-index` HTTP request.
-  // - "min:max:fraction": the strategy above, where `min` and `max` are
-  //   non-negative numbers of delta triples and `fraction` is a floating-point
-  //   number greater than zero (e.g. `10000:1000000:0.1`).
-  // Throws `std::runtime_error` for any other value.
+  // - "automatic:min:max:fraction": the strategy above, where `min` and `max`
+  //   are non-negative numbers of delta triples and `fraction` is a
+  //   floating-point number greater than zero (e.g.
+  //   `automatic:10000:1000000:0.1`).
+  // Throws `std::runtime_error` for any other value. In particular, a plain
+  // "automatic" (with universal default values for `min`, `max`, and
+  // `fraction`) is reserved for the future, but not supported yet; it gets a
+  // dedicated error message.
   static std::optional<RebuildIndexStrategy> parse(std::string_view strategy) {
     if (strategy == "manual") {
       return std::nullopt;
     }
+    if (strategy == "automatic") {
+      throw std::runtime_error(
+          "A plain \"automatic\" (with default values) is not supported yet; "
+          "please specify \"automatic:min:max:fraction\" explicitly");
+    }
     std::vector<std::string_view> parts = absl::StrSplit(strategy, ':');
-    if (parts.size() != 3) {
-      throw std::runtime_error(absl::StrCat(
-          "The value \"", strategy,
-          "\" is neither \"manual\" nor of the form \"min:max:fraction\""));
+    if (parts.size() != 4 || parts[0] != "automatic") {
+      throw std::runtime_error(
+          absl::StrCat("The value \"", strategy,
+                       "\" is neither \"manual\" nor of the form "
+                       "\"automatic:min:max:fraction\""));
     }
     RebuildIndexStrategy result;
-    result.minDeltaTriples_ = parseCount(parts[0], "min");
-    result.maxDeltaTriples_ = parseCount(parts[1], "max");
-    if (!absl::SimpleAtod(parts[2], &result.fractionOfIndexTriples_) ||
+    result.minDeltaTriples_ = parseCount(parts[1], "min");
+    result.maxDeltaTriples_ = parseCount(parts[2], "max");
+    if (!absl::SimpleAtod(parts[3], &result.fractionOfIndexTriples_) ||
         !(result.fractionOfIndexTriples_ > 0.0)) {
       throw std::runtime_error(absl::StrCat(
           "The fraction \"", parts[2],

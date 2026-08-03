@@ -168,12 +168,12 @@ int main(int argc, char** argv) {
       po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
       "When to rebuild the index from the current data (including updates). "
       "\"manual\" (the default): only when explicitly requested via the "
-      "`cmd=rebuild-index` HTTP request. \"min:max:fraction\": additionally "
-      "trigger a rebuild automatically in the background after an update, once "
-      "the number of delta triples (inserted plus deleted) reaches the given "
-      "`fraction` (a number greater than 0) of the number of index triples, "
-      "but never below `min` and always at `max` (e.g. "
-      "\"10000:1000000:0.1\").");
+      "`cmd=rebuild-index` HTTP request. \"automatic:min:max:fraction\": "
+      "additionally trigger a rebuild automatically in the background after "
+      "an update, once the number of delta triples (inserted plus deleted) "
+      "reaches the given `fraction` (a number greater than 0) of the number "
+      "of index triples, but never below `min` and always at `max` (e.g. "
+      "\"automatic:10000:1000000:0.1\").");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
