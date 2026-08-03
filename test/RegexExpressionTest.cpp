@@ -291,18 +291,14 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   test("?vocab", "b", "", {F, F, F});
   test("?vocab", "b", "i", {T, F, F});
 
-  // Not a special prefix filter because of the explicit flags.
-  // TODO<joka921>, Discuss with Hannah: The behavior here is inconsistent
-  // because of the primary level prefix filter. Should we introduce a special
-  // syntax for the prefix filter, as it is non-standard?
-  // Note that for our special prefix filter the third comparison would be true
-  // (for almost all locales). To remove this inconsistency we could introduce a
-  // special syntax for the prefix filter, but then users would only benefit if
-  // they use the special syntax, which most users will not do.
-  // TODO<joka921> check whether the SPARQL STARTSWITH function is consistent
-  // with the behavior of our prefix filter.
-
+  // A prefix regex with flags is evaluated as a real regex as well, so `^alp`
+  // with the `i` flag does *not* match `"älpha"`, although the prefix range
+  // that the prefilter uses would contain it (that range is computed on the
+  // primary level of the collation, where `a` and `ä` are equal). The dedicated
+  // `ql:prefix-match` function is the one that follows the primary level.
   test("?vocab", "^alp", "i", {F, T, F});
+  test("?vocab", "^ALP", "i", {F, T, F});
+  test("?vocab", "^älp", "i", {F, F, T});
 
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
 
