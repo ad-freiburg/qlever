@@ -22,7 +22,7 @@ env:
   # directly (rather than via the Conan recipe) because the Conan Center recipe
   # is outdated. Make sure to also change the version in
   # `conanprofiles/emscripten.profile` when changing this!
-  EMSDK_VERSION: "6.0.2"
+  EMSDK_VERSION: "6.0.5"
 
 # The default GITHUB_TOKEN only needs to read the repository here. The `publish`
 # job requests `id-token: write` for itself; that permission is deliberately NOT
