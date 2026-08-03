@@ -937,11 +937,11 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
-    IndexMetaData& metaData, size_t numColumns,
-    const std::string& fileName) const {
+    IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
+    std::optional<size_t> numWriterThreads) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_);
+      blocksizePermutationPerColumn_, numWriterThreads);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -981,9 +981,11 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 // _____________________________________________________________________________
 std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+    std::optional<size_t> numWriterThreads) {
   IndexMetaData metaData;
-  auto writerAndCallback = getWriterAndCallback(metaData, numColumns, fileName);
+  auto writerAndCallback =
+      getWriterAndCallback(metaData, numColumns, fileName, numWriterThreads);
 
   // We can always supply the tables with the correct permutation. No need to
   // re-order everything.
@@ -1036,8 +1038,15 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
-  auto metaData =
-      createPermutationImpl(numColumns, fileName, std::move(sortedTriples));
+  // This function is only used by the runtime index rebuild (see
+  // `IndexRebuilder`), which by default throttles the compress/write threads
+  // of its permutation writers so that a rebuild on a live server leaves most
+  // of the CPU to concurrent queries. A value of 0 means "fall back to
+  // `permutation-writer-num-threads`".
+  auto numWriterThreads = getRuntimeParameterAsOptional<
+      &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
+  auto metaData = createPermutationImpl(
+      numColumns, fileName, std::move(sortedTriples), numWriterThreads);
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -2194,11 +2203,8 @@ std::packaged_task<void()> computeStatistics(
     // `rebuild-index-scan-num-threads` (several permutations are scanned in
     // parallel, so without the throttle this short phase has a high peak
     // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto rebuildScanThreads =
-        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
-    std::optional<size_t> numThreadsOverride =
-        rebuildScanThreads == 0 ? std::nullopt
-                                : std::optional<size_t>{rebuildScanThreads};
+    auto numThreadsOverride = getRuntimeParameterAsOptional<
+        &RuntimeParameters::rebuildIndexScanNumThreads_>();
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
