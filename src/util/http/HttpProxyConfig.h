@@ -83,16 +83,16 @@ std::optional<Proxy> proxyFromEnvironment();
 // during startup so that such a misconfiguration is reported before the index
 // is loaded, rather than on the first federated query.
 //
-// The returned reference stays valid for the rest of the process, unless
-// `resetGlobalProxyForTesting` (below) is called.
+// The returned reference stays valid for the rest of the process (but the value
+// it refers to changes if `resetGlobalProxyForTesting` below is called).
 const std::optional<Proxy>& globalProxy();
 
-// Discard the value cached by `globalProxy()`, such that the next call reads
-// the environment again. Only for tests: a test that wants to observe the
-// caching behavior cannot know whether some other test in the same binary has
-// already called `globalProxy()` (all unit tests are linked into a single
-// binary in some configurations). Must not be called concurrently with
-// `globalProxy()`, and invalidates references previously returned by it.
+// Read the environment again and replace the value cached by `globalProxy()`
+// with the result. Only for tests: a test that wants to observe the caching
+// behavior cannot know whether some other test in the same binary has already
+// called `globalProxy()` (all unit tests are linked into a single binary in
+// some configurations). Throws if the environment holds a malformed proxy URL,
+// see `parseProxyUrl`. Must not be called concurrently with `globalProxy()`.
 void resetGlobalProxyForTesting();
 
 }  // namespace ad_utility::httpProxy
