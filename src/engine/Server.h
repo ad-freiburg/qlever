@@ -410,6 +410,13 @@ class Server {
   void triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
                                       size_t numIndexTriples);
 
+  // The background coroutine spawned by `triggerRebuildIfStrategySaysSo`:
+  // run the rebuild (unless one is already in progress) and log the outcome.
+  Awaitable<void> runAutomaticRebuild();
+
+  // Completion handler of that coroutine: log the exception, if there is one.
+  static void logAutomaticRebuildFailure(std::exception_ptr exception);
+
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }
   const qlever::Qlever& qlever() const { return qlever_; }

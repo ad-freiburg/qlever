@@ -1076,6 +1076,40 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
       serverTestHelpers::responseBodyToString(std::move(response.body())),
       ::testing::HasSubstr("\"value\":\"l\""));
 
+  // The remaining paths of the trigger machinery, each deterministically:
+  // without a strategy (manual mode) the trigger does nothing; while a
+  // rebuild is (apparently) in progress, it returns early without spawning
+  // anything, and the background coroutine logs that it skipped; the
+  // completion handler logs a failure and ignores the no-exception case.
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    DeltaTriplesCount hugeCount{1000, 1000};
+    auto strategy =
+        std::exchange(server.server().rebuildIndexStrategy_, std::nullopt);
+    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
+    server.server().rebuildIndexStrategy_ = strategy;
+    server.server().rebuildInProgress_.store(true);
+    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("Triggering")));
+
+    boost::asio::thread_pool threadPool{1};
+    boost::asio::co_spawn(threadPool, server.server().runAutomaticRebuild(),
+                          boost::asio::use_future)
+        .get();
+    EXPECT_THAT(
+        logStream.str(),
+        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
+                             "started concurrently"));
+    server.server().rebuildInProgress_.store(false);
+
+    Server::logAutomaticRebuildFailure(
+        std::make_exception_ptr(std::runtime_error{"boom"}));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
+    Server::logAutomaticRebuildFailure(nullptr);
+  }
+
   cleanDirsWithPrefix("previous.");
 }
 #endif  // __EMSCRIPTEN__

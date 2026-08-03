@@ -1752,32 +1752,35 @@ void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
               << rebuildIndexStrategy_->rebuildThreshold(numIndexTriples)
               << ") for the current index size (" << numIndexTriples
               << " triples)" << std::endl;
-  net::co_spawn(
-      queryThreadPool_,
-      [this]() -> Awaitable<void> {
-        auto config =
-            co_await rebuildIndexUnlessInProgress(std::nullopt, std::nullopt);
-        if (config.has_value()) {
-          AD_LOG_INFO << "Automatic index rebuild completed, the new index "
-                         "has been swapped in"
-                      << std::endl;
-        } else {
-          AD_LOG_INFO << "Automatic index rebuild skipped, another rebuild "
-                         "started concurrently"
-                      << std::endl;
-        }
-      },
-      [](std::exception_ptr exception) {
-        if (!exception) {
-          return;
-        }
-        try {
-          std::rethrow_exception(exception);
-        } catch (const std::exception& e) {
-          AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what()
-                       << std::endl;
-        }
-      });
+  net::co_spawn(queryThreadPool_, runAutomaticRebuild(),
+                &Server::logAutomaticRebuildFailure);
+}
+
+// _____________________________________________________________________________
+Awaitable<void> Server::runAutomaticRebuild() {
+  auto config =
+      co_await rebuildIndexUnlessInProgress(std::nullopt, std::nullopt);
+  if (config.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild completed, the new index "
+                   "has been swapped in"
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "Automatic index rebuild skipped, another rebuild "
+                   "started concurrently"
+                << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void Server::logAutomaticRebuildFailure(std::exception_ptr exception) {
+  if (!exception) {
+    return;
+  }
+  try {
+    std::rethrow_exception(exception);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what() << std::endl;
+  }
 }
 
 // For helper function `Server::onlyForTestingProcess`
