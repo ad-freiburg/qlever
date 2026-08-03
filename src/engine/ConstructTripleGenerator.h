@@ -55,7 +55,7 @@ class ConstructTripleGenerator {
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of triples serialized according to `mediaType`.
-  // When `mode` is not `None`, duplicate triples are suppressed.
+  // Duplicate triples are handled according to `config.mode_`.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples, const VariableToColumnMap& variableColums,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
@@ -63,9 +63,10 @@ class ConstructTripleGenerator {
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
-  // When `mode` is not `None`, duplicate triples are suppressed.
+  // Duplicate triples are handled according to `config.mode_`.
   static InputRangeTypeErased<StringTriple> generateStringTriples(
-      const Triples& templateTriples, const VariableToColumnMap& variableColums,
+      const Triples& templateTriples,
+      const VariableToColumnMap& variableColumns,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
       EvaluationConfig config);
 
@@ -76,8 +77,8 @@ class ConstructTripleGenerator {
 
   // Lazily evaluates all `TableWithRange` values from `rowIndices`, processes
   // them in batches of `BATCH_SIZE` rows, and returns a flat range of
-  // `EvaluatedTriple`. When `mode` is not `None`, duplicate triples are
-  // suppressed across batches.
+  // `EvaluatedTriple`. Duplicate triples are handled according to
+  // `config.mode_`.
   static InputRangeTypeErased<EvaluatedTriple> evaluateTables(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns,
