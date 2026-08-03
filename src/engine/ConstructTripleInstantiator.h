@@ -59,7 +59,7 @@ std::vector<EvaluatedTriple> instantiateBatch(
 // `includeDataType=true`: all typed literals carry an explicit
 //   `"..."^^<type>` annotation.
 // Terms with `type == nullptr` (IRIs, blank nodes, vocab-indexed literals)
-// are returned as-is regardless of `shortForm`.
+// are returned as-is regardless of `includeDataType`.
 std::string formatTerm(const EvaluatedTermData& term, bool includeDataType);
 
 // Formats a triple (subject, predicate, object) according to the output
