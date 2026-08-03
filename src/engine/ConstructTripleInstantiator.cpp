@@ -52,7 +52,7 @@ std::optional<EvaluatedTriple> tryInstantiateTriple(
     const std::optional<DeduplicationParams>& deduplication) {
   auto instantiate = [&triple, &batchResult, rowInBatch,
                       blankNodeRowId](size_t pos) {
-    return instantiateTerm(triple[pos], batchResult, rowInBatch,
+    return instantiateTerm(triple.at(pos), batchResult, rowInBatch,
                            blankNodeRowId);
   };
   auto subject = instantiate(0);
@@ -63,8 +63,8 @@ std::optional<EvaluatedTriple> tryInstantiateTriple(
   }
   if (deduplication) {
     const size_t rowIdxInIdTable =
-        deduplication.value().ctx_.firstRow_ + rowInBatch;
-    if (!deduplication.value().deduplicator_.isNew(
+        deduplication.value().ctx_.get().firstRow_ + rowInBatch;
+    if (!deduplication.value().deduplicator_.get().isNew(
             tripleIdx, rowIdxInIdTable, tmpl, deduplication.value().ctx_)) {
       return std::nullopt;
     }
@@ -81,7 +81,8 @@ std::vector<EvaluatedTriple> instantiateBatch(
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
-  for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
+  for (const size_t rowInBatch :
+       ql::views::iota(size_t{0}, batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
     for (auto&& [tripleIdx, triple] :
          ::ranges::views::enumerate(tmpl.preprocessedTriples_)) {
@@ -101,9 +102,9 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
     return term.rdfTermString_;
   }
-  const char* i = XSD_INT_TYPE;
-  const char* d = XSD_DECIMAL_TYPE;
-  const char* b = XSD_BOOLEAN_TYPE;
+  const char* i = static_cast<const char*>(XSD_INT_TYPE);
+  const char* d = static_cast<const char*>(XSD_DECIMAL_TYPE);
+  const char* b = static_cast<const char*>(XSD_BOOLEAN_TYPE);
 
   // Note: XSD_DOUBLE_TYPE values (for example "NaN", "INF", "-INF") always
   // include the datatype.
@@ -126,7 +127,7 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
 
   const auto& [subject, predicate, object] = evaluatedTriple;
 
-  bool includeDataType = (format == ntriples);
+  const bool includeDataType = (format == ntriples);
 
   std::string s = formatTerm(*subject, includeDataType);
   std::string p = formatTerm(*predicate, includeDataType);

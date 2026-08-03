@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTRIPLEINSTANTIATOR_H
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -36,8 +37,8 @@ std::optional<EvaluatedTerm> instantiateTerm(
 // Bundles the state `instantiateBatch` needs to deduplicate triples as it
 // instantiates them.
 struct DeduplicationParams {
-  ConstructDeduplicator& deduplicator_;
-  const BatchEvaluationContext& ctx_;
+  std::reference_wrapper<ConstructDeduplicator> deduplicator_;
+  std::reference_wrapper<const BatchEvaluationContext> ctx_;
 };
 
 // Instantiates all template triples for all rows in a batch. For each row,
@@ -64,7 +65,7 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType);
 // Formats a triple (subject, predicate, object) according to the output
 // format `format`.
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
-                         const ad_utility::MediaType& mediaType);
+                         const ad_utility::MediaType& format);
 
 // Creates a `StringTriple` object. Needed for backwards compatibility with
 // `ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON`
