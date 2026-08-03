@@ -1316,7 +1316,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Update the delta triples.
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
-                auto updateMetadata = this->qlever().processUpdateImpl(
+                auto updateMetadata = qlever().processUpdateImpl(
                     plannedUpdate.value(), cancellationHandle, deltaTriples,
                     tracer);
                 tracer.endTrace("execution");
