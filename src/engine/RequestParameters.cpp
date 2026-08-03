@@ -68,10 +68,18 @@ ResultPinning determineResultPinning(const ParamValueMap& params) {
 // ____________________________________________________________________________
 std::optional<uint64_t> parseSendLimit(const ParamValueMap& params) {
   auto sendParameter = getParameterCheckAtMostOnce(params, "send");
-  if (sendParameter.has_value()) {
-    return std::stoul(sendParameter.value());
-  } else {
+  if (!sendParameter.has_value()) {
     return std::nullopt;
+  }
+  try {
+    // The parameter cannot be negative. `std::stoull` would otherwise accept
+    // a leading '-' and convert it to an unsigned value.
+    AD_CONTRACT_CHECK(!sendParameter->starts_with('-'));
+    return std::stoull(sendParameter.value());
+  } catch (...) {
+    throw std::runtime_error(
+        "Invalid value for `send`: must be a "
+        "positive integer specifying the number of bindings to be exported.");
   }
 }
 
