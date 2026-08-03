@@ -19,6 +19,7 @@
 #include "./engine/sparqlExpressions/RegexExpression.h"
 #include "./engine/sparqlExpressions/RelationalExpressions.h"
 #include "./engine/sparqlExpressions/SparqlExpression.h"
+#include "index/LocalVocabContext.h"
 #include "util/DateYearDuration.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"

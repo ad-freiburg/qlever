@@ -7,6 +7,8 @@
 #include "libqlever/Qlever.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
 #include <boost/optional.hpp>
 #include <functional>
@@ -23,10 +25,13 @@
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/IndexImpl.h"
+#include "index/IndexRebuilder.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
+#include "util/TimeTracer.h"
 #include "util/http/UrlParser.h"
 
 namespace qlever {
@@ -454,6 +459,94 @@ IndexRebuildConfig::IndexRebuildConfig(std::string oldIndexSource,
 }
 
 // ___________________________________________________________________________
+nlohmann::json IndexRebuildConfig::successResponseAsJson() const {
+  nlohmann::json json;
+  json["message"] = "Index successfully rebuilt and swapped in";
+  // Report the directory (not the full base name): it mirrors the
+  // `rebuild-previous-index-dir` command parameter and is the one piece of
+  // information the client cannot know in advance (the default is derived from
+  // the build date of the old index). The new index is not mentioned because
+  // it is always served from the base name of the old one.
+  json["previous-index-dir"] =
+      ql::filesystem::path{oldIndexTarget_}.parent_path().string();
+  return json;
+}
+
+// ___________________________________________________________________________
+IndexRebuildConfig Qlever::makeIndexRebuildConfig(
+    const Index& index, std::optional<std::string> rebuildTmpDir,
+    std::optional<std::string> rebuildPreviousIndexDir) {
+  namespace fs = ql::filesystem;
+
+  // The base name the current index is served from. The new index has to end up
+  // exactly there, so that a later restart loads it; it is therefore also the
+  // base name whose file name and directory the two directories below are
+  // derived from and checked against.
+  const std::string& currentBaseName = index.getOnDiskBase();
+
+  // Resolve one of the two directories (falling back to `defaultDirectory` if
+  // it was not specified) and turn it into a base name.
+  // NOTE: Use `ql::pathFilename` and not `path::filename()`, so that a base
+  // name with a trailing directory separator yields an empty file name
+  // component (and hence a directory base name, see the test
+  // `moveRebuiltIndexIntoPlaceWithDirectoryBasename`) in both the
+  // `std::filesystem` and the `boost::filesystem` backend.
+  auto resolveBaseName =
+      [indexFileName = ql::pathFilename(fs::path{currentBaseName})](
+          std::optional<std::string> directory, std::string defaultDirectory) {
+        return (fs::path{std::move(directory).value_or(
+                    std::move(defaultDirectory))} /
+                indexFileName)
+            .string();
+      };
+
+  // The defaults are: build the new index in `rebuild.<current datetime>.tmp`
+  // and move the old index to `previous.<datetime of the build of the current
+  // index>`.
+  std::string baseNameForRebuild = resolveBaseName(
+      std::move(rebuildTmpDir),
+      absl::StrCat("rebuild.", IndexImpl::formatIndexBuildTime(absl::Now()),
+                   ".tmp"));
+  std::string baseNameForOldIndex = resolveBaseName(
+      std::move(rebuildPreviousIndexDir),
+      absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
+
+  // Check the two base names that were derived from the arguments: they must be
+  // relative (they are resolved against the working directory of the engine,
+  // like the base name of the current index), and their directory must be empty
+  // or not exist yet and be a subdirectory of the directory of the current
+  // index. Base names that would collide with each other or with the currently
+  // served index are rejected by the `IndexRebuildConfig` constructor below.
+  for (const auto& baseName : {baseNameForRebuild, baseNameForOldIndex}) {
+    fs::path path{baseName};
+    if (!path.is_relative()) {
+      throw std::runtime_error{absl::StrCat("The directory \"",
+                                            path.parent_path().string(),
+                                            "\" must be a relative path")};
+    }
+    // The parent path is empty if the base name lies in the working directory
+    // itself, which the checks below then refer to.
+    fs::path dir =
+        path.has_parent_path() ? path.parent_path() : fs::current_path();
+    if (fs::exists(dir) && !fs::is_empty(dir)) {
+      throw std::runtime_error{
+          absl::StrCat("The directory \"", dir.string(),
+                       "\" already exists and is not empty")};
+    }
+    if (!qlever::util::isSubdirectoryOf(baseName, currentBaseName)) {
+      throw std::runtime_error{absl::StrCat(
+          "The directory \"", dir.string(),
+          "\" is not a subdirectory of the directory of the current index")};
+    }
+  }
+
+  // The new index ends up at the base name the current index is served from, so
+  // that a later restart loads it.
+  return IndexRebuildConfig{currentBaseName, baseNameForRebuild,
+                            baseNameForOldIndex, currentBaseName};
+}
+
+// ___________________________________________________________________________
 void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                        const IndexRebuildConfig& config) {
   namespace fs = ql::filesystem;
@@ -511,5 +604,100 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
     newIndex.getImpl().setFilenamesForPersistentUpdates(false);
   }
   newManager.setOnDiskBase(config.newIndexTarget());
+
+  // The move took the new index and its rebuild log out of the directory in
+  // which the new index was built (typically a temporary directory created
+  // exclusively for the rebuild, see `rebuildIndexToDisk`), so that directory
+  // is now empty and can be removed. Everything that matters has already
+  // happened at this point, so a failure here is only worth a warning.
+  // NOTE: The `error_code` is only there to select the non-throwing overload of
+  // `fs::remove`; it does not have to be inspected, because that overload
+  // returns `false` whenever it sets an error code (and also if the directory
+  // did not exist in the first place, which is just as unexpected here).
+  fs::path directoryOfNewIndexSource =
+      fs::path{config.newIndexSource()}.parent_path();
+  ql::error_code errorCode;
+  if (!directoryOfNewIndexSource.empty() &&
+      !fs::remove(directoryOfNewIndexSource, errorCode)) {
+    AD_LOG_WARN << "Could not remove the directory \""
+                << directoryOfNewIndexSource.string()
+                << "\" in which the new index was built" << std::endl;
+  }
 }
+
+// ___________________________________________________________________________
+// The two functions below rely on `materializeToIndex` and
+// `DeltaTriples::addFromSnapshotDiff`, which are only available in the C++20
+// build, so they are not compiled in the reduced C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+Qlever::RebuildResult Qlever::rebuildIndexToDisk(
+    Index& index, const IndexRebuildConfig& config,
+    const ad_utility::SharedCancellationHandle& handle) const {
+  const std::string& indexBaseName = config.newIndexSource();
+  ql::filesystem::path directory =
+      ql::filesystem::path{indexBaseName}.parent_path();
+  if (!directory.empty()) {
+    ql::filesystem::create_directories(directory);
+  }
+  auto logFileName = absl::StrCat(indexBaseName, REBUILD_INDEX_LOG_SUFFIX);
+  auto [currentSnapshot, localVocabCopy, ownedBlocks] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  auto mapping =
+      materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
+                         ownedBlocks, handle, logFileName);
+  auto indexAndViews = std::make_shared<IndexAndViews>(
+      Index{allocator()}, MaterializedViewsManager{});
+  auto& [newIndex, newManager] = *indexAndViews;
+  newIndex.usePatterns() = index.usePatterns();
+  newIndex.loadAllPermutations() = index.loadAllPermutations();
+  newIndex.createFromOnDiskIndex(indexBaseName,
+                                 index.deltaTriplesManager().persists());
+  newManager.setOnDiskBase(indexBaseName);
+  return {std::move(currentSnapshot), std::move(mapping),
+          std::move(indexAndViews)};
+}
+
+// ___________________________________________________________________________
+void Qlever::swapInRebuiltIndex(
+    const Index& index, RebuildResult rebuildResult,
+    const ad_utility::SharedCancellationHandle& handle,
+    const IndexRebuildConfig& config) {
+  auto& [oldSnapshot, mapping, newIndexAndViews] = rebuildResult;
+  auto newSnapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+
+  // Calling this function also persists the remapped delta triples to
+  // disk so that they are not lost if the engine is later restarted on
+  // the rebuilt index. The triples that were persisted for the old index
+  // are not compatible with the freshly built index (their `Id`s refer to
+  // the old vocabulary), so they have to be regenerated.
+  newIndexAndViews->index_.deltaTriplesManager().modify<void>(
+      [&oldSnapshot, &newSnapshot, &mapping,
+       &handle](DeltaTriples& deltaTriples) {
+        ad_utility::timer::TimeTracer tracer{"swapIndex"};
+        deltaTriples.addFromSnapshotDiff(*oldSnapshot, *newSnapshot, mapping,
+                                         handle, tracer);
+      },
+      true);
+  // Move the old index out of the way and the new index into its final
+  // place, which by default is the place of the old index (in particular, a
+  // subsequent restart of the server then loads the latest index).
+  //
+  // NOTE: If this throws halfway through, the server keeps running
+  // consistently on the old index (the swap below has not happened and open
+  // file handles survive the renames), but the on-disk layout has to be
+  // repaired manually before the next restart.
+  moveRebuiltIndexIntoPlace(*newIndexAndViews, config);
+  swapIndexAndViews(std::move(newIndexAndViews));
+  // Clear the query cache, including pinned entries: cached results were
+  // computed against the old index, so their `VocabIndex` ids are in the old
+  // vocabulary's coordinates and their `LocalVocabEntry`s are anchored to the
+  // old index. The cache key alone does not protect against serving them: it
+  // only contains the query string and the delta triples version counter,
+  // and the counter of the new index starts over and can collide with a
+  // pre-swap value.
+  cache_.clearAll();
+}
+#endif
 }  // namespace qlever

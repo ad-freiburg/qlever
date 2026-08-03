@@ -143,22 +143,21 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks) {
 // _____________________________________________________________________________
 namespace {
 // Compute by what offset `value` needs to be increased to fit in the new index.
-AD_ALWAYS_INLINE size_t computeIndexOffset(
-    VocabIndex value, const InsertionPositions& insertionPositions) {
+size_t computeIndexOffset(VocabIndex value,
+                          const InsertionPositions& insertionPositions) {
   return ql::ranges::distance(
       insertionPositions.begin(),
       ql::ranges::upper_bound(insertionPositions, value, std::less{}));
 }
 
 // Apply `offset` to `value` and return the new `Id` resulting from this.
-AD_ALWAYS_INLINE Id applyOffset(VocabIndex value, size_t offset) {
+Id applyOffset(VocabIndex value, size_t offset) {
   return Id::makeFromVocabIndex(VocabIndex::make(value.get() + offset));
 }
 }  // namespace
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id remapVocabId(Id original,
-                                 const InsertionPositions& insertionPositions) {
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
@@ -167,9 +166,8 @@ AD_ALWAYS_INLINE Id remapVocabId(Id original,
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id remapVocabId(Id original,
-                                 const InsertionPositions& insertionPositions,
-                                 size_t& hint) {
+Id remapVocabId(Id original, const InsertionPositions& insertionPositions,
+                size_t& hint) {
   AD_EXPENSIVE_CHECK(
       original.getDatatype() == Datatype::VocabIndex,
       "Only ids resembling a vocab index can be remapped with this function.");
@@ -263,11 +261,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   // thread count as query scans); a positive value throttles the rebuild's
   // read/decompress parallelism only, reducing its peak CPU without touching
   // queries.
-  auto rebuildScanThreads =
-      getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
-  std::optional<size_t> numThreadsOverride =
-      rebuildScanThreads == 0 ? std::nullopt
-                              : std::optional<size_t>{rebuildScanThreads};
+  auto numThreadsOverride = getRuntimeParameterAsOptional<
+      &RuntimeParameters::rebuildIndexScanNumThreads_>();
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState, numThreadsOverride);

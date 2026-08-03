@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <vector>
 
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyTestHelpers.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/GTestHelpers.h"
@@ -283,13 +283,19 @@ TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
-// _____________________________________________________________________________
-TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
-  using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+namespace {
+// Write an `RdfsVocabulary` of the given `type` to an aligned buffer via
+// `writeAsZeroCopyBlob`, read it back via `loadFromZeroCopyDeserializer`, and
+// check that the round trip preserves all words. Use this for all vocabulary
+// types that support zero-copy (de)serialization, so that the same code tests
+// the compressed as well as the uncompressed in-memory vocabulary.
+void testZeroCopyRoundTripPolymorphic(
+    ad_utility::VocabularyType type,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
 
   RdfsVocabulary vocabulary;
-  vocabulary.resetToType(VocabularyType{InMemoryUncompressed});
+  vocabulary.resetToType(type);
   ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
   auto filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
@@ -300,7 +306,10 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
 
   ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
+  // The reader has to select the matching type before loading, exactly as with
+  // the regular `open` mechanism.
   RdfsVocabulary readVocabulary;
+  readVocabulary.resetToType(type);
   readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
 
   ASSERT_EQ(vocabulary.size(), readVocabulary.size());
@@ -309,16 +318,44 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphic) {
               readVocabulary[VocabIndex::make(i)]);
   }
 }
+}  // namespace
 
 // _____________________________________________________________________________
-TEST(Vocabulary, WriteAsZeroCopyBlobThrowsWhenNotInMemory) {
-  using ad_utility::VocabularyType;
-  using enum VocabularyType::Enum;
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphicUncompressed) {
+  testZeroCopyRoundTripPolymorphic(
+      ad_utility::VocabularyType::InMemoryUncompressed);
+}
 
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
+  testZeroCopyRoundTripPolymorphic(
+      ad_utility::VocabularyType::InMemoryCompressed);
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, ZeroCopyBlobThrowsWhenNotInMemory) {
   RdfsVocabulary vocabulary;
-  vocabulary.resetToType(VocabularyType{OnDiskCompressed});
+  vocabulary.resetToType(ad_utility::VocabularyType::OnDiskCompressed);
+
+  // Note that the messages only differ in their first few words, which is
+  // exactly what distinguishes the two directions.
   ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
-  EXPECT_ANY_THROW(vocabulary.writeAsZeroCopyBlob(writeSerializer));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocabulary.writeAsZeroCopyBlob(writeSerializer),
+      ::testing::HasSubstr(
+          "Writing a vocabulary to a zero-copy blob is only supported for the "
+          "in-memory (uncompressed or compressed) vocabulary implementations"));
+
+  // Reading throws before the buffer is touched at all, so the (empty) buffer
+  // of the write serializer above is sufficient here.
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocabulary.loadFromZeroCopyDeserializer(readSerializer),
+      ::testing::HasSubstr(
+          "Loading a vocabulary from a zero-copy blob is only supported for "
+          "the in-memory (uncompressed or compressed) vocabulary "
+          "implementations"));
 }
 
 // _____________________________________________________________________________

@@ -27,7 +27,8 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/StringSortComparator.h"
+#include "index/TripleComponentConversions.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 #include "util/HashMap.h"
@@ -241,7 +242,7 @@ struct alignas(256) ItemMapManager {
     }
     auto& map = map_.map_;
     auto& buffer = map_.buffer_;
-    auto repr = key.tripleComponent_.toRdfLiteral();
+    auto repr = toRdfLiteral(key.tripleComponent_);
     auto it = map.find(repr);
     if (it == map.end()) {
       uint64_t res = map.size() + minId_;
