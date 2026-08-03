@@ -1,3 +1,7 @@
+// Copyright 2026, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Tomas Damek <tomas.damek@email.uni-freiburg.de>
+
 #ifndef QLEVER_TEST_UTIL_PARSEQUERYTESTHELPERS_H
 #define QLEVER_TEST_UTIL_PARSEQUERYTESTHELPERS_H
 
