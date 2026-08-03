@@ -526,8 +526,12 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(strStartsSprql(strSprql(varX), L("\"Bob\"")));
   evalAndEqualityCheck(regexSparql(strSprql(varX), L("\"^Bob\"")));
   evalAndEqualityCheck(strStartsSprql(strSprql(L("\"\"")), L("\"Bob\"")));
-  evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
-                       pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
+  // A negated `REGEX` is not prefiltered at all: the range of the prefix is
+  // computed on the PRIMARY level of the collation and hence also contains
+  // values that the regex does not match (e.g. "ÄBC" for the prefix "abc").
+  // Those values satisfy the negated `REGEX`, so their blocks must not be
+  // dropped. See `RegexExpression::getPrefilterExpressionForMetadata`.
+  evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))));
   // The dedicated `ql:prefix-match` function is prefiltered in the same way as
   // `STRSTARTS` (note that its argument is a plain prefix, not a regex).
   evalAndEqualityCheck(prefixMatchSparql(varX, L("\"prefix\"")),

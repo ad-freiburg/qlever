@@ -103,8 +103,24 @@ class RegexExpression : public RegexExpressionBase {
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] const LocalVocabContext& context,
-      [[maybe_unused]] bool isNegated) const override {
+      bool isNegated) const override {
     if (!prefix_.has_value()) {
+      return {};
+    }
+    // A `PrefixRegexExpression` keeps every block that may contain a value in
+    // the range of the prefix, which is exactly what we need here: the prefix
+    // is guaranteed for every match, so a block outside of that range cannot
+    // contain a match. For a negated `REGEX` the requirement is the opposite
+    // one, namely that no block which may contain a *non*-match is dropped, and
+    // that does not hold: the range of the prefix is computed on the PRIMARY
+    // level of the collation, so it also contains values that the regex does
+    // not match (e.g. "ÄBC" is in the range of the prefix "abc"). Those values
+    // satisfy the negated `REGEX`, but their block would be dropped.
+    //
+    // Note that this is different for `ql:prefix-match` (and `STRSTARTS`),
+    // which is *defined* via the very same range and can therefore be
+    // prefiltered in both directions.
+    if (isNegated) {
       return {};
     }
     std::vector<PrefilterExprVariablePair> prefilterVec;

@@ -19,7 +19,7 @@
 
 using sparqlExpression::detail::getLiteralPrefixOfRegex;
 using ::testing::AllOf;
-using ::testing::Gt;
+using ::testing::Ge;
 using ::testing::IsEmpty;
 using ::testing::Le;
 using ::testing::SizeIs;
@@ -195,7 +195,7 @@ TEST(RegexHelpers, regexesThatAreTooLargeHaveNoPrefix) {
 TEST(RegexHelpers, longPrefixesAreTruncated) {
   std::string longLiteral(500, 'a');
   std::string prefix = getLiteralPrefixOfRegex("^" + longLiteral);
-  EXPECT_THAT(prefix, SizeIs(AllOf(Gt(0u), Le(500u))));
+  EXPECT_THAT(prefix, SizeIs(AllOf(Ge(64u), Le(500u))));
   EXPECT_EQ(prefix, longLiteral.substr(0, prefix.size()));
 }
 

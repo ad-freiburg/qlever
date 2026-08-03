@@ -22,10 +22,13 @@
 namespace sparqlExpression::detail {
 
 namespace {
-// Hardcode the maximum length of the derived prefix. Longer prefixes bring
-// diminishing benefit for prefiltering. Note that a smaller bound can only
-// shorten the resulting prefix, it can never make it unsound.
-constexpr int maxPrefixLength = 16;
+// The maximum length (in bytes) of the derived prefix. `PossibleMatchRange`
+// below inspects all 256 possible successor bytes per step, so this bounds its
+// cost; the bound is generous enough that even long IRI prefixes (e.g.
+// `^http://www\.wikidata\.org/entity/Q`) fit into it, and beyond that a longer
+// prefix hardly narrows the scanned blocks any further. Note that a smaller
+// bound can only shorten the resulting prefix, it can never make it unsound.
+constexpr int maxPrefixLength = 128;
 
 // Return the longest common prefix of `a` and `b`.
 std::string_view longestCommonPrefix(std::string_view a, std::string_view b) {
@@ -84,7 +87,8 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
       RE2::Options{RE2::Quiet}.ParseFlags());
   // A `re2::Regexp` is reference-counted and has a private destructor, so our
   // reference has to be released via `Decref()` instead of `delete`. Note that
-  // the deleter is not run if the pointer is `nullptr`.
+  // `std::unique_ptr` doesn't run the deleter if the stored pointer is
+  // `nullptr`, which is what `Parse` returns for an invalid regex.
   auto decref = [](re2::Regexp* parsedRegex) { parsedRegex->Decref(); };
   std::unique_ptr<re2::Regexp, decltype(decref)> parsed{
       re2::Regexp::Parse(regex, parseFlags, &status), decref};
