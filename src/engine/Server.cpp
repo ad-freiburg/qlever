@@ -319,7 +319,7 @@ auto Server::prepareOperation(
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
   auto [pinSubtrees, pinResult] =
-      ad_utility::request_parameters::determineResultPinning(params);
+      qlever::http_api_helpers::determineResultPinning(params);
   std::optional<std::string> pinResultWithName =
       ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
                                              {});
@@ -330,7 +330,7 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(
           params, "pin-geo-index-simplification", {});
   std::optional<double> geoIndexSimplificationInMeters =
-      ad_utility::request_parameters::parsePinGeoIndexSimplification(
+      qlever::http_api_helpers::parsePinGeoIndexSimplification(
           pinGeoIndexSimplificationStr);
   AD_LOG_INFO << "Processing the following " << operationName
               << (clientIp.empty() ? std::string{}
@@ -1044,7 +1044,7 @@ CPP_template_def(typename RequestT)(
   // The explicit `action=..._export` parameter have precedence over the
   // `Accept:...` header field
   auto mediaType =
-      ad_utility::request_parameters::determineMediaTypesFromParam(params);
+      qlever::http_api_helpers::determineMediaTypesFromParam(params);
   if (mediaType.has_value()) {
     return {mediaType.value()};
   }
@@ -1161,7 +1161,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // content-type is `application/qlever-results+json` and ensure that the
   // offset is not applied twice when exporting the query.
   plannedQuery->parsedQuery().adjustLimitOffset(
-      mediaType, ad_utility::request_parameters::parseSendLimit(params));
+      mediaType, qlever::http_api_helpers::parseSendLimit(params));
 
   // This actually processes the query and sends the result in the
   // requested format.

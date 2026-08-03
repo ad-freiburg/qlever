@@ -5,7 +5,7 @@
 #include "util/GTestHelpers.h"
 
 namespace {
-using namespace ad_utility::request_parameters;
+using namespace qlever::http_api_helpers;
 }  // namespace
 
 // _____________________________________________________________________________
@@ -45,7 +45,7 @@ TEST(RequestParametersTest, determineResultPinning) {
 TEST(RequestParametersTest, parseSendLimit) {
   EXPECT_EQ(parseSendLimit({}), std::nullopt);
   EXPECT_THAT(parseSendLimit({{"send", {"12"}}}), testing::Optional(12ul));
-  EXPECT_THROW(ad_utility::request_parameters::parseSendLimit(
-                   {{"send", {"not-a-number"}}}),
-               std::invalid_argument);
+  EXPECT_THROW(
+      qlever::http_api_helpers::parseSendLimit({{"send", {"not-a-number"}}}),
+      std::invalid_argument);
 }
