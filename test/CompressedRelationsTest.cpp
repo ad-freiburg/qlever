@@ -1118,7 +1118,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry = LocalVocabEntry::fromIriref("<zzz>", index);
+        LocalVocabEntry entry =
+            LocalVocabEntry::fromIriref("<zzz>", index.getLocalVocabContext());
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
@@ -1374,6 +1375,29 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+  }
+  {
+    // An explicit override (used by the runtime index rebuild via
+    // `rebuild-permutation-writer-num-threads`) wins over the runtime
+    // parameter.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
+                                    1};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+  }
+  {
+    // An override is capped at the number of hardware threads, just like the
+    // runtime parameter.
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
+                                    1337};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
   }
 }
 

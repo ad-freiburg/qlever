@@ -30,6 +30,7 @@
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
+#include "index/LocalVocabContextImpl.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/TextMetaData.h"
@@ -205,6 +206,13 @@ class IndexImpl {
 
   GraphNameManager graphNameManager_ = GraphNameManager();
 
+  // The implementation of the `LocalVocabContext` interface for this index.
+  // NOTE: `IndexImpl` deliberately does not implement that interface itself, so
+  // that it doesn't become a polymorphic type. There must be exactly one of
+  // these per index, see `LocalVocabContext.h`.
+  LocalVocabContextImpl localVocabContext_{&vocab_, &encodedIriManager_,
+                                           &blankNodeManager_};
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -310,6 +318,13 @@ class IndexImpl {
   const GraphNameManager& graphNameManager() const { return graphNameManager_; }
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
+
+  // Return the context of the `LocalVocabEntry`s that belong to this index.
+  // Mirror `Index::getLocalVocabContext()`, such that callers can spell this
+  // the same way no matter whether they hold an `Index` or an `IndexImpl`.
+  const LocalVocabContext& getLocalVocabContext() const {
+    return localVocabContext_;
+  }
 
   // Set the prefixes of the IRIs that will be encoded directly into
   // the `Id`; see `EncodedIriManager` for details.
@@ -634,10 +649,12 @@ class IndexImpl {
                                         bool internal) const;
 
   // Create a `CompressedRelationWriter` and a callback that adds the metadata
-  // of large relations to the `metaData` object.
+  // of large relations to the `metaData` object. If `numWriterThreads` is
+  // set, it overrides the number of compress/write threads of the writer
+  // (see the `CompressedRelationWriter` constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
-      IndexMetaData& metaData, size_t numColumns,
-      const std::string& fileName) const;
+      IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
+      std::optional<size_t> numWriterThreads = std::nullopt) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -651,12 +668,14 @@ class IndexImpl {
   // columns in the relation (usually 4, sometimes 6 with patterns).
   // `fileName` is the base name of the files to write to (without suffixes).
   // `sortedTriples` is an input range that provides the triples in the correct
-  // order.
+  // order. If `numWriterThreads` is set, it overrides the number of
+  // compress/write threads (see `getWriterAndCallback`).
   // Return the number of triples written and the metadata for the written
   // permutation.
   std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      std::optional<size_t> numWriterThreads = std::nullopt);
 
  protected:
   // _______________________________________________________________________
