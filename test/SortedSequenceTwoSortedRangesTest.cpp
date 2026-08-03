@@ -516,4 +516,52 @@ TEST(SortedSequenceTwoSortedRangesTest, eraseSortedSubRange) {
   test({p20, p30, p40}, {p10, p50}, {p20, p30, p40}, 0);
 }
 
+// _____________________________________________________________________________
+// Repeated `consolidate` calls without a merge of the two parts: later rounds
+// must respect the already sorted and deduplicated prefix of the small part
+// (elements inserted in earlier rounds), including keys that a later round
+// overrides ("last write wins") and keys that override elements of an earlier
+// round's prefix.
+TEST(SortedSequenceTwoSortedRangesTest, repeatedConsolidateWithoutMerge) {
+  // Large part {1, 2, 3, 4}, so that small-part rounds of a few elements stay
+  // below any reasonable merge threshold; `consolidate(1.0)` never merges.
+  SV s = SV::fromSorted({p10, p20, p30, p40});
+
+  // Round 1: two new keys, one of them inserted twice (the last one wins).
+  s.insert(p51);
+  s.insert(p60);
+  s.insert(p50);
+  s.consolidate(1.0);
+  EXPECT_THAT(s.getSortedView(), ElementsAre(p10, p20, p30, p40, p50, p60));
+
+  // Round 2: override a key from the round-1 prefix (5) and a key from the
+  // large part (2), and add a new key in between (some unsorted order).
+  s.insert(Pair{5, 2});
+  s.insert(p21);
+  s.insert(Pair{4, 5});
+  s.consolidate(1.0);
+  EXPECT_THAT(s.getSortedView(),
+              ElementsAre(p10, p21, p30, Pair{4, 5}, Pair{5, 2}, p60));
+
+  // Round 3: erase (which requires a consolidated state and shrinks the
+  // prefix), then insert and consolidate again.
+  s.erase(p60);
+  s.erase(p10);
+  s.insert(Pair{0, 7});
+  s.insert(Pair{6, 7});
+  s.consolidate(1.0);
+  EXPECT_THAT(s.getSortedView(), ElementsAre(Pair{0, 7}, p21, p30, Pair{4, 5},
+                                             Pair{5, 2}, Pair{6, 7}));
+
+  // Round 4: now force the merge of the two parts (threshold 0), then check
+  // that everything still holds and another round works on the merged state.
+  s.insert(Pair{7, 0});
+  s.consolidate(0.0);
+  s.insert(Pair{0, 8});
+  s.consolidate(1.0);
+  EXPECT_THAT(s.getSortedView(),
+              ElementsAre(Pair{0, 8}, p21, p30, Pair{4, 5}, Pair{5, 2},
+                          Pair{6, 7}, Pair{7, 0}));
+}
+
 }  // namespace ad_utility
