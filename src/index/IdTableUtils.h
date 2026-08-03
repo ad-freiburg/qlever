@@ -10,9 +10,19 @@
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/Log.h"
 
 class IdTableUtils {
+  // The number of threads for the parallel sort, settable via the runtime
+  // parameter `parallel-sort-num-threads` (`0`, the default, means the
+  // compile-time default `NUM_SORT_THREADS`).
+  static size_t numSortThreads() {
+    size_t numThreads =
+        getRuntimeParameter<&RuntimeParameters::parallelSortNumThreads_>();
+    return numThreads == 0 ? NUM_SORT_THREADS : numThreads;
+  }
+
  public:
   template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
@@ -24,7 +34,7 @@ class IdTableUtils {
           [keyColumn](const auto& a, const auto& b) {
             return a[keyColumn] < b[keyColumn];
           },
-          ad_utility::parallel_tag(NUM_SORT_THREADS));
+          ad_utility::parallel_tag(numSortThreads()));
     } else {
       std::sort(stab.begin(), stab.end(),
                 [keyColumn](const auto& a, const auto& b) {
@@ -48,7 +58,7 @@ class IdTableUtils {
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
+                                ad_utility::parallel_tag(numSortThreads()));
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }

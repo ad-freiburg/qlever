@@ -80,6 +80,24 @@ void testSort(IdTable input, const IdTable& expected,
 }
 }  // namespace
 
+// _____________________________________________________________________________
+// The runtime parameter `parallel-sort-num-threads` bounds the number of
+// threads of the parallel sort; the result must be the same for any value.
+TEST(Sort, parallelSortNumThreads) {
+  for (size_t numThreads : {1, 2, 0}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::parallelSortNumThreads_>(
+            numThreads);
+    VectorTable input, expected;
+    for (int i = 1000; i > 0; --i) {
+      input.push_back({i});
+      expected.push_back({1001 - i});
+    }
+    testSort(makeIdTableFromVector(input, &Id::makeFromInt),
+             makeIdTableFromVector(expected, &Id::makeFromInt));
+  }
+}
+
 TEST(Sort, ComputeSortSingleIntColumn) {
   VectorTable input{{0},   {1},       {-1},  {3},
                     {-17}, {1230957}, {123}, {-1249867132}};
