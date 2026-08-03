@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
-  std::string rebuildIndexStrategy = "manual";
+  std::string rebuildIndexStrategy;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};

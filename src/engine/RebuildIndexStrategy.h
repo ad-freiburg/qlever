@@ -15,6 +15,7 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -55,20 +56,23 @@ struct RebuildIndexStrategy {
   double fractionOfIndexTriples_ = 0.0;
 
   // The number of delta triples at which a rebuild is triggered, given the
-  // current number of index triples, see the class comment.
-  double rebuildThreshold(size_t numIndexTriples) const {
-    return std::clamp(
-        fractionOfIndexTriples_ * static_cast<double>(numIndexTriples),
-        static_cast<double>(minDeltaTriples_),
-        static_cast<double>(maxDeltaTriples_));
+  // current number of index triples, see the class comment. The fractional
+  // value is rounded up to a whole number of triples.
+  size_t rebuildThreshold(size_t numIndexTriples) const {
+    double raw = fractionOfIndexTriples_ * static_cast<double>(numIndexTriples);
+    // NOTE: The comparison must happen in `double` (casting `raw` first would
+    // be undefined behavior when it exceeds the range of `size_t`).
+    if (raw >= static_cast<double>(maxDeltaTriples_)) {
+      return maxDeltaTriples_;
+    }
+    return std::max(minDeltaTriples_, static_cast<size_t>(std::ceil(raw)));
   }
 
   // Decide whether a rebuild should be triggered: `true` iff the number of
   // delta triples has reached `rebuildThreshold`.
   bool shouldTriggerRebuild(size_t numDeltaTriples,
                             size_t numIndexTriples) const {
-    return static_cast<double>(numDeltaTriples) >=
-           rebuildThreshold(numIndexTriples);
+    return numDeltaTriples >= rebuildThreshold(numIndexTriples);
   }
 
   // Parse the value of the `--rebuild-index-strategy` option:

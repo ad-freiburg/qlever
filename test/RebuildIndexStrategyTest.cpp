@@ -69,6 +69,17 @@ TEST(RebuildIndexStrategy, rebuildThresholdMinMaxFraction) {
   EXPECT_EQ(strategy.rebuildThreshold(50'000), 10'000);      // 5000 -> min
   EXPECT_EQ(strategy.rebuildThreshold(1'000'000), 100'000);  // 10%
   EXPECT_EQ(strategy.rebuildThreshold(50'000'000), 1'000'000);  // clamped max
+
+  // A fractional raw threshold is rounded up to a whole number of triples.
+  RebuildIndexStrategy roundingStrategy{1, 1'000'000, 0.1};
+  EXPECT_EQ(roundingStrategy.rebuildThreshold(105), 11);  // ceil(10.5)
+  EXPECT_FALSE(roundingStrategy.shouldTriggerRebuild(10, 105));
+  EXPECT_TRUE(roundingStrategy.shouldTriggerRebuild(11, 105));
+
+  // A raw threshold beyond the range of `size_t` is clamped to `max` (and in
+  // particular does not overflow in the conversion).
+  RebuildIndexStrategy hugeFractionStrategy{1, 1'000'000, 1e30};
+  EXPECT_EQ(hugeFractionStrategy.rebuildThreshold(1'000'000), 1'000'000);
 }
 
 // _____________________________________________________________________________

@@ -1747,8 +1747,7 @@ void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
   AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
                  "triples ("
               << numDeltaTriples << ") has reached the threshold ("
-              << static_cast<size_t>(
-                     rebuildIndexStrategy_->rebuildThreshold(numIndexTriples))
+              << rebuildIndexStrategy_->rebuildThreshold(numIndexTriples)
               << ") for the current index size (" << numIndexTriples
               << " triples)" << std::endl;
   net::co_spawn(

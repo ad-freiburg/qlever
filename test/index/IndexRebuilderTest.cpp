@@ -682,8 +682,8 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 namespace {
 // Return the directories in the current directory whose name starts with
 // `prefix`.
-std::vector<std::filesystem::path> dirsWithPrefix(std::string_view prefix) {
-  namespace fs = std::filesystem;
+std::vector<ql::filesystem::path> dirsWithPrefix(std::string_view prefix) {
+  namespace fs = ql::filesystem;
   std::vector<fs::path> result;
   for (const auto& entry : fs::directory_iterator(".")) {
     if (entry.is_directory() &&
@@ -702,7 +702,7 @@ void cleanDirsWithPrefix(std::string_view prefix) {
                     "This function is not meant to delete all directories in "
                     "the current directory. Please specify a prefix.");
   for (const auto& dir : dirsWithPrefix(prefix)) {
-    std::filesystem::remove_all(dir);
+    ql::filesystem::remove_all(dir);
   }
 }
 }  // namespace
@@ -924,15 +924,14 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
 }
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("rebuild.");
 
-  std::string indexName = "IndexRebuilder_serverIntegrationAutomaticRebuild";
+  std::string indexName = gtestCurrentTestName();
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
   qlever::EngineConfig config;
@@ -985,7 +984,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   EXPECT_EQ(numDeltaTriples(), 0);
   EXPECT_FALSE(server.server().rebuildInProgress_.load());
   EXPECT_EQ(dirsWithPrefix("previous.").size(), 1u);
-  EXPECT_TRUE(std::filesystem::exists(indexName + ".meta-data.json"));
+  EXPECT_TRUE(ql::filesystem::exists(indexName + ".meta-data.json"));
 
   // The rebuilt index answers queries and contains the update triples.
   auto request = ad_utility::testing::makeGetRequest(
@@ -998,3 +997,4 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
 
   cleanDirsWithPrefix("previous.");
 }
+#endif  // __EMSCRIPTEN__
