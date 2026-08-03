@@ -1,8 +1,13 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Tomas Damek <tomas.damek@email.uni-freiburg.de>
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Tomas Damek <tomas.damek@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include "engine/RequestParameters.h"
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include "engine/HttpApiHelpers.h"
 
 #include <array>
 #include <optional>
@@ -35,7 +40,8 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
     const ParamValueMap& params) {
   using enum ad_utility::MediaType;
 
-  static const std::array<std::pair<std::string, ad_utility::MediaType>, 6>
+  static constexpr std::array<
+      std::pair<std::string_view, ad_utility::MediaType>, 6>
       actionValueToMediaType = {{{"csv_export", csv},
                                  {"tsv_export", tsv},
                                  {"qlever_json_export", qleverJson},
@@ -44,7 +50,8 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
                                  {"binary_export", octetStream}}};
 
   for (const auto& [actionValue, mediaType] : actionValueToMediaType) {
-    if (checkParameter(params, "action", actionValue).has_value()) {
+    if (checkParameter(params, "action", std::string(actionValue))
+            .has_value()) {
       return mediaType;
     }
   }

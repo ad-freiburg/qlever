@@ -1,6 +1,11 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Tomas Damek <tomas.damek@email.uni-freiburg.de>
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Tomas Damek <tomas.damek@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
 #define QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
@@ -30,13 +35,13 @@ std::optional<double> parsePinGeoIndexSimplification(
 std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
     const ad_utility::url_parser::ParamValueMap& params);
 
-// Help struct defining the pinning of subtrees and the final result of a query
-// into the cache.
+// Helper struct defining the pinning of subtrees and the final result of a
+// query into the cache.
 struct ResultPinning {
   bool pinSubtrees = false;
   bool pinResult = false;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubresults,
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees,
                                               pinResult)
 };
 
