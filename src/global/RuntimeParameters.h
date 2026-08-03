@@ -145,6 +145,10 @@ struct RuntimeParameters {
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
   // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
+  // The maximum number of threads for the parallel counting loops of the
+  // pattern trick (see `CountAvailablePredicates`). The value `0` (the
+  // default) means one thread per hardware thread.
+  SizeT patternTrickNumThreads_{0, "pattern-trick-num-threads"};
   // The maximum size of the `prefilterBox` for
   // `SpatialJoinAlgorithms::libspatialjoinParse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};

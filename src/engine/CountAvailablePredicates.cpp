@@ -8,6 +8,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
+#include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
 #include "util/ParallelExecutor.h"
 
@@ -230,15 +231,14 @@ void CountAvailablePredicates::computePatternTrick(
   AD_LOG_DEBUG << "For " << input.size() << " entities in column "
                << subjectColumnIdx << std::endl;
 
-  // These variables are used to gather additional statistics
-  size_t numEntitiesWithPatterns = 0;
-  // the number of distinct predicates in patterns
+  // The number of distinct predicates in the used patterns (for the
+  // statistics below).
   size_t numPatternPredicates = 0;
-  // the number of predicates counted without patterns
-  size_t numListPredicates = 0;
 
   decltype(auto) subjectColumn = input.getColumn(subjectColumnIdx);
   decltype(auto) patternColumn = input.getColumn(patternColumnIdx);
+  size_t numThreads =
+      getRuntimeParameter<&RuntimeParameters::patternTrickNumThreads_>();
   CountMap<size_t> patternCounts = ad_utility::computeInParallelChunks(
       input.size(), CHUNK_SIZE_ROWS,
       [&subjectColumn, &patternColumn](size_t begin, size_t end) {
@@ -253,7 +253,8 @@ void CountAvailablePredicates::computePatternTrick(
           counts[patternColumn[i].getInt()]++;
         }
         return counts;
-      });
+      },
+      numThreads);
   AD_LOG_DEBUG << "Using " << patternCounts.size()
                << " patterns for computing the result." << std::endl;
   // the number of predicates counted with patterns
@@ -296,7 +297,8 @@ void CountAvailablePredicates::computePatternTrick(
           }
         }
         return counts;
-      });
+      },
+      numThreads);
   AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
                << std::endl;
   // write the predicate counts to the result
@@ -306,46 +308,29 @@ void CountAvailablePredicates::computePatternTrick(
   }
   AD_LOG_DEBUG << "Finished writing results" << std::endl;
 
-  // Print interesting statistics about the pattern trick
-  double ratioHasPatterns =
-      static_cast<double>(numEntitiesWithPatterns) / input.size();
-  size_t numPredicatesWithRepetitions =
-      numPredicatesSubsumedInPatterns + numListPredicates;
-  double ratioCountedWithPatterns =
-      static_cast<double>(numPredicatesSubsumedInPatterns) /
-      numPredicatesWithRepetitions;
-
-  size_t costWithPatterns =
-      input.size() + numListPredicates + numPatternPredicates;
-  size_t costWithoutPatterns = input.size() + numPredicatesWithRepetitions;
+  // Print interesting statistics about the pattern trick: the conceptual
+  // cost with patterns (one lookup per row plus one count per distinct
+  // predicate in the used patterns) vs the cost without patterns (one count
+  // per predicate of every row).
+  size_t costWithPatterns = input.size() + numPatternPredicates;
+  size_t costWithoutPatterns = input.size() + numPredicatesSubsumedInPatterns;
   double costRatio =
       static_cast<double>(costWithPatterns) / costWithoutPatterns;
-  // Print the ratio of entities that used a pattern
-  AD_LOG_DEBUG << numEntitiesWithPatterns << " of " << input.size()
-               << " entities had a pattern. That equals "
-               << (ratioHasPatterns * 100) << " %" << std::endl;
-  // Print info about how many predicates where counted with patterns
-  AD_LOG_DEBUG << "Of the " << numPredicatesWithRepetitions << "predicates "
-               << numPredicatesSubsumedInPatterns
-               << " were counted with patterns, " << numListPredicates
-               << " were counted without.";
-  AD_LOG_DEBUG << "The ratio is " << (ratioCountedWithPatterns * 100) << "%"
-               << std::endl;
-  // Print information about of efficient the pattern trick is
   AD_LOG_DEBUG << "The conceptual cost with patterns was " << costWithPatterns
                << " vs " << costWithoutPatterns << " without patterns"
                << std::endl;
-  // Print the cost improvement using the pattern trick gave us
-  AD_LOG_DEBUG << "This gives a ratio  with to without of " << costRatio
+  AD_LOG_DEBUG << "This gives a ratio with to without of " << costRatio
                << std::endl;
 
-  // Add these values to the runtime info
+  // Add these values to the runtime info. NOTE: the value of
+  // `numPredicatesWithRepetitions` is unchanged (it was previously computed
+  // as `numPredicatesSubsumedInPatterns` plus a counter that was never
+  // incremented); the two `percent...` details, whose values were also
+  // computed from never-incremented counters (and hence always `0` or `NaN`),
+  // have been removed.
   runtimeInfo.addDetail("numEntities", input.size());
   runtimeInfo.addDetail("numPredicatesWithRepetitions",
-                        numPredicatesWithRepetitions);
-  runtimeInfo.addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);
-  runtimeInfo.addDetail("percentPredicatesFromPatterns",
-                        ratioCountedWithPatterns * 100);
+                        numPredicatesSubsumedInPatterns);
   runtimeInfo.addDetail("costWithoutPatterns", costWithoutPatterns);
   runtimeInfo.addDetail("costWithPatterns", costWithPatterns);
   runtimeInfo.addDetail("costRatio", costRatio * 100);

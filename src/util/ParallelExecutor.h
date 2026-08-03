@@ -8,6 +8,7 @@
 #define QLEVER_SRC_UTIL_PARALLELEXECUTOR_H
 
 #include <algorithm>
+#include <deque>
 #include <future>
 #include <thread>
 #include <type_traits>
@@ -41,11 +42,11 @@ inline void runTasksInParallel(
 // Split the range `[0, numElements)` into consecutive chunks of `chunkSize`
 // elements (the last chunk may be smaller), call `computeChunk(begin, end)` for
 // each of the chunks, and return the merged results of those calls. The chunks
-// are processed by a `TaskQueue` with one thread per hardware thread. The
-// partial results are merged via `result.mergeWith(partialResult)`, in the
-// order of the chunks. The result type (the return type of `computeChunk`) has
-// to be default-constructible and movable, and to provide such a `mergeWith`
-// function.
+// are processed by a `TaskQueue` with `numThreads` threads (`0`, the default,
+// means one thread per hardware thread). The partial results are merged via
+// `result.mergeWith(partialResult)`, in the order of the chunks. The result
+// type (the return type of `computeChunk`) has to be default-constructible and
+// movable, and to provide such a `mergeWith` function.
 //
 // NOTE: The `chunkSize` should be small enough that each thread typically
 // processes several chunks (this balances the load, especially when the chunks
@@ -63,7 +64,8 @@ inline void runTasksInParallel(
 // throw, only the first one (in the order of the chunks) is rethrown.
 template <typename ChunkFunction>
 auto computeInParallelChunks(size_t numElements, size_t chunkSize,
-                             const ChunkFunction& computeChunk) {
+                             const ChunkFunction& computeChunk,
+                             size_t numThreads = 0) {
   using Result = std::invoke_result_t<const ChunkFunction&, size_t, size_t>;
   AD_CONTRACT_CHECK(chunkSize > 0);
   if (numElements == 0) {
@@ -72,25 +74,37 @@ auto computeInParallelChunks(size_t numElements, size_t chunkSize,
   if (numElements <= chunkSize) {
     return computeChunk(0, numElements);
   }
-  size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
-  std::vector<std::future<Result>> futures;
+  if (numThreads == 0) {
+    numThreads = std::max(1u, std::thread::hardware_concurrency());
+  }
+  std::deque<std::future<Result>> futures;
   // The number of chunks is typically much larger than the number of threads,
   // which is exactly what a `TaskQueue` is for. Note: Its destructor waits for
-  // all the chunks to complete, also if the merging below throws.
+  // all the chunks to complete, also if `computeChunk` or the merging below
+  // throws.
   TaskQueue<false> queue{numThreads, numThreads, "computeInParallelChunks"};
+  // Merge the oldest outstanding partial result into `result`. Note:
+  // `future.get()` rethrows an exception that `computeChunk` has thrown.
+  Result result{};
+  auto mergeOldest = [&result, &futures]() {
+    result.mergeWith(futures.front().get());
+    futures.pop_front();
+  };
   for (size_t begin = 0; begin < numElements; begin += chunkSize) {
     futures.push_back(
         queue.submit([&computeChunk, begin,
                       end = std::min(begin + chunkSize, numElements)]() {
           return computeChunk(begin, end);
         }));
+    // Merge eagerly, so that only a bounded number of partial results is
+    // alive at any time (the oldest chunk has typically already completed;
+    // if not, waiting for it is fine, because the workers keep running).
+    while (futures.size() > 2 * numThreads) {
+      mergeOldest();
+    }
   }
-  // Merge the partial results while the remaining chunks are still being
-  // computed. This way at most a few of them are alive at the same time. Note:
-  // `future.get()` rethrows an exception that `computeChunk` has thrown.
-  Result result{};
-  for (auto& future : futures) {
-    result.mergeWith(future.get());
+  while (!futures.empty()) {
+    mergeOldest();
   }
   return result;
 }

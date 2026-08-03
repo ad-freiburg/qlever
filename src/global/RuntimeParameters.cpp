@@ -49,6 +49,7 @@ RuntimeParameters::RuntimeParameters() {
   add(divisionByZeroIsUndef_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
+  add(patternTrickNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);

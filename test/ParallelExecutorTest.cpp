@@ -194,6 +194,28 @@ TEST(ComputeInParallelChunks, threadBudgetIsRespected) {
 }
 
 // _____________________________________________________________________________
+TEST(ComputeInParallelChunks, explicitNumThreadsIsRespected) {
+  // With an explicit thread limit of 2, never more than two chunks run at the
+  // same time (in contrast to `threadBudgetIsRespected` above, this test does
+  // not depend on the hardware concurrency of the machine).
+  std::atomic<size_t> numRunning = 0;
+  std::atomic<bool> tooManyRunning = false;
+  Chunks chunks = ad_utility::computeInParallelChunks(
+      100, 1,
+      [&numRunning, &tooManyRunning](size_t begin, size_t end) {
+        if (++numRunning > 2) {
+          tooManyRunning = true;
+        }
+        Chunks chunk = makeChunk(begin, end);
+        --numRunning;
+        return chunk;
+      },
+      2);
+  expectPartitionOf(chunks, 100);
+  EXPECT_FALSE(tooManyRunning.load());
+}
+
+// _____________________________________________________________________________
 TEST(ComputeInParallelChunks, exceptionInChunkIsPropagated) {
   // Every chunk holds exactly one element, and the chunk for the first element
   // throws.
