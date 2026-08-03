@@ -16,6 +16,7 @@
 #include <functional>
 #include <memory>
 
+#include "backports/three_way_comparison.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
@@ -122,7 +123,8 @@ class AllocationMemoryLeftThreadsafe {
   const T& ptr() const { return ptr_; }
 
   // Compares whether two wrappers refer to the same shared memory counter.
-  bool operator==(const AllocationMemoryLeftThreadsafe&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllocationMemoryLeftThreadsafe,
+                                              ptr_)
 
  private:
   // Shared synchronized memory counter.
