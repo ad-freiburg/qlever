@@ -37,13 +37,13 @@ TEST(RequestParametersTest, parsePinGeoIndexSimplification) {
 
 // _____________________________________________________________________________
 TEST(RequestParametersTest, determineResultPinning) {
-  EXPECT_THAT(determineResultPinning(
-                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
-              ResultPinning(true, true));
-  EXPECT_THAT(determineResultPinning({{"pin-result", {"true"}}}),
-              ResultPinning(false, true));
-  EXPECT_THAT(determineResultPinning({{"pin-subresults", {"otherValue"}}}),
-              ResultPinning(false, false));
+  EXPECT_EQ(determineResultPinning(
+                {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
+            ResultPinning(true, true));
+  EXPECT_EQ(determineResultPinning({{"pin-result", {"true"}}}),
+            ResultPinning(false, true));
+  EXPECT_EQ(determineResultPinning({{"pin-subresults", {"otherValue"}}}),
+            ResultPinning(false, false));
 }
 
 // _____________________________________________________________________________

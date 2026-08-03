@@ -1265,8 +1265,8 @@ UpdateMetadata Server::processUpdateImpl(
   // Clear the cache, because all cache entries have been invalidated by
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
-  cache_.clearAll();
-  namedResultCache_.clear();
+  qlever().cache().clearAll();
+  qlever().namedResultCache().clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;
@@ -1341,9 +1341,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Update the delta triples.
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
-                auto updateMetadata = qlever().processUpdateImpl(
-                    plannedUpdate.value(), cancellationHandle, deltaTriples,
-                    tracer);
+                auto updateMetadata =
+                    processUpdateImpl(plannedUpdate.value(), cancellationHandle,
+                                      deltaTriples, tracer);
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");

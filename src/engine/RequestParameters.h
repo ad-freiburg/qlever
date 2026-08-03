@@ -27,7 +27,7 @@ std::optional<double> parsePinGeoIndexSimplification(
 // (historical) `?action=[some-export-specification]` HTTP query parameter, e.g.
 // `?action=csv_export` requests CSV. Return `nullopt` if no such query
 // parameter is set.
-std::optional<ad_utility::MediaType> determineMediaTypeFromActionParam(
+std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
     const ad_utility::url_parser::ParamValueMap& params);
 
 // Help struct defining the pinning of subtrees and the final result of a query
@@ -35,6 +35,9 @@ std::optional<ad_utility::MediaType> determineMediaTypeFromActionParam(
 struct ResultPinning {
   bool pinSubtrees = false;
   bool pinResult = false;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubresults,
+                                              pinResult)
 };
 
 // Determine `ResultPinning` from the `pin-subresults` and `pin-result` URL
