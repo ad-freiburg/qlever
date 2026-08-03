@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <absl/time/time.h>
 #include <gmock/gmock.h>
 
@@ -13,7 +14,11 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <deque>
+#include <fstream>
 #include <future>
+#include <iterator>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -27,13 +32,19 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
+// The `server` library is not built under Emscripten (`Server.cpp` crashes
+// emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
+// server-integration test below is compiled out there.
+#ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#endif
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
@@ -200,6 +211,51 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(14)], "<k>");
   EXPECT_EQ(newVocab[VocabIndex::make(15)], "<l>");
   EXPECT_EQ(newVocab[VocabIndex::make(16)], "<m>");
+}
+
+// With more words than the progress batch size, the progress callback is
+// called once per full batch plus once for the remainder, and the reported
+// numbers add up to the total number of written words.
+TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
+  // Must match the reporting batch size in `mergeVocabs` in
+  // `IndexRebuilder.cpp`.
+  constexpr size_t batchSize = 65'536;
+  constexpr size_t numEntries = batchSize + 1'000;
+
+  auto type = ad_utility::VocabularyType::random();
+  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+  config.vocabularyType = type;
+  auto oldIndex = ad_utility::testing::makeTestIndex(
+      gtestCurrentTestName() + "-index", std::move(config));
+  std::string vocabPrefix = gtestCurrentTestName();
+  absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
+    deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
+  }};
+
+  // A `deque` is used for stable addresses, because `materializeLocalVocab`
+  // takes pointers to the entries.
+  std::deque<LocalVocabEntry> entryStorage;
+  std::vector<LocalVocabIndex> entries;
+  for (size_t i = 0; i < numEntries; ++i) {
+    entryStorage.emplace_back(
+        ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
+        oldIndex.getLocalVocabContext());
+    entries.push_back(&entryStorage.back());
+  }
+
+  std::vector<size_t> reportedBatches;
+  auto [insertionPositions, localVocabMapping] =
+      materializeLocalVocab(entries, oldIndex.getVocab(), vocabPrefix,
+                            [&reportedBatches](size_t numWords) {
+                              reportedBatches.push_back(numWords);
+                            });
+  EXPECT_EQ(insertionPositions.size(), numEntries);
+  EXPECT_EQ(localVocabMapping.size(), numEntries);
+  ASSERT_GE(reportedBatches.size(), 2u);
+  EXPECT_EQ(reportedBatches.front(), batchSize);
+  EXPECT_EQ(std::accumulate(reportedBatches.begin(), reportedBatches.end(),
+                            size_t{0}),
+            oldIndex.getVocab().size() + numEntries);
 }
 
 // _____________________________________________________________________________
@@ -568,6 +624,36 @@ TEST(IndexRebuilder, materializeToIndex) {
                                blankNodes, cancellationHandle, logFile);
     EXPECT_TRUE(ql::filesystem::exists(logFile));
 
+    // Each phase writes its header (which says what is being processed,
+    // depending on which permutations the index has) and at least its final
+    // progress line (with a percentage and an average speed) to the rebuild's
+    // log file.
+    {
+      auto logStream = ad_utility::makeIfstream(logFile);
+      std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+      using ::testing::HasSubstr;
+      EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
+                                        "existing and new words) ..."));
+      EXPECT_THAT(
+          logContent,
+          HasSubstr(loadAllPermutations
+                        ? "Recomputing statistics (from 4 permutations, 3 "
+                          "normal and 1 internal) ..."
+                        : "Recomputing statistics (from 2 permutations, 1 "
+                          "normal and 1 internal) ..."));
+      EXPECT_THAT(logContent,
+                  HasSubstr(loadAllPermutations
+                                ? "Writing new index (8 permutations, 6 "
+                                  "normal and 2 internal) ..."
+                                : "Writing new index (4 permutations, 2 "
+                                  "normal and 2 internal) ..."));
+      EXPECT_THAT(logContent, HasSubstr("Words written: "));
+      EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
+      EXPECT_THAT(logContent, HasSubstr("Triples written: "));
+      EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
+      EXPECT_THAT(logContent, HasSubstr("[average speed "));
+    }
+
     IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
     newIndex.usePatterns() = usePatterns;
     newIndex.loadAllPermutations() = loadAllPermutations;
@@ -700,11 +786,11 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 }  // namespace
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten: the `server` library it needs is not built
+// there (see the include of `engine/Server.h` above), and the test hangs
+// under Emscripten anyway (threaded server integration).
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   namespace fs = std::filesystem;
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("rebuild.");
@@ -817,13 +903,13 @@ TEST(IndexRebuilder, serverIntegration) {
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("serverIntegration.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
@@ -875,6 +961,7 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   threadPool.join();
   cleanDirsWithPrefix("droppedState.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 // The thread-count override for the rebuild's scans must be set on the
