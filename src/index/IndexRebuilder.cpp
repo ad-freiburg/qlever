@@ -261,11 +261,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   // thread count as query scans); a positive value throttles the rebuild's
   // read/decompress parallelism only, reducing its peak CPU without touching
   // queries.
-  auto rebuildScanThreads =
-      getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
-  std::optional<size_t> numThreadsOverride =
-      rebuildScanThreads == 0 ? std::nullopt
-                              : std::optional<size_t>{rebuildScanThreads};
+  auto numThreadsOverride = getRuntimeParameterAsOptional<
+      &RuntimeParameters::rebuildIndexScanNumThreads_>();
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
       *locatedTriplesSharedState, numThreadsOverride);
