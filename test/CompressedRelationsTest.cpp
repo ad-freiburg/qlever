@@ -151,7 +151,10 @@ compressedRelationTestWriteCompressedRelations(
   }));
 
   addGraphColumnIfNecessary(inputs);
-  size_t numColumns = getNumColumns(inputs) + 1;
+  // Note: For empty `inputs` the number of columns cannot be deduced, so we use
+  // the minimal number of columns (the three columns of a triple plus the graph
+  // column).
+  size_t numColumns = inputs.empty() ? 4 : getNumColumns(inputs) + 1;
   AD_CORRECTNESS_CHECK(numColumns >= 4);
   auto generator =
       [&](size_t sorterBlockSize) -> cppcoro::generator<IdTableStatic<0>> {
@@ -427,9 +430,20 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
 // to find subtle rounding bugs when creating the blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
                                  float locatedTriplesProbability = 0.5) {
-  testCompressedRelations(inputs, 19_B, locatedTriplesProbability);
-  testCompressedRelations(inputs, 237_B, locatedTriplesProbability);
-  testCompressedRelations(inputs, 4096_B, locatedTriplesProbability);
+  auto testAllBlockSizes = [&inputs, locatedTriplesProbability]() {
+    testCompressedRelations(inputs, 19_B, locatedTriplesProbability);
+    testCompressedRelations(inputs, 237_B, locatedTriplesProbability);
+    testCompressedRelations(inputs, 4096_B, locatedTriplesProbability);
+  };
+  testAllBlockSizes();
+  // Repeat the tests with very small values for the maximal size of a block
+  // with updates, such that the blocks that contain update triples are split
+  // into several parts. The results must be exactly the same.
+  for (size_t maxBlockSizeWithUpdates : {1, 2, 7}) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::maxBlockSizeWithUpdates_>(maxBlockSizeWithUpdates);
+    testAllBlockSizes();
+  }
 }
 }  // namespace
 
@@ -441,6 +455,20 @@ TEST(CompressedRelationWriter, SmallRelations) {
         RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
   }
   testWithDifferentBlockSizes(inputs);
+}
+
+// Test the case that all the triples are update triples, that is, the
+// permutation on disk is completely empty. This is the important case of a user
+// who builds an index from an empty input and then inserts triples: all of
+// those triples end up in the same (artificial last) block, which then has to
+// be split.
+TEST(CompressedRelationWriter, OnlyUpdateTriples) {
+  std::vector<RelationInput> inputs;
+  for (int i = 1; i < 100; ++i) {
+    inputs.push_back(
+        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
+  }
+  testWithDifferentBlockSizes(inputs, 1.0);
 }
 
 // Internal matchers for the following two tests.

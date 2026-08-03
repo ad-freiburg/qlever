@@ -200,6 +200,14 @@ struct RuntimeParameters {
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 
+  // The maximal number of rows (the rows stored on disk plus the update
+  // triples) that a block may have before it is split into several parts, see
+  // `LocatedTriplesPerBlock::updateAugmentedMetadata`. Without such a split,
+  // all updates that fall into the same block would have to be merged into that
+  // block for every scan that touches it, no matter how selective the scan is.
+  // Set this to `0` to disable the splitting entirely.
+  SizeT maxBlockSizeWithUpdates_{64'000, "max-block-size-with-updates"};
+
   // The runtime log level. Messages with a higher level are suppressed. The
   // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
   LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
