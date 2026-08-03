@@ -138,11 +138,11 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
 //______________________________________________________________________________
 InputRangeTypeErased<std::string>
 ConstructTripleGenerator::generateFormattedTriples(
-    const Triples& templateTriples, const VariableToColumnMap& variableColums,
+    const Triples& templateTriples, const VariableToColumnMap& variableColumns,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
     ad_utility::MediaType mediaType, EvaluationConfig config) {
   auto evaluatedTriples =
-      evaluateTables(templateTriples, variableColums, std::move(rowIndices),
+      evaluateTables(templateTriples, variableColumns, std::move(rowIndices),
                      rowOffset, std::move(config));
 
   auto transformer = [mediaType](const EvaluatedTriple& triple) {
@@ -155,11 +155,11 @@ ConstructTripleGenerator::generateFormattedTriples(
 //______________________________________________________________________________
 InputRangeTypeErased<StringTriple>
 ConstructTripleGenerator::generateStringTriples(
-    const Triples& templateTriples, const VariableToColumnMap& variableColums,
+    const Triples& templateTriples, const VariableToColumnMap& variableColumns,
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
     EvaluationConfig config) {
   auto evaluatedTriples =
-      evaluateTables(templateTriples, variableColums, std::move(rowIndices),
+      evaluateTables(templateTriples, variableColumns, std::move(rowIndices),
                      rowOffset, std::move(config));
 
   auto transformer = [](const EvaluatedTriple& triple) {
