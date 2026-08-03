@@ -594,7 +594,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto& plan = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
-
   insertPayloadColumnsToPlan(plan, leftOpAndCol, rightOpAndCol);
   insertPayloadColumnsToPlan(plan, rightOpAndCol, leftOpAndCol);
 

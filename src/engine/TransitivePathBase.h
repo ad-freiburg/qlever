@@ -297,8 +297,9 @@ class TransitivePathBase : public Operation {
   // Insert the payload columns of one or two given sides into a plan.
   // Traverse each side of the operation and insert columns which are not
   // related to joining into the plan.
-  void insertPayloadColumnsToPlan(auto& plan, const std::optional<OpAndCol>& opAndCol,
-                                  const std::optional<OpAndCol>& otherOpAndCol) const ;
+  void insertPayloadColumnsToPlan(
+      auto& plan, const std::optional<OpAndCol>& opAndCol,
+      const std::optional<OpAndCol>& otherOpAndCol) const;
 
  public:
   size_t getCostEstimate() override;
