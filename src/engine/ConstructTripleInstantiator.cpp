@@ -102,9 +102,9 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
     return term.rdfTermString_;
   }
-  const char* i = static_cast<const char*>(XSD_INT_TYPE);
-  const char* d = static_cast<const char*>(XSD_DECIMAL_TYPE);
-  const char* b = static_cast<const char*>(XSD_BOOLEAN_TYPE);
+  const auto* i = static_cast<const char*>(XSD_INT_TYPE);
+  const auto* d = static_cast<const char*>(XSD_DECIMAL_TYPE);
+  const auto* b = static_cast<const char*>(XSD_BOOLEAN_TYPE);
 
   // Note: XSD_DOUBLE_TYPE values (for example "NaN", "INF", "-INF") always
   // include the datatype.
