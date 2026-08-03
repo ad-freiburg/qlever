@@ -131,6 +131,8 @@ class TransitivePathBase : public Operation {
  protected:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
 
+  using OpAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
+
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
   TransitivePathSide rhs_;
@@ -139,7 +141,7 @@ class TransitivePathBase : public Operation {
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
   // Indicate that the variable is only bound because the path is empty, not
-  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // because `bindSides` was called. This means that it is bound to a
   // full scan of all subjects and objects in the knowledge graph, but can be
   // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
@@ -164,31 +166,14 @@ class TransitivePathBase : public Operation {
 
   ~TransitivePathBase() override = 0;
 
-  /**
-   * Returns a new TransitivePath operation that uses the fact that leftop
-   * generates all possible values for the left side of the paths. If the
-   * results of leftop is smaller than all possible values this will result in a
-   * faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindLeftSide(
-      std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const;
-
-  /**
-   * Returns a new TransitivePath operation that uses the fact that rightop
-   * generates all possible values for the right side of the paths. If the
-   * results of rightop is smaller than all possible values this will result in
-   * a faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindRightSide(
-      std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const;
-
-  // Returns a new `TransitivePath` operation, similar to `bindLeftSide` or
-  // `bindRightSide` but with having both sides bound at the same time.
-  std::shared_ptr<TransitivePathBase> bindBothSides(
-      std::shared_ptr<QueryExecutionTree> leftOp, size_t leftCol,
-      std::shared_ptr<QueryExecutionTree> rightOp, size_t rightCol) const;
+  // Return a new Transitive Path `Operation` that uses the fact that either
+  // the left, right or both input operations generate all possible values of
+  // their corresponding side. This may result in a faster transitive path
+  // operation if the amount of those values is smaller than all possible values
+  // (as the transitive path has to be computed for fewer elements).
+  std::shared_ptr<TransitivePathBase> bindSides(
+      std::optional<OpAndCol> leftOpAndCol = std::nullopt,
+      std::optional<OpAndCol> rightOpAndCol = std::nullopt) const;
 
   bool isBoundOrId() const;
 
@@ -309,6 +294,12 @@ class TransitivePathBase : public Operation {
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
+  // Insert the payload columns of one or two given sides into a plan.
+  // Traverse each side of the operation and insert columns which are not
+  // related to joining into the plan.
+  void insertPayloadColumnsToPlan(auto& plan, const std::optional<OpAndCol>& opAndCol,
+                                  const std::optional<OpAndCol>& otherOpAndCol) const ;
+
  public:
   size_t getCostEstimate() override;
 
@@ -366,14 +357,6 @@ class TransitivePathBase : public Operation {
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-
-  // The internal implementation of `bindLeftSide`, `bindRightSide` and
-  // `bindBothSides` which share a lot of code.
-  std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
-      std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
-          leftOpAndCol,
-      std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
-          rightOpAndCol) const;
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,

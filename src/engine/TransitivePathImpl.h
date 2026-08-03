@@ -267,30 +267,36 @@ class TransitivePathImpl : public TransitivePathBase {
                                                graphVariable_.has_value());
     };
 
+    // Set the target id according to the transitive path's sides.
+    auto assignTargetId = [&](const auto& startNode, const auto& graphId,
+                              const auto& matchedTargetNode) {
+      // Same variable on both sides.
+      if (sameVariableOnBothSides) {
+        targetId = startNode;
+      }
+      // Transitive path ends with Graph variable.
+      if (endsWithGraphVariable) {
+        targetId = graphId;
+      }
+      // An actual target node different from the start side or graph, is given.
+      if (targetNodesAreBound) {
+        targetId = matchedTargetNode;
+      }
+    };
+
     // Prepare nodes and run graph search. Return `NodeWithTargets` if graph
     // search was successful.
     auto runAndProcessGraphSearch =
         [&](Id startNode, Id graphId, std::optional<Id> matchedTargetNode,
-            size_t currentRow, LocalVocab& mergedVocab, const auto& payload,
+            size_t currentRow, const LocalVocab& mergedVocab,
+            const auto& payload,
             const auto& targetPayload) -> std::optional<NodeWithTargets> {
       // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
       // where both `?g` variables are not the same.
       if (startsWithGraphVariable && startNode != graphId) {
         return std::nullopt;
       }
-      if (sameVariableOnBothSides) {
-        targetId = startNode;
-      }
-      if (endsWithGraphVariable) {
-        targetId = graphId;
-      }
-      if (targetNodesAreBound) {
-        targetId = matchedTargetNode;
-      }
-
-      std::cout << "RUNNING GSP FROM " << startNode;
-      if (targetId) std::cout << " to " << targetId.value();
-      std::cout << std::endl;
+      assignTargetId(startNode, graphId, matchedTargetNode);
 
       edges.setGraphId(graphId);
 
@@ -298,7 +304,6 @@ class TransitivePathImpl : public TransitivePathBase {
       GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_, maxDist_);
       GraphSearchExecutionParams ep(cancellationHandle_, allocator());
       Set connectedNodes = runOptimalGraphSearch(gsp, ep);
-      std::cout << "GSP result size: " << connectedNodes.size() << std::endl;
       if (connectedNodes.empty()) {
         return std::nullopt;
       }

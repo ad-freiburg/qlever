@@ -86,8 +86,9 @@ class TransitivePathTest
                  minDist, maxDist, std::move(turtleInput), graphVariable);
     auto operation = getOperation(qec, sideTable, sideVars, sideTableCol,
                                   forceFullyMaterialized);
-    auto boundPath = isLeft ? T->bindLeftSide(operation, sideTableCol)
-                            : T->bindRightSide(operation, sideTableCol);
+    auto boundPath =
+        isLeft ? T->bindSides(std::pair{operation, sideTableCol})
+               : T->bindSides(std::nullopt, std::pair{operation, sideTableCol});
 
     EXPECT_TRUE(boundPath->isBoundOrId());
     return boundPath;
@@ -129,8 +130,8 @@ class TransitivePathTest
         getOperation(qec, rightSideTable, rightSideVars, rightSideTableCol,
                      forceFullyMaterialized);
 
-    auto boundPath = T->bindBothSides(leftOperation, leftSideTableCol,
-                                      rightOperation, rightSideTableCol);
+    auto boundPath = T->bindSides(std::pair{leftOperation, leftSideTableCol},
+                                  std::pair{rightOperation, rightSideTableCol});
 
     EXPECT_TRUE(boundPath->isBoundOrId());
     return boundPath;
@@ -2151,7 +2152,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         qec, side.clone(),
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
   }
@@ -2162,7 +2163,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
         false, std::vector<ColumnIndex>{1});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
   }
@@ -2173,7 +2174,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
         false, std::vector<ColumnIndex>{0});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre(0));
   }
@@ -2187,7 +2188,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
         false, std::vector<ColumnIndex>{0});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
   }

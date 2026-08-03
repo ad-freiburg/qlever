@@ -40,6 +40,10 @@ class BinSearchMap {
   size_t offsetOfActiveGraph_ = 0;
   size_t sizeOfActiveGraph_;
 
+  // Store all existing target ids, which might be needed for filling in
+  // undefineds on the target side.
+  Set targetIdLookup_;
+
  public:
   // Construct with the given edges. The `sizeOfActiveGraph_` is set to the
   // total number of edges if no graphs are given, or to zero otherwise. In the
@@ -52,10 +56,6 @@ class BinSearchMap {
   // Return all target nodes for the given source node in the currently
   // active graph.
   ql::span<const Id> successors(Id node) const;
-
-  // Store all existing target ids, which might be needed for filling in
-  // undefineds on the target side.
-  Set targetIdLookup_;
 
   // Find all `Id`s in `startIds_` that are equal to `id` together with the
   // corresponding graph `Id`s, with the following special cases:

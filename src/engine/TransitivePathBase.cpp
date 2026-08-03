@@ -477,27 +477,6 @@ std::vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftSide(
-    std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
-  return bindLeftOrRightSide(std::pair{std::move(leftop), inputCol},
-                             std::nullopt);
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
-    std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
-  return bindLeftOrRightSide(std::nullopt,
-                             std::pair{std::move(rightop), inputCol});
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<TransitivePathBase> TransitivePathBase::bindBothSides(
-    std::shared_ptr<QueryExecutionTree> leftOp, size_t leftCol,
-    std::shared_ptr<QueryExecutionTree> rightOp, size_t rightCol) const {
-  return bindLeftOrRightSide(std::pair{leftOp, leftCol},
-                             std::pair{rightOp, rightCol});
-}
-// _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
   auto [originalVar, info] =
@@ -564,11 +543,9 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
-    std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
-        leftOpAndCol,
-    std::optional<std::pair<std::shared_ptr<QueryExecutionTree>, size_t>>
-        rightOpAndCol) const {
+std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
+    std::optional<OpAndCol> leftOpAndCol,
+    std::optional<OpAndCol> rightOpAndCol) const {
   // Ensure at least one side is given.
   AD_CORRECTNESS_CHECK(leftOpAndCol.has_value() || rightOpAndCol.has_value());
 
@@ -585,8 +562,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // Process both sides according to if they're given or not.
   // `resetPlaceholder` ensures a side is always cleared if its `opAndCol` has
   // no value.
-  auto setTreeAndCol = [this](auto& side, auto& opAndCol,
-                              bool resetPlaceholder) {
+  auto setTreeAndCol = [&](auto& side, auto& opAndCol, bool resetPlaceholder) {
     if (opAndCol.has_value()) {
       auto& [op, col] = opAndCol.value();
       op = matchWithKnowledgeGraph(col, std::move(op));
@@ -618,55 +594,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   auto& plan = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
-  // Traverse each side of the operation and insert columns which are not
-  // related to the join into the plan.
-  auto insertPayloadColumnsToPlan = [this, &plan](const auto& opAndCol,
-                                                  const auto& otherOpAndCol) {
-    // Ensure we only bind populated columns.
-    if (!opAndCol.has_value()) {
-      return;
-    }
 
-    const auto& [op, col] = opAndCol.value();
-    // Note: The `variable` in the following structured binding is `const`,
-    // even if we bind by value. We deliberately make one unnecessary copy
-    // of the `variable` to keep the code simpler.
-    for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
-      ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-      if (columnIndex == col || variable == graphVariable_) {
-        continue;
-      }
-
-      // Don't add the same payload column twice if it is present on both sides.
-      if (otherOpAndCol.has_value()) {
-        const auto& [otherOp, otherCol] = otherOpAndCol.value();
-        if (otherOp->getVariableColumns().contains(variable) &&
-            plan->variableColumns_.contains(variable)) {
-          continue;
-        }
-      }
-
-      columnIndexWithType.columnIndex_ += columnIndex > col ? 1 : 2;
-
-      // When we have a graph variable, we write it last, so we have to
-      // account for that.
-      if (graphVariable_.has_value()) {
-        auto optGraphIndex =
-            op->getVariableColumnOrNullopt(graphVariable_.value());
-        if (columnIndex >
-            optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
-          columnIndexWithType.columnIndex_ -= 1;
-        }
-      }
-      // Ensure all payload columns are appended to the `variableColumns_`.
-      AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
-      plan->variableColumns_[variable] = columnIndexWithType;
-    }
-    plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWidth(op, col);
-  };
-
-  insertPayloadColumnsToPlan(leftOpAndCol, rightOpAndCol);
-  insertPayloadColumnsToPlan(rightOpAndCol, leftOpAndCol);
+  insertPayloadColumnsToPlan(plan, leftOpAndCol, rightOpAndCol);
+  insertPayloadColumnsToPlan(plan, rightOpAndCol, leftOpAndCol);
 
   // Make sure mapping actually points to the last column if it's not one
   // of the regular variables.
@@ -678,6 +608,53 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     }
   }
   return std::move(plan);
+}
+
+// _____________________________________________________________________________
+void TransitivePathBase::insertPayloadColumnsToPlan(
+    auto& plan, const std::optional<OpAndCol>& opAndCol,
+    const std::optional<OpAndCol>& otherOpAndCol) const {
+  // Ensure we only bind populated columns.
+  if (!opAndCol.has_value()) {
+    return;
+  }
+
+  const auto& [op, col] = opAndCol.value();
+  // Note: The `variable` in the following structured binding is `const`,
+  // even if we bind by value. We deliberately make one unnecessary copy
+  // of the `variable` to keep the code simpler.
+  for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
+    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
+    if (columnIndex == col || variable == graphVariable_) {
+      continue;
+    }
+
+    // Don't add the same payload column twice if it is present on both sides.
+    if (otherOpAndCol.has_value()) {
+      const auto& [otherOp, otherCol] = otherOpAndCol.value();
+      if (otherOp->getVariableColumns().contains(variable) &&
+          plan->variableColumns_.contains(variable)) {
+        continue;
+      }
+    }
+
+    columnIndexWithType.columnIndex_ += columnIndex > col ? 1 : 2;
+
+    // When we have a graph variable, we write it last, so we have to
+    // account for that.
+    if (graphVariable_.has_value()) {
+      auto optGraphIndex =
+          op->getVariableColumnOrNullopt(graphVariable_.value());
+      if (columnIndex >
+          optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
+        columnIndexWithType.columnIndex_ -= 1;
+      }
+    }
+    // Ensure all payload columns are appended to the `variableColumns_`.
+    AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
+    plan->variableColumns_[variable] = columnIndexWithType;
+  }
+  plan->resultWidth_ += op->getResultWidth() - numJoinColumnsWidth(op, col);
 }
 
 // _____________________________________________________________________________
