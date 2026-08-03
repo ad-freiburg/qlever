@@ -509,15 +509,18 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // NOTE: The totals for the progress bar are taken from the statistics
   // of the old index; they are exact up to the delta triples, which is good
   // enough for a progress bar.
-  REBUILD_LOG_INFO << "Recomputing statistics (from "
-                   << (index.hasAllPermutations()
-                           ? "4 permutations, 3 normal and 1 internal"
-                           : "2 permutations, 1 normal and 1 internal")
-                   << ") ..." << std::endl;
+  // The number of normal (non-internal) permutations; there are always two
+  // internal permutations (PSO and POS) in addition.
+  size_t numNormalPermutations = index.hasAllPermutations() ? 6 : 2;
+  // The statistics scan one permutation per normal pair, plus the internal
+  // PSO permutation.
+  size_t numStatsScans = numNormalPermutations / 2;
+  REBUILD_LOG_INFO << "Recomputing statistics (from " << numStatsScans + 1
+                   << " permutations, " << numStatsScans
+                   << " normal and 1 internal) ..." << std::endl;
   auto numTriplesOld = index.numTriples();
   size_t statsTotal =
-      (index.hasAllPermutations() ? 3 : 1) * numTriplesOld.normal +
-      numTriplesOld.internal;
+      numStatsScans * numTriplesOld.normal + numTriplesOld.internal;
   ad_utility::ConcurrentProgressBar statsProgress{
       "Triples counted: ", statsTotal, batchSizeFor(statsTotal)};
   auto newStats = index.recomputeStatistics(locatedTriplesSharedState,
@@ -539,20 +542,18 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
   // Phase 3: write the new index (permutations and patterns).
-  REBUILD_LOG_INFO << "Writing new index ("
-                   << (index.hasAllPermutations()
-                           ? "8 permutations, 6 normal and 2 internal"
-                           : "4 permutations, 2 normal and 2 internal")
-                   << ") ..." << std::endl;
+  REBUILD_LOG_INFO << "Writing new index (" << numNormalPermutations + 2
+                   << " permutations, " << numNormalPermutations
+                   << " normal and 2 internal) ..." << std::endl;
+  // Each triple is written once per permutation.
   size_t permutationsTotal =
-      (index.hasAllPermutations() ? 6 : 2) * numTriplesOld.normal +
-      2 * numTriplesOld.internal;
+      numNormalPermutations * numTriplesOld.normal + 2 * numTriplesOld.internal;
   ad_utility::ConcurrentProgressBar permutationsProgress{
       "Triples written: ", permutationsTotal, batchSizeFor(permutationsTotal)};
   auto permutationsProgressCallback = progressCallbackFor(permutationsProgress);
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
-  size_t numberOfPermutations = index.hasAllPermutations() ? 8 : 4;
+  size_t numberOfPermutations = numNormalPermutations + 2;
   namespace net = boost::asio;
   net::thread_pool threadPool{patternThreads + numberOfPermutations};
 

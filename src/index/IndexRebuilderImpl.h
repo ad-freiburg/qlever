@@ -23,6 +23,7 @@
 #include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
 #include "util/InputRangeUtils.h"
+#include "util/TransparentFunctors.h"
 
 namespace qlever::indexRebuilder {
 
@@ -36,7 +37,7 @@ namespace qlever::indexRebuilder {
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
     const std::string& newIndexName,
-    const std::function<void(size_t)>& progress = [](size_t) {});
+    const std::function<void(size_t)>& progress = ad_utility::noop);
 
 // Turn a vector of `OwnedBlocksEntry`s into a vector of `uint64_t`s
 // representing the block ids of the generated blocks.
@@ -77,7 +78,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    std::function<void(size_t)> progress = [](size_t) {});
+    std::function<void(size_t)> progress = ad_utility::noop);
 
 // Analyze how many columns the new permutation will have and which additional
 // columns it will have based on the given `blockMetadataRanges`. The number of

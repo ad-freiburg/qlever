@@ -45,6 +45,7 @@
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/TransparentFunctors.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -993,7 +994,7 @@ class IndexImpl {
   // rebuild for progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
       const LocatedTriplesSharedState& locatedTriplesSharedState,
-      const std::function<void(size_t)>& progress = [](size_t) {}) const;
+      const std::function<void(size_t)>& progress = ad_utility::noop) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
