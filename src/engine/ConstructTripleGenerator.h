@@ -60,7 +60,7 @@ class ConstructTripleGenerator {
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      ad_utility::MediaType mediaType, EvaluationConfig config);
+      ad_utility::MediaType mediaType, const EvaluationConfig& config);
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
   // lazy range of `StringTriple`.
@@ -69,7 +69,7 @@ class ConstructTripleGenerator {
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns,
       InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
-      EvaluationConfig config);
+      const EvaluationConfig& config);
 
  private:
   // Returns an `IdCache` sized for `tmpl` (minimum one slot to handle
@@ -84,7 +84,7 @@ class ConstructTripleGenerator {
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      size_t rowOffset, EvaluationConfig config);
+      size_t rowOffset, const EvaluationConfig& config);
 
   FRIEND_TEST(MakeIdCache, emptyTemplate);
   FRIEND_TEST(MakeIdCache, singleVariable);
