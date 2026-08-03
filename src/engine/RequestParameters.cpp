@@ -5,12 +5,9 @@
 #include "engine/RequestParameters.h"
 
 #include <array>
-#include <boost/url/param.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <string_view>
-#include <utility>
 
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
@@ -49,7 +46,6 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
   for (const auto& [actionValue, mediaType] : actionValueToMediaType) {
     if (checkParameter(params, "action", actionValue).has_value()) {
       return mediaType;
-      break;
     }
   }
 
