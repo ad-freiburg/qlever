@@ -285,7 +285,9 @@ struct EngineConfig : CommonConfig {
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
-// `src/engine/LibQleverExample.cpp` for an example use.
+// `src/engine/LibQleverExample.cpp` for an example use. If you extend the
+// interface of this class, consider also adding bindings to
+// `QleverEmscriptenBindings.cpp` so it can be used by JS code.
 class Qlever {
  public:
   using PlannedQuery = qlever::PlannedQuery;
