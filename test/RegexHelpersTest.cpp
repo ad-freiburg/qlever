@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/RegexHelpers.h"
+#include "util/StringUtils.h"
 
 using sparqlExpression::detail::getLiteralPrefixOfRegex;
 using ::testing::AllOf;
@@ -197,6 +198,30 @@ TEST(RegexHelpers, longPrefixesAreTruncated) {
   std::string prefix = getLiteralPrefixOfRegex("^" + longLiteral);
   EXPECT_THAT(prefix, SizeIs(AllOf(Ge(64u), Le(500u))));
   EXPECT_EQ(prefix, longLiteral.substr(0, prefix.size()));
+}
+
+// The returned prefix is always valid UTF-8, i.e. it never ends in the middle
+// of a multi-byte character (see `removeIncompleteCharacter`). This is
+// essential for correctness: the vocabulary interprets the prefix as text, and
+// a dangling byte turns into U+FFFD there, which sorts before all letters and
+// hence yields a prefix range that excludes the actual matches.
+TEST(RegexHelpers, prefixIsAlwaysValidUtf8) {
+  // The bounds that RE2 reports for `^Ä[ÄÖ]` are "ÄÄ" and "ÄÖ", which agree on
+  // the first byte of their second character.
+  EXPECT_EQ("Ä", getLiteralPrefixOfRegex("^Ä[ÄÖ]"));
+  EXPECT_EQ("Ä", getLiteralPrefixOfRegex("^Ä[Ä-Ö]"));
+  EXPECT_EQ("ÄÖ", getLiteralPrefixOfRegex("^ÄÖ(?:Ä|Ö)"));
+  EXPECT_THAT(getLiteralPrefixOfRegex("^(?i)Ä"), IsEmpty());
+  // The truncation at `maxPrefixLength` (which counts bytes) can also split a
+  // character. Note that the number of bytes per character (two, three and
+  // four) does not divide the limit evenly for all of these.
+  for (std::string_view regex : {"^Ä{500}", "^日{500}", "^\U0001F600{500}"}) {
+    std::string prefix = getLiteralPrefixOfRegex(regex);
+    // `getUTF8Prefix` throws for malformed UTF-8, and returns the whole string
+    // if it has fewer than the requested number of codepoints.
+    EXPECT_EQ(ad_utility::getUTF8Prefix(prefix, prefix.size()).second, prefix)
+        << regex;
+  }
 }
 
 // _____________________________________________________________________________
