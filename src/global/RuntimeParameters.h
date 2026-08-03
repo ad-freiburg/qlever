@@ -80,6 +80,14 @@ struct RuntimeParameters {
   // parameter deliberately leaves untouched.
   SizeT rebuildPermutationWriterNumThreads_{
       1, "rebuild-permutation-writer-num-threads"};
+  // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
+  // the internal PSO+POS) that a runtime index rebuild processes in
+  // parallel. Each pair costs several CPU cores, several GB/s of memory
+  // bandwidth, and L3 cache, so lowering this value is THE knob for trading
+  // rebuild duration against interference with concurrent queries and
+  // updates. A value of 0 means "no limit" (all pairs in parallel).
+  SizeT rebuildMaxConcurrentPermutationPairs_{
+      0, "rebuild-max-concurrent-permutation-pairs"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{

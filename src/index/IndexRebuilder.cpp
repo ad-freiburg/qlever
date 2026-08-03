@@ -10,6 +10,7 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "index/IndexRebuilder.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 
@@ -23,6 +24,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <cstdint>
 #include <fstream>
+#include <semaphore>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -499,6 +501,22 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     permutationSettings.push_back({{OPS, OSP}, false});
   }
 
+  // Limit how many of the permutation pairs run in parallel (see the
+  // runtime parameter `rebuild-max-concurrent-permutation-pairs`; 0 means
+  // "no limit"). Each pair task acquires a slot before it starts and
+  // releases it when it is done, so the next pair starts as soon as ANY
+  // running pair finishes (the pairs differ a lot in size). A blocked
+  // `acquire` occupies one pool thread, and each running pair needs two, so
+  // the pool (sized `numberOfPermutations` = two threads per pair) always
+  // has enough threads for `maxConcurrentPairs >= 1`.
+  size_t maxConcurrentPairs = getRuntimeParameter<
+      &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>();
+  if (maxConcurrentPairs == 0) {
+    maxConcurrentPairs = permutationSettings.size();
+  }
+  std::counting_semaphore<8> pairSlots{static_cast<std::ptrdiff_t>(
+      std::min(maxConcurrentPairs, permutationSettings.size()))};
+
   for (const auto& [permutationEnums, isInternal] : permutationSettings) {
     auto [a, b] = permutationEnums;
     auto getPermutation =
@@ -509,10 +527,17 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
 
     net::co_spawn(
         threadPool,
-        createPermutationWriterTask(
-            newIndex, getPermutation(a), getPermutation(b), isInternal,
-            locatedTriplesSharedState, localVocabMapping, insertionPositions,
-            blankNodeBlocks, minBlankNodeIndex, cancellationHandle),
+        [&newIndex, getPermutation, a = a, b = b, isInternal,
+         &locatedTriplesSharedState, &localVocabMapping, &insertionPositions,
+         &blankNodeBlocks, minBlankNodeIndex, &cancellationHandle,
+         &pairSlots]() -> boost::asio::awaitable<void> {
+          pairSlots.acquire();
+          absl::Cleanup releaseSlot{[&pairSlots] { pairSlots.release(); }};
+          co_await createPermutationWriterTask(
+              newIndex, getPermutation(a), getPermutation(b), isInternal,
+              locatedTriplesSharedState, localVocabMapping, insertionPositions,
+              blankNodeBlocks, minBlankNodeIndex, cancellationHandle);
+        },
         std::ref(exceptionCollector));
   }
 
