@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "engine/RequestParameters.h"
+#include "gmock/gmock.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -38,18 +39,32 @@ TEST(RequestParametersTest, parsePinGeoIndexSimplification) {
 TEST(RequestParametersTest, determineResultPinning) {
   EXPECT_THAT(determineResultPinning(
                   {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
-              testing::Pair(true, true));
+              ResultPinning(true, true));
   EXPECT_THAT(determineResultPinning({{"pin-result", {"true"}}}),
-              testing::Pair(false, true));
+              ResultPinning(false, true));
   EXPECT_THAT(determineResultPinning({{"pin-subresults", {"otherValue"}}}),
-              testing::Pair(false, false));
+              ResultPinning(false, false));
 }
 
 // _____________________________________________________________________________
 TEST(RequestParametersTest, parseSendLimit) {
+  // No value given - no specific limit given.
   EXPECT_EQ(parseSendLimit({}), std::nullopt);
+
+  // A valid positive number is parsed correctly.
   EXPECT_THAT(parseSendLimit({{"send", {"12"}}}), testing::Optional(12ul));
-  EXPECT_THROW(
+
+  // A non-numeric value throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
       qlever::http_api_helpers::parseSendLimit({{"send", {"not-a-number"}}}),
-      std::invalid_argument);
+      testing::HasSubstr("Invalid value for `send`: must be a "
+                         "positive integer specifying the number of bindings "
+                         "to be exported."));
+
+  // A negative value throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever::http_api_helpers::parseSendLimit({{"send", {"-1"}}}),
+      testing::HasSubstr("Invalid value for `send`: must be a "
+                         "positive integer specifying the number of bindings "
+                         "to be exported."));
 }
