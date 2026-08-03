@@ -284,7 +284,11 @@ class ConcurrentProgressBar {
         return std::nullopt;
       }
       // This thread claims the display; other threads get `std::nullopt`
-      // until the next multiple of the batch size is reached.
+      // until the next multiple of the batch size is reached. Rounding UP to
+      // the next multiple (instead of adding the batch size) matters when a
+      // single bulk `add` jumps over several batch boundaries: exactly one
+      // thread wins, and the next display is due one batch size after the
+      // current count, not several displays in a row for long-passed counts.
       updateWhenThisManyStepsProcessed_ =
           (numStepsProcessed_ / statisticsBatchSize_ + 1) *
           statisticsBatchSize_;
@@ -318,7 +322,7 @@ class ConcurrentProgressBar {
   // than its predecessor (e.g., because the average speed dropped by a
   // digit), it is padded with spaces to the widest string so far, so that
   // the `\r` overwrites all of it and no leftover characters remain.
-  std::string getProgressStringImpl(bool final) {
+  std::string getProgressStringImpl(bool isFinal) {
     size_t numStepsProcessed;
     {
       std::lock_guard lock{countMutex_};
@@ -342,7 +346,7 @@ class ConcurrentProgressBar {
       maxStringWidth_ = std::max(maxStringWidth_, progressString.size());
       progressString.resize(maxStringWidth_, ' ');
     }
-    return absl::StrCat(progressString, reuseLine && !final ? "\r" : "\n");
+    return absl::StrCat(progressString, reuseLine && !isFinal ? "\r" : "\n");
   }
 
   // The first part of the display string (e.g., "Triples processed: ").

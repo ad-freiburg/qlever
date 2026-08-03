@@ -31,12 +31,12 @@ namespace qlever::indexRebuilder {
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
 // `vocab`) and a mapping from old local vocab `Id`s bit representation (for
 // cheaper hash functions) to new vocab `Id`s.
-// If `progress` is nonempty, it is called with the number of newly written
-// words (in batches), for progress reporting.
+// `progress` is called with the number of newly written words (in batches),
+// for progress reporting; it defaults to a no-op.
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
     const std::string& newIndexName,
-    const std::function<void(size_t)>& progress = {});
+    const std::function<void(size_t)>& progress = [](size_t) {});
 
 // Turn a vector of `OwnedBlocksEntry`s into a vector of `uint64_t`s
 // representing the block ids of the generated blocks.
@@ -66,9 +66,9 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
 
 // Create a `boost::asio::awaitable<void>` that writes a pair of new
 // permutations according to the settings of `newIndex`, based on the data of
-// the current index. If `progress` is nonempty, it is called (possibly from
-// several threads) with the number of newly processed triples, for progress
-// reporting.
+// the current index. `progress` is called (possibly from several threads)
+// with the number of newly processed triples, for progress reporting; it
+// defaults to a no-op.
 boost::asio::awaitable<void> createPermutationWriterTask(
     IndexImpl& newIndex, const Permutation& permutationA,
     const Permutation& permutationB, bool isInternal,
@@ -77,7 +77,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    std::function<void(size_t)> progress = {});
+    std::function<void(size_t)> progress = [](size_t) {});
 
 // Analyze how many columns the new permutation will have and which additional
 // columns it will have based on the given `blockMetadataRanges`. The number of

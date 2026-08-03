@@ -39,6 +39,7 @@
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
@@ -220,7 +221,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
-      "materializeLocalVocabProgressBatches", std::move(config));
+      gtestCurrentTestName() + "-index", std::move(config));
   std::string vocabPrefix = gtestCurrentTestName();
   absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
@@ -623,7 +624,7 @@ TEST(IndexRebuilder, materializeToIndex) {
     // progress line (with a percentage and an average speed) to the rebuild's
     // log file.
     {
-      std::ifstream logStream{logFile};
+      auto logStream = ad_utility::makeIfstream(logFile);
       std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
       using ::testing::HasSubstr;
       EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "

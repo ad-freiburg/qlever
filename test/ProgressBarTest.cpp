@@ -126,7 +126,7 @@ TEST(ConcurrentProgressBar, singleThreaded) {
     out << update->getProgressString();
   }
   out << progressBar.getFinalProgressString();
-  std::string s = out.str();
+  std::string s = std::move(out).str();
   EXPECT_THAT(s, ::testing::HasSubstr("Steps: 10 of 100 (10.0%)"));
   EXPECT_THAT(s, ::testing::HasSubstr("Steps: 100 of 100 (100.0%)"));
   EXPECT_EQ(std::count(s.begin(), s.end(), '\r'), 2);
@@ -146,12 +146,14 @@ TEST(ConcurrentProgressBar, zeroTotalIsComplete) {
 // shared stream, and the displayed counts never decrease.
 TEST(ConcurrentProgressBar, concurrentAddsAndUpdates) {
   std::ostringstream out;
-  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 1000, 100};
+  ad_utility::ConcurrentProgressBar progressBar{"Steps: ", 3000, 100};
   std::vector<std::thread> threads;
   for (size_t i = 0; i < 4; ++i) {
     threads.emplace_back([&progressBar, &out]() {
+      // Varying step sizes (cycling through 1..5, 750 steps per thread in
+      // total), so that single `add` calls also jump over batch boundaries.
       for (size_t j = 0; j < 250; ++j) {
-        progressBar.add(1);
+        progressBar.add(j % 5 + 1);
         if (auto update = progressBar.update()) {
           out << update->getProgressString();
         }
@@ -162,8 +164,8 @@ TEST(ConcurrentProgressBar, concurrentAddsAndUpdates) {
     thread.join();
   }
   out << progressBar.getFinalProgressString();
-  std::string s = out.str();
-  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 1,000 of 1,000 (100.0%)"));
+  std::string s = std::move(out).str();
+  EXPECT_THAT(s, ::testing::HasSubstr("Steps: 3,000 of 3,000 (100.0%)"));
   // Every progress string is intact (in particular, not interleaved with
   // another one), and the displayed counts never decrease.
   size_t previousCount = 0;

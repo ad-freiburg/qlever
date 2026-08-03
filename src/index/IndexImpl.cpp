@@ -2208,9 +2208,7 @@ std::packaged_task<void()> computeStatistics(
     for (const auto& table : tables) {
       std::invoke(customAction, table);
       IndexImpl::countDistinct(lastCol0, counter, table);
-      if (progress) {
-        progress(table.numRows());
-      }
+      progress(table.numRows());
     }
   }};
 }

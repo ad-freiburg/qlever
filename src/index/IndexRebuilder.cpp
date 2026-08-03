@@ -82,9 +82,6 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
   // would be needlessly expensive. The exact batch size is not important.
   size_t wordsSinceLastProgress = 0;
   auto noteWord = [&progress, &wordsSinceLastProgress]() {
-    if (!progress) {
-      return;
-    }
     if (++wordsSinceLastProgress == 65536) {
       progress(wordsSinceLastProgress);
       wordsSinceLastProgress = 0;
@@ -119,7 +116,7 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
       [tag = 0](const InsertionInfo& info) {
         return std::tie(info.insertionPosition_.get(), tag);
       });
-  if (progress && wordsSinceLastProgress > 0) {
+  if (wordsSinceLastProgress > 0) {
     progress(wordsSinceLastProgress);
   }
   return localVocabMapping;
@@ -419,9 +416,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
                   localVocabMapping, insertionPositions, blankNodeBlocks,
                   minBlankNodeIndex, cancellationHandle, additionalColumns),
               [progress](IdTableStatic<0>& table) {
-                if (progress) {
-                  progress(table.numRows());
-                }
+                progress(table.numRows());
                 return std::move(table);
               }}};
       return newIndex.createPermutationWithoutMetadata(
@@ -478,13 +473,16 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
 
   // Pass `numSteps` newly processed steps on to `progressBar` and write a
   // progress line to the rebuild's log file whenever one is due.
-  auto logProgress = [&logFile](ad_utility::ConcurrentProgressBar& progressBar,
-                                size_t numSteps) {
-    progressBar.add(numSteps);
-    if (auto update = progressBar.update()) {
-      REBUILD_LOG_INFO << update->getProgressString() << std::flush;
-    }
-  };
+  // NOTE: `REBUILD_LOG_INFO` writes to the captured `logFile`.
+  auto progressCallbackFor =
+      [&logFile](ad_utility::ConcurrentProgressBar& progressBar) {
+        return [&logFile, &progressBar](size_t numSteps) {
+          progressBar.add(numSteps);
+          if (auto update = progressBar.update()) {
+            REBUILD_LOG_INFO << update->getProgressString() << std::flush;
+          }
+        };
+      };
 
   // Choose the batch size of each phase's progress bar such that about 50
   // progress lines are written per phase (but no more often than the default
@@ -503,9 +501,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
                                                   batchSizeFor(vocabTotal)};
   auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, index.getVocab(), newIndexName,
-                            [&logProgress, &vocabProgress](size_t numWords) {
-                              logProgress(vocabProgress, numWords);
-                            });
+                            progressCallbackFor(vocabProgress));
   REBUILD_LOG_INFO << vocabProgress.getFinalProgressString() << std::flush;
 
   // Phase 2: recompute statistics.
@@ -524,11 +520,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       numTriplesOld.internal;
   ad_utility::ConcurrentProgressBar statsProgress{
       "Triples counted: ", statsTotal, batchSizeFor(statsTotal)};
-  auto newStats =
-      index.recomputeStatistics(locatedTriplesSharedState,
-                                [&logProgress, &statsProgress](size_t numRows) {
-                                  logProgress(statsProgress, numRows);
-                                });
+  auto newStats = index.recomputeStatistics(locatedTriplesSharedState,
+                                            progressCallbackFor(statsProgress));
   REBUILD_LOG_INFO << statsProgress.getFinalProgressString() << std::flush;
   newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
@@ -556,10 +549,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       2 * numTriplesOld.internal;
   ad_utility::ConcurrentProgressBar permutationsProgress{
       "Triples written: ", permutationsTotal, batchSizeFor(permutationsTotal)};
-  auto permutationsProgressCallback = [&logProgress,
-                                       &permutationsProgress](size_t numRows) {
-    logProgress(permutationsProgress, numRows);
-  };
+  auto permutationsProgressCallback = progressCallbackFor(permutationsProgress);
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
   size_t numberOfPermutations = index.hasAllPermutations() ? 8 : 4;
