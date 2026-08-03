@@ -19,10 +19,13 @@
 #include "util/StringUtils.h"
 
 using sparqlExpression::detail::getLiteralPrefixOfRegex;
+using sparqlExpression::detail::mergeFlagsIntoRegex;
 using ::testing::AllOf;
+using ::testing::Eq;
 using ::testing::Ge;
 using ::testing::IsEmpty;
 using ::testing::Le;
+using ::testing::Optional;
 using ::testing::SizeIs;
 using ::testing::StartsWith;
 
@@ -222,6 +225,31 @@ TEST(RegexHelpers, prefixIsAlwaysValidUtf8) {
     EXPECT_EQ(ad_utility::getUTF8Prefix(prefix, prefix.size()).second, prefix)
         << regex;
   }
+}
+
+// _____________________________________________________________________________
+TEST(RegexHelpers, mergeFlagsIntoRegex) {
+  // Without flags the regex is unchanged, so that the common case does not pay
+  // for a wrapping group.
+  EXPECT_THAT(mergeFlagsIntoRegex("^abc", ""), Optional(Eq("^abc")));
+  EXPECT_THAT(mergeFlagsIntoRegex("^abc", "i"), Optional(Eq("(?i:^abc)")));
+  EXPECT_THAT(mergeFlagsIntoRegex("^abc", "imsU"),
+              Optional(Eq("(?imsU:^abc)")));
+  // Unsupported flags are rejected. Note that the regex itself is not checked
+  // here, it is only wrapped.
+  EXPECT_EQ(std::nullopt, mergeFlagsIntoRegex("^abc", "x"));
+  EXPECT_EQ(std::nullopt, mergeFlagsIntoRegex("^abc", "iI"));
+  EXPECT_THAT(mergeFlagsIntoRegex("(invalid", "i"),
+              Optional(Eq("(?i:(invalid)")));
+  // The merged regex is what the prefix analysis is run on, so the flags take
+  // effect there: `s` and `U` don't change the meaning of the prefix, whereas
+  // with `m` the `^` also matches after a newline and with `i` the prefix is no
+  // longer fixed.
+  EXPECT_EQ("abc", getLiteralPrefixOfRegex(*mergeFlagsIntoRegex("^abc", "sU")));
+  EXPECT_THAT(getLiteralPrefixOfRegex(*mergeFlagsIntoRegex("^abc", "m")),
+              IsEmpty());
+  EXPECT_THAT(getLiteralPrefixOfRegex(*mergeFlagsIntoRegex("^abc", "i")),
+              IsEmpty());
 }
 
 // _____________________________________________________________________________

@@ -9,6 +9,7 @@
 
 #include "engine/sparqlExpressions/RegexHelpers.h"
 
+#include <absl/strings/str_cat.h>
 #include <re2/prog.h>
 #include <re2/re2.h>
 #include <re2/regexp.h>
@@ -168,6 +169,19 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
   }
   return std::string{
       removeIncompleteCharacter(longestCommonPrefix(lower, upper))};
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> mergeFlagsIntoRegex(std::string regex,
+                                               std::string_view flags) {
+  if (flags.find_first_not_of(supportedRegexFlags) != std::string_view::npos) {
+    return std::nullopt;
+  }
+  if (flags.empty()) {
+    return regex;
+  }
+  // In Google RE2 the flags are directly part of the regex.
+  return absl::StrCat("(?", flags, ":", regex, ")");
 }
 
 }  // namespace sparqlExpression::detail
