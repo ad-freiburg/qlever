@@ -202,14 +202,9 @@ bool SparqlExpression::worksOnAggregatedData(
 bool SparqlExpression::isExistsExpression() const { return false; }
 
 // _____________________________________________________________________________
-bool SparqlExpression::readsAllVisibleColumns() const { return false; }
-
-// _____________________________________________________________________________
-bool SparqlExpression::containsExpressionThatReadsAllVisibleColumns() const {
-  return readsAllVisibleColumns() ||
-         ql::ranges::any_of(
-             children(),
-             &SparqlExpression::containsExpressionThatReadsAllVisibleColumns);
+bool SparqlExpression::readsAllVisibleColumns() const {
+  return ql::ranges::any_of(children(),
+                            &SparqlExpression::readsAllVisibleColumns);
 }
 
 //______________________________________________________________________________

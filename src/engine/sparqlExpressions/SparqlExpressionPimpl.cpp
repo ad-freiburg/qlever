@@ -119,9 +119,8 @@ bool SparqlExpressionPimpl::containsAggregate() const {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpressionPimpl::containsExpressionThatReadsAllVisibleColumns()
-    const {
-  return _pimpl->containsExpressionThatReadsAllVisibleColumns();
+bool SparqlExpressionPimpl::readsAllVisibleColumns() const {
+  return _pimpl->readsAllVisibleColumns();
 }
 
 // ______________________________________________________________________________

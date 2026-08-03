@@ -58,11 +58,11 @@ class SparqlExpressionPimpl {
   // SUM, AVG, COUNT, etc. in any form.
   bool containsAggregate() const;
 
-  // Returns true iff this expression contains a subexpression that reads all
+  // Returns true iff this expression or any of its subexpressions reads all
   // the columns that are visible in the query body without explicitly
   // mentioning the corresponding variables (currently only
   // `COUNT(DISTINCT *)`). See `SparqlExpression::readsAllVisibleColumns`.
-  bool containsExpressionThatReadsAllVisibleColumns() const;
+  bool readsAllVisibleColumns() const;
 
   struct VariableAndDistinctness {
     ::Variable variable_;

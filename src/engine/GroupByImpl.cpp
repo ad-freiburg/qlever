@@ -310,13 +310,11 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
   // used in any of the aggregate aliases. Note that a `COUNT(DISTINCT *)`
   // implicitly uses all the visible columns without mentioning any variable
   // explicitly, so in that case no column may be stripped.
-  auto anyAliasReadsAllColumns = [this]() {
-    return ql::ranges::any_of(_aliases, [](const Alias& alias) {
-      return alias._expression.containsExpressionThatReadsAllVisibleColumns();
-    });
-  };
   if (getRuntimeParameter<&RuntimeParameters::stripColumns_>() &&
-      !anyAliasReadsAllColumns()) {
+      !ql::ranges::any_of(
+          _aliases,
+          &sparqlExpression::SparqlExpressionPimpl::readsAllVisibleColumns,
+          &Alias::_expression)) {
     std::set<Variable> usedVariables{_groupByVariables.begin(),
                                      _groupByVariables.end()};
     for (const auto& alias : _aliases) {
