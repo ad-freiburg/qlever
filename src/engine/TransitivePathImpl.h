@@ -259,8 +259,8 @@ class TransitivePathImpl : public TransitivePathBase {
         start.isVariable() && graphVariable_ == start.getVariable();
     // To bind the `targetId` to values, we have to ensure that both sides are
     // bound.
-    bool targetNodesAreBound = targetNodes.has_value() &&
-                               lhs_.isBoundVariable() && rhs_.isBoundVariable();
+    bool bothSidesBoundVar = lhs_.isBoundVariable() && rhs_.isBoundVariable();
+    bool targetNodesAreBound = targetNodes.has_value() && bothSidesBoundVar;
 
     auto expandUndef = [&](auto pair) {
       return TableColumnWithVocab::expandUndef(pair, edges,
@@ -288,12 +288,17 @@ class TransitivePathImpl : public TransitivePathBase {
         targetId = matchedTargetNode;
       }
 
+      std::cout << "RUNNING GSP FROM " << startNode;
+      if (targetId) std::cout << " to " << targetId.value();
+      std::cout << std::endl;
+
       edges.setGraphId(graphId);
 
       // Pick the appropriate graph search strategy and run it.
       GraphSearchProblem<T> gsp(edges, startNode, targetId, minDist_, maxDist_);
       GraphSearchExecutionParams ep(cancellationHandle_, allocator());
       Set connectedNodes = runOptimalGraphSearch(gsp, ep);
+      std::cout << "GSP result size: " << connectedNodes.size() << std::endl;
       if (connectedNodes.empty()) {
         return std::nullopt;
       }
@@ -329,8 +334,7 @@ class TransitivePathImpl : public TransitivePathBase {
           // Position-match each expanded start pair with the corresponding
           // expanded target pair directly via `zip`, instead of scanning.
           for (auto&& [startNode, graphId] : expandUndef(pair)) {
-            for (auto&& [targetNode, ignoredTargetGraphId] :
-                 expandUndef(targetPair)) {
+            for (auto&& [targetNode, _] : expandUndef(targetPair)) {
               if (auto node = runAndProcessGraphSearch(
                       startNode, graphId, targetNode,
                       static_cast<size_t>(currentRow), mergedVocab,

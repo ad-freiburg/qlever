@@ -4,6 +4,7 @@
 //   2024      Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //   2025-     Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include "util/AllocatorWithLimit.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
@@ -45,11 +46,16 @@ class BinSearchMap {
   // latter case, the correct size has to be set via `setGraphId`.
   BinSearchMap(
       ql::span<const Id> startIds, ql::span<const Id> targetIds,
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
       const std::optional<ql::span<const Id>>& graphIds = std::nullopt);
 
   // Return all target nodes for the given source node in the currently
   // active graph.
   ql::span<const Id> successors(Id node) const;
+
+  // Store all existing target ids, which might be needed for filling in
+  // undefineds on the target side.
+  Set targetIdLookup_;
 
   // Find all `Id`s in `startIds_` that are equal to `id` together with the
   // corresponding graph `Id`s, with the following special cases:
