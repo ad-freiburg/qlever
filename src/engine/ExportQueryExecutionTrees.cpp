@@ -62,7 +62,7 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
   }
 
   // Compute the result of the ASK query.
-  bool result = getResultForAsk(qet.getResult(true));
+  const bool result = getResultForAsk(qet.getResult(true));
 
   // Lambda that returns the result bool in XML format.
   auto getXmlResult = [result]() {
@@ -106,14 +106,13 @@ STREAMABLE_GENERATOR_TYPE computeResultForAsk(
 // __________________________________________________________________________
 InputRangeTypeErased<TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
-  using namespace ad_utility;
   if (result.isFullyMaterialized()) {
-    return InputRangeTypeErased(lazySingleValueRange([&result]() {
+    return InputRangeTypeErased(ad_utility::lazySingleValueRange([&result]() {
       return TableConstRefWithVocab{result.idTableView(), result.localVocab()};
     }));
   }
 
-  return InputRangeTypeErased(CachingTransformInputRange(
+  return InputRangeTypeErased(ad_utility::CachingTransformInputRange(
       result.idTables(), [](const Result::IdTableVocabPair& pair) {
         return TableConstRefWithVocab{pair.idTable_.asStaticView<0>(),
                                       pair.localVocab_};
@@ -124,7 +123,6 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
     const LimitOffsetClause& limitOffset, const Result& result,
     uint64_t& resultSize, uint64_t resultSizeMultiplicator) {
-  using namespace ad_utility;
   // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
   resultSize = 0;
@@ -164,8 +162,8 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
   // each block, see `updateEffectiveOffsetAndLimits` below. If they were not
   // specified, they are initialized to their default values (0 for the offset
   // and `std::numeric_limits<uint64_t>::max()` for the two limits).
-  uint64_t effectiveOffset = limitOffset._offset;
-  uint64_t effectiveLimit = limitOffset.limitOrDefault();
+  const uint64_t effectiveOffset = limitOffset._offset;
+  const uint64_t effectiveLimit = limitOffset.limitOrDefault();
   uint64_t effectiveExportLimit = limitOffset.exportLimitOrDefault();
 
   // Make sure that the export limit is at most the limit (increasing the
@@ -186,7 +184,7 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
        limit = effectiveLimit, exportLimit = effectiveExportLimit,
        offset = effectiveOffset](
           TableConstRefWithVocab& tableWithVocab) mutable -> State {
-    uint64_t blockSize = tableWithVocab.idTable().numRows();
+    const uint64_t blockSize = tableWithVocab.idTable().numRows();
     if (offset >= blockSize) {
       offset -= blockSize;
       return BeforeOffset{};
@@ -200,10 +198,10 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
 
     // Compute the range of rows to be exported (can be zero) and to be
     // counted.
-    uint64_t rangeBegin = std::exchange(offset, 0);
-    uint64_t numRowsToBeExported =
+    const uint64_t rangeBegin = std::exchange(offset, 0);
+    const uint64_t numRowsToBeExported =
         std::min(exportLimit, blockSize - rangeBegin);
-    uint64_t numRowsToBeCounted = std::min(limit, blockSize - rangeBegin);
+    const uint64_t numRowsToBeCounted = std::min(limit, blockSize - rangeBegin);
 
     AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <= blockSize);
     AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <= blockSize);
@@ -241,13 +239,13 @@ InputRangeTypeErased<TableWithRange> ExportQueryExecutionTrees::getRowIndices(
       // We have to consume, but do nothing for `BeforeOffset`
       | v::drop_while(ad_utility::holdsAlternative<BeforeOffset>)
       // As soon as we encoounter `AfterLimit`, we can immediately stop.
-      | v::take_while(std::not_fn(holdsAlternative<AfterLimit>))
+      | v::take_while(std::not_fn(ad_utility::holdsAlternative<AfterLimit>))
       // Also make sure to not trigger the result computation of the first
       // (unneeded) block after the last needed block. Note: With this, the
       // `take_while` above seems redundant, but it might be that no IdTable is
       // yielded at all.
       | ad_utility::views::takeUntilInclusive([](const State& state) {
-          auto ptr = std::get_if<Export>(&state);
+          const auto* ptr = std::get_if<Export>(&state);
           return ptr && ptr->isLast_;
         })
       // At this stage we only see `Export` or `OnlyCountForExport`. For the
@@ -366,7 +364,7 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
                return ql::ranges::transform_view(
                    tableWithView.view_, [&](uint64_t rowIndex) {
                      cancellationHandle->throwIfCancelled();
-                     TableConstRefWithVocab tableWithVocab =
+                     const TableConstRefWithVocab tableWithVocab =
                          tableWithView.tableWithVocab_;
                      return idTableToQLeverJSONRow(
                                 qet, columns, tableWithVocab.localVocab(),
