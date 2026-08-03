@@ -199,8 +199,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
         "implementations.");
     // We cannot use `applyLimitOffset` here, because this might get propagated
     // to children of this operation, where the limit/offset has already been
-    // set correctly. We just reapply a previously set limit which was removed
-    // by the re-sorting.
+    // set correctly. We just reapply a previously set limit to the newly
+    // created re-sorted operation, which was removed by the re-sorting.
     sortedRootOperation->setLimitOffsetDirectlyWithoutTriggeringHooks(
         rootOperation->getLimitOffset());
     return std::move(sortedQet).value();
