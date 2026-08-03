@@ -482,15 +482,6 @@ class Qlever {
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
 
-  // Execute an update operation. The function must have exclusive access to the
-  // DeltaTriples object.
-  UpdateMetadata processUpdateImpl(
-      const PlannedQuery& plannedUpdate,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples,
-      ad_utility::timer::TimeTracer& tracer =
-          ad_utility::timer::DEFAULT_TIME_TRACER);
-
   // Run the given parsed and planned query. The result is returned as a
   // string; see `src/util/http/MediaTypes.h` for the supported formats.
   //
