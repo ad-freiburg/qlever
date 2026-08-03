@@ -14,6 +14,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <chrono>
 #include <deque>
 #include <fstream>
 #include <future>
@@ -22,7 +23,9 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 
+#include "../ServerTestHelpers.h"
 #include "../util/AsioTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
@@ -760,8 +763,8 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 namespace {
 // Return the directories in the current directory whose name starts with
 // `prefix`.
-std::vector<std::filesystem::path> dirsWithPrefix(std::string_view prefix) {
-  namespace fs = std::filesystem;
+std::vector<ql::filesystem::path> dirsWithPrefix(std::string_view prefix) {
+  namespace fs = ql::filesystem;
   std::vector<fs::path> result;
   for (const auto& entry : fs::directory_iterator(".")) {
     if (entry.is_directory() &&
@@ -780,7 +783,7 @@ void cleanDirsWithPrefix(std::string_view prefix) {
                     "This function is not meant to delete all directories in "
                     "the current directory. Please specify a prefix.");
   for (const auto& dir : dirsWithPrefix(prefix)) {
-    std::filesystem::remove_all(dir);
+    ql::filesystem::remove_all(dir);
   }
 }
 }  // namespace
@@ -791,7 +794,7 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 // under Emscripten anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
-  namespace fs = std::filesystem;
+  namespace fs = ql::filesystem;
   cleanDirsWithPrefix("previous.");
   cleanDirsWithPrefix("rebuild.");
   cleanDirsWithPrefix("serverIntegration.");
@@ -1000,3 +1003,113 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
       &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
   EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
 }
+
+// _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
+TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
+  cleanDirsWithPrefix("previous.");
+  cleanDirsWithPrefix("rebuild.");
+
+  std::string indexName = gtestCurrentTestName();
+  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
+
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  config.persistUpdates_ = false;
+  // `min == max == 3` makes the threshold a fixed three delta triples,
+  // independent of the index size: trigger an automatic rebuild as soon as the
+  // number of delta triples reaches three.
+  config.rebuildIndexStrategy_ = qlever::RebuildIndexStrategy{3, 3, 1.0};
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+
+  auto performUpdate = [&server](std::string_view update) {
+    auto request = ad_utility::testing::makePostRequest(
+        "/?access-token=accessToken", "application/sparql-update",
+        std::string{update});
+    auto response = server.process(request);
+    EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  };
+
+  // The number of delta triples of the currently active index.
+  auto numDeltaTriples = [&server]() -> int64_t {
+    auto counts = server.deltaTriplesManager()
+                      .getCurrentLocatedTriplesSharedState()
+                      ->counts_;
+    AD_CORRECTNESS_CHECK(counts.has_value());
+    auto [inserted, deleted] = counts.value();
+    return inserted + deleted;
+  };
+
+  // Two delta triples do not reach the threshold of three, so no rebuild is
+  // triggered. This is checked race-free: the trigger decision is made before
+  // the response is sent, so after the update has returned, the flag can only
+  // be set if a rebuild was started.
+  performUpdate("INSERT DATA { <d> <e> <f> . <g> <h> <i> . }");
+  EXPECT_EQ(numDeltaTriples(), 2);
+  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_TRUE(dirsWithPrefix("previous.").empty());
+
+  // The third delta triple reaches the threshold and triggers a rebuild in
+  // the background. Wait until it has completed, which is observable by the
+  // delta triples being merged into the new index (their number drops to
+  // zero) and the old index appearing in a `previous.<datetime>` directory.
+  performUpdate("INSERT DATA { <j> <k> <l> . }");
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
+  while (
+      (numDeltaTriples() != 0 || server.server().rebuildInProgress_.load()) &&
+      std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  EXPECT_EQ(numDeltaTriples(), 0);
+  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_EQ(dirsWithPrefix("previous.").size(), 1u);
+  EXPECT_TRUE(ql::filesystem::exists(indexName + ".meta-data.json"));
+
+  // The rebuilt index answers queries and contains the update triples.
+  auto request = ad_utility::testing::makeGetRequest(
+      "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Cj%3E%20%3Fp%20%3Fo%20%7D");
+  auto response = server.process(request);
+  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  EXPECT_THAT(
+      serverTestHelpers::responseBodyToString(std::move(response.body())),
+      ::testing::HasSubstr("\"value\":\"l\""));
+
+  // The remaining paths of the trigger machinery, each deterministically:
+  // without a strategy (manual mode) the trigger does nothing; while a
+  // rebuild is (apparently) in progress, it returns early without spawning
+  // anything, and the background coroutine logs that it skipped; the
+  // completion handler logs a failure and ignores the no-exception case.
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    DeltaTriplesCount hugeCount{1000, 1000};
+    auto strategy =
+        std::exchange(server.server().rebuildIndexStrategy_, std::nullopt);
+    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
+    server.server().rebuildIndexStrategy_ = strategy;
+    server.server().rebuildInProgress_.store(true);
+    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("Triggering")));
+
+    boost::asio::thread_pool threadPool{1};
+    boost::asio::co_spawn(threadPool, server.server().runAutomaticRebuild(),
+                          boost::asio::use_future)
+        .get();
+    EXPECT_THAT(
+        logStream.str(),
+        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
+                             "started concurrently"));
+    server.server().rebuildInProgress_.store(false);
+
+    Server::logAutomaticRebuildFailure(
+        std::make_exception_ptr(std::runtime_error{"boom"}));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
+    Server::logAutomaticRebuildFailure(nullptr);
+  }
+
+  cleanDirsWithPrefix("previous.");
+}
+#endif  // __EMSCRIPTEN__
