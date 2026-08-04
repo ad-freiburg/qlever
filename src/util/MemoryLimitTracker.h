@@ -212,7 +212,8 @@ class MemoryLimitTracker {
       : MemoryLimitTracker(other) {}
 
   MemoryLimitTracker& operator=(MemoryLimitTracker&& other) noexcept {
-    return *this = other;
+    *this = other;
+    return *this;
   }
 
   ~MemoryLimitTracker() = default;
