@@ -274,24 +274,6 @@ TEST_F(ConstructDeduplicatorTest, blankNodeTripleAlwaysNew) {
 }
 
 //______________________________________________________________________________
-// A ground triple seeded with a local-vocab constant suppresses a later
-// non-ground instantiation of the same triple. This exercises `canonicalizeKey`
-// (the seed and the non-ground key must agree after reseating).
-TEST_F(ConstructDeduplicatorTest, seedGroundTripleSuppressesNonGround) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
-  auto tmpl = makeSingleTripleTemplate();
-
-  LocalVocab v1;
-  const Id x = makeLocalVocabIndex(v1, "x");
-  deduplicator.seedGroundTriple(DeduplicationKey{x, x, x});
-
-  const LocalVocabRow row = makeLocalVocabRow("x");
-  auto c = row.ctx();
-  EXPECT_FALSE(
-      deduplicator.isNew(0, 0, tmpl, c));  // suppressed by the ground seed
-}
-
-//______________________________________________________________________________
 // In `batchWise` mode a tiny memory threshold forces the filter to drop all
 // dedup state once its internal vocab grows past it, which makes deduplication
 // approximate: the same local-vocab triple is reported "new" again after the

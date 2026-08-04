@@ -93,13 +93,6 @@ bool ConstructDeduplicator::isNew(size_t templateTripleIdx,
       tmpl.preprocessedTriples_[templateTripleIdx], rowIdxInIdTable, ctx));
 }
 
-//______________________________________________________________________________
-void ConstructDeduplicator::seedGroundTriple(const DeduplicationKey& key) {
-  // Reset only at a triple boundary, never mid-key (would dangle the key).
-  resetIfVocabTooLarge();
-  filter_.insert(canonicalizeKey(key));
-}
-
 // Approximate size of a single full-triple dedup key: three `ValueId`s. Used to
 // relate the `dedupVocab_` budget to the number of keys the filter itself
 // holds.
@@ -151,14 +144,6 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
   }
   return ValueId::makeFromLocalVocabIndex(index);
-}
-
-//______________________________________________________________________________
-DeduplicationKey ConstructDeduplicator::canonicalizeKey(DeduplicationKey key) {
-  for (ValueId& id : key) {
-    id = canonicalize(id);
-  }
-  return key;
 }
 
 //______________________________________________________________________________

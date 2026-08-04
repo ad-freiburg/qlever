@@ -106,12 +106,6 @@ class ConstructDeduplicator {
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx);
 
-  // Insert the `key` into the `deduplicator_`. This is used for ground triples
-  // which consist only of constants. If later an instantiated triple
-  // "accidentally" matches the ground triple, it is also detected as a
-  // duplicate.
-  void seedGroundTriple(const DeduplicationKey& key);
-
  private:
   DeduplicationMode mode_;
   std::reference_wrapper<const QueryExecutionContext> queryExecutionContext_;
@@ -147,9 +141,6 @@ class ConstructDeduplicator {
   // the `LocalVocab` the id came from is freed. Ids of all other datatypes are
   // returned unchanged.
   ValueId canonicalize(ValueId id);
-
-  // Canonicalize every element of the `key` using `canonicalize` above.
-  DeduplicationKey canonicalizeKey(DeduplicationKey key);
 
   // Bound `dedupVocab_`s memory in `BatchWise` mode: once the accumulated
   // string bytes reach the threshold, drop all dedup state and start fresh. The
