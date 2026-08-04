@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 #include "backports/algorithm.h"
@@ -35,12 +36,16 @@ namespace {
 // bound can only shorten the resulting prefix, it can never make it unsound.
 constexpr int maxPrefixLength = 128;
 
-// Return the position of the first character of `flags` that is not one of the
-// `supportedRegexFlags`, or `std::string_view::npos` if all of them are
-// supported. Shared by `mergeFlagsIntoRegex` and `ensureIsValidRegexFlags`,
-// which only differ in how they report an unsupported flag.
-size_t findFirstUnsupportedFlag(std::string_view flags) {
-  return flags.find_first_not_of(supportedRegexFlags);
+// Return the first character of `flags` that is not one of the
+// `supportedRegexFlags`, or `std::nullopt` if all of them are supported. Shared
+// by `mergeFlagsIntoRegex` and `ensureIsValidRegexFlags`, which only differ in
+// how they report an unsupported flag.
+std::optional<char> findFirstUnsupportedFlag(std::string_view flags) {
+  size_t position = flags.find_first_not_of(supportedRegexFlags);
+  if (position == std::string_view::npos) {
+    return std::nullopt;
+  }
+  return flags[position];
 }
 
 // Return true iff `regex` or any of its subexpressions is one of the zero-width
@@ -145,14 +150,14 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
   // letters and hence yields a range that excludes the actual matches. Dropping
   // the incomplete character is always sound, as any prefix of a valid prefix
   // is itself a valid prefix.
-  return std::string{ad_utility::removeIncompleteUtf8Character(
+  return std::string{ad_utility::removeTrailingIncompleteUtf8Character(
       ad_utility::commonPrefix(lower, upper))};
 }
 
 // _____________________________________________________________________________
 std::optional<std::string> mergeFlagsIntoRegex(std::string regex,
                                                std::string_view flags) {
-  if (findFirstUnsupportedFlag(flags) != std::string_view::npos) {
+  if (findFirstUnsupportedFlag(flags).has_value()) {
     return std::nullopt;
   }
   if (flags.empty()) {
@@ -164,8 +169,8 @@ std::optional<std::string> mergeFlagsIntoRegex(std::string regex,
 
 // _____________________________________________________________________________
 void ensureIsValidRegexFlags(std::string_view flags) {
-  size_t firstUnsupportedFlag = findFirstUnsupportedFlag(flags);
-  if (firstUnsupportedFlag == std::string_view::npos) {
+  auto unsupportedFlag = findFirstUnsupportedFlag(flags);
+  if (!unsupportedFlag.has_value()) {
     return;
   }
   // Spell out the `supportedRegexFlags` as `'i', 'm', 's', 'U'`, so that the
@@ -174,7 +179,7 @@ void ensureIsValidRegexFlags(std::string_view flags) {
     return absl::StrCat("'", std::string_view{&flag, 1}, "'");
   });
   throw std::runtime_error{absl::StrCat(
-      "Invalid regex flag '", flags.substr(firstUnsupportedFlag, 1),
+      "Invalid regex flag '", std::string_view{&unsupportedFlag.value(), 1},
       "' found in \"", flags, "\". The only supported flags are ",
       ad_utility::lazyStrJoin(quoted, ", "), ", and any combination of them")};
 }

@@ -45,13 +45,13 @@ void utf8EncodeCodepoint(uint32_t codepoint, std::string& output);
 
 // Return true iff `c` is a UTF-8 continuation byte `10xxxxxx`, that is, a byte
 // that continues a multi-byte character instead of starting a character.
-bool isUtf8ContinuationByte(char c);
+bool isUtf8ContinuationByte(unsigned char c);
 
 // Return the total number of bytes of the UTF-8 encoded character that starts
 // with the lead byte `lead`: 1 for `0xxxxxxx`, 2 for `110xxxxx`, 3 for
 // `1110xxxx`, and 4 for `11110xxx`. Return 0 if `lead` is not a valid lead byte
 // (in particular if it is a continuation byte).
-size_t numBytesOfUtf8Character(char lead);
+size_t numBytesOfUtf8Character(unsigned char lead);
 
 // Return `str` without a trailing UTF-8 character that is cut off in the
 // middle, that is, the longest prefix of `str` that consists of complete
@@ -59,7 +59,7 @@ size_t numBytesOfUtf8Character(char lead);
 // at a character boundary. Note that only the last character is inspected, so
 // malformed byte sequences earlier in `str` are not detected. This function
 // does not depend on ICU.
-std::string_view removeIncompleteUtf8Character(std::string_view str);
+std::string_view removeTrailingIncompleteUtf8Character(std::string_view str);
 
 // Convert a UTF-8 string to lowercase. `localeName` is the ICU locale name used
 // for locale-specific case folding (e.g. "tr" for Turkish); the default empty

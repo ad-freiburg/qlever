@@ -209,11 +209,11 @@ TEST(RegexHelpers, longPrefixesAreTruncated) {
 }
 
 // The returned prefix is always valid UTF-8, i.e. it never ends in the middle
-// of a multi-byte character (see `ad_utility::removeIncompleteUtf8Character`).
-// This is
-// essential for correctness: the vocabulary interprets the prefix as text, and
-// a dangling byte turns into U+FFFD there, which sorts before all letters and
-// hence yields a prefix range that excludes the actual matches.
+// of a multi-byte character (see
+// `ad_utility::removeTrailingIncompleteUtf8Character`). This is essential for
+// correctness: the vocabulary interprets the prefix as text, and a dangling
+// byte turns into U+FFFD there, which sorts before all letters and hence yields
+// a prefix range that excludes the actual matches.
 TEST(RegexHelpers, prefixIsAlwaysValidUtf8) {
   // The bounds that RE2 reports for `^Ä[ÄÖ]` are "ÄÄ" and "ÄÖ", which agree on
   // the first byte of their second character.
