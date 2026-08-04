@@ -16,73 +16,31 @@
 
 #include <cstddef>
 #include <memory>
+#include <stdexcept>
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "util/Exception.h"
+#include "util/StringUtils.h"
 
 namespace sparqlExpression::detail {
 
 namespace {
-// The maximum length (in bytes) of the derived prefix. `PossibleMatchRange`
-// below inspects all 256 possible successor bytes per step, so this bounds its
-// cost; the bound is generous enough that even long IRI prefixes (e.g.
+// The maximum length (in bytes) of the derived prefix. It bounds the work of
+// `PossibleMatchRange` below, which per byte of the prefix walks one DFA step
+// that tries each of the 256 possible byte values. The concrete value is
+// generous enough that even long IRI prefixes (e.g.
 // `^http://www\.wikidata\.org/entity/Q`) fit into it, and beyond that a longer
 // prefix hardly narrows the scanned blocks any further. Note that a smaller
 // bound can only shorten the resulting prefix, it can never make it unsound.
 constexpr int maxPrefixLength = 128;
 
-// Return the longest common prefix of `a` and `b`.
-std::string_view longestCommonPrefix(std::string_view a, std::string_view b) {
-  auto mismatchInA = ql::ranges::mismatch(a, b).in1;
-  return a.substr(0, mismatchInA - a.begin());
-}
-
-// Return `prefix` with a trailing UTF-8 character that is cut off in the middle
-// removed. `RE2` works in UTF-8 mode, so the bounds from `PossibleMatchRange`
-// consist of complete characters, but they are compared (and truncated at
-// `maxPrefixLength`) byte by byte, so their common prefix may end in the middle
-// of a character. For example for `^Ä[ÄÖ]` the bounds are "ÄÄ" and "ÄÖ", which
-// agree on the first byte of their second character.
-//
-// Such a prefix must not be handed out: the vocabulary interprets the prefix as
-// text, and a dangling byte becomes U+FFFD there, which sorts *before* all
-// letters and hence yields a range that excludes the actual matches. Dropping
-// the incomplete character is always sound, as any prefix of a valid prefix is
-// itself a valid prefix.
-std::string_view removeIncompleteCharacter(std::string_view prefix) {
-  // Extract the bits of `c` that are selected by `mask`.
-  auto maskedBits = [](char c, std::byte mask) {
-    return static_cast<std::byte>(c) & mask;
-  };
-  // The last character starts at the last byte that is not a continuation byte
-  // `10xxxxxx`, and that lead byte announces the total number of bytes of the
-  // character.
-  auto isContinuationByte = [&maskedBits](char c) {
-    return maskedBits(c, std::byte{0b1100'0000}) == std::byte{0b1000'0000};
-  };
-  auto reversed = ql::views::reverse(prefix);
-  auto lastLeadByte = ql::ranges::find_if_not(reversed, isContinuationByte);
-  if (lastLeadByte == reversed.end()) {
-    // `prefix` is empty (a valid UTF-8 string always has a lead byte), so there
-    // is nothing to remove. This has to be handled separately, because the
-    // dereferencing below would read the byte in front of `prefix`.
-    return prefix;
-  }
-  size_t numBytesPresent = lastLeadByte - reversed.begin() + 1;
-  // The lead byte announces the number of bytes of the character by its leading
-  // one-bits: `0xxxxxxx` -> 1, `110xxxxx` -> 2, `1110xxxx` -> 3, `11110xxx` ->
-  // 4. So each of the masks below that is fully set adds one byte.
-  size_t numBytesAnnounced = 1;
-  for (std::byte mask : {std::byte{0b1100'0000}, std::byte{0b1110'0000},
-                         std::byte{0b1111'0000}}) {
-    if (maskedBits(*lastLeadByte, mask) == mask) {
-      ++numBytesAnnounced;
-    }
-  }
-  return numBytesPresent == numBytesAnnounced
-             ? prefix
-             : prefix.substr(0, prefix.size() - numBytesPresent);
+// Return the position of the first character of `flags` that is not one of the
+// `supportedRegexFlags`, or `std::string_view::npos` if all of them are
+// supported. Shared by `mergeFlagsIntoRegex` and `ensureIsValidRegexFlags`,
+// which only differ in how they report an unsupported flag.
+size_t findFirstUnsupportedFlag(std::string_view flags) {
+  return flags.find_first_not_of(supportedRegexFlags);
 }
 
 // Return true iff `regex` or any of its subexpressions is one of the zero-width
@@ -176,14 +134,25 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
   if (!program->PossibleMatchRange(&lower, &upper, maxPrefixLength)) {
     return "";
   }
-  return std::string{
-      removeIncompleteCharacter(longestCommonPrefix(lower, upper))};
+  // `RE2` works in UTF-8 mode, so the bounds consist of complete characters,
+  // but they are compared (and truncated at `maxPrefixLength`) byte by byte, so
+  // their common prefix may end in the middle of a character. For example for
+  // `^Ä[ÄÖ]` the bounds are "ÄÄ" and "ÄÖ", which agree on the first byte of
+  // their second character.
+  //
+  // Such a prefix must not be handed out: the vocabulary interprets the prefix
+  // as text, and a dangling byte becomes U+FFFD there, which sorts *before* all
+  // letters and hence yields a range that excludes the actual matches. Dropping
+  // the incomplete character is always sound, as any prefix of a valid prefix
+  // is itself a valid prefix.
+  return std::string{ad_utility::removeIncompleteUtf8Character(
+      ad_utility::commonPrefix(lower, upper))};
 }
 
 // _____________________________________________________________________________
 std::optional<std::string> mergeFlagsIntoRegex(std::string regex,
                                                std::string_view flags) {
-  if (flags.find_first_not_of(supportedRegexFlags) != std::string_view::npos) {
+  if (findFirstUnsupportedFlag(flags) != std::string_view::npos) {
     return std::nullopt;
   }
   if (flags.empty()) {
@@ -191,6 +160,35 @@ std::optional<std::string> mergeFlagsIntoRegex(std::string regex,
   }
   // In Google RE2 the flags are directly part of the regex.
   return absl::StrCat("(?", flags, ":", regex, ")");
+}
+
+// _____________________________________________________________________________
+void ensureIsValidRegexFlags(std::string_view flags) {
+  size_t firstUnsupportedFlag = findFirstUnsupportedFlag(flags);
+  if (firstUnsupportedFlag == std::string_view::npos) {
+    return;
+  }
+  // Spell out the `supportedRegexFlags` as `'i', 'm', 's', 'U'`, so that the
+  // message stays in sync with them.
+  auto quoted = ql::views::transform(supportedRegexFlags, [](char flag) {
+    return absl::StrCat("'", std::string_view{&flag, 1}, "'");
+  });
+  throw std::runtime_error{absl::StrCat(
+      "Invalid regex flag '", flags.substr(firstUnsupportedFlag, 1),
+      "' found in \"", flags, "\". The only supported flags are ",
+      ad_utility::lazyStrJoin(quoted, ", "), ", and any combination of them")};
+}
+
+// _____________________________________________________________________________
+void ensureIsValidRegex(std::string_view regex) {
+  RE2 compiledRegex{regex, RE2::Quiet};
+  if (!compiledRegex.ok()) {
+    throw std::runtime_error{absl::StrCat(
+        "The regex \"", regex,
+        "\" is not supported by QLever (which uses Google's RE2 library); "
+        "the error from RE2 is: ",
+        compiledRegex.error())};
+  }
 }
 
 }  // namespace sparqlExpression::detail

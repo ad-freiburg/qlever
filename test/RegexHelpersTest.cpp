@@ -15,14 +15,19 @@
 #include <string_view>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/RegexHelpers.h"
 #include "util/StringUtils.h"
 
+using sparqlExpression::detail::ensureIsValidRegex;
+using sparqlExpression::detail::ensureIsValidRegexFlags;
 using sparqlExpression::detail::getLiteralPrefixOfRegex;
 using sparqlExpression::detail::mergeFlagsIntoRegex;
+using sparqlExpression::detail::supportedRegexFlags;
 using ::testing::AllOf;
 using ::testing::Eq;
 using ::testing::Ge;
+using ::testing::HasSubstr;
 using ::testing::IsEmpty;
 using ::testing::Le;
 using ::testing::Optional;
@@ -204,7 +209,8 @@ TEST(RegexHelpers, longPrefixesAreTruncated) {
 }
 
 // The returned prefix is always valid UTF-8, i.e. it never ends in the middle
-// of a multi-byte character (see `removeIncompleteCharacter`). This is
+// of a multi-byte character (see `ad_utility::removeIncompleteUtf8Character`).
+// This is
 // essential for correctness: the vocabulary interprets the prefix as text, and
 // a dangling byte turns into U+FFFD there, which sorts before all letters and
 // hence yields a prefix range that excludes the actual matches.
@@ -250,6 +256,31 @@ TEST(RegexHelpers, mergeFlagsIntoRegex) {
               IsEmpty());
   EXPECT_THAT(getLiteralPrefixOfRegex(*mergeFlagsIntoRegex("^abc", "i")),
               IsEmpty());
+}
+
+// _____________________________________________________________________________
+// `ensureIsValidRegexFlags` accepts exactly the flags that
+// `mergeFlagsIntoRegex` accepts (they share the check), but reports an
+// unsupported flag as an error instead of `std::nullopt`.
+TEST(RegexHelpers, ensureIsValidRegexFlags) {
+  EXPECT_NO_THROW(ensureIsValidRegexFlags(""));
+  EXPECT_NO_THROW(ensureIsValidRegexFlags(supportedRegexFlags));
+  // The message names the offending flag and lists the supported ones, which it
+  // derives from `supportedRegexFlags`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ensureIsValidRegexFlags("iIm"),
+      AllOf(HasSubstr("Invalid regex flag 'I' found in \"iIm\""),
+            HasSubstr("The only supported flags are 'i', 'm', 's', 'U', and "
+                      "any combination of them")));
+}
+
+// _____________________________________________________________________________
+TEST(RegexHelpers, ensureIsValidRegex) {
+  EXPECT_NO_THROW(ensureIsValidRegex("^abc[def]"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ensureIsValidRegex("(open"),
+      AllOf(HasSubstr("The regex \"(open\" is not supported by QLever"),
+            HasSubstr("the error from RE2 is: missing ): (open")));
 }
 
 // _____________________________________________________________________________

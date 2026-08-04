@@ -26,8 +26,22 @@ inline constexpr std::string_view supportedRegexFlags = "imsU";
 // one of the `supportedRegexFlags`. Note that `regex` is taken by value, so
 // that the case of empty `flags` (where it is returned unchanged) needs no
 // copy.
+//
+// This is the counterpart of `ensureIsValidRegexFlags` below for the case where
+// the flags are only known during the evaluation of a query, where an
+// unsupported flag has to yield `UNDEF` instead of an error. Both use the same
+// check.
 std::optional<std::string> mergeFlagsIntoRegex(std::string regex,
                                                std::string_view flags);
+
+// Throw a `std::runtime_error` if `flags` contains a character that is not one
+// of the `supportedRegexFlags` (see `mergeFlagsIntoRegex` above for the variant
+// that reports this via `std::nullopt`).
+void ensureIsValidRegexFlags(std::string_view flags);
+
+// Throw a `std::runtime_error` if `regex` is not a regex that is supported by
+// RE2, with the error message that RE2 reports for it.
+void ensureIsValidRegex(std::string_view regex);
 
 // Return the longest literal prefix such that every string matched by `regex`
 // is guaranteed to start with it. Return the empty string if no non-trivial

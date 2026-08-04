@@ -366,8 +366,8 @@ struct MergeFlagsIntoRegex {
       return Id::makeUndefined();
     }
     // Note that the same merging is applied at construction time to determine
-    // whether the regex allows prefiltering, see `getConstantRegexWithFlags` in
-    // `RegexExpression.cpp`.
+    // whether the regex allows prefiltering, see
+    // `getConstantRegexForPrefiltering` in `RegexExpression.cpp`.
     auto merged = mergeFlagsIntoRegex(std::move(regex).value(), flags.value());
     if (!merged.has_value()) {
       return Id::makeUndefined();

@@ -501,7 +501,7 @@ TEST(RegexExpression, getEstimatesForFilterExpression) {
   // Constant flags are merged into the regex before the prefix is derived, so a
   // prefix regex with flags is prefiltered (and estimated) as well. The `i`
   // flag is dropped for that purpose, because the prefix range of the prefilter
-  // ignores case anyway (see `getConstantRegexWithFlags`).
+  // ignores case anyway (see `getConstantRegexForPrefiltering`).
   for (const char* flags : {"", "s", "U", "i", "isU"}) {
     auto withFlags = makeRegexExpression("?a", "^abc", flags);
     EXPECT_THAT(withFlags->getEstimatesForFilterExpression(10000, std::nullopt),

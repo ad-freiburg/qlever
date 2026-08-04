@@ -873,8 +873,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
 // The range of the prefix is computed on the PRIMARY level of the collation,
 // where strings that differ only in case are equal. `REGEX` relies on this when
 // it drops the `i` flag before deriving the prefix (see
-// `getConstantRegexWithFlags`), so pin the property down here: a prefix in a
-// different case selects the same blocks.
+// `getConstantRegexForPrefiltering`), so pin the property down here: a prefix
+// in a different case selects the same blocks.
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, prefixRegexPrefixRangesIgnoreCase) {
   // The vocabulary of the test index contains "Berlin", "Düsseldorf",

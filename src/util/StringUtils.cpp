@@ -124,6 +124,43 @@ void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
 }
 
 // ___________________________________________________________________________
+bool isUtf8ContinuationByte(char c) {
+  return (static_cast<unsigned char>(c) & 0xC0) == 0x80;
+}
+
+// ___________________________________________________________________________
+size_t numBytesOfUtf8Character(char lead) {
+  auto byte = static_cast<unsigned char>(lead);
+  return byte < 0x80             ? 1
+         : (byte & 0xE0) == 0xC0 ? 2
+         : (byte & 0xF0) == 0xE0 ? 3
+         : (byte & 0xF8) == 0xF0 ? 4
+                                 : 0;
+}
+
+// ___________________________________________________________________________
+std::string_view removeIncompleteUtf8Character(std::string_view str) {
+  // The last character starts at the last byte that is not a continuation byte,
+  // and that lead byte announces the total number of bytes of the character.
+  auto reversed = ql::views::reverse(str);
+  auto lastLeadByte = ql::ranges::find_if_not(
+      reversed, [](char c) { return isUtf8ContinuationByte(c); });
+  if (lastLeadByte == reversed.end()) {
+    // There is no lead byte at all (in particular `str` is empty), so there is
+    // nothing that could be removed. This has to be handled separately, because
+    // the dereferencing below would read the byte in front of `str`.
+    return str;
+  }
+  size_t numBytesPresent =
+      static_cast<size_t>(lastLeadByte - reversed.begin()) + 1;
+  // Note that `numBytesOfUtf8Character` returns 0 for an invalid lead byte, in
+  // which case the incomplete character is removed as well.
+  return numBytesPresent == numBytesOfUtf8Character(*lastLeadByte)
+             ? str
+             : str.substr(0, str.size() - numBytesPresent);
+}
+
+// ___________________________________________________________________________
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
   // Counting codepoints only requires the byte structure of UTF-8 and no
@@ -135,17 +172,13 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
   while (i < sv.size() && numCodepoints < prefixLength) {
     auto lead = static_cast<unsigned char>(sv[i]);
     // The length of the sequence and the payload bits of the lead byte.
-    size_t sequenceLength = lead < 0x80             ? 1
-                            : (lead & 0xE0) == 0xC0 ? 2
-                            : (lead & 0xF0) == 0xE0 ? 3
-                            : (lead & 0xF8) == 0xF0 ? 4
-                                                    : 0;
+    size_t sequenceLength = numBytesOfUtf8Character(sv[i]);
     static constexpr uint32_t leadMask[] = {0, 0x7F, 0x1F, 0x0F, 0x07};
     bool valid = sequenceLength > 0 && i + sequenceLength <= sv.size();
     uint32_t codepoint = valid ? lead & leadMask[sequenceLength] : 0;
     for (size_t j = 1; valid && j < sequenceLength; ++j) {
       auto continuation = static_cast<unsigned char>(sv[i + j]);
-      valid = (continuation & 0xC0) == 0x80;
+      valid = isUtf8ContinuationByte(sv[i + j]);
       codepoint = (codepoint << 6) | (continuation & 0x3F);
     }
     static constexpr uint32_t minimumBySequenceLength[] = {0, 0, 0x80, 0x800,

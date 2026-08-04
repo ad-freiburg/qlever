@@ -533,9 +533,9 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(
       regexSparqlWithFlags(varX, L("\"^prefix\""), L("\"im\"")));
   // ... and the `i` flag is dropped before the prefix is derived (see
-  // `getConstantRegexWithFlags`), so the prefix is the one of the regex as
-  // written, including its case. The prefix range of the prefilter ignores case
-  // anyway, which is exactly what makes this sound.
+  // `getConstantRegexForPrefiltering`), so the prefix is the one of the regex
+  // as written, including its case. The prefix range of the prefilter ignores
+  // case anyway, which is exactly what makes this sound.
   evalAndEqualityCheck(regexSparqlWithFlags(varX, L("\"^PreFix\""), L("\"i\"")),
                        pr(prefixRegex(L("\"PreFix\"")), varX));
   evalAndEqualityCheck(
