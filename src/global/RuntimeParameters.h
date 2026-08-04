@@ -150,10 +150,9 @@ struct RuntimeParameters {
   // default) means one thread per hardware thread.
   SizeT patternTrickNumThreads_{0, "pattern-trick-num-threads"};
   // The number of threads for the parallel sort of intermediate results
-  // (`Sort` and `ORDER BY`, see `IdTableUtils`). The value `0` (the default)
-  // means the compile-time default `NUM_SORT_THREADS`. Only effective when
-  // QLever was built with `USE_PARALLEL`.
-  SizeT parallelSortNumThreads_{0, "parallel-sort-num-threads"};
+  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
+  // as `1`. Only effective when QLever was built with `USE_PARALLEL`.
+  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
   // `SpatialJoinAlgorithms::libspatialjoinParse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};

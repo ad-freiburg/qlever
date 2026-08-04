@@ -82,9 +82,10 @@ void testSort(IdTable input, const IdTable& expected,
 
 // _____________________________________________________________________________
 // The runtime parameter `parallel-sort-num-threads` bounds the number of
-// threads of the parallel sort; the result must be the same for any value.
+// threads of the parallel sort; the result must be the same for any value
+// (`0` is treated as `1`).
 TEST(Sort, parallelSortNumThreads) {
-  for (size_t numThreads : {1, 2, 0}) {
+  for (size_t numThreads : {0, 1, 2, 3}) {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::parallelSortNumThreads_>(
             numThreads);

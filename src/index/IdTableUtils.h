@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_IDTABLEUTILS_H
 #define QLEVER_SRC_INDEX_IDTABLEUTILS_H
 
+#include <algorithm>
 #include <vector>
 
 #include "backports/type_traits.h"
@@ -15,12 +16,12 @@
 
 class IdTableUtils {
   // The number of threads for the parallel sort, settable via the runtime
-  // parameter `parallel-sort-num-threads` (`0`, the default, means the
-  // compile-time default `NUM_SORT_THREADS`).
+  // parameter `parallel-sort-num-threads` (values below `1` are treated
+  // as `1`).
   static size_t numSortThreads() {
     size_t numThreads =
         getRuntimeParameter<&RuntimeParameters::parallelSortNumThreads_>();
-    return numThreads == 0 ? NUM_SORT_THREADS : numThreads;
+    return std::max<size_t>(numThreads, 1);
   }
 
  public:
