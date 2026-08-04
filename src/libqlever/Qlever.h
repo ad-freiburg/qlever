@@ -20,6 +20,7 @@
 #include "backports/filesystem.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -259,6 +260,12 @@ struct EngineConfig : CommonConfig {
   // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
   // (the default), rebuilds are only triggered manually.
   std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
+
+  // Which `previous.*` index directories to keep after a successful index
+  // rebuild (manual or automatic), see `KeepPreviousIndexDirs`. The default
+  // keeps the original and the most recent one.
+  KeepPreviousIndexDirs keepPreviousIndexDirs_ =
+      KeepPreviousIndexDirs::OriginalAndMostRecent;
 
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
@@ -623,6 +630,17 @@ class Qlever {
   static IndexRebuildConfig makeIndexRebuildConfig(
       const Index& index, std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
+
+  // Apply the given `policy` to the `previous.*` directories in the directory
+  // of the index with the base name `indexBaseName` (each successful rebuild
+  // retires the index that was served so far into such a directory, see
+  // `makeIndexRebuildConfig`): keep or delete each of them according to
+  // `keepPreviousIndexDir`, where the directories are ordered from the oldest
+  // to the newest. Each decision is logged; a directory that cannot be
+  // deleted is logged as an error, but does not make this function throw
+  // (when this is called, the rebuild has already succeeded).
+  static void cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                       KeepPreviousIndexDirs policy);
 
   // Move a freshly rebuilt index into the place of the old one. There are two
   // indices involved, both with base names given by `config`: the old index

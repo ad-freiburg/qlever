@@ -4,6 +4,7 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/time/time.h>
@@ -814,6 +815,13 @@ TEST(IndexRebuilder, serverIntegration) {
 
   qlever::EngineConfig config;
   config.baseName_ = indexName;
+  // Keep all previous index directories: this test runs in the shared
+  // working directory, and deleting `previous.*` directories here would
+  // interfere with the other server-integration tests when the tests run
+  // concurrently. The cleanup policy itself is tested by
+  // `serverIntegrationKeepPreviousIndexDirs` below, in a dedicated
+  // subdirectory.
+  config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
   Server server{4321, 1, std::string{accessToken}, config};
 
@@ -936,6 +944,8 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   qlever::EngineConfig config;
   config.baseName_ = indexName;
   config.persistUpdates_ = false;
+  // Keep all previous index directories, see `serverIntegration` above.
+  config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
 
   // Write a materialized view to disk so it can be preloaded below.
   {
@@ -1026,6 +1036,8 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   qlever::EngineConfig config;
   config.baseName_ = indexName;
   config.persistUpdates_ = false;
+  // Keep all previous index directories, see `serverIntegration` above.
+  config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   // `min == max == 3` makes the threshold a fixed three delta triples,
   // independent of the index size: trigger an automatic rebuild as soon as the
   // number of delta triples reaches three.
@@ -1119,5 +1131,88 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   }
 
   cleanDirsWithPrefix("previous.");
+}
+#endif  // __EMSCRIPTEN__
+
+// _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
+TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
+  namespace fs = ql::filesystem;
+  // Run in a dedicated subdirectory: this test creates and deletes
+  // `previous.*` directories, which would interfere with the
+  // server-integration tests above when the tests run concurrently in the
+  // same working directory.
+  fs::path parentDir = fs::current_path();
+  fs::path testDir = parentDir / "IndexRebuilder_keepPreviousIndexDirs.dir";
+  fs::remove_all(testDir);
+  fs::create_directory(testDir);
+  fs::current_path(testDir);
+  absl::Cleanup restoreWorkingDir{[&parentDir, &testDir]() {
+    ql::filesystem::current_path(parentDir);
+    ql::filesystem::remove_all(testDir);
+  }};
+
+  std::string indexName = "IndexRebuilder_keepPreviousIndexDirs";
+  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
+
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  config.keepPreviousIndexDirs_ =
+      qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+
+  // Trigger a manual rebuild and wait for it (the request only returns after
+  // the new index has been swapped in and the cleanup has run).
+  auto rebuild = [&server]() {
+    auto request = ad_utility::testing::makeGetRequest(
+        "/?cmd=rebuild-index&access-token=accessToken");
+    auto response = server.process(request);
+    EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  };
+
+  // The names of the `previous.*` directories, sorted. The sort order is the
+  // order from oldest to newest here: the names contain the build date of the
+  // retired index (uniquified with a numeric suffix for rebuilds within the
+  // same second, see `Qlever::makeIndexRebuildConfig`).
+  auto previousDirNames = []() {
+    std::vector<std::string> result;
+    for (const auto& dir : dirsWithPrefix("previous.")) {
+      result.push_back(dir.filename().string());
+    }
+    ql::ranges::sort(result);
+    return result;
+  };
+
+  // After the first rebuild, there is one previous index directory (the
+  // original index the server was started on), which the policy keeps.
+  rebuild();
+  auto afterFirst = previousDirNames();
+  ASSERT_EQ(afterFirst.size(), 1u);
+  std::string originalDir = afterFirst.front();
+
+  // After the second rebuild, the directory added by it is the most recent
+  // one, so both are kept.
+  rebuild();
+  auto afterSecond = previousDirNames();
+  ASSERT_EQ(afterSecond.size(), 2u);
+  EXPECT_EQ(afterSecond.front(), originalDir);
+  std::string middleDir = afterSecond.back();
+
+  // The third rebuild adds another directory, so now the one added by the
+  // second rebuild is neither the original nor the most recent and is
+  // deleted.
+  rebuild();
+  auto afterThird = previousDirNames();
+  ASSERT_EQ(afterThird.size(), 2u);
+  EXPECT_EQ(afterThird.front(), originalDir);
+  EXPECT_NE(afterThird.back(), middleDir);
+
+  // The rebuilt index still answers queries.
+  auto request = ad_utility::testing::makeGetRequest(
+      "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+  auto response = server.process(request);
+  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
 }
 #endif  // __EMSCRIPTEN__

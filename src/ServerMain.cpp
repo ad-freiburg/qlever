@@ -59,6 +59,7 @@ int main(int argc, char** argv) {
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
   std::string rebuildIndexStrategy;
+  std::string rebuildKeepPreviousIndexDirs;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -174,6 +175,18 @@ int main(int argc, char** argv) {
       "reaches the given `fraction` (a number greater than 0) of the number "
       "of index triples, but never below `min` and always at `max` (e.g. "
       "\"automatic:10000:1000000:0.1\").");
+  add("rebuild-keep-previous-index-dirs",
+      po::value<std::string>(&rebuildKeepPreviousIndexDirs)
+          ->default_value("original-and-most-recent"),
+      "Which `previous.*` index directories to keep after a successful index "
+      "rebuild, manual or automatic (each rebuild moves the index that was "
+      "served so far into such a directory): \"all\" (keep all of them), "
+      "\"none\" (delete all of them), \"original-only\" (keep only the "
+      "oldest), \"most-recent-only\" (keep only the most recently created), "
+      "or \"original-and-most-recent\" (the default, keep both). The choices "
+      "and the default are the same as for the `--keep-previous-index-dirs` "
+      "option of the `qlever rebuild-index` command, which applies the same "
+      "policy on the client side.");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -320,6 +333,22 @@ int main(int argc, char** argv) {
   if (config.rebuildIndexStrategy_.has_value()) {
     AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
                 << rebuildIndexStrategy << ")" << std::endl;
+  }
+
+  // Resolve the `--rebuild-keep-previous-index-dirs` option, like the
+  // `--rebuild-index-strategy` option above.
+  try {
+    config.keepPreviousIndexDirs_ =
+        qlever::parseKeepPreviousIndexDirs(rebuildKeepPreviousIndexDirs);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid argument to --rebuild-keep-previous-index-dirs: "
+                 << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (config.keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
+    AD_LOG_INFO << "Cleanup of previous index directories after each rebuild "
+                   "enabled (--rebuild-keep-previous-index-dirs "
+                << rebuildKeepPreviousIndexDirs << ")" << std::endl;
   }
 
   try {

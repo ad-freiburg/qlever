@@ -570,6 +570,63 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
 }
 
 // ___________________________________________________________________________
+void Qlever::cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                      KeepPreviousIndexDirs policy) {
+  namespace fs = ql::filesystem;
+  if (policy == KeepPreviousIndexDirs::All) {
+    return;
+  }
+
+  // Collect the `previous.*` directories in the directory of the index. The
+  // parent path is empty if the base name lies in the working directory
+  // itself.
+  fs::path indexDir = fs::path{indexBaseName}.parent_path();
+  if (indexDir.empty()) {
+    indexDir = fs::current_path();
+  }
+  std::vector<fs::path> previousDirs;
+  for (const auto& entry : fs::directory_iterator{indexDir}) {
+    if (entry.is_directory() &&
+        ql::starts_with(entry.path().filename().string(), "previous.")) {
+      previousDirs.push_back(entry.path());
+    }
+  }
+
+  // Order the directories from the oldest to the newest by the time they were
+  // last written to. Nothing writes into such a directory after the rebuild
+  // that created it, so this is the order in which they were created. Two
+  // rebuilds within the same second can produce equal timestamps (depending
+  // on the filesystem backend); such ties are broken by name, which contains
+  // the build date of the retired index (with a numeric suffix for repeated
+  // dates, see `makeIndexRebuildConfig`) and hence also increases from the
+  // oldest to the newest.
+  auto sortKey = [](const fs::path& dir) {
+    return std::pair{fs::last_write_time(dir), dir.filename().string()};
+  };
+  ql::ranges::sort(previousDirs, std::less{}, sortKey);
+
+  // Keep or delete each directory according to the policy.
+  AD_LOG_INFO << "Checking which of the " << previousDirs.size()
+              << " previous index directories to keep or delete "
+                 "(rebuild-keep-previous-index-dirs = "
+              << toString(policy) << ")" << std::endl;
+  for (size_t i = 0; i < previousDirs.size(); ++i) {
+    const fs::path& dir = previousDirs[i];
+    bool keep = keepPreviousIndexDir(policy, i, previousDirs.size());
+    AD_LOG_INFO << dir.filename().string() << " -> "
+                << (keep ? "KEEP" : "DELETE") << std::endl;
+    if (!keep) {
+      ql::error_code errorCode;
+      fs::remove_all(dir, errorCode);
+      if (errorCode) {
+        AD_LOG_ERROR << "Failed to delete \"" << dir.filename().string()
+                     << "\": " << errorCode.message() << std::endl;
+      }
+    }
+  }
+}
+
+// ___________________________________________________________________________
 void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                        const IndexRebuildConfig& config) {
   namespace fs = ql::filesystem;
