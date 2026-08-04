@@ -244,9 +244,9 @@ TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksGlobal) {
 }
 
 //______________________________________________________________________________
-// Same as above, but through the `BatchWise` (LRU) filter path.
-TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksBatchWise) {
-  ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_};
+// Same as above, but through the `Lru` filter path.
+TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksLru) {
+  ConstructDeduplicator deduplicator{DeduplicationMode::lru(10), *qec_};
   auto tmpl = makeSingleTripleTemplate();
 
   const LocalVocabRow block1 = makeLocalVocabRow("x");
@@ -274,13 +274,13 @@ TEST_F(ConstructDeduplicatorTest, blankNodeTripleAlwaysNew) {
 }
 
 //______________________________________________________________________________
-// In `batchWise` mode a tiny memory threshold forces the filter to drop all
+// In `lru` mode a tiny memory threshold forces the filter to drop all
 // dedup state once its internal vocab grows past it, which makes deduplication
 // approximate: the same local-vocab triple is reported "new" again after the
-// reset (rather than a duplicate). Contrast with `dedupAcrossBlocksBatchWise`,
+// reset (rather than a duplicate). Contrast with `dedupAcrossBlocksLru`,
 // which uses the default (large) threshold and deduplicates.
-TEST_F(ConstructDeduplicatorTest, batchWiseResetsWhenVocabExceedsThreshold) {
-  ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_,
+TEST_F(ConstructDeduplicatorTest, lruResetsWhenVocabExceedsThreshold) {
+  ConstructDeduplicator deduplicator{DeduplicationMode::lru(10), *qec_,
                                      ad_utility::MemorySize::bytes(1)};
   auto tmpl = makeSingleTripleTemplate();
 
@@ -293,13 +293,13 @@ TEST_F(ConstructDeduplicatorTest, batchWiseResetsWhenVocabExceedsThreshold) {
 }
 
 //______________________________________________________________________________
-// Regression: a `BatchWise` reset must happen only at the triple boundary,
+// Regression: a `Lru` reset must happen only at the triple boundary,
 // never mid-key. A single triple built from three distinct local-vocab terms
 // under a 1-byte threshold canonicalizes its positions one at a time; if the
 // reset fired between positions it would free the entries the already-
 // canonicalized positions point to, leaving the key with dangling ids.
-TEST_F(ConstructDeduplicatorTest, batchWiseDoesNotResetMidKey) {
-  ConstructDeduplicator deduplicator{DeduplicationMode::batchWise(10), *qec_,
+TEST_F(ConstructDeduplicatorTest, lruDoesNotResetMidKey) {
+  ConstructDeduplicator deduplicator{DeduplicationMode::lru(10), *qec_,
                                      ad_utility::MemorySize::bytes(1)};
 
   PreprocessedConstructTemplate tmpl;

@@ -2188,7 +2188,7 @@ TEST(ExportQueryExecutionTrees,
 // are distinct insertions from the deduplicator's point of view, so all three
 // are emitted.
 TEST(ExportQueryExecutionTrees,
-     ConstructDeduplicationValuesBatchWiseAbaPatternEvictsAndReemits) {
+     ConstructDeduplicationValuesLruAbaPatternEvictsAndReemits) {
   const std::string kg = "";
   const std::string query =
       "CONSTRUCT { ?s ?p ?o } WHERE {"
@@ -2200,7 +2200,7 @@ TEST(ExportQueryExecutionTrees,
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-          ad_utility::DeduplicationMode::batchWise(1));
+          ad_utility::DeduplicationMode::lru(1));
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
             absl::StrCat(a, b, a));
 }
@@ -2208,8 +2208,8 @@ TEST(ExportQueryExecutionTrees,
 namespace {
 // ____________________________________________________________________________
 // Formats the single triple `<ex:c> <ex:c> <ex:c> .` for one lowercase
-// letter `c`, used by `ConstructDeduplicationBatchWiseWindowTest`.
-std::string batchWiseWindowTriple(char c) {
+// letter `c`, used by `ConstructDeduplicationLruWindowTest`.
+std::string lruWindowTriple(char c) {
   return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
                       "> <ex:", std::string(1, c), "> .\n");
 }
@@ -2218,18 +2218,18 @@ std::string batchWiseWindowTriple(char c) {
 // Batchwise deduplication with a stream of 5 unique triples, each repeated
 // twice. Thus we expect 10 triples total. The window size controls how many
 // duplicates survive.
-struct BatchWiseWindowParam {
+struct LruWindowParam {
   size_t windowSize;
   // The letters (each standing for one `<ex:c> <ex:c> <ex:c>` triple)
   // expected to survive deduplication, in order.
   std::string expectedLetters;
 };
 
-class ConstructDeduplicationBatchWiseWindowTest
+class ConstructDeduplicationLruWindowTest
     : public ::testing::Test,
-      public ::testing::WithParamInterface<BatchWiseWindowParam> {};
+      public ::testing::WithParamInterface<LruWindowParam> {};
 
-TEST_P(ConstructDeduplicationBatchWiseWindowTest, window) {
+TEST_P(ConstructDeduplicationLruWindowTest, window) {
   const std::string kg = "";
   const std::string query =
       "CONSTRUCT { ?s ?p ?o } WHERE {"
@@ -2244,28 +2244,28 @@ TEST_P(ConstructDeduplicationBatchWiseWindowTest, window) {
 
   std::string expected;
   for (char letter : GetParam().expectedLetters) {
-    absl::StrAppend(&expected, batchWiseWindowTriple(letter));
+    absl::StrAppend(&expected, lruWindowTriple(letter));
   }
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-          ad_utility::DeduplicationMode::batchWise(GetParam().windowSize));
+          ad_utility::DeduplicationMode::lru(GetParam().windowSize));
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
             expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    WindowSizes, ConstructDeduplicationBatchWiseWindowTest,
+    WindowSizes, ConstructDeduplicationLruWindowTest,
     ::testing::Values(
         // window 4: A is 5 positions back when it reappears. Thus, it has
         // already been evicted from the deduplication window when it re-appears
         // in the triple stream and is thus emitted. All 10 triples survive
         // (window is too small to catch any repeating triples).
-        BatchWiseWindowParam{4, "abcdeabcde"},
+        LruWindowParam{4, "abcdeabcde"},
         // window 5: the second 'a' is only 5 positions after the first.
         // Thus, this triple is still in the deduplication cache when it
         // re-appears. Suppressed. 'b'-'e' repeats hit the same window
         // and are suppressed too. Result: 5 unique triples.
-        BatchWiseWindowParam{5, "abcde"},
+        LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
-        BatchWiseWindowParam{10, "abcde"}));
+        LruWindowParam{10, "abcde"}));
