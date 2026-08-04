@@ -6,23 +6,32 @@
 #define QLEVER_COMPILEREXTENSIONS_H
 
 // A generic macro that forces inlining during compilation across compilers.
+// It expands to (at least) `inline`, hence the single rule for using it: every
+// translation unit that calls the function must see its definition. Concretely:
 //
-// The macro always expands to (at least) `inline`, so it must only be used on a
-// function whose definition is visible in every translation unit that calls it.
-// That is not a restriction, but the precondition for forcing the inlining in
-// the first place: a function that is declared in a header but defined in a
-// `.cpp` file cannot be inlined into its callers in other translation units,
-// and annotating such a definition only earns a `-Wattributes` warning from GCC
+// 1. In a header: always fine, and the typical use case. This covers free
+//    functions, member functions defined inside the class body, and templates.
+// 2. In a `.cpp` file: only for functions that no other translation unit can
+//    call anyway, that is, functions with internal linkage (`static` or in an
+//    anonymous namespace). There the `inline` makes no difference.
+// 3. NOT for a function that is declared in a header, but defined out of line
+//    in a `.cpp` file, no matter whether it is public or private. Calls from
+//    other translation units then fail to link. Note that for private member
+//    functions all calls typically do live in the same `.cpp` file, so it will
+//    usually link, but an `inline` definition whose declaration in the header
+//    is not `inline` is still an ODR violation, so don't rely on that.
+//
+// The `inline` in the macro is not an arbitrary restriction, but the
+// precondition for forcing the inlining in the first place, and it turns
+// violations of the rule above into errors: without it, GCC merely warns
 // (`'always_inline' function might not be inlinable unless also declared
-// 'inline'`). With the `inline` in the macro, that mistake now breaks the link
-// instead of silently doing nothing.
-//
-// The `inline` is also what keeps the attribute usable in a shared-library
-// build. GCC refuses to force the inlining of a function whose body may be
-// replaced at link time (`error: inlining failed in call to 'always_inline'
-// ...: function body can be overwritten at link time`), which applies to
-// functions with external linkage in a shared library, but not to `inline`
-// functions: those are emitted as COMDAT and bind to the definition at hand.
+// 'inline'`) and silently doesn't inline anything. It is also what keeps the
+// attribute usable in a shared-library build, where GCC refuses to force the
+// inlining of a function whose body may be replaced at link time (`error:
+// inlining failed in call to 'always_inline' ...: function body can be
+// overwritten at link time`). That applies to functions with external linkage,
+// but not to `inline` functions, which are emitted as COMDAT and bind to the
+// definition at hand.
 #if defined(__GNUC__) || defined(__clang__)
 // NOTE: Clang defines `__GNUC__` as well and understands the `gnu::` spelling
 // of the attribute, so a single branch covers both compilers.
