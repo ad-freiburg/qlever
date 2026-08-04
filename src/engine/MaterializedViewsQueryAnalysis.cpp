@@ -367,7 +367,11 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
         {std::move(cacheKeyAndCol.value().cacheKey_),
          std::make_shared<ByCacheKeyInfo>(
              view, std::move(cacheKeyAndCol.value().columnMapping_))});
-    if (!inserted) {
+    // If `inserted` is `false` because the entry already belongs to `view`
+    // itself (its "full" and "without invariants" cache keys coincide, e.g.
+    // because the view has no `BIND` to strip), this is expected and not a
+    // collision worth logging.
+    if (!inserted && it->second->view_ != view) {
       AD_LOG_INFO << "Materialized view '" << view->name()
                   << "' has the same cache key as the already loaded view '"
                   << it->second->view_->name()

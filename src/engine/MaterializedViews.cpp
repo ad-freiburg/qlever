@@ -835,6 +835,10 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
     QueryExecutionContext* qec, const std::string& cacheKey,
     const VariableToColumnMap& varToCol) const {
+  // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
+  // triples are present in the current index to prevent diverging results?
+  // (Same concern as in `QueryPlanner::createMaterializedViewJoinReplacements`,
+  // since a cache key alone does not capture the located-triples state.)
   auto info =
       loadedViews_.rlock()->queryPatternCache_.lookupByCacheKey(cacheKey);
   if (info == nullptr) {
@@ -886,7 +890,6 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
       // load it; the view can still be used via its explicit name.
       return std::nullopt;
     }
-    // TODO<ullingec> What about the sorting problems?
 
     ColumnMapping mapping;
     for (const auto& [var, col] : executionTree.getVariableColumns()) {
