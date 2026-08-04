@@ -56,7 +56,12 @@ struct RuntimeParameters {
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of threads that read and decompress the blocks of a lazy index
+  // scan. Each lazy scan of a query has its own pool of this many threads.
+  // The default of `2` is enough for typical queries, where the operation
+  // that consumes the blocks processes them on a single thread and can barely
+  // keep up with the decompression even for `1` thread.
+  SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
   // The number of threads used to read and decompress blocks when scanning
   // permutations during a runtime index rebuild (see `IndexRebuilder`), both
   // for the main scan of the old permutations and for the statistics
