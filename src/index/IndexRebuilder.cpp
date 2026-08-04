@@ -550,9 +550,22 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   auto permutationsProgressCallback = progressCallbackFor(permutationsProgress);
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
-  size_t numberOfPermutations = numNormalPermutations + 2;
+  // The permutations are written as pairs (PSO+POS, SPO+SOP, OPS+OSP, and the
+  // internal PSO+POS), each pair using two threads (one per permutation).
+  size_t numberOfPairs = (numNormalPermutations + 2) / 2;
+  // Limit how many pairs run in parallel (see the runtime parameter
+  // `rebuild-max-concurrent-permutation-pairs`; 0 means "no limit"). Sizing
+  // the thread pool accordingly is all that is needed: with two threads per
+  // pair, a smaller pool simply lets fewer pairs make progress at a time.
+  // This is the knob for trading rebuild duration against interference with
+  // concurrent queries and updates.
+  size_t maxConcurrentPairs = getRuntimeParameter<
+      &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>();
+  if (maxConcurrentPairs == 0 || maxConcurrentPairs > numberOfPairs) {
+    maxConcurrentPairs = numberOfPairs;
+  }
   namespace net = boost::asio;
-  net::thread_pool threadPool{patternThreads + numberOfPermutations};
+  net::thread_pool threadPool{patternThreads + 2 * maxConcurrentPairs};
 
   // Collect the first exception thrown by any worker so it can be rethrown to
   // the caller after `threadPool.join()`. Without this, exceptions escaping a
