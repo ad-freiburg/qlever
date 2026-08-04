@@ -15,6 +15,7 @@
 #include "util/ChunkedForLoop.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/VectorWithMemoryLimit.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
@@ -186,8 +187,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
 
   // Store the indices of rows for which the value of the `EXISTS` (in the added
   // Boolean column) should be `false`.
-  std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
-      allocator()};
+  ad_utility::VectorWithMemoryLimit<size_t> notExistsIndices{allocator()};
   // Helper lambda for computing the exists join with `callFixedSizeVi`, which
   // makes the number of join columns a template parameter.
   auto runForNumJoinCols = [&notExistsIndices, isCheap, &noopRowAdder,
@@ -343,8 +343,7 @@ std::optional<Result> ExistsJoin::tryRightIndexNestedLoopJoinIfSuitable(
       joinColumns_, std::move(leftRes), std::move(rightRes)};
   auto result = nestedLoopJoin.computeRightExistance(
       [this](auto&& idTable, LocalVocab localVocab,
-             const std::vector<bool, ad_utility::AllocatorWithLimit<bool>>&
-                 matchingTracker) {
+             const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {
         IdTable resultTable = AD_FWD(idTable).moveOrClone();
         addExistsColumn(resultTable, matchingTracker);
         return Result::IdTableVocabPair{std::move(resultTable),
