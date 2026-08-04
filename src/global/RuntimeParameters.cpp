@@ -30,6 +30,8 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanQueueSize_);
   add(lazyIndexScanNumThreads_);
   add(rebuildIndexScanNumThreads_);
+  add(rebuildPermutationWriterNumThreads_);
+  add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);

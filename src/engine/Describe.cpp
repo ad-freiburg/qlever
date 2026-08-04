@@ -10,6 +10,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
+#include "index/TripleComponentConversions.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -57,7 +58,7 @@ std::string Describe::getCacheKeyImpl() const {
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
+                          &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
@@ -210,8 +211,8 @@ IdTable Describe::getIdsToDescribe(const Result& result,
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
-          TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              getIndex(), localVocab));
+          toValueId(TripleComponent{std::get<TripleComponent::Iri>(resource)},
+                    getIndex(), localVocab));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
       // the WHERE clause to `idsToDescribe`.

@@ -11,6 +11,7 @@
 #include "engine/ExecuteUpdate.h"
 #include "engine/Load.h"
 #include "engine/QueryPlanner.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
@@ -153,7 +154,7 @@ TEST_F(LoadTest, computeResult) {
         for (const auto& row : expectedIdTable) {
           auto& idVecRow = idVector.emplace_back();
           for (auto& field : row) {
-            auto idOpt = field.toValueId(testQec->getIndex());
+            auto idOpt = toValueId(field, testQec->getIndex());
             if (!idOpt) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());

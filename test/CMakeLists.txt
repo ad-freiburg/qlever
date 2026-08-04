@@ -159,9 +159,9 @@ endif ()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest qlever_util)
 
-addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
+addLinkAndDiscoverTest(SparqlParserTest sparqlParser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(VariableCounterTest parser engine)
+addLinkAndDiscoverTest(VariableCounterTest sparqlParser engine)
 
 addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
@@ -178,7 +178,7 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
+addLinkAndDiscoverTest(WordsAndDocsFileParserTest sparqlParser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
@@ -193,6 +193,8 @@ addLinkAndDiscoverTest(IdTripleTest index)
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
+
+addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
@@ -226,10 +228,10 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser qlever_util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain sparqlParser qlever_util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser qlever_util)
+    linkAndDiscoverTest(TokenTest sparqlParser qlever_util)
 endif ()
 
 addLinkAndDiscoverTestNoLibs(RdfParserTest index)
@@ -271,7 +273,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator parser)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
@@ -300,7 +302,7 @@ addLinkAndDiscoverTestNoLibs(StringBatcherTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-addLinkAndDiscoverTestNoLibs(CompactStringVectorTest parser)
+addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
@@ -334,7 +336,7 @@ addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
 addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
 
-addLinkAndDiscoverTest(DateYearDurationTest qlever_util parser)
+addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
 
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
@@ -344,17 +346,17 @@ addLinkAndDiscoverTest(ValueIdTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
-addLinkAndDiscoverTest(ParseExceptionTest parser engine)
+addLinkAndDiscoverTest(ParseExceptionTest sparqlParser engine)
 
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-addLinkAndDiscoverTest(SelectClauseTest parser engine)
+addLinkAndDiscoverTest(SelectClauseTest sparqlParser engine)
 
-addLinkAndDiscoverTest(RelationalExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(RelationalExpressionTest sparqlParser sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
+addLinkAndDiscoverTest(CheckUsePatternTrickTest sparqlParser engine)
 
-addLinkAndDiscoverTest(RegexExpressionTest parser sparqlExpressions index engine parser)
+addLinkAndDiscoverTest(RegexExpressionTest sparqlParser sparqlExpressions index engine sparqlParser)
 
 addLinkAndDiscoverTest(LocalVocabTest engine)
 
@@ -403,9 +405,9 @@ addLinkAndDiscoverTest(OrderByTest engine)
 
 addLinkAndDiscoverTest(ValuesForTestingTest index)
 
-addLinkAndDiscoverTest(ExportQueryExecutionTreesTest index engine parser)
+addLinkAndDiscoverTest(ExportQueryExecutionTreesTest index engine sparqlParser)
 
-addLinkAndDiscoverTest(AggregateExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(AggregateExpressionTest sparqlParser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
@@ -417,7 +419,7 @@ addLinkAndDiscoverTest(OperationTest engine)
 
 addLinkAndDiscoverTest(RuntimeInformationTest engine index)
 
-addLinkAndDiscoverTest(VariableToColumnMapTest parser)
+addLinkAndDiscoverTest(VariableToColumnMapTest sparqlParser)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
@@ -535,9 +537,16 @@ addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
 addLinkAndDiscoverTest(UnitOfMeasurementTest qlever_util)
 
-addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+# When the `server` library is not built (Emscripten, see
+# `src/engine/CMakeLists.txt`), the server-integration test is compiled out
+# via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.
+if (TARGET server)
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+else ()
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
+endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
@@ -554,7 +563,7 @@ addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest engine parser)
+addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
