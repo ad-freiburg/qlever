@@ -97,8 +97,8 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
         scan.updateRuntimeInfoForLazyScan(generatorStorage->details(),
                                           sendPriority);
         sendPriority = SendPriority::IfDue;
-        // Reorder the columns of the scan result so that the join column(s) come
-        // first, as expected by the join algorithms below.
+        // Reorder the columns of the scan result so that the join column(s)
+        // come first, as expected by the join algorithms below.
         applyPermutation(table, permutation);
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.

@@ -200,7 +200,8 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   // order into the corresponding (canonical) result column indices.
   const auto& varColMap = getExternallyVisibleVariableColumns();
   const auto& keys = permutation().keyOrder().keys();
-  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_, &object_};
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
   std::vector<ColumnIndex> result;
   // Physical column `j` (for `j < numVariables_`) holds the variable at
   // key-order index `3 - numVariables_ + j`.
@@ -291,7 +292,8 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
     }
   };
 
-  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_, &object_};
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
   for (size_t position = 0; position < 3; ++position) {
     const auto& component = *triple.at(position);
     if (component.isVariable()) {
@@ -1068,7 +1070,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> IndexScan::makeSortedTree(
   // cannot be reordered this way and we bail out (the caller then falls back to
   // an explicit `Sort`).
   const auto& varColMap = getExternallyVisibleVariableColumns();
-  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_, &object_};
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
   ad_utility::HashMap<ColumnIndex, size_t> resultColumnToTriplePosition;
   for (size_t position = 0; position < 3; ++position) {
     const auto& component = *triple.at(position);
@@ -1088,9 +1091,9 @@ std::optional<std::shared_ptr<QueryExecutionTree>> IndexScan::makeSortedTree(
     desiredPositions.push_back(it->second);
   }
 
-  // Find a permutation such that (a) the fixed components of the triple form the
-  // prefix of its key order (a scan requirement) and (b) its (canonical) sort
-  // order starts with the `desiredPositions`. Because the canonical result
+  // Find a permutation such that (a) the fixed components of the triple form
+  // the prefix of its key order (a scan requirement) and (b) its (canonical)
+  // sort order starts with the `desiredPositions`. Because the canonical result
   // layout is permutation-independent, the resulting scan has the same
   // `VariableToColumnMap` as this one, but a different sort order.
   using enum Permutation::Enum;
@@ -1160,7 +1163,8 @@ std::vector<ColumnIndex> IndexScan::getColumnPermutationForResult() const {
   std::vector<ColumnIndex> result;
   // The s/p/o variables, in canonical (subject, predicate, object) order. For
   // each, look up its column in the physical (permutation-ordered) scan output.
-  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_, &object_};
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
   for (size_t position = 0; position < 3; ++position) {
     const auto& component = *triple.at(position);
     if (component.isVariable() && isContained(component.getVariable())) {

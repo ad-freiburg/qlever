@@ -357,9 +357,10 @@ TEST_P(JoinTestParametrized, joinWithFullScanPSO) {
     auto fullScanOPS = ad_utility::makeExecutionTree<IndexScan>(
         qec, OPS, SparqlTripleSimple{Var{"?s2"}, Var{"?p2"}, Var{"?s"}});
     // The knowledge graph is "<x> <p> 1 . <x> <o> <x> . <x> <a> 3 ."
-    // Both scans present their columns in canonical (subject, predicate, object)
-    // order. For `fullScanOPS` (?s2 ?p2 ?s) that means `?s2`=0, `?p2`=1, `?s`=2,
-    // so the join column `?s` is column 2. The result keeps `?s2` before `?p2`.
+    // Both scans present their columns in canonical (subject, predicate,
+    // object) order. For `fullScanOPS` (?s2 ?p2 ?s) that means `?s2`=0,
+    // `?p2`=1, `?s`=2, so the join column `?s` is column 2. The result keeps
+    // `?s2` before `?p2`.
     auto expected = makeIdTableFromVector(
         {{x, a, I(3), x, o}, {x, o, x, x, o}, {x, p, I(1), x, o}});
     VariableToColumnMap expectedVariables{

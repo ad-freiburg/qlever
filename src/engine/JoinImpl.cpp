@@ -562,9 +562,10 @@ void JoinImpl::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
   // The block-skipping lazy scans below join on the primary (physical) sort
   // column of each scan, which must be the join column. The columns are then
-  // reordered so that the join column comes first (via the `JoinColumnMapping`),
-  // and the result is reordered back into the expected layout via
-  // `permutationResult()`. This works for any join column, not just column 0.
+  // reordered so that the join column comes first (via the
+  // `JoinColumnMapping`), and the result is reordered back into the expected
+  // layout via `permutationResult()`. This works for any join column, not just
+  // column 0.
   ad_utility::JoinColumnMapping joinColMap = getJoinColumnMapping();
   auto resultPermutation = joinColMap.permutationResult();
   return createResultFromAction(
@@ -578,7 +579,8 @@ Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
         AD_CORRECTNESS_CHECK(leftScan && rightScan);
         // The join has to be on the primary (physical) sort column of both
         // scans for the block-skipping to be correct.
-        AD_CORRECTNESS_CHECK(leftScan->resultSortedOn().front() == leftJoinCol_);
+        AD_CORRECTNESS_CHECK(leftScan->resultSortedOn().front() ==
+                             leftJoinCol_);
         AD_CORRECTNESS_CHECK(rightScan->resultSortedOn().front() ==
                              rightJoinCol_);
         auto rowAdder = makeRowAdder(std::move(yieldTable));
@@ -592,8 +594,9 @@ Result JoinImpl::computeResultForTwoIndexScans(bool requestLaziness) const {
         // If requestLaziness, we don't need to serialize json for every update
         // of the child. If we serialize it whenever the join operation yields a
         // table that's frequent enough and reduces the overhead.
-        auto leftBlocks = convertGeneratorFromScan(
-            std::move(leftBlocksInternal), *leftScan, joinColMap.permutationLeft());
+        auto leftBlocks =
+            convertGeneratorFromScan(std::move(leftBlocksInternal), *leftScan,
+                                     joinColMap.permutationLeft());
         auto rightBlocks =
             convertGeneratorFromScan(std::move(rightBlocksInternal), *rightScan,
                                      joinColMap.permutationRight());
