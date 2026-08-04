@@ -13,7 +13,6 @@
 #include "engine/HttpApiHelpers.h"
 #include "gmock/gmock.h"
 #include "util/GTestHelpers.h"
-#include "util/http/HttpServer.h"
 
 namespace {
 using namespace qlever::http_api_helpers;
@@ -92,14 +91,14 @@ TEST(HttpApiHelpersTest, parseSendLimit) {
 
   // A non-numeric value throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlever::http_api_helpers::parseSendLimit({{"send", {"not-a-number"}}}),
+      parseSendLimit({{"send", {"not-a-number"}}}),
       testing::HasSubstr("Invalid value for `send`: must be a "
                          "positive integer specifying the number of bindings "
                          "to be exported."));
 
   // A negative value throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlever::http_api_helpers::parseSendLimit({{"send", {"-1"}}}),
+      parseSendLimit({{"send", {"-1"}}}),
       testing::HasSubstr("Invalid value for `send`: must be a "
                          "positive integer specifying the number of bindings "
                          "to be exported."));

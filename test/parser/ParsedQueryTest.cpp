@@ -1,11 +1,6 @@
-// Copyright 2026 The QLever Authors, in particular:
-//
-// 2026 Tomas Damek <tomas.damek@email.uni-freiburg.de>, UFR
-//
-// UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
-// You may not use this file except in compliance with the Apache 2.0 License,
-// which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2026, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Tomas Damek <tomas.damek@email.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 
@@ -43,7 +38,6 @@ TEST(ParsedQueryTest, updateExportLimit) {
         EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
                     testing::Eq(limit));
       };
-
   // Use different queries with and without LIMIT/OFFSET to ensure that the
   // export limit is not affected by query-specific LIMIT/OFFSET clauses.
   std::string complexQuery{
