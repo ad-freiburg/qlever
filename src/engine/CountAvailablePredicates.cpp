@@ -241,18 +241,17 @@ void CountAvailablePredicates::computePatternTrick(
       getRuntimeParameter<&RuntimeParameters::patternTrickNumThreads_>();
   CountMap<size_t> patternCounts = ad_utility::computeInParallelChunks(
       input.size(), CHUNK_SIZE_ROWS,
-      [&subjectColumn, &patternColumn](size_t begin, size_t end) {
-        CountMap<size_t> counts;
+      [&subjectColumn, &patternColumn](CountMap<size_t>& counts, size_t begin,
+                                       size_t end) {
         for (size_t i = begin; i < end; ++i) {
-          // Skip over elements with the same subject (don't count them twice).
-          // Note: The element before the first one of a chunk is read, but
-          // never written, so this is safe to do in parallel.
+          // Skip over elements with the same subject (don't count them
+          // twice). Note: The element before the first one of a chunk is
+          // read, but never written, so this is safe to do in parallel.
           if (i > 0 && subjectColumn[i] == subjectColumn[i - 1]) {
             continue;
           }
           counts[patternColumn[i].getInt()]++;
         }
-        return counts;
       },
       numThreads);
   AD_LOG_DEBUG << "Using " << patternCounts.size()
@@ -283,8 +282,7 @@ void CountAvailablePredicates::computePatternTrick(
                << std::endl;
   CountMap<Id> predicateCounts = ad_utility::computeInParallelChunks(
       patternVec.size(), CHUNK_SIZE_PATTERNS,
-      [&patternVec, &patterns](size_t begin, size_t end) {
-        CountMap<Id> counts;
+      [&patternVec, &patterns](CountMap<Id>& counts, size_t begin, size_t end) {
         for (auto [patternIndex, patternCount] : ql::ranges::subrange(
                  patternVec.begin() + begin, patternVec.begin() + end)) {
           // Entities without a pattern contribute no predicates. All other
@@ -296,7 +294,6 @@ void CountAvailablePredicates::computePatternTrick(
             counts[predicate] += patternCount;
           }
         }
-        return counts;
       },
       numThreads);
   AD_LOG_DEBUG << "Finished translating pattern counts to predicate counts"
