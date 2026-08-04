@@ -79,7 +79,7 @@ using FirstArgumentT = typename FirstArgument<T>::type;
 // Split the range `[0, numElements)` into consecutive chunks of `chunkSize`
 // elements (the last chunk may be smaller), fold all of them into a single
 // `Result`, and return it. Each of `numThreads` worker threads (`0`, the
-// default, means one thread per hardware thread) keeps one `Result` of its own
+// default, means the number of logical cores) keeps one `Result` of its own
 // and calls `computeChunk(result, begin, end)` for each of the chunks it gets.
 // The chunks are handed out to the threads dynamically. At the end, the
 // per-thread results are combined via `result.mergeWith(otherResult)`. The

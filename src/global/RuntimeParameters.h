@@ -147,7 +147,7 @@ struct RuntimeParameters {
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
   // The maximum number of threads for the parallel counting loops of the
   // pattern trick (see `CountAvailablePredicates`). The value `0` (the
-  // default) means one thread per hardware thread.
+  // default) means the number of logical cores of the machine.
   SizeT patternTrickNumThreads_{0, "pattern-trick-num-threads"};
   // The number of threads for the parallel sort of intermediate results
   // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
