@@ -28,7 +28,7 @@ add_library(engine
 # too makes the engine PCH inherit `BOOST_PROGRAM_OPTIONS_DYN_LINK` (when
 # Boost is shared) so the PCH matches qlever-server's compile flags and is
 # not silently discarded by GCC with a `-Winvalid-pch` warning.
-qlever_target_link_libraries(engine qlever_util index parser global sparqlExpressions mediaTypes sortPerformanceEstimator Boost::iostreams Boost::program_options s2 spatialjoin-dev pb_util pb_util_geo)
+qlever_target_link_libraries(engine qlever_util index sparqlParser global sparqlExpressions mediaTypes sortPerformanceEstimator Boost::iostreams Boost::program_options s2 spatialjoin-dev pb_util pb_util_geo)
 
 # When `REDUCED_FEATURE_SET_FOR_CPP17` is set, do not link `engine` against the
 # `http` library (which requires C++20). This works because `http` is only used
@@ -45,6 +45,6 @@ endif()
 # containing EH pads — the same LLVM bug that disables `HttpTest`).
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     add_library(server Server.cpp)
-    qlever_target_link_libraries(server engine qlever_util index parser global http
+    qlever_target_link_libraries(server engine qlever_util index sparqlParser global http
     sortPerformanceEstimator qlever metrics)
 endif ()
