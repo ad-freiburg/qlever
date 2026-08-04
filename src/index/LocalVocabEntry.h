@@ -192,21 +192,40 @@ class alignas(16) LocalVocabEntry
   // words of the main vocabulary, so comparing it to a word that is in neither
   // vocabulary has to yield the same result as comparing the corresponding
   // `Id`s, which are compared by their positions.
+  //
+  // NOTE: Looking up the position requires a lookup in the (on-disk) vocabulary
+  // of the index, which is cached per entry, but which the comparison of two
+  // entries did not require before the auxiliary vocabulary was introduced. So
+  // for a workload that only ever compares entries of a `LocalVocab` to each
+  // other (and never to an `Id` of the index, which needs the position anyway),
+  // this is a performance regression. The redesign that is described in the
+  // class comment above has to take that into account: the position is only
+  // needed for the internal order, whereas a semantic comparison can compare
+  // the strings directly. Note that `operator==` below deliberately does not
+  // look up the position at all.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 
   // Two entries are equal if and only if their string representations are, so
   // forward to the base class instead of going through `compareThreeWay`, which
-  // would use the much more expensive collation of the vocabulary. This is what
+  // would use the much more expensive collation of the vocabulary and would
+  // look up the position in the vocabulary (see the note above). This is what
   // happens implicitly anyway (the operators defined by the macro above do not
   // include `operator==`), but state it explicitly so that it doesn't silently
   // change when `compareThreeWay` does.
   bool operator==(const LocalVocabEntry& rhs) const {
     return static_cast<const Base&>(*this) == static_cast<const Base&>(rhs);
   }
-  // Declaring `operator==` above hides the ones inherited from `Base`, which
+  bool operator!=(const LocalVocabEntry& rhs) const { return !(*this == rhs); }
+  // Declaring the operators above hides the ones inherited from `Base`, which
   // would otherwise make comparisons against a plain `LiteralOrIri` ill-formed.
+  // NOTE: `Base` has an `operator!=` only in C++17 mode (in C++20 mode it is
+  // synthesized from its `operator==`), so it cannot be pulled in via a
+  // `using` declaration, but only be forwarded to explicitly.
   using Base::operator==;
+  bool operator!=(const Base& rhs) const {
+    return static_cast<const Base&>(*this) != rhs;
+  }
 
   // Expose `context_` for testing.
   const LocalVocabContext& getContextForTesting() const { return *context_; }

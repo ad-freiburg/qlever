@@ -587,7 +587,7 @@ TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
   // For a literal without a language tag the standard requires the empty
   // string, and the values that are encoded directly in the `Id` all are
   // literals.
-  auto emptyString = Optional(std::string{""});
+  auto emptyString = Optional(::testing::IsEmpty());
   for (Id id :
        {boolTrue_, int_, double_, date_, geoPoint_, plainLiteral_,
         typedLiteral_, wktLiteral_, localPlainLiteral_, localTypedLiteral_,

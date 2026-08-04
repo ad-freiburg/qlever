@@ -10,7 +10,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,6 +21,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/AuxVocabulary.h"
+#include "parser/LiteralOrIri.h"
 
 namespace {
 
@@ -50,11 +50,10 @@ Id auxId(uint64_t index) {
 // An index whose main vocabulary holds `<a>`, `<c>`, `<p>`, and `<s>`, and
 // whose auxiliary vocabulary holds `auxWords`.
 Index makeIndexWithAuxVocab() {
-  Index index = ad_utility::testing::makeTestIndex(
-      gtestCurrentTestName(), "<s> <p> <a> . <s> <p> <c> .");
-  index.getImpl().setAuxVocabForTesting(
-      std::make_shared<AuxVocabulary>(auxWords));
-  return index;
+  ad_utility::testing::TestIndexConfig config{"<s> <p> <a> . <s> <p> <c> ."};
+  config.auxVocabWords = auxWords;
+  return ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
+                                            std::move(config));
 }
 
 // ____________________________________________________________________________
@@ -139,8 +138,10 @@ TEST(AuxVocabIndex, sortsAfterAllOtherDatatypes) {
                       auxId(1)};
   for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
     auto datatype = static_cast<Datatype>(i);
-    bool isCovered = ql::ranges::any_of(
-        ids, [datatype](Id id) { return id.getDatatype() == datatype; });
+    // NOTE: `contains` is C++23, so it is not part of `ql::ranges` (which is
+    // `std::ranges` in C++20 mode). Use it directly from `range-v3`, which
+    // `backports/algorithm.h` includes unconditionally.
+    bool isCovered = ::ranges::contains(ids, datatype, &Id::getDatatype);
     ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
         << toString(datatype);
   }
@@ -205,6 +206,41 @@ TEST(AuxVocabIndex, localVocabEntryInAuxVocabulary) {
 }
 
 // ____________________________________________________________________________
+// Unlike the ordering above, the equality of two `LocalVocabEntry`s is (and
+// always was) the equality of their string representations, no matter which
+// vocabulary the words are stored in, see `index/LocalVocabEntry.h`.
+TEST(AuxVocabIndex, localVocabEntryEqualityIgnoresPositionInVocab) {
+  Index index = makeIndexWithAuxVocab();
+  const auto& context = index.getImpl().getLocalVocabContext();
+
+  // `<b>` is a word of the auxiliary vocabulary, `<e>` is contained in neither
+  // vocabulary, and `<a>` is a word of the main vocabulary.
+  auto entryB = LocalVocabEntry::fromIriref("<b>", context);
+  auto entryB2 = LocalVocabEntry::fromIriref("<b>", context);
+  auto entryE = LocalVocabEntry::fromIriref("<e>", context);
+  auto entryA = LocalVocabEntry::fromIriref("<a>", context);
+
+  EXPECT_TRUE(entryB == entryB2);
+  EXPECT_FALSE(entryB != entryB2);
+  for (const auto& other : {entryE, entryA}) {
+    EXPECT_FALSE(entryB == other);
+    EXPECT_TRUE(entryB != other);
+    EXPECT_FALSE(other == entryB);
+    EXPECT_TRUE(other != entryB);
+  }
+
+  // The same holds for the comparison against a plain `LiteralOrIri`, which the
+  // entries inherit from.
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  auto plainB = LiteralOrIri::fromStringRepresentation(
+      std::string{entryB.toStringRepresentation()});
+  EXPECT_TRUE(entryB == plainB);
+  EXPECT_FALSE(entryB != plainB);
+  EXPECT_FALSE(entryE == plainB);
+  EXPECT_TRUE(entryE != plainB);
+}
+
+// ____________________________________________________________________________
 TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
   // Without an auxiliary vocabulary, the word `<b>` is simply positioned in the
   // main vocabulary, as it always was.
@@ -229,7 +265,7 @@ TEST(AuxVocabIndex, exportOfAuxVocabIds) {
 
   auto iriId = auxId(1);
   auto literalId = auxId(0);
-  auto toStringRepresentation = [](const auto& literalOrIri) {
+  auto toStringRepresentation = [](const auto& literalOrIri) -> decltype(auto) {
     return literalOrIri.toStringRepresentation();
   };
 

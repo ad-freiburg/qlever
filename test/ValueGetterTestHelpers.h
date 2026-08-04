@@ -185,19 +185,11 @@ inline const std::string encodedIri = "<https://encoded.example.com/123>";
 // `Id`, such that an `Id` of every `Datatype` can be created for it (see the
 // fixture in `ValueGetterTest.cpp`).
 //
-// NOTE: The knowledge graph deliberately contains none of the `auxVocabWords`
-// (an auxiliary vocabulary is disjoint from the vocabulary of the main index)
-// and is used by no other test. The latter matters because `getQec` caches its
-// indices by the configuration, so the auxiliary vocabulary that is set here
-// would otherwise leak into unrelated tests.
+// NOTE: The knowledge graph deliberately contains none of the `auxVocabWords`,
+// because an auxiliary vocabulary is disjoint from the vocabulary of the main
+// index.
 struct AuxVocabTestContext : TestContextWithGivenTTl {
-  AuxVocabTestContext() : TestContextWithGivenTTl{makeConfig()} {
-    // `getQec` only hands out a `const Index&`, but setting the auxiliary
-    // vocabulary is a deliberate test-only mutation of that very index.
-    const_cast<Index&>(qec->getIndex())
-        .getImpl()
-        .setAuxVocabForTesting(std::make_shared<AuxVocabulary>(auxVocabWords));
-  }
+  AuxVocabTestContext() : TestContextWithGivenTTl{makeConfig()} {}
 
   // The `Id` of the given word of the auxiliary vocabulary. The word has to be
   // one of `auxVocabWords`.
@@ -244,6 +236,7 @@ struct AuxVocabTestContext : TestContextWithGivenTTl {
         mainLangLiteral, " , ", mainWktLiteral, " , ", mainIri, " .\n")};
     config.encodedPrefixesWithoutAngleBrackets =
         std::vector<std::string>{encodedIriPrefix};
+    config.auxVocabWords = auxVocabWords;
     return config;
   }
 };
@@ -382,7 +375,7 @@ class ValueGetterTester {
       std::string literal,
       ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
@@ -400,7 +393,7 @@ class ValueGetterTester {
   void checkFromVocab(std::string literal,
                       ::testing::Matcher<std::optional<ReturnType>> expected,
                       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
     VocabIndex idx;
@@ -415,7 +408,7 @@ class ValueGetterTester {
   void checkFromValueId(ValueId input,
                         ::testing::Matcher<std::optional<ReturnType>> expected,
                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
     auto res = getter(input, &testContext.context);
@@ -428,7 +421,7 @@ class ValueGetterTester {
   void checkFromAuxVocab(const std::string& word,
                          ::testing::Matcher<std::optional<ReturnType>> expected,
                          Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     AuxVocabTestContext testContext;
     auto res = getter(testContext.auxId(word), &testContext.context);
@@ -440,7 +433,7 @@ class ValueGetterTester {
   void checkFromLiteral(std::string literal,
                         ::testing::Matcher<std::optional<ReturnType>> expected,
                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     ValueGetter getter;
     TestContextWithGivenTTl testContext{testTtl_};
     auto litOrIri =
@@ -455,7 +448,7 @@ class ValueGetterTester {
       std::string wktInput,
       ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     checkFromVocab(wktInput, expected);
     checkFromLocalVocab(wktInput, expected);
     checkFromLiteral(wktInput, expected);
@@ -498,7 +491,7 @@ using IriOrUriValueGetterTester =
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
+  auto trace = generateLocationTrace(sourceLocation);
   // We input `wktInput` twice because we expect the value getter to return the
   // wkt string if it is given a plain wkt string.
   GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(

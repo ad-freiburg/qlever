@@ -13,6 +13,7 @@
 #ifndef QLEVER_SRC_INDEX_EXPORTIDS_H
 #define QLEVER_SRC_INDEX_EXPORTIDS_H
 
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
+#include "util/Algorithm.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/ValueIdentity.h"
@@ -184,8 +186,11 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
-    if (!(datatype == VocabIndex || datatype == LocalVocabIndex ||
-          datatype == AuxVocabIndex)) {
+    // The datatypes of the vocabularies that store their words as strings. Only
+    // those can hold a literal.
+    static constexpr std::array stringVocabDatatypes{
+        VocabIndex, LocalVocabIndex, AuxVocabIndex};
+    if (!ad_utility::contains(stringVocabDatatypes, datatype)) {
       return std::nullopt;
     }
   }

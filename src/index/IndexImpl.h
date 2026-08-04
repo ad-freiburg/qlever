@@ -286,7 +286,10 @@ class IndexImpl {
   // vocabulary is `setAuxVocabForTesting`.
   const AuxVocabulary* auxVocab() const { return auxVocab_.get(); }
 
-  // Set the auxiliary vocabulary, see above.
+  // Set the auxiliary vocabulary, see above. NOTE: Tests that need an index
+  // with an auxiliary vocabulary should not call this directly, but set
+  // `TestIndexConfig::auxVocabWords` (see `test/util/IndexTestHelpers.h`), such
+  // that the vocabulary is part of the index right from its creation.
   void setAuxVocabForTesting(std::shared_ptr<const AuxVocabulary> auxVocab) {
     auxVocab_ = std::move(auxVocab);
   }

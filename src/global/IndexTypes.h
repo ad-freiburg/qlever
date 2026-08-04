@@ -20,9 +20,6 @@ inline constexpr ad_utility::IndexTag wordVocabIndexTag = "WordVocabIndex";
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, wordVocabIndexTag>;
 inline constexpr ad_utility::IndexTag blankNodeIndexTag = "BlankNodeIndex";
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, blankNodeIndexTag>;
-// An index into the auxiliary vocabulary of an index, which holds the words
-// that were added by updates after the main index was built (see
-// `index/vocabulary/AuxVocabulary.h`).
 inline constexpr ad_utility::IndexTag auxVocabIndexTag = "AuxVocabIndex";
 using AuxVocabIndex = ad_utility::TypedIndex<uint64_t, auxVocabIndexTag>;
 inline constexpr ad_utility::IndexTag documentIndexTag = "DocumentIndex";

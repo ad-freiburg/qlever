@@ -42,8 +42,7 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
-  // An index into the auxiliary vocabulary of an index (see
-  // `index/vocabulary/AuxVocabulary.h`).
+  // See `index/vocabulary/AuxVocabulary.h`.
   AuxVocabIndex,
   MaxValue = AuxVocabIndex
   // Note: Unfortunately, we cannot easily get the size of an enum.

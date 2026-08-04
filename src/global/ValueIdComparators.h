@@ -539,6 +539,18 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // `ValueId::compareThreeWay` (the internal order) for the string types, but a
 // separate, explicitly semantic comparison.
 // TODO<joka921> Implement that comparison in a follow-up PR.
+//
+// NOTE: The auxiliary vocabulary is not the only source of semantic
+// incorrectness here, it is only the one that this comment is about. Two
+// pre-existing ones, which are tracked separately and which the fix above
+// should keep in mind:
+// 1. Comparing an `Id` of type `EncodedVal` to a word of one of the
+//    vocabularies is not correct either, not even for equality, because an
+//    encoded IRI is ordered by its encoding and not by its string value, see
+//    issue #2448.
+// 2. Comparing literals with different datatypes blurs the distinction between
+//    `sameTerm` and `=`, which is also why `!(A = B)` and `A != B` currently
+//    behave differently, see issue #2405.
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysUndef,
           typename Comparator>
