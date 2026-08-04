@@ -239,6 +239,134 @@ TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
 }
 
 // ____________________________________________________________
+// Build a `CountAvailablePredicates` operation for the given `input`, of which
+// column 0 holds the subjects and column 1 the pattern indices. The input is
+// declared as sorted by the subjects, so that no additional `Sort` is added.
+static std::shared_ptr<QueryExecutionTree> makePatternTrickSubtree(
+    QueryExecutionContext* qec, IdTable input) {
+  return ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input),
+      std::vector<std::optional<Variable>>{Variable{"?x"},
+                                           Variable{"?predicate"}},
+      false, std::vector<ColumnIndex>{0});
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, countAvailablePredicatesEstimates) {
+  IdTable input{2, makeAllocator()};
+  input.push_back({Int(0), Int(0)});
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  // The multiplicity of the counts cannot be determined without computing the
+  // result, so it always is 1.
+  EXPECT_FLOAT_EQ(patternTrick.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(patternTrick.getMultiplicity(1), 1.0f);
+  // The estimates are very rough, we only check that they are computed at all.
+  EXPECT_NO_THROW(patternTrick.getSizeEstimate());
+  EXPECT_NO_THROW(patternTrick.getCostEstimate());
+  EXPECT_THAT(patternTrick.getCacheKey(),
+              ::testing::HasSubstr("COUNT_AVAILABLE_PREDICATES (col 0)"));
+  EXPECT_EQ(patternTrick.getDescriptor(), "CountAvailablePredicates");
+  EXPECT_THAT(patternTrick.getChildren(), ::testing::SizeIs(1));
+  EXPECT_FALSE(patternTrick.knownEmptyResult());
+  EXPECT_THAT(patternTrick.resultSortedOn(), ::testing::IsEmpty());
+  EXPECT_EQ(patternTrick.getResultWidth(), 2u);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickEmptyInput) {
+  // The pattern trick on an empty input yields an empty result.
+  IdTable input{2, makeAllocator()};
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  EXPECT_EQ(patternTrick.computeResultOnlyForTesting().idTableView().numRows(),
+            0u);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickEntitiesWithoutPattern) {
+  // Entities that have no pattern at all contribute no predicates.
+  auto Voc = ad_utility::testing::VocabId;
+  IdTable input{2, makeAllocator()};
+  input.push_back({Voc(0), Int(Pattern::NoPattern)});
+  input.push_back({Voc(1), Int(Pattern::NoPattern)});
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  EXPECT_EQ(patternTrick.computeResultOnlyForTesting().idTableView().numRows(),
+            0u);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickEntitiesWithoutPatternWiderInput) {
+  // The same as above, but with an input of three columns, which instantiates a
+  // different `computePatternTrick<WIDTH>`. The middle column is ignored.
+  auto Voc = ad_utility::testing::VocabId;
+  IdTable input{3, makeAllocator()};
+  input.push_back({Voc(0), Voc(17), Int(0)});
+  input.push_back({Voc(1), Voc(17), Int(Pattern::NoPattern)});
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input),
+      std::vector<std::optional<Variable>>{V{"?x"}, V{"?y"}, V{"?predicate"}},
+      false, std::vector<ColumnIndex>{0});
+  auto patternTrick =
+      CountAvailablePredicates(qec, subtree, 0, V{"?predicate"}, V{"?count"});
+  // Only the first entity has a pattern, and pattern `0` holds two predicates.
+  const auto& patterns = qec->getIndex().getPatterns();
+  VectorTable expected;
+  for (Id predicate : patterns[0]) {
+    expected.push_back({predicate, Int(1)});
+  }
+  runTestUnordered(patternTrick, expected);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickWithLargeInput) {
+  // An input that is large enough to be split into several chunks that are
+  // processed in parallel, the partial results of which then have to be merged
+  // (see `CHUNK_SIZE_ROWS` in `CountAvailablePredicates.cpp`).
+  auto Voc = ad_utility::testing::VocabId;
+  const auto& patterns = qec->getIndex().getPatterns();
+  // The patterns of the index of this fixture, see above: `x -> p p2`,
+  // `y -> p p3`, and `z -> p3`.
+  ASSERT_EQ(patterns.size(), 3u);
+
+  // Each subject appears twice (the duplicates must not be counted twice), and
+  // each of the patterns is used by the same number of subjects. The number of
+  // rows has to exceed `CHUNK_SIZE_ROWS` for the input to be split.
+  constexpr size_t numSubjects = 501'000;
+  static_assert(numSubjects % 3 == 0);
+  static_assert(2 * numSubjects > 500'000);
+  IdTable input{2, makeAllocator()};
+  input.reserve(2 * numSubjects);
+  for (size_t i = 0; i < numSubjects; ++i) {
+    input.push_back({Voc(i), Int(i % 3)});
+    input.push_back({Voc(i), Int(i % 3)});
+  }
+
+  // Each predicate is counted once for each subject the pattern of which
+  // contains that predicate.
+  ad_utility::HashMap<Id, size_t> expectedCounts;
+  for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) {
+    for (Id predicate : patterns[patternIdx]) {
+      expectedCounts[predicate] += numSubjects / 3;
+    }
+  }
+  VectorTable expected;
+  for (const auto& [predicate, count] : expectedCounts) {
+    expected.push_back({predicate, Int(count)});
+  }
+  ASSERT_THAT(expected, ::testing::SizeIs(3));
+
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  runTestUnordered(patternTrick, expected);
+}
+
+// ____________________________________________________________
 TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
   /* Manual setup of the operations for the full pattern trick:
    * SELECT ?predicate COUNT(DISTINCT ?x) WHERE {
