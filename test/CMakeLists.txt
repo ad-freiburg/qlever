@@ -3,11 +3,12 @@ include(GoogleTest)
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
-# Link binary ${basename} against `gmock_main`, the threading library, the
-# general test utilities and all libraries that are specified as additional
-# arguments.
+# Link binary ${basename} against QLever's test `main` (which runs the tests
+# in a scratch working directory, see `util/QleverTestMain.cpp`), the
+# threading library, the general test utilities and all libraries that are
+# specified as additional arguments.
 function(linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
+    qlever_target_link_libraries(${basename} ${ARGN} qleverTestMain GTest::gtest GTest::gmock ${CMAKE_THREAD_LIBS_INIT} global)
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -17,8 +18,8 @@ function(addTest basename)
 endfunction()
 
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
-# Link the executable `basename` against `gmock_main`,threading library,
-# and all `additionLibraries` which are passed as arguments.
+# Link the executable `basename` against QLever's test `main`, the threading
+# library, and all `additionLibraries` which are passed as arguments.
 # Then register the test cases from the executable with `ctest` (see
 # `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
 # possible regimes).
@@ -53,9 +54,9 @@ endfunction()
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock qleverTestMain testUtil ${CMAKE_THREAD_LIBS_INIT})
     # The following line (as opposed to using `gtest_discover_tests`) has the effect that `ctest` will treat all the
-    # unit tests as a single test case and will simply run the executable (using the main function from `gtest_main`.
+    # unit tests as a single test case and will simply run the executable (using the main function from `qleverTestMain`.
     # This decreases the runtime overhead per unit tests in particular for sanitizer builds.
     add_test(NAME QLeverAllUnitTests COMMAND $<TARGET_FILE:QLeverAllUnitTestsMain>)
 else ()
@@ -80,7 +81,7 @@ endfunction()
 
 # Usage: `addAndLinkTest[NoLibs](basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
-# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
+# `basename.cpp`. All tests are linked against `qleverTestMain` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
 
@@ -97,7 +98,7 @@ endfunction()
 
 
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
-# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
+# `basename.cpp`. All tests are linked against `qleverTestMain` and the threading library.
 # In contrast to `addLinkAndDiscoverTest` this doesn't let ctest run all subtests individually,
 # but all at once to reduce overhead in the CI pipeline.
 function(addLinkAndRunAsSingleTest basename)
