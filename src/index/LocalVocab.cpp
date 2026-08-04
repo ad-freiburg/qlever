@@ -58,6 +58,20 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
 }
 
 // _____________________________________________________________________________
+Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
+  // `positionInVocab` returns a half-open range that is at most one wide, so
+  // `lowerBound != upperBound` means that `word` does have a representation
+  // outside of a local vocab, and the bits of `lowerBound` then are exactly the
+  // corresponding `Id`: a `VocabIndex` if `word` is in the vocabulary of the
+  // index, an `EncodedVal` if it is directly encodable (`EncodedIriManager`).
+  auto [lowerBound, upperBound] = word.positionInVocab();
+  if (lowerBound != upperBound) {
+    return Id::fromBits(lowerBound.get());
+  }
+  return Id::makeFromLocalVocabIndex(getIndexAndAddIfNotContained(word));
+}
+
+// _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
     const LocalVocabEntry& word) const {
   auto localVocabIndex = primaryWordSet().find(word);

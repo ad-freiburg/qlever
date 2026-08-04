@@ -130,18 +130,13 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
     return id;
   }  // fast path
   const auto& entry = *id.getLocalVocabIndex();
-  // If the same term also exists in the index vocabulary, use its `VocabIndex`
-  // `Id`. Otherwise the term reached via a `LocalVocab` (e.g. produced by
-  // `STR`) and the same term coming from the data would yield different `Id`s,
-  // and since `DeduplicationKey`s compare bitwise, that duplicate would be
-  // missed. `positionInVocab` returns a half-open range that is at most one
-  // wide, so `lowerBound != upperBound` means an exact match at `lowerBound`.
-  const auto [lowerBound, upperBound] = entry.positionInVocab();
-  if (lowerBound != upperBound) {
-    return ValueId::fromBits(lowerBound.get());
-  }
   const size_t sizeBefore = dedupVocab_.size();
-  const auto* index = dedupVocab_.getIndexAndAddIfNotContained(entry);
+  // NOTE: `getIdAndAddIfNotContained` (not `getIndexAndAddIfNotContained`) is
+  // essential here: a term reached via a `LocalVocab` (e.g. produced by `STR`)
+  // and the same term coming from the data would otherwise yield different
+  // `Id`s, and since `DeduplicationKey`s compare bitwise, that duplicate would
+  // be missed.
+  ValueId canonicalId = dedupVocab_.getIdAndAddIfNotContained(entry);
   // Only `BatchWise` bounds the size of `dedupVocab_`, so only there do we
   // track the vocab's byte size and check the threshold. We do not track the
   // size of the `dedupVocab_` for `Global` mode, but delegate it in this case
@@ -150,7 +145,7 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   if (isBatchWise() && addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
   }
-  return ValueId::makeFromLocalVocabIndex(index);
+  return canonicalId;
 }
 
 //______________________________________________________________________________

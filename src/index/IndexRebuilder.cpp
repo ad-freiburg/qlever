@@ -132,8 +132,14 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
   insertInfo.reserve(entries.size());
 
   for (auto* entry : entries) {
+    // All entries have to be words that are not yet part of `vocab` (an equal
+    // range means "not contained"), because they are about to be added to it.
+    // `LocalVocab::getIdAndAddIfNotContained` guarantees this.
     const auto& [lower, upper] = entry->positionInVocab();
-    AD_CORRECTNESS_CHECK(lower == upper);
+    AD_CORRECTNESS_CHECK(lower == upper, "The word ",
+                         entry->asLiteralOrIri().toStringRepresentation(),
+                         " is stored in a local vocab although it already is "
+                         "part of the vocabulary of the index");
     Id id = Id::fromBits(upper.get());
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::VocabIndex);
     insertInfo.emplace_back(id.getVocabIndex(),

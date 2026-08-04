@@ -572,6 +572,34 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   EXPECT_EQ(s4.getBits(), blank0.getBits());
 }
 
+// Test that a local vocab entry for a word that is part of the vocabulary of
+// the index is rewritten to the corresponding `VocabIndex` `Id` instead of
+// being copied into the local vocab of the `DeltaTriples`, see
+// https://github.com/ad-freiburg/qlever/issues/3172.
+TEST_F(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab) {
+  DeltaTriples deltaTriples(testQec->getIndex());
+  const IndexImpl& index = testQec->getIndex().getImpl();
+  LocalVocab localVocabOutside;
+  auto triples = makeIdTriples(index, localVocabOutside, {"<a> <upp> <A>"});
+  ASSERT_EQ(triples.size(), 1);
+  auto expectedSubject = triples[0].ids()[0];
+  ASSERT_EQ(expectedSubject.getDatatype(), Datatype::VocabIndex);
+
+  // Store `<a>`, which is part of the vocabulary of the test index, in a local
+  // vocab, as an expression like `IRI(CONCAT("<", "a>"))` would do.
+  triples[0].ids()[0] = Id::makeFromLocalVocabIndex(
+      localVocabOutside.getIndexAndAddIfNotContained(
+          LocalVocabEntry::fromIriref("<a>", index.getLocalVocabContext())));
+  ASSERT_EQ(triples[0].ids()[0].getDatatype(), Datatype::LocalVocabIndex);
+
+  deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
+
+  // The ID is rewritten to the ID that `<a>` has when it comes from the data,
+  // and nothing is stored in the local vocab of the `DeltaTriples`.
+  EXPECT_EQ(triples[0].ids()[0].getBits(), expectedSubject.getBits());
+  EXPECT_TRUE(deltaTriples.localVocab_.empty());
+}
+
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // Preparation.

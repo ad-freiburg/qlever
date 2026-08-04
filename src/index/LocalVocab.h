@@ -16,6 +16,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "global/Id.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
@@ -85,6 +86,17 @@ class LocalVocab {
   // primary.
   LocalVocabIndex getIndexAndAddIfNotContained(const LocalVocabEntry& word);
   LocalVocabIndex getIndexAndAddIfNotContained(LocalVocabEntry&& word);
+
+  // Return an `Id` for `word`. If `word` has a representation that doesn't
+  // reference a local vocab at all, return that and leave this local vocab
+  // unchanged, else behave like `getIndexAndAddIfNotContained`.
+  //
+  // NOTE: Prefer this whenever the resulting `Id`s are compared bitwise or
+  // stored persistently. A word that is constructed at runtime (e.g. via
+  // `CONCAT` or `IRI`) resides in a `LocalVocabEntry` even if it is also part
+  // of the vocabulary of the index, and would then get a different `Id` than
+  // the same word coming from the data.
+  Id getIdAndAddIfNotContained(const LocalVocabEntry& word);
 
   // Like `getIndexAndAddIfNotContained`, but if the `LocalVocabEntry` is not
   // contained in any of the sets, do not add it and return `std::nullopt`.

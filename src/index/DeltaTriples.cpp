@@ -416,8 +416,11 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   // unchanged.
   auto convertId = [this, isGlobalBlankNode, &getLocalBlankNode](Id& id) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      id = Id::makeFromLocalVocabIndex(
-          localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
+      // NOTE: `getIdAndAddIfNotContained` (not `getIndexAndAddIfNotContained`)
+      // is essential here: storing a word that is already in the vocabulary of
+      // the index would give the delta triples two different `Id`s for it, and
+      // a later index rebuild would try to add it to the vocabulary again.
+      id = localVocab_.getIdAndAddIfNotContained(*id.getLocalVocabIndex());
     } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
       auto idx = id.getBlankNodeIndex();
       if (isGlobalBlankNode(idx) ||
