@@ -31,6 +31,27 @@
  * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(Class, members...):
  * Constexpr member version
  *
+ * MACROS FOR DERIVED CLASSES:
+ * The macros above must only be used in classes without base classes, because
+ * the C++20 defaulted operators always compare the base class subobjects first,
+ * while the C++17 implementations only compare the listed members. For a
+ * derived class use the following variants (which only exist as member
+ * operators) instead. They take the (single, public, non-virtual) base class as
+ * their second argument and consistently compare the base class first, then the
+ * listed members. The base class has to define the corresponding operators
+ * itself, which it typically does by using one of the macros above. If the name
+ * of the base class contains a comma (e.g. `Base<A, B>`), then a type alias for
+ * it has to be used, else the preprocessor will not parse the macro arguments
+ * correctly.
+ * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(Class, Base,
+ * members...)
+ * - QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(Class, Base,
+ * members...)
+ * - QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(Class, Base,
+ * members...)
+ * - QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(Class, Base,
+ * members...)
+ *
  * CUSTOM COMPARISON MACROS (for implementing custom comparison logic):
  * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(Class): Friend operator
  * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_CONSTEXPR(Class):
@@ -450,5 +471,34 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
   TEMPLATE_SPEC QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T)
 
 #endif
+
+// The variants of the macros above for derived classes. They are defined in
+// terms of the corresponding non-derived macros by simply prepending the base
+// class subobject to the list of compared members. In C++17 the base class
+// subobject then is the first element of the tie, such that its comparison
+// operators decide before those of the members. In C++20 the additional
+// argument is ignored, because the defaulted operators compare the base class
+// subobjects first anyway. Note that the cast is required to actually call the
+// operators of the base class, because the members and operators of the derived
+// class hide those of the base class.
+#define QL_IMPL_BASE_SUBOBJECT(BASE) static_cast<const BASE&>(*this)
+
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
+                                                                      ...)     \
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(                       \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
+
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(                            \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
+
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
+                                                                      ...)     \
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(                       \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
+
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(                            \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
 
 #endif  // QLEVER_SRC_BACKPORTS_THREE_WAY_COMPARISON_H

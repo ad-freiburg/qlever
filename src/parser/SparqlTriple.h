@@ -62,7 +62,10 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
         g_{std::move(g)} {}
   Graph g_;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SparqlTripleSimpleWithGraph, g_)
+  // Two of these are equal if all members are equal (including the members of
+  // the base class).
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(
+      SparqlTripleSimpleWithGraph, SparqlTripleSimple, g_)
 };
 
 // A triple where the predicate is a `PropertyPath` or a `Variable`.
