@@ -15,10 +15,15 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
+#include <new>
+#include <utility>
 #include <vector>
 
+#include "backports/memory_resource.h"
 #include "util/AllocatorPmr.h"
 #include "util/AllocatorWithLimitImpl.h"
+#include "util/Exception.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -33,6 +38,63 @@ using AllocatorBackendTypes =
                      ad_utility::PmrAllocator<int>>;
 
 TYPED_TEST_SUITE(AllocatorBackendTest, AllocatorBackendTypes);
+
+// A `ql::pmr::memory_resource` for which every allocation fails. Used below to
+// simulate an upstream resource (e.g. an injected bounded arena) that cannot
+// satisfy a request although the memory limit would allow it.
+class AlwaysThrowingResource : public ql::pmr::memory_resource {
+ protected:
+  void* do_allocate(std::size_t, std::size_t) override {
+    throw std::bad_alloc{};
+  }
+  void do_deallocate(void*, std::size_t, std::size_t) override {
+    // Never called, as `do_allocate` always throws.
+    AD_FAIL();
+  }
+  bool do_is_equal(
+      const ql::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+};
+
+// Both backends reserve the requested memory from their tracker *before* they
+// hand the request to the underlying allocator, and have to give that
+// reservation back when the underlying allocation fails. Provoking such a
+// failure necessarily differs between the backends, so it is described by the
+// following traits, which the shared test below then uses.
+template <typename Allocator>
+struct FailingUnderlyingAllocation;
+
+// For the limit backend, the underlying allocator is a `std::allocator<int>`,
+// which cannot be replaced, so the failure has to be provoked by requesting an
+// absurd amount of memory: 8 EB, which `std::allocator` either rejects right
+// away because it exceeds its `max_size()`, or attempts and fails, because 8 EB
+// exceed the address space. The memory limit is set to the maximum, so that the
+// reservation for those bytes still succeeds. Note that the number of bytes
+// must not overflow, as the test below checks that exactly those bytes are
+// given back to the tracker.
+template <>
+struct FailingUnderlyingAllocation<
+    ad_utility::allocatorImpl::AllocatorWithLimit<int>> {
+  static size_t numElements() { return (size_t{1} << 63) / sizeof(int); }
+  static ad_utility::allocatorImpl::AllocatorWithLimit<int> makeAllocator() {
+    return ad_utility::allocatorImpl::AllocatorWithLimit<int>::makeLimited(
+        ad_utility::MemorySize::max());
+  }
+};
+
+// For the PMR backend, the underlying allocator is the upstream resource, so a
+// resource that always throws can simply be injected.
+template <>
+struct FailingUnderlyingAllocation<ad_utility::PmrAllocator<int>> {
+  static size_t numElements() { return 1; }
+  static ad_utility::PmrAllocator<int> makeAllocator() {
+    // The allocator only stores a pointer to the upstream resource, which
+    // therefore has to outlive it.
+    static AlwaysThrowingResource throwingUpstream;
+    return ad_utility::makePmrAllocatorWithLimit<int>(100_B, &throwingUpstream);
+  }
+};
 
 // Allocating within the budget works; exceeding it throws
 // AllocationExceedsLimitException; amountMemoryLeft() tracks allocate and
@@ -145,6 +207,45 @@ TYPED_TEST(AllocatorBackendTest, UnlimitedAllocator) {
   int* p = alloc.allocate(1000);
   ASSERT_NE(p, nullptr);
   alloc.deallocate(p, 1000);
+}
+
+// If the underlying allocator fails although the memory limit would have
+// allowed the allocation, the reserved memory is given back to the tracker, so
+// that it remains available for later allocations.
+TYPED_TEST(AllocatorBackendTest, UnderlyingAllocationFailureReleasesMemory) {
+  using Failing = FailingUnderlyingAllocation<TypeParam>;
+  auto alloc = Failing::makeAllocator();
+  const auto memoryLeftBefore = alloc.amountMemoryLeft();
+  EXPECT_THROW(alloc.allocate(Failing::numElements()), std::bad_alloc);
+  EXPECT_EQ(alloc.amountMemoryLeft(), memoryLeftBefore);
+}
+
+// Copy assignment and move assignment let the target allocator share the budget
+// of the source. As both backends deliberately copy rather than steal on move,
+// a moved-from allocator stays valid and keeps sharing that budget.
+TYPED_TEST(AllocatorBackendTest, Assignment) {
+  static_assert(sizeof(int) == 4);
+  auto alloc = TypeParam::makeLimited(8_B);
+  auto copyAssigned = TypeParam::makeLimited(20_B);
+  ASSERT_NE(copyAssigned, alloc);
+
+  copyAssigned = alloc;
+  EXPECT_EQ(copyAssigned, alloc);
+  EXPECT_EQ(copyAssigned.amountMemoryLeft(), 8_B);
+  // Allocating via the copy now counts towards the budget of `alloc`.
+  int* p = copyAssigned.allocate(1);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
+  copyAssigned.deallocate(p, 1);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 8_B);
+
+  auto moveAssigned = TypeParam::makeLimited(20_B);
+  moveAssigned = std::move(copyAssigned);
+  EXPECT_EQ(moveAssigned, alloc);
+  // The moved-from allocator is still usable and still shares the same budget.
+  int* q = copyAssigned.allocate(1);
+  EXPECT_EQ(moveAssigned.amountMemoryLeft(), 4_B);
+  copyAssigned.deallocate(q, 1);
+  EXPECT_EQ(moveAssigned.amountMemoryLeft(), 8_B);
 }
 
 // operator==: an allocator equals itself and its own .as<int>() (same backing
