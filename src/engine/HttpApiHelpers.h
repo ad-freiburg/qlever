@@ -16,8 +16,8 @@
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
-// Helpers to parse QLever's HTTP api, in particular http query parameters in
-// the ?key=value form.
+// Helpers to parse QLever's HTTP api, in particular HTTP query parameters in
+// the `?key=value` form.
 namespace qlever::http_api_helpers {
 // Parse the `pin-geo-index-simplification` parameter (the maximum error in
 // meters for the simplification of geometries before indexing) from its
@@ -28,18 +28,22 @@ namespace qlever::http_api_helpers {
 std::optional<double> parsePinGeoIndexSimplification(
     const std::optional<std::string>& simplificationStr);
 
-// Determine the media type to be used for the result of a query from the
-// (historical) `?action=[some-export-specification]` HTTP query parameter, e.g.
-// `?action=csv_export` requests CSV. Return `nullopt` if no such query
-// parameter is set.
-std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
-    const ad_utility::url_parser::ParamValueMap& params);
+// Determine media type candidates to be used for the result of query. Media
+// types are determined (in this order) by the current action ((historical)
+// `?action=[some-export-specification]` HTTP query parameter, e.g.
+// `?action=csv_export` requests CSV) and by the "Accept" header of the request.
+// The latter option can produce multiple candidates. The explicit
+// `action=..._export` parameter have precedence over the `Accept:...` header
+// field.
+std::vector<ad_utility::MediaType> determineMediaTypes(
+    const ad_utility::url_parser::ParamValueMap& params,
+    std::string_view acceptHeader);
 
 // Helper struct defining the pinning of subtrees and the final result of a
 // query into the cache.
 struct ResultPinning {
-  bool pinSubtrees = false;
-  bool pinResult = false;
+  bool pinSubtrees_ = false;
+  bool pinResult_ = false;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees,
                                               pinResult)

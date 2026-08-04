@@ -13,13 +13,14 @@
 #include "engine/HttpApiHelpers.h"
 #include "gmock/gmock.h"
 #include "util/GTestHelpers.h"
+#include "util/http/HttpServer.h"
 
 namespace {
 using namespace qlever::http_api_helpers;
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(RequestParametersTest, parsePinGeoIndexSimplification) {
+TEST(HttpApiHelpersTest, parsePinGeoIndexSimplification) {
   // No value given - no simplification.
   EXPECT_EQ(parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
 
@@ -41,7 +42,37 @@ TEST(RequestParametersTest, parsePinGeoIndexSimplification) {
 }
 
 // _____________________________________________________________________________
-TEST(RequestParametersTest, determineResultPinning) {
+TEST(HttpApiHelpersTest, determineMediaType) {
+  auto checkActionMediatype = [&](const std::string& actionName,
+                                  ad_utility::MediaType expectedMediaType) {
+    EXPECT_THAT(determineMediaTypes({{"action", {actionName}}}, ""),
+                testing::ElementsAre(expectedMediaType));
+  };
+  // The media type associated with the action overrides the `Accept` header.
+  EXPECT_THAT(determineMediaTypes({{"action", {"csv_export"}}},
+                                  "application/sparql-results+json"),
+              testing::ElementsAre(ad_utility::MediaType::csv));
+  checkActionMediatype("csv_export", ad_utility::MediaType::csv);
+  checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
+  checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
+  checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
+  checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
+  checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
+  EXPECT_THAT(determineMediaTypes({}, "application/sparql-results+json"),
+              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
+  // No supported media type in the `Accept` header. (Contrary to it's docstring
+  // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
+  // exception if no supported media type is found.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      determineMediaTypes({}, "text/css"),
+      testing::HasSubstr("Not a single media type known to this parser was "
+                         "detected in \"text/css\"."));
+  // No or empty `Accept` header means that any content type is allowed.
+  EXPECT_THAT(determineMediaTypes({}, ""), testing::ElementsAre());
+}
+
+// _____________________________________________________________________________
+TEST(HttpApiHelpersTest, determineResultPinning) {
   EXPECT_EQ(determineResultPinning(
                 {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
             ResultPinning(true, true));
@@ -52,7 +83,7 @@ TEST(RequestParametersTest, determineResultPinning) {
 }
 
 // _____________________________________________________________________________
-TEST(RequestParametersTest, parseSendLimit) {
+TEST(HttpApiHelpersTest, parseSendLimit) {
   // No value given - no specific limit given.
   EXPECT_EQ(parseSendLimit({}), std::nullopt);
 
