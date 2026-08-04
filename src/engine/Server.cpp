@@ -1133,8 +1133,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   }
 
   // Update the `ParsedQuery` with the export limit when the response
-  // content-type is `application/qlever-results+json` and ensure that the
-  // offset is not applied twice when exporting the query.
+  // content-type is `application/qlever-results+json` (or, if enabled via
+  // runtime parameter, `application/sparql-results+json`).
   plannedQuery->parsedQuery().updateExportLimit(
       mediaType, qlever::http_api_helpers::parseSendLimit(params));
 

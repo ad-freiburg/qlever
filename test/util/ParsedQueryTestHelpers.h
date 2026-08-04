@@ -23,8 +23,7 @@ inline const EncodedIriManager* encodedIriManager() {
   return &instance;
 }
 
-// Helper function that parses a SPARQL query string into a typed `ParsedQuery`
-// object.
+// Parse a SPARQL query string into a typed `ParsedQuery` object.
 inline auto parseQuery(std::string query,
                        const std::vector<DatasetClause>& datasets = {}) {
   return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
@@ -33,4 +32,4 @@ inline auto parseQuery(std::string query,
 
 }  // namespace ad_utility::testing
 
-#endif
+#endif  // QLEVER_TEST_UTIL_PARSEDQUERYTESTHELPERS_H

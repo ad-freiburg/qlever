@@ -58,7 +58,7 @@ TEST(HttpApiHelpersTest, determineMediaType) {
   checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
   EXPECT_THAT(determineMediaTypes({}, "application/sparql-results+json"),
               ::testing::ElementsAre(ad_utility::MediaType::sparqlJson));
-  // No supported media type in the `Accept` header. (Contrary to it's docstring
+  // No supported media type in the `Accept` header. (Contrary to its docstring
   // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
   // exception if no supported media type is found.
   AD_EXPECT_THROW_WITH_MESSAGE(

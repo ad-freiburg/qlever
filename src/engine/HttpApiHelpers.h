@@ -18,7 +18,7 @@
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
-// Helpers to parse QLever's HTTP api, in particular HTTP query parameters in
+// Helpers to parse QLever's HTTP API, in particular HTTP query parameters in
 // the `?key=value` form.
 namespace qlever::http_api_helpers {
 // Parse the `pin-geo-index-simplification` parameter (the maximum error in
