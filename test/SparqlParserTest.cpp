@@ -23,6 +23,8 @@ using Var = Variable;
 namespace {
 using ad_utility::testing::parseQuery;
 auto lit = ad_utility::testing::tripleComponentLiteral;
+auto iri = ad_utility::testing::iri;
+auto iriV = ad_utility::testing::iriV;
 
 const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {

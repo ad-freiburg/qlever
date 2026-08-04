@@ -82,23 +82,23 @@ TEST(HttpApiHelpersTest, determineResultPinning) {
 
 // _____________________________________________________________________________
 TEST(HttpApiHelpersTest, parseSendLimit) {
+  auto expectInvalidSendLimit = [](std::string value,
+                                   ad_utility::source_location l =
+                                       AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parseSendLimit({{"send", {std::move(value)}}}),
+        ::testing::HasSubstr(
+            "Invalid value for `send`: must be a "
+            "positive integer specifying the number of bindings "
+            "to be exported."));
+  };
   // No value given - no specific limit given.
   EXPECT_EQ(parseSendLimit({}), std::nullopt);
-
   // A valid positive number is parsed correctly.
   EXPECT_THAT(parseSendLimit({{"send", {"12"}}}), ::testing::Optional(12ul));
-
   // A non-numeric value throws.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parseSendLimit({{"send", {"not-a-number"}}}),
-      ::testing::HasSubstr("Invalid value for `send`: must be a "
-                           "positive integer specifying the number of bindings "
-                           "to be exported."));
-
+  expectInvalidSendLimit("not-a-number");
   // A negative value throws.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parseSendLimit({{"send", {"-1"}}}),
-      ::testing::HasSubstr("Invalid value for `send`: must be a "
-                           "positive integer specifying the number of bindings "
-                           "to be exported."));
+  expectInvalidSendLimit("-1");
 }

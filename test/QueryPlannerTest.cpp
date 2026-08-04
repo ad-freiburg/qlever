@@ -9,14 +9,15 @@
 #include <range/v3/view/cartesian_product.hpp>
 
 #include "./printers/PayloadVariablePrinters.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
-#include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -24,6 +25,7 @@ namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
+using ad_utility::testing::parseQuery;
 using queryPlannerTestHelpers::NamedTag;
 }  // namespace
 using ::testing::HasSubstr;
@@ -31,11 +33,6 @@ using ::testing::HasSubstr;
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
-}
-
-auto parseQuery(std::string query) {
-  static EncodedIriManager evM;
-  return SparqlParser::parseQuery(&evM, std::move(query));
 }
 
 TEST(QueryPlanner, createTripleGraph) {
