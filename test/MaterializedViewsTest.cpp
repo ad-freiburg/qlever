@@ -170,18 +170,50 @@ TEST_F(MaterializedViewsTest, Basic) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ViewReferencingAnotherViewDoesNotDeadlock) {
-  // A materialized view's defining query may not itself scan another
-  // materialized view. Analyzing such a view for the query pattern cache would
-  // deadlock on the write lock for `loadedViews_`.
+  // A materialized view's defining query may itself scan another materialized
+  // view. Analyzing such a view for the (cache-key based) query pattern cache
+  // would deadlock on the write lock for `loadedViews_`, so this case must be
+  // detected and skipped instead (see `MaterializedView::computeCacheKey`).
+  // The view must still load successfully and remain usable.
   qlv().writeMaterializedView("baseView", simpleWriteQuery_);
   qlv().loadMaterializedView("baseView");
   qlv().writeMaterializedView("outerView", R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * { ?s view:baseView-g ?x }
     )");
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      qlv().loadMaterializedView("outerView"),
-      ::testing::HasSubstr("must not itself reference a materialized view"));
+  qlv().loadMaterializedView("outerView");
+  EXPECT_TRUE(qlv().isMaterializedViewLoaded("outerView"));
+
+  auto plannedQuery = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * { ?s view:outerView-x ?y }
+    )");
+  auto expectedResult =
+      getQueryResultAsIdTable("SELECT ?s ?y { ?s ?p ?o . BIND(1 AS ?y) }");
+  auto res = plannedQuery.queryExecutionTree().getResult(false);
+  ASSERT_TRUE(res->isFullyMaterialized());
+  EXPECT_THAT(res->idTableView(), matchesIdTable(expectedResult));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ExplicitReferenceWorksWhenAutoRewriteDisabled) {
+  // The `enable-materialized-view-query-rewrite` runtime parameter only
+  // disables the *automatic* substitution of joins/subtrees by materialized
+  // views. It must not affect an *explicit* reference to a view (via the
+  // `view:<name>-<column>` predicate or the `SERVICE` syntax).
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  qlv().loadMaterializedView("testView1");
+
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+
+  auto plannedQuery = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * { ?s view:testView1-g ?x }
+    )");
+  EXPECT_EQ(
+      plannedQuery.queryExecutionTree().getRootOperation()->getDescriptor(),
+      "IndexScan testView1 ?s ?x");
 }
 
 // _____________________________________________________________________________

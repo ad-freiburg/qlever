@@ -192,6 +192,20 @@ class QueryExecutionContext
   void setDisableMaterializedViewRewriting(
       bool disableMaterializedViewRewriting);
 
+  // Whether a materialized view's own defining query is currently being
+  // planned to compute its cache key (see `MaterializedView::computeCacheKey`).
+  // This is unrelated to the `enable-materialized-view-query-rewrite` runtime
+  // parameter: it is only used to detect (and reject) the case where a view's
+  // query references another materialized view, which would otherwise
+  // deadlock on the write lock for the loaded views.
+  bool isAnalyzingMaterializedViewQuery() const {
+    return isAnalyzingMaterializedViewQuery_;
+  }
+
+  void setIsAnalyzingMaterializedViewQuery(bool isAnalyzing) {
+    isAnalyzingMaterializedViewQuery_ = isAnalyzing;
+  }
+
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
   bool areWebsocketUpdatesEnabled() const {
@@ -291,6 +305,9 @@ class QueryExecutionContext
   // `QueryExecutionTree` by cache key. This is needed in
   // `MaterializedViewQueryAnalysis` to prevent a deadlock.
   bool disableMaterializedViewRewriting_ = false;
+
+  // See the documentation for the getter with the same name above.
+  bool isAnalyzingMaterializedViewQuery_ = false;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

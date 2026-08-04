@@ -694,7 +694,11 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   for (const auto& [v, i] : varToCol) {
     // This is only correct if the `QueryExecutionTree` uses the cache key and
     // `VariableToColumnMap` of the new `IndexScan`.
-    auto col = colMap.at(i.columnIndex_);
+    auto it = colMap.find(i.columnIndex_);
+    AD_CORRECTNESS_CHECK(it != colMap.end(),
+                         "Column index not found in the column mapping of a "
+                         "materialized view.");
+    auto col = it->second;
     if (col == 0) {
       s = v;
     } else if (col == 1) {
@@ -734,11 +738,14 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
         "To read from a materialized view its name must be set in the "
         "query configuration.");
   }
-  if (qec->disableMaterializedViewRewriting()) {
-    // This is importantwhen a materialized view's own query is being analyzed
+  if (qec->isAnalyzingMaterializedViewQuery()) {
+    // This is important when a materialized view's own query is being analyzed
     // for the query pattern cache (see `computeCacheKey`), which holds a write
     // lock on `loadedViews_`. `getView` below would try to acquire that same
-    // lock again and deadlock.
+    // lock again and deadlock. Note that this must not be tied to the
+    // `enable-materialized-view-query-rewrite` runtime parameter (as opposed
+    // to `disableMaterializedViewRewriting`), because that parameter only
+    // disables the *automatic* substitution, not this explicit reference.
     throw MaterializedViewConfigException(
         "The query of a materialized view must not itself reference a "
         "materialized view.");
@@ -778,6 +785,7 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
   // caller's context (which may be reused for other views).
   QueryExecutionContext qec{*qecOriginal};
   qec.setDisableMaterializedViewRewriting(true);
+  qec.setIsAnalyzingMaterializedViewQuery(true);
   auto encodedIriManager = qec.getIndex().encodedIriManager();
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
@@ -790,7 +798,17 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     QueryPlanner qp{&qec, handle};
 
-    auto executionTree = qp.createExecutionTree(parsed);
+    QueryExecutionTree executionTree{&qec};
+    try {
+      executionTree = qp.createExecutionTree(parsed);
+    } catch (const MaterializedViewConfigException&) {
+      // The view's own query references another materialized view, which
+      // would deadlock on the write lock for `loadedViews_` (see the check in
+      // `MaterializedViewsManager::makeIndexScan`). Simply skip the cache-key
+      // based query pattern detection for this view instead of failing to
+      // load it; the view can still be used via its explicit name.
+      return std::nullopt;
+    }
     // TODO<ullingec> What about the sorting problems?
 
     ColumnMapping mapping;

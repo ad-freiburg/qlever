@@ -270,7 +270,16 @@ inline void expectNotSuitableForRewrite(
   auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
   manager.writeViewToDisk(viewName, plan);
   auto view = manager.getView(viewName, qec.get());
-  EXPECT_FALSE(qpc.analyzeView(view, qec.get()));
+  qpc.analyzeView(view, qec.get());
+  // `analyzeView` may still return `true` because the view got registered for
+  // cache-key based rewriting, even for queries that (by design) are not
+  // suitable for the pattern-based (star/chain) rewriting tested here. So
+  // check the latter directly instead of relying on the overall return value.
+  const auto& graphPattern = plan.parsedQuery()._rootGraphPattern;
+  ASSERT_EQ(graphPattern._graphPatterns.size(), 1u);
+  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(
+                     qec.get(), graphPattern._graphPatterns.at(0).getBasic())
+                  .empty());
   manager.unloadViewIfLoaded(viewName);
 };
 

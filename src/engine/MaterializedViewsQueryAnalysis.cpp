@@ -343,8 +343,8 @@ bool QueryPatternCache::analyzeJoinStar(
 bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
-                << "' will not be added to the query pattern cache for query "
-                   "rewriting. Reason: "
+                << "' will not be added to the query pattern cache for "
+                   "pattern-based (star/chain) query rewriting. Reason: "
                 << reason << "." << std::endl;
   };
 
@@ -361,33 +361,42 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   auto [full, withoutInvariant] = view->computeCacheKey(qec);
   auto insert = [&](auto& cacheKeyAndCol) {
     if (!cacheKeyAndCol.has_value()) {
-      return;
+      return false;
     }
-    byCacheKey_.insert(
+    auto [it, inserted] = byCacheKey_.insert(
         {std::move(cacheKeyAndCol.value().cacheKey_),
          std::make_shared<ByCacheKeyInfo>(
              view, std::move(cacheKeyAndCol.value().columnMapping_))});
+    if (!inserted) {
+      AD_LOG_INFO << "Materialized view '" << view->name()
+                  << "' has the same cache key as the already loaded view '"
+                  << it->second->view_->name()
+                  << "'. Only the latter can be matched by cache key."
+                  << std::endl;
+    }
+    return inserted;
   };
-  insert(full);
-  insert(withoutInvariant);
+  // Not `||`: both calls must always be evaluated.
+  bool cacheKeyAdded = insert(full);
+  cacheKeyAdded = insert(withoutInvariant) || cacheKeyAdded;
 
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(
         "The view has more than one graph pattern (even after skipping ignored "
         "patterns)");
-    return false;
+    return cacheKeyAdded;
   }
   const auto& graphPattern = graphPatternsFiltered.at(0);
   if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
     explainIgnore("The graph pattern is not a basic set of triples");
-    return false;
+    return cacheKeyAdded;
   }
   // TODO<ullingerc> Property path is stored as a single predicate here.
   const auto& triples = graphPattern.getBasic()._triples;
   if (triples.size() == 0) {
     explainIgnore("The query body is empty");
-    return false;
+    return cacheKeyAdded;
   }
   bool patternFound = false;
 
@@ -420,10 +429,12 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   }
 
   if (!patternFound) {
-    explainIgnore("No supported query pattern for rewriting joins was found");
+    explainIgnore(
+        "No supported query pattern for rewriting joins was found (this does "
+        "not affect cache-key based rewriting)");
   }
 
-  return patternFound;
+  return patternFound || cacheKeyAdded;
 }
 
 // _____________________________________________________________________________
