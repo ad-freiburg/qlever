@@ -52,16 +52,19 @@ struct FirstArgument {};
 template <typename R, typename First, typename... Rest>
 struct FirstArgument<R (*)(First, Rest...), void> {
   using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
 };
 
 template <typename C, typename R, typename First, typename... Rest>
 struct FirstArgument<R (C::*)(First, Rest...), void> {
   using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
 };
 
 template <typename C, typename R, typename First, typename... Rest>
 struct FirstArgument<R (C::*)(First, Rest...) const, void> {
   using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
 };
 
 // For a class type (in particular a lambda), look at its `operator()`.
@@ -116,6 +119,12 @@ CPP_template(typename ChunkFunction)(
                                               size_t numThreads = 0) {
   // The `Result` is the type of the first argument of `computeChunk`.
   using Result = detail::FirstArgumentT<ChunkFunction>;
+  // Guard against a subtle bug: if `computeChunk` took its first parameter by
+  // value, each call would write into a discarded copy and the final result
+  // would be silently empty.
+  static_assert(detail::FirstArgument<ChunkFunction>::isLvalueReference,
+                "The first parameter of `computeChunk` (the result that it "
+                "writes to) must be an lvalue reference");
   AD_CONTRACT_CHECK(chunkSize > 0);
   if (numElements == 0) {
     return Result{};
