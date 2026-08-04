@@ -14,6 +14,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "engine/HttpError.h"
+#include "util/http/HttpServer.h"
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
@@ -35,13 +37,14 @@ std::optional<double> parsePinGeoIndexSimplification(
   }
 }
 
-// __________________________________________________________________________
-std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
-    const ParamValueMap& params) {
+// ____________________________________________________________________________
+std::vector<ad_utility::MediaType> determineMediaTypes(
+    const ad_utility::url_parser::ParamValueMap& params,
+    std::string_view acceptHeader) {
+  using namespace ad_utility::url_parser;
   using enum ad_utility::MediaType;
 
-  static constexpr std::array<
-      std::pair<std::string_view, ad_utility::MediaType>, 6>
+  static const std::array<std::pair<std::string, ad_utility::MediaType>, 6>
       actionValueToMediaType = {{{"csv_export", csv},
                                  {"tsv_export", tsv},
                                  {"qlever_json_export", qleverJson},
@@ -50,13 +53,16 @@ std::optional<ad_utility::MediaType> determineMediaTypesFromParam(
                                  {"binary_export", octetStream}}};
 
   for (const auto& [actionValue, mediaType] : actionValueToMediaType) {
-    if (checkParameter(params, "action", std::string(actionValue))
-            .has_value()) {
-      return mediaType;
+    if (checkParameter(params, "action", actionValue).has_value()) {
+      return {mediaType};
     }
   }
 
-  return std::nullopt;
+  try {
+    return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
+  } catch (const std::exception& e) {
+    throw HttpError(http::status::not_acceptable, e.what());
+  }
 }
 
 // ____________________________________________________________________________

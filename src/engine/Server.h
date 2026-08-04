@@ -227,16 +227,6 @@ class Server {
           const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
           std::optional<PlannedQuery>& plannedUpdate);
 
-  // Determine media type candidates to be used for the result. Media types are
-  // determined (in this order) by the current action (e.g.,
-  // "action=csv_export") and by the "Accept" header of the request. The latter
-  // option can produce multiple candidates.
-  CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ad_utility::MediaType> determineMediaTypes(
-          const ad_utility::url_parser::ParamValueMap& params,
-          const RequestT& request);
-  FRIEND_TEST(ServerTest, determineMediaType);
   // Describe the pinning of a named result (and, if applicable, of its geo
   // index) for the request log line, e.g. `" [pin result with name
   // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty

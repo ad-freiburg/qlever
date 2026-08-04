@@ -1033,33 +1033,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    std::vector<ad_utility::MediaType> Server::determineMediaTypes(
-        const ad_utility::url_parser::ParamValueMap& params,
-        const RequestT& request) {
-  using namespace ad_utility::url_parser;
-  // The following code block determines the media type to be used for the
-  // result. The media type is either determined by the "Accept:" header of
-  // the request or by the URL parameter "action=..." (for TSV and CSV export,
-  // for QLever-historical reasons).
-  // The explicit `action=..._export` parameter have precedence over the
-  // `Accept:...` header field
-  auto mediaType =
-      qlever::http_api_helpers::determineMediaTypesFromParam(params);
-  if (mediaType.has_value()) {
-    return {mediaType.value()};
-  }
-
-  std::string_view acceptHeader = request.base()[http::field::accept];
-  try {
-    return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
-  } catch (const std::exception& e) {
-    throw HttpError(http::status::not_acceptable, e.what());
-  }
-}
-
-// ____________________________________________________________________________
-CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::MessageSender Server::createMessageSender(
         const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
         const RequestT& request, std::string_view operation,
@@ -1119,7 +1092,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   ad_utility::metrics::ActiveCounterGuard queryGuard{
       *metrics_->runningSparqlOperations_, "query"};
 
-  auto mediaTypes = determineMediaTypes(params, request);
+  auto mediaTypes = qlever::http_api_helpers::determineMediaTypes(
+      params, request.base()[http::field::accept]);
   AD_LOG_INFO << "Requested media types of the result are: "
               << absl::StrJoin(
                      mediaTypes | ql::views::transform([](MediaType mediaType) {
