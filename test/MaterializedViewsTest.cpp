@@ -1091,7 +1091,7 @@ TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
   }};
 
   manager.writeViewToDisk("testViewRetired", plan);
-  EXPECT_NE(manager.getView("testViewRetired"), nullptr);
+  EXPECT_NE(manager.getView("testViewRetired", nullptr), nullptr);
 
   manager.retireOnDiskFiles();
   // Retiring twice is a no-op.
@@ -1115,7 +1115,7 @@ TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
   EXPECT_TRUE(ql::filesystem::exists(
       absl::StrCat(testIndexBase_, ".view.testViewRetired", VIEW_INFO_SUFFIX)));
   EXPECT_TRUE(manager.isViewLoaded("testViewRetired"));
-  EXPECT_NE(manager.getView("testViewRetired"), nullptr);
+  EXPECT_NE(manager.getView("testViewRetired", nullptr), nullptr);
 }
 
 // _____________________________________________________________________________
