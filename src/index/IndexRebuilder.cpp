@@ -10,11 +10,11 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "index/IndexRebuilder.h"
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 
 #include <array>
+#include <atomic>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -24,7 +24,8 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <cstdint>
 #include <fstream>
-#include <semaphore>
+#include <functional>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -45,6 +46,9 @@
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
+#include "util/ProgressBar.h"
+#include "util/StringUtils.h"
+#include "util/Timer.h"
 
 namespace qlever::indexRebuilder {
 
@@ -68,22 +72,36 @@ struct InsertionInfo {
 // representation (for cheaper hash functions) to new `Id`s.
 LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
                               const Index::Vocab& vocab,
-                              const std::vector<InsertionInfo>& insertInfo) {
+                              const std::vector<InsertionInfo>& insertInfo,
+                              const std::function<void(size_t)>& progress) {
   auto vocabWriter = vocab.makeWordWriterPtr(vocabularyName);
   LocalVocabMapping localVocabMapping;
-  auto writeWordFromVocab = [&vocab,
-                             &vocabWriter](const IndexAndWord& indexAndWord) {
+  // Report the number of written words to `progress` in batches: each report
+  // is a mutex-protected addition on a shared counter (see
+  // `ad_utility::ConcurrentProgressBar`), so reporting every single word
+  // would be needlessly expensive. The exact batch size is not important.
+  size_t wordsSinceLastProgress = 0;
+  auto noteWord = [&progress, &wordsSinceLastProgress]() {
+    if (++wordsSinceLastProgress == 65536) {
+      progress(wordsSinceLastProgress);
+      wordsSinceLastProgress = 0;
+    }
+  };
+  auto writeWordFromVocab = [&vocab, &vocabWriter,
+                             &noteWord](const IndexAndWord& indexAndWord) {
     const auto& [_, word] = indexAndWord;
     (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    noteWord();
   };
-  auto writeWordFromLocalVocab =
-      [&vocab, &vocabWriter, &localVocabMapping](const InsertionInfo& info) {
-        const auto& [_, word, originalId] = info;
-        auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-        localVocabMapping.emplace(
-            originalId.getBits(),
-            Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
-      };
+  auto writeWordFromLocalVocab = [&vocab, &vocabWriter, &localVocabMapping,
+                                  &noteWord](const InsertionInfo& info) {
+    const auto& [_, word, originalId] = info;
+    auto newIndex = (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    localVocabMapping.emplace(
+        originalId.getBits(),
+        Id::makeFromVocabIndex(VocabIndex::make(newIndex)));
+    noteWord();
+  };
   ad_utility::OverloadCallOperator writer{std::move(writeWordFromVocab),
                                           std::move(writeWordFromLocalVocab)};
   ql::ranges::merge(
@@ -98,6 +116,9 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
       [tag = 0](const InsertionInfo& info) {
         return std::tie(info.insertionPosition_.get(), tag);
       });
+  if (wordsSinceLastProgress > 0) {
+    progress(wordsSinceLastProgress);
+  }
   return localVocabMapping;
 }
 }  // namespace
@@ -105,7 +126,8 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
 // _____________________________________________________________________________
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
-    const std::string& newIndexName) {
+    const std::string& newIndexName,
+    const std::function<void(size_t)>& progress) {
   std::vector<InsertionInfo> insertInfo;
   insertInfo.reserve(entries.size());
 
@@ -126,7 +148,7 @@ std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
   });
 
   LocalVocabMapping localVocabMapping =
-      mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo);
+      mergeVocabs(newIndexName + VOCAB_SUFFIX, vocab, insertInfo, progress);
   auto denseInfo = insertInfo |
                    ql::views::transform(&InsertionInfo::insertionPosition_) |
                    ::ranges::to<std::vector>;
@@ -370,24 +392,32 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const LocalVocabMapping& localVocabMapping,
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    std::function<void(size_t)> progress) {
   namespace net = boost::asio;
   using namespace net::experimental::awaitable_operators;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
     return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
             &localVocabMapping, &insertionPositions, &blankNodeBlocks,
-            minBlankNodeIndex, &cancellationHandle]() {
+            minBlankNodeIndex, &cancellationHandle, progress]() {
       auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
           *locatedTriplesSharedState);
       auto [numColumns, additionalColumns] =
           getNumberOfColumnsAndAdditionalColumns(blockMetadataRanges);
+      // Wrap the input range so that the number of processed triples is
+      // reported to `progress` per block.
+      auto countingStream = ad_utility::InputRangeTypeErased<IdTableStatic<0>>{
+          ad_utility::CachingTransformInputRange{
+              readIndexAndRemap(
+                  permutation, blockMetadataRanges, locatedTriplesSharedState,
+                  localVocabMapping, insertionPositions, blankNodeBlocks,
+                  minBlankNodeIndex, cancellationHandle, additionalColumns),
+              [progress](IdTableStatic<0>& table) {
+                progress(table.numRows());
+                return std::move(table);
+              }}};
       return newIndex.createPermutationWithoutMetadata(
-          numColumns,
-          readIndexAndRemap(
-              permutation, blockMetadataRanges, locatedTriplesSharedState,
-              localVocabMapping, insertionPositions, blankNodeBlocks,
-              minBlankNodeIndex, cancellationHandle, additionalColumns),
-          permutation, isInternal);
+          numColumns, std::move(countingStream), permutation, isInternal);
     };
   };
   // Workaround for a GCC 15/16 bug: the hidden object of a by-value
@@ -438,20 +468,65 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   REBUILD_LOG_INFO << "Rebuilding index from current data (including updates)"
                    << std::endl;
 
-  REBUILD_LOG_INFO << "Writing new vocabulary ..." << std::endl;
+  // Pass `numSteps` newly processed steps on to `progressBar` and write a
+  // progress line to the rebuild's log file whenever one is due.
+  // NOTE: `REBUILD_LOG_INFO` writes to the captured `logFile`.
+  auto progressCallbackFor =
+      [&logFile](ad_utility::ConcurrentProgressBar& progressBar) {
+        return [&logFile, &progressBar](size_t numSteps) {
+          progressBar.add(numSteps);
+          if (auto update = progressBar.update()) {
+            REBUILD_LOG_INFO << update->getProgressString() << std::flush;
+          }
+        };
+      };
 
+  // Choose the batch size of each phase's progress bar such that about 50
+  // progress lines are written per phase (but no more often than the default
+  // batch size).
+  auto batchSizeFor = [](size_t total) {
+    return std::max(DEFAULT_PROGRESS_BAR_BATCH_SIZE, total / 50);
+  };
+
+  // Phase 1: write the new vocabulary.
+  REBUILD_LOG_INFO << "Writing new vocabulary (merging existing and new "
+                      "words) ..."
+                   << std::endl;
   auto blankNodeBlocks = flattenBlankNodeBlocks(ownedBlocks);
+  size_t vocabTotal = index.getVocab().size() + entries.size();
+  ad_utility::ConcurrentProgressBar vocabProgress{"Words written: ", vocabTotal,
+                                                  batchSizeFor(vocabTotal)};
   auto [insertionPositions, localVocabMapping] =
-      materializeLocalVocab(entries, index.getVocab(), newIndexName);
+      materializeLocalVocab(entries, index.getVocab(), newIndexName,
+                            progressCallbackFor(vocabProgress));
+  REBUILD_LOG_INFO << vocabProgress.getFinalProgressString() << std::flush;
 
-  REBUILD_LOG_INFO << "Recomputing statistics ..." << std::endl;
-
-  auto newStats = index.recomputeStatistics(locatedTriplesSharedState);
+  // Phase 2: recompute statistics.
+  //
+  // NOTE: The totals for the progress bar are taken from the statistics
+  // of the old index; they are exact up to the delta triples, which is good
+  // enough for a progress bar.
+  // The number of normal (non-internal) permutations; there are always two
+  // internal permutations (PSO and POS) in addition.
+  size_t numNormalPermutations = index.hasAllPermutations() ? 6 : 2;
+  // The statistics scan one permutation per normal pair, plus the internal
+  // PSO permutation.
+  size_t numStatsScans = numNormalPermutations / 2;
+  REBUILD_LOG_INFO << "Recomputing statistics (from " << numStatsScans + 1
+                   << " permutations, " << numStatsScans
+                   << " normal and 1 internal) ..." << std::endl;
+  auto numTriplesOld = index.numTriples();
+  size_t statsTotal =
+      numStatsScans * numTriplesOld.normal + numTriplesOld.internal;
+  ad_utility::ConcurrentProgressBar statsProgress{
+      "Triples counted: ", statsTotal, batchSizeFor(statsTotal)};
+  auto newStats = index.recomputeStatistics(locatedTriplesSharedState,
+                                            progressCallbackFor(statsProgress));
+  REBUILD_LOG_INFO << statsProgress.getFinalProgressString() << std::flush;
   newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
 
-  auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
-
   // Set newer lower bound for dynamic blank node indices.
+  auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
   newStats["num-blank-nodes-total"] =
       minBlankNodeIndex +
       blankNodeBlocks.size() * ad_utility::BlankNodeManager::blockSize_;
@@ -463,12 +538,34 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   IndexImpl newIndex{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   newIndex.loadConfigFromOldIndex(newIndexName, index, newStats);
 
-  REBUILD_LOG_INFO << "Writing new permutations ..." << std::endl;
+  // Phase 3: write the new index (permutations and patterns).
+  REBUILD_LOG_INFO << "Writing new index (" << numNormalPermutations + 2
+                   << " permutations, " << numNormalPermutations
+                   << " normal and 2 internal) ..." << std::endl;
+  // Each triple is written once per permutation.
+  size_t permutationsTotal =
+      numNormalPermutations * numTriplesOld.normal + 2 * numTriplesOld.internal;
+  ad_utility::ConcurrentProgressBar permutationsProgress{
+      "Triples written: ", permutationsTotal, batchSizeFor(permutationsTotal)};
+  auto permutationsProgressCallback = progressCallbackFor(permutationsProgress);
 
   auto patternThreads = static_cast<size_t>(index.usePatterns());
-  size_t numberOfPermutations = index.hasAllPermutations() ? 8 : 4;
+  // The permutations are written as pairs (PSO+POS, SPO+SOP, OPS+OSP, and the
+  // internal PSO+POS), each pair using two threads (one per permutation).
+  size_t numberOfPairs = (numNormalPermutations + 2) / 2;
+  // Limit how many pairs run in parallel (see the runtime parameter
+  // `rebuild-max-concurrent-permutation-pairs`; 0 means "no limit"). Sizing
+  // the thread pool accordingly is all that is needed: with two threads per
+  // pair, a smaller pool simply lets fewer pairs make progress at a time.
+  // This is the knob for trading rebuild duration against interference with
+  // concurrent queries and updates.
+  size_t maxConcurrentPairs = getRuntimeParameter<
+      &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>();
+  if (maxConcurrentPairs == 0 || maxConcurrentPairs > numberOfPairs) {
+    maxConcurrentPairs = numberOfPairs;
+  }
   namespace net = boost::asio;
-  net::thread_pool threadPool{patternThreads + numberOfPermutations};
+  net::thread_pool threadPool{patternThreads + 2 * maxConcurrentPairs};
 
   // Collect the first exception thrown by any worker so it can be rethrown to
   // the caller after `threadPool.join()`. Without this, exceptions escaping a
@@ -501,22 +598,6 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     permutationSettings.push_back({{OPS, OSP}, false});
   }
 
-  // Limit how many of the permutation pairs run in parallel (see the
-  // runtime parameter `rebuild-max-concurrent-permutation-pairs`; 0 means
-  // "no limit"). Each pair task acquires a slot before it starts and
-  // releases it when it is done, so the next pair starts as soon as ANY
-  // running pair finishes (the pairs differ a lot in size). A blocked
-  // `acquire` occupies one pool thread, and each running pair needs two, so
-  // the pool (sized `numberOfPermutations` = two threads per pair) always
-  // has enough threads for `maxConcurrentPairs >= 1`.
-  size_t maxConcurrentPairs = getRuntimeParameter<
-      &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>();
-  if (maxConcurrentPairs == 0) {
-    maxConcurrentPairs = permutationSettings.size();
-  }
-  std::counting_semaphore<8> pairSlots{static_cast<std::ptrdiff_t>(
-      std::min(maxConcurrentPairs, permutationSettings.size()))};
-
   for (const auto& [permutationEnums, isInternal] : permutationSettings) {
     auto [a, b] = permutationEnums;
     auto getPermutation =
@@ -525,24 +606,19 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       return isInternal ? perm.internalPermutation() : perm;
     };
 
-    net::co_spawn(
-        threadPool,
-        [&newIndex, getPermutation, a = a, b = b, isInternal,
-         &locatedTriplesSharedState, &localVocabMapping, &insertionPositions,
-         &blankNodeBlocks, minBlankNodeIndex, &cancellationHandle,
-         &pairSlots]() -> boost::asio::awaitable<void> {
-          pairSlots.acquire();
-          absl::Cleanup releaseSlot{[&pairSlots] { pairSlots.release(); }};
-          co_await createPermutationWriterTask(
-              newIndex, getPermutation(a), getPermutation(b), isInternal,
-              locatedTriplesSharedState, localVocabMapping, insertionPositions,
-              blankNodeBlocks, minBlankNodeIndex, cancellationHandle);
-        },
-        std::ref(exceptionCollector));
+    net::co_spawn(threadPool,
+                  createPermutationWriterTask(
+                      newIndex, getPermutation(a), getPermutation(b),
+                      isInternal, locatedTriplesSharedState, localVocabMapping,
+                      insertionPositions, blankNodeBlocks, minBlankNodeIndex,
+                      cancellationHandle, permutationsProgressCallback),
+                  std::ref(exceptionCollector));
   }
 
   threadPool.join();
   exceptionCollector.rethrowIfException();
+  REBUILD_LOG_INFO << permutationsProgress.getFinalProgressString()
+                   << std::flush;
 
   REBUILD_LOG_INFO << "Index rebuild completed" << std::endl;
 
