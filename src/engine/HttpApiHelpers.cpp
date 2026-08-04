@@ -13,8 +13,10 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "engine/HttpError.h"
+#include "util/Exception.h"
 #include "util/http/HttpServer.h"
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"

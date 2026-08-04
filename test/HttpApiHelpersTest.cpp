@@ -11,7 +11,6 @@
 #include <gtest/gtest.h>
 
 #include "engine/HttpApiHelpers.h"
-#include "gmock/gmock.h"
 #include "util/GTestHelpers.h"
 
 namespace {
@@ -30,7 +29,7 @@ TEST(HttpApiHelpersTest, parsePinGeoIndexSimplification) {
   // A non-numeric value throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
       parsePinGeoIndexSimplification("not-a-number"),
-      testing::HasSubstr(
+      ::testing::HasSubstr(
           "Invalid value for `pin-geo-index-simplification`: must be a "
           "floating-point number of meters."));
 
@@ -45,12 +44,12 @@ TEST(HttpApiHelpersTest, determineMediaType) {
   auto checkActionMediatype = [&](const std::string& actionName,
                                   ad_utility::MediaType expectedMediaType) {
     EXPECT_THAT(determineMediaTypes({{"action", {actionName}}}, ""),
-                testing::ElementsAre(expectedMediaType));
+                ::testing::ElementsAre(expectedMediaType));
   };
   // The media type associated with the action overrides the `Accept` header.
   EXPECT_THAT(determineMediaTypes({{"action", {"csv_export"}}},
                                   "application/sparql-results+json"),
-              testing::ElementsAre(ad_utility::MediaType::csv));
+              ::testing::ElementsAre(ad_utility::MediaType::csv));
   checkActionMediatype("csv_export", ad_utility::MediaType::csv);
   checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
   checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
@@ -58,16 +57,16 @@ TEST(HttpApiHelpersTest, determineMediaType) {
   checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
   checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
   EXPECT_THAT(determineMediaTypes({}, "application/sparql-results+json"),
-              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
+              ::testing::ElementsAre(ad_utility::MediaType::sparqlJson));
   // No supported media type in the `Accept` header. (Contrary to it's docstring
   // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
   // exception if no supported media type is found.
   AD_EXPECT_THROW_WITH_MESSAGE(
       determineMediaTypes({}, "text/css"),
-      testing::HasSubstr("Not a single media type known to this parser was "
-                         "detected in \"text/css\"."));
+      ::testing::HasSubstr("Not a single media type known to this parser was "
+                           "detected in \"text/css\"."));
   // No or empty `Accept` header means that any content type is allowed.
-  EXPECT_THAT(determineMediaTypes({}, ""), testing::ElementsAre());
+  EXPECT_THAT(determineMediaTypes({}, ""), ::testing::ElementsAre());
 }
 
 // _____________________________________________________________________________
@@ -87,19 +86,19 @@ TEST(HttpApiHelpersTest, parseSendLimit) {
   EXPECT_EQ(parseSendLimit({}), std::nullopt);
 
   // A valid positive number is parsed correctly.
-  EXPECT_THAT(parseSendLimit({{"send", {"12"}}}), testing::Optional(12ul));
+  EXPECT_THAT(parseSendLimit({{"send", {"12"}}}), ::testing::Optional(12ul));
 
   // A non-numeric value throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
       parseSendLimit({{"send", {"not-a-number"}}}),
-      testing::HasSubstr("Invalid value for `send`: must be a "
-                         "positive integer specifying the number of bindings "
-                         "to be exported."));
+      ::testing::HasSubstr("Invalid value for `send`: must be a "
+                           "positive integer specifying the number of bindings "
+                           "to be exported."));
 
   // A negative value throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
       parseSendLimit({{"send", {"-1"}}}),
-      testing::HasSubstr("Invalid value for `send`: must be a "
-                         "positive integer specifying the number of bindings "
-                         "to be exported."));
+      ::testing::HasSubstr("Invalid value for `send`: must be a "
+                           "positive integer specifying the number of bindings "
+                           "to be exported."));
 }

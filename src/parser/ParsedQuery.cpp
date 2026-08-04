@@ -394,7 +394,7 @@ void ParsedQuery::updateExportLimit(const ad_utility::MediaType& mediaType,
       (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>() &&
        mediaType == MediaType::sparqlJson);
   if (sendLimit.has_value() && considerSendParameter) {
-    exportLimit = std::move(sendLimit);
+    exportLimit = sendLimit;
   }
 }
 

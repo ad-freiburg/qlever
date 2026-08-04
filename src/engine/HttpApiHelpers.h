@@ -7,12 +7,14 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
-#define QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
+#ifndef QLEVER_SRC_ENGINE_HTTPAPIHELPERS_H
+#define QLEVER_SRC_ENGINE_HTTPAPIHELPERS_H
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
+#include "backports/three_way_comparison.h"
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
@@ -57,9 +59,10 @@ ResultPinning determineResultPinning(
 
 // Parse the `send` parameter (historical name): the maximum number of
 // bindings to export, e.g. `?send=100` limits the response to (at most)
-// 100 bindings. Returns `std::nullopt` if the parameter is not set.
+// 100 bindings. Return `std::nullopt` if the parameter is not set. Throw
+// if the parameter is set, but is not a valid non-negative integer.
 std::optional<uint64_t> parseSendLimit(
     const ad_utility::url_parser::ParamValueMap& params);
 }  // namespace qlever::http_api_helpers
 
-#endif  // QLEVER_SRC_ENGINE_REQUESTPARAMETERS_H
+#endif  // QLEVER_SRC_ENGINE_HTTPAPIHELPERS_H
