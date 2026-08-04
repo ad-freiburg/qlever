@@ -1,6 +1,6 @@
 include(GoogleTest)
 
-# Needed for creating the `testUil`-library.
+# Needed for creating the `testUtil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
 # Link binary ${basename} against QLever's test `main` (which runs the tests
@@ -19,7 +19,7 @@ endfunction()
 
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
 # Link the executable `basename` against QLever's test `main`, the threading
-# library, and all `additionLibraries` which are passed as arguments.
+# library, and all `additionalLibraries` which are passed as arguments.
 # Then register the test cases from the executable with `ctest` (see
 # `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
 # possible regimes).
@@ -56,7 +56,7 @@ if (SINGLE_TEST_BINARY)
     add_executable(QLeverAllUnitTestsMain)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock qleverTestMain testUtil ${CMAKE_THREAD_LIBS_INIT})
     # The following line (as opposed to using `gtest_discover_tests`) has the effect that `ctest` will treat all the
-    # unit tests as a single test case and will simply run the executable (using the main function from `qleverTestMain`.
+    # unit tests as a single test case and will simply run the executable (using the main function from `qleverTestMain`).
     # This decreases the runtime overhead per unit tests in particular for sanitizer builds.
     add_test(NAME QLeverAllUnitTests COMMAND $<TARGET_FILE:QLeverAllUnitTestsMain>)
 else ()
