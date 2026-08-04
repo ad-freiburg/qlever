@@ -25,13 +25,17 @@ auto LocalVocabContextImpl::getPositionOfWord(std::string_view word) const
 }
 
 // ____________________________________________________________________________
+bool LocalVocabContextImpl::hasAuxVocabulary() const {
+  return *auxVocab_ != nullptr;
+}
+
+// ____________________________________________________________________________
 std::optional<AuxVocabIndex> LocalVocabContextImpl::getAuxVocabIndex(
     std::string_view word) const {
-  const auto& auxVocab = *auxVocab_;
-  if (auxVocab == nullptr) {
+  if (!hasAuxVocabulary()) {
     return std::nullopt;
   }
-  return auxVocab->getId(word);
+  return (*auxVocab_)->getId(word);
 }
 
 // ____________________________________________________________________________

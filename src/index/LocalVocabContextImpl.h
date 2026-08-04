@@ -56,6 +56,7 @@ class LocalVocabContextImpl : public LocalVocabContext {
 
   int compareWords(std::string_view a, std::string_view b) const override;
   VocabBounds getPositionOfWord(std::string_view word) const override;
+  bool hasAuxVocabulary() const override;
   std::optional<AuxVocabIndex> getAuxVocabIndex(
       std::string_view word) const override;
   std::optional<Id> encodeAsId(std::string_view word) const override;

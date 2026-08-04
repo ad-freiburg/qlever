@@ -675,11 +675,9 @@ TEST_F(IriOrUriValueGetterTest, OperatorWithId) {
   // `LocalVocabEntry` because it does not have to be contained in any
   // vocabulary of the index.
   auto isIriEntry = [](const std::string& expected) {
-    return VariantWith<LocalVocabEntry>(ResultOf(
-        [](const LocalVocabEntry& entry) {
-          return entry.toStringRepresentation();
-        },
-        Eq(absl::StrCat("<", expected, ">"))));
+    return VariantWith<LocalVocabEntry>(
+        AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                    Eq(absl::StrCat("<", expected, ">"))));
   };
   for (const auto& iris : {plainLiterals_, typedLiterals_, iris_}) {
     for (const auto& [id, content] : iris) {

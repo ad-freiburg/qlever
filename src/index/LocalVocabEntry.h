@@ -184,25 +184,32 @@ class alignas(16) LocalVocabEntry
 
   // Compare two entries in the internal order (see the warning in the class
   // comment above; in particular this is NOT a semantic comparison as soon as
-  // the index has an auxiliary vocabulary). Note that this first compares the
-  // positions in the vocabularies (see `positionInVocab()`) and only falls back
-  // to the (expensive) comparison of the strings if those are equal. Comparing
-  // the strings alone would not be a valid strict weak ordering: a word that is
-  // stored in the auxiliary vocabulary of the index is positioned after all
-  // words of the main vocabulary, so comparing it to a word that is in neither
-  // vocabulary has to yield the same result as comparing the corresponding
-  // `Id`s, which are compared by their positions.
+  // the index has an auxiliary vocabulary). If the index has such a vocabulary,
+  // then this first compares the positions in the vocabularies (see
+  // `positionInVocab()`) and only falls back to the (expensive) comparison of
+  // the strings if those are equal. Comparing the strings alone would then not
+  // be a valid strict weak ordering: a word that is stored in the auxiliary
+  // vocabulary of the index is positioned after all words of the main
+  // vocabulary, so comparing it to a word that is in neither vocabulary has to
+  // yield the same result as comparing the corresponding `Id`s, which are
+  // compared by their positions.
   //
-  // NOTE: Looking up the position requires a lookup in the (on-disk) vocabulary
-  // of the index, which is cached per entry, but which the comparison of two
-  // entries did not require before the auxiliary vocabulary was introduced. So
-  // for a workload that only ever compares entries of a `LocalVocab` to each
-  // other (and never to an `Id` of the index, which needs the position anyway),
-  // this is a performance regression. The redesign that is described in the
-  // class comment above has to take that into account: the position is only
-  // needed for the internal order, whereas a semantic comparison can compare
-  // the strings directly. Note that `operator==` below deliberately does not
-  // look up the position at all.
+  // If the index has no auxiliary vocabulary, then the comparison of the
+  // strings alone already yields the same result as the comparison of the
+  // positions, so the position is deliberately NOT looked up
+  // (`LocalVocabContext` has the cheap `hasAuxVocabulary()` for exactly this
+  // purpose). This matters because that lookup goes to the (on-disk) vocabulary
+  // of the index, which the comparison of two entries would otherwise require
+  // even for a workload that only ever compares entries of a `LocalVocab` to
+  // each other, and never to an `Id` of the index (which needs the position
+  // anyway).
+  //
+  // NOTE: This shortcut also means that an entry whose word is an encoded IRI
+  // (see `LocalVocabContext::encodeAsId`) is compared by its string value here,
+  // but by its encoding when the corresponding `Id`s are compared. That
+  // inconsistency is pre-existing and tracked separately, see the note at
+  // `valueIdComparators::detail::compareIdsImpl`. Note also that `operator==`
+  // below never looks up the position, no matter which vocabularies exist.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
 

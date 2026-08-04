@@ -25,6 +25,10 @@
 
 namespace {
 
+// The functions that export an `Id`, and the type aliases for `LiteralOrIri`
+// and `Literal` that come with them.
+using namespace ql::exportIds;
+
 using ::testing::HasSubstr;
 using ::testing::Optional;
 
@@ -158,6 +162,7 @@ TEST(AuxVocabIndex, localVocabEntryInAuxVocabulary) {
   Index index = makeIndexWithAuxVocab();
   auto getId = ad_utility::testing::makeGetId(index);
   const auto& context = index.getImpl().getLocalVocabContext();
+  EXPECT_TRUE(context.hasAuxVocabulary());
 
   // `<b>` is a word of the auxiliary vocabulary, `<e>` is contained in neither
   // vocabulary and would be sorted between `<c>` and `<p>` of the main one.
@@ -228,7 +233,6 @@ TEST(AuxVocabIndex, localVocabEntryEqualityIgnoresPositionInVocab) {
 
   // The same holds for the comparison against a plain `LiteralOrIri`, which the
   // entries inherit from.
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   auto plainB = LiteralOrIri::fromStringRepresentation(
       std::string{entryB.toStringRepresentation()});
   EXPECT_TRUE(entryB == plainB);
@@ -246,6 +250,7 @@ TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
   auto getId = ad_utility::testing::makeGetId(index);
   const auto& context = index.getImpl().getLocalVocabContext();
   EXPECT_EQ(index.getImpl().auxVocab(), nullptr);
+  EXPECT_FALSE(context.hasAuxVocabulary());
 
   auto entryB = LocalVocabEntry::fromIriref("<b>", context);
   auto position = entryB.positionInVocab();
@@ -253,6 +258,22 @@ TEST(AuxVocabIndex, localVocabEntryWithoutAuxVocabulary) {
   EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), getId("<c>"));
   EXPECT_LT(Id::makeFromLocalVocabIndex(&entryB), getId("<c>"));
   EXPECT_LT(getId("<a>"), Id::makeFromLocalVocabIndex(&entryB));
+
+  // Without an auxiliary vocabulary, two entries are compared by their string
+  // values alone, without looking up their positions (see the documentation of
+  // `LocalVocabEntry::compareThreeWay`). The result is the same as it would be
+  // with the positions, no matter whether the words are contained in the
+  // vocabulary of the index (`<a>` and `<c>`) or not (`<b>` and `<d>`).
+  std::vector<LocalVocabEntry> entries;
+  for (std::string_view word : {"<d>", "<b>", "<c>", "<a>"}) {
+    entries.push_back(LocalVocabEntry::fromIriref(word, context));
+  }
+  ql::ranges::sort(entries);
+  EXPECT_THAT(entries, ::testing::ElementsAre(
+                           LocalVocabEntry::fromIriref("<a>", context),
+                           LocalVocabEntry::fromIriref("<b>", context),
+                           LocalVocabEntry::fromIriref("<c>", context),
+                           LocalVocabEntry::fromIriref("<d>", context)));
 }
 
 // ____________________________________________________________________________
@@ -262,44 +283,44 @@ TEST(AuxVocabIndex, exportOfAuxVocabIds) {
 
   auto iriId = auxId(1);
   auto literalId = auxId(0);
-  auto toStringRepresentation = [](const auto& literalOrIri) -> decltype(auto) {
-    return literalOrIri.toStringRepresentation();
+  // Matchers for the return values of the export functions below, which are an
+  // optional `LiteralOrIri` resp. `Literal` with the given string
+  // representation.
+  auto isLiteralOrIri = [](std::string_view expected) {
+    return Optional(
+        AD_PROPERTY(LiteralOrIri, toStringRepresentation, expected));
+  };
+  auto isLiteral = [](std::string_view expected) {
+    return Optional(AD_PROPERTY(Literal, toStringRepresentation, expected));
   };
 
-  EXPECT_THAT(
-      ql::exportIds::idToLiteralOrIri(index.getImpl(), iriId, localVocab),
-      Optional(::testing::ResultOf(toStringRepresentation, "<b>")));
-  EXPECT_THAT(
-      ql::exportIds::idToLiteralOrIri(index.getImpl(), literalId, localVocab),
-      Optional(::testing::ResultOf(toStringRepresentation, "\"a\"")));
+  EXPECT_THAT(idToLiteralOrIri(index.getImpl(), iriId, localVocab),
+              isLiteralOrIri("<b>"));
+  EXPECT_THAT(idToLiteralOrIri(index.getImpl(), literalId, localVocab),
+              isLiteralOrIri("\"a\""));
 
   // `idToLiteral` strips the angle brackets of an IRI and keeps a literal as it
   // is.
-  EXPECT_THAT(ql::exportIds::idToLiteral(index.getImpl(), iriId, localVocab),
-              Optional(::testing::ResultOf(toStringRepresentation, "\"b\"")));
-  EXPECT_THAT(
-      ql::exportIds::idToLiteral(index.getImpl(), literalId, localVocab),
-      Optional(::testing::ResultOf(toStringRepresentation, "\"a\"")));
+  EXPECT_THAT(idToLiteral(index.getImpl(), iriId, localVocab),
+              isLiteral("\"b\""));
+  EXPECT_THAT(idToLiteral(index.getImpl(), literalId, localVocab),
+              isLiteral("\"a\""));
   // With `onlyReturnLiteralsWithXsdString`, the IRI is dropped, but the literal
   // is still returned.
-  EXPECT_EQ(
-      ql::exportIds::idToLiteral(index.getImpl(), iriId, localVocab, true),
-      std::nullopt);
-  EXPECT_THAT(
-      ql::exportIds::idToLiteral(index.getImpl(), literalId, localVocab, true),
-      Optional(::testing::ResultOf(toStringRepresentation, "\"a\"")));
+  EXPECT_EQ(idToLiteral(index.getImpl(), iriId, localVocab, true),
+            std::nullopt);
+  EXPECT_THAT(idToLiteral(index.getImpl(), literalId, localVocab, true),
+              isLiteral("\"a\""));
 
   using StringAndType = std::pair<std::string, const char*>;
-  EXPECT_THAT(ql::exportIds::idToStringAndType(index, iriId, localVocab),
+  EXPECT_THAT(idToStringAndType(index, iriId, localVocab),
               Optional(StringAndType{"<b>", nullptr}));
-  EXPECT_THAT(ql::exportIds::idToStringAndType(index, literalId, localVocab),
+  EXPECT_THAT(idToStringAndType(index, literalId, localVocab),
               Optional(StringAndType{"\"a\"", nullptr}));
   // `returnOnlyLiterals` also has to work for the auxiliary vocabulary.
-  EXPECT_EQ(
-      (ql::exportIds::idToStringAndType<true, true>(index, iriId, localVocab)),
-      std::nullopt);
-  EXPECT_THAT((ql::exportIds::idToStringAndType<true, true>(index, literalId,
-                                                            localVocab)),
+  EXPECT_EQ((idToStringAndType<true, true>(index, iriId, localVocab)),
+            std::nullopt);
+  EXPECT_THAT((idToStringAndType<true, true>(index, literalId, localVocab)),
               Optional(StringAndType{"a", nullptr}));
 }
 
@@ -308,7 +329,7 @@ TEST(AuxVocabIndex, exportWithoutAuxVocabularyThrows) {
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<s> <p> <a> .");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::idToLiteralOrIri(index.getImpl(), auxId(0), LocalVocab{}),
+      idToLiteralOrIri(index.getImpl(), auxId(0), LocalVocab{}),
       HasSubstr("the index has no auxiliary vocabulary"));
 }
 
