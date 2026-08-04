@@ -270,7 +270,9 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
 
   // Compute the cache key corresponding to the query of this materialized view.
   // Requires a `QueryExecutionContext` to access the index, and the
-  // materialized view must know its original query.
+  // materialized view must know its original query. If `qec` is `nullptr` or
+  // the view does not know its original query, both members of the returned
+  // struct are `nullopt` (currently used by tests).
   struct CacheKeyAndColumnMapping {
     std::string cacheKey_;
     ColumnMapping columnMapping_;
@@ -411,6 +413,9 @@ class MaterializedViewsManager {
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).
+  // `qec` is forwarded to `MaterializedView::computeCacheKey` for cache-key
+  // based query rewriting; passing `nullptr` skips that analysis (currently
+  // used by tests that do not care about it).
   void loadView(const std::string& name, QueryExecutionContext* qec) const;
 
   // Unload a materialized view if it is loaded. This function is a no-op
@@ -422,7 +427,8 @@ class MaterializedViewsManager {
   void deleteView(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it. This pointer
-  // is never `nullptr`. If the view does not exist, the function throws.
+  // is never `nullptr`. If the view does not exist, the function throws. See
+  // `loadView` above for details on the use of the `QueryExecutionContext`.
   std::shared_ptr<const MaterializedView> getView(
       const std::string& name, QueryExecutionContext* qec) const;
 

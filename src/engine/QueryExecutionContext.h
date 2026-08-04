@@ -304,7 +304,7 @@ class QueryExecutionContext
   // Disable the automatic rewriting of joins to materialized views. This also
   // deactivates the check for materialized view rewriting of
   // `QueryExecutionTree` by cache key. This is needed in
-  // `MaterializedViewQueryAnalysis` to prevent a deadlock.
+  // `MaterializedView::computeCacheKey` to prevent a deadlock.
   bool disableMaterializedViewRewriting_ = false;
 
   // See the documentation for the getter with the same name above.
