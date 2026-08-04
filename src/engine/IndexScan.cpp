@@ -1063,6 +1063,14 @@ std::optional<std::shared_ptr<QueryExecutionTree>> IndexScan::makeSortedTree(
     return std::nullopt;
   }
 
+  // Only a `NORMAL` permutation is one of the six permutations of the index.
+  // Other permutation types (currently materialized views) have their own data
+  // and their own `locatedTriplesSharedState_`, so switching to a permutation
+  // of the index would read completely different data.
+  if (permutation().permutationType() != Permutation::Type::NORMAL) {
+    return std::nullopt;
+  }
+
   // Only the s/p/o variable columns can be reordered by changing the
   // permutation. Map each requested sort column (a result column index) back to
   // its triple position (0 = subject, 1 = predicate, 2 = object). If a sort

@@ -2248,3 +2248,168 @@ TEST(IndexScan, additionalVariablesInDescriptor) {
           Var{"?s"}, Var{"?p"}, Var{"?o"}, {std::pair{3, Var{"?g"}}}}};
   EXPECT_EQ(scan2.getDescriptor(), "IndexScan PSO ?s ?p ?o ?g");
 }
+
+namespace {
+// Return the rows of `table` as a sorted vector of vectors, such that two
+// `IdTable`s can be compared while ignoring the order of their rows.
+std::vector<std::vector<Id>> sortedRows(const IdTable& table) {
+  std::vector<std::vector<Id>> rows;
+  for (const auto& row : table) {
+    std::vector<Id> currentRow;
+    for (size_t i = 0; i < table.numColumns(); ++i) {
+      currentRow.push_back(row[i]);
+    }
+    rows.push_back(std::move(currentRow));
+  }
+  ql::ranges::sort(rows);
+  return rows;
+}
+
+// Return the result of `scan` as a sorted vector of rows (see `sortedRows`).
+std::vector<std::vector<Id>> sortedResultRows(IndexScan& scan) {
+  return sortedRows(scan.computeResultOnlyForTesting(false).cloneIdTable());
+}
+}  // namespace
+
+// Tests for `IndexScan::makeSortedTree`, which re-sorts an `IndexScan` by
+// changing its permutation instead of adding an explicit `Sort`.
+TEST(IndexScanTest, makeSortedTree) {
+  using namespace ::testing;
+  using I = TripleComponent::Iri;
+  auto* qec = getQec("<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>");
+
+  // Check that `scan.makeSortedTree(sortColumns)` yields an `IndexScan` in the
+  // `expectedPermutation`, which is sorted by `expectedSortedOn` (and hence
+  // also by `sortColumns`), and which has the same columns and the same rows
+  // (only in a different order) as `scan`.
+  auto checkResorted = [qec](IndexScan& scan,
+                             const std::vector<ColumnIndex>& sortColumns,
+                             Permutation::Enum expectedPermutation,
+                             const std::vector<ColumnIndex>& expectedSortedOn,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto tree = scan.makeSortedTree(sortColumns);
+    ASSERT_TRUE(tree.has_value());
+    auto& resorted =
+        dynamic_cast<IndexScan&>(*tree.value()->getRootOperation());
+    EXPECT_EQ(resorted.permutation().permutation(), expectedPermutation);
+    EXPECT_THAT(resorted.resultSortedOn(), ElementsAreArray(expectedSortedOn));
+    EXPECT_TRUE(resorted.isSortedBy(sortColumns));
+    // Changing the permutation doesn't change the columns of the result.
+    EXPECT_EQ(resorted.getExternallyVisibleVariableColumns(),
+              scan.getExternallyVisibleVariableColumns());
+    EXPECT_EQ(resorted.getResultWidth(), scan.getResultWidth());
+    // The rows are the same, only their order differs.
+    qec->clearCacheUnpinnedOnly();
+    auto expected = sortedResultRows(scan);
+    qec->clearCacheUnpinnedOnly();
+    EXPECT_THAT(sortedResultRows(resorted), ElementsAreArray(expected));
+  };
+
+  // A scan with three variables can be sorted by any of the six orders, because
+  // all six permutations are loaded.
+  {
+    IndexScan scan{qec, Permutation::SPO,
+                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+    ASSERT_THAT(scan.resultSortedOn(), ElementsAre(0, 1, 2));
+    // Requesting a sort order that the scan already has violates the
+    // precondition of `makeSortedTree`.
+    EXPECT_THROW(scan.makeSortedTree({0, 1}), ad_utility::Exception);
+
+    // Note: the first candidate permutation (`SPO`) doesn't match the requested
+    // sort order in all of the following cases, which exercises the search for
+    // a matching permutation.
+    checkResorted(scan, {1}, Permutation::PSO, {1, 0, 2});
+    checkResorted(scan, {1, 2}, Permutation::POS, {1, 2, 0});
+    checkResorted(scan, {2}, Permutation::OSP, {2, 0, 1});
+    checkResorted(scan, {2, 1}, Permutation::OPS, {2, 1, 0});
+    checkResorted(scan, {0, 2}, Permutation::SOP, {0, 2, 1});
+
+    // For three variables the multiplicities only depend on the variable, not
+    // on the permutation, so they are simply reordered.
+    auto resorted = scan.makeSortedTree({2, 1}).value();
+    for (size_t i = 0; i < scan.getResultWidth(); ++i) {
+      EXPECT_FLOAT_EQ(resorted->getRootOperation()->getMultiplicity(i),
+                      scan.getMultiplicity(i));
+    }
+  }
+
+  // A scan with two variables can only use the permutations whose key order
+  // starts with the fixed component, here `PSO` and `POS`. The candidates whose
+  // key order starts with a variable are skipped.
+  {
+    IndexScan scan{
+        qec, Permutation::PSO,
+        SparqlTripleSimple{Var{"?x"}, I::fromIriref("<p>"), Var{"?z"}}};
+    // The predicate is fixed and hence has no column, so `?x` is column 0 and
+    // `?z` is column 1.
+    ASSERT_THAT(scan.resultSortedOn(), ElementsAre(0, 1));
+    checkResorted(scan, {1}, Permutation::POS, {1, 0});
+  }
+
+  // The additional (graph) column is not part of the s/p/o triple, so it cannot
+  // be sorted on by changing the permutation.
+  {
+    IndexScan scan{
+        qec, Permutation::SPO,
+        SparqlTripleSimple{
+            Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
+    ASSERT_THAT(scan.resultSortedOn(), ElementsAre(0, 1, 2, 3));
+    EXPECT_FALSE(scan.makeSortedTree({3}).has_value());
+    // The s/p/o columns still can be reordered.
+    checkResorted(scan, {1}, Permutation::PSO, {1, 0, 2, 3});
+  }
+
+  // A scan with stripped columns can also be re-sorted, as long as the sort
+  // column is a kept s/p/o variable.
+  {
+    IndexScan scan{qec, Permutation::SPO,
+                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+    auto stripped = scan.makeTreeWithStrippedColumns({Var{"?y"}, Var{"?z"}});
+    ASSERT_TRUE(stripped.has_value());
+    auto& strippedScan =
+        dynamic_cast<IndexScan&>(*stripped.value()->getRootOperation());
+    // `?y` is column 0 and `?z` is column 1. The scan is sorted by `?x` first,
+    // which is stripped away, so the result is sorted on nothing.
+    ASSERT_THAT(strippedScan.resultSortedOn(), IsEmpty());
+    // Switching to `PSO` makes the scan sorted by `?y`. Note that it is still
+    // not sorted by `?z` afterwards, because the stripped `?x` comes in
+    // between.
+    checkResorted(strippedScan, {0}, Permutation::PSO, {0});
+  }
+
+  // A prefiltered scan is tied to its permutation.
+  {
+    using namespace makeFilterExpression;
+    using namespace filterHelper;
+    auto scanTree = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::SPO,
+        SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}});
+    auto prefiltered =
+        scanTree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            makePrefilterVec(pr(lt(LocalVocabEntry::fromIriref(
+                                    "<s2>", qec->getLocalVocabContext())),
+                                Var{"?x"})));
+    ASSERT_TRUE(prefiltered.has_value());
+    EXPECT_FALSE(prefiltered.value()
+                     ->getRootOperation()
+                     ->makeSortedTree({1})
+                     .has_value());
+  }
+
+  // Re-sorting also works on an index that was built with only the `PSO` and
+  // `POS` permutations. Note that such an index only supports scans with a
+  // fixed predicate, and for those the two candidate permutations are exactly
+  // `PSO` and `POS`, which both are loaded.
+  {
+    TestIndexConfig config{"<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>"};
+    config.loadAllPermutations = false;
+    config.usePatterns = false;
+    auto* qecTwoPermutations = getQec(config);
+    IndexScan scan{
+        qecTwoPermutations, Permutation::PSO,
+        SparqlTripleSimple{Var{"?x"}, I::fromIriref("<p>"), Var{"?z"}}};
+    ASSERT_THAT(scan.resultSortedOn(), ElementsAre(0, 1));
+    checkResorted(scan, {1}, Permutation::POS, {1, 0});
+  }
+}

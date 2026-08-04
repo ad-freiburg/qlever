@@ -2065,3 +2065,30 @@ TEST(MaterializedViewsManager, viewFilesOnDisk) {
                   MaterializedView::getFilenameBase(base, "viewA"),
                   MaterializedView::getFilenameBase(base, "viewB") + ".spo"));
 }
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, indexScanOnViewCannotChangeItsPermutation) {
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk("testView1", plan);
+
+  auto plannedQuery = qlv().parseAndPlanQuery(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:testView1 {
+        _:config view:column-s ?s ;
+                 view:column-p ?p .
+      }
+    }
+  )");
+  const auto& scan = dynamic_cast<const IndexScan&>(
+      *plannedQuery.queryExecutionTree().getRootOperation());
+  EXPECT_THAT(scan.resultSortedOn(), ::testing::ElementsAre(0, 1));
+
+  // An `IndexScan` on a materialized view doesn't read from one of the six
+  // permutations of the index, but from the view's own permutation. Those
+  // contain completely different data, so the scan must not change its
+  // permutation to obtain a different sort order (the caller then adds an
+  // explicit `Sort` instead).
+  EXPECT_FALSE(scan.makeSortedTree({1}).has_value());
+}
