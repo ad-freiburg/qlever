@@ -14,6 +14,7 @@
 #include <re2/re2.h>
 #include <re2/regexp.h>
 
+#include <cstddef>
 #include <memory>
 
 #include "backports/algorithm.h"
@@ -50,11 +51,15 @@ std::string_view longestCommonPrefix(std::string_view a, std::string_view b) {
 // the incomplete character is always sound, as any prefix of a valid prefix is
 // itself a valid prefix.
 std::string_view removeIncompleteCharacter(std::string_view prefix) {
+  // Extract the bits of `c` that are selected by `mask`.
+  auto maskedBits = [](char c, std::byte mask) {
+    return static_cast<std::byte>(c) & mask;
+  };
   // The last character starts at the last byte that is not a continuation byte
   // `10xxxxxx`, and that lead byte announces the total number of bytes of the
   // character.
-  auto isContinuationByte = [](char c) {
-    return (static_cast<unsigned char>(c) & 0b1100'0000) == 0b1000'0000;
+  auto isContinuationByte = [&maskedBits](char c) {
+    return maskedBits(c, std::byte{0b1100'0000}) == std::byte{0b1000'0000};
   };
   auto reversed = ql::views::reverse(prefix);
   auto lastLeadByte = ql::ranges::find_if_not(reversed, isContinuationByte);
@@ -65,12 +70,16 @@ std::string_view removeIncompleteCharacter(std::string_view prefix) {
     return prefix;
   }
   size_t numBytesPresent = lastLeadByte - reversed.begin() + 1;
-  // The lead byte announces the number of bytes of the character: `0xxxxxxx` ->
-  // 1, `110xxxxx` -> 2, `1110xxxx` -> 3, `11110xxx` -> 4.
-  auto leadByte = static_cast<unsigned char>(*lastLeadByte);
-  size_t numBytesAnnounced = 1 + (leadByte >= 0b1100'0000) +
-                             (leadByte >= 0b1110'0000) +
-                             (leadByte >= 0b1111'0000);
+  // The lead byte announces the number of bytes of the character by its leading
+  // one-bits: `0xxxxxxx` -> 1, `110xxxxx` -> 2, `1110xxxx` -> 3, `11110xxx` ->
+  // 4. So each of the masks below that is fully set adds one byte.
+  size_t numBytesAnnounced = 1;
+  for (std::byte mask : {std::byte{0b1100'0000}, std::byte{0b1110'0000},
+                         std::byte{0b1111'0000}}) {
+    if (maskedBits(*lastLeadByte, mask) == mask) {
+      ++numBytesAnnounced;
+    }
+  }
   return numBytesPresent == numBytesAnnounced
              ? prefix
              : prefix.substr(0, prefix.size() - numBytesPresent);
