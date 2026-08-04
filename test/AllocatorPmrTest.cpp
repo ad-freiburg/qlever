@@ -53,6 +53,17 @@ class CountingResource : public ql::pmr::memory_resource {
     return this == &other;
   }
 };
+
+// Return the `LimitedMemoryResource` that `alloc` allocates from. Fails the
+// currently running test if the allocator uses a different kind of resource.
+template <typename T>
+ad_utility::LimitedMemoryResource* limitedResourceOf(
+    const PmrAllocator<T>& alloc) {
+  auto* resource =
+      dynamic_cast<ad_utility::LimitedMemoryResource*>(alloc.resource());
+  EXPECT_NE(resource, nullptr);
+  return resource;
+}
 }  // namespace
 
 // `.as<U>()` keeps using the same underlying PMR resource.
@@ -70,6 +81,7 @@ TEST(AllocatorPmr, CustomUpstreamResource) {
   static_assert(sizeof(int) == 4);
   CountingResource upstream;
   auto alloc = makePmrAllocatorWithLimit<int>(8_B, &upstream);
+  EXPECT_EQ(limitedResourceOf(alloc)->upstream(), &upstream);
 
   int* p = alloc.allocate(2);
   ASSERT_NE(p, nullptr);
@@ -92,6 +104,10 @@ TEST(AllocatorPmr, CustomUpstreamResource) {
 TEST(AllocatorPmr, NullptrUpstreamUsesDefaultResource) {
   static_assert(sizeof(int) == 4);
   auto alloc = makePmrAllocatorWithLimit<int>(8_B, nullptr);
+  EXPECT_EQ(limitedResourceOf(alloc)->upstream(),
+            ql::pmr::get_default_resource());
+
+  // The allocator is fully functional, including the limit.
   int* p = alloc.allocate(2);
   ASSERT_NE(p, nullptr);
   EXPECT_EQ(alloc.amountMemoryLeft(), 0_B);

@@ -50,6 +50,11 @@ class LimitedMemoryResource : public ql::pmr::memory_resource {
         upstream_{upstream == nullptr ? ql::pmr::get_default_resource()
                                       : upstream} {}
 
+  // Return the upstream resource that all allocations are forwarded to. This is
+  // the resource that was passed to the constructor, or the default resource if
+  // that was `nullptr`.
+  ql::pmr::memory_resource* upstream() const { return upstream_; }
+
  protected:
   void* do_allocate(std::size_t bytes, std::size_t alignment) override {
     tracker_.reserveOrThrow(MemorySize::bytes(bytes));

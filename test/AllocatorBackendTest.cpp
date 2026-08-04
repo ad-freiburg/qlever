@@ -220,6 +220,31 @@ TYPED_TEST(AllocatorBackendTest, UnderlyingAllocationFailureReleasesMemory) {
   EXPECT_EQ(alloc.amountMemoryLeft(), memoryLeftBefore);
 }
 
+// Copy construction and move construction let the new allocator share the
+// budget of the source. As both backends deliberately copy rather than steal on
+// move, a moved-from allocator stays valid and keeps sharing that budget.
+TYPED_TEST(AllocatorBackendTest, Construction) {
+  static_assert(sizeof(int) == 4);
+  auto alloc = TypeParam::makeLimited(8_B);
+
+  TypeParam copyConstructed{alloc};
+  EXPECT_EQ(copyConstructed, alloc);
+  EXPECT_EQ(copyConstructed.amountMemoryLeft(), 8_B);
+  // Allocating via the copy counts towards the budget of `alloc`.
+  int* p = copyConstructed.allocate(1);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
+  copyConstructed.deallocate(p, 1);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 8_B);
+
+  TypeParam moveConstructed{std::move(copyConstructed)};
+  EXPECT_EQ(moveConstructed, alloc);
+  // The moved-from allocator is still usable and still shares the same budget.
+  int* q = copyConstructed.allocate(1);
+  EXPECT_EQ(moveConstructed.amountMemoryLeft(), 4_B);
+  copyConstructed.deallocate(q, 1);
+  EXPECT_EQ(moveConstructed.amountMemoryLeft(), 8_B);
+}
+
 // Copy assignment and move assignment let the target allocator share the budget
 // of the source. As both backends deliberately copy rather than steal on move,
 // a moved-from allocator stays valid and keeps sharing that budget.
