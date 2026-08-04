@@ -1,11 +1,11 @@
 add_library(qlever Qlever.cpp NamedCachedQueryBlobManager.cpp)
-qlever_target_link_libraries(qlever parser engine qlever_util index)
+qlever_target_link_libraries(qlever sparqlParser engine qlever_util index)
 
 if (EMSCRIPTEN)
     # Build the WASM module (`qlever.mjs` + `qlever.wasm` + `qlever.d.ts"`)
     # with the embind bindings from `QleverEmscriptenBindings.cpp`.
     add_executable(qleverwasm QleverEmscriptenBindings.cpp)
-    qlever_target_link_libraries(qleverwasm qlever parser engine util index)
+    qlever_target_link_libraries(qleverwasm qlever sparqlParser engine util index)
 
     # The module is loaded as `qlever.mjs` (which fetches `qlever.wasm`). The
     # `.mjs` suffix marks it as an ES module for Node and bundlers alike.
