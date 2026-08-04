@@ -341,8 +341,6 @@ Plans QueryPlanner::getDistinctRow(const p::SelectClause& selectClause,
   added.reserve(previous.size());
   for (const auto& parent : previous) {
     SubtreePlan distinctPlan(_qec);
-    // NOTE: `keepIndices` is passed on to the `Distinct` operation and is
-    // bounded by the number of columns, hence it keeps the default allocator.
     vector<ColumnIndex> keepIndices;
     Set<ColumnIndex> indDone{allocator_};
     const auto& colMap = parent._qet->getVariableColumns();
@@ -539,8 +537,6 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
   Map<Variable, std::string> optTermForCvar{allocator_};
-  // NOTE: The inner `std::vector`s are passed on to
-  // `Index::getIndexOfBestSuitedElTerm` and hence keep the default allocator.
   Map<Variable, std::vector<std::string>> potentialTermsForCvar{allocator_};
   Vec<const SparqlTriple*> entityTriples{allocator_};
   // Add one or more nodes for each triple.
@@ -1636,8 +1632,6 @@ size_t QueryPlanner::countSubgraphs(Vec<const SubtreePlan*> graph,
   // function closer to the actual behavior of the DP query planner (it always
   // applies either all possible filters at once, or none of them).
   Plans dummyPlansForFilter{allocator_};
-  // NOTE: The inner sets are bounded by the number of variables in a single
-  // filter, so they keep the default allocator.
   Set<ad_utility::HashSet<Variable>> deduplicatedFilterVariables{allocator_};
   for (const auto& filter : filters) {
     const auto& vars = filter.expression_.containedVariables();
@@ -1895,8 +1889,6 @@ PlanRows QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // More than one connected component, set up a Cartesian product.
   PlanRows result{allocator_};
   result.emplace_back(allocator_);
-  // NOTE: The `subtrees` are passed on to the `CartesianProductJoin`, hence
-  // they keep the default allocator.
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
   // We need to manually inform the cartesian produce about
   // its included nodes and filters and text limits to make the

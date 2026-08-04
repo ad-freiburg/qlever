@@ -39,9 +39,6 @@ class QueryPlanner {
   using Set = ad_utility::HashSetWithMemoryLimit<T>;
 
  private:
-  // NOTE: The `TextLimitMap` is owned by the parser (see
-  // `ParsedQuery::GraphPattern::textLimits_`), so it deliberately keeps the
-  // default allocator. The `TextLimitVec` is created by the planner itself.
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
   using TextLimitVec =
@@ -209,9 +206,6 @@ class QueryPlanner {
     bool hasSubstitute() const { return substitute_.has_value(); }
   };
 
-  // NOTE: The number of filters is bounded by the size of the query (and even
-  // explicitly limited to 64), and the filters themselves are owned by the
-  // parser, so this container keeps the default allocator.
   using FiltersAndOptionalSubstitutes =
       std::vector<FilterAndOptionalSubstitute>;
 
