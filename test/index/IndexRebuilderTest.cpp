@@ -810,7 +810,7 @@ TEST(IndexRebuilder, serverIntegration) {
   // neither can collide with the directories of another test. It is declared
   // first, so that it is restored and removed last, i.e. after the `server` and
   // the `threadPool` below have been destroyed.
-  auto workingDirectory = ad_utility::testing::useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -1023,7 +1023,7 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   // The automatic rebuild below uses the default directory names and the checks
   // below inspect all directories with a given prefix, see the comment in
   // `serverIntegration` above for why this needs a fresh working directory.
-  auto workingDirectory = ad_utility::testing::useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
 
   std::string indexName = gtestCurrentTestName();
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
