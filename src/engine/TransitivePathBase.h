@@ -101,18 +101,20 @@ struct NodeWithTargets {
   Set targets_;
   LocalVocab localVocab_;
   PayloadTable idTable_;
-  // Corresponding row in `idTable_`.
+  PayloadTable targetIdTable_;
+  // Corresponding row in `idTable_` and `targetIdTable_`.
   size_t row_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Id graph, Set targets, LocalVocab localVocab,
-                  PayloadTable idTable, size_t row)
+                  PayloadTable idTable, PayloadTable targetIdTable, size_t row)
       : node_{node},
         graph_{graph},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
         idTable_{std::move(idTable)},
+        targetIdTable_{std::move(targetIdTable)},
         row_{row} {}
 };
 
@@ -129,6 +131,8 @@ class TransitivePathBase : public Operation {
  protected:
   using Graphs = ScanSpecificationAsTripleComponent::GraphFilter;
 
+  using OpAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
+
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
   TransitivePathSide rhs_;
@@ -137,7 +141,7 @@ class TransitivePathBase : public Operation {
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
   // Indicate that the variable is only bound because the path is empty, not
-  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // because `bindSides` was called. This means that it is bound to a
   // full scan of all subjects and objects in the knowledge graph, but can be
   // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
@@ -162,25 +166,14 @@ class TransitivePathBase : public Operation {
 
   ~TransitivePathBase() override = 0;
 
-  /**
-   * Returns a new TransitivePath operation that uses the fact that leftop
-   * generates all possible values for the left side of the paths. If the
-   * results of leftop is smaller than all possible values this will result in a
-   * faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindLeftSide(
-      std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const;
-
-  /**
-   * Returns a new TransitivePath operation that uses the fact that rightop
-   * generates all possible values for the right side of the paths. If the
-   * results of rightop is smaller than all possible values this will result in
-   * a faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindRightSide(
-      std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const;
+  // Return a new Transitive Path `Operation` that uses the fact that either
+  // the left, right or both input operations generate all possible values of
+  // their corresponding side. This may result in a faster transitive path
+  // operation if the amount of those values is smaller than all possible values
+  // (as the transitive path has to be computed for fewer elements).
+  std::shared_ptr<TransitivePathBase> bindSides(
+      std::optional<OpAndCol> leftOpAndCol = std::nullopt,
+      std::optional<OpAndCol> rightOpAndCol = std::nullopt) const;
 
   bool isBoundOrId() const;
 
@@ -230,9 +223,9 @@ class TransitivePathBase : public Operation {
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+  void copyColumns(const PayloadTable& inputTable,
                    IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
-                   size_t outputRow) const;
+                   size_t outputRow, size_t outputColOffset = 0) const;
 
   // Return the actual index of the graph column in `tree`. If
   // `internalGraphHelper_` is present it takes precedence over
@@ -244,8 +237,8 @@ class TransitivePathBase : public Operation {
   // Return how many columns would be joined given the passed `tree`. Return 1
   // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
   // index is equal to `joinColumn`. Return 2 otherwise.
-  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
-                            ColumnIndex joinColumn) const;
+  size_t numJoinColumnsWidth(const std::shared_ptr<QueryExecutionTree>& tree,
+                             ColumnIndex joinColumn) const;
 
  public:
   std::string getDescriptor() const override;
@@ -301,12 +294,19 @@ class TransitivePathBase : public Operation {
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
+  // Insert the payload columns of one or two given sides into a plan.
+  // Traverse each side of the operation and insert columns which are not
+  // related to joining into the plan.
+  void insertPayloadColumnsToPlan(
+      auto& plan, const std::optional<OpAndCol>& opAndCol,
+      const std::optional<OpAndCol>& otherOpAndCol) const;
+
  public:
   size_t getCostEstimate() override;
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathFallback or
+   * The concrete object will either be TransitivePathHashMap or
    * TransitivePathBinSearch, depending on the useBinSearch flag.
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
@@ -358,12 +358,6 @@ class TransitivePathBase : public Operation {
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-
-  // The internal implementation of `bindLeftSide` and `bindRightSide` which
-  // share a lot of code.
-  std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
-      std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
-      bool isLeft) const;
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,

@@ -5,6 +5,7 @@
 
 #include <gmock/gmock.h>
 
+#include <cstddef>
 #include <limits>
 #include <memory>
 
@@ -83,17 +84,54 @@ class TransitivePathTest
     auto [T, qec] =
         makePath(std::move(input), vars, std::move(left), std::move(right),
                  minDist, maxDist, std::move(turtleInput), graphVariable);
-    auto operation =
-        std::holds_alternative<IdTable>(sideTable)
-            ? ad_utility::makeExecutionTree<ValuesForTesting>(
-                  qec, std::move(std::get<IdTable>(sideTable)), sideVars, false,
-                  std::vector<ColumnIndex>{sideTableCol}, LocalVocab{},
-                  std::nullopt, forceFullyMaterialized)
-            : ad_utility::makeExecutionTree<ValuesForTesting>(
-                  qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
-                  sideVars, false, std::vector<ColumnIndex>{sideTableCol});
-    auto boundPath = isLeft ? T->bindLeftSide(operation, sideTableCol)
-                            : T->bindRightSide(operation, sideTableCol);
+    auto operation = getOperation(qec, sideTable, sideVars, sideTableCol,
+                                  forceFullyMaterialized);
+    auto boundPath =
+        isLeft ? T->bindSides(std::pair{operation, sideTableCol})
+               : T->bindSides(std::nullopt, std::pair{operation, sideTableCol});
+
+    EXPECT_TRUE(boundPath->isBoundOrId());
+    return boundPath;
+  }
+
+  // Get the `operation` element for a side of a transitive path.
+  [[nodiscard]] static std::shared_ptr<QueryExecutionTree> getOperation(
+      QueryExecutionContext* qec,
+      std::variant<IdTable, std::vector<IdTable>>& sideTable, Vars sideVars,
+      size_t sideTableCol, bool forceFullyMaterialized) {
+    return std::holds_alternative<IdTable>(sideTable)
+               ? ad_utility::makeExecutionTree<ValuesForTesting>(
+                     qec, std::move(std::get<IdTable>(sideTable)), sideVars,
+                     false, std::vector<ColumnIndex>{sideTableCol},
+                     LocalVocab{}, std::nullopt, forceFullyMaterialized)
+               : ad_utility::makeExecutionTree<ValuesForTesting>(
+                     qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
+                     sideVars, false, std::vector<ColumnIndex>{sideTableCol});
+  }
+
+  // Same as `makePathBound` but binds two columns at once.
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase>
+  makePathBoundOnBothSides(
+      IdTable input, Vars vars,
+      std::variant<IdTable, std::vector<IdTable>> leftSideTable,
+      std::variant<IdTable, std::vector<IdTable>> rightSideTable,
+      size_t leftSideTableCol, size_t rightSideTableCol, Vars leftSideVars,
+      Vars rightSideVars, TransitivePathSide left, TransitivePathSide right,
+      size_t minDist, size_t maxDist, bool forceFullyMaterialized = false,
+      const std::optional<Variable>& graphVariable = std::nullopt,
+      std::optional<std::string> turtleInput = std::nullopt) {
+    auto [T, qec] =
+        makePath(std::move(input), vars, std::move(left), std::move(right),
+                 minDist, maxDist, std::move(turtleInput), graphVariable);
+
+    auto leftOperation = getOperation(qec, leftSideTable, leftSideVars,
+                                      leftSideTableCol, forceFullyMaterialized);
+    auto rightOperation =
+        getOperation(qec, rightSideTable, rightSideVars, rightSideTableCol,
+                     forceFullyMaterialized);
+
+    auto boundPath = T->bindSides(std::pair{leftOperation, leftSideTableCol},
+                                  std::pair{rightOperation, rightSideTableCol});
 
     EXPECT_TRUE(boundPath->isBoundOrId());
     return boundPath;
@@ -140,6 +178,19 @@ class TransitivePathTest
     testCase(idTable.clone(), false);
     testCase(split(idTable), false);
     testCase(idTable.clone(), true);
+  }
+
+  static void runTestWithForcedSideTableScenariosOnBothSides(
+      const std::invocable<std::variant<IdTable, std::vector<IdTable>>,
+                           std::variant<IdTable, std::vector<IdTable>>,
+                           bool> auto& testCase,
+      IdTable firstIdTable, IdTable secondIdTable,
+      ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+
+    testCase(firstIdTable.clone(), secondIdTable.clone(), false);
+    testCase(split(firstIdTable), split(secondIdTable), false);
+    testCase(firstIdTable.clone(), secondIdTable.clone(), true);
   }
 };
 
@@ -314,7 +365,7 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, varTovar) {
+TEST_P(TransitivePathTest, varToVar) {
   auto sub = makeIdTableFromVector({
       {0, 1},
       {1, 2},
@@ -559,6 +610,55 @@ TEST_P(TransitivePathTest, boundToVarWithUndef) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWithUndef) {
+  auto sub = makeIdTableFromVector({
+      {0, 5},
+      {1, 2},
+      {1, 4},
+      {4, 3},
+  });
+
+  auto bindAndCompareResult = [&](auto& leftOpTable, auto& rightOpTable,
+                                  auto& expected) {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::move(leftOpTable), std::move(rightOpTable), 1, 0,
+        {Variable{"?side1"}, Variable{"?start"}},
+        {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
+        std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, 1}});
+    auto rightOpTable = makeIdTableFromVector({{Id::makeUndefined(), 20}});
+    auto expected = makeIdTableFromVector({{1, 4, 10, 20}});
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, Id::makeUndefined()}});
+    auto rightOpTable = makeIdTableFromVector({{3, 20}});
+    auto expected = makeIdTableFromVector({
+        {1, 3, 10, 20},
+        {4, 3, 10, 20},
+    });
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, Id::makeUndefined()}});
+    auto rightOpTable = makeIdTableFromVector({{Id::makeUndefined(), 20}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20},
+    });
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, boundToVarWithUndefWithGraph) {
   auto sub = makeIdTableFromVector({
       {1, 2, 100},
@@ -596,6 +696,56 @@ TEST_P(TransitivePathTest, boundToVarWithUndefWithGraph) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWithUndefWithGraph) {
+  auto sub = makeIdTableFromVector({
+      {0, 5, 100},
+      {1, 2, 101},
+      {1, 4, 101},
+      {4, 3, 101},
+  });
+
+  auto bindAndCompareResult = [&](auto& leftOpTable, auto& rightOpTable,
+                                  auto& expected) {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
+        std::move(leftOpTable), std::move(rightOpTable), 1, 0,
+        {Variable{"?side1"}, Variable{"?start"}},
+        {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), false, Variable{"?g"});
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, 1}});
+    auto rightOpTable = makeIdTableFromVector({{Id::makeUndefined(), 20}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20, 101},
+    });
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, Id::makeUndefined()}});
+    auto rightOpTable = makeIdTableFromVector({{4, 20}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20, 101},
+    });
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, Id::makeUndefined()}});
+    auto rightOpTable = makeIdTableFromVector({{Id::makeUndefined(), 20}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20, 101},
+    });
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, boundToVarWithUndefGraph) {
   auto sub = makeIdTableFromVector({
       {1, 2, 100},
@@ -627,6 +777,55 @@ TEST_P(TransitivePathTest, boundToVarWithUndefGraph) {
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
+}
+
+// TODO<schaetzr>
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVarWithUndefGraph) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 100},
+      {2, 3, 100},
+      {2, 4, 101},
+      {3, 4, 100},
+      {3, 4, 101},
+      {4, 5, 101},
+  });
+
+  auto bindAndCompareResult = [&](auto& leftOpTable, auto& rightOpTable,
+                                  auto& expected) {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?i1"}, Variable{"?i2"}, Variable{"?g"}},
+        std::move(leftOpTable), std::move(rightOpTable), 1, 0,
+        {Variable{"?side1"}, Variable{"?start"}, Variable{"?g"}},
+        {Variable{"?target"}, Variable{"?side2"}, Variable{"?g"}}, left, right,
+        1, std::numeric_limits<size_t>::max(), false, Variable{"?g"});
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+  {
+    auto leftOpTable = makeIdTableFromVector({{10, 1, Id::makeUndefined()}});
+    auto rightOpTable = makeIdTableFromVector({{3, 20, 100}});
+    auto expected = makeIdTableFromVector({{1, 3, 10, 20, 100}});
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+  {
+    auto leftOpTable = makeIdTableFromVector({{11, 2, 101}});
+    auto rightOpTable = makeIdTableFromVector({{4, 21, Id::makeUndefined()}});
+    auto expected = makeIdTableFromVector({{2, 4, 11, 21, 101}});
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
+  {
+    auto leftOpTable = makeIdTableFromVector({{12, 2, Id::makeUndefined()}});
+    auto rightOpTable = makeIdTableFromVector({{4, 22, Id::makeUndefined()}});
+    auto expected = makeIdTableFromVector({
+        {2, 4, 12, 22, 100},
+        {2, 4, 12, 22, 101},
+    });
+    bindAndCompareResult(leftOpTable, rightOpTable, expected);
+  }
 }
 
 // _____________________________________________________________________________
@@ -673,6 +872,68 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, bothBoundToVar) {
+  auto sub = makeIdTableFromVector({
+      {0, 5},
+      {1, 2},
+      {1, 4},
+      {4, 3},
+      {4, 4},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {10, 0},
+      {11, 1},
+      {12, 2},
+      {13, 4},
+  });
+  auto rightOpTable = makeIdTableFromVector({
+      {2, 20},
+      {3, 21},
+      {3, 23},
+      {4, 24},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 3, 11, 21},
+      {4, 4, 13, 24},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+
+  auto testCaseFunc = [&](auto tableVariant, auto secondTableVariant,
+                          bool forceFullyMaterialized) {
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::move(tableVariant), std::move(secondTableVariant), 1, 0,
+        {Variable{"?side1"}, Variable{"?start"}},
+        {Variable{"?target"}, Variable{"?side2"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), forceFullyMaterialized);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  };
+
+  // We cannot move away the same tables twice, hence we clone them before
+  // moving them into the test execution.
+  auto leftOpTableCopy = leftOpTable.clone();
+  auto rightOpTableCopy = rightOpTable.clone();
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, leftOpTable.clone(), rightOpTable.clone());
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, std::move(leftOpTableCopy), rightOpTable.clone());
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, leftOpTable.clone(), std::move(rightOpTableCopy));
+
+  runTestWithForcedSideTableScenariosOnBothSides(
+      testCaseFunc, std::move(leftOpTable), std::move(rightOpTable));
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
   auto sub = makeIdTableFromVector({
       {1, 2},
@@ -710,15 +971,32 @@ TEST_P(TransitivePathTest, emptySideTable) {
 
   auto expected = makeIdTableFromVector({});
 
-  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
-  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePathBound(true, sub.clone(),
-                         {Variable{"?start"}, Variable{"?target"}},
-                         std::vector<IdTable>{}, 0, {Variable{"?start"}}, left,
-                         right, 0, std::numeric_limits<size_t>::max());
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    // Single side bound to empty side table.
+    auto T = makePathBound(true, sub.clone(),
+                           {Variable{"?start"}, Variable{"?target"}},
+                           std::vector<IdTable>{}, 0, {Variable{"?start"}},
+                           left, right, 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-  assertResultMatchesIdTable(resultTable, expected);
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    // Both sides bound to empty side table.
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        std::vector<IdTable>{}, std::vector<IdTable>{}, 0, 0,
+        {Variable{"?start"}}, {Variable{"?target"}}, left, right, 0,
+        std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
 }
 
 // _____________________________________________________________________________
@@ -1061,13 +1339,12 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
         qlever::index::GraphFilter<TripleComponent>::All(), std::nullopt);
   };
 
-  // Simulate entries in the delta triples by using entries that are not in the
-  // index
-  // Note: the entries in this local vocab are destroyed when this test is done.
-  // It is therefore crucial that the `makePath...` functions clear the cache,
-  // s.t. subsequent tests do not read results with a dangling local vocab from
-  // the cache (Currently the indexes used for testing are `static` which should
-  // be changed in the future).
+  // Simulate entries in the delta triples by using entries that are not in
+  // the index Note: the entries in this local vocab are destroyed when this
+  // test is done. It is therefore crucial that the `makePath...` functions
+  // clear the cache, s.t. subsequent tests do not read results with a
+  // dangling local vocab from the cache (Currently the indexes used for
+  // testing are `static` which should be changed in the future).
   LocalVocab localVocab;
   auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithoutQuotes(literal,
@@ -1199,6 +1476,17 @@ TEST_P(TransitivePathTest, sameVariableOnBothSidesBound) {
                            {Variable{"?internal1"}, Variable{"?internal2"}},
                            split(sideTable), 0, {Variable{"?var"}}, left, right,
                            1, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?var"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?var"}, 1);
+    auto T = makePathBoundOnBothSides(
+        sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}},
+        split(sideTable), split(sideTable), 0, 0, {Variable{"?var"}},
+        {Variable{"?var"}}, left, right, 0, std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
@@ -1864,7 +2152,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         qec, side.clone(),
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
   }
@@ -1875,7 +2163,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
         false, std::vector<ColumnIndex>{1});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
   }
@@ -1886,7 +2174,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
         false, std::vector<ColumnIndex>{0});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre(0));
   }
@@ -1900,7 +2188,7 @@ TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
         std::vector<std::optional<Variable>>{Variable{"?start"},
                                              Variable{"?other"}},
         false, std::vector<ColumnIndex>{0});
-    auto boundPath = path->bindLeftSide(operation, 0);
+    auto boundPath = path->bindSides(std::pair{operation, 0});
 
     EXPECT_THAT(boundPath->resultSortedOn(), ::testing::ElementsAre());
   }
@@ -1921,7 +2209,8 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(TransitivePathBinSearch, successors) {
   auto input =
       makeIdTableFromVector({{0, 10}, {1, 10}, {2, 11}, {2, 12}, {3, 13}});
-  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1)};
+  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
+                            input.getAllocator()};
   EXPECT_THAT(binSearchMap.successors(V(0)), ElementsAre(V(10)));
   EXPECT_THAT(binSearchMap.successors(V(1)), ElementsAre(V(10)));
   EXPECT_THAT(binSearchMap.successors(V(2)), ElementsAre(V(11), V(12)));
@@ -1933,7 +2222,7 @@ TEST(TransitivePathBinSearch, successorsWithGraph) {
   auto input = makeIdTableFromVector(
       {{0, 10, 100}, {1, 10, 100}, {2, 11, 100}, {2, 12, 101}, {3, 13, 101}});
   BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
-                            input.getColumn(2)};
+                            input.getAllocator(), input.getColumn(2)};
   binSearchMap.setGraphId(V(100));
   EXPECT_THAT(binSearchMap.successors(V(0)), ElementsAre(V(10)));
   EXPECT_THAT(binSearchMap.successors(V(1)), ElementsAre(V(10)));
@@ -1989,7 +2278,7 @@ TEST(TransitivePathHashMap, successors) {
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0),
                    input.getColumn(1)),
-      input.getAllocator()};
+      Set{input.getAllocator()}, input.getAllocator()};
   EXPECT_THAT(hashMapWrapper.successors(V(0)), UnorderedElementsAre(V(10)));
   EXPECT_THAT(hashMapWrapper.successors(V(1)), UnorderedElementsAre(V(10)));
   EXPECT_THAT(hashMapWrapper.successors(V(2)),
@@ -2002,7 +2291,7 @@ TEST(TransitivePathHashMap, successorsWithGraph) {
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0), input.getColumn(1),
                    input.getColumn(2)),
-      input.getAllocator()};
+      Set{input.getAllocator()}, input.getAllocator()};
   hashMapWrapper.setGraphId(V(100));
   EXPECT_THAT(hashMapWrapper.successors(V(0)), UnorderedElementsAre(V(10)));
   EXPECT_THAT(hashMapWrapper.successors(V(1)), UnorderedElementsAre(V(10)));
@@ -2026,7 +2315,8 @@ TEST(TransitivePathHashMap, successorsWithGraph) {
 TEST(TransitivePathBinSearch, getEquivalentIdAndMatchingGraphs) {
   auto input =
       makeIdTableFromVector({{0, 10}, {1, 10}, {2, 11}, {2, 12}, {3, 13}});
-  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1)};
+  BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
+                            input.getAllocator()};
   EXPECT_THAT(
       binSearchMap.getEquivalentIdAndMatchingGraphs(U),
       ElementsAre(Pair(V(0), U), Pair(V(1), U), Pair(V(2), U), Pair(V(3), U)));
@@ -2052,7 +2342,7 @@ TEST(TransitivePathBinSearch, getEquivalentIdAndMatchingGraphsWithGraphs) {
                                       {3, 13, 101},
                                       {3, 14, 101}});
   BinSearchMap binSearchMap{input.getColumn(0), input.getColumn(1),
-                            input.getColumn(2)};
+                            input.getAllocator(), input.getColumn(2)};
   // The active graph should be ignored
   for (Id graphId : {U, V(100), V(101)}) {
     // Don't explicitly set undefined, this works fine because by default no
@@ -2084,7 +2374,7 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphs) {
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0),
                    input.getColumn(1)),
-      input.getAllocator()};
+      Set{input.getAllocator()}, input.getAllocator()};
   EXPECT_THAT(hashMapWrapper.getEquivalentIdAndMatchingGraphs(U),
               UnorderedElementsAre(Pair(V(0), U), Pair(V(1), U), Pair(V(2), U),
                                    Pair(V(3), U)));
@@ -2112,7 +2402,7 @@ TEST(TransitivePathHashMap, getEquivalentIdAndMatchingGraphsWithGraphs) {
   HashMapWrapper hashMapWrapper{
       columnsToMap(input.getAllocator(), input.getColumn(0), input.getColumn(1),
                    input.getColumn(2)),
-      input.getAllocator()};
+      Set{input.getAllocator()}, input.getAllocator()};
   // The active graph should be ignored
   for (Id graphId : {U, V(100), V(101)}) {
     // Don't explicitly set undefined, this works fine because by default no
