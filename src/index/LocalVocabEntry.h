@@ -188,11 +188,11 @@ class alignas(16) LocalVocabEntry
 
   // Compare two entries in the internal order (see the warning in the class
   // comment above; in particular this is NOT a semantic comparison as soon as
-  // the index has an auxiliary vocabulary). If the index has such a vocabulary,
-  // then this first compares the positions in the vocabularies (see
-  // `positionInVocab()`) and only falls back to the (expensive) comparison of
-  // the strings if those are equal. Comparing the strings alone would then not
-  // be a valid strict weak ordering: a word that is stored in the auxiliary
+  // the index has an auxiliary vocabulary). If the index has such an auxiliary
+  // vocabulary, then this first compares the positions in the vocabularies (see
+  // `positionInVocab()`) and only falls back to the comparison of the strings
+  // if those positions are equal. Comparing the strings alone would then not be
+  // a valid strict weak ordering: a word that is stored in the auxiliary
   // vocabulary of the index is positioned after all words of the main
   // vocabulary, so comparing it to a word that is in neither vocabulary has to
   // yield the same result as comparing the corresponding `Id`s, which are
