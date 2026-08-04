@@ -8,6 +8,7 @@
 
 #include <absl/functional/function_ref.h>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>

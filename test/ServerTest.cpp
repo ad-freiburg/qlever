@@ -29,8 +29,6 @@
 using nlohmann::json;
 
 namespace {
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 // Expect that `call()` throws an `HttpError` with status 403 Forbidden and
 // with a message that matches `messageMatcher`.
@@ -47,6 +45,8 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
   }
 };
 }  // namespace
+
+// ____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
   auto askQuery = parseQuery("ASK {}");
   auto selectQuery = parseQuery("SELECT * {}");

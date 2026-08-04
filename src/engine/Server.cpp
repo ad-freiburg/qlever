@@ -51,7 +51,7 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
@@ -1131,7 +1131,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     qec.areWebsocketUpdatesEnabled_ = false;
   }
 
-  // Update the `PlannedQuery` with the export limit when the response
+  // Update the `ParsedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
   // offset is not applied twice when exporting the query.
   plannedQuery->parsedQuery().updateExportLimit(
@@ -1315,9 +1315,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Update the delta triples.
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
-                auto updateMetadata =
-                    processUpdateImpl(plannedUpdate.value(), cancellationHandle,
-                                      deltaTriples, tracer);
+                auto updateMetadata = this->processUpdateImpl(
+                    plannedUpdate.value(), cancellationHandle, deltaTriples,
+                    tracer);
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
