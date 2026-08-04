@@ -594,99 +594,107 @@ TEST(IndexRebuilder, materializeToIndex) {
   for (auto [usePatterns, loadAllPermutations] :
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
-    ad_utility::testing::TestIndexConfig config;
-    config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
-    config.loadAllPermutations = loadAllPermutations;
-    config.usePatterns = usePatterns;
-    auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
-                                                    std::move(config));
-    index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
-                                                 DeltaTriples& deltaTriples) {
-      auto g =
-          toValueId(
-              TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                  DEFAULT_GRAPH_IRI)},
-              index)
-              .value();
-      deltaTriples.insertTriples(
-          cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
-                               IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
-    });
+    // Also exercise the fully sequential processing of the permutation pairs
+    // (`rebuild-max-concurrent-permutation-pairs = 1`); the result must be
+    // the same as with the default (0 = no limit).
+    for (size_t maxConcurrentPairs : {size_t{0}, size_t{1}}) {
+      auto cleanupMaxPairs = setRuntimeParameterForTest<
+          &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>(
+          maxConcurrentPairs);
+      ad_utility::testing::TestIndexConfig config;
+      config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
+      config.loadAllPermutations = loadAllPermutations;
+      config.usePatterns = usePatterns;
+      auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
+                                                      std::move(config));
+      index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                                   DeltaTriples& deltaTriples) {
+        auto g =
+            toValueId(
+                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    DEFAULT_GRAPH_IRI)},
+                index)
+                .value();
+        deltaTriples.insertTriples(
+            cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
+                                 IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+      });
 
-    auto [state, vocab, blankNodes] =
-        index.deltaTriplesManager()
-            .getCurrentLocatedTriplesSharedStateWithVocab();
+      auto [state, vocab, blankNodes] =
+          index.deltaTriplesManager()
+              .getCurrentLocatedTriplesSharedStateWithVocab();
 
-    ql::filesystem::create_directory(baseFolder);
-    absl::Cleanup removeIndexFiles{
-        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+      ql::filesystem::create_directory(baseFolder);
+      absl::Cleanup removeIndexFiles{
+          [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
-    auto sourceDate = index.getImpl().dateOfIndexBuild();
+      auto sourceDate = index.getImpl().dateOfIndexBuild();
 
-    qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                               blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(ql::filesystem::exists(logFile));
+      qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                                 blankNodes, cancellationHandle, logFile);
+      EXPECT_TRUE(ql::filesystem::exists(logFile));
 
-    // Each phase writes its header (which says what is being processed,
-    // depending on which permutations the index has) and at least its final
-    // progress line (with a percentage and an average speed) to the rebuild's
-    // log file.
-    {
-      auto logStream = ad_utility::makeIfstream(logFile);
-      std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
-      using ::testing::HasSubstr;
-      EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
-                                        "existing and new words) ..."));
-      EXPECT_THAT(
-          logContent,
-          HasSubstr(loadAllPermutations
-                        ? "Recomputing statistics (from 4 permutations, 3 "
-                          "normal and 1 internal) ..."
-                        : "Recomputing statistics (from 2 permutations, 1 "
-                          "normal and 1 internal) ..."));
-      EXPECT_THAT(logContent,
-                  HasSubstr(loadAllPermutations
-                                ? "Writing new index (8 permutations, 6 "
-                                  "normal and 2 internal) ..."
-                                : "Writing new index (4 permutations, 2 "
-                                  "normal and 2 internal) ..."));
-      EXPECT_THAT(logContent, HasSubstr("Words written: "));
-      EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
-      EXPECT_THAT(logContent, HasSubstr("Triples written: "));
-      EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
-      EXPECT_THAT(logContent, HasSubstr("[average speed "));
-    }
+      // Each phase writes its header (which says what is being processed,
+      // depending on which permutations the index has) and at least its final
+      // progress line (with a percentage and an average speed) to the rebuild's
+      // log file.
+      {
+        auto logStream = ad_utility::makeIfstream(logFile);
+        std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+        using ::testing::HasSubstr;
+        EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
+                                          "existing and new words) ..."));
+        EXPECT_THAT(
+            logContent,
+            HasSubstr(loadAllPermutations
+                          ? "Recomputing statistics (from 4 permutations, 3 "
+                            "normal and 1 internal) ..."
+                          : "Recomputing statistics (from 2 permutations, 1 "
+                            "normal and 1 internal) ..."));
+        EXPECT_THAT(logContent,
+                    HasSubstr(loadAllPermutations
+                                  ? "Writing new index (8 permutations, 6 "
+                                    "normal and 2 internal) ..."
+                                  : "Writing new index (4 permutations, 2 "
+                                    "normal and 2 internal) ..."));
+        EXPECT_THAT(logContent, HasSubstr("Words written: "));
+        EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
+        EXPECT_THAT(logContent, HasSubstr("Triples written: "));
+        EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
+        EXPECT_THAT(logContent, HasSubstr("[average speed "));
+      }
 
-    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
-    newIndex.usePatterns() = usePatterns;
-    newIndex.loadAllPermutations() = loadAllPermutations;
-    newIndex.createFromOnDiskIndex(newIndexName, false);
+      IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+      newIndex.usePatterns() = usePatterns;
+      newIndex.loadAllPermutations() = loadAllPermutations;
+      newIndex.createFromOnDiskIndex(newIndexName, false);
 
-    // The rebuilt index gets its own, more recent build date. Both dates are
-    // recorded with second resolution, so the rebuild may happen within the
-    // same second as the original build; hence we only assert "not older".
-    auto parseDate = [](const std::string& date) {
-      absl::Time result;
-      std::string error;
-      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
-                                  absl::UTCTimeZone(), &result, &error))
-          << error;
-      return result;
-    };
-    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+      // The rebuilt index gets its own, more recent build date. Both dates are
+      // recorded with second resolution, so the rebuild may happen within the
+      // same second as the original build; hence we only assert "not older".
+      auto parseDate = [](const std::string& date) {
+        absl::Time result;
+        std::string error;
+        EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                    absl::UTCTimeZone(), &result, &error))
+            << error;
+        return result;
+      };
+      EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
 
-    EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
-              index.getBlankNodeManager()->minIndex_ +
-                  ad_utility::BlankNodeManager::blockSize_);
-    EXPECT_EQ(newIndex.numTriples().normal, 4);
-    EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
-    EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
-    EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
-    if (newIndex.loadAllPermutations()) {
-      EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
-      EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
-      EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
-      EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+      EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
+                index.getBlankNodeManager()->minIndex_ +
+                    ad_utility::BlankNodeManager::blockSize_);
+      EXPECT_EQ(newIndex.numTriples().normal, 4);
+      EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
+      EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
+      EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
+      if (newIndex.loadAllPermutations()) {
+        EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
+        EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
+        EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
+        EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+      }
     }
   }
 }
