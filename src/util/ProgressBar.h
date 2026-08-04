@@ -8,6 +8,10 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
+#include <algorithm>
+#include <functional>
+#include <mutex>
+#include <optional>
 #include <string>
 
 #include "util/Exception.h"
@@ -25,8 +29,14 @@ inline std::string DEFAULT_SPEED_DESCRIPTION_FUNCTION(double stepsPerSecond) {
 
 namespace ad_utility {
 
+// Format `number` with thousand separators (e.g., 1234567 becomes
+// "1,234,567"), as used in the progress strings of the two classes below.
+inline std::string withThousandSeparators(size_t number) {
+  return insertThousandSeparator(std::to_string(number), ',');
+}
+
 // A class that keeps track of the progress of a long-running computation which
-// processed in (typically many and small) steps (for example, the lines of a
+// proceeds in (typically many and small) steps (for example, the lines of a
 // large input file or the triples of a permutation). The total number of steps
 // does not have to be known in advance.
 //
@@ -67,7 +77,7 @@ class ProgressBar {
   // NOTE: The variable for counting the number of steps must come from the
   // outside (and be incremented there). That is because the calling code
   // typically has such a variable anyway (also for other purposes) and it
-  // would we unnatural to have it originally in this class.
+  // would be unnatural to have it originally in this class.
   CPP_template(typename SizeT)(requires ad_utility::SimilarTo<SizeT, size_t>)
       ProgressBar(SizeT& numStepsProcessed, std::string displayStringPrefix,
                   size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
@@ -84,7 +94,7 @@ class ProgressBar {
   // should be displayed, `false` otherwise.
   //
   // IMPORTANT: This call is (and should) return `false` most of the time, in
-  // which case it is (and should be) very cheap (namely, and increment and a
+  // which case it is (and should be) very cheap (namely, an increment and a
   // simple check).
   bool update() {
     if (numStepsProcessed_ < updateWhenThisManyStepsProcessed_) {
@@ -102,10 +112,7 @@ class ProgressBar {
   // Progress string with statistics.
   std::string getProgressString() const {
     bool notYetFinished = timer_.isRunning();
-    // Two helper functions.
-    auto withThousandSeparators = [](size_t number) {
-      return ad_utility::insertThousandSeparator(std::to_string(number), ',');
-    };
+    // Helper function for the speed description.
     auto speed = [this](size_t numSteps, Timer::Duration duration) {
       return this->getSpeedDescription_(static_cast<double>(numSteps) /
                                         Timer::toSeconds(duration));
@@ -182,6 +189,198 @@ class ProgressBar {
   Timer::Duration maxBatchDuration_ = Timer::Duration::min();
 };
 
+// A class for the same general goal as `ProgressBar` above (reporting the
+// progress of a long-running computation), but with two differences:
+//
+// 1. The total number of steps is known in advance, so the progress can be
+// shown as a percentage of the total, together with the average speed; no need
+// to show the last, fastest, and slowest batch speeds like for `ProgressBar`.
+//
+// 2. The computation is done by several threads that concurrently report their
+// progress. The progress counter therefore lives inside this class, and the
+// progress string is only handed out via a lock-holding `Update` object, so
+// that the output of concurrent updates can neither interleave nor overtake
+// each other.
+//
+// Typical usage, analogous to the usage of `ProgressBar` above; in particular,
+// the `std::flush` at the end of the `AD_LOG_INFO` calls is important.
+//
+// ad_utility::ConcurrentProgressBar progressBar("Triples processed: ",
+//                                               numTriplesTotal);
+// std::vector<std::thread> threads;
+// for (size_t i = 0; i < numThreads; ++i) {
+//   threads.emplace_back([&]() {
+//     while (...) {
+//       // Code that processes one chunk of triples.
+//       progressBar.add(chunk.size());
+//       if (auto update = progressBar.update()) {
+//         AD_LOG_INFO << update->getProgressString() << std::flush;
+//       }
+//     }
+//   });
+// }
+// for (auto& thread : threads) {
+//   thread.join();
+// }
+// AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
+//
+class ConcurrentProgressBar {
+ public:
+  using SpeedDescriptionFunction = ProgressBar::SpeedDescriptionFunction;
+  using DisplayUpdateOptions = ProgressBar::DisplayUpdateOptions;
+
+  // The result of a successful `update()`: provides the progress string, and
+  // holds a lock until it is destroyed, so that the display of this update
+  // cannot interleave with (or be overtaken by) the display of updates from
+  // other threads. Hence write the string while the `Update` object is still
+  // alive, as in the typical usage above.
+  class Update {
+   public:
+    const std::string& getProgressString() const { return progressString_; }
+
+   private:
+    friend class ConcurrentProgressBar;
+    Update(std::unique_lock<std::mutex> displayLock, std::string progressString)
+        : displayLock_{std::move(displayLock)},
+          progressString_{std::move(progressString)} {}
+    std::unique_lock<std::mutex> displayLock_;
+    std::string progressString_;
+  };
+
+  // Create and initialize a concurrent progress bar.
+  ConcurrentProgressBar(
+      std::string displayStringPrefix, size_t totalSteps,
+      size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
+      SpeedDescriptionFunction getSpeedDescription =
+          DEFAULT_SPEED_DESCRIPTION_FUNCTION,
+      DisplayUpdateOptions displayUpdateOptions = ProgressBar::ReuseLine)
+      : displayStringPrefix_(std::move(displayStringPrefix)),
+        totalSteps_(totalSteps),
+        statisticsBatchSize_(statisticsBatchSize),
+        getSpeedDescription_(std::move(getSpeedDescription)),
+        displayUpdateOptions_(displayUpdateOptions) {
+    // NOTE: `update()` divides by the batch size.
+    AD_CONTRACT_CHECK(statisticsBatchSize_ > 0,
+                      "The batch size of a `ConcurrentProgressBar` must not "
+                      "be zero");
+  }
+
+  // Call this whenever one or more units have been processed (threadsafe).
+  //
+  // NOTE: Each call takes a lock, so callers in hot loops should accumulate
+  // steps locally and report them in larger batches.
+  void add(size_t numSteps) {
+    std::lock_guard lock{countMutex_};
+    numStepsProcessed_ += numSteps;
+  }
+
+  // Call this after `add`. Returns an `Update` if an update should be
+  // displayed and this thread is the one that should display it, and
+  // `std::nullopt` otherwise. Threadsafe.
+  std::optional<Update> update() {
+    {
+      std::lock_guard lock{countMutex_};
+      if (numStepsProcessed_ < updateWhenThisManyStepsProcessed_) {
+        return std::nullopt;
+      }
+      // This thread claims the display; other threads get `std::nullopt`
+      // until the next multiple of the batch size is reached. Rounding UP to
+      // the next multiple (instead of adding the batch size) matters when a
+      // single bulk `add` jumps over several batch boundaries: exactly one
+      // thread wins, and the next display is due one batch size after the
+      // current count, not several displays in a row for long-passed counts.
+      updateWhenThisManyStepsProcessed_ =
+          (numStepsProcessed_ / statisticsBatchSize_ + 1) *
+          statisticsBatchSize_;
+    }
+    // NOTE: The progress string is composed after acquiring the display lock
+    // (and from the current count, not from the count at the time of the
+    // claim above), so that a display that happens to be delayed can never
+    // show a smaller count than its predecessor.
+    std::unique_lock displayLock{displayMutex_};
+    return Update{std::move(displayLock), getProgressStringImpl(false)};
+  }
+
+  // Final progress string (should only be called once, after all threads
+  // have finished). Always ends with a newline.
+  std::string getFinalProgressString() {
+    AD_CONTRACT_CHECK(!finished_,
+                      "`ConcurrentProgressBar::getFinalProgressString()` "
+                      "should only be called once after the computation has "
+                      "finished");
+    timer_.stop();
+    finished_ = true;
+    std::unique_lock displayLock{displayMutex_};
+    return getProgressStringImpl(true);
+  }
+
+ private:
+  // Compose one progress string; requires that `displayMutex_` is held. Like
+  // for `ProgressBar` with `ReuseLine`, intermediate updates end with `\r`,
+  // so that a viewer of the output shows them on one line that updates in
+  // place; only the final string ends with `\n`. When a string is shorter
+  // than its predecessor (e.g., because the average speed dropped by a
+  // digit), it is padded with spaces to the widest string so far, so that
+  // the `\r` overwrites all of it and no leftover characters remain.
+  std::string getProgressStringImpl(bool isFinal) {
+    size_t numStepsProcessed;
+    {
+      std::lock_guard lock{countMutex_};
+      numStepsProcessed = numStepsProcessed_;
+    }
+    // A total of zero steps is trivially complete.
+    double percentage =
+        totalSteps_ == 0
+            ? 100.0
+            : std::min(100.0, 100.0 * static_cast<double>(numStepsProcessed) /
+                                  static_cast<double>(totalSteps_));
+    std::string progressString = absl::StrCat(
+        displayStringPrefix_, withThousandSeparators(numStepsProcessed), " of ",
+        withThousandSeparators(totalSteps_),
+        absl::StrFormat(" (%.1f%%)", percentage), " [average speed ",
+        getSpeedDescription_(static_cast<double>(numStepsProcessed) /
+                             std::max(Timer::toSeconds(timer_.value()), 0.001)),
+        "]");
+    bool reuseLine = displayUpdateOptions_ == ProgressBar::ReuseLine;
+    if (reuseLine) {
+      maxStringWidth_ = std::max(maxStringWidth_, progressString.size());
+      progressString.resize(maxStringWidth_, ' ');
+    }
+    return absl::StrCat(progressString, reuseLine && !isFinal ? "\r" : "\n");
+  }
+
+  // The first part of the display string (e.g., "Triples processed: ").
+  std::string displayStringPrefix_;
+  // The total number of steps, known in advance.
+  size_t totalSteps_;
+  // Produce a progress string every this many steps.
+  size_t statisticsBatchSize_;
+  // Function that returns a string with a speed description (e.g., "3.4
+  // M/s") given a speed in steps per second.
+  SpeedDescriptionFunction getSpeedDescription_;
+  // See `ProgressBar::DisplayUpdateOptions`.
+  DisplayUpdateOptions displayUpdateOptions_;
+
+  // Timer that is started as soon as this progress bar is created.
+  Timer timer_{Timer::Started};
+  // Finished yet or not.
+  bool finished_ = false;
+  // The total number of units that have been processed so far. Protected by
+  // `countMutex_`.
+  size_t numStepsProcessed_ = 0;
+  // Produce the next progress string when at least this many steps have been
+  // processed. Protected by `countMutex_`.
+  size_t updateWhenThisManyStepsProcessed_ = statisticsBatchSize_;
+  // The width of the widest progress string so far, used to pad shorter
+  // strings, see `getProgressStringImpl`. Protected by `displayMutex_`.
+  size_t maxStringWidth_ = 0;
+  // Mutex that protects the two counters above. It is taken on every `add`,
+  // so it must never be held while an update is displayed.
+  std::mutex countMutex_;
+  // Mutex that is held while an update is displayed (via the `Update` class
+  // above), so that concurrent displays cannot interleave.
+  std::mutex displayMutex_;
+};
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_PROGRESSBAR_H

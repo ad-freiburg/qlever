@@ -30,6 +30,8 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanQueueSize_);
   add(lazyIndexScanNumThreads_);
   add(rebuildIndexScanNumThreads_);
+  add(rebuildPermutationWriterNumThreads_);
+  add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
@@ -48,6 +50,8 @@ RuntimeParameters::RuntimeParameters() {
   add(divisionByZeroIsUndef_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
+  add(patternTrickNumThreads_);
+  add(parallelSortNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
