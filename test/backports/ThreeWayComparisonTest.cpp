@@ -278,6 +278,16 @@ class TestDerivedFromIntermediate : public TestIntermediateClass {
   TestDerivedFromIntermediate(int x, int y) : TestIntermediateClass(x), y_(y) {}
 };
 
+// A derived class that adds no members of its own, so that only the base class
+// is compared.
+class TestDerivedWithoutOwnMembers : public TestBaseClass {
+ public:
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(
+      TestDerivedWithoutOwnMembers, TestBaseClass)
+
+  using TestBaseClass::TestBaseClass;
+};
+
 TEST(ThreeWayComparisonTest, DerivedEqualityOperators) {
   // Differences in the base class must not be ignored.
   static_assert(TestDerivedEqualityConstexpr(1, 2) ==
@@ -343,6 +353,16 @@ TEST(ThreeWayComparisonTest, DerivedRelationalOperators) {
   EXPECT_GE(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(1, 3));
   EXPECT_EQ(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(1, 3));
   EXPECT_NE(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(2, 3));
+
+  // A derived class without own members compares only its base class.
+  static_assert(TestDerivedWithoutOwnMembers(1) <
+                TestDerivedWithoutOwnMembers(2));
+  static_assert(TestDerivedWithoutOwnMembers(2) >=
+                TestDerivedWithoutOwnMembers(1));
+  static_assert(TestDerivedWithoutOwnMembers(1) ==
+                TestDerivedWithoutOwnMembers(1));
+  static_assert(TestDerivedWithoutOwnMembers(1) !=
+                TestDerivedWithoutOwnMembers(2));
 }
 
 TEST(ThreeWayComparisonTest, StrongOrderingWithIntegers) {

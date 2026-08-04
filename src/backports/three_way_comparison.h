@@ -294,53 +294,6 @@ constexpr auto compareThreeWay(const T& /*lhs*/,
     return this->membersAsTie() >= other.membersAsTie();             \
   }
 
-// The base class subobject of `*this` resp. `other`. Note that this cast is
-// required to actually call the operators of the base class, because the
-// operators (and the `membersAsTie` function) of the derived class hide those
-// of the base class.
-#define QL_IMPL_BASE_OF_THIS(BASE) static_cast<const BASE&>(*this)
-#define QL_IMPL_BASE_OF_OTHER(BASE) static_cast<const BASE&>(other)
-
-// Equality operators for a derived class. The base class subobjects are
-// compared first, then the members that were passed to the macro. This matches
-// the semantics of the defaulted C++20 `operator==`.
-#define QL_IMPL_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(CONSTEXPR_SPEC, T, \
-                                                          BASE)              \
-  CONSTEXPR_SPEC bool operator==(const T& other) const {                     \
-    return QL_IMPL_BASE_OF_THIS(BASE) == QL_IMPL_BASE_OF_OTHER(BASE) &&      \
-           this->membersAsTie() == other.membersAsTie();                     \
-  }                                                                          \
-  CONSTEXPR_SPEC bool operator!=(const T& other) const {                     \
-    return !(*this == other);                                                \
-  }
-
-// Relational operators for a derived class. If the base class subobjects
-// differ, then their comparison decides, else the members that were passed to
-// the macro decide. This matches the semantics of the defaulted C++20
-// `operator<=>`.
-#define QL_IMPL_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(CONSTEXPR_SPEC, T, \
-                                                          BASE)              \
-  CONSTEXPR_SPEC bool operator<(const T& other) const {                      \
-    return QL_IMPL_BASE_OF_THIS(BASE) != QL_IMPL_BASE_OF_OTHER(BASE)         \
-               ? QL_IMPL_BASE_OF_THIS(BASE) < QL_IMPL_BASE_OF_OTHER(BASE)    \
-               : this->membersAsTie() < other.membersAsTie();                \
-  }                                                                          \
-  CONSTEXPR_SPEC bool operator<=(const T& other) const {                     \
-    return QL_IMPL_BASE_OF_THIS(BASE) != QL_IMPL_BASE_OF_OTHER(BASE)         \
-               ? QL_IMPL_BASE_OF_THIS(BASE) < QL_IMPL_BASE_OF_OTHER(BASE)    \
-               : this->membersAsTie() <= other.membersAsTie();               \
-  }                                                                          \
-  CONSTEXPR_SPEC bool operator>(const T& other) const {                      \
-    return QL_IMPL_BASE_OF_THIS(BASE) != QL_IMPL_BASE_OF_OTHER(BASE)         \
-               ? QL_IMPL_BASE_OF_THIS(BASE) > QL_IMPL_BASE_OF_OTHER(BASE)    \
-               : this->membersAsTie() > other.membersAsTie();                \
-  }                                                                          \
-  CONSTEXPR_SPEC bool operator>=(const T& other) const {                     \
-    return QL_IMPL_BASE_OF_THIS(BASE) != QL_IMPL_BASE_OF_OTHER(BASE)         \
-               ? QL_IMPL_BASE_OF_THIS(BASE) > QL_IMPL_BASE_OF_OTHER(BASE)    \
-               : this->membersAsTie() >= other.membersAsTie();               \
-  }
-
 #define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_CONSTEXPR(T, ...) \
   QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)        \
   QL_IMPL_DEFAULTED_THREEWAY_OPERATOR(constexpr, T)             \
@@ -376,26 +329,6 @@ constexpr auto compareThreeWay(const T& /*lhs*/,
 #define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(T, ...) \
   QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)             \
   QL_IMPL_DEFAULTED_EQUALITY_OPERATOR_LOCAL(, T)
-
-#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
-                                                                      ...)     \
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)                       \
-  QL_IMPL_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(constexpr, T, BASE)        \
-  QL_IMPL_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(constexpr, T, BASE)
-
-#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)                           \
-  QL_IMPL_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(, T, BASE)            \
-  QL_IMPL_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(, T, BASE)
-
-#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
-                                                                      ...)     \
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(constexpr, __VA_ARGS__)                       \
-  QL_IMPL_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(constexpr, T, BASE)
-
-#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
-  QL_DEFINE_CLASS_MEMBERS_AS_TIE(, __VA_ARGS__)                           \
-  QL_IMPL_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(, T, BASE)
 
 #define QL_IMPL_CUSTOM_THREEWAY_OPERATOR(TEMPLATE_SPEC, CONSTEXPR_SPEC, T)     \
   TEMPLATE_SPEC friend CONSTEXPR_SPEC bool operator<(const T& a, const T& b) { \
@@ -503,22 +436,6 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
 #define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(T, ...) \
   bool operator==(const T&) const = default;
 
-// The defaulted operators already compare the base class subobjects first, so
-// the `BASE` argument is only needed for the C++17 implementation.
-#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
-                                                                      ...)     \
-  constexpr auto operator<=>(const T&) const = default;
-
-#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
-  auto operator<=>(const T&) const = default;
-
-#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
-                                                                      ...)     \
-  constexpr bool operator==(const T&) const = default;
-
-#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
-  bool operator==(const T&) const = default;
-
 #define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR(T)           \
   friend auto operator<=>(const T& lhs, const T& rhs) { \
     return compareThreeWay(lhs, rhs);                   \
@@ -554,5 +471,34 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
   TEMPLATE_SPEC QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T)
 
 #endif
+
+// The variants of the macros above for derived classes. They are defined in
+// terms of the corresponding non-derived macros by simply prepending the base
+// class subobject to the list of compared members. In C++17 the base class
+// subobject then is the first element of the tie, such that its comparison
+// operators decide before those of the members. In C++20 the additional
+// argument is ignored, because the defaulted operators compare the base class
+// subobjects first anyway. Note that the cast is required to actually call the
+// operators of the base class, because the members and operators of the derived
+// class hide those of the base class.
+#define QL_IMPL_BASE_SUBOBJECT(BASE) static_cast<const BASE&>(*this)
+
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
+                                                                      ...)     \
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(                       \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
+
+#define QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(                            \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
+
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(T, BASE, \
+                                                                      ...)     \
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(                       \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
+
+#define QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(T, BASE, ...) \
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(                            \
+      T, QL_IMPL_BASE_SUBOBJECT(BASE) __VA_OPT__(, ) __VA_ARGS__)
 
 #endif  // QLEVER_SRC_BACKPORTS_THREE_WAY_COMPARISON_H
