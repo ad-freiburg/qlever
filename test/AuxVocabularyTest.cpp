@@ -138,9 +138,6 @@ TEST(AuxVocabIndex, sortsAfterAllOtherDatatypes) {
                       auxId(1)};
   for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
     auto datatype = static_cast<Datatype>(i);
-    // NOTE: `contains` is C++23, so it is not part of `ql::ranges` (which is
-    // `std::ranges` in C++20 mode). Use it directly from `range-v3`, which
-    // `backports/algorithm.h` includes unconditionally.
     bool isCovered = ::ranges::contains(ids, datatype, &Id::getDatatype);
     ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
         << toString(datatype);
