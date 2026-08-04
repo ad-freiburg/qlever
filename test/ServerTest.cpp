@@ -211,13 +211,12 @@ TEST(ServerTest, createResponseMetadata) {
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
-          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          plannedQuery, plannedQuery.queryExecutionTree(), UpdateMetadata{},
-          tracer2),
+          *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+          UpdateMetadata{}, tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-      plannedQuery, plannedQuery.queryExecutionTree(), updateMetadata, tracer2);
+      *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+      updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},

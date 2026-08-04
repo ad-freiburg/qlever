@@ -7,36 +7,25 @@
 #include <optional>
 
 #include "../util/GTestHelpers.h"
-#include "../util/IndexTestHelpers.h"
 #include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
-#include "engine/QueryPlanner.h"
-#include "libqlever/QleverTypes.h"
 #include "parser/ParsedQuery.h"
+
+using ad_utility::testing::parseQuery;
 
 // _____________________________________________________________________________
 TEST(ParsedQueryTest, updateExportLimit) {
   using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
-    ParsedQuery parsed = ad_utility::testing::parseQuery(std::move(operation));
-    auto* qec = ad_utility::testing::getQec();
-    QueryExecutionTree qet =
-        QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
-            .createExecutionTree(parsed);
-    return {std::move(parsed), std::move(qet), *qec};
-  };
   auto expectExportLimit =
-      [&makePlannedQuery](
-          ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
-          std::string operation =
-              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          std::optional<uint64_t> sendLimit = std::optional<uint64_t>{12},
-          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+      [](ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
+         std::string operation =
+             "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
+         std::optional<uint64_t> sendLimit = 12,
+         ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
-        auto pq = makePlannedQuery(std::move(operation));
-        pq.parsedQuery().updateExportLimit(mediaType, sendLimit);
-        EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
-                    testing::Eq(limit));
+        ParsedQuery pq = parseQuery(std::move(operation));
+        pq.updateExportLimit(mediaType, sendLimit);
+        EXPECT_THAT(pq._limitOffset.exportLimit_, testing::Eq(limit));
       };
   // Use different queries with and without LIMIT/OFFSET to ensure that the
   // export limit is not affected by query-specific LIMIT/OFFSET clauses.
@@ -46,9 +35,8 @@ TEST(ParsedQueryTest, updateExportLimit) {
 
   // Check that the export limit is set for `qlever-results+json`.
   expectExportLimit(qleverJson, 12);
-  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
-                    std::optional<uint64_t>{13});
-  expectExportLimit(qleverJson, 13, complexQuery, std::optional<uint64_t>{13});
+  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }", 13);
+  expectExportLimit(qleverJson, 13, complexQuery, 13);
   // Check that the export limit is set for `sparql-results+json` if and
   // only if the runtime parameter `sparql-results-json-with-time`  is set.
   {

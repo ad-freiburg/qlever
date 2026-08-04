@@ -13,7 +13,6 @@ namespace {
 using namespace checkUsePatternTrick;
 using ad_utility::source_location;
 using ad_utility::testing::encodedIriManager;
-};
 
 // Parse the SPARQL query `SELECT * WHERE { <whereClause> }`. Not that the
 // `whereClause` does not need to be enclosed by braces `{}`.

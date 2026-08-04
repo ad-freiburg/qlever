@@ -4,10 +4,13 @@
 
 #include <gtest/gtest.h>
 
-#include "./parser/SparqlAntlrParserTestHelpers.h"
-#include "parser/SparqlParser.h"
+#include "./util/ParsedQueryTestHelpers.h"
+#include "util/GTestHelpers.h"
 #include "util/ParseException.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/SourceLocation.h"
+
+using ad_utility::testing::parseQuery;
 
 // _____________________________________________________________________________
 TEST(ParseException, coloredError) {
@@ -35,8 +38,7 @@ void expectParseExceptionWithMetadata(
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   try {
-    static EncodedIriManager ev;
-    SparqlParser::parseQuery(&ev, input);
+    parseQuery(input);
     FAIL();  // Should be unreachable.
   } catch (const ParseException& e) {
     // The constructor has to be bracketed because EXPECT_EQ is a macro.

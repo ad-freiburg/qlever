@@ -47,8 +47,8 @@ struct ResultPinning {
   bool pinSubtrees_ = false;
   bool pinResult_ = false;
 
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees,
-                                              pinResult)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees_,
+                                              pinResult_)
 };
 
 // Determine `ResultPinning` from the `pin-subresults` and `pin-result` URL

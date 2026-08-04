@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -42,16 +43,15 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
-#include "parser/SparqlParser.h"
 #include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TypeTraits.h"
 
 using ad_utility::source_location;
+using ad_utility::testing::parseQuery;
 
 namespace queryPlannerTestHelpers {
 using namespace ::testing;
@@ -617,8 +617,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 template <typename QueryPlannerClass = QueryPlanner>
 inline QueryExecutionTree parseAndPlan(std::string query,
                                        QueryExecutionContext* qec) {
-  static EncodedIriManager ev;
-  ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
+  ParsedQuery pq = parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
   auto tree =
