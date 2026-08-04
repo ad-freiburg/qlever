@@ -146,13 +146,16 @@ struct RuntimeParameters {
   // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
   // The maximum number of threads for the parallel counting loops of the
-  // pattern trick (see `CountAvailablePredicates`). The value `0` (the
-  // default) means the number of logical cores of the machine.
-  SizeT patternTrickNumThreads_{0, "pattern-trick-num-threads"};
+  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
+  // number of logical cores of the machine. The default of `3` captures most
+  // of the speedup, with quickly diminishing returns for more threads.
+  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
   // The number of threads for the parallel sort of intermediate results
   // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
-  // as `1`. Only effective when QLever was built with `USE_PARALLEL`.
-  SizeT parallelSortNumThreads_{4, "parallel-sort-num-threads"};
+  // as `1`. Only effective when QLever was built with `USE_PARALLEL`. The
+  // default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more threads.
+  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
   // `SpatialJoinAlgorithms::libspatialjoinParse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
