@@ -461,9 +461,35 @@ TEST(ServerTest, checkAccessToken) {
   Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       server.checkAccessToken("invalidAccessToken"),
-      testing::HasSubstr("Access token was provided but it was invalid"));
+      testing::HasSubstr("Access token was provided but it was invalid"),
+      HttpError);
+  // An invalid access token results in a 403 Forbidden response.
+  try {
+    server.checkAccessToken("invalidAccessToken");
+    FAIL() << "Expected an `HttpError` to be thrown";
+  } catch (const HttpError& e) {
+    EXPECT_EQ(e.status(), boost::beast::http::status::forbidden);
+  }
+
+  // Same when the server was started without `--access-token` at all.
+  Server serverWithoutToken{4322, 1, "", config};
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      serverWithoutToken.checkAccessToken("someToken"),
+      testing::HasSubstr("Access token was provided but server was started "
+                         "without --access-token"),
+      HttpError);
+  try {
+    serverWithoutToken.checkAccessToken("someToken");
+    FAIL() << "Expected an `HttpError` to be thrown";
+  } catch (const HttpError& e) {
+    EXPECT_EQ(e.status(), boost::beast::http::status::forbidden);
+  }
+
+  // No access token provided at all is not an error here, it just means that
+  // operations requiring one are rejected later.
+  EXPECT_FALSE(serverWithoutToken.checkAccessToken(std::nullopt));
 
   config.persistUpdates_ = false;
 

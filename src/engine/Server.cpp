@@ -449,9 +449,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto requireValidAccessToken = [&accessTokenOk](
                                      const std::string& actionName) {
     if (!accessTokenOk) {
-      throw std::runtime_error(absl::StrCat(
-          actionName,
-          " requires a valid access token but no access token was provided"));
+      throw HttpError(
+          http::status::forbidden,
+          absl::StrCat(actionName, " requires a valid access token but no "
+                                   "access token was provided"));
     }
   };
 
@@ -1495,7 +1496,6 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
-    // TODO<qup42> this includes missing/wrong access token which should be 403
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::internal});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
@@ -1583,12 +1583,14 @@ bool Server::checkAccessToken(
   }
   const auto accessTokenProvidedMsg = "Access token was provided";
   if (accessToken_.empty()) {
-    throw std::runtime_error(
+    throw HttpError(
+        http::status::forbidden,
         absl::StrCat(accessTokenProvidedMsg,
                      " but server was started without --access-token"));
   } else if (!ad_utility::constantTimeEquals(accessToken.value(),
                                              accessToken_)) {
-    throw std::runtime_error(
+    throw HttpError(
+        http::status::forbidden,
         absl::StrCat(accessTokenProvidedMsg, " but it was invalid"));
   } else {
     AD_LOG_DEBUG << accessTokenProvidedMsg << " and correct" << std::endl;
