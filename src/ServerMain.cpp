@@ -17,6 +17,7 @@
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "libqlever/Qlever.h"
+#include "util/Algorithm.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -57,6 +58,7 @@ int main(int argc, char** argv) {
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
+  std::string rebuildIndexStrategy;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -162,6 +164,16 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("rebuild-index-strategy",
+      po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
+      "When to rebuild the index from the current data (including updates). "
+      "\"manual\" (the default): only when explicitly requested via the "
+      "`cmd=rebuild-index` HTTP request. \"automatic:min:max:fraction\": "
+      "additionally trigger a rebuild automatically in the background after "
+      "an update, once the number of delta triples (inserted plus deleted) "
+      "reaches the given `fraction` (a number greater than 0) of the number "
+      "of index triples, but never below `min` and always at `max` (e.g. "
+      "\"automatic:10000:1000000:0.1\").");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -232,10 +244,32 @@ int main(int argc, char** argv) {
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
       "token.");
+  std::vector<std::string> runtimeParameterAssignments;
+  add("set-runtime-parameter",
+      po::value<std::vector<std::string>>(&runtimeParameterAssignments)
+          ->composing(),
+      "Set any runtime parameter at startup, in the form <name>=<value>, for "
+      "example `--set-runtime-parameter default-query-timeout=300s`. Can be "
+      "given multiple times. Use `--set-runtime-parameter help` to list all "
+      "runtime parameters together with their default values. The parameters "
+      "can also be changed while the server is running, via the API. If a "
+      "parameter can also be set by one of the dedicated options above, the "
+      "value given here wins.");
   po::variables_map optionsMap;
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
+    if (optionsMap.count("set-runtime-parameter") &&
+        ad_utility::contains(
+            optionsMap["set-runtime-parameter"].as<std::vector<std::string>>(),
+            "help")) {
+      std::cout << "Available runtime parameters and their default values:\n";
+      auto parameters = globalRuntimeParameters.rlock()->toMap();
+      for (const auto& name : globalRuntimeParameters.rlock()->getKeys()) {
+        std::cout << "  " << name << " = " << parameters.at(name) << '\n';
+      }
+      return EXIT_SUCCESS;
+    }
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
@@ -255,6 +289,38 @@ int main(int argc, char** argv) {
               << ", compiled on " << qlever::version::DatetimeOfCompilation
               << " using git hash " << qlever::version::GitShortHash << EMPH_OFF
               << std::endl;
+
+  // Apply the `--set-runtime-parameter` assignments. This runs after
+  // `po::notify` above, so for parameters that can also be set by a dedicated
+  // option (like `--service-max-redirects`), the value given here wins. A bad
+  // name or value fails the startup with a readable message, before the index
+  // is loaded.
+  for (const auto& assignment : runtimeParameterAssignments) {
+    try {
+      globalRuntimeParameters.wlock()->setFromAssignment(assignment);
+    } catch (const std::exception& e) {
+      AD_LOG_ERROR << "Invalid argument to --set-runtime-parameter: "
+                   << e.what() << std::endl;
+      return EXIT_FAILURE;
+    }
+    AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
+                << std::endl;
+  }
+
+  // Resolve the `--rebuild-index-strategy` option. A bad value fails the
+  // startup with a readable message, before the index is loaded.
+  try {
+    config.rebuildIndexStrategy_ =
+        qlever::RebuildIndexStrategy::parse(rebuildIndexStrategy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid argument to --rebuild-index-strategy: " << e.what()
+                 << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (config.rebuildIndexStrategy_.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
+                << rebuildIndexStrategy << ")" << std::endl;
+  }
 
   try {
     // Samples RSS and CPU usage, starting before the index is loaded.

@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "index/PrefixHeuristic.h"
+#include "index/vocabulary/PrefixHeuristic.h"
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"

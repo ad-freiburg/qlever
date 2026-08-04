@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -24,15 +25,20 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RebuildIndexStrategy.h"
 #include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/IndexRebuilderTypes.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 namespace qlever {
 
@@ -119,6 +125,12 @@ class IndexRebuildConfig {
   // Typically the same location as the currently served index, so that the
   // "current" index has a stable location.
   const std::string& newIndexTarget() const { return newIndexTarget_; }
+
+  // The JSON that is reported to the client after a successful rebuild: a
+  // human-readable message plus the directory to which the old index was
+  // retired (the resolved value of the `rebuild-previous-index-dir` command
+  // parameter, which the client does not know when the default was used).
+  nlohmann::json successResponseAsJson() const;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -242,12 +254,27 @@ struct EngineConfig : CommonConfig {
   // simply delete this file.
   bool persistUpdates_ = true;
 
+  // If set, an index rebuild (the same operation as the `cmd=rebuild-index`
+  // HTTP request) is triggered automatically in the background after an update,
+  // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
+  // (the default), rebuilds are only triggered manually.
+  std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
+
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
   // executed (e.g., queries that only compute constant expressions, or query
   // that only rely on the `NamedQueryCache` which can be populated
   // separately).
   bool doNotLoadPermutations_ = false;
+
+  // QLever doesn't use a cancelable sorting algorithm, but before starting a
+  // sort estimates whether the sort will time out. To do so, on index load it
+  // sorts some `IdTable`s to measure the time that sorting takes on the
+  // concrete machine. This step can take some time and can be disabled by
+  // setting this flag to `false`. In that case, sort operations are always
+  // started and run to completion (unless the query times out or is canceled
+  // before the sort operation starts).
+  bool computeSortPerformanceEstimators_ = true;
 
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
@@ -265,9 +292,13 @@ struct EngineConfig : CommonConfig {
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
-// `src/engine/LibQleverExample.cpp` for an example use.
+// `src/engine/LibQleverExample.cpp` for an example use. If you extend the
+// interface of this class, consider also adding bindings to
+// `QleverEmscriptenBindings.cpp` so it can be used by JS code.
 class Qlever {
  public:
+  using PlannedQuery = qlever::PlannedQuery;
+
   // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
   // so that an index rebuild can atomically swap both in, while other threads
   // continue to read the previous instances via the `shared_ptr`s they hold.
@@ -334,8 +365,6 @@ class Qlever {
   // before it can answer queries.
   explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
-  using PlannedQuery = qlever::PlannedQuery;
-
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
   // ParsedQuery::hasUpdateClause()); this function handles both cases
@@ -360,8 +389,63 @@ class Qlever {
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
+  // Plan a query that was parsed by `parseQuery` (or bundled by
+  // `bindParsedQuery`, both see below). The query is planned against the
+  // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
+  // out of sync. Implemented in terms of the `planQuery` overload above.
+  //
+  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
+  // `planQuery` above.
+  PlannedQuery planQuery(
+      ParsedQueryAndContext parsedQuery,
+      SharedCancellationHandle handle =
+          std::make_shared<ad_utility::CancellationHandle<>>(),
+      std::optional<TimeLimit> timeLimit = std::nullopt,
+      boost::optional<const ad_utility::Timer&> requestTimer =
+          boost::none) const;
+
+  // Parse the given `query` (despite the name, `query` may also be a SPARQL
+  // update operation) and return it together with the
+  // `QueryExecutionContext` to plan and execute it against, see
+  // `ParsedQueryAndContext`.
+  //
+  // This is the first half of `parseAndPlanQuery`, the second half being the
+  // `planQuery` overload above. Calling the two separately is useful to inspect
+  // or modify the `ParsedQuery` before it is planned, to measure the time for
+  // the parsing and the planning separately, and to reuse a parsed query (see
+  // below).
+  //
+  // NOTE ON REUSING A PARSED QUERY: The `ParsedQuery` depends on the
+  // `QueryExecutionContext` it was parsed with, but only through that context's
+  // `EncodedIriManager` (which determines which IRIs are encoded directly in
+  // the ID). It is therefore valid, and saves the repeated parsing of the same
+  // query, to take the `ParsedQuery` out of the result and plan it against a
+  // *different* context, as long as that context has an equivalent
+  // `EncodedIriManager` (see `bindParsedQuery`). This is in particular the case
+  // for several `Qlever` instances whose indexes were built with the same
+  // `IndexBuilderConfig::prefixesForIdEncodedIris_`. If the
+  // `EncodedIriManager`s differ, the affected IRIs are silently misinterpreted,
+  // so this has to be ensured by the caller.
+  ParsedQueryAndContext parseQuery(
+      std::string query, const std::vector<DatasetClause>& datasetClauses = {},
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
+
+  // Bundle an already-parsed query with a fresh `QueryExecutionContext` of this
+  // instance, so that it can be planned here. Together with `parseQuery` this
+  // makes it possible to parse a query once and plan it on several instances.
+  //
+  // PRECONDITION: `parsedQuery` must have been parsed with a context whose
+  // `EncodedIriManager` is equivalent to this instance's; see the note on
+  // reusing a parsed query in `parseQuery` above. This is not checked.
+  ParsedQueryAndContext bindParsedQuery(
+      ParsedQuery parsedQuery,
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
+      bool pinSubtrees = false, bool pinResult = false) const;
+
   // Parse and plan the given `query` (see `planQuery` above; despite the
-  // name, `query` may also be a SPARQL update operation).
+  // name, `query` may also be a SPARQL update operation). This is exactly
+  // `parseQuery` followed by `planQuery`.
   //
   // NOTES: This is useful as a separate function for the following reasons.
   //
@@ -388,8 +472,7 @@ class Qlever {
           std::make_shared<ad_utility::CancellationHandle<>>(),
       std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
 
   // Run the given parsed and planned query. The result is returned as a
@@ -486,13 +569,15 @@ class Qlever {
     blobManager_.deserialize(*this, blob, allocator);
   }
 
+  // Clear the query result cache.
+  void clearCache() { cache_.clearAll(); }
+
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
   // consistent state.
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<IndexAndViews> indexAndViews,
-      std::function<void(std::string)> updateCallback =
-          [](std::string) { /* the default is a noop*/ },
+      std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =
           QueryExecutionContext::DisableCaching::FromRuntimeParameter) const;
@@ -524,6 +609,27 @@ class Qlever {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
 
+  // Assemble the `IndexRebuildConfig` for a rebuild of `index` (which has to be
+  // the index that is currently being served) from the two directories a
+  // rebuild can be configured with: `rebuildTmpDir`, in which the new index
+  // is built, and `rebuildPreviousIndexDir`, to which the old index is retired.
+  // Both default (if `std::nullopt`) to a directory that is derived from the
+  // current time resp. from the build date of the current index. Inside these
+  // directories, and for the new index after the swap, the file name of
+  // `index.getOnDiskBase()` is used: the new index has to end up at the base
+  // name the current index is served from, so that a later restart loads it.
+  //
+  // The two directories must be relative paths (they are resolved against the
+  // working directory of the engine, just like the base name of the current
+  // index), must be empty or not exist yet, and must lie inside the directory
+  // of `index.getOnDiskBase()`, so that the index directories are not nested
+  // ever deeper. Throws `std::runtime_error` if one of these conditions is
+  // violated, and (via the `IndexRebuildConfig` constructor) if the resulting
+  // base names collide.
+  static IndexRebuildConfig makeIndexRebuildConfig(
+      const Index& index, std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
+
   // Move a freshly rebuilt index into the place of the old one. There are two
   // indices involved, both with base names given by `config`: the old index
   // that is currently being served (at `config.oldIndexSource()`), and the
@@ -539,6 +645,9 @@ class Qlever {
   // 3. Re-anchor all path-derived state of the new index in memory (on-disk
   //    base name, files for persisted updates and graph names, and the views
   //    manager) to `config.newIndexTarget()`.
+  // 4. Remove the directory that contained `config.newIndexSource()`, which
+  //    step 2 has emptied (if it is actually empty). A failure here is only
+  //    logged as a warning.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
@@ -559,6 +668,54 @@ class Qlever {
   // while the file handle is still open is fine in POSIX compliant systems.
   static void moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                                         const IndexRebuildConfig& config);
+
+  // The result of the first phase of an index rebuild (see
+  // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
+  // of the rebuild, the mapping from the old vocabulary `Id`s to the new ones,
+  // and the freshly built index (loaded from disk) paired with a fresh, empty
+  // `MaterializedViewsManager`.
+  using RebuildResult =
+      std::tuple<LocatedTriplesSharedState, indexRebuilder::IndexRebuildMapping,
+                 std::shared_ptr<IndexAndViews>>;
+
+  // The two functions below implement an index rebuild. They are only available
+  // in the C++20 build. They rely on `materializeToIndex` and
+  // `DeltaTriples::addFromSnapshotDiff`, which are excluded from the reduced
+  // C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+  // Build a new index from the current state of `index` and write it to disk
+  // under the base name `config.newIndexSource()` (the containing directory is
+  // created if it does not exist), then load it into a fresh `IndexAndViews`.
+  // This is the expensive, read-only first phase of an index rebuild. It
+  // returns the data required by `swapInRebuiltIndex` to atomically switch over
+  // to the new index. `handle` can be used to cancel the rebuild. The reason
+  // why `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
+  [[nodiscard]] RebuildResult rebuildIndexToDisk(
+      Index& index, const IndexRebuildConfig& config,
+      const ad_utility::SharedCancellationHandle& handle) const;
+
+  // Remap the delta triples that accumulated on the old `index` (which has to
+  // be the exact same index that was used to create `rebuildResult`) onto the
+  // freshly built index (using the `rebuildResult` produced by
+  // `rebuildIndexToDisk`) and atomically swap the new index in. Calling this
+  // also persists the remapped delta triples to disk so that they are not lost
+  // if the engine is later restarted on the rebuilt index. The reason why
+  // `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs. It is crucial
+  // that this function is only called when you can guarantee no updates are
+  // added during the duration of this function call.
+  //
+  // Before the swap, `moveRebuiltIndexIntoPlace` is called, which moves the
+  // files of the old index to `config.oldIndexTarget()` and the files of the
+  // new index from `config.newIndexSource()` to `config.newIndexTarget()` (by
+  // default the place of the old index) and removes the directory in which the
+  // new index was built.
+  void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
+                          const ad_utility::SharedCancellationHandle& handle,
+                          const IndexRebuildConfig& config);
+#endif
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }

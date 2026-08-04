@@ -18,7 +18,7 @@
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "util/HashMap.h"
 #include "util/ProgressBar.h"
 #include "util/Serializer/FileSerializer.h"

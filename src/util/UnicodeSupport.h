@@ -16,10 +16,10 @@ namespace ad_utility {
 // The default value for the `useICU` template parameter of the various string
 // functions that have both an ICU-based and an ICU-free implementation (for
 // example `ad_utility::utf8ToLower`). It is `false` exactly if the
-// `QLEVER_NO_UNICODE` macro is defined. Currently there is deliberately no
-// build option that defines this macro (the unit tests instantiate the ICU-free
-// variants directly); a CMake option will follow, see the comment on
-// `LocaleManager` in `index/LocaleManager.h`.
+// `QLEVER_NO_UNICODE` macro is defined, which happens iff the CMake option of
+// the same name is `ON`. For the consequences of an ICU-free build, see the
+// comment on that option in the top-level `CMakeLists.txt` and the comment on
+// `LocaleManager` in `index/vocabulary/LocaleManager.h`.
 #ifdef QLEVER_NO_UNICODE
 inline constexpr bool useICUDefault = false;
 #else

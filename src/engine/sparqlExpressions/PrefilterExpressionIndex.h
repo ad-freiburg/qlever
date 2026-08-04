@@ -19,8 +19,12 @@
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "util/Iterators.h"
+
+// NOTE: The prefiltering needs the vocabulary of the index (and not only the
+// `LocalVocabContext` interface), so it takes the `IndexImpl` itself.
+class IndexImpl;
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
 // procedure w.r.t. relevant data blocks/ValueId values, by making use of the
@@ -133,7 +137,7 @@ class PrefilterExpression {
   // potentially incomplete first/last `CompressedBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  BlockMetadataRanges evaluate(const LocalVocabContext& context,
+  BlockMetadataRanges evaluate(const IndexImpl& index,
                                BlockMetadataSpan blockRange,
                                size_t evaluationColumn) const;
 
@@ -145,7 +149,7 @@ class PrefilterExpression {
   // return their corresponding complement over ALL datatypes. This is in
   // particular needed for the complement of `IsDatatype` and `InExpression`.
   virtual BlockMetadataRanges evaluateImpl(
-      const LocalVocabContext& context, const ValueIdSubrange& idRange,
+      const IndexImpl& index, const ValueIdSubrange& idRange,
       BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
 
   // Format for debugging
@@ -183,7 +187,7 @@ class PrefixRegexExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -216,7 +220,7 @@ class LogicalExpression : public PrefilterExpression {
   // Declare `PrefixRegexExpression` as a friend because its `evaluateImpl`
   // requires access to the `evaluateImpl` declared here.
   friend class PrefixRegexExpression;
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -246,7 +250,7 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -275,7 +279,7 @@ class IsInExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -314,7 +318,7 @@ class RelationalExpression : public PrefilterExpression {
   // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
@@ -340,7 +344,7 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const LocalVocabContext& context,
+  BlockMetadataRanges evaluateImpl(const IndexImpl& index,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;

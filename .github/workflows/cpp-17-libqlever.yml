@@ -34,7 +34,9 @@ jobs:
             expensive-tests: true
             use-keep-going: true
             use-ignore-errors: true
-            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
+            # The GCC 8 build additionally exercises the ICU-free (`NO_UNICODE`)
+            # mode, which targets constrained environments without ICU.
+            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON -DQLEVER_NO_UNICODE=ON"
 
 
     env:
@@ -54,22 +56,28 @@ jobs:
         with:
           compiler: ${{env.compiler}}
           compiler-version: ${{matrix.compiler-version}}
+      - name: Build the Docker image for the 'using enum' rewriter
+        if: matrix.compiler-version == 8
+        run: |
+          # The base image ghcr.io/joka921/llvm-cpp-17-rewriter contains a custom
+          # clang build with the `backport-using-enum` tool at /opt/llvm/bin/. It
+          # is built using the Dockerfile at
+          # https://github.com/joka921/llvm-project/blob/fork-for-qlever/Dockerfile .
+          # All the dependencies that QLever needs are installed on top of it by
+          # `Dockerfiles/Dockerfile.cpp-17-rewriter`, so a new dependency only
+          # requires a change in that Dockerfile. The build context is the
+          # `Dockerfiles` directory (the Dockerfile copies nothing, so we don't
+          # have to send the whole repository to the Docker daemon).
+          docker build -f Dockerfiles/Dockerfile.cpp-17-rewriter -t qlever-cpp-17-rewriter:local Dockerfiles
+
       - name: Rewrite C++20 'using enum' for C++17 compatibility
         if: matrix.compiler-version == 8
         run: |
-          # The Docker container ghcr.io/joka921/llvm-enum-rewriter contains a custom
-          # clang-21 build with the `backport-using-enum` tool at /opt/llvm/bin/.
-          # It also has cmake, boost 1.81, icu, zstd, and jemalloc installed.
-          # The docker image is built using the Dockerfile at
-          # https://github.com/joka921/llvm-project/blob/2d1f59cd321c3a7efd6e47bd2e97413cafa912c9/Dockerfile
-          # and will be extended and moved to a more stable location in the future.
-          docker pull ghcr.io/joka921/llvm-enum-rewriter:latest
-
           # Generate compile_commands.json using the container's clang-21.
           docker run --user "$(id -u):$(id -g)" --rm \
             -v ${{github.workspace}}:/src \
             -w /src \
-            ghcr.io/joka921/llvm-enum-rewriter:latest \
+            qlever-cpp-17-rewriter:local \
             bash -c "
               export PATH=/opt/llvm/bin:\$PATH
               cmake -B /src/rewriter-build \
@@ -80,18 +88,26 @@ jobs:
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                 -DUSE_PARALLEL=true \
                 -DUSE_PRECOMPILED_HEADERS=OFF \
-                -DREDUCED_FEATURE_SET_FOR_CPP17=ON
+                -DREDUCED_FEATURE_SET_FOR_CPP17=ON \
+                -DQLEVER_NO_UNICODE=ON
             "
 
           # Run backport-using-enum on all src/ files containing 'using enum'.
+          # We deliberately also attempt files that are not valid in the reduced
+          # feature set mode, so an individual rewrite may fail. Such per-file
+          # failures must NOT fail the CI, hence the '|| true'.
+          #
+          # NOTE: no backticks in the comments of this script: it is one
+          # double-quoted string, in which the outer shell expands backticks as
+          # command substitutions.
           docker run --rm --user "$(id -u):$(id -g)" \
             -v ${{github.workspace}}:/src \
             -w /src \
-            ghcr.io/joka921/llvm-enum-rewriter:latest \
+            qlever-cpp-17-rewriter:local \
             bash -c "
               for f in \$(grep -rl 'using enum' ./src/ --include='*.h' --include='*.cpp'); do
                 echo \"Rewriting: \$f\"
-                /opt/llvm/bin/backport-using-enum -p /src/rewriter-build \"\$f\"
+                /opt/llvm/bin/backport-using-enum -p /src/rewriter-build \"\$f\" || true
               done
             "
 

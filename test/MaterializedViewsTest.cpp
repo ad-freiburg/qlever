@@ -15,7 +15,12 @@
 
 #include "./MaterializedViewsTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
+// The `server` library is not built under Emscripten (`Server.cpp` crashes
+// emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
+// server-integration test below is compiled out there.
+#ifndef __EMSCRIPTEN__
 #include "./ServerTestHelpers.h"
+#endif
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -25,13 +30,15 @@
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#endif
 #include "engine/SpatialJoinConfig.h"
 #include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "index/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParser.h"
@@ -818,11 +825,11 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 }
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten: the `server` library it needs is not built
+// there (see the include of `engine/Server.h` above), and the test hangs
+// under Emscripten anyway (threaded server integration).
+#ifndef __EMSCRIPTEN__
 TEST_F(MaterializedViewsTest, serverIntegration) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using namespace serverTestHelpers;
   // Config for the plain `Server` instances constructed below.
@@ -1021,6 +1028,7 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
                              "token but no access token was provided"));
   }
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, Deletion) {
@@ -1055,6 +1063,59 @@ TEST_F(MaterializedViewsTest, Deletion) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.deleteView("invalid name!"),
       ::testing::HasSubstr("is not a valid name for a materialized view"));
+}
+
+// _____________________________________________________________________________
+// Once the on-disk files of a manager have been retired (because an index
+// rebuild moved the files of the corresponding index away), no view file may be
+// created or deleted anymore, see
+// `MaterializedViewsManager::retireOnDiskFiles`. Views that are already loaded
+// stay usable, so that queries that still hold a snapshot of the old index can
+// finish.
+TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
+  MaterializedViewsManager manager{testIndexBase_};
+  auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
+
+  // The view written below deliberately outlives the retirement (a retired
+  // manager must not delete it anymore), so its files have to be removed here.
+  // `testViewAfterRetirement` must never be created at all, but remove it too
+  // so that a failing expectation below does not leave files behind for the
+  // other tests on this index.
+  auto cleanUp = absl::Cleanup{[this]() {
+    for (std::string_view name :
+         {".view.testViewRetired", ".view.testViewAfterRetirement"}) {
+      for (std::string_view suffix : VIEW_ALL_SUFFIXES) {
+        ql::filesystem::remove(absl::StrCat(testIndexBase_, name, suffix));
+      }
+    }
+  }};
+
+  manager.writeViewToDisk("testViewRetired", plan);
+  EXPECT_NE(manager.getView("testViewRetired"), nullptr);
+
+  manager.retireOnDiskFiles();
+  // Retiring twice is a no-op.
+  manager.retireOnDiskFiles();
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk("testViewAfterRetirement", plan),
+      ::testing::HasSubstr(
+          "Cannot write the materialized view 'testViewAfterRetirement' "
+          "because the files of the index it belongs to have been moved away"));
+  EXPECT_FALSE(ql::filesystem::exists(absl::StrCat(
+      testIndexBase_, ".view.testViewAfterRetirement", VIEW_INFO_SUFFIX)));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.deleteView("testViewRetired"),
+      ::testing::HasSubstr("Cannot delete the materialized view "
+                           "'testViewRetired' because the files of the index "
+                           "it belongs to have been moved away"));
+  // In particular, the files of the view were not deleted, and the loaded view
+  // is still available.
+  EXPECT_TRUE(ql::filesystem::exists(
+      absl::StrCat(testIndexBase_, ".view.testViewRetired", VIEW_INFO_SUFFIX)));
+  EXPECT_TRUE(manager.isViewLoaded("testViewRetired"));
+  EXPECT_NE(manager.getView("testViewRetired"), nullptr);
 }
 
 // _____________________________________________________________________________

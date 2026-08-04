@@ -68,6 +68,13 @@ void MaterializedViewsManager::writeViewToDisk(
     std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
+  // Hold this lock for the whole write, so that an index rebuild can not move
+  // the files of this index away while we are creating the view's files (which
+  // would leave them behind under the base name of the rebuilt index, where
+  // they don't belong, see `retireOnDiskFiles`). NOTE: It has to be acquired
+  // before `loadedViews_` (which `unloadViewIfLoaded` locks).
+  auto notRetiredLock = lockIfNotRetired(
+      absl::StrCat("write the materialized view '", name, "'"));
   unloadViewIfLoaded(name);
   MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
@@ -181,7 +188,7 @@ MaterializedViewWriter::getBlocksForAlreadySortedResult(
   } else {
     // Transform the lazy result (permute columns)
     return RangeOfIdTables{
-        ad_utility::OwningView{result->idTables()} |
+        result->idTables() |
         ql::views::transform(
             [&](auto& idTableAndLocalVocab) -> IdTableStatic<0> {
               auto& [block, vocab] = idTableAndLocalVocab;
@@ -491,6 +498,13 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
   MaterializedView::throwIfInvalidName(name);
   auto filenameBase = MaterializedView::getFilenameBase(onDiskBase_, name);
 
+  // Hold this lock for the whole sequence below, so that we can not delete
+  // files that an index rebuild has already replaced by the files of the
+  // rebuilt index (see `retireOnDiskFiles`). NOTE: It has to be acquired before
+  // `loadedViews_` below.
+  auto notRetiredLock = lockIfNotRetired(
+      absl::StrCat("delete the materialized view '", name, "'"));
+
   // Hold the lock for the whole check-unload-delete sequence below, so that a
   // concurrent `loadView`/`getView` call for the same view can not reload it
   // in between, and so that of two concurrent `deleteView` calls for the same
@@ -532,6 +546,11 @@ std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
 // _____________________________________________________________________________
 bool MaterializedViewsManager::isViewLoaded(const std::string& name) const {
   return loadedViews_.rlock()->views_.contains(name);
+}
+
+// _____________________________________________________________________________
+bool MaterializedViewsManager::hasLoadedViews() const {
+  return !loadedViews_.rlock()->views_.empty();
 }
 
 // _____________________________________________________________________________

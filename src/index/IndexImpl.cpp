@@ -30,6 +30,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexFormatVersion.h"
+#include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
 #include "parser/WordsAndDocsFileParser.h"
@@ -46,6 +47,7 @@
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
+#include "util/UnicodeSupport.h"
 #include "util/Views.h"
 #include "util/json.h"
 
@@ -118,8 +120,7 @@ static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   };
 
   return ad_utility::CachingTransformInputRange{
-      ad_utility::OwningView{sorterPtr->template getSortedBlocks<0>()},
-      setSubset};
+      sorterPtr->template getSortedBlocks<0>(), setSubset};
 }
 
 // Perform a lazy optional block join on the first column of `leftInput` and
@@ -936,11 +937,11 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
-    IndexMetaData& metaData, size_t numColumns,
-    const std::string& fileName) const {
+    IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
+    std::optional<size_t> numWriterThreads) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_);
+      blocksizePermutationPerColumn_, numWriterThreads);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -980,9 +981,11 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 // _____________________________________________________________________________
 std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+    std::optional<size_t> numWriterThreads) {
   IndexMetaData metaData;
-  auto writerAndCallback = getWriterAndCallback(metaData, numColumns, fileName);
+  auto writerAndCallback =
+      getWriterAndCallback(metaData, numColumns, fileName, numWriterThreads);
 
   // We can always supply the tables with the correct permutation. No need to
   // re-order everything.
@@ -1035,8 +1038,15 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
-  auto metaData =
-      createPermutationImpl(numColumns, fileName, std::move(sortedTriples));
+  // This function is only used by the runtime index rebuild (see
+  // `IndexRebuilder`), which by default throttles the compress/write threads
+  // of its permutation writers so that a rebuild on a live server leaves most
+  // of the CPU to concurrent queries. A value of 0 means "fall back to
+  // `permutation-writer-num-threads`".
+  auto numWriterThreads = getRuntimeParameterAsOptional<
+      &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
+  auto metaData = createPermutationImpl(
+      numColumns, fileName, std::move(sortedTriples), numWriterThreads);
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -1308,6 +1318,11 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  // Record whether the index was built with ICU (Unicode) support. Indexes
+  // built with and without ICU use different collations and are hence not
+  // interchangeable; `readConfiguration` throws if the configuration of the
+  // loaded index does not match the current binary.
+  configuration["has-icu-support"] = ad_utility::useICUDefault;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1406,6 +1421,22 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         << std::endl;
     throw std::runtime_error{
         "Incompatible index format, see log message for details"};
+  }
+
+  // The index and the current binary must agree on whether ICU (Unicode)
+  // support is available: the two use different string collations, so mixing
+  // them would silently produce a wrong sort order. Indexes built before this
+  // flag was recorded were always built with ICU, hence the default of `true`.
+  bool indexHasIcuSupport = configurationJson_.value("has-icu-support", true);
+  if (indexHasIcuSupport != ad_utility::useICUDefault) {
+    throw std::runtime_error{absl::StrCat(
+        "This index was built ", indexHasIcuSupport ? "with" : "without",
+        " ICU (Unicode) support, but the QLever binary you are using was "
+        "built ",
+        ad_utility::useICUDefault ? "with" : "without",
+        " it. The two use different string collations and are not "
+        "interchangeable. Please rebuild the index or use a matching QLever "
+        "binary.")};
   }
 
   if (configurationJson_.find("prefixes-external") !=
@@ -1521,7 +1552,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // Note that the actual folding is done by the `TripleComponent`.
     auto& el = std::invoke(getter, triple);
     std::optional<Id> idIfNotString =
-        el.toValueIdIfNotString(&encodedIriManager());
+        toValueIdIfNotString(el, &encodedIriManager());
 
     // TODO<joka921> The following statement could be simplified by a helper
     // function "optionalCast";
@@ -1550,7 +1581,7 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
+    if (vocab_.shouldBeExternalized(toRdfLiteral(iriOrLiteral))) {
       component.isExternal_ = true;
     }
   }
@@ -1875,7 +1906,7 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 std::vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, const Permutation& permutation,
     const LocatedTriplesState& locatedTriplesState) const {
-  if (auto keyId = key.toValueId(*this)) {
+  if (auto keyId = toValueId(key, *this)) {
     auto meta = permutation.getMetadata(keyId.value(), locatedTriplesState);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
@@ -2159,9 +2190,10 @@ namespace {
 template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, CustomAction customAction) {
+    const Permutation& permutation, CustomAction customAction,
+    const std::function<void(size_t)>& progress) {
   return std::packaged_task<void()>{[&counter, &permutation,
-                                     &locatedTriplesSharedState,
+                                     &locatedTriplesSharedState, progress,
                                      customAction = std::move(customAction)]() {
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
@@ -2172,11 +2204,8 @@ std::packaged_task<void()> computeStatistics(
     // `rebuild-index-scan-num-threads` (several permutations are scanned in
     // parallel, so without the throttle this short phase has a high peak
     // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto rebuildScanThreads =
-        getRuntimeParameter<&RuntimeParameters::rebuildIndexScanNumThreads_>();
-    std::optional<size_t> numThreadsOverride =
-        rebuildScanThreads == 0 ? std::nullopt
-                                : std::optional<size_t>{rebuildScanThreads};
+    auto numThreadsOverride = getRuntimeParameterAsOptional<
+        &RuntimeParameters::rebuildIndexScanNumThreads_>();
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
@@ -2185,6 +2214,7 @@ std::packaged_task<void()> computeStatistics(
     for (const auto& table : tables) {
       std::invoke(customAction, table);
       IndexImpl::countDistinct(lastCol0, counter, table);
+      progress(table.numRows());
     }
   }};
 }
@@ -2192,7 +2222,8 @@ std::packaged_task<void()> computeStatistics(
 
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
-    const LocatedTriplesSharedState& locatedTriplesSharedState) const {
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const std::function<void(size_t)>& progress) const {
   size_t numTriples = 0;
   size_t numTriplesInternal = 0;
   size_t numSubjects = 0;
@@ -2202,11 +2233,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
   std::vector<std::packaged_task<void()>> tasks;
 
-  auto getCounterTask = [&locatedTriplesSharedState](
+  auto getCounterTask = [&locatedTriplesSharedState, &progress](
                             size_t& counter, const Permutation& permutation,
                             auto customAction) {
     return computeStatistics(locatedTriplesSharedState, counter, permutation,
-                             customAction);
+                             customAction, progress);
   };
 
   tasks.push_back(getCounterTask(

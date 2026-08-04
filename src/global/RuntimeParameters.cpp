@@ -8,6 +8,8 @@
 
 #include "global/RuntimeParameters.h"
 
+#include <absl/strings/str_join.h>
+
 #include "backports/algorithm.h"
 #include "util/Algorithm.h"
 
@@ -28,6 +30,7 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanQueueSize_);
   add(lazyIndexScanNumThreads_);
   add(rebuildIndexScanNumThreads_);
+  add(rebuildPermutationWriterNumThreads_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
@@ -94,8 +97,9 @@ RuntimeParameters::toMap() const {
 void RuntimeParameters::setFromString(const std::string& name,
                                       const std::string& value) {
   if (!ad_utility::contains(runtimeMap_, name)) {
-    throw std::runtime_error{"No parameter with name " + std::string{name} +
-                             " exists"};
+    throw std::runtime_error{
+        "No parameter with name " + std::string{name} +
+        " exists. Available parameters are: " + absl::StrJoin(getKeys(), ", ")};
   }
   try {
     runtimeMap_.at(name)->setFromString(value);
@@ -104,6 +108,18 @@ void RuntimeParameters::setFromString(const std::string& name,
                              " to value " + value +
                              ". Exception was: " + e.what());
   }
+}
+
+// _____________________________________________________________________________
+void RuntimeParameters::setFromAssignment(const std::string& assignment) {
+  auto positionOfEquals = assignment.find('=');
+  if (positionOfEquals == std::string::npos) {
+    throw std::runtime_error{
+        "Expected an assignment of the form <name>=<value>, but got \"" +
+        assignment + "\""};
+  }
+  setFromString(assignment.substr(0, positionOfEquals),
+                assignment.substr(positionOfEquals + 1));
 }
 
 // _____________________________________________________________________________

@@ -8,8 +8,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_INDEX_LOCALEMANAGER_H
-#define QLEVER_SRC_INDEX_LOCALEMANAGER_H
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_LOCALEMANAGER_H
+#define QLEVER_SRC_INDEX_VOCABULARY_LOCALEMANAGER_H
 
 #ifndef QLEVER_NO_UNICODE
 #include <unicode/coll.h>
@@ -422,15 +422,15 @@ class LocaleManagerNoICU : public LocaleManagerBase {
 };
 
 // Select the ICU or the NoICU locale manager depending on whether the
-// `QLEVER_NO_UNICODE` macro is defined. Currently there is deliberately no
-// build option that defines this macro (the unit tests use the `NoICU` class
-// directly); a CMake option will follow together with the check that a loaded
-// index matches the binary in this respect, because the two variants produce
-// different sort orders.
+// `QLEVER_NO_UNICODE` macro is defined. The macro is defined by the CMake
+// option of the same name. Because the two variants produce different sort
+// orders, an index records which variant it was built with
+// (`has-icu-support` in the index metadata), and loading an index with a
+// mismatching binary fails (see `IndexImpl::applyConfiguration`).
 #ifdef QLEVER_NO_UNICODE
 using LocaleManager = LocaleManagerNoICU;
 #else
 using LocaleManager = LocaleManagerICU;
 #endif
 
-#endif  // QLEVER_SRC_INDEX_LOCALEMANAGER_H
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_LOCALEMANAGER_H

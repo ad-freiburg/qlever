@@ -10,9 +10,11 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWS_H_
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
 #include <array>
+#include <stdexcept>
 
 #include "backports/filesystem.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
@@ -306,6 +308,48 @@ class MaterializedViewsManager {
  private:
   std::string onDiskBase_;
 
+  // Set by `retireOnDiskFiles` (see there) once the files of the index this
+  // manager belongs to have been moved away by an index rebuild, after which
+  // this manager must not create or delete any file under `onDiskBase_`
+  // anymore. Accessed only through `lockIfNotRetired` below, whose shared lock
+  // makes the "not retired" answer stay valid for as long as it is held.
+  //
+  // NOTE: Whenever this and `loadedViews_` are held at the same time, this one
+  // has to be locked first, otherwise `retireOnDiskFiles` can deadlock against
+  // a concurrent write or deletion of a view. Since `lockIfNotRetired` is
+  // private and used only by `writeViewToDisk` and `deleteView`, which both
+  // take it before touching `loadedViews_`, no code holding `loadedViews_` can
+  // ask for this lock, so the two can not be acquired in the opposite order.
+  //
+  // NOTE: This deliberately is a separate `Synchronized` and not a member of
+  // `LoadedViews` below, although that would make the above ordering rule
+  // unnecessary. The two locks have very different hold times: this one is held
+  // in shared mode for the whole duration of writing a view (query execution,
+  // external sorting and writing the permutation), whereas `loadedViews_` is
+  // held only for the short lookups and updates of the loaded views. Merging
+  // them would mean that `getView`, which needs the exclusive lock to load a
+  // view lazily, has to wait for a concurrent view write to finish.
+  ad_utility::Synchronized<bool> onDiskFilesRetired_{false};
+
+  // Return a lock that blocks `retireOnDiskFiles` for as long as it is held, or
+  // throw if the on-disk files have already been retired. Every operation that
+  // creates or deletes a file under `onDiskBase_` has to hold such a lock for
+  // its whole duration: only then is it guaranteed that the files it touches
+  // still belong to this manager's index, and not to a rebuilt index that has
+  // taken over `onDiskBase_` in the meantime. `description` is a verb phrase
+  // naming the operation and is only used for the error message.
+  [[nodiscard]] auto lockIfNotRetired(std::string_view description) const {
+    auto lock = onDiskFilesRetired_.rlock();
+    if (*lock) {
+      throw std::runtime_error{absl::StrCat(
+          "Cannot ", description,
+          " because the files of the index it belongs to have been moved away "
+          "by an index rebuild. Please retry the operation, it will then be "
+          "applied to the rebuilt index.")};
+    }
+    return lock;
+  }
+
   // Helper struct to unify the locking of loaded views and `QueryPatternCache`.
   struct LoadedViews {
     ad_utility::HashMap<std::string, std::shared_ptr<MaterializedView>> views_;
@@ -332,8 +376,29 @@ class MaterializedViewsManager {
   // before any calls to `loadView` and `getView`.
   void setOnDiskBase(const std::string& onDiskBase);
 
+  // Permanently prevent this manager from creating or deleting any further view
+  // file under `onDiskBase_`. This has to be called before the files of the
+  // index this manager belongs to are moved away by an index rebuild (see
+  // `Server::rebuildIndex`, which is the only caller, and
+  // `Qlever::moveRebuiltIndexIntoPlace`, which performs the move). Otherwise a
+  // view that is written concurrently with that move can end up under the base
+  // name that the rebuilt index has just taken over, even though its `Id`s
+  // refer to the vocabulary of the old index.
+  //
+  // Taking the exclusive lock is what makes this airtight: it blocks until a
+  // concurrent `writeViewToDisk` or `deleteView` has finished, so that the
+  // files of such an operation are complete before the move enumerates them and
+  // are therefore moved along with the rest of the old index (where they
+  // belong). Every later attempt throws. Everything else, in particular
+  // scanning views that are already loaded, keeps working, so that queries
+  // which still hold a snapshot of the old index can finish.
+  void retireOnDiskFiles() { *onDiskFilesRetired_.wlock() = true; }
+
   // Check if a materialized view is currently loaded.
   bool isViewLoaded(const std::string& name) const;
+
+  // Check if any materialized view is currently loaded.
+  bool hasLoadedViews() const;
 
   // Return the names of all view files (of all views, loaded or not) that exist
   // on disk for the given index base name. Views are loaded lazily by name, so

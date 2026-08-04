@@ -18,6 +18,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -35,6 +36,7 @@
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/UnicodeSupport.h"
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -650,6 +652,34 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(std::as_const(index).parserBufferSize(), 8_kB);
 }
 
+// _____________________________________________________________________________
+TEST(IndexTest, destructorLogsUnloading) {
+  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  // An `Index` that still owns its `IndexImpl` logs on destruction.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Index at someIndexBase was unloaded"));
+  }
+  // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
+  // silent on destruction. We reset it while `movedInto` is still alive, so no
+  // unload message may be logged at that point.
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->setOnDiskBase("someIndexBase");
+    Index movedInto{std::move(index).value()};
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
+  }
+}
+
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
   using enum qlever::Filetype;
@@ -787,9 +817,10 @@ TEST(IndexImpl, recomputeStatistics) {
   index.deltaTriplesManager().modify<void>([&cancellationHandle, blankNodeId,
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
-    LocalVocabEntry zzz = LocalVocabEntry::fromIriref("<zzz>", indexImpl);
-    LocalVocabEntry literal =
-        LocalVocabEntry::fromStringRepresentation("\"test\"@en", indexImpl);
+    LocalVocabEntry zzz =
+        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
+        "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
     // Create duplicate in different graph.
@@ -867,6 +898,26 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
+
+  // Writing the same permutation with the writer-thread throttle disabled
+  // (0 means "fall back to `permutation-writer-num-threads`") must give the
+  // same result. Together with the default of 1 used by the calls above and
+  // below, this exercises the translation of the runtime parameter to the
+  // writer-thread override on both of its branches. Use a separate base name,
+  // so that the permutation that was already finalized above stays intact.
+  {
+    auto cleanupParameter = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
+    index.setOnDiskBase(onDiskBase + ".unthrottled");
+    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
+        index.createPermutationWithoutMetadata(
+            4,
+            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+                tables.at(0).clone(), tables.at(1).clone()}},
+            permutation, false);
+    index.setOnDiskBase(onDiskBase);
+    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
+  }
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
@@ -981,12 +1032,48 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   // The version written to disk will also have these fields.
   stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
   stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["has-icu-support"] = ad_utility::useICUDefault;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
   nlohmann::json jsonFromFile;
   in >> jsonFromFile;
   EXPECT_EQ(stats, jsonFromFile);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, icuSupportConfigurationMustMatch) {
+  auto index =
+      makeTestIndex("icuSupportConfigurationMustMatch", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+
+  // A freshly built index records whether the current binary has ICU support.
+  ASSERT_TRUE(indexImpl.configurationJson().contains("has-icu-support"));
+  EXPECT_EQ(indexImpl.configurationJson()["has-icu-support"],
+            ad_utility::useICUDefault);
+  const auto originalConfig = indexImpl.configurationJson();
+
+  // Applying a configuration whose ICU-support flag disagrees with the current
+  // binary must throw.
+  auto mismatchedConfig = originalConfig;
+  mismatchedConfig["has-icu-support"] = !ad_utility::useICUDefault;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(mismatchedConfig),
+      ::testing::HasSubstr(
+          "different string collations and are not interchangeable"));
+
+  // An index built before this flag existed is assumed to have ICU support, so
+  // it loads iff the current binary also has ICU support.
+  auto legacyConfig = originalConfig;
+  legacyConfig.erase("has-icu-support");
+  if constexpr (ad_utility::useICUDefault) {
+    EXPECT_NO_THROW(indexImpl.applyConfiguration(legacyConfig));
+  } else {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        indexImpl.applyConfiguration(legacyConfig),
+        ::testing::HasSubstr(
+            "different string collations and are not interchangeable"));
+  }
 }
 
 // _____________________________________________________________________________
