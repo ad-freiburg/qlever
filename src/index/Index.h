@@ -17,6 +17,7 @@
 #include "index/Permutation.h"
 #include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -27,6 +28,7 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
+class LocalVocabContext;
 struct LocatedTriplesState;
 class DeltaTriplesManager;
 
@@ -244,6 +246,12 @@ class Index {
 
   // Allow implicit conversions to `const IndexImpl&`.
   operator const IndexImpl&() const { return getImpl(); }
+
+  // Return this index as the context of the `LocalVocabEntry`s that belong to
+  // it. Defined out of line, such that the callers only need the forward
+  // declaration of `LocalVocabContext` above and not the complete type (which
+  // would require the rather expensive `IndexImpl.h`).
+  const LocalVocabContext& getLocalVocabContext() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEX_H

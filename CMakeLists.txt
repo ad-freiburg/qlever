@@ -652,6 +652,13 @@ FetchContent_Declare(
 # See https://github.com/google/googletest/issues/5015
 if (EMSCRIPTEN)
     add_compile_definitions(GTEST_HAS_PTHREAD=1)
+
+    # With Emscripten, the DWARF debug info that `-g` puts into the object
+    # files (which is all that CMake's `Debug`/`RelWithDebInfo` flags do) only
+    # ends up in the final `.wasm` when `-g` is ALSO passed at link time.
+    # Add it, so that debug build types produce binaries that can be debugged
+    # and profiled with source information in the browser dev tools.
+    add_link_options("$<$<CONFIG:Debug,RelWithDebInfo>:-g>")
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
@@ -789,7 +796,7 @@ set(PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS
    ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
 
 if (USE_PRECOMPILED_HEADERS)
-    target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
+    target_precompile_headers(sparqlParser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
     target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
     target_precompile_headers(sparqlExpressions PRIVATE ${PRECOMPILED_HEADER_FILES_SPARQL_EXPRESSIONS})
     # Note: index TUs that include `Operation.h` transitively pull in `beast.h`
@@ -829,10 +836,10 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample parser engine qlever_util index qlever)
+qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain qlever_util)

@@ -24,6 +24,7 @@
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
 #include "index/LocatedTriples.h"
+#include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
@@ -235,10 +236,10 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   Triples internalTriples;
   // Initialize on first use.
   if (languagePredicate_.isUndefined()) {
-    languagePredicate_ =
+    languagePredicate_ = toValueId(
         TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
-            .toValueId(index_, localVocab_);
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)},
+        index_, localVocab_);
   }
   ad_utility::HashSet<Id> addedObjects;
   for (const auto& triple : triples) {
@@ -263,8 +264,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
     auto specialPredicate =
         ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
-    Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
-        index_, localVocab_);
+    Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
+                             index_, localVocab_);
     // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, objectId, ids.at(3)}});
@@ -275,8 +276,9 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     Id langtagId =
         languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
-          return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
-              .toValueId(index_, localVocab_);
+          return toValueId(
+              TripleComponent{ad_utility::convertLangtagToEntityUri(tag)},
+              index_, localVocab_);
         });
 
     // Because we don't track the exact counts of existing objects, we just
@@ -674,8 +676,8 @@ void DeltaTriples::readFromDisk() {
     return;
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
-  auto [vocab, idRanges] =
-      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getLocalVocabContext());
   if (idRanges.empty()) {
     return;
   }
@@ -811,7 +813,8 @@ void DeltaTriples::remapId(
       // cache) into the local vocab and rewrite the id, so that no entry of the
       // new index references the old index, which is destroyed after the swap.
       id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(), index}));
+          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(),
+                          index.getLocalVocabContext()}));
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(
