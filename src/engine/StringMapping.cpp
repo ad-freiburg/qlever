@@ -40,8 +40,9 @@ Id StringMapping::remapId(Id id) {
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`
-  // (see above), or `BlankNodeIndex` (which also requires special handling and
-  // remapping, but cannot be handled by the `StringMapping`.
+  // (see above), or `EncodedVal`, or `BlankNodeIndex` (the latter also requires
+  // special handling and remapping, but cannot be handled by the
+  // `StringMapping`).
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||

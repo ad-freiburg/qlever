@@ -166,9 +166,11 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
 }
 
 // Convert the `id` to a human-readable string. The `index` is used to resolve
-// `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
-// used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
-// is applied to the resulting string if it is not of a numeric type.
+// the `Id`s that point into one of its data structures (`VocabIndex`,
+// `AuxVocabIndex`, `WordVocabIndex`, `TextRecordIndex`, and `EncodedVal`). The
+// `localVocab` is used to resolve `Id`s with datatype `LocalVocabIndex`. The
+// `escapeFunction` is applied to the resulting string if it is not of a numeric
+// type.
 //
 // Return value: If the `Id` encodes a numeric value (integer, double, etc.)
 // then the `string` (first element of the pair) will be the number as a
@@ -186,8 +188,12 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
-    // The datatypes of the vocabularies that store their words as strings. Only
-    // those can hold a literal.
+    // In this mode, restrict the result to the words of the vocabularies that
+    // store their words as strings. Only those are routed through
+    // `literalOrIriToStringAndType`, which applies the actual `isLiteral()`
+    // check; the other datatypes below would bypass it (the words of the text
+    // index and the values that are encoded in the `Id` are turned into a
+    // string directly), so they have to be discarded here.
     static constexpr std::array stringVocabDatatypes{
         VocabIndex, LocalVocabIndex, AuxVocabIndex};
     if (!ad_utility::contains(stringVocabDatatypes, datatype)) {

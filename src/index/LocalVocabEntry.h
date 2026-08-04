@@ -34,8 +34,11 @@ class LocalVocabContext;
 // is the order in which the index scans emit their `Id`s (call it the
 // *internal* order, see `ValueId::compareThreeWay`). Without an auxiliary
 // vocabulary (see `index/vocabulary/AuxVocabulary.h`) that order coincides with
-// the semantic (that is, by string value) order, but as soon as an index has
-// such a vocabulary, the two differ: a word of the auxiliary vocabulary is
+// the semantic (that is, by string value) order, except for the encoded IRIs
+// (see `LocalVocabContext::encodeAsId`), which are ordered by their encoding
+// (a pre-existing deviation that is tracked separately, see the note at
+// `compareThreeWay` below). As soon as an index has such a vocabulary, the two
+// orders differ much more fundamentally: a word of the auxiliary vocabulary is
 // positioned after *all* words of the main vocabulary, no matter what it is. An
 // entry whose word is stored in the auxiliary vocabulary therefore compares
 // greater than every word of the main vocabulary, and greater than every entry
@@ -99,10 +102,11 @@ class alignas(16) LocalVocabEntry
       : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known. Note that
-  // the caller has to guarantee that the word is contained in neither the main
-  // nor the auxiliary vocabulary, or that `lower` and `upper` are the bounds
-  // that `positionInVocabExpensiveCase` would compute (which is checked by the
-  // expensive check below).
+  // the caller has to guarantee that `lower` and `upper` are exactly the bounds
+  // that `positionInVocabExpensiveCase` would compute, which the expensive
+  // check below verifies. In particular, a word that is contained in neither
+  // the main nor the auxiliary vocabulary still has to be given the bounds of
+  // the position at which it would be sorted into the main vocabulary.
   template <typename Lower, typename Upper>
   LocalVocabEntry(Base&& base, Lower lower, Upper upper,
                   const LocalVocabContext& context)
@@ -215,8 +219,9 @@ class alignas(16) LocalVocabEntry
 
   // Two entries are equal if and only if their string representations are, so
   // forward to the base class instead of going through `compareThreeWay`, which
-  // would use the much more expensive collation of the vocabulary and would
-  // look up the position in the vocabulary (see the note above). This is what
+  // would use the much more expensive collation of the vocabulary, and which
+  // would additionally look up the position in the vocabulary if the index has
+  // an auxiliary vocabulary (see the note above). This is what
   // happens implicitly anyway (the operators defined by the macro above do not
   // include `operator==`), but state it explicitly so that it doesn't silently
   // change when `compareThreeWay` does.

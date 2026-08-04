@@ -14,7 +14,7 @@
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 AuxVocabulary::AuxVocabulary(std::vector<std::string> words)
     : words_{std::move(words)} {
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(words_),
@@ -23,13 +23,13 @@ AuxVocabulary::AuxVocabulary(std::vector<std::string> words)
                     "The words of an auxiliary vocabulary have to be distinct");
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::string_view AuxVocabulary::operator[](AuxVocabIndex index) const {
   AD_CONTRACT_CHECK(index.get() < words_.size());
   return words_[index.get()];
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<AuxVocabIndex> AuxVocabulary::getId(std::string_view word) const {
   auto it = ql::ranges::lower_bound(words_, word);
   if (it == words_.end() || *it != word) {

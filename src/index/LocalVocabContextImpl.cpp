@@ -11,25 +11,25 @@
 
 #include "util/Exception.h"
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 int LocalVocabContextImpl::compareWords(std::string_view a,
                                         std::string_view b) const {
   return vocabulary_->getCaseComparator().compare(a, b,
                                                   LocaleManager::Level::TOTAL);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 auto LocalVocabContextImpl::getPositionOfWord(std::string_view word) const
     -> VocabBounds {
   return vocabulary_->getPositionOfWord(word);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 bool LocalVocabContextImpl::hasAuxVocabulary() const {
   return *auxVocab_ != nullptr;
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<AuxVocabIndex> LocalVocabContextImpl::getAuxVocabIndex(
     std::string_view word) const {
   if (!hasAuxVocabulary()) {
@@ -38,13 +38,13 @@ std::optional<AuxVocabIndex> LocalVocabContextImpl::getAuxVocabIndex(
   return (*auxVocab_)->getId(word);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<Id> LocalVocabContextImpl::encodeAsId(
     std::string_view word) const {
   return encodedIriManager_->encode(word);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 ad_utility::BlankNodeManager* LocalVocabContextImpl::getBlankNodeManager()
     const {
   AD_CONTRACT_CHECK(*blankNodeManager_);

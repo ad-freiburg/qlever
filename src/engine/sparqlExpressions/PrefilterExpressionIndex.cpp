@@ -700,10 +700,10 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
     const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
-  // IRIs are represented in one of two disjoint `ValueId` ranges: regular
-  // vocabulary IRIs (datatype `VocabIndex`/`LocalVocabIndex`) and encoded IRIs
-  // (datatype `EncodedVal`). We therefore have to keep the blocks for *both*
-  // representations.
+  // IRIs are represented in several disjoint `ValueId` ranges, two of which are
+  // handled here: regular vocabulary IRIs (datatype
+  // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
+  // We therefore have to keep the blocks for *both* representations.
   //
   // TODO<joka921> There is a third range: the IRIs of an auxiliary vocabulary
   // (datatype `AuxVocabIndex`, see `index/vocabulary/AuxVocabulary.h`). Those

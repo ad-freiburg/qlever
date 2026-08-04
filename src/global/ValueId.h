@@ -337,8 +337,8 @@ class ValueId {
     return value ? "true" : "false";
   }
 
-  // Create a `ValueId` for an unsigned index of type
-  // `VocabIndex|TextRecordIndex|LocalVocabIndex`. These types can
+  // Create a `ValueId` for an unsigned index of one of the index types (see
+  // `global/IndexTypes.h`). These types can
   // represent values in the range [0, 2^60]. When `index` is outside of this
   // range, and `IndexTooLargeException` is thrown.
   static ValueId makeFromVocabIndex(VocabIndex index) {
@@ -369,9 +369,9 @@ class ValueId {
     return makeFromIndex(index.get(), Datatype::AuxVocabIndex);
   }
 
-  // Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
-  // != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
-  // unspecified.
+  // Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()`
+  // is not the index type that the respective getter below is named after, then
+  // the result is unspecified.
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(removeDatatypeBits(_bits));
   }
@@ -545,7 +545,8 @@ class ValueId {
         AD_CORRECTNESS_CHECK(value != nullptr);
         ostr << value->toStringRepresentation();
       } else {
-        // T is `VocabIndex | TextRecordIndex`
+        // `T` is one of the remaining index types, all of which wrap a
+        // `uint64_t` (see `global/IndexTypes.h`).
         ostr << std::to_string(value.get());
       }
     };
