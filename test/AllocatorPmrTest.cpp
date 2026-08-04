@@ -115,6 +115,34 @@ TEST(AllocatorPmr, NullptrUpstreamUsesDefaultResource) {
   EXPECT_EQ(alloc.amountMemoryLeft(), 8_B);
 }
 
+// ____________________________________________________________________________
+// `LimitedMemoryResource::do_is_equal` reports a resource as equal to itself
+// only, not even to another resource with the same limit and upstream. Note
+// that `PmrAllocator::operator==` does not go through this function (it
+// directly compares the resource pointers), but the comparison of
+// `ql::pmr::polymorphic_allocator`s does.
+TEST(AllocatorPmr, ResourceIsEqual) {
+  auto alloc = makePmrAllocatorWithLimit<int>(8_B);
+  auto otherAlloc = makePmrAllocatorWithLimit<int>(8_B);
+  const ql::pmr::memory_resource& resource = *alloc.resource();
+  const ql::pmr::memory_resource& otherResource = *otherAlloc.resource();
+
+  EXPECT_TRUE(resource.is_equal(resource));
+  EXPECT_FALSE(resource.is_equal(otherResource));
+  EXPECT_FALSE(otherResource.is_equal(resource));
+  // The same holds for a resource of a completely different type.
+  EXPECT_FALSE(resource.is_equal(*ql::pmr::get_default_resource()));
+
+  // The comparison of `polymorphic_allocator`s uses `is_equal` (unless the
+  // resource pointers are identical, in which case it short-circuits).
+  using PolymorphicAllocator = ql::pmr::polymorphic_allocator<int>;
+  EXPECT_TRUE(PolymorphicAllocator{alloc.resource()} ==
+              PolymorphicAllocator{alloc.resource()});
+  EXPECT_TRUE(PolymorphicAllocator{alloc.resource()} !=
+              PolymorphicAllocator{otherAlloc.resource()});
+}
+
+// ____________________________________________________________________________
 // A plain platform resource (non-owning) enforces no limit.
 TEST(AllocatorPmr, FromResourceNoLimit) {
   ql::pmr::monotonic_buffer_resource platformPool;

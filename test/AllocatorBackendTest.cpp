@@ -67,15 +67,23 @@ struct FailingUnderlyingAllocation;
 
 // For the limit backend, the underlying allocator is a `std::allocator<int>`,
 // which cannot be replaced, so the failure has to be provoked by requesting an
-// absurd amount of memory: 8 EB, which `std::allocator` either rejects right
-// away because it exceeds its `max_size()`, or attempts and fails, because 8 EB
-// exceed the address space. The memory limit is set to the maximum, so that the
+// absurd amount of memory: 8 EB, which `std::allocator` rejects because it
+// exceeds its `max_size()`. The memory limit is set to the maximum, so that the
 // reservation for those bytes still succeeds. Note that the number of bytes
 // must not overflow, as the test below checks that exactly those bytes are
 // given back to the tracker.
+//
+// Only libstdc++ rejects such a request by its size alone; libc++ instead
+// attempts the allocation, which then fails in an implementation-defined way,
+// so the test is skipped there.
 template <>
 struct FailingUnderlyingAllocation<
     ad_utility::allocatorImpl::AllocatorWithLimit<int>> {
+#ifdef _LIBCPP_VERSION
+  static constexpr bool isSupported = false;
+#else
+  static constexpr bool isSupported = true;
+#endif
   static size_t numElements() { return (size_t{1} << 63) / sizeof(int); }
   static ad_utility::allocatorImpl::AllocatorWithLimit<int> makeAllocator() {
     return ad_utility::allocatorImpl::AllocatorWithLimit<int>::makeLimited(
@@ -87,6 +95,7 @@ struct FailingUnderlyingAllocation<
 // resource that always throws can simply be injected.
 template <>
 struct FailingUnderlyingAllocation<ad_utility::PmrAllocator<int>> {
+  static constexpr bool isSupported = true;
   static size_t numElements() { return 1; }
   static ad_utility::PmrAllocator<int> makeAllocator() {
     // The allocator only stores a pointer to the upstream resource, which
@@ -214,6 +223,11 @@ TYPED_TEST(AllocatorBackendTest, UnlimitedAllocator) {
 // that it remains available for later allocations.
 TYPED_TEST(AllocatorBackendTest, UnderlyingAllocationFailureReleasesMemory) {
   using Failing = FailingUnderlyingAllocation<TypeParam>;
+  if (!Failing::isSupported) {
+    GTEST_SKIP() << "The failure of the underlying allocation cannot be "
+                    "provoked for this backend and standard library, see the "
+                    "comment at `FailingUnderlyingAllocation`";
+  }
   auto alloc = Failing::makeAllocator();
   const auto memoryLeftBefore = alloc.amountMemoryLeft();
   EXPECT_THROW(alloc.allocate(Failing::numElements()), std::bad_alloc);
