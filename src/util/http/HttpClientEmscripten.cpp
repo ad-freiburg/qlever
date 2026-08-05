@@ -230,7 +230,7 @@ QLEVER_EM_JS(void, qleverFetchRun,
                 .slice(0, 512);
         // Write the given object to the metadata buffer as JSON. If it does not
         // fit even though its values are truncated, report that rather than
-        // writing something unparseable.
+        // writing something unparsable.
         const writeMetadata = (object) => {
           let json = JSON.stringify(object);
           // A string of length `n` needs at most `3 * n` bytes in UTF-8, plus
