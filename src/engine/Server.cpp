@@ -446,15 +446,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
   bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
-  auto requireValidAccessToken = [&accessTokenOk](
-                                     const std::string& actionName) {
-    if (!accessTokenOk) {
-      throw HttpError(
-          http::status::forbidden,
-          absl::StrCat(actionName, " requires a valid access token but no "
-                                   "access token was provided"));
-    }
-  };
+  auto requireValidAccessToken =
+      [&accessTokenOk](const std::string& actionName) {
+        if (!accessTokenOk) {
+          throw HttpError(http::status::forbidden,
+                          absl::StrCat(actionName,
+                                       " requires a valid access token but no "
+                                       "access token was provided"));
+        }
+      };
 
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
