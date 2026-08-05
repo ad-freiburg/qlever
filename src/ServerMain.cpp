@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
       R"("Controls deduplication of triples in CONSTRUCT query results. "
       "\"none\" (default): no deduplication, every triple is emitted. "
-      "\"global\": a triple is emitted at most once across the entire result. "
+      "\"full\": a triple is emitted at most once across the entire result. "
       "\"lru:N\" (positive integer N): deduplicate against the N most "
       "recently used unique triples, with one cache shared across all "
       "template triples (bounded memory, partial deduplication).")");

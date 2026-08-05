@@ -54,15 +54,15 @@ PreprocessedConstructTemplate makeSingleTripleTemplate() {
 }
 
 // Shared fixture: holds the `QueryExecutionContext` every test needs and offers
-// helpers to build a `Global`-mode deduplicator and local-vocab ids on it.
+// helpers to build a `Full`-mode deduplicator and local-vocab ids on it.
 class ConstructDeduplicatorTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = getQec("<s> <p> <o>");
 
-  // Build a `ConstructDeduplicator` in `Global` mode on `qec_`.
-  ConstructDeduplicator makeGlobalDeduplicator(
+  // Build a `ConstructDeduplicator` in `Full` mode on `qec_`.
+  ConstructDeduplicator makeFullDeduplicator(
       std::optional<ad_utility::MemorySize> maxDedupVocabSize = std::nullopt) {
-    return ConstructDeduplicator{DeduplicationMode::global(), *qec_,
+    return ConstructDeduplicator{DeduplicationMode::full(), *qec_,
                                  maxDedupVocabSize};
   }
 
@@ -98,7 +98,7 @@ class ConstructDeduplicatorTest : public ::testing::Test {
 // `makeFullTripleKey` copies an encoded (non-local-vocab) id into the key
 // unchanged, since `canonicalize` only re-anchors `LocalVocabIndex` ids.
 TEST_F(ConstructDeduplicatorTest, passThroughForNonLocalVocab) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
 
   const Id id = IntId(42);
   auto table = makeIdTable(id);
@@ -118,7 +118,7 @@ TEST_F(ConstructDeduplicatorTest, passThroughForNonLocalVocab) {
 // are bitwise identical to each other (same `dedupVocab_` entry) yet bitwise
 // distinct from both sources (proving they were actually moved).
 TEST_F(ConstructDeduplicatorTest, crossVocabCollapse) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
 
   const LocalVocabRow row1 = makeLocalVocabRow("x");
   const LocalVocabRow row2 = makeLocalVocabRow("x");
@@ -147,7 +147,7 @@ TEST_F(ConstructDeduplicatorTest, crossVocabCollapse) {
 // A key built from a `LocalVocab` that is then destroyed must not dangle: the
 // reseated ids live in `dedupVocab_`, which outlives the source.
 TEST_F(ConstructDeduplicatorTest, keySurvivesSourceVocabDestruction) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
 
   DeduplicationKey key1;
   {
@@ -169,7 +169,7 @@ TEST_F(ConstructDeduplicatorTest, keySurvivesSourceVocabDestruction) {
 // A constant position contributes its precomputed `dedupId_` to the key
 // (rather than reading anything from the row).
 TEST_F(ConstructDeduplicatorTest, constantPositionUsesDedupId) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
 
   const PreprocessedTriple constTriple{
       makeConstant(IntId(7)), makeConstant(IntId(8)), makeConstant(IntId(9))};
@@ -189,7 +189,7 @@ TEST_F(ConstructDeduplicatorTest, constantPositionUsesDedupId) {
 // `LocalVocabIndex` id. Otherwise it would never compare bitwise equal to the
 // same term coming from the data, and the duplicate would be missed.
 TEST_F(ConstructDeduplicatorTest, localVocabTermInIndexVocabUsesVocabIndex) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
 
   // `<s>` is part of the index built by the fixture, so it is in the index
   // vocabulary.
@@ -214,7 +214,7 @@ TEST_F(ConstructDeduplicatorTest, localVocabTermInIndexVocabUsesVocabIndex) {
 // Building a key for a blank-node position is a precondition violation:
 // blank-node triples bypass deduplication and never reach `makeFullTripleKey`.
 TEST_F(ConstructDeduplicatorTest, blankNodePositionInKeyFails) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
 
   const PreprocessedTriple blankNodeTriple{
       PrecomputedBlankNode{.prefix_ = "_:g", .suffix_ = "_0"},
@@ -226,10 +226,10 @@ TEST_F(ConstructDeduplicatorTest, blankNodePositionInKeyFails) {
 }
 
 //______________________________________________________________________________
-// `global` dedup collapses the same local-vocab triple across two result
+// `full` dedup collapses the same local-vocab triple across two result
 // blocks (each with its own, separately-destroyed `LocalVocab`).
-TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksGlobal) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksFull) {
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
 
   {
@@ -263,7 +263,7 @@ TEST_F(ConstructDeduplicatorTest, dedupAcrossBlocksLru) {
 // "new": blank-node triples bypass deduplication, so no key is built and
 // nothing is ever recorded (so a second call is "new" again too).
 TEST_F(ConstructDeduplicatorTest, blankNodeTripleAlwaysNew) {
-  ConstructDeduplicator deduplicator = makeGlobalDeduplicator();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
   auto tmpl = makeSingleTripleTemplate();
   tmpl.tripleContainsBlankNode_ = {true};
 
@@ -319,18 +319,18 @@ TEST_F(ConstructDeduplicatorTest, lruDoesNotResetMidKey) {
 }
 
 //______________________________________________________________________________
-// `global` dedup is exact and is never reset on memory pressure: the vocab
+// `full` dedup is exact and is never reset on memory pressure: the vocab
 // threshold does not apply to it. So even with a 1-byte threshold the identical
 // triple is still recognized as a duplicate.
-TEST_F(ConstructDeduplicatorTest, globalIgnoresVocabThreshold) {
+TEST_F(ConstructDeduplicatorTest, fullIgnoresVocabThreshold) {
   ConstructDeduplicator deduplicator =
-      makeGlobalDeduplicator(ad_utility::MemorySize::bytes(1));
+      makeFullDeduplicator(ad_utility::MemorySize::bytes(1));
   auto tmpl = makeSingleTripleTemplate();
 
   const LocalVocabRow row = makeLocalVocabRow("x");
   auto c = row.ctx();
   EXPECT_TRUE(deduplicator.isNew(0, 0, tmpl, c));  // first occurrence
-  // The tiny threshold is ignored for `global`: no reset, so the identical
+  // The tiny threshold is ignored for `full`: no reset, so the identical
   // triple is still a duplicate.
   EXPECT_FALSE(deduplicator.isNew(0, 0, tmpl, c));
 }

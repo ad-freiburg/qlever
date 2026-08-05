@@ -2097,7 +2097,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
 }
 
 // _____________________________________________________________________________
-// Regression test for the `Global` deduplication of CONSTRUCT results: the same
+// Regression test for the `Full` deduplication of CONSTRUCT results: the same
 // RDF term may reach the CONSTRUCT template through two different kinds of
 // `Id`. A term that comes straight from the data is a `VocabIndex` `Id`, while
 // a term computed by an expression such as `STR` is materialized in the query's
@@ -2109,7 +2109,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
 // `ConstructDeduplicator::canonicalize` maps the `LocalVocabIndex` `Id` back
 // onto the index vocabulary's `VocabIndex` `Id`, the two keys differ and the
 // duplicate survives.
-TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
+TEST(ExportQueryExecutionTrees, ConstructFullDeduplicationAcrossLocalVocab) {
   const std::string kg =
       "<http://example.org/x> <http://example.org/name> \"Alice\" . "
       "<http://example.org/y> <http://example.org/label> \"Alice\" .";
@@ -2136,11 +2136,11 @@ TEST(ExportQueryExecutionTrees, ConstructGlobalDeduplicationAcrossLocalVocab) {
         absl::StrCat(expected, expected));
   }
 
-  // With `Global` deduplication the triple is emitted exactly once.
+  // With `Full` deduplication the triple is emitted exactly once.
   {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::global());
+            DeduplicationMode::full());
     EXPECT_EQ(
         runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
         expected);
@@ -2167,7 +2167,7 @@ TEST(ExportQueryExecutionTrees,
 }
 
 TEST(ExportQueryExecutionTrees,
-     ConstructDeduplicationValuesGlobalDropsDuplicates) {
+     ConstructDeduplicationValuesFullDropsDuplicates) {
   const std::string kg = "";
   const std::string query =
       "CONSTRUCT { ?s ?p ?o } WHERE {"
@@ -2178,7 +2178,7 @@ TEST(ExportQueryExecutionTrees,
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-          ad_utility::DeduplicationMode::global());
+          ad_utility::DeduplicationMode::full());
   EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
             expected);
 }

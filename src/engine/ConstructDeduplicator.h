@@ -36,7 +36,7 @@ using ad_utility::HashSetWithMemoryLimit;
 using ad_utility::OverloadCallOperator;
 
 // `TripleDeduplicator` stores either all unique previously seen CONSTRUCT
-// triples (global mode), or the N most recently used triples (lru mode). When
+// triples (full mode), or the N most recently used triples (lru mode). When
 // a new triple is passed to the filter (via `insert`), it stores it in the
 // cache. For a previously seen triple that is already in the cache, `insert`
 // just informs the caller that the triple is a duplicate.
@@ -55,7 +55,7 @@ class TripleDeduplicator {
 
   Deduplicator deduplicator_;
 
-  // Build the dedup structure for `mode`: an unbounded hash set for `Global`
+  // Build the dedup structure for `mode`: an unbounded hash set for `Full`
   // and a bounded LRU cache for `Lru` (capacity `N`).
   //
   // Precondition: `mode` is not `None`. `None` means "no deduplication", so the
@@ -78,7 +78,7 @@ class TripleDeduplicator {
 class ConstructDeduplicator {
  public:
   // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_` in the
-  // `Lru` mode, and is ignored in the `Global` mode.
+  // `Lru` mode, and is ignored in the `Full` mode.
   //
   // Precondition: `mode` is not `DeduplicationMode::None`. For `None` the
   // caller must not construct this state at all (see the class comment).
@@ -110,10 +110,10 @@ class ConstructDeduplicator {
   DeduplicationMode mode_;
   std::reference_wrapper<const QueryExecutionContext> queryExecutionContext_;
   // Approximate total byte size of the strings currently held in `dedupVocab_`.
-  // Only tracked in `Lru` mode; stays `0` in `Global` mode.
+  // Only tracked in `Lru` mode; stays `0` in `Full` mode.
   size_t dedupVocabBytes_ = 0;
   // Set by `computeMaxDedupVocabBytes` below. Only meaningful in `Lru`
-  // mode; `0` (unused) in `Global` mode.
+  // mode; `0` (unused) in `Full` mode.
   size_t maxDedupVocabBytes_;
 
   // `dedupVocab_` owns every local-vocab entry referenced by a stored key.
@@ -125,7 +125,7 @@ class ConstructDeduplicator {
   // Compute the byte threshold that bounds `dedupVocab_` in `Lru` mode:
   // The explicit `maxDedupVocabSize` if given, else a default value that is
   // roughly equal to the size of the LRU triple cache in the
-  // `deduplicator_`. `Global` mode does no memory accounting, so this returns a
+  // `deduplicator_`. `Full` mode does no memory accounting, so this returns a
   // dummy `0` there (see the definition).
   static size_t computeMaxDedupVocabBytes(
       const DeduplicationMode& mode,

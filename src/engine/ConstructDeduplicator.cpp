@@ -34,7 +34,7 @@ TripleDeduplicator::Deduplicator TripleDeduplicator::makeDeduplicator(
                               "`DeduplicationMode::None`.");
                         },
                         [&queryExecutionContext](
-                            const DeduplicationMode::Global&) -> Deduplicator {
+                            const DeduplicationMode::Full&) -> Deduplicator {
                           return HashSetWithMemoryLimit<DeduplicationKey>{
                               queryExecutionContext.getAllocator()};
                         },
@@ -111,7 +111,7 @@ size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
     return lru->capacity_ * bytesPerDedupKey;
   }
   // We do not track the memory usage of the `dedupVocab_` for
-  // `DeduplicationMode::Global` explicitly, thus this threshold is unused.
+  // `DeduplicationMode::Full` explicitly, thus this threshold is unused.
   // Return a dummy `0`.
   return 0;
 }
@@ -136,7 +136,7 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   const auto* index = dedupVocab_.getIndexAndAddIfNotContained(entry);
   // Only `Lru` bounds the size of `dedupVocab_`, so only there do we
   // track the vocab's byte size and check the threshold. We do not track the
-  // size of the `dedupVocab_` for `Global` mode, but delegate it in this case
+  // size of the `dedupVocab_` for `Full` mode, but delegate it in this case
   // to the `LocalVocab` class itself.
   const bool addedNewString = dedupVocab_.size() != sizeBefore;
   if (isLru() && addedNewString) {
@@ -147,7 +147,7 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
 
 //______________________________________________________________________________
 void ConstructDeduplicator::resetIfVocabTooLarge() {
-  // Only `Lru` bounds its vocab here; `Global` must stay exact and is
+  // Only `Lru` bounds its vocab here; `Full` must stay exact and is
   // never reset.
   if (!isLru()) {
     return;

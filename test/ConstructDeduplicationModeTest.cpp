@@ -16,15 +16,14 @@ using namespace ad_utility;
 namespace {
 // Convenience aliases for the alternatives of `DeduplicationMode::value_`.
 using None = DeduplicationMode::None;
-using Global = DeduplicationMode::Global;
+using Full = DeduplicationMode::Full;
 using Lru = DeduplicationMode::Lru;
 }  // namespace
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, FactoryFunctions) {
   EXPECT_TRUE(std::holds_alternative<None>(DeduplicationMode::none().value_));
-  EXPECT_TRUE(
-      std::holds_alternative<Global>(DeduplicationMode::global().value_));
+  EXPECT_TRUE(std::holds_alternative<Full>(DeduplicationMode::full().value_));
 
   auto lru = DeduplicationMode::lru(42);
   ASSERT_TRUE(std::holds_alternative<Lru>(lru.value_));
@@ -38,9 +37,9 @@ TEST(ConstructDeduplicationMode, FromStringNone) {
 }
 
 // _____________________________________________________________________________
-TEST(ConstructDeduplicationMode, FromStringGlobal) {
-  auto mode = DeduplicationModeFromString{}("global");
-  EXPECT_TRUE(std::holds_alternative<Global>(mode.value_));
+TEST(ConstructDeduplicationMode, FromStringFull) {
+  auto mode = DeduplicationModeFromString{}("full");
+  EXPECT_TRUE(std::holds_alternative<Full>(mode.value_));
 }
 
 // _____________________________________________________________________________
@@ -64,19 +63,19 @@ TEST(ConstructDeduplicationMode, FromStringRejectsInvalidInput) {
   EXPECT_THROW(DeduplicationModeFromString{}("lru:"), std::runtime_error);
   EXPECT_THROW(DeduplicationModeFromString{}("lru:-5"), std::runtime_error);
   EXPECT_THROW(DeduplicationModeFromString{}("lru:abc"), std::runtime_error);
-  EXPECT_THROW(DeduplicationModeFromString{}("global "), std::runtime_error);
+  EXPECT_THROW(DeduplicationModeFromString{}("full "), std::runtime_error);
 }
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, ToString) {
   EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::none()), "none");
-  EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::global()), "global");
+  EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::full()), "full");
   EXPECT_EQ(DeduplicationModeToString{}(DeduplicationMode::lru(7)), "lru:7");
 }
 
 // _____________________________________________________________________________
 TEST(ConstructDeduplicationMode, RoundTrip) {
-  for (const std::string s : {"none", "global", "lru:1", "lru:1000"}) {
+  for (const std::string s : {"none", "full", "lru:1", "lru:1000"}) {
     auto roundTripped =
         DeduplicationModeToString{}(DeduplicationModeFromString{}(s));
     EXPECT_EQ(roundTripped, s);

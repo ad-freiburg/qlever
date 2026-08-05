@@ -34,7 +34,7 @@ namespace ad_utility {
 // `None` is the default: it preserves the original QLever behaviour (no
 // deduplication, constant-memory streaming) for users who need minimal memory
 // overhead and no deduplication cost.
-// `Global` is the strictly spec-compliant mode, but requires memory
+// `Full` is the strictly spec-compliant mode, but requires memory
 // proportional to the number of unique triples in the result, which can be
 // prohibitive for large result sets. Triples containing a blank node are
 // exempt from deduplication, which is not an approximation: every solution
@@ -49,19 +49,18 @@ namespace ad_utility {
 // emitted again.
 struct DeduplicationMode {
   static constexpr std::string_view none_ = "none";
-  static constexpr std::string_view global_ = "global";
+  static constexpr std::string_view full_ = "full";
   static constexpr std::string_view lru_ = "lru";
 
   struct None {};  // Every triple is emitted, no duplicate tracking.
-  struct Global {
-  };  // A triple is emitted at most once across the entire result.
+  struct Full {};  // A triple is emitted at most once across the entire result.
   struct Lru {         // Deduplicates against the `capacity_` most recently
     size_t capacity_;  // seen unique triples (one shared cache).
   };
-  std::variant<None, Global, Lru> value_;
+  std::variant<None, Full, Lru> value_;
 
   static DeduplicationMode none() { return {None{}}; }
-  static DeduplicationMode global() { return {Global{}}; }
+  static DeduplicationMode full() { return {Full{}}; }
   static DeduplicationMode lru(size_t capacity) { return {Lru{capacity}}; }
 };
 
@@ -69,7 +68,7 @@ struct DeduplicationMode {
 struct DeduplicationModeFromString {
   DeduplicationMode operator()(const std::string& s) const {
     if (s == DeduplicationMode::none_) return {DeduplicationMode::None{}};
-    if (s == DeduplicationMode::global_) return {DeduplicationMode::Global{}};
+    if (s == DeduplicationMode::full_) return {DeduplicationMode::Full{}};
 
     // `lru:<positive integer>`.
     constexpr std::string_view prefix = "lru:";
@@ -85,7 +84,7 @@ struct DeduplicationModeFromString {
     }
     throw std::runtime_error(absl::StrFormat(
         R"(Invalid value for construct-deduplication: "%s" Expected "%s", "%s", or "%s:<positive integer>".)",
-        s, DeduplicationMode::none_, DeduplicationMode::global_,
+        s, DeduplicationMode::none_, DeduplicationMode::full_,
         DeduplicationMode::lru_));
   }
 };
@@ -96,8 +95,8 @@ struct DeduplicationModeToString {
                           [](const DeduplicationMode::None&) {
                             return std::string{DeduplicationMode::none_};
                           },
-                          [](const DeduplicationMode::Global&) {
-                            return std::string{DeduplicationMode::global_};
+                          [](const DeduplicationMode::Full&) {
+                            return std::string{DeduplicationMode::full_};
                           },
                           [](const DeduplicationMode::Lru& bw) {
                             return absl::StrCat(DeduplicationMode::lru_, ":",
