@@ -54,7 +54,7 @@ struct DeduplicationMode {
 
   struct None {};  // Every triple is emitted, no duplicate tracking.
   struct Full {};  // A triple is emitted at most once across the entire result.
-  struct Lru {         // Deduplicates against the `capacity_` most recently
+  struct Lru {     // Deduplicates against the `capacity_` most recently
     size_t capacity_;  // seen unique triples (one shared cache).
   };
   std::variant<None, Full, Lru> value_;
