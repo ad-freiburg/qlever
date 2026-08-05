@@ -375,6 +375,13 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 endif ()
 
+# The `fetch`-based implementation of the HTTP client that replaces the
+# Boost.Beast-based one for Emscripten (see `HttpClientEmscripten.cpp`) can of
+# course only be tested in a WebAssembly build.
+if (EMSCRIPTEN)
+    addLinkAndDiscoverTest(HttpClientEmscriptenTest http)
+endif ()
+
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
