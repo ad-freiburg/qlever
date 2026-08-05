@@ -1,8 +1,11 @@
 name: Native build
 
+# Note: There deliberately is no `push: branches: [master]` trigger. Everything
+# that lands on `master` has to go through the merge queue, which runs the full
+# matrix below (see `isPullRequest`) on the temporary merge branch. A separate
+# run for the push to `master` would test the exact same tree again, and any
+# failure would be detected too late, namely after the merge.
 on:
-  push:
-    branches: [ master ]
   pull_request:
     branches: [ master ]
   merge_group:
@@ -31,15 +34,26 @@ jobs:
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
-        isPr:
-          - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
-        skipIfPr: [false]
+        # Some of the builds below are expensive and are therefore not run for
+        # every push to a pull request, but only in the merge queue. As this
+        # workflow is only triggered by the `pull_request` and the `merge_group`
+        # event, `isPullRequest: false` exactly means "this is a merge queue
+        # build".
+        #
+        # TODO<joka921> This is temporarily hardcoded to `false`, such that the
+        # merge-queue-only builds (`gcc-12` and `clang-18`, see the `exclude`
+        # section below) also run for pull requests. That way
+        # we can check whether they pass at all before the merge queue is
+        # activated. Undo this by restoring the original value, which is
+        #   - ${{github.event_name == 'pull_request'}}
+        # This is the ONLY place that has to be changed to undo this.
+        isPullRequest:
+          - false
         exclude:
+          # Compiler versions that we currently don't test at all (there is no
+          # `gcc-18`/`gcc-21`, and the following `clang` versions are too old).
           - compiler: gcc
             compiler-version: 8
-          - compiler: gcc
-            compiler-version: 12
-            isPr: true
           - compiler: gcc
             compiler-version: 18
           - compiler: gcc
@@ -56,10 +70,15 @@ jobs:
             compiler-version: 15
           - compiler: clang
             compiler-version: 16
-            isPr: true
+          # The following builds are only run in the merge queue, because
+          # running them for each single push to a pull request would make the
+          # CI unnecessarily expensive.
+          - compiler: gcc
+            compiler-version: 12
+            isPullRequest: true
           - compiler: clang
             compiler-version: 18
-            isPr: true
+            isPullRequest: true
         include:
           - compiler: gcc
             compiler-version: 11
@@ -77,21 +96,16 @@ jobs:
             build-type: RelWithDebInfo
             runner: ubuntu-22.04
             expensive-tests: false
-            skipIfPr: false
           - compiler: clang
             compiler-version: 17
             build-type: Debug
             expensive-tests: false
             ubsan-flags: " -fsanitize=thread -O1 -g"
             additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
-            skipIfPr: false
 
     runs-on: ${{matrix.runner || 'ubuntu-24.04'}}
 
     steps:
-      - name: Skip early if conditions are not met
-        if: (github.event_name == 'pull_request' && matrix.skipIfPr)
-        run: exit 0;
       - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
@@ -141,3 +155,24 @@ jobs:
       - name: E2E with separate text index build
         if: (matrix.compiler != 'clang')  && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh -t
+
+  # A single job that succeeds if and only if all the matrix jobs above have
+  # succeeded. Its name does not depend on the matrix, so it is stable across
+  # the `pull_request` and the `merge_group` event, and it is therefore the job
+  # that should be configured as a required status check on GitHub. Requiring
+  # the individual matrix jobs instead would not work, because the jobs that are
+  # only run in the merge queue would never be reported for a pull request, so
+  # the pull request could never be added to the merge queue in the first place.
+  native-build-successful:
+    name: Native build successful
+    # `always()` is required, such that this job also runs (and then fails) when
+    # one of the matrix jobs has failed or was cancelled.
+    if: always()
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check the result of the matrix jobs
+        if: needs.build.result != 'success'
+        run: |
+          echo "At least one of the native builds failed (result: ${{needs.build.result}})"
+          exit 1
