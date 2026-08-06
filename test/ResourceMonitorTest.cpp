@@ -146,9 +146,8 @@ TEST(ResourceMonitor, SetReadersAfterStartThrows) {
   monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
   // Swapping the readers after `start` would race the sampling thread and
   // must throw.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      monitor.setReadersForTesting(currentRssBytes, cpuTimeSeconds),
-      ::testing::HasSubstr("before `start`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(monitor.setReadersForTesting({}),
+                               ::testing::HasSubstr("before `start`"));
 }
 
 // _____________________________________________________________________________
@@ -269,14 +268,14 @@ TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
     {
       ResourceMonitor monitor;
+      // Only the RSS reader is overridden; the CPU reader stays the real one.
       monitor.setReadersForTesting(
-          [stdException]() -> std::optional<uint64_t> {
+          {.rssReader_ = [stdException]() -> std::optional<uint64_t> {
             if (stdException) {
               throw std::runtime_error{"boom"};
             }
             throw 42;
-          },
-          cpuTimeSeconds);
+          }});
       // Short interval plus a sleep so the thread ticks and hits the reader
       // before the destructor stops it.
       monitor.start(path, ResourceMonitor::Mode::Truncate,

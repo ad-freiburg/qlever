@@ -73,6 +73,13 @@ std::string formatTsvRow(const Sample& sample);
 using RssReader = absl::AnyInvocable<std::optional<uint64_t>()>;
 using CpuReader = absl::AnyInvocable<std::optional<double>()>;
 
+// Which OS readers to override in `ResourceMonitor::setReadersForTesting`.
+// An unset member leaves the real reader in place.
+struct ReaderOverrides {
+  RssReader rssReader_;
+  CpuReader cpuReader_;
+};
+
 }  // namespace resource_monitor
 
 // Samples the RSS and CPU usage of this process on a background thread
@@ -100,8 +107,7 @@ class ResourceMonitor {
 
   // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
   // exercise the sampler's error handling.
-  void setReadersForTesting(resource_monitor::RssReader rssReader,
-                            resource_monitor::CpuReader cpuReader);
+  void setReadersForTesting(resource_monitor::ReaderOverrides readerOverrides);
 
  private:
   // Body of the sampling thread.
