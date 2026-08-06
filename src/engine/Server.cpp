@@ -66,6 +66,20 @@ Server::Server(
       metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
+  initializeServerMetrics(config.memoryLimit_);
+
+  if (noAccessCheck_) {
+    AD_LOG_INFO << "No access token required for restricted API calls"
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
+                << "\"" << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void Server::initializeServerMetrics(
+    std::optional<ad_utility::MemorySize> memoryLimit) {
   metrics_ = std::make_unique<ServerMetrics>(
       [this]() {
         auto counts = indexAndViewsSnapshot()
@@ -84,16 +98,8 @@ Server::Server(
       [this]() -> int64_t {
         return static_cast<int64_t>(rebuildInProgress_.load());
       },
-      config.memoryLimit_);
+      memoryLimit);
   metrics_->registerCallbacks();
-
-  if (noAccessCheck_) {
-    AD_LOG_INFO << "No access token required for restricted API calls"
-                << std::endl;
-  } else {
-    AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
-                << "\"" << std::endl;
-  }
 }
 
 // _____________________________________________________________________________

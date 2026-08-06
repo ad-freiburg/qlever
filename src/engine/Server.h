@@ -81,6 +81,10 @@ class Server {
 
   virtual ~Server() = default;
 
+  // Initialize and register server metrics.
+  void initializeServerMetrics(
+      std::optional<ad_utility::MemorySize> memoryLimit);
+
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run();
