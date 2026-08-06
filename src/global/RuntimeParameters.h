@@ -166,7 +166,8 @@ struct RuntimeParameters {
   SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
   // The number of threads for the parallel sort of intermediate results
   // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
-  // as `1`. Only effective when QLever was built with `USE_PARALLEL`. The
+  // as `1`. Only effective when QLever was built with the CMake option
+  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
   // default of `3` captures most of the speedup, with quickly diminishing
   // returns for more threads.
   SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
