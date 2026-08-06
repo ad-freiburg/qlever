@@ -30,7 +30,9 @@
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/Log.h"
 #include "util/TimeTracer.h"
 #include "util/http/UrlParser.h"
 
@@ -605,20 +607,30 @@ void Qlever::cleanUpPreviousIndexDirs(const std::string& indexBaseName,
   };
   ql::ranges::sort(previousDirs, std::less{}, sortKey);
 
-  // Keep or delete each directory according to the policy.
-  AD_LOG_INFO << "Checking which of the " << previousDirs.size()
-              << " previous index directories to keep or delete "
-                 "(rebuild-keep-previous-index-dirs = "
-              << toString(policy) << ")" << std::endl;
+  // Keep or delete each directory according to the policy. The decisions are
+  // written to the log file of the rebuild that has just finished (which was
+  // moved into place together with the index), not to the server log.
+  auto logFile = ad_utility::makeOfstream(
+      absl::StrCat(indexBaseName, REBUILD_INDEX_LOG_SUFFIX), std::ios::app);
+  auto logInfo = [&logFile]() -> std::ostream& {
+    return logFile << ad_utility::Log::getTimeStamp() << " - INFO: ";
+  };
+  logInfo() << "Checking which previous index directories to keep or delete ("
+            << toString(policy) << ")" << std::endl;
   for (size_t i = 0; i < previousDirs.size(); ++i) {
     const fs::path& dir = previousDirs[i];
     bool keep = keepPreviousIndexDir(policy, i, previousDirs.size());
-    AD_LOG_INFO << dir.filename().string() << " -> "
-                << (keep ? "KEEP" : "DELETE") << std::endl;
+    logInfo() << dir.filename().string() << " -> " << (keep ? "KEEP" : "DELETE")
+              << std::endl;
     if (!keep) {
       ql::error_code errorCode;
       fs::remove_all(dir, errorCode);
       if (errorCode) {
+        // A failed deletion additionally goes to the server log, where
+        // operators look for errors.
+        logFile << ad_utility::Log::getTimeStamp() << " - ERROR: "
+                << "Failed to delete \"" << dir.filename().string()
+                << "\": " << errorCode.message() << std::endl;
         AD_LOG_ERROR << "Failed to delete \"" << dir.filename().string()
                      << "\": " << errorCode.message() << std::endl;
       }

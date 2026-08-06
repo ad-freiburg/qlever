@@ -636,9 +636,12 @@ class Qlever {
   // retires the index that was served so far into such a directory, see
   // `makeIndexRebuildConfig`): keep or delete each of them according to
   // `keepPreviousIndexDir`, where the directories are ordered from the oldest
-  // to the newest. Each decision is logged; a directory that cannot be
-  // deleted is logged as an error, but does not make this function throw
-  // (when this is called, the rebuild has already succeeded).
+  // to the newest. Each decision is appended to the `rebuild-index` log of
+  // the index with the base name `indexBaseName` (the log of the rebuild that
+  // has just finished), not to the server log. A directory that cannot be
+  // deleted is additionally logged as an error in the server log, but does
+  // not make this function throw (when this is called, the rebuild has
+  // already succeeded).
   static void cleanUpPreviousIndexDirs(const std::string& indexBaseName,
                                        KeepPreviousIndexDirs policy);
 

@@ -7,15 +7,18 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include "backports/filesystem.h"
 #include "engine/KeepPreviousIndexDirs.h"
+#include "global/FileSuffixConstants.h"
 #include "libqlever/Qlever.h"
 #include "util/GTestHelpers.h"
 
@@ -149,12 +152,15 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
   std::string baseName = (testDir / "index").string();
 
   // Apply the given policy to a freshly set up directory and return the
-  // names of the surviving entries.
+  // names of the surviving entries. For every policy except `all`, the
+  // decisions are appended to the `rebuild-index` log of the index, which
+  // hence appears among the entries.
   auto survivors = [&](KeepPreviousIndexDirs policy) {
     setUpPreviousIndexDirs(testDir);
     qlever::Qlever::cleanUpPreviousIndexDirs(baseName, policy);
     return entryNames(testDir);
   };
+  std::string logName = absl::StrCat("index", REBUILD_INDEX_LOG_SUFFIX);
 
   // Entries that are not directories or whose name does not start with
   // `previous.` are never touched.
@@ -162,14 +168,29 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
               ElementsAre("other.dir", "previous.a", "previous.b", "previous.c",
                           "previous.d", "previous.e", "previous.file"));
   EXPECT_THAT(survivors(KeepPreviousIndexDirs::None),
-              ElementsAre("other.dir", "previous.file"));
+              ElementsAre(logName, "other.dir", "previous.file"));
   EXPECT_THAT(survivors(KeepPreviousIndexDirs::OriginalOnly),
-              ElementsAre("other.dir", "previous.a", "previous.file"));
+              ElementsAre(logName, "other.dir", "previous.a", "previous.file"));
   EXPECT_THAT(survivors(KeepPreviousIndexDirs::MostRecentOnly),
-              ElementsAre("other.dir", "previous.e", "previous.file"));
-  EXPECT_THAT(
-      survivors(KeepPreviousIndexDirs::OriginalAndMostRecent),
-      ElementsAre("other.dir", "previous.a", "previous.e", "previous.file"));
+              ElementsAre(logName, "other.dir", "previous.e", "previous.file"));
+  EXPECT_THAT(survivors(KeepPreviousIndexDirs::OriginalAndMostRecent),
+              ElementsAre(logName, "other.dir", "previous.a", "previous.e",
+                          "previous.file"));
+
+  // The decisions are written to the `rebuild-index` log of the index (not to
+  // the server log), one line per directory.
+  {
+    std::ifstream logStream{(testDir / logName).string()};
+    std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+    EXPECT_THAT(logContent,
+                HasSubstr("Checking which previous index directories to keep "
+                          "or delete (original-and-most-recent)"));
+    EXPECT_THAT(logContent, HasSubstr("previous.a -> KEEP"));
+    EXPECT_THAT(logContent, HasSubstr("previous.b -> DELETE"));
+    EXPECT_THAT(logContent, HasSubstr("previous.c -> DELETE"));
+    EXPECT_THAT(logContent, HasSubstr("previous.d -> DELETE"));
+    EXPECT_THAT(logContent, HasSubstr("previous.e -> KEEP"));
+  }
 
   fs::remove_all(testDir);
 }
