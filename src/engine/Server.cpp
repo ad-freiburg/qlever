@@ -391,7 +391,8 @@ void Server::configurePinnedResultWithName(
     return;
   }
   if (!accessTokenOk) {
-    throw std::runtime_error(
+    throw HttpError(
+        http::status::forbidden,
         "Pinning a result with a name requires a valid access token");
   }
   auto getGeoCacheVar = [&]() -> std::optional<Variable> {
