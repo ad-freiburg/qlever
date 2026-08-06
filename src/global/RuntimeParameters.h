@@ -58,6 +58,7 @@ struct RuntimeParameters {
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
   // The number of threads that read and decompress the blocks of a lazy index
   // scan. Each lazy scan of a query has its own pool of this many threads.
+  // The value must be at least `1` (enforced by a parameter constraint).
   // The default of `2` is enough for typical queries, where the operation
   // that consumes the blocks processes them on a single thread and can barely
   // keep up with the decompression even for `1` thread.

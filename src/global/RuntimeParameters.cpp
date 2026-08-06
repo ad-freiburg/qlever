@@ -82,6 +82,14 @@ RuntimeParameters::RuntimeParameters() {
               value.count(), "s")};
         }
       });
+
+  lazyIndexScanNumThreads_.setParameterConstraint(
+      [](size_t value, std::string_view parameterName) {
+        if (value == 0) {
+          throw std::runtime_error{absl::StrCat("Parameter ", parameterName,
+                                                " must be strictly positive")};
+        }
+      });
 }
 
 // _____________________________________________________________________________
