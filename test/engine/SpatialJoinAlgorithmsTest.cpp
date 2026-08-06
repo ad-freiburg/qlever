@@ -1788,19 +1788,19 @@ TEST(SpatialJoin, ParseDe9imFilter) {
   // Valid patterns: digits, upper-/lowercase `T`/`F`, and `*`, in any mix.
   EXPECT_THAT(validateDe9imFilterString("012TFTF**"),
               Optional(Eq(De9imFilterString{'0', '1', '2', 'T', 'F', 'T', 'F',
-                                             '*', '*'})));
+                                            '*', '*'})));
   EXPECT_THAT(validateDe9imFilterString("012tftf**"),
               Optional(Eq(De9imFilterString{'0', '1', '2', 't', 'f', 't', 'f',
-                                             '*', '*'})));
+                                            '*', '*'})));
   EXPECT_THAT(validateDe9imFilterString("*********"),
               Optional(Eq(De9imFilterString{'*', '*', '*', '*', '*', '*', '*',
-                                             '*', '*'})));
+                                            '*', '*'})));
   EXPECT_THAT(validateDe9imFilterString("2FFF1FFF2"),
               Optional(Eq(De9imFilterString{'2', 'F', 'F', 'F', '1', 'F', 'F',
-                                             'F', '2'})));
+                                            'F', '2'})));
   EXPECT_THAT(validateDe9imFilterString("012TFTF*t"),
               Optional(Eq(De9imFilterString{'0', '1', '2', 'T', 'F', 'T', 'F',
-                                             '*', 't'})));
+                                            '*', 't'})));
 
   // Invalid: wrong length.
   EXPECT_EQ(validateDe9imFilterString(""), std::nullopt);
