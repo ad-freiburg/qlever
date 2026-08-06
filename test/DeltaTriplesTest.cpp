@@ -598,6 +598,28 @@ TEST_F(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab) {
   // and nothing is stored in the local vocab of the `DeltaTriples`.
   EXPECT_EQ(triples[0].ids()[0].getBits(), expectedSubject.getBits());
   EXPECT_TRUE(deltaTriples.localVocab_.empty());
+
+  // The same through the public update path, with a batch that mixes an
+  // ordinary triple with the local-vocab spelling of an indexed word.
+  DeltaTriples deltaTriples2(testQec->getIndex());
+  LocalVocab localVocabOutside2;
+  auto triples2 = makeIdTriples(index, localVocabOutside2,
+                                {"<b> <upp> <B>", "<a> <upp> <A>"});
+  triples2[1].ids()[0] = Id::makeFromLocalVocabIndex(
+      localVocabOutside2.getIndexAndAddIfNotContained(
+          LocalVocabEntry::fromIriref("<a>", index.getLocalVocabContext())));
+  ql::ranges::sort(triples2);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  deltaTriples2.insertTriples(cancellationHandle, std::move(triples2));
+  EXPECT_EQ(deltaTriples2.numInserted(), 2);
+  // The local vocab of the `DeltaTriples` does not store `<a>`. Note that it
+  // is not empty, because `insertTriples` lazily adds the internal language
+  // predicate to it.
+  EXPECT_EQ(
+      deltaTriples2.localVocab_.getIndexOrNullopt(
+          LocalVocabEntry::fromIriref("<a>", index.getLocalVocabContext())),
+      std::nullopt);
 }
 
 // _____________________________________________________________________________

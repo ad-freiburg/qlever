@@ -619,6 +619,21 @@ TEST(IndexRebuilder, materializeToIndex) {
         deltaTriples.insertTriples(
             cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
                                  IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+        // Also insert `<a> <b> <c>` with the subject given as the local-vocab
+        // spelling of `<a>`, as an update with `BIND(IRI(...))` would produce
+        // it. The `Id` must be normalized to the `VocabIndex` `Id` of `<a>`,
+        // otherwise the rebuild below fails on the assertion in
+        // `materializeLocalVocab` (regression test for issue #3172). The
+        // triple already exists in the index, so the expected counts below
+        // are unchanged.
+        LocalVocab outsideVocab;
+        Id localA = Id::makeFromLocalVocabIndex(
+            outsideVocab.getIndexAndAddIfNotContained(
+                LocalVocabEntry::fromIriref("<a>",
+                                            index.getLocalVocabContext())));
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{localA, V(1), V(2), g}}});
       });
 
       auto [state, vocab, blankNodes] =
