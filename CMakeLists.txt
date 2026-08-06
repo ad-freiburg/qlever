@@ -307,9 +307,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 0d7ab4d9bd1d1cf72f218f6de874745e52f3c0c2
-        # TODO Temporary fix. remove asap
-        PATCH_COMMAND git apply --ignore-whitespace ${CMAKE_SOURCE_DIR}/misc/patches/spatialjoin-fix-webmerc-dist-factor.patch
+        GIT_TAG d1170ee08f0b932c73ca53af75338eacb3e043f6
         SYSTEM
         EXCLUDE_FROM_ALL
 )
