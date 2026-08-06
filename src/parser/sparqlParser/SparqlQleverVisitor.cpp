@@ -351,6 +351,11 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
   visit(ctx->prologue());
+  // The definitions of named subqueries also only affect the internal state.
+  // They are visited in the order in which they appear, so a definition can
+  // `INCLUDE` previously defined named subqueries.
+  ql::ranges::for_each(ctx->namedSubqueryDefinition(),
+                       [this](auto* definition) { this->visit(definition); });
   auto query =
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
@@ -1210,7 +1215,8 @@ Visitor::OperationOrFilter Visitor::visit(
   return visitAlternative<std::variant<GraphPatternOperation, SparqlFilter>>(
       ctx->filterR(), ctx->optionalGraphPattern(), ctx->minusGraphPattern(),
       ctx->bind(), ctx->inlineData(), ctx->groupOrUnionGraphPattern(),
-      ctx->graphGraphPattern(), ctx->serviceGraphPattern());
+      ctx->graphGraphPattern(), ctx->serviceGraphPattern(),
+      ctx->includeClause());
 }
 
 // ____________________________________________________________________________________
@@ -1560,6 +1566,112 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
                                     makeInternalVariableGenerator());
   return parsedQuery_;
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(Parser::NamedSubqueryDefinitionContext* ctx) {
+  auto name = ctx->NAMED_SUBQUERY_NAME()->getText();
+  if (namedSubqueries_.contains(name)) {
+    reportError(ctx, absl::StrCat("The named subquery \"", name,
+                                  "\" is defined more than once"));
+  }
+  // The body of a named subquery definition is parsed like any other
+  // subquery, but in a clean environment: it sees no variables from the
+  // outside, and its variables only become visible via `INCLUDE`.
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
+  auto visibleVariablesBackup = std::exchange(visibleVariables_, {});
+  auto [subquery, values] = visit(ctx->subSelect());
+  if (values.has_value()) {
+    reportError(ctx,
+                absl::StrCat("A VALUES clause at the end of the named subquery "
+                             "\"",
+                             name, "\" is currently not supported"));
+  }
+  parsedQuery_ = std::move(queryBackup);
+  visibleVariables_ = std::move(visibleVariablesBackup);
+  namedSubqueries_.emplace(std::move(name), std::move(subquery.get()));
+}
+
+// ____________________________________________________________________________________
+std::pair<Variable, Variable> Visitor::visit(
+    Parser::IncludeRenamingContext* ctx) {
+  return {visit(ctx->var(0)), visit(ctx->var(1))};
+}
+
+// ____________________________________________________________________________________
+GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
+  const auto name = ctx->NAMED_SUBQUERY_NAME()->getText();
+  auto it = namedSubqueries_.find(name);
+  if (it == namedSubqueries_.end()) {
+    reportError(
+        ctx, absl::StrCat("The named subquery \"", name,
+                          "\" is not defined. Named subqueries must be defined "
+                          "before the query body via `WITH ",
+                          name, " AS { ... }`"));
+  }
+  // Deliberately copy the stored subquery, it can be included multiple times.
+  ParsedQuery subquery = it->second;
+  const auto& selectedVariables =
+      subquery.selectClause().getSelectedVariables();
+  auto renamings = visitVector(ctx->includeRenaming());
+
+  // Without renamings, the expansion is exactly the stored subquery.
+  if (renamings.empty()) {
+    ql::ranges::for_each(selectedVariables, [this](const Variable& variable) {
+      addVisibleVariable(variable);
+    });
+    return parsedQuery::Subquery{std::move(subquery)};
+  }
+
+  // With renamings, wrap the stored subquery in a subquery that projects the
+  // renamed variables via aliases, e.g. `SELECT ?kept (?a AS ?b) { ... }`.
+  ad_utility::HashMap<Variable, Variable> renameMap;
+  for (const auto& [source, target] : renamings) {
+    if (!ad_utility::contains(selectedVariables, source)) {
+      reportError(ctx, absl::StrCat("The variable ", source.name(),
+                                    " cannot be renamed because it is not "
+                                    "selected by the named subquery \"",
+                                    name, "\""));
+    }
+    if (!renameMap.emplace(source, target).second) {
+      reportError(ctx, absl::StrCat("The variable ", source.name(),
+                                    " is renamed more than once"));
+    }
+  }
+  std::vector<parsedQuery::SelectClause::VarOrAlias> newSelection;
+  std::vector<Variable> outputVariables;
+  for (const auto& variable : selectedVariables) {
+    if (auto renaming = renameMap.find(variable); renaming != renameMap.end()) {
+      newSelection.push_back(
+          Alias{sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+                    variable),
+                renaming->second});
+      outputVariables.push_back(renaming->second);
+    } else {
+      newSelection.push_back(variable);
+      outputVariables.push_back(variable);
+    }
+  }
+  ad_utility::HashSet<Variable> distinctOutputs{outputVariables.begin(),
+                                                outputVariables.end()};
+  if (distinctOutputs.size() != outputVariables.size()) {
+    reportError(ctx,
+                absl::StrCat("The variables of the named subquery \"", name,
+                             "\" are not distinct anymore after the renaming"));
+  }
+
+  ParsedQuery wrapper;
+  wrapper._rootGraphPattern._graphPatterns.emplace_back(
+      parsedQuery::Subquery{std::move(subquery)});
+  wrapper.registerVariablesVisibleInQueryBody(selectedVariables);
+  parsedQuery::SelectClause selectClause;
+  selectClause.setSelected(std::move(newSelection));
+  wrapper._clause = std::move(selectClause);
+  wrapper.addSolutionModifiers({}, makeInternalVariableGenerator());
+  ql::ranges::for_each(outputVariables, [this](const Variable& variable) {
+    addVisibleVariable(variable);
+  });
+  return parsedQuery::Subquery{std::move(wrapper)};
 }
 
 // ____________________________________________________________________________________
