@@ -101,14 +101,14 @@ std::optional<double> CpuPercentTracker::update(
 }
 
 // _____________________________________________________________________________
-std::string formatTsvRow(double elapsed, int64_t timestampMs,
-                         std::optional<uint64_t> rss,
-                         std::optional<double> cpuPercent) {
-  return absl::StrFormat("%.1f\t%d\t%s\t%s\n", elapsed, timestampMs,
-                         rss.has_value() ? std::to_string(rss.value()) : "",
-                         cpuPercent.has_value()
-                             ? absl::StrFormat("%.1f", cpuPercent.value())
-                             : "");
+std::string formatTsvRow(const Sample& sample) {
+  return absl::StrFormat(
+      "%.1f\t%d\t%s\t%s\n", sample.elapsedSeconds_, sample.timestampMs_,
+      sample.rssBytes_.has_value() ? std::to_string(sample.rssBytes_.value())
+                                   : "",
+      sample.cpuPercent_.has_value()
+          ? absl::StrFormat("%.1f", sample.cpuPercent_.value())
+          : "");
 }
 
 }  // namespace ad_utility::resource_monitor
@@ -202,11 +202,11 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     }
     deadline += interval;
     double elapsed = Timer::toSeconds(timer.value());
-    auto rss = rssReader_();
-    auto cpuPercent = cpuTracker.update(cpuReader_(), elapsed);
     stream_ << resource_monitor::formatTsvRow(
-        elapsed, epochMillis(std::chrono::system_clock::now()), rss,
-        cpuPercent);
+        {.elapsedSeconds_ = elapsed,
+         .timestampMs_ = epochMillis(std::chrono::system_clock::now()),
+         .rssBytes_ = rssReader_(),
+         .cpuPercent_ = cpuTracker.update(cpuReader_(), elapsed)});
     stream_.flush();
     if (stream_.fail()) {
       AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "

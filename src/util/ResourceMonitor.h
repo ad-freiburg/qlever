@@ -57,10 +57,16 @@ class CpuPercentTracker {
   double lastElapsed_ = 0.0;
 };
 
-// One TSV row; a missing `rss` or `cpuPercent` becomes an empty cell.
-std::string formatTsvRow(double elapsed, int64_t timestampMs,
-                         std::optional<uint64_t> rss,
-                         std::optional<double> cpuPercent);
+// One sampled row of the resource-usage log
+struct Sample {
+  double elapsedSeconds_;
+  int64_t timestampMs_;
+  std::optional<uint64_t> rssBytes_;
+  std::optional<double> cpuPercent_;
+};
+
+// One TSV row; a missing field becomes an empty cell.
+std::string formatTsvRow(const Sample& sample);
 
 // The two OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).

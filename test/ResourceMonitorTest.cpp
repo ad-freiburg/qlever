@@ -82,12 +82,24 @@ TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
-  EXPECT_EQ(formatTsvRow(1.0, 1000, 2048u, 50.0), "1.0\t1000\t2048\t50.0\n");
-  EXPECT_EQ(formatTsvRow(1.0, 1000, std::nullopt, 50.0), "1.0\t1000\t\t50.0\n");
-  EXPECT_EQ(formatTsvRow(1.0, 1000, 2048u, std::nullopt),
-            "1.0\t1000\t2048\t\n");
-  EXPECT_EQ(formatTsvRow(1.0, 1000, std::nullopt, std::nullopt),
-            "1.0\t1000\t\t\n");
+  constexpr ad_utility::resource_monitor::Sample base{.elapsedSeconds_ = 1.0,
+                                                      .timestampMs_ = 1000,
+                                                      .rssBytes_ = 2048u,
+                                                      .cpuPercent_ = 50.0};
+  EXPECT_EQ(formatTsvRow(base), "1.0\t1000\t2048\t50.0\n");
+
+  auto noRss = base;
+  noRss.rssBytes_ = std::nullopt;
+  EXPECT_EQ(formatTsvRow(noRss), "1.0\t1000\t\t50.0\n");
+
+  auto noCpu = base;
+  noCpu.cpuPercent_ = std::nullopt;
+  EXPECT_EQ(formatTsvRow(noCpu), "1.0\t1000\t2048\t\n");
+
+  auto neither = base;
+  neither.rssBytes_ = std::nullopt;
+  neither.cpuPercent_ = std::nullopt;
+  EXPECT_EQ(formatTsvRow(neither), "1.0\t1000\t\t\n");
 }
 
 // _____________________________________________________________________________
