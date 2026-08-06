@@ -115,7 +115,7 @@ inline DistancePtrAndExpected makeUnrelated() {
 inline De9imPtrAndExpected makeDe9imRelation(
     std::string pattern = "T*T***T**") {
   De9imRelationCall exp{{DE9IM, V{"?a"}, V{"?b"}},
-                        parseDe9imFilter(pattern).value()};
+                        validateDe9imFilterString(pattern).value()};
   auto ptr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(V{"?b"}),
       getExpr(Literal::literalWithoutQuotes(pattern)));

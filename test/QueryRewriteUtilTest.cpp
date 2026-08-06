@@ -136,7 +136,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   ASSERT_EQ(de9imSjConf.value().joinType_, DE9IM);
   const auto& de9imTask =
       std::get<LibSpatialJoinConfig>(de9imSjConf.value().task_);
-  ASSERT_EQ(de9imTask.de9imFilter_, parseDe9imFilter("T*T***T**"));
+  ASSERT_EQ(de9imTask.de9imFilter_, validateDe9imFilterString("T*T***T**"));
 }
 
 // TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +

@@ -1642,14 +1642,11 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
       "?a <p> ?b ."
       "?x <p> ?y ."
       "FILTER(geof:relate(?y, ?b, \"T*T***T**\"))  }";
-  h::expect(query, ::testing::AllOf(
-                       h::spatialJoinFilterSubstitute(
-                           -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                           PayloadVariables::all(), algo, DE9IM,
-                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
-                       h::RootOperation<::SpatialJoin>(AD_PROPERTY(
-                           ::SpatialJoin, getDe9imFilter,
-                           ::testing::Eq(parseDe9imFilter("T*T***T**"))))));
+  h::expect(query,
+            h::spatialJoinFilterSubstitute(
+                -1, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+                algo, DE9IM, validateDe9imFilterString("T*T***T**"),
+                scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Geo relate filter with the same variable twice is not allowed
   AD_EXPECT_THROW_WITH_MESSAGE(
