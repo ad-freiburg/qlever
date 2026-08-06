@@ -401,7 +401,10 @@ TEST(MakeIdCache, emptyTemplate) {
 // `CACHE_ENTRIES_PER_VARIABLE`.
 TEST(MakeIdCache, singleVariable) {
   PreprocessedConstructTemplate tmpl;
-  tmpl.uniqueVariableColumns_ = {0};
+  // Note: Assigning an `initializer_list` of size 1 to a `std::vector` here
+  // would trigger a false-positive `-Warray-bounds` warning with GCC 12 in
+  // optimized builds, hence the explicit `std::vector`.
+  tmpl.uniqueVariableColumns_ = std::vector<ColumnIndex>{0};
   auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
   EXPECT_EQ(cache.capacity(),
             ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
