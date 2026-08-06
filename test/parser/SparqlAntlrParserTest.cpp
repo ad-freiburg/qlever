@@ -66,6 +66,19 @@ TEST(SparqlParser, NumericLiterals) {
   expectNumericLiteralFails("-4.2E550");
 }
 
+// _____________________________________________________________________________
+TEST(SparqlParser, BooleanLiterals) {
+  auto expectBooleanLiteral = ExpectCompleteParse<&Parser::booleanLiteral>{};
+  expectBooleanLiteral("true", true);
+  expectBooleanLiteral("TRUE", true);
+  expectBooleanLiteral("True", true);
+  expectBooleanLiteral("tRuE", true);
+  expectBooleanLiteral("false", false);
+  expectBooleanLiteral("FALSE", false);
+  expectBooleanLiteral("False", false);
+  expectBooleanLiteral("fAlSe", false);
+}
+
 TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
