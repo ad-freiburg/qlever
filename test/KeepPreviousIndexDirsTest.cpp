@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -147,6 +148,9 @@ std::vector<std::string> entryNames(const ql::filesystem::path& testDir) {
 TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
   namespace fs = ql::filesystem;
   fs::path testDir = "keepPreviousIndexDirsTest.dir";
+  // Remove the test directory also when an assertion or an exception exits
+  // this test early.
+  absl::Cleanup removeTestDir{[&testDir] { fs::remove_all(testDir); }};
   // The base name of the index whose directory is cleaned up. The index files
   // themselves do not have to exist for the cleanup.
   std::string baseName = (testDir / "index").string();
@@ -191,6 +195,4 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
     EXPECT_THAT(logContent, HasSubstr("previous.d -> DELETE"));
     EXPECT_THAT(logContent, HasSubstr("previous.e -> KEEP"));
   }
-
-  fs::remove_all(testDir);
 }

@@ -1719,22 +1719,15 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   // The rebuild has succeeded, so apply the configured policy for which
   // `previous.*` index directories to keep. This runs on the query thread
   // pool: deleting a large index directory can take a while and must not
-  // block the (single-threaded) update executor. A failure here is only
-  // logged (by `cleanUpPreviousIndexDirs` itself, or by the catch below for
-  // an error while enumerating the directories); it must not fail the
-  // request, because the new index is already in place.
+  // block the (single-threaded) update executor. A failure is only logged
+  // (`cleanUpPreviousIndexDirs` never throws); it must not fail the request,
+  // because the new index is already in place.
   if (keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
     auto cleanupRoutine = ad_utility::runFunctionOnExecutor(
         queryThreadPool_.get_executor(),
         [this, &config] {
-          try {
-            qlever::Qlever::cleanUpPreviousIndexDirs(config.newIndexTarget(),
-                                                     keepPreviousIndexDirs_);
-          } catch (const std::exception& e) {
-            AD_LOG_ERROR << "Failed to clean up the previous index "
-                            "directories: "
-                         << e.what() << std::endl;
-          }
+          qlever::Qlever::cleanUpPreviousIndexDirs(config.newIndexTarget(),
+                                                   keepPreviousIndexDirs_);
         },
         net::use_awaitable);
     co_await std::move(cleanupRoutine);

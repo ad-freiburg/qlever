@@ -638,13 +638,20 @@ class Qlever {
   // `keepPreviousIndexDir`, where the directories are ordered from the oldest
   // to the newest. Each decision is appended to the `rebuild-index` log of
   // the index with the base name `indexBaseName` (the log of the rebuild that
-  // has just finished), not to the server log. A directory that cannot be
-  // deleted is additionally logged as an error in the server log, but does
-  // not make this function throw (when this is called, the rebuild has
-  // already succeeded).
+  // has just finished), not to the server log. This function never throws
+  // (when this is called, the rebuild has already succeeded): a directory
+  // that cannot be deleted is logged as an error in the server log and
+  // skipped, and any other filesystem failure is also only logged.
   static void cleanUpPreviousIndexDirs(const std::string& indexBaseName,
                                        KeepPreviousIndexDirs policy);
 
+ private:
+  // The implementation of `cleanUpPreviousIndexDirs` above, which wraps this
+  // function in a try-catch.
+  static void cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                           KeepPreviousIndexDirs policy);
+
+ public:
   // Move a freshly rebuilt index into the place of the old one. There are two
   // indices involved, both with base names given by `config`: the old index
   // that is currently being served (at `config.oldIndexSource()`), and the

@@ -574,11 +574,26 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
 // ___________________________________________________________________________
 void Qlever::cleanUpPreviousIndexDirs(const std::string& indexBaseName,
                                       KeepPreviousIndexDirs policy) {
-  namespace fs = ql::filesystem;
   if (policy == KeepPreviousIndexDirs::All) {
     return;
   }
+  // Nothing in here may throw: when this runs, the rebuild has already
+  // succeeded, so a failure of the cleanup must only be logged. Deletion
+  // failures are handled (and skipped) individually below; the catch covers
+  // everything else (e.g. a failure while enumerating the directories or
+  // opening the log file).
+  try {
+    cleanUpPreviousIndexDirsImpl(indexBaseName, policy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Failed to clean up the previous index directories: "
+                 << e.what() << std::endl;
+  }
+}
 
+// ___________________________________________________________________________
+void Qlever::cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                          KeepPreviousIndexDirs policy) {
+  namespace fs = ql::filesystem;
   // Collect the `previous.*` directories in the directory of the index. The
   // parent path is empty if the base name lies in the working directory
   // itself.
