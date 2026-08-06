@@ -5,6 +5,7 @@
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <absl/time/time.h>
 #include <gmock/gmock.h>
 
@@ -13,12 +14,20 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <chrono>
+#include <deque>
+#include <fstream>
 #include <future>
+#include <iterator>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 
+#include "../ServerTestHelpers.h"
 #include "../util/AsioTestHelpers.h"
+#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -27,12 +36,19 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
+// The `server` library is not built under Emscripten (`Server.cpp` crashes
+// emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
+// server-integration test below is compiled out there.
+#ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#endif
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
@@ -130,7 +146,8 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   }};
 
   auto makeVocabEntry = [&oldIndex](std::string_view str) {
-    return LocalVocabEntry{ad_utility::testing::iri(str), oldIndex};
+    return LocalVocabEntry{ad_utility::testing::iri(str),
+                           oldIndex.getLocalVocabContext()};
   };
 
   auto getId = ad_utility::testing::makeGetId(oldIndex);
@@ -198,6 +215,51 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   EXPECT_EQ(newVocab[VocabIndex::make(14)], "<k>");
   EXPECT_EQ(newVocab[VocabIndex::make(15)], "<l>");
   EXPECT_EQ(newVocab[VocabIndex::make(16)], "<m>");
+}
+
+// With more words than the progress batch size, the progress callback is
+// called once per full batch plus once for the remainder, and the reported
+// numbers add up to the total number of written words.
+TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
+  // Must match the reporting batch size in `mergeVocabs` in
+  // `IndexRebuilder.cpp`.
+  constexpr size_t batchSize = 65'536;
+  constexpr size_t numEntries = batchSize + 1'000;
+
+  auto type = ad_utility::VocabularyType::random();
+  ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
+  config.vocabularyType = type;
+  auto oldIndex = ad_utility::testing::makeTestIndex(
+      gtestCurrentTestName() + "-index", std::move(config));
+  std::string vocabPrefix = gtestCurrentTestName();
+  absl::Cleanup removeVocabFiles{[&vocabPrefix, &type] {
+    deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
+  }};
+
+  // A `deque` is used for stable addresses, because `materializeLocalVocab`
+  // takes pointers to the entries.
+  std::deque<LocalVocabEntry> entryStorage;
+  std::vector<LocalVocabIndex> entries;
+  for (size_t i = 0; i < numEntries; ++i) {
+    entryStorage.emplace_back(
+        ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
+        oldIndex.getLocalVocabContext());
+    entries.push_back(&entryStorage.back());
+  }
+
+  std::vector<size_t> reportedBatches;
+  auto [insertionPositions, localVocabMapping] =
+      materializeLocalVocab(entries, oldIndex.getVocab(), vocabPrefix,
+                            [&reportedBatches](size_t numWords) {
+                              reportedBatches.push_back(numWords);
+                            });
+  EXPECT_EQ(insertionPositions.size(), numEntries);
+  EXPECT_EQ(localVocabMapping.size(), numEntries);
+  ASSERT_GE(reportedBatches.size(), 2u);
+  EXPECT_EQ(reportedBatches.front(), batchSize);
+  EXPECT_EQ(std::accumulate(reportedBatches.begin(), reportedBatches.end(),
+                            size_t{0}),
+            oldIndex.getVocab().size() + numEntries);
 }
 
 // _____________________________________________________________________________
@@ -345,15 +407,18 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
 
-  auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                               DEFAULT_GRAPH_IRI)}
-               .toValueId(index)
-               .value();
+  auto g =
+      toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    DEFAULT_GRAPH_IRI)},
+                index)
+          .value();
 
   index.deltaTriplesManager().modify<void>(
       [&cancellationHandle, g, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry1 = LocalVocabEntry::fromIriref("<a2>", index);
-        LocalVocabEntry entry2 = LocalVocabEntry::fromIriref("<d2>", index);
+        LocalVocabEntry entry1 =
+            LocalVocabEntry::fromIriref("<a2>", index.getLocalVocabContext());
+        LocalVocabEntry entry2 =
+            LocalVocabEntry::fromIriref("<d2>", index.getLocalVocabContext());
         auto a2 = Id::makeFromLocalVocabIndex(&entry1);
         auto d2 = Id::makeFromLocalVocabIndex(&entry2);
         deltaTriples.insertTriples(
@@ -530,67 +595,107 @@ TEST(IndexRebuilder, materializeToIndex) {
   for (auto [usePatterns, loadAllPermutations] :
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
-    ad_utility::testing::TestIndexConfig config;
-    config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
-    config.loadAllPermutations = loadAllPermutations;
-    config.usePatterns = usePatterns;
-    auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
-                                                    std::move(config));
-    index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
-                                                 DeltaTriples& deltaTriples) {
-      auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                                   DEFAULT_GRAPH_IRI)}
-                   .toValueId(index)
-                   .value();
-      deltaTriples.insertTriples(
-          cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
-                               IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
-    });
+    // Also exercise the fully sequential processing of the permutation pairs
+    // (`rebuild-max-concurrent-permutation-pairs = 1`); the result must be
+    // the same as with the default (0 = no limit).
+    for (size_t maxConcurrentPairs : {size_t{0}, size_t{1}}) {
+      auto cleanupMaxPairs = setRuntimeParameterForTest<
+          &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>(
+          maxConcurrentPairs);
+      ad_utility::testing::TestIndexConfig config;
+      config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
+      config.loadAllPermutations = loadAllPermutations;
+      config.usePatterns = usePatterns;
+      auto index = ad_utility::testing::makeTestIndex("materializeToIndex",
+                                                      std::move(config));
+      index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                                   DeltaTriples& deltaTriples) {
+        auto g =
+            toValueId(
+                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    DEFAULT_GRAPH_IRI)},
+                index)
+                .value();
+        deltaTriples.insertTriples(
+            cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
+                                 IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+      });
 
-    auto [state, vocab, blankNodes] =
-        index.deltaTriplesManager()
-            .getCurrentLocatedTriplesSharedStateWithVocab();
+      auto [state, vocab, blankNodes] =
+          index.deltaTriplesManager()
+              .getCurrentLocatedTriplesSharedStateWithVocab();
 
-    ql::filesystem::create_directory(baseFolder);
-    absl::Cleanup removeIndexFiles{
-        [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+      ql::filesystem::create_directory(baseFolder);
+      absl::Cleanup removeIndexFiles{
+          [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
-    auto sourceDate = index.getImpl().dateOfIndexBuild();
+      auto sourceDate = index.getImpl().dateOfIndexBuild();
 
-    qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                               blankNodes, cancellationHandle, logFile);
-    EXPECT_TRUE(ql::filesystem::exists(logFile));
+      qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                                 blankNodes, cancellationHandle, logFile);
+      EXPECT_TRUE(ql::filesystem::exists(logFile));
 
-    IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
-    newIndex.usePatterns() = usePatterns;
-    newIndex.loadAllPermutations() = loadAllPermutations;
-    newIndex.createFromOnDiskIndex(newIndexName, false);
+      // Each phase writes its header (which says what is being processed,
+      // depending on which permutations the index has) and at least its final
+      // progress line (with a percentage and an average speed) to the rebuild's
+      // log file.
+      {
+        auto logStream = ad_utility::makeIfstream(logFile);
+        std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+        using ::testing::HasSubstr;
+        EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
+                                          "existing and new words) ..."));
+        EXPECT_THAT(
+            logContent,
+            HasSubstr(loadAllPermutations
+                          ? "Recomputing statistics (from 4 permutations, 3 "
+                            "normal and 1 internal) ..."
+                          : "Recomputing statistics (from 2 permutations, 1 "
+                            "normal and 1 internal) ..."));
+        EXPECT_THAT(logContent,
+                    HasSubstr(loadAllPermutations
+                                  ? "Writing new index (8 permutations, 6 "
+                                    "normal and 2 internal) ..."
+                                  : "Writing new index (4 permutations, 2 "
+                                    "normal and 2 internal) ..."));
+        EXPECT_THAT(logContent, HasSubstr("Words written: "));
+        EXPECT_THAT(logContent, HasSubstr("Triples counted: "));
+        EXPECT_THAT(logContent, HasSubstr("Triples written: "));
+        EXPECT_THAT(logContent, HasSubstr("(100.0%)"));
+        EXPECT_THAT(logContent, HasSubstr("[average speed "));
+      }
 
-    // The rebuilt index gets its own, more recent build date. Both dates are
-    // recorded with second resolution, so the rebuild may happen within the
-    // same second as the original build; hence we only assert "not older".
-    auto parseDate = [](const std::string& date) {
-      absl::Time result;
-      std::string error;
-      EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
-                                  absl::UTCTimeZone(), &result, &error))
-          << error;
-      return result;
-    };
-    EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+      IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+      newIndex.usePatterns() = usePatterns;
+      newIndex.loadAllPermutations() = loadAllPermutations;
+      newIndex.createFromOnDiskIndex(newIndexName, false);
 
-    EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
-              index.getBlankNodeManager()->minIndex_ +
-                  ad_utility::BlankNodeManager::blockSize_);
-    EXPECT_EQ(newIndex.numTriples().normal, 4);
-    EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
-    EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
-    EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
-    if (newIndex.loadAllPermutations()) {
-      EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
-      EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
-      EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
-      EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+      // The rebuilt index gets its own, more recent build date. Both dates are
+      // recorded with second resolution, so the rebuild may happen within the
+      // same second as the original build; hence we only assert "not older".
+      auto parseDate = [](const std::string& date) {
+        absl::Time result;
+        std::string error;
+        EXPECT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT, date,
+                                    absl::UTCTimeZone(), &result, &error))
+            << error;
+        return result;
+      };
+      EXPECT_GE(parseDate(newIndex.dateOfIndexBuild()), parseDate(sourceDate));
+
+      EXPECT_EQ(newIndex.getBlankNodeManager()->minIndex_,
+                index.getBlankNodeManager()->minIndex_ +
+                    ad_utility::BlankNodeManager::blockSize_);
+      EXPECT_EQ(newIndex.numTriples().normal, 4);
+      EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
+      EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
+      EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
+      if (newIndex.loadAllPermutations()) {
+        EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
+        EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
+        EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
+        EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+      }
     }
   }
 }
@@ -616,17 +721,18 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   Index index{ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   index.createFromOnDiskIndex(sourceIndexName, false);
 
-  index.deltaTriplesManager().modify<void>(
-      [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        auto g = TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                                     DEFAULT_GRAPH_IRI)}
-                     .toValueId(index)
-                     .value();
-        deltaTriples.insertTriples(
-            cancellationHandle,
-            {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
-                                    Id::makeFromInt(3), g}}});
-      });
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                      DEFAULT_GRAPH_IRI)},
+                  index)
+            .value();
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                Id::makeFromInt(3), g}}});
+  });
 
   auto [state, vocab, blankNodes] =
       index.deltaTriplesManager()
@@ -666,8 +772,8 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
 namespace {
 // Return the directories in the current directory whose name starts with
 // `prefix`.
-std::vector<std::filesystem::path> dirsWithPrefix(std::string_view prefix) {
-  namespace fs = std::filesystem;
+std::vector<ql::filesystem::path> dirsWithPrefix(std::string_view prefix) {
+  namespace fs = ql::filesystem;
   std::vector<fs::path> result;
   for (const auto& entry : fs::directory_iterator(".")) {
     if (entry.is_directory() &&
@@ -686,21 +792,25 @@ void cleanDirsWithPrefix(std::string_view prefix) {
                     "This function is not meant to delete all directories in "
                     "the current directory. Please specify a prefix.");
   for (const auto& dir : dirsWithPrefix(prefix)) {
-    std::filesystem::remove_all(dir);
+    ql::filesystem::remove_all(dir);
   }
 }
 }  // namespace
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten: the `server` library it needs is not built
+// there (see the include of `engine/Server.h` above), and the test hangs
+// under Emscripten anyway (threaded server integration).
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
-  namespace fs = std::filesystem;
-  cleanDirsWithPrefix("previous.");
-  cleanDirsWithPrefix("rebuild.");
-  cleanDirsWithPrefix("serverIntegration.");
+  namespace fs = ql::filesystem;
+  // The rebuilds below use the default names for the temporary directory and
+  // for the directory the old index is moved to, and the checks below inspect
+  // all directories with a given prefix. Use a fresh working directory, so that
+  // neither can collide with the directories of another test. It is declared
+  // first, so that it is restored and removed last, i.e. after the `server` and
+  // the `threadPool` below have been destroyed.
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -806,16 +916,14 @@ TEST(IndexRebuilder, serverIntegration) {
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
 
   threadPool.join();
-  cleanDirsWithPrefix("previous.");
-  cleanDirsWithPrefix("serverIntegration.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-#ifdef __EMSCRIPTEN__
-  GTEST_SKIP() << "Skipped under Emscripten: this test hangs (threaded server "
-                  "integration).";
-#endif
   SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
@@ -867,6 +975,7 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   threadPool.join();
   cleanDirsWithPrefix("droppedState.");
 }
+#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
 // The thread-count override for the rebuild's scans must be set on the
@@ -905,3 +1014,113 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
       &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
   EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
 }
+
+// _____________________________________________________________________________
+// Compiled out under Emscripten like `serverIntegration` above: the `server`
+// library it needs is not built there.
+#ifndef __EMSCRIPTEN__
+TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
+  // The automatic rebuild below uses the default directory names and the checks
+  // below inspect all directories with a given prefix, see the comment in
+  // `serverIntegration` above for why this needs a fresh working directory.
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
+
+  std::string indexName = gtestCurrentTestName();
+  ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
+
+  qlever::EngineConfig config;
+  config.baseName_ = indexName;
+  config.persistUpdates_ = false;
+  // `min == max == 3` makes the threshold a fixed three delta triples,
+  // independent of the index size: trigger an automatic rebuild as soon as the
+  // number of delta triples reaches three.
+  config.rebuildIndexStrategy_ = qlever::RebuildIndexStrategy{3, 3, 1.0};
+  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+
+  auto performUpdate = [&server](std::string_view update) {
+    auto request = ad_utility::testing::makePostRequest(
+        "/?access-token=accessToken", "application/sparql-update",
+        std::string{update});
+    auto response = server.process(request);
+    EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  };
+
+  // The number of delta triples of the currently active index.
+  auto numDeltaTriples = [&server]() -> int64_t {
+    auto counts = server.deltaTriplesManager()
+                      .getCurrentLocatedTriplesSharedState()
+                      ->counts_;
+    AD_CORRECTNESS_CHECK(counts.has_value());
+    auto [inserted, deleted] = counts.value();
+    return inserted + deleted;
+  };
+
+  // Two delta triples do not reach the threshold of three, so no rebuild is
+  // triggered. This is checked race-free: the trigger decision is made before
+  // the response is sent, so after the update has returned, the flag can only
+  // be set if a rebuild was started.
+  performUpdate("INSERT DATA { <d> <e> <f> . <g> <h> <i> . }");
+  EXPECT_EQ(numDeltaTriples(), 2);
+  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_TRUE(dirsWithPrefix("previous.").empty());
+
+  // The third delta triple reaches the threshold and triggers a rebuild in
+  // the background. Wait until it has completed, which is observable by the
+  // delta triples being merged into the new index (their number drops to
+  // zero) and the old index appearing in a `previous.<datetime>` directory.
+  performUpdate("INSERT DATA { <j> <k> <l> . }");
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
+  while (
+      (numDeltaTriples() != 0 || server.server().rebuildInProgress_.load()) &&
+      std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  EXPECT_EQ(numDeltaTriples(), 0);
+  EXPECT_FALSE(server.server().rebuildInProgress_.load());
+  EXPECT_EQ(dirsWithPrefix("previous.").size(), 1u);
+  EXPECT_TRUE(ql::filesystem::exists(indexName + ".meta-data.json"));
+
+  // The rebuilt index answers queries and contains the update triples.
+  auto request = ad_utility::testing::makeGetRequest(
+      "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Cj%3E%20%3Fp%20%3Fo%20%7D");
+  auto response = server.process(request);
+  EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+  EXPECT_THAT(
+      serverTestHelpers::responseBodyToString(std::move(response.body())),
+      ::testing::HasSubstr("\"value\":\"l\""));
+
+  // The remaining paths of the trigger machinery, each deterministically:
+  // without a strategy (manual mode) the trigger does nothing; while a
+  // rebuild is (apparently) in progress, it returns early without spawning
+  // anything, and the background coroutine logs that it skipped; the
+  // completion handler logs a failure and ignores the no-exception case.
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    DeltaTriplesCount hugeCount{1000, 1000};
+    auto strategy =
+        std::exchange(server.server().rebuildIndexStrategy_, std::nullopt);
+    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
+    server.server().rebuildIndexStrategy_ = strategy;
+    server.server().rebuildInProgress_.store(true);
+    server.server().triggerRebuildIfStrategySaysSo(hugeCount, 1);
+    EXPECT_THAT(logStream.str(),
+                ::testing::Not(::testing::HasSubstr("Triggering")));
+
+    boost::asio::thread_pool threadPool{1};
+    boost::asio::co_spawn(threadPool, server.server().runAutomaticRebuild(),
+                          boost::asio::use_future)
+        .get();
+    EXPECT_THAT(
+        logStream.str(),
+        ::testing::HasSubstr("Automatic index rebuild skipped, another rebuild "
+                             "started concurrently"));
+    server.server().rebuildInProgress_.store(false);
+
+    Server::logAutomaticRebuildFailure(
+        std::make_exception_ptr(std::runtime_error{"boom"}));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("Automatic index rebuild failed: boom"));
+    Server::logAutomaticRebuildFailure(nullptr);
+  }
+}
+#endif  // __EMSCRIPTEN__

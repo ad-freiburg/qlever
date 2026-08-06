@@ -61,6 +61,7 @@ Server::Server(
       accessToken_(std::move(accessToken)),
       noAccessCheck_(noAccessCheck),
       queryThreadPool_{numThreads},
+      rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       metricsReader_(std::move(metricsReader)) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
@@ -390,7 +391,8 @@ void Server::configurePinnedResultWithName(
     return;
   }
   if (!accessTokenOk) {
-    throw std::runtime_error(
+    throw HttpError(
+        http::status::forbidden,
         "Pinning a result with a name requires a valid access token");
   }
   auto getGeoCacheVar = [&]() -> std::optional<Variable> {
@@ -445,14 +447,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
   bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
-  auto requireValidAccessToken = [&accessTokenOk](
-                                     const std::string& actionName) {
-    if (!accessTokenOk) {
-      throw std::runtime_error(absl::StrCat(
-          actionName,
-          " requires a valid access token but no access token was provided"));
-    }
-  };
+  auto requireValidAccessToken =
+      [&accessTokenOk](const std::string& actionName) {
+        if (!accessTokenOk) {
+          throw HttpError(http::status::forbidden,
+                          absl::StrCat(actionName,
+                                       " requires a valid access token but no "
+                                       "access token was provided"));
+        }
+      };
 
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
@@ -562,18 +565,16 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = createJsonResponse(json, request);
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
     requireValidAccessToken("rebuild-index");
-
-    if (rebuildInProgress_.exchange(true)) {
+    logCommand(cmd, "rebuilding index");
+    auto config = co_await rebuildIndexUnlessInProgress(
+        checkParameter("rebuild-tmp-dir", std::nullopt),
+        checkParameter("rebuild-previous-index-dir", std::nullopt));
+    if (config.has_value()) {
+      response = createJsonResponse(config->successResponseAsJson(), request);
+    } else {
       response = createHttpResponseFromString(
           "Another rebuild is currently in progress!",
           http::status::too_many_requests, request, MediaType::textPlain);
-    } else {
-      absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
-      logCommand(cmd, "rebuilding index");
-      auto config = co_await rebuildIndex(
-          checkParameter("rebuild-tmp-dir", std::nullopt),
-          checkParameter("rebuild-previous-index-dir", std::nullopt));
-      response = createJsonResponse(config.successResponseAsJson(), request);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     requireValidAccessToken("write-materialized-view");
@@ -1410,6 +1411,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       static_cast<double>(requestTimer.msecs().count()),
       {OperationType::update});
   metrics_->finishedSparqlOperations_->Add(1, {OperationType::update});
+  // With `--rebuild-index-strategy` set, an update can bring the delta triples
+  // to a state where the strategy asks for a rebuild, in which case one is
+  // started in the background here (without delaying the response below).
+  if (!metadatas.empty() && metadatas.back().countAfter_.has_value()) {
+    auto numIndexTriples = static_cast<size_t>(
+        indexAndViewsSnapshot()->index_.numTriples().normal);
+    triggerRebuildIfStrategySaysSo(metadatas.back().countAfter_.value(),
+                                   numIndexTriples);
+  }
   auto responseJson = nlohmann::ordered_json();
   responseJson["operations"] = operations;
   outerTracer->endTrace("update");
@@ -1487,7 +1497,6 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
-    // TODO<qup42> this includes missing/wrong access token which should be 403
     metrics_->sparqlErrors_->Add(1, {SparqlErrorType::internal});
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
@@ -1575,12 +1584,14 @@ bool Server::checkAccessToken(
   }
   const auto accessTokenProvidedMsg = "Access token was provided";
   if (accessToken_.empty()) {
-    throw std::runtime_error(
+    throw HttpError(
+        http::status::forbidden,
         absl::StrCat(accessTokenProvidedMsg,
                      " but server was started without --access-token"));
   } else if (!ad_utility::constantTimeEquals(accessToken.value(),
                                              accessToken_)) {
-    throw std::runtime_error(
+    throw HttpError(
+        http::status::forbidden,
         absl::StrCat(accessTokenProvidedMsg, " but it was invalid"));
   } else {
     AD_LOG_DEBUG << accessTokenProvidedMsg << " and correct" << std::endl;
@@ -1696,10 +1707,87 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
         oldManager.retireOnDiskFiles();
         qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
                                     config);
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+        metrics_->indexLoadMetric_->Record(now);
       },
       net::use_awaitable);
   co_await std::move(swapRoutine);
   co_return config;
+}
+
+// _____________________________________________________________________________
+Awaitable<std::optional<qlever::IndexRebuildConfig>>
+Server::rebuildIndexUnlessInProgress(
+    std::optional<std::string> rebuildTmpDir,
+    std::optional<std::string> rebuildPreviousIndexDir) {
+  if (rebuildInProgress_.exchange(true)) {
+    co_return std::nullopt;
+  }
+  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+  co_return co_await rebuildIndex(std::move(rebuildTmpDir),
+                                  std::move(rebuildPreviousIndexDir));
+}
+
+// _____________________________________________________________________________
+void Server::triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
+                                            size_t numIndexTriples) {
+  if (!rebuildIndexStrategy_.has_value()) {
+    return;
+  }
+  // NOTE: Cast before adding: the counts are non-negative here (they are set
+  // sizes), and the unsigned addition cannot overflow.
+  auto numDeltaTriples = static_cast<size_t>(count.triplesInserted_) +
+                         static_cast<size_t>(count.triplesDeleted_);
+  if (!rebuildIndexStrategy_->shouldTriggerRebuild(numDeltaTriples,
+                                                   numIndexTriples)) {
+    return;
+  }
+  // Cheap early return while a rebuild is running, so that the updates that
+  // arrive during it (whose delta triples are carried over into the new index
+  // by the swap) do not each spawn a coroutine only to find the guard taken.
+  // The authoritative check is the guard in `rebuildIndexUnlessInProgress`,
+  // which is shared with the `cmd=rebuild-index` HTTP request, so that a
+  // manual and an automatic rebuild can never run concurrently.
+  if (rebuildInProgress_.load()) {
+    return;
+  }
+  AD_LOG_INFO << "Triggering an automatic index rebuild, the number of delta "
+                 "triples ("
+              << numDeltaTriples << ") has reached the threshold ("
+              << rebuildIndexStrategy_->rebuildThreshold(numIndexTriples)
+              << ") for the current index size (" << numIndexTriples
+              << " triples)" << std::endl;
+  net::co_spawn(queryThreadPool_, runAutomaticRebuild(),
+                &Server::logAutomaticRebuildFailure);
+}
+
+// _____________________________________________________________________________
+Awaitable<void> Server::runAutomaticRebuild() {
+  auto config =
+      co_await rebuildIndexUnlessInProgress(std::nullopt, std::nullopt);
+  if (config.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild completed, the new index "
+                   "has been swapped in"
+                << std::endl;
+  } else {
+    AD_LOG_INFO << "Automatic index rebuild skipped, another rebuild "
+                   "started concurrently"
+                << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void Server::logAutomaticRebuildFailure(std::exception_ptr exception) {
+  if (!exception) {
+    return;
+  }
+  try {
+    std::rethrow_exception(exception);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what() << std::endl;
+  }
 }
 
 // For helper function `Server::onlyForTestingProcess`

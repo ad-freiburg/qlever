@@ -14,12 +14,10 @@
 #ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 #define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 
-#include <functional>
-
+#include "engine/ConstructTripleGenerator.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryExportTypes.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Algorithm.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/stream_generator.h"
@@ -139,6 +137,13 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree::ColumnIndicesAndTypes columns,
       std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
+
+  // Return a `qlever::constructExport::EvaluationConfig` for
+  // `ConstructTripleGenerator`, including
+  // `RuntimeParameters::constructDeduplication_`.
+  static qlever::constructExport::EvaluationConfig
+  makeConstructEvaluationConfig(const QueryExecutionTree& qet,
+                                CancellationHandle cancellationHandle);
 
   // Helper function that generates the result of a CONSTRUCT query as
   // `StringTriple`s.

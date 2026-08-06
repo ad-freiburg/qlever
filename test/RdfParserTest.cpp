@@ -17,6 +17,7 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -316,7 +317,7 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
   auto result = ladttc("POINT(7.8 47.9)", fromIri(GEO_WKT_LITERAL));
-  auto vid = result.toValueIdIfNotString(encodedIriManager());
+  auto vid = toValueIdIfNotString(result, encodedIriManager());
   ASSERT_TRUE(vid.has_value() &&
               vid.value().getDatatype() == Datatype::GeoPoint);
   auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
@@ -1492,8 +1493,8 @@ _:blank ex:b ex:c .
         EXPECT_EQ(triple.subject_, blankNodeId.value())
             << "Blank node label _:blank should have consistent ID across "
                "batches, but got different IDs: "
-            << blankNodeId.value().toRdfLiteral() << " vs "
-            << triple.subject_.toRdfLiteral();
+            << toRdfLiteral(blankNodeId.value()) << " vs "
+            << toRdfLiteral(triple.subject_);
         foundAsSubject = true;
         break;
       }

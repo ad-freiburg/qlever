@@ -4,8 +4,8 @@
 
 #include <gmock/gmock.h>
 
-#include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/PrefixHeuristic.h"
 #include "util/Views.h"
 
 TEST(PrefixCompressor, CompressionPreservesWords) {
