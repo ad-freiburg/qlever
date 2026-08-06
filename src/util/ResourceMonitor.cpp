@@ -17,8 +17,10 @@
 // The readings use platform-specific APIs.
 // `getrusage` (CPU time) is shared by both linux and macOS.
 #if defined(__APPLE__)
+#include <libproc.h>
 #include <mach/mach.h>
 #include <sys/resource.h>
+#include <unistd.h>
 #elif defined(__linux__)
 #include <sys/resource.h>
 #include <unistd.h>
@@ -99,6 +101,52 @@ std::optional<double> CpuPercentTracker::update(
   lastElapsed_ = elapsed;
   return percent;
 }
+
+// _____________________________________________________________________________
+std::optional<DiskIoBytes> currentDiskIoBytes() {
+#if defined(__APPLE__)
+  // Not `getrusage`'s `ru_inblock`/`ru_oublock`: macOS leaves those at zero.
+  rusage_info_current info;
+  if (proc_pid_rusage(getpid(), RUSAGE_INFO_CURRENT,
+                      reinterpret_cast<rusage_info_t*>(&info)) != 0) {
+    return std::nullopt;
+  }
+  return DiskIoBytes{.readBytes_ = info.ri_diskio_bytesread,
+                     .writeBytes_ = info.ri_diskio_byteswritten};
+#elif defined(__linux__)
+  std::ifstream procIo{"/proc/self/io"};
+  return diskIoBytesFromProcIo(procIo);
+#else
+  return std::nullopt;
+#endif
+}
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo) {
+  // `/proc/self/io` is a list of `key: value` lines whose set has grown
+  // across kernel versions, so scan for the two keys instead of counting
+  // lines.
+  std::optional<uint64_t> readBytes;
+  std::optional<uint64_t> writeBytes;
+  std::string key;
+  uint64_t value;
+
+  while (procIo >> key >> value) {
+    if (key == "read_bytes:") {
+      readBytes = value;
+    } else if (key == "write_bytes:") {
+      writeBytes = value;
+    }
+  }
+
+  if (!readBytes.has_value() || !writeBytes.has_value()) {
+    return std::nullopt;
+  }
+  return DiskIoBytes{.readBytes_ = readBytes.value(),
+                     .writeBytes_ = writeBytes.value()};
+}
+#endif
 
 // _____________________________________________________________________________
 std::string formatTsvRow(const Sample& sample) {

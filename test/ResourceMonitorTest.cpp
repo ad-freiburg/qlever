@@ -61,6 +61,27 @@ TEST(ResourceMonitor, ReadsCurrentMemoryAndCpuUsage) {
 #endif
 }
 
+// _____________________________________________________________________________
+TEST(ResourceMonitor, ReadsCumulativeDiskIoBytes) {
+#if defined(__APPLE__) || defined(__linux__)
+  using ad_utility::resource_monitor::currentDiskIoBytes;
+  // On Linux this needs `CONFIG_TASK_IO_ACCOUNTING`, which mainstream kernels
+  // enable; a failure here means the kernel lacks it, not a parse failure.
+  auto first = currentDiskIoBytes();
+  ASSERT_TRUE(first.has_value());
+
+  // The counters are cumulative, which is the property the rate computation
+  // depends on: a later reading is never smaller. Not `EXPECT_GT`, since a
+  // process can go a moment without touching the disk at all.
+  auto second = currentDiskIoBytes();
+  ASSERT_TRUE(second.has_value());
+  EXPECT_GE(second.value().readBytes_, first.value().readBytes_);
+  EXPECT_GE(second.value().writeBytes_, first.value().writeBytes_);
+#else
+  EXPECT_FALSE(ad_utility::resource_monitor::currentDiskIoBytes().has_value());
+#endif
+}
+
 #if defined(__linux__)
 // _____________________________________________________________________________
 TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
@@ -77,6 +98,38 @@ TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
 
   std::istringstream empty{""};
   EXPECT_FALSE(rssBytesFromStatm(empty).has_value());
+}
+#endif
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+TEST(ResourceMonitor,
+     DiskIoBytesFromProcIoMatchesKeysAndRejectsIncompleteInput) {
+  using ad_utility::resource_monitor::diskIoBytesFromProcIo;
+  // A realistic `/proc/self/io`: the keys we want are neither first nor last,
+  // and every value differs, so a parser reading by position would fail.
+  std::istringstream valid{
+      "rchar: 4036\n"
+      "wchar: 12\n"
+      "syscr: 9\n"
+      "syscw: 1\n"
+      "read_bytes: 8192\n"
+      "write_bytes: 4096\n"
+      "cancelled_write_bytes: 64\n"};
+  auto bytes = diskIoBytesFromProcIo(valid);
+  ASSERT_TRUE(bytes.has_value());
+  EXPECT_EQ(bytes.value().readBytes_, 8192u);
+  EXPECT_EQ(bytes.value().writeBytes_, 4096u);
+
+  std::istringstream garbage{"not a number"};
+  EXPECT_FALSE(diskIoBytesFromProcIo(garbage).has_value());
+
+  std::istringstream empty{""};
+  EXPECT_FALSE(diskIoBytesFromProcIo(empty).has_value());
+
+  // One key alone is a failed reading, not a zero for the other.
+  std::istringstream onlyRead{"read_bytes: 8192\n"};
+  EXPECT_FALSE(diskIoBytesFromProcIo(onlyRead).has_value());
 }
 #endif
 

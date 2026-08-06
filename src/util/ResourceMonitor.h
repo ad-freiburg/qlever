@@ -57,6 +57,21 @@ class CpuPercentTracker {
   double lastElapsed_ = 0.0;
 };
 
+// Cumulative bytes this process has read from and written to disk.
+struct DiskIoBytes {
+  uint64_t readBytes_;
+  uint64_t writeBytes_;
+};
+
+// Cumulative disk bytes of this process, or `std::nullopt` if unavailable.
+std::optional<DiskIoBytes> currentDiskIoBytes();
+
+#if defined(__linux__)
+// Disk bytes from a `/proc/self/io` stream, read by the `read_bytes:` and
+// `write_bytes:` keys, never by position.
+std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo);
+#endif
+
 // One sampled row of the resource-usage log
 struct Sample {
   double elapsedSeconds_;
