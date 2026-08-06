@@ -23,6 +23,7 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
+#include "util/http/HttpProxyConfig.h"
 #include "util/metrics/Metrics.h"
 
 using std::size_t;
@@ -305,6 +306,32 @@ int main(int argc, char** argv) {
     }
     AD_LOG_INFO << "Runtime parameter set from the command line: " << assignment
                 << std::endl;
+  }
+
+  // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
+  // environment. We do this eagerly so that a malformed proxy URL fails the
+  // startup with a readable message, instead of only surfacing on the first
+  // federated query. Only log if a proxy is actually configured, to not add
+  // noise for the common case.
+  try {
+    const auto& proxy = ad_utility::httpProxy::globalProxy();
+    if (proxy.has_value()) {
+      AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
+                  << proxy->asStringForLogging() << std::endl;
+    }
+    // The uppercase `HTTP_PROXY` is deliberately ignored (following `curl`,
+    // see `HttpProxyConfig.h`), but silently doing so would be confusing, so
+    // leave a hint.
+    if (ad_utility::httpProxy::uppercaseHttpProxyIsSetButIgnored()) {
+      AD_LOG_INFO << "The environment variable `HTTP_PROXY` (uppercase) is "
+                     "set, but deliberately ignored; use the lowercase "
+                     "`http_proxy` to configure a proxy for outgoing requests"
+                  << std::endl;
+    }
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
+                 << e.what() << std::endl;
+    return EXIT_FAILURE;
   }
 
   // Resolve the `--rebuild-index-strategy` option. A bad value fails the
