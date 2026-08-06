@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -37,75 +38,96 @@ namespace {
 namespace http = boost::beast::http;
 using ad_utility::httpUtils::Url;
 
+// The shape of the two large responses of the test server below. They are
+// parameters of the server rather than literals in its JavaScript code, so that
+// the expectations of the tests don't have to repeat them.
+//
+// The body of `/large` is larger than the buffer for a single chunk, and the
+// one of `/stream` is more than an order of magnitude larger than the queue of
+// a request. Byte `i` of the latter is `i % STREAM_BYTE_MODULUS`, so that a
+// consumer can tell whether it received exactly the bytes that were sent, in
+// order (see `expectStreamedBytes`).
+constexpr int LARGE_BODY_SIZE = 500'000;
+constexpr int NUM_STREAM_CHUNKS = 200;
+constexpr int STREAM_CHUNK_SIZE = 1 << 16;  // 64 KiB
+constexpr int STREAM_BYTE_MODULUS = 251;
+
 // NOTE: `clang-format` is disabled below because it breaks JavaScript (it turns
 // `===` into `== =`).
 // clang-format off
 
 // The test server below needs `require` and a socket to listen on.
 EM_JS(bool, isNodeJs, (void), {
-  return typeof process !== "undefined" && !!process.versions &&
-         !!process.versions.node;
+  return typeof process !== "undefined" &&
+         typeof process.versions?.node === "string";
 });
 
 // Start the test server and store the port it listens on at the given address
-// (that of an `std::atomic<int32_t>`), thereby signalling that it is ready.
-EM_JS(void, startTestServer, (void* portAddress), {
-  var http = require("http");
-  var server = http.createServer(function(request, response) {
-    var url = request.url;
-    if (url === "/hello") {
+// (that of an `std::atomic<int32_t>`), thereby signalling that it is ready. For
+// the meaning of the sizes, see the constants above.
+EM_JS(void, startTestServer,
+      (void* portAddress, int largeBodySize, int numStreamChunks,
+       int streamChunkSize, int streamByteModulus), {
+  const http = require("http");
+  const server = http.createServer((request, response) => {
+    if (request.url === "/hello") {
       response.writeHead(200, {"Content-Type" : "text/turtle"});
       response.end("Hello, World!");
-    } else if (url === "/echo") {
+    } else if (request.url === "/echo") {
       // Report the request, so that the test can check it.
-      var chunks = [];
-      request.on("data", function(chunk) { chunks.push(chunk); });
-      request.on("end", function() {
+      const chunks = [];
+      request.on("data", (chunk) => chunks.push(chunk));
+      request.on("end", () => {
         response.writeHead(200, {"Content-Type" : "application/json"});
         response.end(JSON.stringify({
           method : request.method,
           body : Buffer.concat(chunks).toString(),
-          accept : request.headers["accept"] || "",
-          contentType : request.headers["content-type"] || ""
+          accept : request.headers["accept"] ?? "",
+          contentType : request.headers["content-type"] ?? ""
         }));
       });
-    } else if (url === "/large") {
-      // A body that is larger than the buffer for a single chunk, sent in many
-      // small chunks.
+    } else if (request.url === "/large") {
+      // Sent in many small pieces, so that the client has to assemble it.
       response.writeHead(200, {"Content-Type" : "text/plain"});
-      for (var i = 0; i < 50; ++i) {
-        response.write("x".repeat(10000));
+      const numPieces = 50;
+      const piece = "x".repeat(largeBodySize / numPieces);
+      for (let i = 0; i < numPieces; ++i) {
+        response.write(piece);
       }
       response.end();
-    } else if (url === "/stream") {
-      // Much larger than the ring buffer, and sent slowly, so that a client
-      // which stops reading is still connected when it does so.
+    } else if (request.url === "/stream") {
+      // Sent slowly, so that a client which stops reading is still connected
+      // when it does so.
       response.writeHead(200, {"Content-Type" : "text/plain"});
-      var chunksSent = 0;
-      var timer = setInterval(function() {
-        if (chunksSent === 200) {
+      let chunksSent = 0;
+      const timer = setInterval(() => {
+        if (chunksSent === numStreamChunks) {
           clearInterval(timer);
           response.end();
           return;
         }
+        const chunk = Buffer.alloc(streamChunkSize);
+        for (let i = 0; i < chunk.length; ++i) {
+          chunk[i] = (chunksSent * streamChunkSize + i) % streamByteModulus;
+        }
         ++chunksSent;
-        response.write("y".repeat(65536));
+        response.write(chunk);
       }, 2);
       // Count the connections that were closed before we were done sending,
       // that is, the requests the client aborted.
-      response.on("close", function() {
+      response.on("close", () => {
         clearInterval(timer);
         if (!response.writableEnded) {
-          globalThis.numAbortedRequests = (globalThis.numAbortedRequests || 0) + 1;
+          globalThis.numAbortedRequests = (globalThis.numAbortedRequests ?? 0) + 1;
         }
       });
-    } else if (url === "/aborted-requests") {
+    } else if (request.url === "/aborted-requests") {
       response.writeHead(200, {"Content-Type" : "text/plain"});
-      response.end(String(globalThis.numAbortedRequests || 0));
-    } else if (url === "/redirect") {
+      response.end(String(globalThis.numAbortedRequests ?? 0));
+    } else if (request.url === "/redirect") {
       response.writeHead(308, {"Location" : "/hello"});
       response.end();
-    } else if (url === "/empty") {
+    } else if (request.url === "/empty") {
       response.writeHead(204);
       response.end();
     } else {
@@ -118,7 +140,7 @@ EM_JS(void, startTestServer, (void* portAddress), {
   // index the heap views, hence the `Number(...)` conversion (a no-op without
   // it). The view is built freshly because Emscripten's cached `HEAPU8` can be
   // stale after a memory growth.
-  server.listen(0, "127.0.0.1", function() {
+  server.listen(0, "127.0.0.1", () => {
     Atomics.store(new Int32Array(HEAPU8.buffer), Number(portAddress) / 4,
                   server.address().port);
   });
@@ -135,7 +157,8 @@ const std::string& testServerUrl() {
   static const std::string url = []() {
     static std::atomic<int32_t> port{0};
     std::thread{[]() {
-      startTestServer(&port);
+      startTestServer(&port, LARGE_BODY_SIZE, NUM_STREAM_CHUNKS,
+                      STREAM_CHUNK_SIZE, STREAM_BYTE_MODULUS);
       // Keep the Web Worker of this thread (and hence the server) alive.
       emscripten_exit_with_live_runtime();
     }}.detach();
@@ -168,6 +191,60 @@ class HttpClientEmscriptenTest : public ::testing::Test {
       GTEST_SKIP() << "The test server requires Node.js";
     }
     url_ = testServerUrl();
+  }
+
+  // The number of requests that the test server has seen the client abort.
+  size_t numAbortedRequests() {
+    auto response =
+        sendHttpOrHttpsRequest(Url{url_ + "/aborted-requests"}, handle_);
+    return std::stoul(toString(response));
+  }
+
+  // Read the whole body of `/stream` and check that it is exactly the sequence
+  // of bytes that the server sent (see there), so that neither a lost nor a
+  // duplicated nor a reordered chunk goes unnoticed. Sleeping for
+  // `millisecondsPerChunk` after each chunk lets a test consume slower than the
+  // server sends.
+  void expectStreamedBytes(HttpOrHttpsResponse& response,
+                           int millisecondsPerChunk = 0) {
+    size_t numBytes = 0;
+    size_t numChunks = 0;
+    for (ql::span<std::byte> bytes : response.body_) {
+      for (std::byte byte : bytes) {
+        ASSERT_EQ(static_cast<size_t>(byte), numBytes % STREAM_BYTE_MODULUS)
+            << "at byte " << numBytes;
+        ++numBytes;
+      }
+      ++numChunks;
+      if (millisecondsPerChunk > 0) {
+        emscripten_thread_sleep(millisecondsPerChunk);
+      }
+    }
+    EXPECT_EQ(numBytes,
+              static_cast<size_t>(NUM_STREAM_CHUNKS * STREAM_CHUNK_SIZE));
+    // The body has to have been consumed as it arrived, not in one piece.
+    EXPECT_GT(numChunks, static_cast<size_t>(NUM_STREAM_CHUNKS / 2));
+  }
+
+  // Request `/stream` (a response that is still being sent when `consume`
+  // returns), let `consume` read as much of it as it wants, and check that the
+  // server saw the connection close before it was done sending, that is, that
+  // the request was aborted.
+  void expectRequestIsAborted(
+      const std::function<void(HttpOrHttpsResponse&)>& consume) {
+    size_t numAbortedBefore = numAbortedRequests();
+    {
+      auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
+      consume(response);
+    }
+    // The server learns about the closed connection asynchronously, hence the
+    // retries.
+    size_t numAbortedAfter = numAbortedBefore;
+    for (size_t i = 0; i < 100 && numAbortedAfter == numAbortedBefore; ++i) {
+      emscripten_thread_sleep(20);
+      numAbortedAfter = numAbortedRequests();
+    }
+    EXPECT_EQ(numAbortedAfter, numAbortedBefore + 1);
   }
 };
 
@@ -203,7 +280,7 @@ TEST_F(HttpClientEmscriptenTest, largeBodyIsReadInChunks) {
     ++numChunks;
     numBytes += bytes.size();
   }
-  EXPECT_EQ(numBytes, 500000u);
+  EXPECT_EQ(numBytes, static_cast<size_t>(LARGE_BODY_SIZE));
   EXPECT_GT(numChunks, 1u);
 }
 
@@ -214,46 +291,55 @@ TEST_F(HttpClientEmscriptenTest, bodyThatIsNotReadCompletely) {
 }
 
 // _____________________________________________________________________________
-TEST_F(HttpClientEmscriptenTest, bodyLargerThanTheRingBufferIsStreamed) {
-  // 200 chunks of 64 KiB are more than an order of magnitude more than the ring
-  // buffer holds, so this only works if the body is consumed as it arrives.
+TEST_F(HttpClientEmscriptenTest, bodyLargerThanTheQueueIsStreamed) {
+  // The body is far larger than the queue of a request holds, so this only
+  // works if it is consumed as it arrives.
   auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
-  size_t numBytes = 0;
-  size_t numChunks = 0;
-  for (ql::span<std::byte> bytes : response.body_) {
-    numBytes += bytes.size();
-    ++numChunks;
-  }
-  EXPECT_EQ(numBytes, 200 * 65536u);
-  EXPECT_GT(numChunks, 100u);
+  expectStreamedBytes(response);
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, slowConsumerGetsTheWholeBody) {
+  // Consume much slower than the server sends, so that the queue of the request
+  // fills up and the JavaScript side has to stop and wait for space (which the
+  // test above, where the consumer is the faster one, does not exercise). Not a
+  // single byte may be lost or duplicated when it continues.
+  auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
+  expectStreamedBytes(response, 2);
 }
 
 // _____________________________________________________________________________
 TEST_F(HttpClientEmscriptenTest, notReadingTheBodyToTheEndAbortsTheRequest) {
-  size_t numAbortedBefore = 0;
-  {
-    auto response =
-        sendHttpOrHttpsRequest(Url{url_ + "/aborted-requests"}, handle_);
-    numAbortedBefore = std::stoul(toString(response));
-  }
-  {
-    // Read a single chunk of a response that is still being sent, then let the
-    // response go out of scope.
-    auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
+  expectRequestIsAborted([](HttpOrHttpsResponse& response) {
+    // Read a single chunk, then let the response go out of scope.
     auto iterator = response.body_.begin();
     ASSERT_NE(iterator, response.body_.end());
     EXPECT_GT((*iterator).size(), 0u);
-  }
-  // The server has to have seen the connection close before it was done
-  // sending; it learns about that asynchronously, hence the retries.
-  size_t numAbortedAfter = numAbortedBefore;
-  for (size_t i = 0; i < 100 && numAbortedAfter == numAbortedBefore; ++i) {
-    emscripten_thread_sleep(20);
-    auto response =
-        sendHttpOrHttpsRequest(Url{url_ + "/aborted-requests"}, handle_);
-    numAbortedAfter = std::stoul(toString(response));
-  }
-  EXPECT_EQ(numAbortedAfter, numAbortedBefore + 1);
+  });
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, abortingWhileTheQueueIsFullWorks) {
+  // Read a few chunks slowly, so that the queue is full and the JavaScript side
+  // is waiting for space when we stop. That wait has to end, even though the
+  // space it waits for will never come.
+  expectRequestIsAborted([](HttpOrHttpsResponse& response) {
+    size_t numChunks = 0;
+    for ([[maybe_unused]] ql::span<std::byte> bytes : response.body_) {
+      emscripten_thread_sleep(20);
+      if (++numChunks == 3) {
+        break;
+      }
+    }
+  });
+}
+
+// _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, notReadingTheBodyAtAllAbortsTheRequest) {
+  // Not even starting to read the body has to abort the request as well, even
+  // though the body generator is then destroyed without its body ever having
+  // been run.
+  expectRequestIsAborted([](HttpOrHttpsResponse&) {});
 }
 
 // _____________________________________________________________________________
