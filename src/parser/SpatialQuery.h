@@ -52,6 +52,10 @@ struct SpatialQuery : MagicServiceQuery {
   // is used implicitly.
   std::optional<SpatialJoinType> joinType_;
 
+  // The DE-9IM filter pattern, mandatory if and only if `joinType_` is
+  // `SpatialJoinType::DE9IM`.
+  std::optional<De9imFilterString> de9imFilter_;
+
   // If the s2-point-polyline algorithm is used, the right side of the spatial
   // join will be an already existing s2 index together with the fully
   // materialized child result table. Both are pinned to the named query cache.

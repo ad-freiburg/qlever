@@ -57,7 +57,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
         "The parameter `<joinType>` needs an IRI that selects the algorithm "
         "to employ. Currently supported are `<intersects>`, `<covers>`, "
         "`<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, `<equals>`, "
-        "`<within-dist>`");
+        "`<within-dist>`, `<de9im>`");
     auto type = extractParameterName(object, SPATIAL_SEARCH_IRI);
     if (type == "intersects") {
       joinType_ = SpatialJoinType::INTERSECTS;
@@ -77,13 +77,26 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       joinType_ = SpatialJoinType::WITHIN;
     } else if (type == "within-dist") {
       joinType_ = SpatialJoinType::WITHIN_DIST;
+    } else if (type == "de9im") {
+      joinType_ = SpatialJoinType::DE9IM;
     } else {
       throw SpatialSearchException{
           "The IRI given for the parameter `<joinType>` does not refer to a "
           "supported join type. Currently supported are `<intersects>`, "
           "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within>`, `<within-dist>`"};
+          "`<equals>`, `<within>`, `<within-dist>`, `<de9im>`"};
     }
+  } else if (predString == "de9imFilter") {
+    throwIf(!object.isLiteral(),
+            "The parameter `<de9imFilter>` expects a string literal with "
+            "exactly 9 characters, each of which must be one of `0`-`2`, "
+            "`T`/`F` (or lowercase), or `*`.");
+    de9imFilter_ =
+        parseDe9imFilter(asStringViewUnsafe(object.getLiteral().getContent()));
+    throwIf(!de9imFilter_.has_value(),
+            "The parameter `<de9imFilter>` expects a string literal with "
+            "exactly 9 characters, each of which must be one of `0`-`2`, "
+            "`T`/`F` (or lowercase), or `*`.");
   } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description
@@ -121,7 +134,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
         "Unsupported argument ", predString,
         " in spatial search; supported arguments are: `<left>`, `<right>`, "
         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
-        "`<joinType>`, `<payload>`, and `<algorithm>`"));
+        "`<joinType>`, `<de9imFilter>`, `<payload>`, and `<algorithm>`"));
   }
 }
 
@@ -151,6 +164,14 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
           "The algorithm `<libspatialjoin>` supports the "
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`.");
+
+  throwIf(joinType_ == SpatialJoinType::DE9IM && !de9imFilter_.has_value(),
+          "The join type `<de9im>` requires the `<de9imFilter>` parameter to "
+          "be set.");
+
+  throwIf(de9imFilter_.has_value() && joinType_ != SpatialJoinType::DE9IM,
+          "The parameter `<de9imFilter>` may only be set if `<joinType>` is "
+          "set to `<de9im>`.");
 
   throwIf(
       joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN,
@@ -217,7 +238,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   SpatialJoinTask task;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
     task = LibSpatialJoinConfig{joinType.value_or(SpatialJoinType::INTERSECTS),
-                                maxDist_};
+                                maxDist_, de9imFilter_};
   } else if (maxResults_.has_value()) {
     task = NearestNeighborsConfig{maxResults_.value(), maxDist_};
   } else {

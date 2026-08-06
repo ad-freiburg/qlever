@@ -1781,6 +1781,79 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
 }
 
 // _____________________________________________________________________________
+TEST(SpatialJoin, ParseDe9imFilter) {
+  // Valid patterns: digits, upper-/lowercase `T`/`F`, and `*`, in any mix.
+  EXPECT_TRUE(parseDe9imFilter("012TFTF**").has_value());
+  EXPECT_TRUE(parseDe9imFilter("012tftf**").has_value());
+  EXPECT_TRUE(parseDe9imFilter("*********").has_value());
+  EXPECT_TRUE(parseDe9imFilter("2FFF1FFF2").has_value());
+  {
+    auto filter = parseDe9imFilter("012TFTF*t");
+    ASSERT_TRUE(filter.has_value());
+    EXPECT_EQ((std::string_view{filter->data(), filter->size()}), "012TFTF*t");
+  }
+
+  // Invalid: wrong length.
+  EXPECT_FALSE(parseDe9imFilter("").has_value());
+  EXPECT_FALSE(parseDe9imFilter("012TFTF*").has_value());
+  EXPECT_FALSE(parseDe9imFilter("012TFTF***").has_value());
+
+  // Invalid: characters outside of `[0-2TFtf*]`.
+  EXPECT_FALSE(parseDe9imFilter("012TFTF*3").has_value());
+  EXPECT_FALSE(parseDe9imFilter("012TFTF*X").has_value());
+  EXPECT_FALSE(parseDe9imFilter("012TFTF* ").has_value());
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+
+  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.parserBufferSize = 10_kB;
+  auto qec = ad_utility::testing::getQec(std::move(idxConfig));
+
+  auto runWithFilter = [&](std::string_view filterPattern) {
+    auto leftChild =
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?area1"});
+    auto rightChild =
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?area2"});
+    SpatialJoinConfiguration config{
+        LibSpatialJoinConfig{SpatialJoinType::DE9IM, std::nullopt,
+                             parseDe9imFilter(filterPattern).value()},
+        Variable{"?area1"},
+        Variable{"?area2"},
+        std::nullopt,
+        PayloadVariables::all(),
+        SpatialJoinAlgorithm::LIBSPATIALJOIN,
+        SpatialJoinType::DE9IM};
+    auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, config, leftChild, rightChild);
+    auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+        spatialJoinOperation->getRootOperation());
+    return spatialJoin->computeResult(false);
+  };
+
+  // An area exactly equals itself (and nothing else in this dataset), which
+  // corresponds to the DE-9IM matrix `2FFF1FFF2`.
+  auto equalsRes = runWithFilter("2FFF1FFF2");
+  EXPECT_EQ(equalsRes.idTableView().numRows(), 2);
+
+  // The same pattern still matches when using `*` and lowercase `t`/`f` as
+  // wildcards/equivalents.
+  auto equalsResWithWildcards = runWithFilter("2*ff1fff*");
+  EXPECT_EQ(equalsResWithWildcards.idTableView().numRows(), 2);
+
+  // No pair of geometries in this dataset has a 0-dimensional intersection of
+  // their interiors (it is either empty for disjoint areas, or 2-dimensional
+  // for an area with itself), so this filter matches nothing.
+  auto noMatchRes = runWithFilter("0FFFFFFF2");
+  EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   std::string kg;
   addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);

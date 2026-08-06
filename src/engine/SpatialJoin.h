@@ -38,6 +38,7 @@ struct PreparedSpatialJoinParams {
   std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
+  std::optional<De9imFilterString> de9imFilter_;
   std::optional<std::string> rightCacheName_;
   SpatialJoinBoundingBoxColumns boundingBoxColsLeft_;
   SpatialJoinBoundingBoxColumns boundingBoxColsRight_;
@@ -106,6 +107,11 @@ class SpatialJoin : public Operation {
 
   // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
+
+  // this function is used to give the DE-9IM filter pattern, if the task is a
+  // `LibSpatialJoinConfig` with one set (only relevant for the `DE9IM` join
+  // type)
+  std::optional<De9imFilterString> getDe9imFilter() const;
 
   // switch the algorithm set in the config parameter at construction time
   void selectAlgorithm(SpatialJoinAlgorithm algo) { config_.algo_ = algo; }
