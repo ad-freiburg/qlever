@@ -151,7 +151,7 @@ string IndexScan::getCacheKeyImpl() const {
 
   if (varsToKeep_.has_value()) {
     os << " column subset "
-       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+       << absl::StrJoin(getColumnPermutationForResult(), ",");
   }
   return std::move(os).str();
 }
@@ -192,22 +192,37 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+  // The raw result of the permutation scan is sorted by its physical columns
+  // `[0, numVariables_)` (the variables, in key order), followed by the graph
+  // column (if present as an additional column). Because the final result
+  // reorders the columns into the canonical layout (see
+  // `getColumnPermutationForResult`), we have to translate the physical sort
+  // order into the corresponding (canonical) result column indices.
+  const auto& varColMap = getExternallyVisibleVariableColumns();
+  const auto& keys = permutation().keyOrder().keys();
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
   std::vector<ColumnIndex> result;
-  for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
-    result.push_back(i);
+  // Physical column `j` (for `j < numVariables_`) holds the variable at
+  // key-order index `3 - numVariables_ + j`.
+  for (size_t j = 0; j < numVariables_; ++j) {
+    const auto& component = *triple.at(keys.at(3 - numVariables_ + j));
+    AD_CORRECTNESS_CHECK(component.isVariable());
+    auto it = varColMap.find(component.getVariable());
+    if (it == varColMap.end()) {
+      // The variable is stripped away, so the result is not sorted beyond this
+      // point on any of the remaining (kept) columns.
+      return result;
+    }
+    result.push_back(it->second.columnIndex_);
   }
+  // The graph column (if present) is part of the sort order, right after the
+  // s/p/o variable columns.
   for (size_t i = 0; i < additionalColumns_.size(); ++i) {
     if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
-      result.push_back(numVariables_ + i);
-    }
-  }
-
-  if (varsToKeep_.has_value()) {
-    auto permutation = getSubsetForStrippedColumns();
-    for (auto it = result.begin(); it != result.end(); ++it) {
-      if (!ad_utility::contains(permutation, *it)) {
-        result.erase(it, result.end());
-        return result;
+      auto it = varColMap.find(additionalVariables_.at(i));
+      if (it != varColMap.end()) {
+        result.push_back(it->second.columnIndex_);
       }
     }
   }
@@ -263,24 +278,31 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
-  auto addCol = [&isContained, &variableToColumnMap,
-                 nextColIdx = ColumnIndex{0},
-                 permutationColIdx = ColumnIndex{0},
-                 this](const Variable& var) mutable {
+  // The columns of the result are laid out in a canonical, permutation-
+  // independent order: the s/p/o variables in (subject, predicate, object)
+  // order, followed by the additional columns. `nextColIdx` counts the result
+  // columns; the undef status is looked up via the physical column of the
+  // variable in the underlying permutation scan.
+  ColumnIndex nextColIdx = 0;
+  auto addCol = [&](const Variable& var, ColumnIndex physicalColIdx) {
     if (isContained(var)) {
       variableToColumnMap[var] = {
-          nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
+          nextColIdx, permutation().getColumnUndefStatus(physicalColIdx)};
       ++nextColIdx;
     }
-    ++permutationColIdx;
   };
 
-  for (const TripleComponent* const ptr : getPermutedTriple()) {
-    if (ptr->isVariable()) {
-      addCol(ptr->getVariable());
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
+  for (size_t position = 0; position < 3; ++position) {
+    const auto& component = *triple.at(position);
+    if (component.isVariable()) {
+      addCol(component.getVariable(), physicalColumnOfTriplePosition(position));
     }
   }
-  ql::ranges::for_each(additionalVariables_, addCol);
+  for (size_t i = 0; i < additionalVariables_.size(); ++i) {
+    addCol(additionalVariables_.at(i), numVariables_ + i);
+  }
   return variableToColumnMap;
 }
 
@@ -405,13 +427,14 @@ void IndexScan::determineMultiplicities() {
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
 
-  if (varsToKeep_.has_value()) {
-    std::vector<float> actualMultiplicites;
-    for (size_t column : getSubsetForStrippedColumns()) {
-      actualMultiplicites.push_back(multiplicity_.at(column));
-    }
-    multiplicity_ = std::move(actualMultiplicites);
+  // The `multiplicity_` values are computed in the physical column order of the
+  // permutation scan. Reorder (and strip) them so that they match the canonical
+  // result column order.
+  std::vector<float> actualMultiplicities;
+  for (size_t column : getColumnPermutationForResult()) {
+    actualMultiplicities.push_back(multiplicity_.at(column));
   }
+  multiplicity_ = std::move(actualMultiplicities);
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
 
@@ -1031,24 +1054,139 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
-  AD_CORRECTNESS_CHECK(varsToKeep_.has_value());
-  const auto& v = varsToKeep_.value();
-  std::vector<ColumnIndex> result;
-  size_t idx = 0;
-  for (const auto& el : getPermutedTriple()) {
-    if (el->isVariable()) {
-      if (v.contains(el->getVariable())) {
-        result.push_back(idx);
+std::optional<std::shared_ptr<QueryExecutionTree>> IndexScan::makeSortedTree(
+    const std::vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  // A prefilter is tied to a specific permutation, so we cannot change the
+  // permutation (and hence the sort order) in that case.
+  if (scanSpecAndBlocksIsPrefiltered_) {
+    return std::nullopt;
+  }
+
+  // Only a `NORMAL` permutation is one of the six permutations of the index.
+  // Other permutation types (currently materialized views) have their own data
+  // and their own `locatedTriplesSharedState_`, so switching to a permutation
+  // of the index would read completely different data.
+  if (permutation().permutationType() != Permutation::Type::NORMAL) {
+    return std::nullopt;
+  }
+
+  // Only the s/p/o variable columns can be reordered by changing the
+  // permutation. Map each requested sort column (a result column index) back to
+  // its triple position (0 = subject, 1 = predicate, 2 = object). If a sort
+  // column is an additional column (patterns, graph) or a stripped column, it
+  // cannot be reordered this way and we bail out (the caller then falls back to
+  // an explicit `Sort`).
+  const auto& varColMap = getExternallyVisibleVariableColumns();
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
+  ad_utility::HashMap<ColumnIndex, size_t> resultColumnToTriplePosition;
+  for (size_t position = 0; position < 3; ++position) {
+    const auto& component = *triple.at(position);
+    if (component.isVariable()) {
+      auto it = varColMap.find(component.getVariable());
+      if (it != varColMap.end()) {
+        resultColumnToTriplePosition[it->second.columnIndex_] = position;
       }
-      ++idx;
     }
   }
-  for (const auto& var : additionalVariables_) {
-    if (v.contains(var)) {
-      result.push_back(idx);
+  std::vector<size_t> desiredPositions;
+  for (ColumnIndex sortColumn : sortColumns) {
+    auto it = resultColumnToTriplePosition.find(sortColumn);
+    if (it == resultColumnToTriplePosition.end()) {
+      return std::nullopt;
     }
-    ++idx;
+    desiredPositions.push_back(it->second);
+  }
+
+  // Find a permutation such that (a) the fixed components of the triple form
+  // the prefix of its key order (a scan requirement) and (b) its (canonical)
+  // sort order starts with the `desiredPositions`. Because the canonical result
+  // layout is permutation-independent, the resulting scan has the same
+  // `VariableToColumnMap` as this one, but a different sort order.
+  using enum Permutation::Enum;
+  for (Permutation::Enum candidate : {SPO, SOP, PSO, POS, OSP, OPS}) {
+    auto keyOrder = Permutation::toKeyOrder(candidate);
+    const auto& keys = keyOrder.keys();
+    // (a) The fixed components must be the prefix of the key order.
+    bool fixedComponentsArePrefix = ql::ranges::none_of(
+        ad_utility::integerRange(size_t{3} - numVariables_),
+        [&](size_t i) { return triple.at(keys.at(i))->isVariable(); });
+    if (!fixedComponentsArePrefix) {
+      continue;
+    }
+    // (b) The variable positions right after the fixed prefix must match the
+    // desired sort positions.
+    bool matches = true;
+    for (size_t j = 0; j < desiredPositions.size(); ++j) {
+      if (keys.at(3 - numVariables_ + j) != desiredPositions.at(j)) {
+        matches = false;
+        break;
+      }
+    }
+    if (!matches) {
+      continue;
+    }
+
+    // Skip permutations that are not loaded (e.g. when the index was built
+    // without all six permutations). In that case, another candidate might
+    // still work, or we fall back to an explicit `Sort`.
+    auto newPermutation = getIndex().getImpl().getPermutationPtr(candidate);
+    if (!newPermutation->isLoaded()) {
+      continue;
+    }
+
+    auto clonedTree = clone();
+    auto& operation = dynamic_cast<IndexScan&>(*clonedTree);
+    operation.permutation_ = std::move(newPermutation);
+    operation.scanSpecAndBlocks_ = operation.getScanSpecAndBlocks();
+    operation.determineMultiplicities();
+    return std::make_shared<QueryExecutionTree>(getExecutionContext(),
+                                                std::move(clonedTree));
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+ColumnIndex IndexScan::physicalColumnOfTriplePosition(size_t position) const {
+  // The raw result of a permutation scan lays out its variable columns in the
+  // key order of the permutation. The fixed components of the triple form the
+  // prefix of the key order and don't produce a column, so the variable at
+  // key-order index `i` (where `i >= 3 - numVariables_`) is the physical output
+  // column `i - (3 - numVariables_)`.
+  const auto& keys = permutation().keyOrder().keys();
+  for (size_t i = 3 - numVariables_; i < 3; ++i) {
+    if (keys.at(i) == position) {
+      return static_cast<ColumnIndex>(i - (3 - numVariables_));
+    }
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::getColumnPermutationForResult() const {
+  auto isContained = [this](const Variable& var) {
+    return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
+  };
+  std::vector<ColumnIndex> result;
+  // The s/p/o variables, in canonical (subject, predicate, object) order. For
+  // each, look up its column in the physical (permutation-ordered) scan output.
+  std::array<const TripleComponent*, 3> triple{&subject_, &predicate_,
+                                               &object_};
+  for (size_t position = 0; position < 3; ++position) {
+    const auto& component = *triple.at(position);
+    if (component.isVariable() && isContained(component.getVariable())) {
+      result.push_back(physicalColumnOfTriplePosition(position));
+    }
+  }
+  // The additional columns keep their relative order and always come after the
+  // s/p/o columns, both in the physical output and in the canonical layout. In
+  // the physical output the additional column `i` is at index `numVariables_ +
+  // i`.
+  for (size_t i = 0; i < additionalVariables_.size(); ++i) {
+    if (isContained(additionalVariables_.at(i))) {
+      result.push_back(numVariables_ + i);
+    }
   }
   return result;
 }
