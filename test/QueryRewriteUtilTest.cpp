@@ -67,6 +67,24 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
 //______________________________________________________________________________
 
 // _____________________________________________________________________________
+TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
+  auto [expr1, exp1] = makeDe9imRelation();
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*expr1), exp1);
+
+  // Not a `geof:relate` call
+  auto [expr2, exp2] = makeUnrelated();
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*expr2),
+                         std::nullopt);
+
+  // Invalid DE-9IM pattern (wrong length / characters) is rejected
+  auto invalidPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("invalid")));
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*invalidPtr),
+                         std::nullopt);
+}
+
+// _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   auto D = &ValueId::makeFromDouble;
 
@@ -95,6 +113,23 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
       std::move(unrelExprSharedPtr),
       "<http://www.w3.org/2005/xpath-functions/math#pow>(?a, ?b) <= 10.0"}};
   ASSERT_FALSE(rewriteFilterToSpatialJoinConfig(unrelFilter).has_value());
+
+  // Construct `FILTER(geof:relate(?a, ?b, "T*T***T**"))`
+  auto [de9imExpr, de9imCall] = makeDe9imRelation();
+  std::shared_ptr<SparqlExpression> de9imSharedPtr = std::move(de9imExpr);
+  SparqlFilter de9imFilter{
+      SparqlExpressionPimpl{std::move(de9imSharedPtr),
+                            "<http://www.opengis.net/def/function/geosparql/"
+                            "relate>(?a, ?b, \"T*T***T**\")"}};
+
+  auto de9imSjConf = rewriteFilterToSpatialJoinConfig(de9imFilter);
+  ASSERT_TRUE(de9imSjConf.has_value());
+  ASSERT_EQ(de9imSjConf.value().left_, V{"?a"});
+  ASSERT_EQ(de9imSjConf.value().right_, V{"?b"});
+  ASSERT_EQ(de9imSjConf.value().joinType_, DE9IM);
+  const auto& de9imTask =
+      std::get<LibSpatialJoinConfig>(de9imSjConf.value().task_);
+  ASSERT_EQ(de9imTask.de9imFilter_, parseDe9imFilter("T*T***T**"));
 }
 
 // TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +

@@ -1600,6 +1600,38 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType;
+
+  std::string query =
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:relate(?y, ?b, \"T*T***T**\"))  }";
+  h::expect(query, ::testing::AllOf(
+                       h::spatialJoinFilterSubstitute(
+                           -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                           PayloadVariables::all(), algo, DE9IM,
+                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+                       h::RootOperation<::SpatialJoin>(AD_PROPERTY(
+                           ::SpatialJoin, getDe9imFilter,
+                           ::testing::Eq(parseDe9imFilter("T*T***T**"))))));
+
+  // Geo relate filter with the same variable twice is not allowed
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "FILTER geof:relate(?b, ?b, \"T*T***T**\") . }",
+                ::testing::_),
+      ::testing::HasSubstr("Variable ?b on both sides"));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
