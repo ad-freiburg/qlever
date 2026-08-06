@@ -12,9 +12,11 @@
 #include <absl/strings/str_cat.h>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/ConstructDeduplicator.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
+#include "util/Views.h"
 
 namespace qlever::constructExport {
 
@@ -40,26 +42,55 @@ std::optional<EvaluatedTerm> instantiateTerm(
       term);
 }
 
+namespace {
+// Instantiates one template triple for one result row, or returns
+// `nullopt` if a term is undefined or the triple is a duplicate under
+// `deduplication`.
+std::optional<EvaluatedTriple> tryInstantiateTriple(
+    const PreprocessedTriple& triple, const BatchEvaluationResult& batchResult,
+    size_t rowInBatch, size_t blankNodeRowId, size_t tripleIdx,
+    const PreprocessedConstructTemplate& tmpl,
+    const std::optional<DeduplicationParams>& deduplication) {
+  auto instantiate = [&triple, &batchResult, rowInBatch,
+                      blankNodeRowId](size_t pos) {
+    return instantiateTerm(triple.at(pos), batchResult, rowInBatch,
+                           blankNodeRowId);
+  };
+  auto subject = instantiate(0);
+  auto predicate = instantiate(1);
+  auto object = instantiate(2);
+  if (!subject || !predicate || !object) {
+    return std::nullopt;
+  }
+  if (deduplication) {
+    const size_t rowIdxInIdTable =
+        deduplication.value().ctx_.get().firstRow_ + rowInBatch;
+    if (!deduplication.value().deduplicator_.get().isNew(
+            tripleIdx, rowIdxInIdTable, tmpl, deduplication.value().ctx_)) {
+      return std::nullopt;
+    }
+  }
+  return EvaluatedTriple{*subject, *predicate, *object};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::vector<EvaluatedTriple> instantiateBatch(
     const PreprocessedConstructTemplate& tmpl,
-    const BatchEvaluationResult& batchResult, size_t batchOffset) {
+    const BatchEvaluationResult& batchResult, size_t batchOffset,
+    std::optional<DeduplicationParams> deduplicationParams) {
   std::vector<EvaluatedTriple> triples;
   triples.reserve(batchResult.numRows_ * tmpl.preprocessedTriples_.size());
 
-  for (size_t rowInBatch : ql::views::iota(size_t{0}, batchResult.numRows_)) {
+  for (const size_t rowInBatch :
+       ad_utility::integerRange(batchResult.numRows_)) {
     const size_t blankNodeRowId = batchOffset + rowInBatch;
-    for (const auto& triple : tmpl.preprocessedTriples_) {
-      auto instantiate = [&triple, &batchResult, rowInBatch,
-                          blankNodeRowId](size_t pos) {
-        return instantiateTerm(triple[pos], batchResult, rowInBatch,
-                               blankNodeRowId);
-      };
-      auto subject = instantiate(0);
-      auto predicate = instantiate(1);
-      auto object = instantiate(2);
-      if (subject && predicate && object) {
-        triples.push_back(EvaluatedTriple{*subject, *predicate, *object});
+    for (auto&& [tripleIdx, triple] :
+         ::ranges::views::enumerate(tmpl.preprocessedTriples_)) {
+      if (auto instantiated = tryInstantiateTriple(
+              triple, batchResult, rowInBatch, blankNodeRowId,
+              static_cast<size_t>(tripleIdx), tmpl, deduplicationParams)) {
+        triples.push_back(std::move(*instantiated));
       }
     }
   }
@@ -72,9 +103,9 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
     // IRI, blank node, or vocab-indexed literal: already in final form.
     return term.rdfTermString_;
   }
-  const char* i = XSD_INT_TYPE;
-  const char* d = XSD_DECIMAL_TYPE;
-  const char* b = XSD_BOOLEAN_TYPE;
+  const auto* i = static_cast<const char*>(XSD_INT_TYPE);
+  const auto* d = static_cast<const char*>(XSD_DECIMAL_TYPE);
+  const auto* b = static_cast<const char*>(XSD_BOOLEAN_TYPE);
 
   // Note: XSD_DOUBLE_TYPE values (for example "NaN", "INF", "-INF") always
   // include the datatype.
@@ -97,7 +128,7 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
 
   const auto& [subject, predicate, object] = evaluatedTriple;
 
-  bool includeDataType = (format == ntriples);
+  const bool includeDataType = (format == ntriples);
 
   std::string s = formatTerm(*subject, includeDataType);
   std::string p = formatTerm(*predicate, includeDataType);

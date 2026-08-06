@@ -25,6 +25,7 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RebuildIndexStrategy.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -252,6 +253,12 @@ struct EngineConfig : CommonConfig {
   // after a restart). To revert to the state of the index without updates,
   // simply delete this file.
   bool persistUpdates_ = true;
+
+  // If set, an index rebuild (the same operation as the `cmd=rebuild-index`
+  // HTTP request) is triggered automatically in the background after an update,
+  // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
+  // (the default), rebuilds are only triggered manually.
+  std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
 
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
