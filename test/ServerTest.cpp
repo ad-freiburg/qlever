@@ -47,7 +47,7 @@ auto parseQuery(std::string query,
 // with a message that matches `messageMatcher`.
 auto expectForbiddenError = [](auto call, auto messageMatcher,
                                ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+                                   AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   try {
     call();
