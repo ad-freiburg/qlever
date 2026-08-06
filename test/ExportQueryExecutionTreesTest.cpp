@@ -7,13 +7,9 @@
 #include <gmock/gmock.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/IndexScan.h"
-#include "engine/QueryExportTypes.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
-#include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
-#include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -2101,7 +2097,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
 }
 
 // _____________________________________________________________________________
-// Regression test for the `Global` deduplication of CONSTRUCT results: the same
+// Regression test for the `Full` deduplication of CONSTRUCT results: the same
 // RDF term may reach the CONSTRUCT template through two different kinds of
 // `Id`. A term that comes straight from the data is a `VocabIndex` `Id`, while
 // a term computed by an expression such as `STR` is materialized in the query's
@@ -2113,12 +2109,7 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
 // `ConstructDeduplicator::canonicalize` maps the `LocalVocabIndex` `Id` back
 // onto the index vocabulary's `VocabIndex` `Id`, the two keys differ and the
 // duplicate survives.
-//
-// DISABLED: this test can only pass once the `ConstructDeduplicator` is wired
-// into the CONSTRUCT export, which happens in the next PR of this series.
-// Enable it there.
-TEST(ExportQueryExecutionTrees,
-     DISABLED_ConstructGlobalDeduplicationAcrossLocalVocab) {
+TEST(ExportQueryExecutionTrees, ConstructFullDeduplicationAcrossLocalVocab) {
   const std::string kg =
       "<http://example.org/x> <http://example.org/name> \"Alice\" . "
       "<http://example.org/y> <http://example.org/label> \"Alice\" .";
@@ -2145,13 +2136,136 @@ TEST(ExportQueryExecutionTrees,
         absl::StrCat(expected, expected));
   }
 
-  // With `Global` deduplication the triple is emitted exactly once.
+  // With `Full` deduplication the triple is emitted exactly once.
   {
     auto cleanup =
         setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
-            DeduplicationMode::global());
+            DeduplicationMode::full());
     EXPECT_EQ(
         runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
         expected);
   }
 }
+
+// A minimal smoke test that the deduplication is wired end-to-end. VALUES
+// clause that emits the identical triple 3 times.
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesNoneKeepsDuplicates) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>)"
+      " } }";
+  const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::none());
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            absl::StrCat(expected, expected, expected));
+}
+
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesFullDropsDuplicates) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>)"
+      " } }";
+  const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::full());
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            expected);
+}
+
+// A-B-A pattern with a batch-wise window of 1: A inserted, B inserted
+// (evicts A), A inserted again (evicts B, A is new again). All three insertions
+// are distinct insertions from the deduplicator's point of view, so all three
+// are emitted.
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesLruAbaPatternEvictsAndReemits) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>) (<ex:a> <ex:a> <ex:a>)"
+      " } }";
+  const std::string a = "<ex:a> <ex:a> <ex:a> .\n";
+  const std::string b = "<ex:b> <ex:b> <ex:b> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::lru(1));
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            absl::StrCat(a, b, a));
+}
+
+namespace {
+// ____________________________________________________________________________
+// Formats the single triple `<ex:c> <ex:c> <ex:c> .` for one lowercase
+// letter `c`, used by `ConstructDeduplicationLruWindowTest`.
+std::string lruWindowTriple(char c) {
+  return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
+                      "> <ex:", std::string(1, c), "> .\n");
+}
+}  // namespace
+
+// Batchwise deduplication with a stream of 5 unique triples, each repeated
+// twice. Thus we expect 10 triples total. The window size controls how many
+// duplicates survive.
+struct LruWindowParam {
+  size_t windowSize;
+  // The letters (each standing for one `<ex:c> <ex:c> <ex:c>` triple)
+  // expected to survive deduplication, in order.
+  std::string expectedLetters;
+};
+
+class ConstructDeduplicationLruWindowTest
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<LruWindowParam> {};
+
+TEST_P(ConstructDeduplicationLruWindowTest, window) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>)"
+      "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
+      "  (<ex:e> <ex:e> <ex:e>)"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>)"
+      "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
+      "  (<ex:e> <ex:e> <ex:e>)"
+      " } }";
+
+  std::string expected;
+  for (char letter : GetParam().expectedLetters) {
+    absl::StrAppend(&expected, lruWindowTriple(letter));
+  }
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::lru(GetParam().windowSize));
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    WindowSizes, ConstructDeduplicationLruWindowTest,
+    ::testing::Values(
+        // window 4: A is 5 positions back when it reappears. Thus, it has
+        // already been evicted from the deduplication window when it re-appears
+        // in the triple stream and is thus emitted. All 10 triples survive
+        // (window is too small to catch any repeating triples).
+        LruWindowParam{4, "abcdeabcde"},
+        // window 5: the second 'a' is only 5 positions after the first.
+        // Thus, this triple is still in the deduplication cache when it
+        // re-appears. Suppressed. 'b'-'e' repeats hit the same window
+        // and are suppressed too. Result: 5 unique triples.
+        LruWindowParam{5, "abcde"},
+        // window 10: all duplicates are caught, 5 unique triples remain.
+        LruWindowParam{10, "abcde"}));

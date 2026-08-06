@@ -28,6 +28,7 @@
 
 #include "../ServerTestHelpers.h"
 #include "../util/AsioTestHelpers.h"
+#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/HttpRequestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -804,9 +805,13 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 #ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
   namespace fs = ql::filesystem;
-  cleanDirsWithPrefix("previous.");
-  cleanDirsWithPrefix("rebuild.");
-  cleanDirsWithPrefix("serverIntegration.");
+  // The rebuilds below use the default names for the temporary directory and
+  // for the directory the old index is moved to, and the checks below inspect
+  // all directories with a given prefix. Use a fresh working directory, so that
+  // neither can collide with the directories of another test. It is declared
+  // first, so that it is restored and removed last, i.e. after the `server` and
+  // the `threadPool` below have been destroyed.
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
 
@@ -919,8 +924,6 @@ TEST(IndexRebuilder, serverIntegration) {
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
 
   threadPool.join();
-  cleanDirsWithPrefix("previous.");
-  cleanDirsWithPrefix("serverIntegration.");
 }
 #endif  // __EMSCRIPTEN__
 
@@ -1027,8 +1030,10 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
 // library it needs is not built there.
 #ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
-  cleanDirsWithPrefix("previous.");
-  cleanDirsWithPrefix("rebuild.");
+  // The automatic rebuild below uses the default directory names and the checks
+  // below inspect all directories with a given prefix, see the comment in
+  // `serverIntegration` above for why this needs a fresh working directory.
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
 
   std::string indexName = gtestCurrentTestName();
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
@@ -1129,8 +1134,6 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
                 ::testing::HasSubstr("Automatic index rebuild failed: boom"));
     Server::logAutomaticRebuildFailure(nullptr);
   }
-
-  cleanDirsWithPrefix("previous.");
 }
 #endif  // __EMSCRIPTEN__
 

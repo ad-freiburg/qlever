@@ -50,6 +50,8 @@ RuntimeParameters::RuntimeParameters() {
   add(divisionByZeroIsUndef_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
+  add(patternTrickNumThreads_);
+  add(parallelSortNumThreads_);
   add(spatialJoinPrefilterMaxSize_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
@@ -72,14 +74,25 @@ RuntimeParameters::RuntimeParameters() {
   logLevel_.setOnUpdateAction(
       [](LogLevel level) { ad_utility::setRuntimeLogLevel(level); });
 
-  defaultQueryTimeout_.setParameterConstraint(
-      [](std::chrono::seconds value, std::string_view parameterName) {
-        if (value <= std::chrono::seconds{0}) {
-          throw std::runtime_error{absl::StrCat(
-              "Parameter ", parameterName, " must be strictly positive, was ",
-              value.count(), "s")};
+  // A constraint that rejects values that are not strictly positive, with a
+  // readable error message. Works for integral types and for
+  // `std::chrono::seconds`.
+  auto mustBeStrictlyPositive = [](auto value, std::string_view parameterName) {
+    if (value <= decltype(value){}) {
+      auto valueAsString = [&value]() {
+        if constexpr (std::is_integral_v<decltype(value)>) {
+          return absl::StrCat(value);
+        } else {
+          return absl::StrCat(std::chrono::seconds{value}.count(), "s");
         }
-      });
+      }();
+      throw std::runtime_error{absl::StrCat("Parameter ", parameterName,
+                                            " must be strictly positive, was ",
+                                            valueAsString)};
+    }
+  };
+  defaultQueryTimeout_.setParameterConstraint(mustBeStrictlyPositive);
+  lazyIndexScanNumThreads_.setParameterConstraint(mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________

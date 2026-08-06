@@ -345,7 +345,6 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-constexpr inline size_t NUM_SORT_THREADS = 4;
 /// ANSI escape sequence for bold text in the console
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.
