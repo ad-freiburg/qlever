@@ -148,6 +148,21 @@ TEST(ParseProxyUrl, malformedUrlsAreRejected) {
 }
 
 // _____________________________________________________________________________
+TEST(ParseProxyUrl, errorMessagesRedactCredentials) {
+  // The error messages end up in the server log, so they must not contain the
+  // proxy password, no matter which check the URL fails.
+  using ::testing::AllOf;
+  using ::testing::Not;
+  auto redacted = AllOf(HasSubstr("<credentials>"), Not(HasSubstr("secret")));
+  AD_EXPECT_THROW_WITH_MESSAGE(parseProxyUrl("socks5://user:secret@proxy:1080"),
+                               redacted);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parseProxyUrl("http://user:secret@proxy:3128/some/path"), redacted);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parseProxyUrl("http://user:secret@proxy:not-a-port"), redacted);
+}
+
+// _____________________________________________________________________________
 TEST(Proxy, asStringForLoggingHidesCredentials) {
   EXPECT_EQ(parseProxyUrl("http://proxy:3128")->asStringForLogging(),
             "proxy:3128");
@@ -196,6 +211,17 @@ TEST_F(ProxyEnvironmentTest, uppercaseHttpProxyIsIgnored) {
   // request header.
   setEnv("HTTP_PROXY", "http://should-be-ignored:3128");
   EXPECT_EQ(proxyFromEnvironment(), std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST_F(ProxyEnvironmentTest, uppercaseHttpProxyHintFiresOnlyWhenIgnored) {
+  EXPECT_FALSE(uppercaseHttpProxyIsSetButIgnored());
+  setEnv("HTTP_PROXY", "http://proxy:3128");
+  EXPECT_TRUE(uppercaseHttpProxyIsSetButIgnored());
+  // As soon as the lowercase variable configures a proxy, the hint would only
+  // be noise.
+  setEnv("http_proxy", "http://proxy:3128");
+  EXPECT_FALSE(uppercaseHttpProxyIsSetButIgnored());
 }
 
 // _____________________________________________________________________________

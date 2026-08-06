@@ -735,14 +735,16 @@ TYPED_TEST(HttpServerBodyTest, MaterializeBody) {
 namespace {
 using ad_utility::httpProxy::Proxy;
 
-// An echo handler that reports the request target and the `Host` header, which
-// is what a proxy needs to see in order to relay a plain HTTP request.
+// An echo handler that reports the request target, the `Host` header, and the
+// `Proxy-Authorization` header, which is what a proxy sees when it relays a
+// plain HTTP request.
 auto makeProxyEchoServer() {
   auto handler = [](auto req, auto&& send,
                     auto...) -> boost::asio::awaitable<void> {
     co_await send(createOkResponse(
-        absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host])), req,
-        ad_utility::MediaType::textPlain));
+        absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host]), "\n",
+                     toStd(req[field::proxy_authorization])),
+        req, ad_utility::MediaType::textPlain));
   };
   return TestHttpServer{std::move(handler)};
 }
@@ -825,7 +827,28 @@ TEST(HttpProxy, plainHttpRequestIsRelayedByTheProxy) {
       "text/plain", "text/plain", 0, proxy);
   EXPECT_EQ(response.status_, status::ok);
   EXPECT_EQ(toString(std::move(response.body_)),
-            "http://example.org:8080/sparql?query=X\nexample.org");
+            "http://example.org:8080/sparql?query=X\nexample.org\n");
+}
+
+// Credentials in the proxy configuration are sent as a `Proxy-Authorization`
+// header on every relayed plain HTTP request; the proxy consumes this header
+// and does not forward it (RFC 9110, 11.7.2).
+TEST(HttpProxy, plainHttpRequestSendsProxyAuthorization) {
+  auto proxyServer = makeProxyEchoServer();
+  proxyServer.runInOwnThread();
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  std::string authorization =
+      absl::StrCat("Basic ", absl::Base64Escape("user:password"));
+  Proxy proxy{"localhost", std::to_string(proxyServer.getPort()),
+              authorization};
+  auto response = sendHttpOrHttpsRequestWithProxy(
+      Url{"http://example.org:8080/sparql"}, handle, verb::get, "",
+      "text/plain", "text/plain", 0, proxy);
+  EXPECT_EQ(response.status_, status::ok);
+  EXPECT_EQ(toString(std::move(response.body_)),
+            absl::StrCat("http://example.org:8080/sparql\nexample.org\n",
+                         authorization));
 }
 
 // For HTTPS, the client first asks the proxy for a tunnel via `CONNECT`. Check

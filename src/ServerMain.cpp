@@ -319,6 +319,15 @@ int main(int argc, char** argv) {
       AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
                   << proxy->asStringForLogging() << std::endl;
     }
+    // The uppercase `HTTP_PROXY` is deliberately ignored (following `curl`,
+    // see `HttpProxyConfig.h`), but silently doing so would be confusing, so
+    // leave a hint.
+    if (ad_utility::httpProxy::uppercaseHttpProxyIsSetButIgnored()) {
+      AD_LOG_INFO << "The environment variable `HTTP_PROXY` (uppercase) is "
+                     "set, but deliberately ignored; use the lowercase "
+                     "`http_proxy` to configure a proxy for outgoing requests"
+                  << std::endl;
+    }
   } catch (const std::exception& e) {
     AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
                  << e.what() << std::endl;

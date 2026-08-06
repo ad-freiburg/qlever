@@ -39,6 +39,12 @@ namespace {
 // Note: this is a free function and not a member of `HttpClientImpl`, because
 // the explicit instantiation for the plain-HTTP case at the bottom of this file
 // would instantiate all members, and `beast::tcp_stream` has no `next_layer()`.
+//
+// TODO: Like the `connect` and `handshake` calls in the constructor below,
+// this exchange is blocking and has no timeout, so a proxy that accepts the
+// TCP connection but never answers blocks the calling thread indefinitely
+// (and out of reach of the cancellation handle). The whole connection setup
+// should eventually get a deadline.
 void establishProxyTunnel(tcp::socket& socket, const Proxy& proxy,
                           std::string_view host, std::string_view port) {
   // The target of a `CONNECT` request is in authority form, that is
@@ -113,7 +119,12 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
     auto const results = resolver.resolve(connectHost, connectPort);
     stream_->connect(results);
     // No tunnel needed: a plain HTTP request is relayed by the proxy based on
-    // the absolute form of its request target, see `absoluteFormTarget`.
+    // the absolute form of its request target, see `absoluteFormTarget`. The
+    // proxy credentials, however, have to go on every relayed request, see
+    // `sendRequest`.
+    if (proxy.has_value()) {
+      proxyAuthorization_ = proxy->authorization_;
+    }
   } else {
     static_assert(std::is_same_v<StreamType, ssl::stream<tcp::socket>>,
                   "StreamType must be either boost::beast::tcp_stream or "
@@ -178,6 +189,13 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.method(method);
   request.target(target);
   request.set(http::field::host, host);
+  // A relayed plain HTTP request carries the proxy credentials on every
+  // request; the proxy consumes this header and does not forward it (RFC 9110,
+  // 11.7.2). For HTTPS the credentials are sent on the `CONNECT` request
+  // instead, see `establishProxyTunnel`.
+  if (!client->proxyAuthorization_.empty()) {
+    request.set(http::field::proxy_authorization, client->proxyAuthorization_);
+  }
   request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
   request.set(http::field::accept, acceptHeader);
   request.set(http::field::content_type, contentTypeHeader);

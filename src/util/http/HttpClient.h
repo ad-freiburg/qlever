@@ -110,6 +110,12 @@ class HttpClientImpl {
       workGuard_ = boost::asio::make_work_guard(ioContext_);
   std::unique_ptr<boost::asio::ssl::context> ssl_context_;
   std::unique_ptr<StreamType> stream_;
+  // The value for the `Proxy-Authorization` header of relayed plain HTTP
+  // requests (empty if there is no proxy or it needs no authentication). Only
+  // used for plain HTTP: for HTTPS, the credentials are sent on the `CONNECT`
+  // request instead, and must not appear inside the TLS session, where the
+  // target server would see them.
+  std::string proxyAuthorization_;
 };
 
 // Instantiation for HTTP.

@@ -24,6 +24,29 @@
 
 namespace ad_utility::httpProxy {
 
+namespace {
+// Replace the userinfo part of `url` (anything between the scheme and an `@`)
+// by `<credentials>`, for use in error messages: the URL may contain a proxy
+// password, and the error messages end up in the server log. The heuristic is
+// deliberately conservative: everything up to the last `@` is treated as
+// userinfo, so a password is redacted even when the URL is too malformed to
+// parse.
+std::string redactCredentials(std::string_view url) {
+  size_t atPosition = url.rfind('@');
+  if (atPosition == std::string_view::npos) {
+    return std::string{url};
+  }
+  size_t schemeEnd = url.find("://");
+  size_t userinfoStart =
+      schemeEnd == std::string_view::npos ? 0 : schemeEnd + 3;
+  if (atPosition < userinfoStart) {
+    return std::string{url};
+  }
+  return absl::StrCat(url.substr(0, userinfoStart), "<credentials>",
+                      url.substr(atPosition));
+}
+}  // namespace
+
 // ____________________________________________________________________________
 std::string Proxy::asStringForLogging() const {
   return absl::StrCat(host_, ":", port_,
@@ -48,7 +71,7 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
       boost::urls::parse_uri(withScheme);
   if (parsed.has_error()) {
     throw std::runtime_error(absl::StrCat(
-        "The proxy URL \"", proxyUrl,
+        "The proxy URL \"", redactCredentials(proxyUrl),
         "\" could not be parsed: ", parsed.error().message(),
         ". Expected a URL of the form [http://][user[:password]@]host[:port]"));
   }
@@ -56,26 +79,28 @@ std::optional<Proxy> parseProxyUrl(std::string_view proxyUrl) {
 
   if (url.scheme() != "http") {
     throw std::runtime_error(absl::StrCat(
-        "The proxy URL \"", proxyUrl, "\" uses the scheme \"",
-        std::string_view{url.scheme()},
+        "The proxy URL \"", redactCredentials(proxyUrl),
+        "\" uses the scheme \"", std::string_view{url.scheme()},
         R"(", but QLever only supports plain HTTP proxies (scheme "http"). )"
         "Note that a plain HTTP proxy can still relay HTTPS requests; it is "
         "only the connection to the proxy itself that must not use TLS."));
   }
   if (url.host().empty()) {
-    throw std::runtime_error(absl::StrCat("The proxy URL \"", proxyUrl,
+    throw std::runtime_error(absl::StrCat("The proxy URL \"",
+                                          redactCredentials(proxyUrl),
                                           "\" does not specify a host"));
   }
   // A proxy URL is an authority, not a resource; a path, query or fragment
   // would silently be ignored, so reject it instead of pretending to honor it.
   if (!url.path().empty() && url.path() != "/") {
-    throw std::runtime_error(absl::StrCat("The proxy URL \"", proxyUrl,
-                                          "\" must not have a path, but has \"",
-                                          url.path(), "\""));
+    throw std::runtime_error(
+        absl::StrCat("The proxy URL \"", redactCredentials(proxyUrl),
+                     "\" must not have a path, but has \"", url.path(), "\""));
   }
   if (url.has_query() || url.has_fragment()) {
-    throw std::runtime_error(absl::StrCat(
-        "The proxy URL \"", proxyUrl, "\" must not have a query or fragment"));
+    throw std::runtime_error(
+        absl::StrCat("The proxy URL \"", redactCredentials(proxyUrl),
+                     "\" must not have a query or fragment"));
   }
 
   Proxy proxy;
@@ -104,6 +129,15 @@ std::optional<Proxy> proxyFromEnvironment() {
   // Note that `parseProxyUrl` maps the empty string to "no proxy", so a
   // variable that is set but empty needs no special handling here.
   return parseProxyUrl(value == nullptr ? "" : value);
+}
+
+// ____________________________________________________________________________
+bool uppercaseHttpProxyIsSetButIgnored() {
+  auto isSetAndNonEmpty = [](const char* name) {
+    const char* value = std::getenv(name);
+    return value != nullptr && !std::string_view{value}.empty();
+  };
+  return isSetAndNonEmpty("HTTP_PROXY") && !isSetAndNonEmpty("http_proxy");
 }
 
 namespace {

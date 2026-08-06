@@ -78,6 +78,12 @@ std::string absoluteFormTarget(std::string_view host, std::string_view port,
 // Exposed mostly for testing; production code should use `globalProxy()` below.
 std::optional<Proxy> proxyFromEnvironment();
 
+// True if the uppercase `HTTP_PROXY` is set in the environment, but the
+// lowercase `http_proxy` is not, so that no proxy is configured at all.
+// Callers can use this to log a hint, so that the deliberate ignoring of the
+// uppercase variable (see the file comment above) does not confuse users.
+bool uppercaseHttpProxyIsSetButIgnored();
+
 // The proxy for this process, read from the environment on first use. Throws if
 // the environment holds a malformed proxy URL; `qlever-server` calls this early
 // during startup so that such a misconfiguration is reported before the index
