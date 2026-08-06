@@ -149,8 +149,7 @@ class Server {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
-  using HttpErrorResponse = ad_utility::httpUtils::http::response<
-      ad_utility::httpUtils::http::string_body>;
+  using HttpErrorResponse = ad_utility::httpUtils::ResponseT;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -180,7 +179,7 @@ class Server {
       reportHttpError(std::string_view message,
                       ad_utility::httpUtils::http::status status,
                       const RequestT& request,
-                      ad_utility::metrics::HttpErrorType errorType);
+                      ad_utility::metrics::MetricLabel errorType);
 
   // The `HttpHandler` passed to `HttpServer` in `run()`. Replies immediately
   // to CORS preflight (OPTIONS) requests, otherwise dispatches to `process`

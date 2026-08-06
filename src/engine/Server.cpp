@@ -124,7 +124,7 @@ CPP_template_def(typename RequestT)(
     Server::HttpErrorResponse Server::reportHttpError(std::string_view message,
                                                       http::status status,
                                                       const RequestT& request,
-                                                      HttpErrorType errorType) {
+                                                      MetricLabel errorType) {
   using namespace ad_utility::httpUtils;
   AD_LOG_ERROR << message << std::endl;
   metrics_->httpErrors_->Add(1, {errorType});
@@ -172,7 +172,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // below requires `co_await` and thus has to happen outside the catch
   // block; building the error response itself is synchronous and can happen
   // right here.
-  std::optional<http::response<http::string_body>> errorResponse;
+  std::optional<HttpErrorResponse> errorResponse;
   try {
     co_await process(request, sendWithAccessControlHeaders);
   } catch (const HttpError& e) {
