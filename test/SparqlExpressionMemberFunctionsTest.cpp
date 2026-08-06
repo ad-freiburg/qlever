@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
+#include "engine/sparqlExpressions/PrefixMatchExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -262,7 +263,7 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
                                     "RAND()"};
   EXPECT_FALSE(nonDetPimpl.isDeterministic());
 
-  EXPECT_TRUE((PrefixRegexExpression{makeVar(), "prefix", Variable{"?x"}}
+  EXPECT_TRUE((PrefixMatchExpression{makeVar(), "prefix", Variable{"?x"}}
                    .isDeterministic()));
 
   EXPECT_TRUE((SingleUseExpression{Id::makeFromInt(1)}.isDeterministic()));

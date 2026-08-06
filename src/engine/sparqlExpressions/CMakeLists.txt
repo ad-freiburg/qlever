@@ -8,6 +8,8 @@ add_library(sparqlExpressions
         AggregateExpression.cpp
         StdevExpression.cpp
         RegexExpression.cpp
+        RegexHelpers.cpp
+        PrefixMatchExpression.cpp
         NumericUnaryExpressions.cpp
         NumericBinaryExpressions.cpp
         DateExpressions.cpp

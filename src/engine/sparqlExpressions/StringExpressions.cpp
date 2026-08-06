@@ -11,6 +11,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/RegexHelpers.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 #include "index/TripleComponentConversions.h"
@@ -364,17 +365,14 @@ struct MergeFlagsIntoRegex {
     if (!flags.has_value() || !regex.has_value()) {
       return Id::makeUndefined();
     }
-    auto firstInvalidFlag = flags.value().find_first_not_of("imsU");
-    if (firstInvalidFlag != std::string::npos) {
+    // Note that the same merging is applied at construction time to determine
+    // whether the regex allows prefiltering, see
+    // `getConstantRegexForPrefiltering` in `RegexExpression.cpp`.
+    auto merged = mergeFlagsIntoRegex(std::move(regex).value(), flags.value());
+    if (!merged.has_value()) {
       return Id::makeUndefined();
     }
-
-    // In Google RE2 the flags are directly part of the regex.
-    std::string result =
-        flags.value().empty()
-            ? std::move(regex.value())
-            : absl::StrCat("(?", flags.value(), ":", regex.value() + ")");
-    return toLiteral(std::move(result));
+    return toLiteral(merged.value());
   }
 };
 
