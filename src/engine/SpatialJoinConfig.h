@@ -56,7 +56,7 @@ using De9imFilterString = std::array<char, 9>;
 // `De9imFilterString` above), return it as a `De9imFilterString`, else
 // `std::nullopt`. Implemented as a simple character-class check instead of a
 // regex library to keep this frequently-included header cheap to compile.
-constexpr std::optional<De9imFilterString> parseDe9imFilter(
+constexpr std::optional<De9imFilterString> validateDe9imFilterString(
     std::string_view filter) {
   if (filter.size() != 9) {
     return std::nullopt;
