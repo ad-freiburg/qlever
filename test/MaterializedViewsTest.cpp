@@ -1377,17 +1377,17 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto viewScanWithBind =
         viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 3,
                  AC{{3, V{"?bind"}}});
-    qpExpect(
-        qlv(), bindThroughSpatialJoin,
-        h::spatialJoin(
-            100, -1, V{"?o"}, V{"?o2"}, std::nullopt, PayloadVariables::all(),
-            SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN_DIST,
-            // Matcher for left child of `SpatialJoin`: Scan on
-            // view without `BIND` push down.
-            viewScanNoBind,
-            // Matcher for right child of `SpatialJoin`: Scan on
-            // view with `BIND` push down due to matching variables.
-            viewScanWithBind));
+    qpExpect(qlv(), bindThroughSpatialJoin,
+             h::spatialJoin(
+                 100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
+                 PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                 SpatialJoinType::WITHIN_DIST, std::nullopt,
+                 // Matcher for left child of `SpatialJoin`: Scan on
+                 // view without `BIND` push down.
+                 viewScanNoBind,
+                 // Matcher for right child of `SpatialJoin`: Scan on
+                 // view with `BIND` push down due to matching variables.
+                 viewScanWithBind));
   }
 
   // The `2 * ?o + 1` expression.
@@ -1737,7 +1737,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     auto sjMatcher = h::spatialJoin(
         -1, -1, V{"?geometry1"}, V{"?geometry2"}, std::nullopt,
         PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
-        SpatialJoinType::INTERSECTS,
+        SpatialJoinType::INTERSECTS, std::nullopt,
         // Push down of automatic `BIND`s through a `Join`.
         h::Join(viewScan(viewName, "?osm_id1", "?_ql_materialized_view_p",
                          "?geometry1", 4,
