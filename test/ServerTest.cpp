@@ -43,6 +43,21 @@ auto parseQuery(std::string query,
                                   datasets);
 }
 
+// Expect that `call()` throws an `HttpError` with status 403 Forbidden and
+// with a message that matches `messageMatcher`.
+auto expectForbiddenError = [](auto call, auto messageMatcher,
+                               ad_utility::source_location l =
+                                   ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l);
+  try {
+    call();
+    FAIL() << "Expected an `HttpError` to be thrown";
+  } catch (const HttpError& e) {
+    EXPECT_EQ(e.status(), boost::beast::http::status::forbidden);
+    EXPECT_THAT(e.what(), messageMatcher);
+  }
+};
+
 }  // namespace
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
@@ -397,10 +412,12 @@ TEST(ServerTest, configurePinnedResultWithName) {
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
-  // Test with pinNamed but invalid access token - should throw exception
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
-                                            std::nullopt, false, *qec),
+  // Pinning without a valid access token is rejected with 403 Forbidden.
+  expectForbiddenError(
+      [&] {
+        Server::configurePinnedResultWithName(pinNamed, std::nullopt,
+                                              std::nullopt, false, *qec);
+      },
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
@@ -461,9 +478,21 @@ TEST(ServerTest, checkAccessToken) {
   Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      server.checkAccessToken("invalidAccessToken"),
+  // An invalid access token results in a 403 Forbidden response.
+  expectForbiddenError(
+      [&] { server.checkAccessToken("invalidAccessToken"); },
       testing::HasSubstr("Access token was provided but it was invalid"));
+
+  // Same when the server was started without `--access-token` at all.
+  Server serverWithoutToken{4322, 1, "", config};
+  expectForbiddenError(
+      [&] { serverWithoutToken.checkAccessToken("someToken"); },
+      testing::HasSubstr("Access token was provided but server was started "
+                         "without --access-token"));
+
+  // No access token provided at all is not an error here, it just means that
+  // operations requiring one are rejected later.
+  EXPECT_FALSE(serverWithoutToken.checkAccessToken(std::nullopt));
 
   config.persistUpdates_ = false;
 
