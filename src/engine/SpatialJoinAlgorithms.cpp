@@ -455,9 +455,11 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
   cfg.useOBB = false;
   cfg.useDiagBox = true;
   cfg.useFastSweepSkip = true;
-  cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
+  cfg.euclideanDist = false;
+  cfg.haversineApprox = false;
   cfg.computeDE9IM = false;
+  cfg.de9imFilter = ::util::geo::FANY;
   // Never let `libspatialjoin` fall back to a self-join when it considers one
   // side to be empty; QLever's callbacks rely on the first geometry of each
   // result pair coming from the left side and the second one from the right

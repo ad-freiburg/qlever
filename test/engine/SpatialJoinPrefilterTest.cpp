@@ -106,7 +106,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
   checkSweeperTestResult(vMap, testResultWithinDist,
                          {{{WITHIN_DIST, vIdCampus, vIdGkAllee, 0},
                            {WITHIN_DIST, vIdCampus, vIdUni, 0},
-                           {WITHIN_DIST, vIdCampus, vIdMinster, 2225.01}},
+                           {WITHIN_DIST, vIdCampus, vIdMinster, 2225.0275}},
                           {},
                           {},
                           4,
