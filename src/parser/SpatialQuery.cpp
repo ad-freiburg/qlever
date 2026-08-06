@@ -92,7 +92,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
             "exactly 9 characters, each of which must be one of `0`-`2`, "
             "`T`/`F` (or lowercase), or `*`.");
     de9imFilter_ =
-        parseDe9imFilter(asStringViewUnsafe(object.getLiteral().getContent()));
+        validateDe9imFilterString(asStringViewUnsafe(object.getLiteral().getContent()));
     throwIf(!de9imFilter_.has_value(),
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "

@@ -1782,26 +1782,35 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoin, ParseDe9imFilter) {
+  using ::testing::Eq;
+  using ::testing::Optional;
+
   // Valid patterns: digits, upper-/lowercase `T`/`F`, and `*`, in any mix.
-  EXPECT_TRUE(parseDe9imFilter("012TFTF**").has_value());
-  EXPECT_TRUE(parseDe9imFilter("012tftf**").has_value());
-  EXPECT_TRUE(parseDe9imFilter("*********").has_value());
-  EXPECT_TRUE(parseDe9imFilter("2FFF1FFF2").has_value());
-  {
-    auto filter = parseDe9imFilter("012TFTF*t");
-    ASSERT_TRUE(filter.has_value());
-    EXPECT_EQ((std::string_view{filter->data(), filter->size()}), "012TFTF*t");
-  }
+  EXPECT_THAT(validateDe9imFilterString("012TFTF**"),
+              Optional(Eq(De9imFilterString{'0', '1', '2', 'T', 'F', 'T', 'F',
+                                             '*', '*'})));
+  EXPECT_THAT(validateDe9imFilterString("012tftf**"),
+              Optional(Eq(De9imFilterString{'0', '1', '2', 't', 'f', 't', 'f',
+                                             '*', '*'})));
+  EXPECT_THAT(validateDe9imFilterString("*********"),
+              Optional(Eq(De9imFilterString{'*', '*', '*', '*', '*', '*', '*',
+                                             '*', '*'})));
+  EXPECT_THAT(validateDe9imFilterString("2FFF1FFF2"),
+              Optional(Eq(De9imFilterString{'2', 'F', 'F', 'F', '1', 'F', 'F',
+                                             'F', '2'})));
+  EXPECT_THAT(validateDe9imFilterString("012TFTF*t"),
+              Optional(Eq(De9imFilterString{'0', '1', '2', 'T', 'F', 'T', 'F',
+                                             '*', 't'})));
 
   // Invalid: wrong length.
-  EXPECT_FALSE(parseDe9imFilter("").has_value());
-  EXPECT_FALSE(parseDe9imFilter("012TFTF*").has_value());
-  EXPECT_FALSE(parseDe9imFilter("012TFTF***").has_value());
+  EXPECT_EQ(validateDe9imFilterString(""), std::nullopt);
+  EXPECT_EQ(validateDe9imFilterString("012TFTF*"), std::nullopt);
+  EXPECT_EQ(validateDe9imFilterString("012TFTF***"), std::nullopt);
 
   // Invalid: characters outside of `[0-2TFtf*]`.
-  EXPECT_FALSE(parseDe9imFilter("012TFTF*3").has_value());
-  EXPECT_FALSE(parseDe9imFilter("012TFTF*X").has_value());
-  EXPECT_FALSE(parseDe9imFilter("012TFTF* ").has_value());
+  EXPECT_EQ(validateDe9imFilterString("012TFTF*3"), std::nullopt);
+  EXPECT_EQ(validateDe9imFilterString("012TFTF*X"), std::nullopt);
+  EXPECT_EQ(validateDe9imFilterString("012TFTF* "), std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -1822,7 +1831,7 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?area2"});
     SpatialJoinConfiguration config{
         LibSpatialJoinConfig{SpatialJoinType::DE9IM, std::nullopt,
-                             parseDe9imFilter(filterPattern).value()},
+                             validateDe9imFilterString(filterPattern).value()},
         Variable{"?area1"},
         Variable{"?area2"},
         std::nullopt,
