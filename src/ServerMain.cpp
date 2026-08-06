@@ -236,10 +236,10 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
       R"("Controls deduplication of triples in CONSTRUCT query results. "
       "\"none\" (default): no deduplication, every triple is emitted. "
-      "\"global\": a triple is emitted at most once across the entire result. "
-      "\"batchwise:N\" (positive integer N): deduplicate against the N most "
-      "recently seen unique triples per template triple (bounded memory, "
-      "partial deduplication).")");
+      "\"full\": a triple is emitted at most once across the entire result. "
+      "\"lru:N\" (positive integer N): deduplicate against the N most "
+      "recently used unique triples, with one cache shared across all "
+      "template triples (bounded memory, partial deduplication).")");
   add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
