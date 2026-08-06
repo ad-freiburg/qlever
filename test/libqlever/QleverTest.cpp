@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -431,27 +432,6 @@ RebuildSetup setUpRebuild(const std::string& baseFolder) {
       std::move(rebuilt), MaterializedViewsManager{rebuiltBase});
   return {std::move(oldBase), std::move(rebuiltBase), std::move(indexAndViews)};
 }
-
-// Create a fresh (empty) directory named after the currently running test and
-// make it the working directory. The returned cleanup first restores the
-// previous working directory and then removes that directory again, so both
-// steps live in a single cleanup to fix their order. Needed by the tests that
-// deal with base names without a directory component, as those are resolved
-// against the working directory.
-[[nodiscard]] auto useFreshWorkingDirectory() {
-  auto oldCwd = ql::filesystem::current_path();
-  std::string folder = gtestCurrentTestName();
-  // Leftovers from a previous run would break the checks for directories that
-  // must not exist yet.
-  ql::filesystem::remove_all(folder);
-  ql::filesystem::create_directory(folder);
-  ql::filesystem::current_path(folder);
-  return absl::Cleanup{
-      [oldCwd = std::move(oldCwd), folder = std::move(folder)] {
-        ql::filesystem::current_path(oldCwd);
-        ql::filesystem::remove_all(folder);
-      }};
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -557,7 +537,7 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
 // bare file names as well, otherwise the base-name prefix substitution of the
 // move fails on the globbed files (vocabulary, views).
 TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
-  auto cleanup = useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
   ql::filesystem::create_directory("rebuild.tmp");
   Index rebuilt = ad_utility::testing::makeTestIndex(
@@ -595,7 +575,7 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
 // of that directory has to be skipped (in particular, the working directory
 // itself must not be removed).
 TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareNewIndexSource) {
-  auto cleanup = useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
   Index rebuilt = ad_utility::testing::makeTestIndex(
       "rebuilt", "<a> <b> <c> . <d> <e> <f> .");
@@ -943,7 +923,7 @@ TEST(LibQlever, clearCache) {
 // to lie inside the directory of the current index (which is the working
 // directory here as the index is served from the bare base name `index`).
 TEST(Qlever, makeIndexRebuildConfig) {
-  auto cleanup = useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   Index index = ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
   auto makeConfig = [&index](
                         std::optional<std::string> rebuildTmpDir,
