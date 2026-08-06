@@ -308,13 +308,7 @@ FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
         GIT_TAG 0d7ab4d9bd1d1cf72f218f6de874745e52f3c0c2
-        # `webMercMeterDist()`'s multi-geometry overload (used for all our
-        # distance computations that are not point-to-point) accidentally
-        # applies `cos()` twice (once inside `webMercDistFactor()`, which
-        # already returns a cosine, and once again on its result), which
-        # over-estimates most distances by 10-20%. Patch this back to the
-        # (mathematically equivalent) formula used before this dependency
-        # update, until this is fixed upstream.
+        # TODO Temporary fix. remove asap
         PATCH_COMMAND git apply --ignore-whitespace ${CMAKE_SOURCE_DIR}/misc/patches/spatialjoin-fix-webmerc-dist-factor.patch
         SYSTEM
         EXCLUDE_FROM_ALL
