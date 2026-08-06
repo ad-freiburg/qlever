@@ -94,7 +94,8 @@ TEST(GeoSparqlHelpers, WktDist) {
   EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.68, 0.02);
   EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421676, 15);
   EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 262.02, 0.02);
-  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676, 15);
+  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676,
+              15);
 
   // Distance between WKT non-point literals.
   EXPECT_NEAR(
