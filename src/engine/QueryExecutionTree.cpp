@@ -251,6 +251,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
         translatedIndices.push_back(after.at(variable).columnIndex_);
       }
     }
+    // The sizes can only match because `distinctIndices` contains no
+    // duplicates (a documented precondition of this function).
     AD_CORRECTNESS_CHECK(translatedIndices.size() == distinctIndices.size());
     AD_CORRECTNESS_CHECK(distinctQet.value()->getRootOperation()->isDistinctBy(
         translatedIndices));

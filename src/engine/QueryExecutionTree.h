@@ -194,7 +194,8 @@ class QueryExecutionTree {
   //    returned.
   //  - Otherwise a `Distinct` operation is added on top.
   // The returned tree always exposes the same set of variables as `qet`, but
-  // the column order may differ.
+  // the column order may differ. The `distinctIndices` must not contain
+  // duplicates.
   static std::shared_ptr<QueryExecutionTree> createDistinctTree(
       std::shared_ptr<QueryExecutionTree> qet,
       const std::vector<ColumnIndex>& distinctIndices);
