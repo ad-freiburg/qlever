@@ -237,3 +237,25 @@ TEST(Distinct, clone) {
   EXPECT_THAT(distinct, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), distinct.getDescriptor());
 }
+
+// _____________________________________________________________________________
+TEST(Distinct, isDistinctBy) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = ad_utility::testing::getQec();
+
+  // A `Distinct` on `{0, 1}` produces rows that are distinct wrt `{0, 1}` and
+  // any superset thereof, but not wrt a set that misses one of these columns.
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1, 7}, {0, 1, 8}, {2, 3, 9}}),
+      Vars{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}});
+  auto distinct =
+      ad_utility::makeExecutionTree<Distinct>(qec, values, SC{0, 1});
+  const auto& op = *distinct->getRootOperation();
+
+  EXPECT_TRUE(op.isDistinctBy(SC{0, 1}));
+  EXPECT_TRUE(op.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_TRUE(op.isDistinctBy(SC{2, 1, 0}));
+  EXPECT_FALSE(op.isDistinctBy(SC{0, 2}));
+  EXPECT_FALSE(op.isDistinctBy(SC{0}));
+}

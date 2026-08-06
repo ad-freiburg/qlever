@@ -739,6 +739,31 @@ TEST(QueryPlanner, CartesianProductJoin) {
           scan("?x", "<b>", "?c")));
 }
 
+// _____________________________________________________________________________
+TEST(QueryPlanner, DistinctIsPushedDown) {
+  auto scan = h::IndexScanFromStrings;
+
+  // `SELECT DISTINCT *` over a full index scan `?s ?p ?o` is a no-op: the scan
+  // already produces distinct rows, so no `Distinct` operation is added.
+  h::expect("SELECT DISTINCT * WHERE { ?s ?p ?o }", scan("?s", "?p", "?o"));
+
+  // The `DISTINCT` is pushed through the `CartesianProductJoin` into its
+  // children instead of being applied on top of the (potentially huge)
+  // product. Here both children are single-variable scans that are already
+  // distinct, so no `Distinct` operation is added at all.
+  h::expect("SELECT DISTINCT * WHERE { <s> <p> ?o . ?a <b> <c> }",
+            h::CartesianProductJoin(scan("<s>", "<p>", "?o"),
+                                    scan("?a", "<b>", "<c>")));
+
+  // Test based on https://github.com/ad-freiburg/qlever/issues/1895.
+  h::expect(
+      "SELECT DISTINCT * WHERE { ?s <p> <o> . ?s <p2> <o2> . ?x <b> <c> }",
+      h::CartesianProductJoin(
+          h::Distinct({0}, h::Join(scan("?s", "<p>", "<o>"),
+                                   scan("?s", "<p2>", "<o2>"))),
+          scan("?x", "<b>", "<c>")));
+}
+
 namespace {
 // A helper function to recreate the internal variables added by the query
 // planner for transitive paths.

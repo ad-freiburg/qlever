@@ -191,7 +191,7 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
   std::vector<ColumnIndex> result;
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
@@ -201,6 +201,12 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
       result.push_back(numVariables_ + i);
     }
   }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+  auto result = variableAndGraphColumns();
 
   if (varsToKeep_.has_value()) {
     auto permutation = getSubsetForStrippedColumns();
@@ -212,6 +218,52 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
     }
   }
   return result;
+}
+
+// _____________________________________________________________________________
+bool IndexScan::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // Duplicate triples are removed during scanning, so the result contains every
+  // matching triple (or quad, if a graph column is present) exactly once. Its
+  // rows are therefore uniquely identified by the triple's variable columns
+  // plus the graph column; all other (payload) columns, e.g. the `pattern`
+  // column, are functionally determined by those. The scan is thus distinct wrt
+  // `distinctIndices` iff `distinctIndices` is a superset of the identifying
+  // columns. Note that it does not have to be equal to them: additional columns
+  // in `distinctIndices` can only make two rows differ in more places, so they
+  // never destroy distinctness. Conversely, a `distinctIndices` that misses
+  // even one identifying column (e.g. `DISTINCT ?s` for `?s ?p ?o`) makes this
+  // function return `false`, because the remaining columns may well repeat.
+  //
+  // Exception: For materialized views the deduplication during scanning is
+  // deliberately deactivated (see the `MaterializedView` constructor), so a
+  // view scan may well contain duplicate rows.
+  if (permutation().permutationType() == Permutation::Type::MATERIALIZED_VIEW) {
+    return false;
+  }
+
+  auto identifyingColumns = variableAndGraphColumns();
+
+  // The identifying columns above refer to the unstripped result, so translate
+  // them into the columns of the actual (possibly stripped) result. An
+  // identifying column that was stripped away is not part of the result at all,
+  // which makes the scan non-distinct: the columns that remain don't identify a
+  // row uniquely.
+  if (varsToKeep_.has_value()) {
+    auto subset = getSubsetForStrippedColumns();
+    for (ColumnIndex& col : identifyingColumns) {
+      auto it = ql::ranges::find(subset, col);
+      if (it == subset.end()) {
+        return false;
+      }
+      col = it - subset.begin();
+    }
+  }
+
+  return ql::ranges::all_of(identifyingColumns,
+                            [&distinctIndices](ColumnIndex col) {
+                              return ad_utility::contains(distinctIndices, col);
+                            });
 }
 
 // _____________________________________________________________________________

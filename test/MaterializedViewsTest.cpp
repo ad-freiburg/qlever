@@ -1297,6 +1297,42 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   }
 }
 
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, DistinctIsNotDroppedForViewScan) {
+  // For a regular `IndexScan`, a `DISTINCT` over all of the scan's columns is a
+  // no-op, because duplicate triples are removed while scanning. For a scan of
+  // a materialized view this deduplication does not happen (see
+  // `NoDuplicateRemovalOnScan` above), so the `DISTINCT` must not be dropped.
+
+  // Write a view in which every triple occurs twice, once for each of the two
+  // values of the fourth column `?g` (which we do not select below).
+  qlv().writeMaterializedView(
+      "dupView", "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }");
+  qlv().loadMaterializedView("dupView");
+
+  constexpr std::string_view distinctQuery = R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT DISTINCT * {
+      SERVICE view:dupView {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o .
+      }
+    }
+  )";
+
+  // The `DISTINCT` is not a no-op here, so it has to be part of the query plan.
+  qpExpect(qlv(), distinctQuery,
+           h::Distinct({0, 1, 2}, ::testing::A<const QueryExecutionTree&>()));
+
+  // Consequently the result contains every triple exactly once, and not twice
+  // as the view scan itself does.
+  auto expected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
+  EXPECT_THAT(getQueryResultAsIdTable(std::string{distinctQuery}),
+              matchesIdTable(expected));
+}
+
 // Queries for testing `BIND` rewriting.
 constexpr std::string_view bindWriteQuery =
     R"(
