@@ -1474,6 +1474,20 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       h::Filter("geof:sfContains(\"POINT(50.0 50.0)\""
                 "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)",
                 scan("?a", "<p>", "?b")));
+
+  // `geof:relate` requires a fixed string literal as its third argument: if
+  // it is a variable instead, the filter is not rewritten into a spatial
+  // join.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:relate(?y, ?b, ?a))"
+      " }",
+      h::Filter("geof:relate(?y, ?b, ?a)",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
 }
 
 // _____________________________________________________________________________

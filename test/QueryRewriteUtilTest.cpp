@@ -82,6 +82,13 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
       getExpr(Literal::literalWithoutQuotes("invalid")));
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*invalidPtr),
                          std::nullopt);
+
+  // The third argument must be a fixed string literal: a variable is
+  // rejected, even if it happens to be bound to a valid pattern at runtime.
+  auto variablePatternPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}), getExpr(V{"?pattern"}));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*variablePatternPtr), std::nullopt);
 }
 
 // _____________________________________________________________________________
