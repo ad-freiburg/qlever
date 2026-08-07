@@ -1840,6 +1840,22 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return res;
 }
 
-// Explicit template instantiation for unit test helper function
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<ResponseT> Server::onlyForTestingHandleHttpRequest(
+        RequestT request) {
+  ResponseT res;
+  auto mockSend = [&](auto response) -> Awaitable<void> {
+    res = std::move(response);
+    co_return;
+  };
+  co_await handleHttpRequest(std::move(request), mockSend);
+  co_return res;
+}
+
+// Explicit template instantiations for unit test helper functions
 template Awaitable<StreamedResponse> Server::onlyForTestingProcess(
     SimpleRequest&);
+template Awaitable<StreamedResponse> Server::onlyForTestingHandleHttpRequest(
+    SimpleRequest);
