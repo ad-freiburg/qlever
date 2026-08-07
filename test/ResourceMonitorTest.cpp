@@ -33,11 +33,8 @@
 
 namespace {
 namespace fs = ql::filesystem;
+namespace rm = ad_utility::resource_monitor;
 using ad_utility::ResourceMonitor;
-using ad_utility::resource_monitor::CpuPercentTracker;
-using ad_utility::resource_monitor::cpuTimeSeconds;
-using ad_utility::resource_monitor::currentRssBytes;
-using ad_utility::resource_monitor::formatTsvRow;
 using ad_utility::testing::readLines;
 }  // namespace
 
@@ -47,57 +44,55 @@ TEST(ResourceMonitor, ReadsCurrentMemoryAndCpuUsage) {
   // Both readings are implemented here, so each returns a value: the
   // running process always has some resident memory and has spent a
   // non-negative amount of CPU time.
-  auto rss = currentRssBytes();
+  auto rss = rm::currentRssBytes();
   ASSERT_TRUE(rss.has_value());
   EXPECT_GT(rss.value(), 0u);
 
-  auto cpu = cpuTimeSeconds();
+  auto cpu = rm::cpuTimeSeconds();
   ASSERT_TRUE(cpu.has_value());
   EXPECT_GE(cpu.value(), 0.0);
 #else
   // No implementation elsewhere: both readings come back empty.
-  EXPECT_FALSE(currentRssBytes().has_value());
-  EXPECT_FALSE(cpuTimeSeconds().has_value());
+  EXPECT_FALSE(rm::currentRssBytes().has_value());
+  EXPECT_FALSE(rm::cpuTimeSeconds().has_value());
 #endif
 }
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, ReadsCumulativeDiskIoBytes) {
 #if defined(__APPLE__) || defined(__linux__)
-  using ad_utility::resource_monitor::currentDiskIoBytes;
   // On Linux this needs `CONFIG_TASK_IO_ACCOUNTING`, which mainstream kernels
   // enable; a failure here means the kernel lacks it, not a parse failure.
-  auto first = currentDiskIoBytes();
+  auto first = rm::currentDiskIoBytes();
   ASSERT_TRUE(first.has_value());
 
   // The counters are cumulative, which is the property the rate computation
   // depends on: a later reading is never smaller. Not `EXPECT_GT`, since a
   // process can go a moment without touching the disk at all.
-  auto second = currentDiskIoBytes();
+  auto second = rm::currentDiskIoBytes();
   ASSERT_TRUE(second.has_value());
   EXPECT_GE(second.value().readBytes_, first.value().readBytes_);
   EXPECT_GE(second.value().writeBytes_, first.value().writeBytes_);
 #else
-  EXPECT_FALSE(ad_utility::resource_monitor::currentDiskIoBytes().has_value());
+  EXPECT_FALSE(rm::currentDiskIoBytes().has_value());
 #endif
 }
 
 #if defined(__linux__)
 // _____________________________________________________________________________
 TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
-  using ad_utility::resource_monitor::rssBytesFromStatm;
   // `/proc/self/statm` lists total pages, then the resident pages we want,
   // which are scaled to bytes by the machine's page size.
   std::istringstream valid{"100 42 7 0 0 0 0"};
-  auto bytes = rssBytesFromStatm(valid);
+  auto bytes = rm::rssBytesFromStatm(valid);
   ASSERT_TRUE(bytes.has_value());
   EXPECT_EQ(bytes.value(), 42u * sysconf(_SC_PAGESIZE));
 
   std::istringstream garbage{"not a number"};
-  EXPECT_FALSE(rssBytesFromStatm(garbage).has_value());
+  EXPECT_FALSE(rm::rssBytesFromStatm(garbage).has_value());
 
   std::istringstream empty{""};
-  EXPECT_FALSE(rssBytesFromStatm(empty).has_value());
+  EXPECT_FALSE(rm::rssBytesFromStatm(empty).has_value());
 }
 #endif
 
@@ -105,7 +100,6 @@ TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
 // _____________________________________________________________________________
 TEST(ResourceMonitor,
      DiskIoBytesFromProcIoMatchesKeysAndRejectsIncompleteInput) {
-  using ad_utility::resource_monitor::diskIoBytesFromProcIo;
   // A realistic `/proc/self/io`: the keys we want are neither first nor last,
   // and every value differs, so a parser reading by position would fail.
   std::istringstream valid{
@@ -116,49 +110,49 @@ TEST(ResourceMonitor,
       "read_bytes: 8192\n"
       "write_bytes: 4096\n"
       "cancelled_write_bytes: 64\n"};
-  auto bytes = diskIoBytesFromProcIo(valid);
+  auto bytes = rm::diskIoBytesFromProcIo(valid);
   ASSERT_TRUE(bytes.has_value());
   EXPECT_EQ(bytes.value().readBytes_, 8192u);
   EXPECT_EQ(bytes.value().writeBytes_, 4096u);
 
   std::istringstream garbage{"not a number"};
-  EXPECT_FALSE(diskIoBytesFromProcIo(garbage).has_value());
+  EXPECT_FALSE(rm::diskIoBytesFromProcIo(garbage).has_value());
 
   std::istringstream empty{""};
-  EXPECT_FALSE(diskIoBytesFromProcIo(empty).has_value());
+  EXPECT_FALSE(rm::diskIoBytesFromProcIo(empty).has_value());
 
   // One key alone is a failed reading, not a zero for the other.
   std::istringstream onlyRead{"read_bytes: 8192\n"};
-  EXPECT_FALSE(diskIoBytesFromProcIo(onlyRead).has_value());
+  EXPECT_FALSE(rm::diskIoBytesFromProcIo(onlyRead).has_value());
 }
 #endif
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
-  constexpr ad_utility::resource_monitor::Sample base{.elapsedSeconds_ = 1.0,
-                                                      .timestampMs_ = 1000,
-                                                      .rssBytes_ = 2048u,
-                                                      .cpuPercent_ = 50.0};
-  EXPECT_EQ(formatTsvRow(base), "1.0\t1000\t2048\t50.0\n");
+  constexpr rm::Sample base{.elapsedSeconds_ = 1.0,
+                            .timestampMs_ = 1000,
+                            .rssBytes_ = 2048u,
+                            .cpuPercent_ = 50.0};
+  EXPECT_EQ(rm::formatTsvRow(base), "1.0\t1000\t2048\t50.0\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
-  EXPECT_EQ(formatTsvRow(noRss), "1.0\t1000\t\t50.0\n");
+  EXPECT_EQ(rm::formatTsvRow(noRss), "1.0\t1000\t\t50.0\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
-  EXPECT_EQ(formatTsvRow(noCpu), "1.0\t1000\t2048\t\n");
+  EXPECT_EQ(rm::formatTsvRow(noCpu), "1.0\t1000\t2048\t\n");
 
   auto neither = base;
   neither.rssBytes_ = std::nullopt;
   neither.cpuPercent_ = std::nullopt;
-  EXPECT_EQ(formatTsvRow(neither), "1.0\t1000\t\t\n");
+  EXPECT_EQ(rm::formatTsvRow(neither), "1.0\t1000\t\t\n");
 }
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, CpuPercentTrackerComputesUsageBetweenReadings) {
   // Baseline 0.0s at elapsed 0.0s; 0.5 CPU-s over 1.0 wall-s is 50% of a core.
-  CpuPercentTracker tracker{0.0};
+  rm::CpuPercentTracker tracker{0.0};
   auto first = tracker.update(0.5, 1.0);
   ASSERT_TRUE(first.has_value());
   EXPECT_DOUBLE_EQ(first.value(), 50.0);
@@ -171,11 +165,13 @@ TEST(ResourceMonitor, CpuPercentTrackerComputesUsageBetweenReadings) {
 // _____________________________________________________________________________
 TEST(ResourceMonitor, CpuPercentTrackerReportsNothingWhenUncomputable) {
   // No reading this tick.
-  EXPECT_FALSE(CpuPercentTracker{0.0}.update(std::nullopt, 1.0).has_value());
+  EXPECT_FALSE(
+      rm::CpuPercentTracker{0.0}.update(std::nullopt, 1.0).has_value());
   // No baseline yet.
-  EXPECT_FALSE(CpuPercentTracker{std::nullopt}.update(0.5, 1.0).has_value());
+  EXPECT_FALSE(
+      rm::CpuPercentTracker{std::nullopt}.update(0.5, 1.0).has_value());
   // No time elapsed since the baseline.
-  EXPECT_FALSE(CpuPercentTracker{0.0}.update(0.5, 0.0).has_value());
+  EXPECT_FALSE(rm::CpuPercentTracker{0.0}.update(0.5, 0.0).has_value());
 }
 
 // _____________________________________________________________________________
