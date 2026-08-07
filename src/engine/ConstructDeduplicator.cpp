@@ -26,22 +26,22 @@ bool TripleDeduplicator::insert(const DeduplicationKey& key) {
 TripleDeduplicator::Deduplicator TripleDeduplicator::makeDeduplicator(
     const DeduplicationMode& mode,
     const QueryExecutionContext& queryExecutionContext) {
-  return std::visit(
-      OverloadCallOperator{
-          [](const DeduplicationMode::None&) -> Deduplicator {
-            AD_CONTRACT_CHECK(false,
+  return std::visit(OverloadCallOperator{
+                        [](const DeduplicationMode::None&) -> Deduplicator {
+                          AD_CONTRACT_CHECK(
+                              false,
                               "No `Deduplicator` may be constructed for "
                               "`DeduplicationMode::None`.");
-          },
-          [&queryExecutionContext](
-              const DeduplicationMode::Global&) -> Deduplicator {
-            return HashSetWithMemoryLimit<DeduplicationKey>{
-                queryExecutionContext.getAllocator()};
-          },
-          [](const DeduplicationMode::BatchWise& batchWise) -> Deduplicator {
-            return LruDeduplicationCache{batchWise.batchSize_};
-          }},
-      mode.value_);
+                        },
+                        [&queryExecutionContext](
+                            const DeduplicationMode::Full&) -> Deduplicator {
+                          return HashSetWithMemoryLimit<DeduplicationKey>{
+                              queryExecutionContext.getAllocator()};
+                        },
+                        [](const DeduplicationMode::Lru& lru) -> Deduplicator {
+                          return LruDeduplicationCache{lru.capacity_};
+                        }},
+                    mode.value_);
 }
 
 //______________________________________________________________________________
@@ -93,13 +93,6 @@ bool ConstructDeduplicator::isNew(size_t templateTripleIdx,
       tmpl.preprocessedTriples_[templateTripleIdx], rowIdxInIdTable, ctx));
 }
 
-//______________________________________________________________________________
-void ConstructDeduplicator::seedGroundTriple(const DeduplicationKey& key) {
-  // Reset only at a triple boundary, never mid-key (would dangle the key).
-  resetIfVocabTooLarge();
-  filter_.insert(canonicalizeKey(key));
-}
-
 // Approximate size of a single full-triple dedup key: three `ValueId`s. Used to
 // relate the `dedupVocab_` budget to the number of keys the filter itself
 // holds.
@@ -114,12 +107,11 @@ size_t ConstructDeduplicator::computeMaxDedupVocabBytes(
   if (maxDedupVocabSize.has_value()) {
     return maxDedupVocabSize.value().getBytes();
   }
-  if (const auto* batchWise =
-          std::get_if<DeduplicationMode::BatchWise>(&mode.value_)) {
-    return batchWise->batchSize_ * bytesPerDedupKey;
+  if (const auto* lru = std::get_if<DeduplicationMode::Lru>(&mode.value_)) {
+    return lru->capacity_ * bytesPerDedupKey;
   }
   // We do not track the memory usage of the `dedupVocab_` for
-  // `DeduplicationMode::Global` explicitly, thus this threshold is unused.
+  // `DeduplicationMode::Full` explicitly, thus this threshold is unused.
   // Return a dummy `0`.
   return 0;
 }
@@ -142,30 +134,22 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   }
   const size_t sizeBefore = dedupVocab_.size();
   const auto* index = dedupVocab_.getIndexAndAddIfNotContained(entry);
-  // Only `BatchWise` bounds the size of `dedupVocab_`, so only there do we
+  // Only `Lru` bounds the size of `dedupVocab_`, so only there do we
   // track the vocab's byte size and check the threshold. We do not track the
-  // size of the `dedupVocab_` for `Global` mode, but delegate it in this case
+  // size of the `dedupVocab_` for `Full` mode, but delegate it in this case
   // to the `LocalVocab` class itself.
   const bool addedNewString = dedupVocab_.size() != sizeBefore;
-  if (isBatchWise() && addedNewString) {
+  if (isLru() && addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
   }
   return ValueId::makeFromLocalVocabIndex(index);
 }
 
 //______________________________________________________________________________
-DeduplicationKey ConstructDeduplicator::canonicalizeKey(DeduplicationKey key) {
-  for (ValueId& id : key) {
-    id = canonicalize(id);
-  }
-  return key;
-}
-
-//______________________________________________________________________________
 void ConstructDeduplicator::resetIfVocabTooLarge() {
-  // Only `BatchWise` bounds its vocab here; `Global` must stay exact and is
+  // Only `Lru` bounds its vocab here; `Full` must stay exact and is
   // never reset.
-  if (!isBatchWise()) {
+  if (!isLru()) {
     return;
   }
   if (dedupVocabBytes_ < maxDedupVocabBytes_) {

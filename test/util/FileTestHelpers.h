@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "GTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "util/Exception.h"
@@ -69,6 +70,30 @@ inline auto makeTemporaryDirectory(std::string_view name) {
     }
   }};
   return std::make_pair(std::move(directory), std::move(cleanup));
+}
+
+// Create a fresh (empty) directory named after the currently running test and
+// make it the working directory. The returned cleanup first restores the
+// previous working directory and then removes that directory again, so both
+// steps live in a single cleanup to fix their order.
+//
+// Use this in tests that deal with base names without a directory component (as
+// those are resolved against the working directory), and in tests that would
+// otherwise be prone to name collisions with other tests, because they create
+// or inspect files whose names they do not fully control.
+[[nodiscard]] inline auto useFreshWorkingDirectory() {
+  auto oldCwd = ql::filesystem::current_path();
+  std::string folder = gtestCurrentTestName();
+  // Leftovers from a previous run would break the checks for directories that
+  // must not exist yet.
+  ql::filesystem::remove_all(folder);
+  ql::filesystem::create_directory(folder);
+  ql::filesystem::current_path(folder);
+  return absl::Cleanup{
+      [oldCwd = std::move(oldCwd), folder = std::move(folder)] {
+        ql::filesystem::current_path(oldCwd);
+        ql::filesystem::remove_all(folder);
+      }};
 }
 }  // namespace ad_utility::testing
 
