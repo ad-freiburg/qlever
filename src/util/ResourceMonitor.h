@@ -78,29 +78,32 @@ struct Sample {
   int64_t timestampMs_;
   std::optional<uint64_t> rssBytes_;
   std::optional<double> cpuPercent_;
+  std::optional<DiskIoBytes> diskIoBytes_;
 };
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);
 
-// The two OS readers, as swappable function objects (see
+// The OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).
 using RssReader = absl::AnyInvocable<std::optional<uint64_t>()>;
 using CpuReader = absl::AnyInvocable<std::optional<double>()>;
+using DiskIoReader = absl::AnyInvocable<std::optional<DiskIoBytes>()>;
 
 // Which OS readers to override in `ResourceMonitor::setReadersForTesting`.
 // An unset member leaves the real reader in place.
 struct ReaderOverrides {
   RssReader rssReader_;
   CpuReader cpuReader_;
+  DiskIoReader diskIoReader_;
 };
 
 }  // namespace resource_monitor
 
-// Samples the RSS and CPU usage of this process on a background thread
-// and appends one TSV row (`elapsed_s`, `timestamp_ms`, `rss`,
-// `cpu_percent`) per interval; failed readings become empty cells. The
-// destructor stops the sampling thread and closes the file.
+// Samples the RSS, CPU usage and disk IO of this process on a background thread
+// and appends one TSV row (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`,
+// `read_bytes`, `write_bytes`) per interval; failed readings become empty
+// cells. The destructor stops the sampling thread and closes the file.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
@@ -133,6 +136,9 @@ class ResourceMonitor {
   std::ofstream stream_;
   resource_monitor::RssReader rssReader_ = resource_monitor::currentRssBytes;
   resource_monitor::CpuReader cpuReader_ = resource_monitor::cpuTimeSeconds;
+  resource_monitor::DiskIoReader diskIoReader_ =
+      resource_monitor::currentDiskIoBytes;
+
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;

@@ -9,10 +9,15 @@
 #include "util/ResourceMonitor.h"
 
 #include <absl/strings/str_format.h>
+#include <absl/strings/str_join.h>
+
+#include <array>
+#include <type_traits>
 
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
+#include "util/TypeTraits.h"
 
 // The readings use platform-specific APIs.
 // `getrusage` (CPU time) is shared by both linux and macOS.
@@ -148,15 +153,42 @@ std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo) {
 }
 #endif
 
+namespace {
+// One TSV cell: an integer, a double, or either wrapped in an `optional`,
+// where a missing value becomes an empty cell.
+// _____________________________________________________________________________
+template <typename T>
+std::string formatCell(const T& value) {
+  if constexpr (similarToInstantiation<T, std::optional>) {
+    return value.has_value() ? formatCell(value.value()) : std::string{};
+  } else if constexpr (std::is_floating_point_v<T>) {
+    return absl::StrFormat("%.1f", value);
+  } else {
+    static_assert(std::is_integral_v<T>,
+                  "A TSV cell must be an integer, a double or an optional of "
+                  "one of those.");
+    return std::to_string(value);
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::string formatTsvRow(const Sample& sample) {
-  return absl::StrFormat(
-      "%.1f\t%d\t%s\t%s\n", sample.elapsedSeconds_, sample.timestampMs_,
-      sample.rssBytes_.has_value() ? std::to_string(sample.rssBytes_.value())
-                                   : "",
-      sample.cpuPercent_.has_value()
-          ? absl::StrFormat("%.1f", sample.cpuPercent_.value())
-          : "");
+  std::string readBytes;
+  std::string writeBytes;
+  if (sample.diskIoBytes_.has_value()) {
+    readBytes = formatCell(sample.diskIoBytes_->readBytes_);
+    writeBytes = formatCell(sample.diskIoBytes_->writeBytes_);
+  }
+
+  const std::array tsvCells{formatCell(sample.elapsedSeconds_),
+                            formatCell(sample.timestampMs_),
+                            formatCell(sample.rssBytes_),
+                            formatCell(sample.cpuPercent_),
+                            std::move(readBytes),
+                            std::move(writeBytes)};
+
+  return absl::StrJoin(tsvCells, "\t") + "\n";
 }
 
 }  // namespace ad_utility::resource_monitor
@@ -186,9 +218,10 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
   // Decide about the header before opening: truncating destroys the
   // old file size. A missing file or failed stat also gets a header.
   ql::error_code ec;
-  auto oldSize = fs::file_size(path, ec);
-  bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
-  auto openMode = mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
+  const auto oldSize = fs::file_size(path, ec);
+  const bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
+  const auto openMode =
+      mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
   stream_.open(path, std::ios::out | openMode);
   if (!stream_.is_open()) {
     AD_LOG_WARN << "ResourceMonitor: failed to open the output file; "
@@ -197,7 +230,9 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
     return;
   }
   if (writeHeader) {
-    stream_ << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n" << std::flush;
+    stream_ << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\t"
+               "write_bytes\n"
+            << std::flush;
   }
   // Spawn last: the thread uses the stream right away. An exception
   // escaping a thread would terminate the process, so catch everything.
@@ -235,11 +270,14 @@ void ResourceMonitor::setReadersForTesting(
   if (readerOverrides.cpuReader_) {
     cpuReader_ = std::move(readerOverrides.cpuReader_);
   }
+  if (readerOverrides.diskIoReader_) {
+    diskIoReader_ = std::move(readerOverrides.diskIoReader_);
+  }
 }
 
 // _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
-  Timer timer{Timer::Started};
+  const Timer timer{Timer::Started};
   resource_monitor::CpuPercentTracker cpuTracker{cpuReader_()};
 
   // Absolute deadlines keep the ticks on a steady grid, no matter how
@@ -252,12 +290,13 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
       break;  // Woken by the destructor, not the timeout.
     }
     deadline += interval;
-    double elapsed = Timer::toSeconds(timer.value());
+    const double elapsed = Timer::toSeconds(timer.value());
     stream_ << resource_monitor::formatTsvRow(
         {.elapsedSeconds_ = elapsed,
          .timestampMs_ = epochMillis(std::chrono::system_clock::now()),
          .rssBytes_ = rssReader_(),
-         .cpuPercent_ = cpuTracker.update(cpuReader_(), elapsed)});
+         .cpuPercent_ = cpuTracker.update(cpuReader_(), elapsed),
+         .diskIoBytes_ = diskIoReader_()});
     stream_.flush();
     if (stream_.fail()) {
       AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "
