@@ -1,15 +1,174 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+#include <array>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 namespace detail {
+// Generic infrastructure for binary expressions. The function and the value
+// getter(s) are specified using `FunctionAndValueGetters`. A single value
+// getter is used for both operands, or two separate value getters can be
+// specified for the left and right operand.
+template <typename FunctionAndValueGettersT>
+class BinaryExpression;
+
+template <typename Function, typename... ValueGetters>
+class BinaryExpression<FunctionAndValueGetters<Function, ValueGetters...>>
+    : public SparqlExpression {
+ public:
+  using Children = std::array<SparqlExpression::Ptr, 2>;
+  using Getters = ValueGetterPack<2, std::tuple<ValueGetters...>>;
+  using LeftValueGetter = std::tuple_element_t<0, Getters>;
+  using RightValueGetter = std::tuple_element_t<1, Getters>;
+
+ private:
+  Children children_;
+
+ public:
+  BinaryExpression(SparqlExpression::Ptr lhs, SparqlExpression::Ptr rhs)
+      : children_{std::move(lhs), std::move(rhs)} {}
+
+  ExpressionResult evaluate(EvaluationContext* context) const override;
+
+  [[nodiscard]] std::string getCacheKey(
+      const VariableToColumnMap& variableToColumnMap) const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
+
+ private:
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
+};
+
+// Evaluate a binary operation for concrete child-result types.
+template <typename Function, typename LeftValueGetter,
+          typename RightValueGetter, typename Left, typename Right>
+ExpressionResult evaluateBinaryOperation(Left&& left, Right&& right,
+                                         EvaluationContext* context) {
+  using LeftType = std::decay_t<Left>;
+  using RightType = std::decay_t<Right>;
+
+  // `SetOfIntervals` is currently not supported by this infrastructure.
+  if constexpr (ad_utility::isSimilar<LeftType, ad_utility::SetOfIntervals> ||
+                ad_utility::isSimilar<RightType, ad_utility::SetOfIntervals>) {
+    AD_FAIL();
+
+    // Variables are converted to non-owning spans for the direct loops.
+  } else if constexpr (ad_utility::isSimilar<LeftType, ::Variable>) {
+    return evaluateBinaryOperation<Function, LeftValueGetter, RightValueGetter>(
+        getIdsFromVariable(left, context), AD_FWD(right), context);
+
+  } else if constexpr (ad_utility::isSimilar<RightType, ::Variable>) {
+    return evaluateBinaryOperation<Function, LeftValueGetter, RightValueGetter>(
+        AD_FWD(left), getIdsFromVariable(right, context), context);
+
+  } else {
+    LeftValueGetter leftGetter;
+    RightValueGetter rightGetter;
+    Function function;
+
+    // Case 1: constant–constant.
+    if constexpr (isConstantResult<LeftType> && isConstantResult<RightType>) {
+      context->cancellationHandle_->throwIfCancelled();
+      return function(leftGetter(AD_FWD(left), context),
+                      rightGetter(AD_FWD(right), context));
+
+      // Case 2: vector–vector.
+    } else if constexpr (isVectorResult<LeftType> &&
+                         isVectorResult<RightType>) {
+      AD_CONTRACT_CHECK(left.size() == context->size());
+      AD_CONTRACT_CHECK(right.size() == context->size());
+
+      VectorWithMemoryLimit<Id> result{context->_allocator};
+      result.reserve(context->size());
+
+      for (size_t i = 0; i < context->size(); ++i) {
+        context->cancellationHandle_->throwIfCancelled();
+        result.push_back(function(leftGetter(left[i], context),
+                                  rightGetter(right[i], context)));
+      }
+      return result;
+
+      // Case 3: vector–constant.
+    } else if constexpr (isVectorResult<LeftType> &&
+                         isConstantResult<RightType>) {
+      AD_CONTRACT_CHECK(left.size() == context->size());
+
+      const auto rightValue = rightGetter(AD_FWD(right), context);
+      VectorWithMemoryLimit<Id> result{context->_allocator};
+      result.reserve(context->size());
+
+      for (size_t i = 0; i < context->size(); ++i) {
+        context->cancellationHandle_->throwIfCancelled();
+        result.push_back(function(leftGetter(left[i], context), rightValue));
+      }
+      return result;
+
+      // Case 4: constant–vector.
+    } else if constexpr (isConstantResult<LeftType> &&
+                         isVectorResult<RightType>) {
+      AD_CONTRACT_CHECK(right.size() == context->size());
+
+      const auto leftValue = leftGetter(AD_FWD(left), context);
+      VectorWithMemoryLimit<Id> result{context->_allocator};
+      result.reserve(context->size());
+
+      for (size_t i = 0; i < context->size(); ++i) {
+        context->cancellationHandle_->throwIfCancelled();
+        result.push_back(function(leftValue, rightGetter(right[i], context)));
+      }
+      return result;
+
+    } else {
+      AD_FAIL();
+    }
+  }
+}
+
+// _____________________________________________________________________________
+template <typename Function, typename... ValueGetters>
+ExpressionResult
+BinaryExpression<FunctionAndValueGetters<Function, ValueGetters...>>::evaluate(
+    EvaluationContext* context) const {
+  auto leftResult = children_[0]->evaluate(context);
+  auto rightResult = children_[1]->evaluate(context);
+
+  auto visitor = [context](auto&& left, auto&& right) -> ExpressionResult {
+    return evaluateBinaryOperation<Function, LeftValueGetter, RightValueGetter>(
+        AD_FWD(left), AD_FWD(right), context);
+  };
+
+  return std::visit(visitor, std::move(leftResult), std::move(rightResult));
+}
+
+template <typename Function, typename... ValueGetters>
+std::string
+BinaryExpression<FunctionAndValueGetters<Function, ValueGetters...>>::
+    getCacheKey(const VariableToColumnMap& variableToColumnMap) const {
+  std::string key = typeid(*this).name();
+  key += absl::StrJoin(children_ | ql::views::transform([&variableToColumnMap](
+                                                            const auto& child) {
+                         return child->getCacheKey(variableToColumnMap);
+                       }),
+                       "");
+  return key;
+}
+
+// _____________________________________________________________________________
+template <typename Function, typename... ValueGetters>
+ql::span<SparqlExpression::Ptr> BinaryExpression<
+    FunctionAndValueGetters<Function, ValueGetters...>>::childrenImpl() {
+  return {children_.data(), children_.size()};
+}
+
 // Multiplication.
 using Multiply = MakeNumericExpression<std::multiplies<>>;
-NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
+using MultiplyExpression = BinaryExpression<FV<Multiply, NumericValueGetter>>;
 
 // Division.
 //
@@ -29,12 +188,12 @@ struct DivideImpl {
 };
 
 using Divide1 = MakeNumericExpression<DivideImpl, true>;
-NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<Divide1, NumericValueGetter>);
+using DivideExpressionByZeroIsUndef =
+    BinaryExpression<FV<Divide1, NumericValueGetter>>;
 
 using Divide2 = MakeNumericExpression<DivideImpl, false>;
-NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<Divide2, NumericValueGetter>);
+using DivideExpressionByZeroIsNan =
+    BinaryExpression<FV<Divide2, NumericValueGetter>>;
 
 // _____________________________________________________________________________
 // Addition.
@@ -74,7 +233,7 @@ struct AddImpl {
     return Id::makeUndefined();
   }
 };
-NARY_EXPRESSION(AddExpression, 2, FV<AddImpl, NumericOrDateValueGetter>);
+using AddExpression = BinaryExpression<FV<AddImpl, NumericOrDateValueGetter>>;
 
 // _____________________________________________________________________________
 // Subtraction.
@@ -114,8 +273,8 @@ struct SubtractImpl {
     return Id::makeUndefined();
   }
 };
-NARY_EXPRESSION(SubtractExpression, 2,
-                FV<SubtractImpl, NumericOrDateValueGetter>);
+using SubtractExpression =
+    BinaryExpression<FV<SubtractImpl, NumericOrDateValueGetter>>;
 
 // _____________________________________________________________________________
 // Power.
@@ -125,7 +284,7 @@ struct PowImpl {
   }
 };
 using Pow = MakeNumericExpression<PowImpl>;
-NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
+using PowExpression = BinaryExpression<FV<Pow, NumericValueGetter>>;
 
 // OR and AND
 // _____________________________________________________________________________
