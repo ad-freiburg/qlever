@@ -19,6 +19,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterPrologue(SparqlAutomaticParser::PrologueContext* ctx) = 0;
   virtual void exitPrologue(SparqlAutomaticParser::PrologueContext* ctx) = 0;
 
+  virtual void enterNamedSubqueryDefinition(
+      SparqlAutomaticParser::NamedSubqueryDefinitionContext* ctx) = 0;
+  virtual void exitNamedSubqueryDefinition(
+      SparqlAutomaticParser::NamedSubqueryDefinitionContext* ctx) = 0;
+
   virtual void enterBaseDecl(SparqlAutomaticParser::BaseDeclContext* ctx) = 0;
   virtual void exitBaseDecl(SparqlAutomaticParser::BaseDeclContext* ctx) = 0;
 
@@ -271,6 +276,16 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
       SparqlAutomaticParser::GraphPatternNotTriplesContext* ctx) = 0;
   virtual void exitGraphPatternNotTriples(
       SparqlAutomaticParser::GraphPatternNotTriplesContext* ctx) = 0;
+
+  virtual void enterIncludeClause(
+      SparqlAutomaticParser::IncludeClauseContext* ctx) = 0;
+  virtual void exitIncludeClause(
+      SparqlAutomaticParser::IncludeClauseContext* ctx) = 0;
+
+  virtual void enterIncludeRenaming(
+      SparqlAutomaticParser::IncludeRenamingContext* ctx) = 0;
+  virtual void exitIncludeRenaming(
+      SparqlAutomaticParser::IncludeRenamingContext* ctx) = 0;
 
   virtual void enterOptionalGraphPattern(
       SparqlAutomaticParser::OptionalGraphPatternContext* ctx) = 0;
