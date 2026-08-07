@@ -796,7 +796,7 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 // the permutation's shared reader, which is used by the query scans, must
 // never carry an override.
 TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
-  auto index = ad_utility::testing::makeTestIndex("lazyScanNumThreadsOverride",
+  auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                   "<a> <b> <c> .");
   const auto& permutation =
       index.getImpl().getPermutation(Permutation::Enum::PSO);

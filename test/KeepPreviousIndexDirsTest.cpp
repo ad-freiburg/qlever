@@ -238,12 +238,12 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirsFailures) {
   // the cleanup continues with the remaining directories. Removing all
   // permissions from `previous.b` makes the deletion of the file it contains
   // (and hence the `remove_all`) fail.
-  auto restorePermissions = [&testDir] {
+  auto makeDirDeletableAgain = [&testDir] {
     ql::error_code ignored;
     fs::permissions(testDir / "previous.b", fs::perms::owner_all, ignored);
   };
-  absl::Cleanup removeTestDir{[&testDir, &restorePermissions] {
-    restorePermissions();
+  absl::Cleanup removeTestDir{[&testDir, &makeDirDeletableAgain] {
+    makeDirDeletableAgain();
     fs::remove_all(testDir);
   }};
   setUpPreviousIndexDirs(testDir);
@@ -256,7 +256,7 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirsFailures) {
   }
   qlever::Qlever::cleanUpPreviousIndexDirs((testDir / "index").string(),
                                            KeepPreviousIndexDirs::None);
-  restorePermissions();
+  makeDirDeletableAgain();
 
   std::string logName = absl::StrCat("index", REBUILD_INDEX_LOG_SUFFIX);
   EXPECT_THAT(entryNames(testDir),
