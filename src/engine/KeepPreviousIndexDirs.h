@@ -10,14 +10,24 @@
 #ifndef QLEVER_SRC_ENGINE_KEEPPREVIOUSINDEXDIRS_H
 #define QLEVER_SRC_ENGINE_KEEPPREVIOUSINDEXDIRS_H
 
-#include <absl/strings/str_cat.h>
-
-#include <stdexcept>
+#include <array>
 #include <string_view>
+#include <utility>
 
+#include "util/EnumWithStrings.h"
 #include "util/Exception.h"
 
 namespace qlever {
+
+namespace detail {
+enum class KeepPreviousIndexDirsEnum {
+  All,
+  None,
+  OriginalOnly,
+  MostRecentOnly,
+  OriginalAndMostRecent
+};
+}
 
 // Policy for which `previous.*` index directories to keep after a successful
 // index rebuild, configured via the `--rebuild-keep-previous-index-dirs`
@@ -30,56 +40,43 @@ namespace qlever {
 // (which applies the same policy on the client side): keep all of the
 // directories, none of them, only the original one (the oldest, which
 // contains the index the first rebuild started from), only the most recently
-// created one, or the original and the most recent.
-enum class KeepPreviousIndexDirs {
-  All,
-  None,
-  OriginalOnly,
-  MostRecentOnly,
-  OriginalAndMostRecent
+// created one, or the original and the most recent. The `EnumWithStrings`
+// base class provides the conversion from and to these strings (in
+// particular, for the command-line option).
+class KeepPreviousIndexDirs
+    : public ad_utility::EnumWithStrings<KeepPreviousIndexDirs,
+                                         detail::KeepPreviousIndexDirsEnum> {
+ public:
+  using Enum = detail::KeepPreviousIndexDirsEnum;
+
+  static constexpr std::array<std::pair<Enum, std::string_view>, 5>
+      descriptions_{
+          {{Enum::All, "all"},
+           {Enum::None, "none"},
+           {Enum::OriginalOnly, "original-only"},
+           {Enum::MostRecentOnly, "most-recent-only"},
+           {Enum::OriginalAndMostRecent, "original-and-most-recent"}}};
+  static const KeepPreviousIndexDirs All;
+  static const KeepPreviousIndexDirs None;
+  static const KeepPreviousIndexDirs OriginalOnly;
+  static const KeepPreviousIndexDirs MostRecentOnly;
+  static const KeepPreviousIndexDirs OriginalAndMostRecent;
+
+  static constexpr std::string_view typeName() {
+    return "policy for keeping previous index directories";
+  }
+
+  using EnumWithStrings::EnumWithStrings;
 };
 
-// Parse the value of the `--rebuild-keep-previous-index-dirs` option. Throws
-// `std::runtime_error` for any value that is not one of the five choices.
-inline KeepPreviousIndexDirs parseKeepPreviousIndexDirs(
-    std::string_view value) {
-  if (value == "all") {
-    return KeepPreviousIndexDirs::All;
-  }
-  if (value == "none") {
-    return KeepPreviousIndexDirs::None;
-  }
-  if (value == "original-only") {
-    return KeepPreviousIndexDirs::OriginalOnly;
-  }
-  if (value == "most-recent-only") {
-    return KeepPreviousIndexDirs::MostRecentOnly;
-  }
-  if (value == "original-and-most-recent") {
-    return KeepPreviousIndexDirs::OriginalAndMostRecent;
-  }
-  throw std::runtime_error{
-      absl::StrCat("The value \"", value,
-                   "\" must be one of \"all\", \"none\", \"original-only\", "
-                   "\"most-recent-only\", or \"original-and-most-recent\"")};
-}
-
-// The inverse of `parseKeepPreviousIndexDirs`, for log messages.
-inline std::string_view toString(KeepPreviousIndexDirs policy) {
-  switch (policy) {
-    case KeepPreviousIndexDirs::All:
-      return "all";
-    case KeepPreviousIndexDirs::None:
-      return "none";
-    case KeepPreviousIndexDirs::OriginalOnly:
-      return "original-only";
-    case KeepPreviousIndexDirs::MostRecentOnly:
-      return "most-recent-only";
-    case KeepPreviousIndexDirs::OriginalAndMostRecent:
-      return "original-and-most-recent";
-  }
-  AD_FAIL();
-}
+const inline KeepPreviousIndexDirs KeepPreviousIndexDirs::All{Enum::All};
+const inline KeepPreviousIndexDirs KeepPreviousIndexDirs::None{Enum::None};
+const inline KeepPreviousIndexDirs KeepPreviousIndexDirs::OriginalOnly{
+    Enum::OriginalOnly};
+const inline KeepPreviousIndexDirs KeepPreviousIndexDirs::MostRecentOnly{
+    Enum::MostRecentOnly};
+const inline KeepPreviousIndexDirs KeepPreviousIndexDirs::OriginalAndMostRecent{
+    Enum::OriginalAndMostRecent};
 
 // Decide whether the previous index directory at position `index` should be
 // kept under the given `policy`, where the `numDirs` directories are numbered
@@ -90,16 +87,17 @@ inline bool keepPreviousIndexDir(KeepPreviousIndexDirs policy, size_t index,
   AD_CONTRACT_CHECK(index < numDirs);
   bool isOriginal = index == 0;
   bool isMostRecent = index + 1 == numDirs;
-  switch (policy) {
-    case KeepPreviousIndexDirs::All:
+  using enum KeepPreviousIndexDirs::Enum;
+  switch (policy.value()) {
+    case All:
       return true;
-    case KeepPreviousIndexDirs::None:
+    case None:
       return false;
-    case KeepPreviousIndexDirs::OriginalOnly:
+    case OriginalOnly:
       return isOriginal;
-    case KeepPreviousIndexDirs::MostRecentOnly:
+    case MostRecentOnly:
       return isMostRecent;
-    case KeepPreviousIndexDirs::OriginalAndMostRecent:
+    case OriginalAndMostRecent:
       return isOriginal || isMostRecent;
   }
   AD_FAIL();

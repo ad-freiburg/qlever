@@ -60,7 +60,6 @@ int main(int argc, char** argv) {
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
   std::string rebuildIndexStrategy;
-  std::string rebuildKeepPreviousIndexDirs;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -177,8 +176,8 @@ int main(int argc, char** argv) {
       "of index triples, but never below `min` and always at `max` (e.g. "
       "\"automatic:10000:1000000:0.1\").");
   add("rebuild-keep-previous-index-dirs",
-      po::value<std::string>(&rebuildKeepPreviousIndexDirs)
-          ->default_value("original-and-most-recent"),
+      po::value(&config.keepPreviousIndexDirs_)
+          ->default_value(qlever::KeepPreviousIndexDirs::OriginalAndMostRecent),
       "Which `previous.*` index directories to keep after a successful index "
       "rebuild, manual or automatic (each rebuild moves the index that was "
       "served so far into such a directory): \"all\" (keep all of them), "
@@ -362,20 +361,13 @@ int main(int argc, char** argv) {
                 << rebuildIndexStrategy << ")" << std::endl;
   }
 
-  // Resolve the `--rebuild-keep-previous-index-dirs` option, like the
-  // `--rebuild-index-strategy` option above.
-  try {
-    config.keepPreviousIndexDirs_ =
-        qlever::parseKeepPreviousIndexDirs(rebuildKeepPreviousIndexDirs);
-  } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Invalid argument to --rebuild-keep-previous-index-dirs: "
-                 << e.what() << std::endl;
-    return EXIT_FAILURE;
-  }
+  // The `--rebuild-keep-previous-index-dirs` option is parsed directly into
+  // `config.keepPreviousIndexDirs_` (a bad value fails the startup with a
+  // readable message, via the `validate` hook in `EnumWithStrings.h`).
   if (config.keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
     AD_LOG_INFO << "Cleanup of previous index directories after each rebuild "
                    "enabled (--rebuild-keep-previous-index-dirs "
-                << rebuildKeepPreviousIndexDirs << ")" << std::endl;
+                << config.keepPreviousIndexDirs_ << ")" << std::endl;
   }
 
   try {

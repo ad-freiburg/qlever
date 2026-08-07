@@ -774,15 +774,7 @@ namespace {
 // Return the directories in the current directory whose name starts with
 // `prefix`.
 std::vector<ql::filesystem::path> dirsWithPrefix(std::string_view prefix) {
-  namespace fs = ql::filesystem;
-  std::vector<fs::path> result;
-  for (const auto& entry : fs::directory_iterator(".")) {
-    if (entry.is_directory() &&
-        ql::starts_with(entry.path().filename().string(), prefix)) {
-      result.push_back(entry.path());
-    }
-  }
-  return result;
+  return qlever::util::directoriesWithPrefix(".", prefix);
 }
 
 // Remove all directories in the current directory whose name starts with
@@ -799,9 +791,48 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 }  // namespace
 
 // _____________________________________________________________________________
-// Compiled out under Emscripten: the `server` library it needs is not built
-// there (see the include of `engine/Server.h` above), and the test hangs
-// under Emscripten anyway (threaded server integration).
+// The thread-count override for the rebuild's scans must be set on the
+// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
+// the permutation's shared reader, which is used by the query scans, must
+// never carry an override.
+TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
+  auto index = ad_utility::testing::makeTestIndex("lazyScanNumThreadsOverride",
+                                                  "<a> <b> <c> .");
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::PSO);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto state =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+
+  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
+    return permutation.lazyScanWithUnlimitedReader(
+        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
+        cancellationHandle, *state, numThreadsOverride);
+  };
+  auto [reader, scan] = scanWithOverride(3);
+  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
+  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
+  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
+  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
+
+  // Recomputing the statistics with the throttle set must give exactly the
+  // same result as with the default (0, which means "fall back to
+  // `lazy-index-scan-num-threads`"). This exercises the translation of the
+  // runtime parameter to the override at both of its use sites.
+  auto statsDefault = index.getImpl().recomputeStatistics(state);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
+  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
+}
+
+// _____________________________________________________________________________
+// All of the server-integration tests below are compiled out under
+// Emscripten: the `server` library they need is not built there (see the
+// include of `engine/Server.h` above), and the tests hang under Emscripten
+// anyway (threaded server integration).
 #ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegration) {
   namespace fs = ql::filesystem;
@@ -820,12 +851,9 @@ TEST(IndexRebuilder, serverIntegration) {
 
   qlever::EngineConfig config;
   config.baseName_ = indexName;
-  // Keep all previous index directories: this test runs in the shared
-  // working directory, and deleting `previous.*` directories here would
-  // interfere with the other server-integration tests when the tests run
-  // concurrently. The cleanup policy itself is tested by
-  // `serverIntegrationKeepPreviousIndexDirs` below, in a dedicated
-  // subdirectory.
+  // Keep all previous index directories; the checks below expect one
+  // directory per rebuild. The cleanup policy itself is tested by
+  // `serverIntegrationKeepPreviousIndexDirs` below.
   config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
   Server server{4321, 1, std::string{accessToken}, config};
@@ -925,12 +953,8 @@ TEST(IndexRebuilder, serverIntegration) {
 
   threadPool.join();
 }
-#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
-// Compiled out under Emscripten like `serverIntegration` above: the `server`
-// library it needs is not built there.
-#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
   cleanDirsWithPrefix("droppedState.");
@@ -985,50 +1009,8 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   threadPool.join();
   cleanDirsWithPrefix("droppedState.");
 }
-#endif  // __EMSCRIPTEN__
 
 // _____________________________________________________________________________
-// The thread-count override for the rebuild's scans must be set on the
-// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
-// the permutation's shared reader, which is used by the query scans, must
-// never carry an override.
-TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
-  auto index = ad_utility::testing::makeTestIndex("lazyScanNumThreadsOverride",
-                                                  "<a> <b> <c> .");
-  const auto& permutation =
-      index.getImpl().getPermutation(Permutation::Enum::PSO);
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  auto state =
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-
-  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
-    return permutation.lazyScanWithUnlimitedReader(
-        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
-        cancellationHandle, *state, numThreadsOverride);
-  };
-  auto [reader, scan] = scanWithOverride(3);
-  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
-  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
-  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
-  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
-
-  // Recomputing the statistics with the throttle set must give exactly the
-  // same result as with the default (0, which means "fall back to
-  // `lazy-index-scan-num-threads`"). This exercises the translation of the
-  // runtime parameter to the override at both of its use sites.
-  auto statsDefault = index.getImpl().recomputeStatistics(state);
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
-  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
-}
-
-// _____________________________________________________________________________
-// Compiled out under Emscripten like `serverIntegration` above: the `server`
-// library it needs is not built there.
-#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
   // The automatic rebuild below uses the default directory names and the checks
   // below inspect all directories with a given prefix, see the comment in
@@ -1135,43 +1117,50 @@ TEST(IndexRebuilder, serverIntegrationAutomaticRebuild) {
     Server::logAutomaticRebuildFailure(nullptr);
   }
 }
-#endif  // __EMSCRIPTEN__
-
 // _____________________________________________________________________________
-// Compiled out under Emscripten like `serverIntegration` above: the `server`
-// library it needs is not built there.
-#ifndef __EMSCRIPTEN__
 TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
-  namespace fs = ql::filesystem;
-  // Run in a dedicated subdirectory: this test creates and deletes
+  // Run in a fresh working directory: this test creates and deletes
   // `previous.*` directories, which would interfere with the
   // server-integration tests above when the tests run concurrently in the
-  // same working directory.
-  fs::path parentDir = fs::current_path();
-  fs::path testDir = parentDir / "IndexRebuilder_keepPreviousIndexDirs.dir";
-  fs::remove_all(testDir);
-  fs::create_directory(testDir);
-  fs::current_path(testDir);
-  absl::Cleanup restoreWorkingDir{[&parentDir, &testDir]() {
-    ql::filesystem::current_path(parentDir);
-    ql::filesystem::remove_all(testDir);
-  }};
+  // same working directory. Declared first, so that it is restored and
+  // removed last, i.e. after the `server` and the `threadPool` below have
+  // been destroyed.
+  auto restoreWorkingDir = ad_utility::testing::useFreshWorkingDirectory();
+  namespace net = boost::asio;
+  net::thread_pool threadPool{1};
 
-  std::string indexName = "IndexRebuilder_keepPreviousIndexDirs";
+  std::string indexName = gtestCurrentTestName();
   ad_utility::testing::makeTestIndex(indexName, "<a> <b> <c> .");
 
   qlever::EngineConfig config;
   config.baseName_ = indexName;
   config.keepPreviousIndexDirs_ =
       qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
-  serverTestHelpers::ServerForTesting server{1, "accessToken", config};
+  Server server{4321, 1, "accessToken", config};
+
+  // Perform the given request on the `threadPool` (like in `serverIntegration`
+  // above) and return the response. NOTE: A fresh, request-local `io_context`
+  // (as used by `ServerForTesting::process`) would be destroyed right after
+  // the response future resolves, while the server-pool thread that posted the
+  // final coroutine resumption can still be inside the signal on that
+  // context's scheduler event; the thread sanitizer reports this as a race
+  // between `pthread_cond_signal` and `pthread_cond_destroy`.
+  auto performRequest = [&server, &threadPool](auto& request) {
+    return net::co_spawn(
+               threadPool,
+               server.onlyForTestingProcess<std::decay_t<decltype(request)>,
+                                            ad_utility::httpUtils::ResponseT>(
+                   request),
+               net::use_future)
+        .get();
+  };
 
   // Trigger a manual rebuild and wait for it (the request only returns after
-  // the new index has been swapped in and the cleanup has run).
-  auto rebuild = [&server]() {
+  // the new index has been swapped in, which includes the cleanup).
+  auto rebuild = [&performRequest]() {
     auto request = ad_utility::testing::makeGetRequest(
         "/?cmd=rebuild-index&access-token=accessToken");
-    auto response = server.process(request);
+    auto response = performRequest(request);
     EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
   };
 
@@ -1212,10 +1201,17 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   EXPECT_EQ(afterThird.front(), originalDir);
   EXPECT_NE(afterThird.back(), middleDir);
 
-  // The rebuilt index still answers queries.
+  // The rebuilt index still answers queries. Unlike the `cmd=rebuild-index`
+  // requests above, a query needs the query hub (for the live runtime
+  // information via websocket).
+  auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
+      threadPool.get_executor());
+  server.queryHub_ = queryHub;
   auto request = ad_utility::testing::makeGetRequest(
       "/?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
-  auto response = server.process(request);
+  auto response = performRequest(request);
   EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
+
+  threadPool.join();
 }
 #endif  // __EMSCRIPTEN__

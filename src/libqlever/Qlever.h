@@ -670,6 +670,10 @@ class Qlever {
   // 4. Remove the directory that contained `config.newIndexSource()`, which
   //    step 2 has emptied (if it is actually empty). A failure here is only
   //    logged as a warning.
+  // 5. Apply the `policy` for which `previous.*` index directories to keep
+  //    (see `cleanUpPreviousIndexDirs` above), right after step 1 has retired
+  //    the old index into such a directory. The default policy `all` keeps
+  //    everything, i.e. performs no cleanup.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
@@ -688,8 +692,9 @@ class Qlever {
   // this function does is string concatenation and moving files around. This
   // function assumes that file handles are never reopened, so moving the files
   // while the file handle is still open is fine in POSIX compliant systems.
-  static void moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
-                                        const IndexRebuildConfig& config);
+  static void moveRebuiltIndexIntoPlace(
+      IndexAndViews& newIndexAndViews, const IndexRebuildConfig& config,
+      KeepPreviousIndexDirs policy = KeepPreviousIndexDirs::All);
 
   // The result of the first phase of an index rebuild (see
   // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
@@ -732,11 +737,13 @@ class Qlever {
   // Before the swap, `moveRebuiltIndexIntoPlace` is called, which moves the
   // files of the old index to `config.oldIndexTarget()` and the files of the
   // new index from `config.newIndexSource()` to `config.newIndexTarget()` (by
-  // default the place of the old index) and removes the directory in which the
-  // new index was built.
+  // default the place of the old index), removes the directory in which the
+  // new index was built, and applies the policy from `keepPreviousIndexDirs`
+  // for which `previous.*` index directories to keep.
   void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
                           const ad_utility::SharedCancellationHandle& handle,
-                          const IndexRebuildConfig& config);
+                          const IndexRebuildConfig& config,
+                          KeepPreviousIndexDirs keepPreviousIndexDirs);
 #endif
 
   QueryResultCache& cache() { return cache_; }

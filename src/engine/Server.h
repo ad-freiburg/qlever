@@ -69,6 +69,7 @@ class Server {
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
   FRIEND_TEST(IndexRebuilder, serverIntegrationAutomaticRebuild);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs);
   friend serverTestHelpers::ServerForTesting;
 
  public:

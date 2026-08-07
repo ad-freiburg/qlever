@@ -12,9 +12,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "backports/filesystem.h"
@@ -25,28 +27,27 @@
 
 using qlever::keepPreviousIndexDir;
 using qlever::KeepPreviousIndexDirs;
-using qlever::parseKeepPreviousIndexDirs;
-using qlever::toString;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 
 // _____________________________________________________________________________
 TEST(KeepPreviousIndexDirs, parse) {
-  EXPECT_EQ(parseKeepPreviousIndexDirs("all"), KeepPreviousIndexDirs::All);
-  EXPECT_EQ(parseKeepPreviousIndexDirs("none"), KeepPreviousIndexDirs::None);
-  EXPECT_EQ(parseKeepPreviousIndexDirs("original-only"),
-            KeepPreviousIndexDirs::OriginalOnly);
-  EXPECT_EQ(parseKeepPreviousIndexDirs("most-recent-only"),
-            KeepPreviousIndexDirs::MostRecentOnly);
-  EXPECT_EQ(parseKeepPreviousIndexDirs("original-and-most-recent"),
+  auto parse = [](std::string_view value) {
+    return KeepPreviousIndexDirs::fromString(value);
+  };
+  EXPECT_EQ(parse("all"), KeepPreviousIndexDirs::All);
+  EXPECT_EQ(parse("none"), KeepPreviousIndexDirs::None);
+  EXPECT_EQ(parse("original-only"), KeepPreviousIndexDirs::OriginalOnly);
+  EXPECT_EQ(parse("most-recent-only"), KeepPreviousIndexDirs::MostRecentOnly);
+  EXPECT_EQ(parse("original-and-most-recent"),
             KeepPreviousIndexDirs::OriginalAndMostRecent);
 }
 
 // _____________________________________________________________________________
 TEST(KeepPreviousIndexDirs, parseErrors) {
   auto expectThrows = [](std::string_view value) {
-    AD_EXPECT_THROW_WITH_MESSAGE(parseKeepPreviousIndexDirs(value),
-                                 HasSubstr("must be one of"));
+    AD_EXPECT_THROW_WITH_MESSAGE(KeepPreviousIndexDirs::fromString(value),
+                                 HasSubstr("is not a valid"));
   };
   expectThrows("");
   expectThrows("some");
@@ -67,11 +68,12 @@ TEST(KeepPreviousIndexDirs, engineConfigDefault) {
 
 // _____________________________________________________________________________
 TEST(KeepPreviousIndexDirs, toStringIsInverseOfParse) {
-  for (auto policy : {KeepPreviousIndexDirs::All, KeepPreviousIndexDirs::None,
-                      KeepPreviousIndexDirs::OriginalOnly,
-                      KeepPreviousIndexDirs::MostRecentOnly,
-                      KeepPreviousIndexDirs::OriginalAndMostRecent}) {
-    EXPECT_EQ(parseKeepPreviousIndexDirs(toString(policy)), policy);
+  for (KeepPreviousIndexDirs policy :
+       {KeepPreviousIndexDirs::All, KeepPreviousIndexDirs::None,
+        KeepPreviousIndexDirs::OriginalOnly,
+        KeepPreviousIndexDirs::MostRecentOnly,
+        KeepPreviousIndexDirs::OriginalAndMostRecent}) {
+    EXPECT_EQ(KeepPreviousIndexDirs::fromString(policy.toString()), policy);
   }
 }
 
@@ -114,10 +116,14 @@ namespace {
 // Create the directory `testDir` (deleting whatever was there before) with
 // five `previous.*` subdirectories (each containing a dummy index file, one
 // of them also a nested subdirectory), a subdirectory whose name does not
-// start with `previous.`, and a regular file whose name does. The
-// `previous.*` subdirectories are created in lexicographic name order, so
-// this order is also their order from oldest to newest (equal timestamps are
-// broken by name, see `Qlever::cleanUpPreviousIndexDirs`).
+// start with `previous.`, and a regular file whose name does. The `previous.*`
+// subdirectories get explicit last-write times that make `previous.a` the
+// oldest and `previous.e` the newest, with a deliberate timestamp tie between
+// `previous.d` and `previous.e` (which the cleanup breaks by name, see
+// `Qlever::cleanUpPreviousIndexDirs`). The times cannot be left implicit:
+// creating the nested subdirectory below modifies `previous.c`, and on a
+// filesystem with fine-grained timestamps that would make `previous.c` the
+// newest directory (observed on the macOS CI runners).
 void setUpPreviousIndexDirs(const ql::filesystem::path& testDir) {
   namespace fs = ql::filesystem;
   fs::remove_all(testDir);
@@ -131,6 +137,24 @@ void setUpPreviousIndexDirs(const ql::filesystem::path& testDir) {
   fs::create_directory(testDir / "previous.c" / "nested");
   fs::create_directory(testDir / "other.dir");
   std::ofstream{testDir / "previous.file"} << "not a directory";
+  // Derive the timestamps from a real one read back from disk, so that this
+  // works with both `std::filesystem` (`file_time_type`) and the
+  // `boost::filesystem` backport (`std::time_t`).
+  auto newest = fs::last_write_time(testDir / "previous.e");
+  // The generic lambda makes the discarded branch dependent, so that each
+  // build only instantiates the branch that matches its timestamp type.
+  auto minutesEarlier = [](auto timestamp, int minutes) {
+    if constexpr (std::is_integral_v<decltype(timestamp)>) {
+      return timestamp - 60 * minutes;
+    } else {
+      return timestamp - std::chrono::minutes(minutes);
+    }
+  };
+  fs::last_write_time(testDir / "previous.a", minutesEarlier(newest, 4));
+  fs::last_write_time(testDir / "previous.b", minutesEarlier(newest, 3));
+  fs::last_write_time(testDir / "previous.c", minutesEarlier(newest, 2));
+  fs::last_write_time(testDir / "previous.d", minutesEarlier(newest, 1));
+  fs::last_write_time(testDir / "previous.e", minutesEarlier(newest, 1));
 }
 
 // Return the names of the entries of `testDir`, sorted.
@@ -147,7 +171,7 @@ std::vector<std::string> entryNames(const ql::filesystem::path& testDir) {
 // _____________________________________________________________________________
 TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
   namespace fs = ql::filesystem;
-  fs::path testDir = "keepPreviousIndexDirsTest.dir";
+  fs::path testDir = absl::StrCat(gtestCurrentTestName(), ".dir");
   // Remove the test directory also when an assertion or an exception exits
   // this test early.
   absl::Cleanup removeTestDir{[&testDir] { fs::remove_all(testDir); }};

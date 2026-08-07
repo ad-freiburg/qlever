@@ -1706,8 +1706,14 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
         // it is only written from this very executor, which has a single
         // thread.
         oldManager.retireOnDiskFiles();
+        // The swap also applies the configured policy for which `previous.*`
+        // index directories to keep. Deleting a directory there blocks this
+        // single-threaded executor for a bit, but the swap blocks updates
+        // anyway, and doing it in the same step avoids an extra executor
+        // hop. A cleanup failure is only logged; it does not fail the
+        // request, because the new index is already in place.
         qlever().swapInRebuiltIndex(index, std::move(rebuildResult), handle,
-                                    config);
+                                    config, keepPreviousIndexDirs_);
         auto now = std::chrono::duration_cast<std::chrono::seconds>(
                        std::chrono::system_clock::now().time_since_epoch())
                        .count();
@@ -1715,23 +1721,6 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
       },
       net::use_awaitable);
   co_await std::move(swapRoutine);
-
-  // The rebuild has succeeded, so apply the configured policy for which
-  // `previous.*` index directories to keep. This runs on the query thread
-  // pool: deleting a large index directory can take a while and must not
-  // block the (single-threaded) update executor. A failure is only logged
-  // (`cleanUpPreviousIndexDirs` never throws); it must not fail the request,
-  // because the new index is already in place.
-  if (keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
-    auto cleanupRoutine = ad_utility::runFunctionOnExecutor(
-        queryThreadPool_.get_executor(),
-        [this, &config] {
-          qlever::Qlever::cleanUpPreviousIndexDirs(config.newIndexTarget(),
-                                                   keepPreviousIndexDirs_);
-        },
-        net::use_awaitable);
-    co_await std::move(cleanupRoutine);
-  }
   co_return config;
 }
 
