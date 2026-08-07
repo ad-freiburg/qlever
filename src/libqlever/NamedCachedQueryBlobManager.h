@@ -42,6 +42,23 @@ class NamedCachedQueryBlobManager {
       char,
       ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
 
+  // The result of loading a blob (see `tryToDeserialize` below). All of these
+  // are detected before any of the actual contents of the blob is read.
+  enum class BlobStatus {
+    // The blob was decompressed and its header is compatible with this version
+    // of QLever.
+    ok,
+    // The blob is not a ZSTD frame written by `compressBlob`, or its compressed
+    // data is corrupted (see `tryToDecompressBlob`).
+    notDecompressible,
+    // The decompressed blob does not start with the expected magic bytes. This
+    // also covers the case that it is too short to hold a complete header.
+    invalidMagicBytes,
+    // The magic bytes are correct, but the format version stored in the blob is
+    // not the one that this version of QLever writes.
+    invalidVersion
+  };
+
  private:
   // In this buffer, the blob passed to `deserialize` is kept alive (in
   // decompressed form) for the lifetime of this manager (and hence of the
@@ -65,9 +82,27 @@ class NamedCachedQueryBlobManager {
   // kept alive for the lifetime of this manager and is allocated via the
   // `allocator` (see `BlobAllocator` above).
   //
+  // Return `ok` on success, and the reason for the rejection if the blob cannot
+  // be decompressed, or if its header is missing or incompatible (see
+  // `BlobStatus`). In those cases, `qlever` is left completely unchanged, so it
+  // can be used as if this function had never been called, and another blob can
+  // be loaded afterwards.
+  //
+  // NOTE: This function is non-throwing only for the failures that are detected
+  // before any of the actual contents of the blob is read (see `BlobStatus`).
+  // Contents that cannot be read behind a valid header still throw, as does a
+  // violation of the preconditions below.
+  //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access `qlever`, e.g. right after construction and before the first query
-  // is answered. Must not be called more than once on the same manager.
+  // is answered. Must not be called more than once on the same manager, except
+  // after a call that returned a status other than `ok`.
+  BlobStatus tryToDeserialize(Qlever& qlever,
+                              ql::span<const char> compressedBlob,
+                              ql::pmr::polymorphic_allocator<char> allocator);
+
+  // Same as `tryToDeserialize`, but throw a descriptive exception instead of
+  // returning a status.
   void deserialize(Qlever& qlever, ql::span<const char> compressedBlob,
                    ql::pmr::polymorphic_allocator<char> allocator);
 
@@ -80,8 +115,16 @@ class NamedCachedQueryBlobManager {
 
   // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
   // allocated buffer that uses `allocator` for its storage (see
-  // `BlobAllocator`). Throw with a descriptive message if `compressedBlob` was
-  // not written by `compressBlob`, or is corrupted.
+  // `BlobAllocator`). Return `nullopt` if `compressedBlob` was not written by
+  // `compressBlob`, or is corrupted. Exceptions that do not come from ZSTD (in
+  // particular `std::bad_alloc`, should the frame header state an uncompressed
+  // size that cannot be allocated) are still propagated.
+  static std::optional<std::vector<char, BlobAllocator>> tryToDecompressBlob(
+      ql::span<const char> compressedBlob,
+      ql::pmr::polymorphic_allocator<char> allocator);
+
+  // Same as `tryToDecompressBlob`, but throw with a descriptive message instead
+  // of returning `nullopt`.
   static std::vector<char, BlobAllocator> decompressBlob(
       ql::span<const char> compressedBlob,
       ql::pmr::polymorphic_allocator<char> allocator);
@@ -92,9 +135,19 @@ class NamedCachedQueryBlobManager {
       ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer);
 
   // Read and verify the magic header and format version at the start of a
-  // decompressed blob, advancing `serializer` past them. Throw if the header is
-  // missing, truncated, or has an incompatible format version. Mirrors
+  // decompressed blob, advancing `serializer` past them. Return `ok` if the
+  // header is valid, and the reason for the rejection otherwise (see
+  // `BlobStatus`). Never throw; in particular, a missing or truncated
+  // header is reported as `invalidMagicBytes`. If the result is not `ok`, the
+  // position of the `serializer` is unspecified afterwards. Mirrors
   // `writeBlobHeader`.
+  static BlobStatus tryToSkipAndVerifyBlobHeader(
+      ad_utility::serialization::ByteBufferReadSerializerT<
+          true, ql::span<const char>>& serializer) noexcept;
+
+  // Same as `tryToSkipAndVerifyBlobHeader`, but throw a descriptive exception
+  // instead of returning a status if the header is missing, truncated, or has
+  // an incompatible format version.
   static void skipAndVerifyBlobHeader(
       ad_utility::serialization::ByteBufferReadSerializerT<
           true, ql::span<const char>>& serializer);
