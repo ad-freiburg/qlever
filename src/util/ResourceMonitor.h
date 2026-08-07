@@ -20,6 +20,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "backports/filesystem.h"
 #include "util/jthread.h"
@@ -91,6 +92,13 @@ struct Sample {
   std::optional<DiskIoBytes> diskIoBytes_;
   std::optional<double> ioStallPercent_;
 };
+
+// The column names `formatTsvRow` produces values for, without the trailing
+// newline. `start` also compares it against an existing file's first line to
+// notice that the format has changed since that file was written.
+inline constexpr std::string_view tsvHeader =
+    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\twrite_bytes\t"
+    "io_stall_percent";
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);

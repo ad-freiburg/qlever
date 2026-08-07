@@ -263,9 +263,39 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
   // old file size. A missing file or failed stat also gets a header.
   ql::error_code ec;
   const auto oldSize = fs::file_size(path, ec);
-  const bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
+  bool writeHeader = mode == Mode::Truncate || ec || oldSize == 0;
   const auto openMode =
       mode == Mode::Truncate ? std::ios::trunc : std::ios::app;
+
+  if (!writeHeader) {
+    // Appending to an existing file: if it was written by a QLever version
+    // with a different TSV format (its header differs), rotate it away, so
+    // that every file is internally consistent (header matches all rows).
+    std::string firstLine;
+    {
+      std::ifstream existingFile{path};
+      std::getline(existingFile, firstLine);
+    }
+    if (firstLine != resource_monitor::tsvHeader) {
+      auto rotated = path;
+      rotated += ".old";
+      ql::error_code renameEc;
+      fs::rename(path, rotated, renameEc);
+      if (renameEc) {
+        AD_LOG_WARN
+            << "ResourceMonitor: could not move the resource-usage "
+               "log of an older format out of the way. Writing a second "
+               "header line and appending rows in the current format to it."
+            << std::endl;
+      } else {
+        AD_LOG_INFO << "ResourceMonitor: moved the resource-usage log of an "
+                       "older format to \""
+                    << rotated.string() << "\"" << std::endl;
+      }
+      writeHeader = true;
+    }
+  }
+
   stream_.open(path, std::ios::out | openMode);
   if (!stream_.is_open()) {
     AD_LOG_WARN << "ResourceMonitor: failed to open the output file; "
@@ -274,9 +304,7 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
     return;
   }
   if (writeHeader) {
-    stream_ << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\t"
-               "write_bytes\tio_stall_percent\n"
-            << std::flush;
+    stream_ << resource_monitor::tsvHeader << "\n" << std::flush;
   }
   // Spawn last: the thread uses the stream right away. An exception
   // escaping a thread would terminate the process, so catch everything.
