@@ -680,7 +680,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
           moveToCachingInputRange(std::move(resultPairs)));
       viewCollection.emplace_back(std::move(generator));
       sibling->precomputedResultBecauseSiblingOfService() =
-          std::make_shared<const Result>(
+          std::allocate_shared<const Result>(
+              sibling->allocator(),
               Result::LazyResult{
                   ad_utility::OwningViewNoConst{std::move(viewCollection)} |
                   ql::views::join},
@@ -704,8 +705,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   service->siblingInfo_.emplace(
-      std::make_shared<Result>(std::move(siblingPair),
-                               siblingResult->sortedBy()),
+      std::allocate_shared<Result>(service->allocator(), std::move(siblingPair),
+                                   siblingResult->sortedBy()),
       sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
 
   sibling->precomputedResultBecauseSiblingOfService() =

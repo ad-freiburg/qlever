@@ -24,7 +24,11 @@ using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : qec_(qec) {}
+    : qec_(qec) {
+  // A `QueryExecutionTree` always needs a `QueryExecutionContext`, if only to
+  // obtain the memory limited allocator of the query.
+  AD_CONTRACT_CHECK(qec_ != nullptr);
+}
 
 // _____________________________________________________________________________
 std::string QueryExecutionTree::getCacheKey() const {

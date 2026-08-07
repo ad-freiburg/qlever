@@ -92,8 +92,8 @@ SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
   // NOTE: The operations are allocated with the memory limited allocator of the
   // query, because the query planner creates a lot of them, most of which never
   // become part of the final execution tree.
-  return {qec, std::allocate_shared<Operation>(QueryPlanner::allocatorOf(qec),
-                                               qec, AD_FWD(args)...)};
+  return {qec, std::allocate_shared<Operation>(qec->getAllocator(), qec,
+                                               AD_FWD(args)...)};
 }
 
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
@@ -136,7 +136,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec,
                            CancellationHandle cancellationHandle)
     : _qec{qec},
-      allocator_{allocatorOf(qec)},
+      allocator_{qec->getAllocator()},
       cancellationHandle_{std::move(cancellationHandle)},
       warnings_{allocator_} {
   AD_CONTRACT_CHECK(cancellationHandle_);

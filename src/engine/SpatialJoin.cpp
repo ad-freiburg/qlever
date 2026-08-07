@@ -67,8 +67,9 @@ SpatialJoin::SpatialJoin(
     AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
 
     auto key = config_.rightCacheName_.value();
-    childRight_ = std::make_shared<QueryExecutionTree>(
-        qec, qec->namedResultCache().getOperation(key, qec));
+    childRight_ = std::allocate_shared<QueryExecutionTree>(
+        qec->getAllocator(), qec,
+        qec->namedResultCache().getOperation(key, qec));
 
     // Early check that the query was pinned together with a geometry index
     const auto& geoIndex = qec->namedResultCache().get(key)->cachedGeoIndex_;
@@ -100,13 +101,13 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     const Variable& varOfChild) const {
   std::shared_ptr<SpatialJoin> sj;
   if (varOfChild == config_.left_) {
-    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       std::move(child), childRight_,
-                                       substitutesFilterOp_);
+    sj = std::allocate_shared<SpatialJoin>(allocator(), getExecutionContext(),
+                                           config_, std::move(child),
+                                           childRight_, substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
-    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       childLeft_, std::move(child),
-                                       substitutesFilterOp_);
+    sj = std::allocate_shared<SpatialJoin>(
+        allocator(), getExecutionContext(), config_, childLeft_,
+        std::move(child), substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
   }
@@ -720,8 +721,8 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   if (!left.has_value() && !right.has_value()) {
     return std::nullopt;
   }
-  return std::make_shared<SpatialJoin>(
-      _executionContext, config_,
+  return std::allocate_shared<SpatialJoin>(
+      allocator(), _executionContext, config_,
       // Potentially unchanged child retrieved with `value_or`.
       left.value_or(childLeft_), right.value_or(childRight_));
 }

@@ -388,9 +388,9 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   // kept as a non-const `shared_ptr` so it can be updated in-place on each
   // iteration without a new allocation; the implicit conversion to
   // `shared_ptr<const IdTableView<0>>` makes it compatible with `idTables`.
-  auto placeholder = std::make_shared<IdTable>(0, allocator());
-  auto placeholderView =
-      std::make_shared<IdTableView<0>>(placeholder->asStaticView<0>());
+  auto placeholder = std::allocate_shared<IdTable>(allocator(), 0, allocator());
+  auto placeholderView = std::allocate_shared<IdTableView<0>>(
+      allocator(), placeholder->asStaticView<0>());
   idTables.push_back(placeholderView);
 
   auto generatedTables = lazyResult->idTables();
