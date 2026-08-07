@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -219,4 +220,49 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
     EXPECT_THAT(logContent, HasSubstr("previous.d -> DELETE"));
     EXPECT_THAT(logContent, HasSubstr("previous.e -> KEEP"));
   }
+}
+
+// _____________________________________________________________________________
+TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirsFailures) {
+  namespace fs = ql::filesystem;
+  fs::path testDir = absl::StrCat(gtestCurrentTestName(), ".dir");
+
+  // A base name in a directory that does not exist makes the enumeration of
+  // the `previous.*` directories fail. The failure must only be logged (when
+  // the cleanup runs, the rebuild has already succeeded), never thrown.
+  EXPECT_NO_THROW(qlever::Qlever::cleanUpPreviousIndexDirs(
+      (testDir / "doesNotExist" / "index").string(),
+      KeepPreviousIndexDirs::None));
+
+  // A directory that cannot be deleted is logged as an error and kept, and
+  // the cleanup continues with the remaining directories. Removing all
+  // permissions from `previous.b` makes the deletion of the file it contains
+  // (and hence the `remove_all`) fail.
+  auto restorePermissions = [&testDir] {
+    ql::error_code ignored;
+    fs::permissions(testDir / "previous.b", fs::perms::owner_all, ignored);
+  };
+  absl::Cleanup removeTestDir{[&testDir, &restorePermissions] {
+    restorePermissions();
+    fs::remove_all(testDir);
+  }};
+  setUpPreviousIndexDirs(testDir);
+  fs::permissions(testDir / "previous.b", ql::filesystem_perms_none);
+  fs::path fileInB = testDir / "previous.b" / "index.meta-data.json";
+  if (FILE* handle = fopen(fileInB.string().c_str(), "r")) {
+    fclose(handle);
+    // This can happen in docker environments (running as root).
+    GTEST_SKIP_("File permissions are not effective in this environment");
+  }
+  qlever::Qlever::cleanUpPreviousIndexDirs((testDir / "index").string(),
+                                           KeepPreviousIndexDirs::None);
+  restorePermissions();
+
+  std::string logName = absl::StrCat("index", REBUILD_INDEX_LOG_SUFFIX);
+  EXPECT_THAT(entryNames(testDir),
+              ElementsAre(logName, "other.dir", "previous.b", "previous.file"));
+  std::ifstream logStream{(testDir / logName).string()};
+  std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+  EXPECT_THAT(logContent, HasSubstr("previous.b -> DELETE"));
+  EXPECT_THAT(logContent, HasSubstr("Failed to delete \"previous.b\""));
 }
