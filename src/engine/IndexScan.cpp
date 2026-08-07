@@ -828,9 +828,9 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
        metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
-          auto scan = std::make_shared<
+          auto scan = std::allocate_shared<
               CompressedRelationReader::IdTableGeneratorInputRange>(
-              getLazyScan());
+              allocator(), getLazyScan());
           scan->details().numBlocksAll_ =
               getMetadataForScan().value().sizeBlockMetadata_;
           updateRuntimeInfoForLazyScan(scan->details(), Always);
@@ -893,7 +893,8 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
             Result::LazyResult{}};
   }
 
-  auto state = std::make_shared<SharedGeneratorState>(
+  auto state = std::allocate_shared<SharedGeneratorState>(
+      allocator(),
       SharedGeneratorState{std::move(input), joinColumn,
                            std::move(metaBlocks.value()), filterJoinSide});
   return {createPrefilteredJoinSide(state),

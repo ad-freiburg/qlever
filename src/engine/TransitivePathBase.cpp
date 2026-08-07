@@ -438,13 +438,15 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     size_t maxDist, bool useBinSearch, Graphs activeGraphs,
     const std::optional<Variable>& graphVariable) {
   if (useBinSearch) {
-    return std::make_shared<TransitivePathBinSearch>(
-        qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist, std::move(activeGraphs), graphVariable);
+    return std::allocate_shared<TransitivePathBinSearch>(
+        qec->getAllocator(), qec, std::move(child), std::move(leftSide),
+        std::move(rightSide), minDist, maxDist, std::move(activeGraphs),
+        graphVariable);
   } else {
-    return std::make_shared<TransitivePathHashMap>(
-        qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist, std::move(activeGraphs), graphVariable);
+    return std::allocate_shared<TransitivePathHashMap>(
+        qec->getAllocator(), qec, std::move(child), std::move(leftSide),
+        std::move(rightSide), minDist, maxDist, std::move(activeGraphs),
+        graphVariable);
   }
 }
 

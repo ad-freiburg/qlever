@@ -310,9 +310,11 @@ class QueryExecutionTree {
   };
 
   std::shared_ptr<QueryExecutionTree> clone() const {
-    return rootOperation_ ? std::make_shared<QueryExecutionTree>(
-                                qec_, rootOperation_->clone())
-                          : std::make_shared<QueryExecutionTree>(qec_);
+    return rootOperation_
+               ? std::allocate_shared<QueryExecutionTree>(
+                     qec_->getAllocator(), qec_, rootOperation_->clone())
+               : std::allocate_shared<QueryExecutionTree>(qec_->getAllocator(),
+                                                          qec_);
   }
 };
 
@@ -320,11 +322,16 @@ namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
 // arguments.
+//
+// NOTE: Both the tree and the operation are allocated with the memory limited
+// allocator of the query, such that they count towards its memory limit.
 template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
     QueryExecutionContext* qec, Args&&... args) {
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+  const auto& allocator = qec->getAllocator();
+  return std::allocate_shared<QueryExecutionTree>(
+      allocator, qec,
+      std::allocate_shared<Operation>(allocator, qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
 
