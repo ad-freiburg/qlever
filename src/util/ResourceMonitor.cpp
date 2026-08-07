@@ -10,10 +10,15 @@
 
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
+#include <absl/strings/str_split.h>
 
+#include <algorithm>
 #include <array>
+#include <charconv>
+#include <string_view>
 #include <type_traits>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
@@ -90,19 +95,19 @@ std::optional<double> cpuTimeSeconds() {
 }
 
 // _____________________________________________________________________________
-std::optional<double> CpuPercentTracker::update(
-    std::optional<double> cpuSeconds, double elapsed) {
+std::optional<double> SecondsToPercentTracker::update(
+    std::optional<double> seconds, double elapsed) {
   // Keep the old baseline on a failed reading, so the next value averages
   // over the whole gap rather than jumping.
-  if (!cpuSeconds.has_value()) {
+  if (!seconds.has_value()) {
     return std::nullopt;
   }
   std::optional<double> percent;
-  if (lastCpuSeconds_.has_value() && elapsed > lastElapsed_) {
-    percent =
-        (*cpuSeconds - *lastCpuSeconds_) / (elapsed - lastElapsed_) * 100.0;
+  if (lastSeconds_.has_value() && elapsed > lastElapsed_) {
+    percent = (seconds.value() - lastSeconds_.value()) /
+              (elapsed - lastElapsed_) * 100.0;
   }
-  lastCpuSeconds_ = cpuSeconds;
+  lastSeconds_ = seconds;
   lastElapsed_ = elapsed;
   return percent;
 }
@@ -153,6 +158,44 @@ std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo) {
 }
 #endif
 
+// _____________________________________________________________________________
+std::optional<double> ioStallSeconds() {
+#if defined(__linux__)
+  std::ifstream pressure{"/proc/pressure/io"};
+  return ioStallSecondsFromPressure(pressure);
+#else
+  return std::nullopt;
+#endif
+}
+
+#if defined(__linux__)
+// _____________________________________________________________________________
+std::optional<double> ioStallSecondsFromPressure(std::istream& pressure) {
+  // The relevant line is `some avg10=... avg60=... avg300=... total=<n>`
+  // Read `some` (at least one task stalled), not `full` (every
+  // runnable task stalled), which undercounts a busy server.
+  constexpr std::string_view totalPrefix = "total=";
+  std::string line;
+  while (std::getline(pressure, line)) {
+    if (!ql::starts_with(line, "some ")) continue;
+    for (std::string_view token :
+         absl::StrSplit(line, ' ', absl::SkipEmpty())) {
+      if (!ql::starts_with(token, totalPrefix)) continue;
+      token.remove_prefix(totalPrefix.size());
+      uint64_t microseconds{};
+      const char* end = token.data() + token.size();
+      auto [ptr, ec] = std::from_chars(token.data(), end, microseconds);
+      if (ec != std::errc() || ptr != end) {
+        return std::nullopt;
+      }
+      return static_cast<double>(microseconds) * 1e-6;
+    }
+    return std::nullopt;  // A `some` line with no `total=` token.
+  }
+  return std::nullopt;  // No file, or no `some` line.
+}
+#endif
+
 namespace {
 // One TSV cell: an integer, a double, or either wrapped in an `optional`,
 // where a missing value becomes an empty cell.
@@ -186,7 +229,8 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.rssBytes_),
                             formatCell(sample.cpuPercent_),
                             std::move(readBytes),
-                            std::move(writeBytes)};
+                            std::move(writeBytes),
+                            formatCell(sample.ioStallPercent_)};
 
   return absl::StrJoin(tsvCells, "\t") + "\n";
 }
@@ -231,7 +275,7 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
   }
   if (writeHeader) {
     stream_ << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\t"
-               "write_bytes\n"
+               "write_bytes\tio_stall_percent\n"
             << std::flush;
   }
   // Spawn last: the thread uses the stream right away. An exception
@@ -273,12 +317,16 @@ void ResourceMonitor::setReadersForTesting(
   if (readerOverrides.diskIoReader_) {
     diskIoReader_ = std::move(readerOverrides.diskIoReader_);
   }
+  if (readerOverrides.ioStallReader_) {
+    ioStallReader_ = std::move(readerOverrides.ioStallReader_);
+  }
 }
 
 // _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   const Timer timer{Timer::Started};
-  resource_monitor::CpuPercentTracker cpuTracker{cpuReader_()};
+  resource_monitor::SecondsToPercentTracker cpuTracker{cpuReader_()};
+  resource_monitor::SecondsToPercentTracker ioStallTracker{ioStallReader_()};
 
   // Absolute deadlines keep the ticks on a steady grid, no matter how
   // long each sample takes.
@@ -291,12 +339,22 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     }
     deadline += interval;
     const double elapsed = Timer::toSeconds(timer.value());
+
+    // A stall is a fraction of one timeline, so it cannot exceed 100%; the
+    // reading and the elapsed clock are taken at slightly different instants,
+    // so a tick can still compute a hair over.
+    std::optional<double> ioStallPercent{
+        ioStallTracker.update(ioStallReader_(), elapsed)};
+    if (ioStallPercent.has_value()) {
+      ioStallPercent = std::clamp(ioStallPercent.value(), 0.0, 100.0);
+    }
     stream_ << resource_monitor::formatTsvRow(
         {.elapsedSeconds_ = elapsed,
          .timestampMs_ = epochMillis(std::chrono::system_clock::now()),
          .rssBytes_ = rssReader_(),
          .cpuPercent_ = cpuTracker.update(cpuReader_(), elapsed),
-         .diskIoBytes_ = diskIoReader_()});
+         .diskIoBytes_ = diskIoReader_(),
+         .ioStallPercent_ = ioStallPercent});
     stream_.flush();
     if (stream_.fail()) {
       AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "

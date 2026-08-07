@@ -40,20 +40,20 @@ std::optional<uint64_t> rssBytesFromStatm(std::istream& statm);
 // Total CPU time (user + system) used by this process so far, in seconds.
 std::optional<double> cpuTimeSeconds();
 
-// Turns successive cumulative CPU-time readings into CPU usage as a percentage
-// of one core. Stateful: each `update` is the baseline for the next.
-class CpuPercentTracker {
+// Turns successive readings of a cumulative "seconds spent doing X" counter
+// into a percentage of the elapsed wall time. Stateful: each `update` is the
+// baseline for the next. Used for both `cpu_percent` and `io_stall_percent`.
+class SecondsToPercentTracker {
  public:
-  explicit CpuPercentTracker(std::optional<double> initialCpuSeconds)
-      : lastCpuSeconds_{initialCpuSeconds} {}
+  explicit SecondsToPercentTracker(std::optional<double> initialSeconds)
+      : lastSeconds_{initialSeconds} {}
 
   // `std::nullopt` when usage cannot be computed yet: no reading this tick,
   // no baseline, or no time elapsed since the baseline.
-  std::optional<double> update(std::optional<double> cpuSeconds,
-                               double elapsed);
+  std::optional<double> update(std::optional<double> seconds, double elapsed);
 
  private:
-  std::optional<double> lastCpuSeconds_;
+  std::optional<double> lastSeconds_;
   double lastElapsed_ = 0.0;
 };
 
@@ -72,6 +72,16 @@ std::optional<DiskIoBytes> currentDiskIoBytes();
 std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo);
 #endif
 
+// Cumulative seconds during which at least one task was stalled on I/O, or
+// `std::nullopt` if unavailable. Linux-only as not supported elsewhere.
+std::optional<double> ioStallSeconds();
+
+#if defined(__linux__)
+// Stall seconds from a `/proc/pressure/io` stream: the `total=` microseconds
+// on the `some` line, scaled to seconds.
+std::optional<double> ioStallSecondsFromPressure(std::istream& pressure);
+#endif
+
 // One sampled row of the resource-usage log
 struct Sample {
   double elapsedSeconds_;
@@ -79,6 +89,7 @@ struct Sample {
   std::optional<uint64_t> rssBytes_;
   std::optional<double> cpuPercent_;
   std::optional<DiskIoBytes> diskIoBytes_;
+  std::optional<double> ioStallPercent_;
 };
 
 // One TSV row; a missing field becomes an empty cell.
@@ -89,6 +100,7 @@ std::string formatTsvRow(const Sample& sample);
 using RssReader = absl::AnyInvocable<std::optional<uint64_t>()>;
 using CpuReader = absl::AnyInvocable<std::optional<double>()>;
 using DiskIoReader = absl::AnyInvocable<std::optional<DiskIoBytes>()>;
+using IoStallReader = absl::AnyInvocable<std::optional<double>()>;
 
 // Which OS readers to override in `ResourceMonitor::setReadersForTesting`.
 // An unset member leaves the real reader in place.
@@ -96,14 +108,16 @@ struct ReaderOverrides {
   RssReader rssReader_;
   CpuReader cpuReader_;
   DiskIoReader diskIoReader_;
+  IoStallReader ioStallReader_;
 };
 
 }  // namespace resource_monitor
 
-// Samples the RSS, CPU usage and disk IO of this process on a background thread
-// and appends one TSV row (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`,
-// `read_bytes`, `write_bytes`) per interval; failed readings become empty
-// cells. The destructor stops the sampling thread and closes the file.
+// Samples the RSS, CPU usage, and disk IO of this process, plus system-wide IO
+// stall on a background thread and appends one TSV row (`elapsed_s`,
+// `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes`, `write_bytes`,
+// `io_stall_percent`) per interval; failed readings become empty cells. The
+// destructor stops the sampling thread and closes the file.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`
@@ -138,6 +152,8 @@ class ResourceMonitor {
   resource_monitor::CpuReader cpuReader_ = resource_monitor::cpuTimeSeconds;
   resource_monitor::DiskIoReader diskIoReader_ =
       resource_monitor::currentDiskIoBytes;
+  resource_monitor::IoStallReader ioStallReader_ =
+      resource_monitor::ioStallSeconds;
 
   std::atomic<bool> started_{false};
   std::mutex mutex_;
