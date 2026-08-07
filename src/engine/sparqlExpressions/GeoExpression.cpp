@@ -87,6 +87,10 @@ NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
+NARY_EXPRESSION(De9imRelationExpression, 3,
+                FV<ad_utility::WktDe9imRelation, GeoPointValueGetter,
+                   GeoPointValueGetter, StringValueGetter>);
+
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 NARY_EXPRESSION(BoundingCoordinateExpression, 1,
                 FV<ad_utility::WktBoundingCoordinate<RequestedCoordinate>,
@@ -198,6 +202,14 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeDe9imRelationExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    SparqlExpression::Ptr child3) {
+  return std::make_unique<De9imRelationExpression>(
+      std::move(child1), std::move(child2), std::move(child3));
+}
+
+// _____________________________________________________________________________
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
@@ -276,6 +288,41 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     return res;
   }
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:relate(?x, ?y, "<pattern>")`?
+  auto de9imExpr = dynamic_cast<const De9imRelationExpression*>(&expr);
+  if (de9imExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables
+  auto p1 = de9imExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = de9imExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  // Extract and validate the DE-9IM filter pattern
+  auto patternLiteral =
+      getLiteralFromLiteralExpression(de9imExpr->children()[2].get());
+  if (!patternLiteral.has_value()) {
+    return std::nullopt;
+  }
+  auto pattern = validateDe9imFilterString(
+      asStringViewUnsafe(patternLiteral.value().getContent()));
+  if (!pattern.has_value()) {
+    return std::nullopt;
+  }
+
+  return De9imRelationCall{{SpatialJoinType::DE9IM, p1.value(), p2.value()},
+                           pattern.value()};
 }
 
 // _____________________________________________________________________________

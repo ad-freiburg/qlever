@@ -194,6 +194,15 @@ ExpressionPtr Visitor::processIriFunctionCall(
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
+  // Create `SparqlExpression` with three children.
+  auto createTernary =
+      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
+          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                         ExpressionPtr, ExpressionPtr>) {
+    checkNumArgs(3);  // Check is ternary.
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
+  };
   // Create `SparqlExpression` with two or three children (currently used for
   // backward-compatible geof:distance function)
   auto createBinaryOrTernary =
@@ -253,6 +262,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
+    } else if (functionName == "relate") {
+      return createTernary(&makeDe9imRelationExpression);
     } else if (ad_utility::contains(geoUnaryFuncs, functionName)) {
       return createUnary(geoUnaryFuncs.at(functionName));
     } else if (ad_utility::contains(geoBinaryFuncs, functionName)) {

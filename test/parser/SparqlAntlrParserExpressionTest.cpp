@@ -462,6 +462,14 @@ TEST(SparqlParser, FunctionCall) {
       matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
                 Variable{"?a"}, Variable{"?b"}));
 
+  // DE-9IM relation function
+  expectFunctionCall(
+      absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\")"),
+      matchNaryWithChildrenMatchers(&makeDe9imRelationExpression,
+                                    variableExpressionMatcher(Variable{"?a"}),
+                                    variableExpressionMatcher(Variable{"?b"}),
+                                    matchLiteralExpression(lit("T*T***T**"))));
+
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
                      matchUnary(&makeLogExpression));
@@ -509,6 +517,11 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>()"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>(?a, ?b)"));
+  expectFunctionCallFails(
+      absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\", ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
       "centroid", "envelope", "geometryType",  "minX",         "minY",

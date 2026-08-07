@@ -20,16 +20,25 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
   // optimizable geof: function
   auto geoFuncCall = getGeoFunctionExpressionParameters(filterBody);
   std::optional<double> maxDist = std::nullopt;
+  std::optional<De9imFilterString> de9imFilter = std::nullopt;
 
   if (!geoFuncCall.has_value()) {
-    // If the filter body is no geof: function, it can still be a maximum
-    // distance spatial search (direct body of filter is comparison).
-    auto distFilterRes = getGeoDistanceFilter(filterBody);
-    if (!distFilterRes.has_value()) {
-      return std::nullopt;
+    // If the filter body is no geof:sf... function, it can still be a
+    // `geof:relate` call with an explicit DE-9IM filter pattern.
+    auto de9imCall = getDe9imRelationExpressionParameters(filterBody);
+    if (de9imCall.has_value()) {
+      de9imFilter = de9imCall.value().pattern_;
+      geoFuncCall = std::move(de9imCall.value());
+    } else {
+      // If the filter body is neither, it can still be a maximum distance
+      // spatial search (direct body of filter is comparison).
+      auto distFilterRes = getGeoDistanceFilter(filterBody);
+      if (!distFilterRes.has_value()) {
+        return std::nullopt;
+      }
+      geoFuncCall = distFilterRes.value().first;
+      maxDist = distFilterRes.value().second;
     }
-    geoFuncCall = distFilterRes.value().first;
-    maxDist = distFilterRes.value().second;
   }
 
   // Construct spatial join
@@ -41,12 +50,13 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
         absl::StrCat("Unsupported GeoSPARQL filter: Variable ", left.name(),
                      " on both sides. Is this what you intended?"));
   }
-  return SpatialJoinConfiguration{LibSpatialJoinConfig{type, maxDist},
-                                  std::move(left),
-                                  std::move(right),
-                                  std::nullopt,
-                                  PayloadVariables::all(),
-                                  SpatialJoinAlgorithm::LIBSPATIALJOIN,
-                                  type,
-                                  std::nullopt};
+  return SpatialJoinConfiguration{
+      LibSpatialJoinConfig{type, maxDist, de9imFilter},
+      std::move(left),
+      std::move(right),
+      std::nullopt,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+      type,
+      std::nullopt};
 }
