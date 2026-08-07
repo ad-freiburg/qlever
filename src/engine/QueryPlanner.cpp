@@ -1283,16 +1283,7 @@ Plans QueryPlanner::merge(const Plans& a, const Plans& b,
     }
   };
 
-  if (isInTestMode()) {
-    Vec<std::pair<std::string, Plans>> sortedCandidates{
-        ql::make_move_iterator(candidates.begin()),
-        ql::make_move_iterator(candidates.end()), allocator_};
-    std::sort(sortedCandidates.begin(), sortedCandidates.end(),
-              [](const auto& a, const auto& b) { return a.first < b.first; });
-    pruneCandidates(sortedCandidates);
-  } else {
-    pruneCandidates(candidates);
-  }
+  pruneCandidates(candidates);
 
   AD_LOG_TRACE << "Got " << prunedPlans.size() << " pruned plans from \n";
   return prunedPlans;
@@ -2215,14 +2206,8 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 size_t QueryPlanner::findCheapestExecutionTree(const Plans& lastRow) const {
   AD_CONTRACT_CHECK(!lastRow.empty());
   checkCancellation();
-  auto compare = [this](const auto& a, const auto& b) {
-    auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
-    if (aCost == bCost && isInTestMode()) {
-      // Make the tiebreaking deterministic for the unit tests.
-      return a._qet->getCacheKey() < b._qet->getCacheKey();
-    } else {
-      return aCost < bCost;
-    }
+  auto compare = [](const auto& a, const auto& b) {
+    return a.getCostEstimate() < b.getCostEstimate();
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
@@ -2241,13 +2226,9 @@ size_t QueryPlanner::findSmallestExecutionTree(const Plans& lastRow) {
 
 // _____________________________________________________________________________
 Plans QueryPlanner::createJoinCandidates(
-    const SubtreePlan& ain, const SubtreePlan& bin,
+    const SubtreePlan& a, const SubtreePlan& b,
     boost::optional<const TripleGraph&> tg) const {
-  bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
-                        ain._qet->getCacheKey() < bin._qet->getCacheKey();
-  const auto& a = !swapForTesting ? ain : bin;
-  const auto& b = !swapForTesting ? bin : ain;
-  return createJoinCandidates(ain, bin, connected(a, b, tg));
+  return createJoinCandidates(a, b, connected(a, b, tg));
 }
 
 // _____________________________________________________________________________
@@ -2262,14 +2243,10 @@ Plans QueryPlanner::createJoinCandidatesAllowEmpty(
 }
 
 // _____________________________________________________________________________
-Plans QueryPlanner::createJoinCandidates(const SubtreePlan& ain,
-                                         const SubtreePlan& bin,
+Plans QueryPlanner::createJoinCandidates(const SubtreePlan& a,
+                                         const SubtreePlan& b,
                                          const JoinColumns& jcs) const {
   checkCancellation();
-  bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
-                        ain._qet->getCacheKey() < bin._qet->getCacheKey();
-  const auto& a = !swapForTesting ? ain : bin;
-  const auto& b = !swapForTesting ? bin : ain;
   Plans candidates{allocator_};
 
   if (jcs.empty()) {

@@ -61,8 +61,7 @@ class Operation {
   std::optional<std::shared_ptr<const Result>>
       precomputedResultBecauseSiblingOfService_;
 
-  std::shared_ptr<RuntimeInformation> _runtimeInfo =
-      std::make_shared<RuntimeInformation>();
+  std::shared_ptr<RuntimeInformation> _runtimeInfo;
 
   // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
   // and reset in `createRuntimeInfoFromEstimates()`.
@@ -121,7 +120,12 @@ class Operation {
 
   // Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext) {}
+      : _runtimeInfo{std::allocate_shared<RuntimeInformation>(
+            executionContext->getAllocator())},
+        _executionContext(executionContext),
+        cancellationHandle_{
+            std::allocate_shared<SharedCancellationHandle::element_type>(
+                executionContext->getAllocator())} {}
 
   // Destructor.
   virtual ~Operation() {
@@ -490,8 +494,7 @@ class Operation {
   std::chrono::milliseconds remainingTime() const;
 
   /// Pointer to the cancellation handle of this operation.
-  SharedCancellationHandle cancellationHandle_ =
-      std::make_shared<SharedCancellationHandle::element_type>();
+  SharedCancellationHandle cancellationHandle_;
 
   std::chrono::steady_clock::time_point deadline_ =
       std::chrono::steady_clock::time_point::max();
