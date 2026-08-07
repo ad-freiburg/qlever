@@ -2490,6 +2490,139 @@ TEST(GroupBy, AddedHavingRows) {
   EXPECT_EQ(table, expected);
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, CountDistinctStarIsNotAffectedByStrippedColumns) {
+  // `COUNT(DISTINCT *)` reads all the columns that are visible in the query
+  // body, although it doesn't explicitly mention any of the corresponding
+  // variables. The columns of the subtree therefore must not be stripped away
+  // (regression test for #3158). A plain `COUNT(*)` in contrast only looks at
+  // the number of rows, which stripping columns doesn't change.
+  auto* qec = ad_utility::testing::getQec();
+  auto i = IntId;
+  auto V = ad_utility::testing::VocabId;
+  Variable varR{"?r"};
+  Variable varA{"?a"};
+
+  // The input has 8 rows, of which 7 are distinct (the pair `(1, 200)` occurs
+  // twice), and 4 distinct values for `?r`.
+  auto makeInput = []() {
+    return makeIdTableFromVector({{0, 1000},
+                                  {1, 200},
+                                  {2, 300},
+                                  {3, 400},
+                                  {1, 500},
+                                  {1, 700},
+                                  {3, 200},
+                                  {1, 200}});
+  };
+
+  // Run the `GROUP BY` given by `groupByVariables` and `aliases` on the input
+  // above, once with and once without the optimization that strips the columns
+  // which none of the variables in the query refers to. Both runs must yield
+  // the `expected` result.
+  auto expectResult = [&](const std::vector<Variable>& groupByVariables,
+                          const std::vector<Alias>& aliases,
+                          const IdTable& expected,
+                          ad_utility::source_location l =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    for (bool stripColumns : {false, true}) {
+      // The stripping happens in the constructor of `GroupByImpl`, so the
+      // parameter has to be set before creating it.
+      auto cleanup =
+          setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(
+              stripColumns);
+      auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeInput(), std::vector<std::optional<Variable>>{varR, varA});
+      GroupByImpl groupBy{qec, groupByVariables, aliases, std::move(subtree)};
+      EXPECT_EQ(groupBy.computeResultOnlyForTesting().idTableView(), expected)
+          << "stripColumns = " << stripColumns;
+    }
+  };
+
+  // The case from the issue: `(COUNT(*) AS ?total) (COUNT(DISTINCT *) AS ?d)`
+  // without a `GROUP BY`. Neither alias mentions a variable, so without the fix
+  // both columns were stripped and the distinct count collapsed to 1.
+  expectResult({},
+               {Alias{SparqlExpressionPimpl{makeCountStarExpression(false),
+                                            "COUNT(*) AS ?total"},
+                      Variable{"?total"}},
+                Alias{SparqlExpressionPimpl{makeCountStarExpression(true),
+                                            "COUNT(DISTINCT *) AS ?d"},
+                      Variable{"?d"}}},
+               makeIdTableFromVector({{i(8), i(7)}}));
+
+  // The same, but with the `COUNT(DISTINCT *)` nested inside a larger
+  // expression: `(COUNT(DISTINCT *) + 1 AS ?d)`.
+  expectResult(
+      {},
+      {Alias{SparqlExpressionPimpl{
+                 makeAddExpression(makeCountStarExpression(true),
+                                   std::make_unique<IdExpression>(i(1))),
+                 "COUNT(DISTINCT *) + 1 AS ?d"},
+             Variable{"?d"}}},
+      makeIdTableFromVector({{i(8)}}));
+
+  // Grouping doesn't help either: the group columns alone are not sufficient to
+  // compute the distinct count within a group, so `?a` must be kept as well.
+  expectResult({varR},
+               {Alias{SparqlExpressionPimpl{makeCountStarExpression(true),
+                                            "COUNT(DISTINCT *) AS ?d"},
+                      Variable{"?d"}}},
+               makeIdTableFromVector(
+                   {{V(0), i(1)}, {V(1), i(3)}, {V(2), i(1)}, {V(3), i(2)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, ColumnsThatAreUsedByNoAliasAreStripped) {
+  // The counterpart to the test above: as long as none of the aliases reads all
+  // the visible columns, the columns that are neither grouped nor used by any
+  // of the aliases are stripped from the subtree.
+  auto* qec = ad_utility::testing::getQec();
+  auto i = IntId;
+  auto V = ad_utility::testing::VocabId;
+  Variable varR{"?r"};
+  Variable varA{"?a"};
+  Variable varB{"?b"};
+
+  // `?r` is grouped and `?a` is used by the alias, but `?b` is used by neither,
+  // so only `?b` may be stripped.
+  std::vector<Alias> aliases{
+      Alias{SparqlExpressionPimpl{
+                std::make_unique<CountExpression>(
+                    false, std::make_unique<VariableExpression>(varA)),
+                "COUNT(?a) AS ?c"},
+            Variable{"?c"}}};
+  auto expected = makeIdTableFromVector({{V(0), i(2)}, {V(1), i(1)}});
+
+  using ::testing::Pair;
+  for (bool stripColumns : {false, true}) {
+    // The stripping happens in the constructor of `GroupByImpl`, so the
+    // parameter has to be set before creating it.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(
+            stripColumns);
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 10, 100}, {1, 20, 200}, {0, 30, 300}}),
+        std::vector<std::optional<Variable>>{varR, varA, varB});
+    GroupByImpl groupBy{qec, {varR}, aliases, std::move(subtree)};
+
+    // `?b` is only visible in the subtree if it wasn't stripped away.
+    auto expectedVariables =
+        stripColumns
+            ? std::vector{Pair(varR, ::testing::_), Pair(varA, ::testing::_)}
+            : std::vector{Pair(varR, ::testing::_), Pair(varA, ::testing::_),
+                          Pair(varB, ::testing::_)};
+    EXPECT_THAT(groupBy.getChildren().at(0)->getVariableColumns(),
+                ::testing::UnorderedElementsAreArray(expectedVariables))
+        << "stripColumns = " << stripColumns;
+
+    // Stripping the unused column doesn't change the result.
+    EXPECT_EQ(groupBy.computeResultOnlyForTesting().idTableView(), expected)
+        << "stripColumns = " << stripColumns;
+  }
+}
+
 TEST(GroupBy, Descriptor) {
   // Group by with variables
   auto* qec = ad_utility::testing::getQec();
