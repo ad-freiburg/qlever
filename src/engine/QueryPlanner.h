@@ -38,6 +38,16 @@ class QueryPlanner {
   template <typename T>
   using Set = ad_utility::HashSetWithMemoryLimit<T>;
 
+  // Return the memory limited allocator of the query that the given `qec`
+  // belongs to. In the unit test mode there is no `QueryExecutionContext` and
+  // hence no memory limit that we could respect; an unlimited allocator is
+  // returned in that case.
+  template <typename T = char>
+  static Alloc<T> allocatorOf(const QueryExecutionContext* qec) {
+    return qec != nullptr ? Alloc<T>{qec->getAllocator()}
+                          : ad_utility::makeUnlimitedAllocator<T>();
+  }
+
  private:
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
@@ -166,13 +176,14 @@ class QueryPlanner {
     enum Type { BASIC, OPTIONAL, MINUS };
 
     explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
+        : _qet(std::allocate_shared<QueryExecutionTree>(allocatorOf(qec),
+                                                        qec)) {}
 
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
                 std::shared_ptr<Operation> operation)
-        : _qet{std::make_shared<QueryExecutionTree>(qec,
-                                                    std::move(operation))} {}
+        : _qet{std::allocate_shared<QueryExecutionTree>(
+              allocatorOf(qec), qec, std::move(operation))} {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;
