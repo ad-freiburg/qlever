@@ -1611,7 +1611,9 @@ GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
   }
   // Deliberately copy the stored subquery, it can be included multiple times.
   ParsedQuery subquery = it->second;
-  const auto& selectedVariables =
+  // NOTE: This must be a copy, because the subquery is moved into the
+  // expansion below, while the variables are still needed after that.
+  const std::vector<Variable> selectedVariables =
       subquery.selectClause().getSelectedVariables();
   auto renamings = visitVector(ctx->includeRenaming());
 
@@ -1663,10 +1665,12 @@ GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
   ParsedQuery wrapper;
   wrapper._rootGraphPattern._graphPatterns.emplace_back(
       parsedQuery::Subquery{std::move(subquery)});
-  wrapper.registerVariablesVisibleInQueryBody(selectedVariables);
   parsedQuery::SelectClause selectClause;
   selectClause.setSelected(std::move(newSelection));
   wrapper._clause = std::move(selectClause);
+  // NOTE: The variables have to be registered after the select clause has
+  // been set, because the registration writes into the current clause.
+  wrapper.registerVariablesVisibleInQueryBody(selectedVariables);
   wrapper.addSolutionModifiers({}, makeInternalVariableGenerator());
   ql::ranges::for_each(outputVariables, [this](const Variable& variable) {
     addVisibleVariable(variable);

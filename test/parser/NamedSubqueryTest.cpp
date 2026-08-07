@@ -145,6 +145,32 @@ TEST(NamedSubquery, aggregationInsideDefinition) {
       " } } }");
 }
 
+namespace {
+// Collect the warnings of the given query and of all its (transitive)
+// subqueries.
+std::vector<std::string> allWarnings(const ParsedQuery& query) {
+  std::vector<std::string> warnings = query.warnings();
+  for (const auto& operation : query._rootGraphPattern._graphPatterns) {
+    if (auto* subquery = std::get_if<parsedQuery::Subquery>(&operation)) {
+      ql::ranges::copy(allWarnings(subquery->get()),
+                       std::back_inserter(warnings));
+    }
+  }
+  return warnings;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(NamedSubquery, noWarningsForRenaming) {
+  // The renaming wrapper must register the variables of the included subquery
+  // as visible, otherwise QLever warns that the aliased variables are not
+  // defined in the query body.
+  auto query = parse(
+      "WITH %sub AS { SELECT ?s ?o WHERE { ?s ?p ?o } }"
+      "SELECT * WHERE { INCLUDE %sub (?s AS ?s2) (?o AS ?o2) }");
+  EXPECT_THAT(allWarnings(query), ::testing::IsEmpty());
+}
+
 // _____________________________________________________________________________
 TEST(NamedSubquery, invalidQueries) {
   // Reference to an undefined named subquery.
