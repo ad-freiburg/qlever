@@ -331,30 +331,19 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
 }
 
 // _____________________________________________________________________________
-void ResourceMonitor::setReadersForTesting(
-    resource_monitor::ReaderOverrides readerOverrides) {
+void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
   AD_CONTRACT_CHECK(!started_,
                     "The readers must be swapped before `start` is called, "
                     "otherwise this would race the sampling thread.");
-  if (readerOverrides.rssReader_) {
-    rssReader_ = std::move(readerOverrides.rssReader_);
-  }
-  if (readerOverrides.cpuReader_) {
-    cpuReader_ = std::move(readerOverrides.cpuReader_);
-  }
-  if (readerOverrides.diskIoReader_) {
-    diskIoReader_ = std::move(readerOverrides.diskIoReader_);
-  }
-  if (readerOverrides.ioStallReader_) {
-    ioStallReader_ = std::move(readerOverrides.ioStallReader_);
-  }
+  readers_ = std::move(readers);
 }
 
 // _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   const Timer timer{Timer::Started};
-  resource_monitor::SecondsToPercentTracker cpuTracker{cpuReader_()};
-  resource_monitor::SecondsToPercentTracker ioStallTracker{ioStallReader_()};
+  resource_monitor::SecondsToPercentTracker cpuTracker{readers_.cpuReader_()};
+  resource_monitor::SecondsToPercentTracker ioStallTracker{
+      readers_.ioStallReader_()};
 
   // Absolute deadlines keep the ticks on a steady grid, no matter how
   // long each sample takes.
@@ -372,16 +361,16 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     // reading and the elapsed clock are taken at slightly different instants,
     // so a tick can still compute a hair over.
     std::optional<double> ioStallPercent{
-        ioStallTracker.update(ioStallReader_(), elapsed)};
+        ioStallTracker.update(readers_.ioStallReader_(), elapsed)};
     if (ioStallPercent.has_value()) {
       ioStallPercent = std::clamp(ioStallPercent.value(), 0.0, 100.0);
     }
     stream_ << resource_monitor::formatTsvRow(
         {.elapsedSeconds_ = elapsed,
          .timestampMs_ = epochMillis(std::chrono::system_clock::now()),
-         .rssBytes_ = rssReader_(),
-         .cpuPercent_ = cpuTracker.update(cpuReader_(), elapsed),
-         .diskIoBytes_ = diskIoReader_(),
+         .rssBytes_ = readers_.rssReader_(),
+         .cpuPercent_ = cpuTracker.update(readers_.cpuReader_(), elapsed),
+         .diskIoBytes_ = readers_.diskIoReader_(),
          .ioStallPercent_ = ioStallPercent});
     stream_.flush();
     if (stream_.fail()) {

@@ -110,13 +110,13 @@ using CpuReader = absl::AnyInvocable<std::optional<double>()>;
 using DiskIoReader = absl::AnyInvocable<std::optional<DiskIoBytes>()>;
 using IoStallReader = absl::AnyInvocable<std::optional<double>()>;
 
-// Which OS readers to override in `ResourceMonitor::setReadersForTesting`.
-// An unset member leaves the real reader in place.
-struct ReaderOverrides {
-  RssReader rssReader_;
-  CpuReader cpuReader_;
-  DiskIoReader diskIoReader_;
-  IoStallReader ioStallReader_;
+// The readers the sampler calls each tick. Each starts out as the real OS
+// reader, so a test can replace one and leave the rest real.
+struct Readers {
+  RssReader rssReader_ = currentRssBytes;
+  CpuReader cpuReader_ = cpuTimeSeconds;
+  DiskIoReader diskIoReader_ = currentDiskIoBytes;
+  IoStallReader ioStallReader_ = ioStallSeconds;
 };
 
 }  // namespace resource_monitor
@@ -146,8 +146,9 @@ class ResourceMonitor {
              std::chrono::milliseconds interval);
 
   // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
-  // exercise the sampler's error handling.
-  void setReadersForTesting(resource_monitor::ReaderOverrides readerOverrides);
+  // exercise the sampler's error handling. Readers that are not named keep
+  // their real implementation.
+  void setReadersForTesting(resource_monitor::Readers readers);
 
  private:
   // Body of the sampling thread.
@@ -156,12 +157,7 @@ class ResourceMonitor {
   // Declaration order is load-bearing: `sampler_` must be destroyed
   // (i.e. joined) first, while the members it uses are still alive.
   std::ofstream stream_;
-  resource_monitor::RssReader rssReader_ = resource_monitor::currentRssBytes;
-  resource_monitor::CpuReader cpuReader_ = resource_monitor::cpuTimeSeconds;
-  resource_monitor::DiskIoReader diskIoReader_ =
-      resource_monitor::currentDiskIoBytes;
-  resource_monitor::IoStallReader ioStallReader_ =
-      resource_monitor::ioStallSeconds;
+  resource_monitor::Readers readers_;
 
   std::atomic<bool> started_{false};
   std::mutex mutex_;

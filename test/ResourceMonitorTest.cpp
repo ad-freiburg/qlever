@@ -532,6 +532,30 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
 }
 
 // _____________________________________________________________________________
+TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    ResourceMonitor monitor;
+    // What every non-Linux machine does: there is no pressure-stall interface,
+    // so the reader returns nothing on every tick and nothing is clamped.
+    monitor.setReadersForTesting(
+        {.ioStallReader_ = []() -> std::optional<double> {
+          return std::nullopt;
+        }});
+    // A short interval plus a longer sleep, so at least one row is written.
+    monitor.start(path, ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+  }
+  auto lines = readLines(path);
+  ASSERT_GE(lines.size(), 2u);
+  // All seven columns are still there, the last one empty, so the row ends in
+  // a tab rather than losing a column.
+  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 6);
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t"));
+}
+
+// _____________________________________________________________________________
 TEST(ResourceMonitor, SamplingThreadSurvivesAThrowingReader) {
   // A reader that throws makes `runLoop` throw; the sampler thread must catch
   // it and log, not terminate the process. Both catch arms are covered: a
