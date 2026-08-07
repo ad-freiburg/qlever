@@ -36,9 +36,6 @@ namespace fs = ql::filesystem;
 namespace rm = ad_utility::resource_monitor;
 using ad_utility::ResourceMonitor;
 using ad_utility::testing::readLines;
-// The header the monitor writes, as `readLines` returns it (no newline).
-constexpr std::string_view tsvHeader =
-    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\twrite_bytes";
 }  // namespace
 
 // _____________________________________________________________________________
@@ -78,6 +75,31 @@ TEST(ResourceMonitor, ReadsCumulativeDiskIoBytes) {
   EXPECT_GE(second.value().writeBytes_, first.value().writeBytes_);
 #else
   EXPECT_FALSE(rm::currentDiskIoBytes().has_value());
+#endif
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, ReadsCumulativeIoStallSeconds) {
+#if defined(__linux__)
+  // Unlike `/proc/self/io`, this file is genuinely optional: a kernel built
+  // without `CONFIG_PSI`, or with `CONFIG_PSI_DEFAULT_DISABLED` and booted
+  // without `psi=1`, does not have it. So an empty reading is skipped rather
+  // than failed; on a kernel that does have it, the value must make sense.
+  auto first = rm::ioStallSeconds();
+  if (!first.has_value()) {
+    GTEST_SKIP() << "/proc/pressure/io is not available on this kernel";
+  }
+  EXPECT_GE(first.value(), 0.0);
+
+  // Cumulative, which is what the percentage computation depends on: a later
+  // reading is never smaller. Not `EXPECT_GT`, since a machine can go a moment
+  // without stalling on I/O at all.
+  auto second = rm::ioStallSeconds();
+  ASSERT_TRUE(second.has_value());
+  EXPECT_GE(second.value(), first.value());
+#else
+  // No pressure-stall interface exists off Linux, by design.
+  EXPECT_FALSE(rm::ioStallSeconds().has_value());
 #endif
 }
 
@@ -130,42 +152,85 @@ TEST(ResourceMonitor,
 }
 #endif
 
+#if defined(__linux__)
+// _____________________________________________________________________________
+TEST(ResourceMonitor, IoStallSecondsFromPressureReadsSomeAndRejectsGarbage) {
+  // `full` carries a different `total`, so a parser that reads the wrong line
+  // fails here instead of returning a number that merely looks plausible.
+  std::istringstream valid{
+      "some avg10=0.00 avg60=1.25 avg300=0.30 total=2500000\n"
+      "full avg10=0.00 avg60=0.00 avg300=0.00 total=1000000\n"};
+  auto seconds = rm::ioStallSecondsFromPressure(valid);
+  ASSERT_TRUE(seconds.has_value());
+  // Microseconds in the file, seconds out.
+  EXPECT_DOUBLE_EQ(seconds.value(), 2.5);
+
+  // A file with no `some` line at all: `full` must not be used instead.
+  std::istringstream onlyFull{"full avg10=0.00 total=1000000\n"};
+  EXPECT_FALSE(rm::ioStallSecondsFromPressure(onlyFull).has_value());
+
+  std::istringstream noTotal{"some avg10=0.00 avg60=0.00 avg300=0.00\n"};
+  EXPECT_FALSE(rm::ioStallSecondsFromPressure(noTotal).has_value());
+
+  // Not a number, and a number followed by garbage. The second one would slip
+  // through a parser that stops at the first non-digit and reports success.
+  std::istringstream unparseable{"some avg10=0.00 total=abc\n"};
+  EXPECT_FALSE(rm::ioStallSecondsFromPressure(unparseable).has_value());
+
+  std::istringstream trailingGarbage{"some avg10=0.00 total=12abc\n"};
+  EXPECT_FALSE(rm::ioStallSecondsFromPressure(trailingGarbage).has_value());
+
+  std::istringstream empty{""};
+  EXPECT_FALSE(rm::ioStallSecondsFromPressure(empty).has_value());
+}
+#endif
+
 // _____________________________________________________________________________
 TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
-  constexpr rm::Sample base{.elapsedSeconds_ = 1.0,
-                            .timestampMs_ = 1000,
-                            .rssBytes_ = 2048u,
-                            .cpuPercent_ = 50.0,
-                            .diskIoBytes_ = rm::DiskIoBytes{
-                                .readBytes_ = 8192u, .writeBytes_ = 4096u}};
-  EXPECT_EQ(rm::formatTsvRow(base), "1.0\t1000\t2048\t50.0\t8192\t4096\n");
+  constexpr rm::Sample base{
+      .elapsedSeconds_ = 1.0,
+      .timestampMs_ = 1000,
+      .rssBytes_ = 2048u,
+      .cpuPercent_ = 50.0,
+      .diskIoBytes_ =
+          rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u},
+      .ioStallPercent_ = 25.0};
+  EXPECT_EQ(rm::formatTsvRow(base),
+            "1.0\t1000\t2048\t50.0\t8192\t4096\t25.0\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noRss), "1.0\t1000\t\t50.0\t8192\t4096\n");
+  EXPECT_EQ(rm::formatTsvRow(noRss), "1.0\t1000\t\t50.0\t8192\t4096\t25.0\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noCpu), "1.0\t1000\t2048\t\t8192\t4096\n");
+  EXPECT_EQ(rm::formatTsvRow(noCpu), "1.0\t1000\t2048\t\t8192\t4096\t25.0\n");
 
-  // One failed reading empties both counters, never just one of them, so the
-  // row ends in a tab. A consumer that strips trailing whitespace before
-  // splitting would lose a column here.
+  // One failed reading empties both counters, never just one of them.
   auto noDiskIo = base;
   noDiskIo.diskIoBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noDiskIo), "1.0\t1000\t2048\t50.0\t\t\n");
+  EXPECT_EQ(rm::formatTsvRow(noDiskIo), "1.0\t1000\t2048\t50.0\t\t\t25.0\n");
+
+  // The row every non-Linux machine writes: the last cell is empty, so the row
+  // ends in a tab. A consumer that strips trailing whitespace before splitting
+  // would lose a column here.
+  auto noIoStall = base;
+  noIoStall.ioStallPercent_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(noIoStall),
+            "1.0\t1000\t2048\t50.0\t8192\t4096\t\n");
 
   auto nothing = base;
   nothing.rssBytes_ = std::nullopt;
   nothing.cpuPercent_ = std::nullopt;
   nothing.diskIoBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\n");
+  nothing.ioStallPercent_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, CpuPercentTrackerComputesUsageBetweenReadings) {
+TEST(ResourceMonitor, SecondsToPercentTrackerComputesPercentBetweenReadings) {
   // Baseline 0.0s at elapsed 0.0s; 0.5 CPU-s over 1.0 wall-s is 50% of a core.
-  rm::CpuPercentTracker tracker{0.0};
+  rm::SecondsToPercentTracker tracker{0.0};
   auto first = tracker.update(0.5, 1.0);
   ASSERT_TRUE(first.has_value());
   EXPECT_DOUBLE_EQ(first.value(), 50.0);
@@ -176,15 +241,15 @@ TEST(ResourceMonitor, CpuPercentTrackerComputesUsageBetweenReadings) {
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, CpuPercentTrackerReportsNothingWhenUncomputable) {
+TEST(ResourceMonitor, SecondsToPercentTrackerReportsNothingWhenUncomputable) {
   // No reading this tick.
   EXPECT_FALSE(
-      rm::CpuPercentTracker{0.0}.update(std::nullopt, 1.0).has_value());
+      rm::SecondsToPercentTracker{0.0}.update(std::nullopt, 1.0).has_value());
   // No baseline yet.
   EXPECT_FALSE(
-      rm::CpuPercentTracker{std::nullopt}.update(0.5, 1.0).has_value());
+      rm::SecondsToPercentTracker{std::nullopt}.update(0.5, 1.0).has_value());
   // No time elapsed since the baseline.
-  EXPECT_FALSE(rm::CpuPercentTracker{0.0}.update(0.5, 0.0).has_value());
+  EXPECT_FALSE(rm::SecondsToPercentTracker{0.0}.update(0.5, 0.0).has_value());
 }
 
 // _____________________________________________________________________________
@@ -249,22 +314,19 @@ TEST(ResourceMonitor, TruncateModeWritesHeader) {
   }
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 1u);
-  EXPECT_EQ(lines[0], tsvHeader);
+  EXPECT_EQ(lines[0], rm::tsvHeader);
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, AppendModeKeepsExistingHeader) {
+TEST(ResourceMonitor, AppendModeKeepsAMatchingHeader) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  // A log left over from a server that ran before the disk IO columns existed:
-  // a four-column header plus one four-column row. Append mode leaves it
-  // alone, so the file legitimately ends up with an old header, old rows,
-  // then six-column ones. That is accepted, not a defect: rewriting the
-  // header would put a second header line inside the data. Consumers must
-  // therefore count columns per row, not per file.
+  // The steady state: a log written by a server of this same version, so its
+  // header is the one this build writes. Append mode adds no second header
+  // and leaves the existing row alone.
+  const std::string existingRow = "0.0\t1000\t2048\t10.0\t8192\t4096\t1.0";
   {
     std::ofstream existing{path};
-    existing << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n";
-    existing << "0.0\t1000\t2048\t10.0\n";
+    existing << rm::tsvHeader << "\n" << existingRow << "\n";
   }
   {
     ResourceMonitor monitor;
@@ -274,8 +336,102 @@ TEST(ResourceMonitor, AppendModeKeepsExistingHeader) {
   }
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 2u);
-  EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
-  EXPECT_EQ(lines[1], "0.0\t1000\t2048\t10.0");
+  EXPECT_EQ(lines[0], rm::tsvHeader);
+  EXPECT_EQ(lines[1], existingRow);
+  // Nothing was rotated: there is only ever one log file in the steady state.
+  EXPECT_FALSE(fs::exists(path.string() + ".old"));
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, AppendModeRotatesAFileWithAnOutdatedHeader) {
+  // A whole directory, because this test produces a second file (the archive)
+  // whose name it does not choose; the cleanup removes the directory's
+  // contents whatever they are.
+  auto [directory, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("resourceMonitorRotation");
+  const fs::path path = fs::path{directory} / "resource-usage.tsv";
+  // A log left over from a server that ran before the disk IO columns existed:
+  // a four-column header plus one four-column row. Appending seven-column rows
+  // to it would leave one file holding rows of two widths, which no
+  // header-driven reader can parse. So the old file is moved aside intact and
+  // a fresh one is started, and every file on disk keeps a single width.
+  const std::string oldHeader = "elapsed_s\ttimestamp_ms\trss\tcpu_percent";
+  const std::string oldRow = "0.0\t1000\t2048\t10.0";
+  {
+    std::ofstream existing{path};
+    existing << oldHeader << "\n" << oldRow << "\n";
+  }
+  {
+    ResourceMonitor monitor;
+    // Long interval so no data row is written; the new file should hold
+    // exactly the current header.
+    monitor.start(path, ResourceMonitor::Mode::Append, std::chrono::hours{1});
+  }
+  const fs::path rotated = path.string() + ".old";
+  auto lines = readLines(path);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(lines[0], rm::tsvHeader);
+
+  // The old log is preserved unchanged next to it.
+  ASSERT_TRUE(fs::exists(rotated));
+  auto rotatedLines = readLines(rotated);
+  ASSERT_EQ(rotatedLines.size(), 2u);
+  EXPECT_EQ(rotatedLines[0], oldHeader);
+  EXPECT_EQ(rotatedLines[1], oldRow);
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, AppendModeWritesASecondHeaderWhenRotationFails) {
+  auto [directory, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("resourceMonitorNoRotate");
+  const fs::path path = fs::path{directory} / "resource-usage.tsv";
+  const std::string oldHeader = "elapsed_s\ttimestamp_ms\trss\tcpu_percent";
+  const std::string oldRow = "0.0\t1000\t2048\t10.0";
+  {
+    std::ofstream existing{path};
+    existing << oldHeader << "\n" << oldRow << "\n";
+  }
+  // A directory of that name makes the rename fail with `EISDIR`, which is the
+  // only reliable way to reach the fallback. Monitoring is optional, so this
+  // warns rather than throwing, and writes a second header line so that the
+  // format change is at least visible inside the file.
+  fs::create_directory(path.string() + ".old");
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  {
+    ResourceMonitor monitor;
+    // Long interval so no data row is written.
+    monitor.start(path, ResourceMonitor::Mode::Append, std::chrono::hours{1});
+  }
+  auto lines = readLines(path);
+  ASSERT_EQ(lines.size(), 3u);
+  EXPECT_EQ(lines[0], oldHeader);
+  EXPECT_EQ(lines[1], oldRow);
+  EXPECT_EQ(lines[2], rm::tsvHeader);
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("could not move"));
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, TruncateModeNeverRotates) {
+  // Index builds start a fresh file every run, so an outdated header is simply
+  // overwritten. Rotation exists to protect rows that are being appended to,
+  // and there are none here.
+  auto [directory, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("resourceMonitorTruncate");
+  const fs::path path = fs::path{directory} / "resource-usage.tsv";
+  {
+    std::ofstream existing{path};
+    existing << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n";
+    existing << "0.0\t1000\t2048\t10.0\n";
+  }
+  {
+    ResourceMonitor monitor;
+    // Long interval so the file holds only the header afterwards.
+    monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
+  }
+  auto lines = readLines(path);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(lines[0], rm::tsvHeader);
+  EXPECT_FALSE(fs::exists(path.string() + ".old"));
 }
 
 // _____________________________________________________________________________
@@ -291,7 +447,7 @@ TEST(ResourceMonitor, AppendModeWritesHeaderWhenFileIsEmptyOrMissing) {
     }
     auto lines = readLines(path);
     ASSERT_EQ(lines.size(), 1u);
-    EXPECT_EQ(lines[0], tsvHeader);
+    EXPECT_EQ(lines[0], rm::tsvHeader);
   };
 
   auto [missing, cleanup1] = ad_utility::testing::filenameForTesting();
@@ -316,12 +472,12 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   auto lines = readLines(path);
   // The header plus at least one sampled row.
   ASSERT_GE(lines.size(), 2u);
-  EXPECT_EQ(lines[0], tsvHeader);
-  // Each data row has the header's six tab-separated columns (five tabs),
+  EXPECT_EQ(lines[0], rm::tsvHeader);
+  // Each data row has the header's seven tab-separated columns (six tabs),
   // even when an individual reading was empty.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 5)
-        << "row does not have 6 columns: " << *it;
+    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 6)
+        << "row does not have 7 columns: " << *it;
   }
 }
 
@@ -331,13 +487,14 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   {
     ResourceMonitor monitor;
     // Readers that always return the same value, so the row is known in
-    // advance. The CPU time never grows, so the CPU usage is always 0%.
+    // advance. Neither cumulative counter grows, so both percentages are 0.
     monitor.setReadersForTesting(
         {.rssReader_ = []() -> std::optional<uint64_t> { return 2048u; },
          .cpuReader_ = []() -> std::optional<double> { return 1.0; },
          .diskIoReader_ = []() -> std::optional<rm::DiskIoBytes> {
            return rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u};
-         }});
+         },
+         .ioStallReader_ = []() -> std::optional<double> { return 2.0; }});
     // A short interval plus a longer sleep, so at least one row is written.
     monitor.start(path, ResourceMonitor::Mode::Truncate,
                   std::chrono::milliseconds{5});
@@ -346,9 +503,32 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   auto lines = readLines(path);
   ASSERT_GE(lines.size(), 2u);
   // Each reading lands in its own column. The first two columns are clocks,
-  // so only the end of the row can be checked. Each value is different, so
-  // two readings that ended up in the wrong columns would fail here.
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t2048\t0.0\t8192\t4096"));
+  // so only the end of the row can be checked. The three raw readings differ
+  // from each other, so a swap among them would fail here; the two computed
+  // columns are both 0 and are only pinned by position.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t2048\t0.0\t8192\t4096\t0.0"));
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    ResourceMonitor monitor;
+    // A stall counter growing by 1000 seconds per reading, far more than the
+    // elapsed time: the raw percentage is way above 100 and must be clamped.
+    monitor.setReadersForTesting(
+        {.ioStallReader_ = [seconds = 0.0]() mutable -> std::optional<double> {
+          seconds += 1000.0;
+          return seconds;
+        }});
+    // A short interval plus a longer sleep, so at least one row is written.
+    monitor.start(path, ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+  }
+  auto lines = readLines(path);
+  ASSERT_GE(lines.size(), 2u);
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0"));
 }
 
 // _____________________________________________________________________________
