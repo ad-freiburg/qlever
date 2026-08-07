@@ -7,6 +7,7 @@
 #ifndef QLEVER_TEST_SERVERTESTHELPERS_H_
 #define QLEVER_TEST_SERVERTESTHELPERS_H_
 
+#include <boost/asio/awaitable.hpp>
 #include <boost/beast/http.hpp>
 #include <optional>
 #include <string>
@@ -76,20 +77,40 @@ class ServerForTesting {
   // `http::response`. A fresh `io_context` and `QueryHub` are created per
   // request, but the `Server` itself is reused across calls.
   ResT process(const ReqT& request) {
+    return runOnFreshIoContext(request, [](Server* server, ReqT& request) {
+      return server->template onlyForTestingProcess<ReqT, ResT>(request);
+    });
+  }
+
+  // Apply `Server::handleHttpRequest` on the given request and return the
+  // captured `http::response`. Unlike `process()`, this goes through the
+  // same entry point `Server::run()` uses, including the OPTIONS preflight
+  // shortcut, CORS headers, and the exception-to-HTTP-error translation. A
+  // fresh `io_context` and `QueryHub` are created per request, but the
+  // `Server` itself is reused across calls.
+  ResT handleHttpRequest(const ReqT& request) {
+    return runOnFreshIoContext(request, [](Server* server, ReqT& request) {
+      return server->template onlyForTestingHandleHttpRequest<ReqT, ResT>(
+          request);
+    });
+  }
+
+ private:
+  // Run `fn(server, request)` (which must return an `Awaitable<ResT>`) to
+  // completion on a fresh `io_context`, with `queryHub_` set up beforehand,
+  // and return the result. Shared by `process()` and `handleHttpRequest()`,
+  // which only differ in which `Server::onlyForTesting...` method `fn` calls.
+  template <typename Fn>
+  ResT runOnFreshIoContext(const ReqT& request, Fn fn) {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [](auto request, Server* server,
-           auto& io) -> boost::asio::awaitable<ResT> {
+        [fn](auto request, Server* server,
+             auto& io) -> boost::asio::awaitable<ResT> {
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
               io.get_executor());
           server->queryHub_ = queryHub;
-
-          auto result =
-              co_await server
-                  ->template onlyForTestingProcess<decltype(request), ResT>(
-                      request);
-          co_return result;
+          co_return co_await fn(server, request);
         }(request, server_.get(), io),
         boost::asio::use_future);
     io.run();

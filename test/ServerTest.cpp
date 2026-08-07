@@ -59,6 +59,8 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
 };
 
 }  // namespace
+
+// _____________________________________________________________________________
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
                   {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
@@ -692,6 +694,39 @@ TEST(ServerTest, metricsEndpoint) {
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
       MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, handleHttpRequest) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+  auto response = server.handleHttpRequest(makeRequest(http::verb::options));
+
+  // OPTIONS is answered directly with CORS headers, without dispatching.
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_headers,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_methods,
+                                      testing::StrEq("GET, POST, OPTIONS")));
+
+  // A normal successful request also gets the CORS headers.
+  response = server.handleHttpRequest(makeGetRequest("/?default"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+
+  // Valid token format, wrong value: `HttpError` -> forbidden.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "Bearer correct_format_wrong_token"}}));
+  EXPECT_THAT(response, StatusIs(http::status::forbidden));
+
+  // Missing "Bearer " prefix: generic exception -> bad_request.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "correct_token_wrong_format"}}));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
 }
 
 // _____________________________________________________________________________
