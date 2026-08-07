@@ -174,8 +174,8 @@ TEST(ResourceMonitor, IoStallSecondsFromPressureReadsSomeAndRejectsGarbage) {
 
   // Not a number, and a number followed by garbage. The second one would slip
   // through a parser that stops at the first non-digit and reports success.
-  std::istringstream unparseable{"some avg10=0.00 total=abc\n"};
-  EXPECT_FALSE(rm::ioStallSecondsFromPressure(unparseable).has_value());
+  std::istringstream unparsable{"some avg10=0.00 total=abc\n"};
+  EXPECT_FALSE(rm::ioStallSecondsFromPressure(unparsable).has_value());
 
   std::istringstream trailingGarbage{"some avg10=0.00 total=12abc\n"};
   EXPECT_FALSE(rm::ioStallSecondsFromPressure(trailingGarbage).has_value());
