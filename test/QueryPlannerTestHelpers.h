@@ -427,6 +427,7 @@ struct SpatialJoinMatcher {
                   PayloadVariables payloadVariables,
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
+                  std::optional<De9imFilterString> de9imFilter,
                   const ChildArgs&... childMatchers) const {
     return RootOperation<::SpatialJoin>(AllOf(
         children(childMatchers...),
@@ -440,6 +441,7 @@ struct SpatialJoinMatcher {
                     Eq(payloadVariables)),
         AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
         AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getDe9imFilter, Eq(de9imFilter)),
         AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
   }
 };

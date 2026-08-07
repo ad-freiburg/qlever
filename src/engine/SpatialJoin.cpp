@@ -160,6 +160,19 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
 }
 
 // ____________________________________________________________________________
+std::optional<De9imFilterString> SpatialJoin::getDe9imFilter() const {
+  auto visitor = [](const auto& config) -> std::optional<De9imFilterString> {
+    using T = std::decay_t<decltype(config)>;
+    if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
+      return config.de9imFilter_;
+    } else {
+      return std::nullopt;
+    }
+  };
+  return std::visit(visitor, config_.task_);
+}
+
+// ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
   std::vector<QueryExecutionTree*> result;
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
@@ -202,6 +215,12 @@ std::string SpatialJoin::getCacheKeyImpl() const {
       auto joinType = getJoinType();
       os << "libspatialjoin on: "
          << (int)joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
+      auto de9imFilter = getDe9imFilter();
+      if (de9imFilter.has_value()) {
+        os << "de9imFilter: "
+           << std::string_view{de9imFilter->data(), de9imFilter->size()}
+           << "\n";
+      }
     }
 
     // Uses distance variable?
@@ -246,9 +265,16 @@ std::string SpatialJoin::getDescriptor() const {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      return absl::StrCat(
+      auto descriptor = absl::StrCat(
           "Spatial Join of ", left, " and ", right, " using ",
           SpatialJoinTypeString.at(static_cast<int>(config.joinType_)));
+      if (config.de9imFilter_.has_value()) {
+        absl::StrAppend(&descriptor, " (",
+                        std::string_view{config.de9imFilter_->data(),
+                                         config.de9imFilter_->size()},
+                        ")");
+      }
+      return descriptor;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -523,6 +549,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    getMaxDist(),
                                    getMaxResults(),
                                    config_.joinType_,
+                                   getDe9imFilter(),
                                    config_.rightCacheName_,
                                    bbLeft,
                                    bbRight};

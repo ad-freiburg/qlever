@@ -24,8 +24,11 @@
 // class declaration of the spatial join operation.
 
 // The supported spatial join types (geometry predicates). When updating this
-// enum, also add a case in `getGeoFunctionExpressionParameters` in
-// `GeoExpression.cpp`.
+// enum with a new two-argument boolean relation, also add a case in
+// `getGeoFunctionExpressionParameters` in `GeoExpression.cpp`. This does not
+// apply to `WITHIN_DIST` and `DE9IM`, which take an additional parameter
+// (the distance resp. the filter pattern) and are therefore not exposed as
+// `geof:sf...`-style two-argument relations.
 enum class SpatialJoinType {
   INTERSECTS,
   CONTAINS,
@@ -35,13 +38,41 @@ enum class SpatialJoinType {
   EQUALS,
   OVERLAPS,
   WITHIN,
-  WITHIN_DIST
+  WITHIN_DIST,
+  DE9IM
 };
 
 // String representation of the `SpatialJoinType` values.
-inline constexpr std::array<std::string_view, 9> SpatialJoinTypeString{
-    "intersects", "contains", "covers", "crosses",    "touches",
-    "equals",     "overlaps", "within", "within-dist"};
+inline constexpr std::array<std::string_view, 10> SpatialJoinTypeString{
+    "intersects", "contains", "covers", "crosses",     "touches",
+    "equals",     "overlaps", "within", "within-dist", "de9im"};
+
+// A DE-9IM filter pattern: a fixed-size string of exactly 9 characters, each
+// one of `0`-`2`, `T`/`t`, `F`/`f`, or `*` (see
+// https://en.wikipedia.org/wiki/DE-9IM). Stored without a null terminator.
+using De9imFilterString = std::array<char, 9>;
+
+// If `filter` is a syntactically valid DE-9IM filter pattern (as described for
+// `De9imFilterString` above), return it as a `De9imFilterString`, else
+// `std::nullopt`. Implemented as a simple character-class check instead of a
+// regex library to keep this frequently-included header cheap to compile.
+constexpr std::optional<De9imFilterString> validateDe9imFilterString(
+    std::string_view filter) {
+  if (filter.size() != 9) {
+    return std::nullopt;
+  }
+  De9imFilterString result{};
+  for (size_t i = 0; i < result.size(); ++i) {
+    char c = filter[i];
+    bool isValidChar = (c >= '0' && c <= '2') || c == 'T' || c == 't' ||
+                       c == 'F' || c == 'f' || c == '*';
+    if (!isValidChar) {
+      return std::nullopt;
+    }
+    result[i] = c;
+  }
+  return result;
+}
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -55,10 +86,12 @@ struct MaxDistanceConfig {
 };
 
 // Spatial join with libspatialjoin using one of the join types above. The
-// maximal distance is relevant only for the `WITHIN_DIST` join type.
+// maximal distance is relevant only for the `WITHIN_DIST` join type, and the
+// DE-9IM filter pattern only for the `DE9IM` join type.
 struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<double> maxDist_ = std::nullopt;
+  std::optional<De9imFilterString> de9imFilter_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
