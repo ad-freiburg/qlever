@@ -36,6 +36,9 @@ namespace fs = ql::filesystem;
 namespace rm = ad_utility::resource_monitor;
 using ad_utility::ResourceMonitor;
 using ad_utility::testing::readLines;
+// The header the monitor writes, as `readLines` returns it (no newline).
+constexpr std::string_view tsvHeader =
+    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\twrite_bytes";
 }  // namespace
 
 // _____________________________________________________________________________
@@ -132,21 +135,31 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   constexpr rm::Sample base{.elapsedSeconds_ = 1.0,
                             .timestampMs_ = 1000,
                             .rssBytes_ = 2048u,
-                            .cpuPercent_ = 50.0};
-  EXPECT_EQ(rm::formatTsvRow(base), "1.0\t1000\t2048\t50.0\n");
+                            .cpuPercent_ = 50.0,
+                            .diskIoBytes_ = rm::DiskIoBytes{
+                                .readBytes_ = 8192u, .writeBytes_ = 4096u}};
+  EXPECT_EQ(rm::formatTsvRow(base), "1.0\t1000\t2048\t50.0\t8192\t4096\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noRss), "1.0\t1000\t\t50.0\n");
+  EXPECT_EQ(rm::formatTsvRow(noRss), "1.0\t1000\t\t50.0\t8192\t4096\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noCpu), "1.0\t1000\t2048\t\n");
+  EXPECT_EQ(rm::formatTsvRow(noCpu), "1.0\t1000\t2048\t\t8192\t4096\n");
 
-  auto neither = base;
-  neither.rssBytes_ = std::nullopt;
-  neither.cpuPercent_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(neither), "1.0\t1000\t\t\n");
+  // One failed reading empties both counters, never just one of them, so the
+  // row ends in a tab. A consumer that strips trailing whitespace before
+  // splitting would lose a column here.
+  auto noDiskIo = base;
+  noDiskIo.diskIoBytes_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(noDiskIo), "1.0\t1000\t2048\t50.0\t\t\n");
+
+  auto nothing = base;
+  nothing.rssBytes_ = std::nullopt;
+  nothing.cpuPercent_ = std::nullopt;
+  nothing.diskIoBytes_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
@@ -236,13 +249,18 @@ TEST(ResourceMonitor, TruncateModeWritesHeader) {
   }
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 1u);
-  EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
+  EXPECT_EQ(lines[0], tsvHeader);
 }
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, AppendModeKeepsExistingHeader) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  // A log left over from an earlier run: a header plus one data row.
+  // A log left over from a server that ran before the disk IO columns existed:
+  // a four-column header plus one four-column row. Append mode leaves it
+  // alone, so the file legitimately ends up with an old header, old rows,
+  // then six-column ones. That is accepted, not a defect: rewriting the
+  // header would put a second header line inside the data. Consumers must
+  // therefore count columns per row, not per file.
   {
     std::ofstream existing{path};
     existing << "elapsed_s\ttimestamp_ms\trss\tcpu_percent\n";
@@ -273,7 +291,7 @@ TEST(ResourceMonitor, AppendModeWritesHeaderWhenFileIsEmptyOrMissing) {
     }
     auto lines = readLines(path);
     ASSERT_EQ(lines.size(), 1u);
-    EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
+    EXPECT_EQ(lines[0], tsvHeader);
   };
 
   auto [missing, cleanup1] = ad_utility::testing::filenameForTesting();
@@ -298,13 +316,39 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   auto lines = readLines(path);
   // The header plus at least one sampled row.
   ASSERT_GE(lines.size(), 2u);
-  EXPECT_EQ(lines[0], "elapsed_s\ttimestamp_ms\trss\tcpu_percent");
-  // Each data row has the header's four tab-separated columns (three tabs),
+  EXPECT_EQ(lines[0], tsvHeader);
+  // Each data row has the header's six tab-separated columns (five tabs),
   // even when an individual reading was empty.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 3)
-        << "row does not have 4 columns: " << *it;
+    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 5)
+        << "row does not have 6 columns: " << *it;
   }
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    ResourceMonitor monitor;
+    // Readers that always return the same value, so the row is known in
+    // advance. The CPU time never grows, so the CPU usage is always 0%.
+    monitor.setReadersForTesting(
+        {.rssReader_ = []() -> std::optional<uint64_t> { return 2048u; },
+         .cpuReader_ = []() -> std::optional<double> { return 1.0; },
+         .diskIoReader_ = []() -> std::optional<rm::DiskIoBytes> {
+           return rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u};
+         }});
+    // A short interval plus a longer sleep, so at least one row is written.
+    monitor.start(path, ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+  }
+  auto lines = readLines(path);
+  ASSERT_GE(lines.size(), 2u);
+  // Each reading lands in its own column. The first two columns are clocks,
+  // so only the end of the row can be checked. Each value is different, so
+  // two readings that ended up in the wrong columns would fail here.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t2048\t0.0\t8192\t4096"));
 }
 
 // _____________________________________________________________________________
