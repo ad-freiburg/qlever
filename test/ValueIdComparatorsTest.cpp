@@ -56,7 +56,8 @@ TEST_F(ValueIdComparators, GetRangeForDatatype) {
                                   Datatype::Undefined,
                                   Datatype::LocalVocabIndex,
                                   Datatype::TextRecordIndex,
-                                  Datatype::WordVocabIndex};
+                                  Datatype::WordVocabIndex,
+                                  Datatype::AuxVocabIndex};
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {

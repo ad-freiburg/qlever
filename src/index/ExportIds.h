@@ -13,6 +13,7 @@
 #ifndef QLEVER_SRC_INDEX_EXPORTIDS_H
 #define QLEVER_SRC_INDEX_EXPORTIDS_H
 
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
+#include "util/Algorithm.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/ValueIdentity.h"
@@ -47,6 +49,17 @@ using Literal = ad_utility::triple_component::Literal;
 // non-`xsd:string` datatypes (including encoded IDs) return `std::nullopt`.
 // These semantics are useful for the string expressions in
 // StringExpressions.cpp.
+//
+// All datatypes are handled, in one of the following ways: the words of the
+// vocabularies (`VocabIndex`, `LocalVocabIndex`, `AuxVocabIndex`) and the
+// encoded IRIs (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex`
+// resp. `encodedIdToLiteralOrIri` and then processed as described above; the
+// words of the text index (`WordVocabIndex`, `TextRecordIndex`) always are
+// plain literals; and all remaining datatypes are handled by
+// `idToLiteralForEncodedValue`, which turns the value that the `Id` stores into
+// a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns the
+// label of the blank node (`BlankNodeIndex`), resp. returns `std::nullopt`
+// (`Undefined`).
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
     bool onlyReturnLiteralsWithXsdString = false);
@@ -101,9 +114,11 @@ std::optional<std::string_view> blankNodeIriToString(
     const IriType& iri AD_LIFETIMEBOUND);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
-// is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
-// should only be called with suitable `Datatype` Ids, otherwise `AD_FAIL()` is
-// called.
+// is of type `VocabIndex`, `LocalVocabIndex`, `AuxVocabIndex`, or `EncodedVal`.
+// This function should only be called with suitable `Datatype` Ids, otherwise
+// `AD_FAIL()` is called. Note that an `Id` of type `AuxVocabIndex` requires the
+// `index` to have an auxiliary vocabulary (see `IndexImpl::auxVocab`), which is
+// checked.
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab);
 
@@ -151,9 +166,11 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
 }
 
 // Convert the `id` to a human-readable string. The `index` is used to resolve
-// `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
-// used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
-// is applied to the resulting string if it is not of a numeric type.
+// the `Id`s that point into one of its data structures (`VocabIndex`,
+// `AuxVocabIndex`, `WordVocabIndex`, `TextRecordIndex`, and `EncodedVal`). The
+// `localVocab` is used to resolve `Id`s with datatype `LocalVocabIndex`. The
+// `escapeFunction` is applied to the resulting string if it is not of a numeric
+// type.
 //
 // Return value: If the `Id` encodes a numeric value (integer, double, etc.)
 // then the `string` (first element of the pair) will be the number as a
@@ -171,7 +188,15 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
-    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
+    // In this mode, restrict the result to the words of the vocabularies that
+    // store their words as strings. Only those are routed through
+    // `literalOrIriToStringAndType`, which applies the actual `isLiteral()`
+    // check; the other datatypes below would bypass it (the words of the text
+    // index and the values that are encoded in the `Id` are turned into a
+    // string directly), so they have to be discarded here.
+    static constexpr std::array stringVocabDatatypes{
+        VocabIndex, LocalVocabIndex, AuxVocabIndex};
+    if (!ad_utility::contains(stringVocabDatatypes, datatype)) {
       return std::nullopt;
     }
   }
@@ -189,6 +214,7 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
     case VocabIndex:
     case LocalVocabIndex:
+    case AuxVocabIndex:
       return formatLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:

@@ -362,6 +362,8 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(LocalVocabEntryTest index)
 
+addLinkAndDiscoverTest(AuxVocabularyTest index engine)
+
 addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(ServiceTest engine)
@@ -517,7 +519,7 @@ addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
-addLinkAndDiscoverTest(ValueGetterTest engine)
+addLinkAndDiscoverTest(ValueGetterTest engine index)
 
 addLinkAndDiscoverTest(LruCacheTest)
 

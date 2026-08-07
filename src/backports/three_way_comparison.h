@@ -38,6 +38,12 @@
  * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(Class): Member operator
  * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Class):
  * Constexpr member version
+ * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(Class): Member
+ * operators that are constexpr in C++20 mode only, mirroring `QL_CONSTEXPR`
+ * (see `backports/keywords.h`). Use this if the `compareThreeWay` that the
+ * operators call is itself declared `QL_CONSTEXPR`, which is needed when it
+ * cannot be constexpr in C++17 (for example because GCC 8 rejects an `if`
+ * statement in a relaxed-constexpr function).
  *
  * Note: Custom three-way comparison macros assume the presence of a
  * compareThreeWay function (either as a member or free function) that returns
@@ -362,6 +368,9 @@ constexpr auto compareThreeWay(const T& /*lhs*/,
 #define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T) \
   QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(, constexpr, T)
 
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(T) \
+  QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(, , T)
+
 #define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_TEMPLATE( \
     TEMPLATE_SPEC, T)                                                \
   QL_IMPL_CUSTOM_THREEWAY_OPERATOR_LOCAL(TEMPLATE_SPEC, constexpr, T)
@@ -444,6 +453,9 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
   constexpr auto operator<=>(const T& other) const {          \
     return this->compareThreeWay(other);                      \
   }
+
+#define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(T) \
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(T)
 
 #define QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_TEMPLATE( \
     TEMPLATE_SPEC, T)                                                \

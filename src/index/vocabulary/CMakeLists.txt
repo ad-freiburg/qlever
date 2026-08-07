@@ -9,5 +9,6 @@
 add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp
                        VocabularyInMemoryBinSearch.cpp VocabularyInternalExternal.cpp
                        VocabularyOnDisk.cpp SplitVocabulary.cpp GeoVocabulary.cpp PolymorphicVocabulary.cpp
-                       Vocabulary.cpp EncodedIriManager.cpp PrefixHeuristic.cpp)
+                       Vocabulary.cpp EncodedIriManager.cpp PrefixHeuristic.cpp
+                       AuxVocabulary.cpp)
 qlever_target_link_libraries(vocabulary qlever_util rdfTypes)
