@@ -18,6 +18,7 @@
 // `Boost::container` for the `monotonic_buffer_resource`.
 
 #ifdef QLEVER_CPP_17
+#include <boost/container/pmr/global_resource.hpp>  // get_default_resource, new_delete_resource
 #include <boost/container/pmr/memory_resource.hpp>
 #include <boost/container/pmr/monotonic_buffer_resource.hpp>
 #include <boost/container/pmr/polymorphic_allocator.hpp>
