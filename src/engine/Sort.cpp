@@ -249,6 +249,25 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
 std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  // For an explicit `INTERNAL SORT BY` with a `LIMIT`/`OFFSET` the sort order
+  // determines which rows are part of the result, so we must not replace it by
+  // a different one:
+  //
+  //   SELECT * {
+  //     { SELECT * { ?x <p> ?y . ?y <q> ?z }
+  //       INTERNAL SORT BY ?z LIMIT 5 OFFSET 7 }
+  //     ?x <r> ?w
+  //   }
+  //
+  // The subquery uses the cheap `INTERNAL SORT BY ?z` (instead of an
+  // `ORDER BY`) to obtain a deterministic subset. The outer join needs `?x`
+  // order, but sorting by `?x` instead of `?z` would change which 5 rows
+  // survive. We therefore return `std::nullopt`, such that a second `Sort` (on
+  // `?x`) is stacked on top of this one (on `?z`). Without a `LIMIT`/`OFFSET`
+  // the sort order is not observable, because the result is re-sorted anyway.
+  if (explicitSort_ && !getLimitOffset().isUnconstrained()) {
+    return std::nullopt;
+  }
   AD_LOG_DEBUG
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
          "different sort order. This indicates a flaw during query planning."

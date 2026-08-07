@@ -92,7 +92,27 @@ class Union : public Operation {
   std::optional<ColumnIndex> getOriginalColumn(bool leftChild,
                                                ColumnIndex unionColumn) const;
 
+  // We propagate part of the `LimitOffsetClause` to both children to
+  // potentially speed them up and save memory, but `Union` does not actually
+  // apply its own `LimitOffsetClause` to itself, this still needs to be done by
+  // the `Operation` base class.
+  //
+  // Concretely, each child gets a `LIMIT` of `limit + offset` and no `OFFSET`
+  // (see `onLimitOffsetChanged`). This is always correct, because every row of
+  // the union's result consumes exactly one row of one of the children, so the
+  // first `limit + offset` rows of this operation can never require more than
+  // the first `limit + offset` rows of either child. It is however only a good
+  // optimization for small `OFFSET` values: the `OFFSET` cannot be pushed down,
+  // as we don't know upfront how the skipped rows are distributed between the
+  // two children, so for a large `OFFSET` both children still have to compute
+  // almost all of their rows.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::PARTIAL;
+  }
+
  private:
+  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   std::unique_ptr<Operation> cloneImpl() const override;
