@@ -20,6 +20,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "backports/filesystem.h"
 #include "util/jthread.h"
@@ -40,38 +41,90 @@ std::optional<uint64_t> rssBytesFromStatm(std::istream& statm);
 // Total CPU time (user + system) used by this process so far, in seconds.
 std::optional<double> cpuTimeSeconds();
 
-// Turns successive cumulative CPU-time readings into CPU usage as a percentage
-// of one core. Stateful: each `update` is the baseline for the next.
-class CpuPercentTracker {
+// Turns successive readings of a cumulative "seconds spent doing X" counter
+// into a percentage of the elapsed wall time. Stateful: each `update` is the
+// baseline for the next. Used for both `cpu_percent` and `io_stall_percent`.
+class SecondsToPercentTracker {
  public:
-  explicit CpuPercentTracker(std::optional<double> initialCpuSeconds)
-      : lastCpuSeconds_{initialCpuSeconds} {}
+  explicit SecondsToPercentTracker(std::optional<double> initialSeconds)
+      : lastSeconds_{initialSeconds} {}
 
   // `std::nullopt` when usage cannot be computed yet: no reading this tick,
   // no baseline, or no time elapsed since the baseline.
-  std::optional<double> update(std::optional<double> cpuSeconds,
-                               double elapsed);
+  std::optional<double> update(std::optional<double> seconds, double elapsed);
 
  private:
-  std::optional<double> lastCpuSeconds_;
+  std::optional<double> lastSeconds_;
   double lastElapsed_ = 0.0;
 };
 
-// One TSV row; a missing `rss` or `cpuPercent` becomes an empty cell.
-std::string formatTsvRow(double elapsed, int64_t timestampMs,
-                         std::optional<uint64_t> rss,
-                         std::optional<double> cpuPercent);
+// Cumulative bytes this process has read from and written to disk.
+struct DiskIoBytes {
+  uint64_t readBytes_;
+  uint64_t writeBytes_;
+};
 
-// The two OS readers, as swappable function objects (see
+// Cumulative disk bytes of this process, or `std::nullopt` if unavailable.
+std::optional<DiskIoBytes> currentDiskIoBytes();
+
+#if defined(__linux__)
+// Disk bytes from a `/proc/self/io` stream, read by the `read_bytes:` and
+// `write_bytes:` keys, never by position.
+std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo);
+#endif
+
+// Cumulative seconds during which at least one task was stalled on I/O, or
+// `std::nullopt` if unavailable. Linux-only as not supported elsewhere.
+std::optional<double> ioStallSeconds();
+
+#if defined(__linux__)
+// Stall seconds from a `/proc/pressure/io` stream: the `total=` microseconds
+// on the `some` line, scaled to seconds.
+std::optional<double> ioStallSecondsFromPressure(std::istream& pressure);
+#endif
+
+// One sampled row of the resource-usage log
+struct Sample {
+  double elapsedSeconds_;
+  int64_t timestampMs_;
+  std::optional<uint64_t> rssBytes_;
+  std::optional<double> cpuPercent_;
+  std::optional<DiskIoBytes> diskIoBytes_;
+  std::optional<double> ioStallPercent_;
+};
+
+// The column names `formatTsvRow` produces values for, without the trailing
+// newline. `start` also compares it against an existing file's first line to
+// notice that the format has changed since that file was written.
+inline constexpr std::string_view tsvHeader =
+    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\twrite_bytes\t"
+    "io_stall_percent";
+
+// One TSV row; a missing field becomes an empty cell.
+std::string formatTsvRow(const Sample& sample);
+
+// The OS readers, as swappable function objects (see
 // `ResourceMonitor::setReadersForTesting`).
 using RssReader = absl::AnyInvocable<std::optional<uint64_t>()>;
 using CpuReader = absl::AnyInvocable<std::optional<double>()>;
+using DiskIoReader = absl::AnyInvocable<std::optional<DiskIoBytes>()>;
+using IoStallReader = absl::AnyInvocable<std::optional<double>()>;
+
+// The readers the sampler calls each tick. Each starts out as the real OS
+// reader, so a test can replace one and leave the rest real.
+struct Readers {
+  RssReader rssReader_ = currentRssBytes;
+  CpuReader cpuReader_ = cpuTimeSeconds;
+  DiskIoReader diskIoReader_ = currentDiskIoBytes;
+  IoStallReader ioStallReader_ = ioStallSeconds;
+};
 
 }  // namespace resource_monitor
 
-// Samples the RSS and CPU usage of this process on a background thread
-// and appends one TSV row (`elapsed_s`, `timestamp_ms`, `rss`,
-// `cpu_percent`) per interval; failed readings become empty cells. The
+// Samples the RSS, CPU usage, and disk IO of this process, plus system-wide IO
+// stall on a background thread and appends one TSV row (`elapsed_s`,
+// `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes`, `write_bytes`,
+// `io_stall_percent`) per interval; failed readings become empty cells. The
 // destructor stops the sampling thread and closes the file.
 class ResourceMonitor {
  public:
@@ -93,9 +146,9 @@ class ResourceMonitor {
              std::chrono::milliseconds interval);
 
   // Test-only: swap the OS readers before `start`, e.g. a throwing reader to
-  // exercise the sampler's error handling.
-  void setReadersForTesting(resource_monitor::RssReader rssReader,
-                            resource_monitor::CpuReader cpuReader);
+  // exercise the sampler's error handling. Readers that are not named keep
+  // their real implementation.
+  void setReadersForTesting(resource_monitor::Readers readers);
 
  private:
   // Body of the sampling thread.
@@ -104,8 +157,8 @@ class ResourceMonitor {
   // Declaration order is load-bearing: `sampler_` must be destroyed
   // (i.e. joined) first, while the members it uses are still alive.
   std::ofstream stream_;
-  resource_monitor::RssReader rssReader_ = resource_monitor::currentRssBytes;
-  resource_monitor::CpuReader cpuReader_ = resource_monitor::cpuTimeSeconds;
+  resource_monitor::Readers readers_;
+
   std::atomic<bool> started_{false};
   std::mutex mutex_;
   std::condition_variable stopCondition_;
