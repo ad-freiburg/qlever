@@ -30,7 +30,9 @@
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/Log.h"
 #include "util/TimeTracer.h"
 #include "util/http/UrlParser.h"
 
@@ -570,8 +572,86 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
 }
 
 // ___________________________________________________________________________
+void Qlever::cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                      KeepPreviousIndexDirs policy) {
+  if (policy == KeepPreviousIndexDirs::All) {
+    return;
+  }
+  // Nothing in here may throw: when this runs, the rebuild has already
+  // succeeded, so a failure of the cleanup must only be logged. Deletion
+  // failures are handled (and skipped) individually below; the catch covers
+  // everything else (e.g. a failure while enumerating the directories or
+  // opening the log file).
+  try {
+    cleanUpPreviousIndexDirsImpl(indexBaseName, policy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Failed to clean up the previous index directories: "
+                 << e.what() << std::endl;
+  }
+}
+
+// ___________________________________________________________________________
+void Qlever::cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                          KeepPreviousIndexDirs policy) {
+  namespace fs = ql::filesystem;
+  // Collect the `previous.*` directories in the directory of the index. The
+  // parent path is empty if the base name lies in the working directory
+  // itself.
+  fs::path indexDir = fs::path{indexBaseName}.parent_path();
+  if (indexDir.empty()) {
+    indexDir = fs::current_path();
+  }
+  auto previousDirs =
+      qlever::util::directoriesWithPrefix(indexDir, "previous.");
+
+  // Order the directories from the oldest to the newest by the time they were
+  // last written to. Nothing writes into such a directory after the rebuild
+  // that created it, so this is the order in which they were created. Two
+  // rebuilds within the same second can produce equal timestamps (depending
+  // on the filesystem backend); such ties are broken by name, which contains
+  // the build date of the retired index (with a numeric suffix for repeated
+  // dates, see `makeIndexRebuildConfig`) and hence also increases from the
+  // oldest to the newest.
+  auto sortKey = [](const fs::path& dir) {
+    return std::pair{fs::last_write_time(dir), dir.filename().string()};
+  };
+  ql::ranges::sort(previousDirs, std::less{}, sortKey);
+
+  // Keep or delete each directory according to the policy. The decisions are
+  // written to the log file of the rebuild that has just finished (which was
+  // moved into place together with the index), not to the server log.
+  auto logFile = ad_utility::makeOfstream(
+      absl::StrCat(indexBaseName, REBUILD_INDEX_LOG_SUFFIX), std::ios::app);
+  auto log = [&logFile](std::string_view severity = "INFO") -> std::ostream& {
+    return logFile << ad_utility::Log::getTimeStamp() << " - " << severity
+                   << ": ";
+  };
+  log() << "Checking which previous index directories to keep or delete ("
+        << policy << ")" << std::endl;
+  for (size_t i = 0; i < previousDirs.size(); ++i) {
+    const fs::path& dir = previousDirs[i];
+    bool keep = keepPreviousIndexDir(policy, i, previousDirs.size());
+    log() << dir.filename().string() << " -> " << (keep ? "KEEP" : "DELETE")
+          << std::endl;
+    if (!keep) {
+      ql::error_code errorCode;
+      fs::remove_all(dir, errorCode);
+      if (errorCode) {
+        // A failed deletion additionally goes to the server log, where
+        // operators look for errors.
+        log("ERROR") << "Failed to delete \"" << dir.filename().string()
+                     << "\": " << errorCode.message() << std::endl;
+        AD_LOG_ERROR << "Failed to delete \"" << dir.filename().string()
+                     << "\": " << errorCode.message() << std::endl;
+      }
+    }
+  }
+}
+
+// ___________________________________________________________________________
 void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
-                                       const IndexRebuildConfig& config) {
+                                       const IndexRebuildConfig& config,
+                                       KeepPreviousIndexDirs policy) {
   namespace fs = ql::filesystem;
 
   // Move a `file` whose name starts with `fromBasename` so that its base-name
@@ -646,6 +726,13 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                 << directoryOfNewIndexSource.string()
                 << "\" in which the new index was built" << std::endl;
   }
+
+  // Apply the configured policy for which `previous.*` index directories to
+  // keep, right after the move that has just retired the old index into such
+  // a directory. A failure is only logged (`cleanUpPreviousIndexDirs` never
+  // throws): the new index is already in place, so the rebuild as a whole has
+  // succeeded.
+  cleanUpPreviousIndexDirs(config.newIndexTarget(), policy);
 }
 
 // ___________________________________________________________________________
@@ -685,7 +772,8 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
 void Qlever::swapInRebuiltIndex(
     const Index& index, RebuildResult rebuildResult,
     const ad_utility::SharedCancellationHandle& handle,
-    const IndexRebuildConfig& config) {
+    const IndexRebuildConfig& config,
+    KeepPreviousIndexDirs keepPreviousIndexDirs) {
   auto& [oldSnapshot, mapping, newIndexAndViews] = rebuildResult;
   auto newSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
@@ -711,7 +799,7 @@ void Qlever::swapInRebuiltIndex(
   // consistently on the old index (the swap below has not happened and open
   // file handles survive the renames), but the on-disk layout has to be
   // repaired manually before the next restart.
-  moveRebuiltIndexIntoPlace(*newIndexAndViews, config);
+  moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
   // Clear the query cache, including pinned entries: cached results were
   // computed against the old index, so their `VocabIndex` ids are in the old
