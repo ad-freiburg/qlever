@@ -139,7 +139,7 @@ TEST(LocalVocab, getIdAndAddIfNotContained) {
 
   // The same for a word that can be encoded directly in an `Id`.
   auto encodable =
-      LocalVocabEntry::fromIriref("<http://example.org/42>", context);
+      LocalVocabEntry::fromIriref("<http://example.org/69>", context);
   auto idEncodable = localVocab.getIdAndAddIfNotContained(encodable);
   EXPECT_EQ(idEncodable.getDatatype(), Datatype::EncodedVal);
   EXPECT_EQ(idEncodable.getBits(),
