@@ -139,12 +139,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                                               ResponseT&& send) {
   using namespace ad_utility::httpUtils;
 
-  // Version of send with maximally permissive CORS header (which allows the
-  // client that receives the response to do with it what it wants).
-  // NOTE: For POST and GET requests, the "allow origin" header is sufficient,
-  // while the "allow headers" header is needed only for OPTIONS request. The
-  // "allow methods" header is purely informational. To avoid two similar
-  // lambdas here, we send the same headers for GET, POST, and OPTIONS.
   auto sendWithAccessControlHeaders =
       [&send](auto response) -> boost::asio::awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
@@ -154,10 +148,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     co_return co_await send(std::move(response));
   };
 
-  // Reply to OPTIONS requests immediately by allowing everything.
-  // NOTE: Handling OPTIONS requests is necessary because some POST queries
-  // (in particular, from the QLever UI) are preceded by an OPTIONS request (a
-  // so-called "preflight" request, which asks permission for the POST query).
   if (request.method() == http::verb::options) {
     AD_LOG_INFO << std::endl;
     AD_LOG_INFO << "Request received via " << request.method()
@@ -166,12 +156,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         createOkResponse("", request, MediaType::textPlain));
   }
 
-  // Process the request using the `process` method. If it throws, turn the
-  // exception into an HTTP error response via `reportHttpError` (which
-  // also logs it and updates the error metrics). Note that only the `send`
-  // below requires `co_await` and thus has to happen outside the catch
-  // block; building the error response itself is synchronous and can happen
-  // right here.
+  // The C++ standard forbids a suspend point (`co_await`) inside a `catch`
+  // block, so the actual `send` cannot happen here. Building the error
+  // response, however, is synchronous and can happen right in the `catch`
+  // block.
   std::optional<HttpErrorResponse> errorResponse;
   try {
     co_await process(request, sendWithAccessControlHeaders);

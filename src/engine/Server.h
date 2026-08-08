@@ -181,11 +181,24 @@ class Server {
                       const RequestT& request,
                       ad_utility::metrics::MetricLabel errorType);
 
-  // The `HttpHandler` passed to `HttpServer` in `run()`. Replies immediately
-  // to CORS preflight (OPTIONS) requests, otherwise dispatches to `process`
-  // and turns any exception it throws into an HTTP error response. This
-  // function satisfies the constraints for the `HttpHandler` in
-  // `HttpServer.h`.
+  /// The `HttpHandler` passed to `HttpServer` in `run()`. This function
+  /// satisfies the constraints for the `HttpHandler` in `HttpServer.h`.
+  ///
+  /// Replies to OPTIONS requests immediately by allowing everything. This is
+  /// necessary because some POST queries (in particular, from the QLever UI)
+  /// are preceded by an OPTIONS request (a so-called "preflight" request,
+  /// which asks permission for the POST query).
+  ///
+  /// All other requests are processed using `process()`. If that throws, the
+  /// exception is turned into an HTTP error response via `reportHttpError`
+  /// (which also logs it and updates the error metrics).
+  ///
+  /// Every response (including error responses) is sent with a maximally
+  /// permissive CORS header, which allows the client that receives the
+  /// response to do with it what it wants. Strictly, only OPTIONS requests
+  /// need the "allow headers" header, while GET and POST only need "allow
+  /// origin"; the same headers are sent for all three to avoid two similar
+  /// code paths.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> handleHttpRequest(RequestT request, ResponseT&& send);
