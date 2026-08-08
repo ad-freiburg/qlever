@@ -64,7 +64,6 @@ class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
-  FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
@@ -213,9 +212,8 @@ class Server {
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
-      const Index& index, const LocatedTriplesState& locatedTriples,
-      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-      const UpdateMetadata& updateMetadata,
+      const LocatedTriplesState& locatedTriples,
+      const PlannedQuery& plannedQuery, const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
@@ -228,28 +226,6 @@ class Server {
           const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
           std::optional<PlannedQuery>& plannedUpdate);
 
-  // Determine media type candidates to be used for the result. Media types are
-  // determined (in this order) by the current action (e.g.,
-  // "action=csv_export") and by the "Accept" header of the request. The latter
-  // option can produce multiple candidates.
-  CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ad_utility::MediaType> determineMediaTypes(
-          const ad_utility::url_parser::ParamValueMap& params,
-          const RequestT& request);
-  FRIEND_TEST(ServerTest, determineMediaType);
-  // Determine whether the subtrees and the result should be pinned.
-  static std::pair<bool, bool> determineResultPinning(
-      const ad_utility::url_parser::ParamValueMap& params);
-  FRIEND_TEST(ServerTest, determineResultPinning);
-  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
-  // meters for the simplification of geometries before indexing) from its
-  // string representation. Return `std::nullopt` if `simplificationStr` is
-  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
-  // floating-point number.
-  static std::optional<double> parsePinGeoIndexSimplification(
-      const std::optional<std::string>& simplificationStr);
-  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
   // Describe the pinning of a named result (and, if applicable, of its geo
   // index) for the request log line, e.g. `" [pin result with name
   // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
@@ -266,10 +242,6 @@ class Server {
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk,
                         std::string_view clientIp);
-  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
-  static void adjustParsedQueryLimitOffset(
-      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-      const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Configure pinned of named results on the `qec`. If `pinResultWithName` is
   // set, then the `qec` is configured such that the query result will be stored
@@ -299,7 +271,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const Index& index, const PlannedQuery& plannedUpdate,
+      const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =

@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "gtest/gtest.h"
 #include "parser/SparqlParser.h"
@@ -11,11 +12,7 @@
 namespace {
 using namespace checkUsePatternTrick;
 using ad_utility::source_location;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
+using ad_utility::testing::encodedIriManager;
 
 // Parse the SPARQL query `SELECT * WHERE { <whereClause> }`. Not that the
 // `whereClause` does not need to be enclosed by braces `{}`.

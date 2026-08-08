@@ -22,6 +22,7 @@
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/GraphStoreProtocol.h"
+#include "engine/HttpApiHelpers.h"
 #include "engine/HttpError.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
@@ -50,7 +51,7 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
@@ -283,21 +284,6 @@ auto Server::setupCancellationHandle(
 }
 
 // ____________________________________________________________________________
-std::optional<double> Server::parsePinGeoIndexSimplification(
-    const std::optional<std::string>& simplificationStr) {
-  if (!simplificationStr.has_value()) {
-    return std::nullopt;
-  }
-  try {
-    return std::stod(simplificationStr.value());
-  } catch (...) {
-    throw std::runtime_error(
-        "Invalid value for `pin-geo-index-simplification`: must be a "
-        "floating-point number of meters.");
-  }
-}
-
-// ____________________________________________________________________________
 std::string Server::describePinResultWithNameForLog(
     const std::optional<std::string>& pinResultWithName,
     const std::optional<std::string>& pinNamedGeoIndex,
@@ -332,7 +318,8 @@ auto Server::prepareOperation(
 
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
-  auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  auto [pinSubtrees, pinResult] =
+      qlever::http_api_helpers::determineResultPinning(params);
   std::optional<std::string> pinResultWithName =
       ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
                                              {});
@@ -343,7 +330,8 @@ auto Server::prepareOperation(
       ad_utility::url_parser::checkParameter(
           params, "pin-geo-index-simplification", {});
   std::optional<double> geoIndexSimplificationInMeters =
-      parsePinGeoIndexSimplification(pinGeoIndexSimplificationStr);
+      qlever::http_api_helpers::parsePinGeoIndexSimplification(
+          pinGeoIndexSimplificationStr);
   AD_LOG_INFO << "Processing the following " << operationName
               << (clientIp.empty() ? std::string{}
                                    : absl::StrCat(" from ", clientIp))
@@ -885,18 +873,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-std::pair<bool, bool> Server::determineResultPinning(
-    const ad_utility::url_parser::ParamValueMap& params) {
-  const bool pinSubresults =
-      ad_utility::url_parser::checkParameter(params, "pin-subresults", "true")
-          .has_value();
-  const bool pinResult =
-      ad_utility::url_parser::checkParameter(params, "pin-result", "true")
-          .has_value();
-  return {pinSubresults, pinResult};
-}
-
-// ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle, TimeLimit timeLimit,
@@ -1057,48 +1033,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    std::vector<ad_utility::MediaType> Server::determineMediaTypes(
-        const ad_utility::url_parser::ParamValueMap& params,
-        const RequestT& request) {
-  using namespace ad_utility::url_parser;
-  // The following code block determines the media type to be used for the
-  // result. The media type is either determined by the "Accept:" header of
-  // the request or by the URL parameter "action=..." (for TSV and CSV export,
-  // for QLever-historical reasons).
-  std::optional<MediaType> mediaType = std::nullopt;
-
-  // The explicit `action=..._export` parameter have precedence over the
-  // `Accept:...` header field
-  if (checkParameter(params, "action", "csv_export")) {
-    mediaType = MediaType::csv;
-  } else if (checkParameter(params, "action", "tsv_export")) {
-    mediaType = MediaType::tsv;
-  } else if (checkParameter(params, "action", "qlever_json_export")) {
-    mediaType = MediaType::qleverJson;
-  } else if (checkParameter(params, "action", "sparql_json_export")) {
-    mediaType = MediaType::sparqlJson;
-  } else if (checkParameter(params, "action", "turtle_export")) {
-    mediaType = MediaType::turtle;
-  } else if (checkParameter(params, "action", "binary_export")) {
-    mediaType = MediaType::octetStream;
-  }
-
-  std::string_view acceptHeader = request.base()[http::field::accept];
-
-  if (mediaType.has_value()) {
-    return {mediaType.value()};
-  }
-
-  try {
-    return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
-  } catch (const std::exception& e) {
-    throw HttpError(http::status::not_acceptable, e.what());
-  }
-}
-
-// ____________________________________________________________________________
-CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::MessageSender Server::createMessageSender(
         const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
         const RequestT& request, std::string_view operation,
@@ -1158,7 +1092,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   ad_utility::metrics::ActiveCounterGuard queryGuard{
       *metrics_->runningSparqlOperations_, "query"};
 
-  auto mediaTypes = determineMediaTypes(params, request);
+  auto mediaTypes = qlever::http_api_helpers::determineMediaTypes(
+      params, request.base()[http::field::accept]);
   AD_LOG_INFO << "Requested media types of the result are: "
               << absl::StrJoin(
                      mediaTypes | ql::views::transform([](MediaType mediaType) {
@@ -1196,10 +1131,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     qec.areWebsocketUpdatesEnabled_ = false;
   }
 
-  // Update the `PlannedQuery` with the export limit when the response
-  // content-type is `application/qlever-results+json` and ensure that the
-  // offset is not applied twice when exporting the query.
-  adjustParsedQueryLimitOffset(plannedQuery.value(), mediaType, params);
+  // Update the `ParsedQuery` with the export limit when the response
+  // content-type is `application/qlever-results+json` (or, if enabled via
+  // runtime parameter, `application/sparql-results+json`).
+  plannedQuery->parsedQuery().updateExportLimit(
+      mediaType, qlever::http_api_helpers::parseSendLimit(params));
 
   // This actually processes the query and sends the result in the
   // requested format.
@@ -1232,13 +1168,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // ____________________________________________________________________________
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
-    const Index& index, const LocatedTriplesState& locatedTriples,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const LocatedTriplesState& locatedTriples, const PlannedQuery& plannedQuery,
     const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
   AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
   AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
   AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto& qet = plannedQuery.queryExecutionTree();
   auto warnings = qet.collectWarnings();
   warnings.emplace(warnings.begin(),
                    "SPARQL 1.1 Update for QLever is experimental.");
@@ -1273,7 +1209,8 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
         permutation)]["blocks-affected"] =
         locatedTriples.getLocatedTriplesForPermutation<false>(permutation)
             .numBlocks();
-    auto numBlocks = index.getPimpl()
+    auto numBlocks = plannedQuery.getIndex()
+                         .getPimpl()
                          .getPermutation(permutation)
                          .metaData()
                          .blockData()
@@ -1286,16 +1223,16 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 
 // ____________________________________________________________________________
 UpdateMetadata Server::processUpdateImpl(
-    const Index& index, const PlannedQuery& plannedUpdate,
+    const PlannedQuery& plannedUpdate,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata =
-      ExecuteUpdate::executeUpdate(index, plannedUpdate.parsedQuery(), qet,
-                                   deltaTriples, cancellationHandle, tracer);
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      plannedUpdate.getIndex(), plannedUpdate.parsedQuery(), qet, deltaTriples,
+      cancellationHandle, tracer);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
@@ -1303,8 +1240,8 @@ UpdateMetadata Server::processUpdateImpl(
   // Clear the cache, because all cache entries have been invalidated by
   // the update anyway (The index of the located triples snapshot is
   // part of the cache key).
-  cache().clearAll();
-  namedResultCache().clear();
+  qlever().cache().clearAll();
+  qlever().namedResultCache().clear();
   tracer.endTrace("clearCache");
 
   return updateMetadata;
@@ -1352,9 +1289,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         auto qecPtr = makeQec(indexAndViews);
         auto& qec = *qecPtr;
         return index.deltaTriplesManager().modify<json>(
-            [this, &index, &cancellationHandle, &plannedUpdate, &updates,
-             &requestTimer, &timeLimit, &qec,
-             &metadatas](DeltaTriples& deltaTriples) {
+            [this, &cancellationHandle, &plannedUpdate, &updates, &requestTimer,
+             &timeLimit, &qec, &metadatas](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
                   deltaTriples.getLocatedTriplesSharedStateReference());
               json results = json::array();
@@ -1380,16 +1316,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
                 auto updateMetadata = this->processUpdateImpl(
-                    index, plannedUpdate.value(), cancellationHandle,
-                    deltaTriples, tracer);
+                    plannedUpdate.value(), cancellationHandle, deltaTriples,
+                    tracer);
                 tracer.endTrace("execution");
 
                 tracer.endTrace("update");
                 results.push_back(createResponseMetadataForUpdate(
-                    index,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
-                    *plannedUpdate, plannedUpdate->queryExecutionTree(),
-                    updateMetadata, tracer));
+                    *plannedUpdate, updateMetadata, tracer));
                 metadatas.push_back(std::move(updateMetadata));
 
                 AD_LOG_INFO << "Done processing update, total time was "
@@ -1597,29 +1531,6 @@ bool Server::checkAccessToken(
   } else {
     AD_LOG_DEBUG << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
-  }
-}
-
-// _____________________________________________________________________________
-void Server::adjustParsedQueryLimitOffset(
-    PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-    const ad_utility::url_parser::ParamValueMap& parameters) {
-  // Read the export limit from the `send` parameter (historical name). This
-  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
-  //
-  // NOTE: This was originally designed exclusively for `qlever-results+json`.
-  // However, when the runtime parameter `sparql-results-json-with-time` is set
-  // (which is the default), we now also apply it to `sparql-results+json`.
-  auto& limitOffset = plannedQuery.parsedQuery()._limitOffset;
-  auto& exportLimit = limitOffset.exportLimit_;
-  auto sendParameter =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, "send");
-  bool considerSendParameter =
-      mediaType == MediaType::qleverJson ||
-      (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>() &&
-       mediaType == MediaType::sparqlJson);
-  if (sendParameter.has_value() && considerSendParameter) {
-    exportLimit = std::stoul(sendParameter.value());
   }
 }
 

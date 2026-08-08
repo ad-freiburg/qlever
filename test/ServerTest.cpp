@@ -10,6 +10,7 @@
 
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -20,7 +21,6 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
@@ -29,20 +29,7 @@
 using nlohmann::json;
 
 namespace {
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
-                                  datasets);
-}
-
 // Expect that `call()` throws an `HttpError` with status 403 Forbidden and
 // with a message that matches `messageMatcher`.
 auto expectForbiddenError = [](auto call, auto messageMatcher,
@@ -57,69 +44,9 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
     EXPECT_THAT(e.what(), messageMatcher);
   }
 };
-
 }  // namespace
-TEST(ServerTest, determineResultPinning) {
-  EXPECT_THAT(Server::determineResultPinning(
-                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
-              testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
-              testing::Pair(false, true));
-  EXPECT_THAT(
-      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
-      testing::Pair(false, false));
-}
 
-// _____________________________________________________________________________
-TEST(ServerTest, determineMediaType) {
-  auto MakeRequest = [](const std::optional<std::string>& accept,
-                        const http::verb method = http::verb::get,
-                        const std::string& target = "/",
-                        const std::string& body = "") {
-    auto req = http::request<http::string_body>{method, target, 11};
-    if (accept.has_value()) {
-      req.set(http::field::accept, accept.value());
-    }
-    req.body() = body;
-    req.prepare_payload();
-    return req;
-  };
-  auto checkActionMediatype = [&](const std::string& actionName,
-                                  ad_utility::MediaType expectedMediaType) {
-    EXPECT_THAT(Server::determineMediaTypes({{"action", {actionName}}},
-                                            MakeRequest(std::nullopt)),
-                testing::ElementsAre(expectedMediaType));
-  };
-  // The media type associated with the action overrides the `Accept` header.
-  EXPECT_THAT(Server::determineMediaTypes(
-                  {{"action", {"csv_export"}}},
-                  MakeRequest("application/sparql-results+json")),
-              testing::ElementsAre(ad_utility::MediaType::csv));
-  checkActionMediatype("csv_export", ad_utility::MediaType::csv);
-  checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
-  checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
-  checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
-  checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
-  checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
-  EXPECT_THAT(Server::determineMediaTypes(
-                  {}, MakeRequest("application/sparql-results+json")),
-              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
-  // No supported media type in the `Accept` header. (Contrary to it's docstring
-  // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
-  // exception if no supported media type is found.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::determineMediaTypes({}, MakeRequest("text/css")),
-      testing::HasSubstr("Not a single media type known to this parser was "
-                         "detected in \"text/css\"."));
-  // No `Accept` header means that any content type is allowed.
-  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest(std::nullopt)),
-              testing::ElementsAre());
-  // No `Accept` header and an empty `Accept` header are not distinguished.
-  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest("")),
-              testing::ElementsAre());
-}
-
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
   auto askQuery = parseQuery("ASK {}");
   auto selectQuery = parseQuery("SELECT * {}");
@@ -284,13 +211,12 @@ TEST(ServerTest, createResponseMetadata) {
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
-          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          plannedQuery, plannedQuery.queryExecutionTree(), UpdateMetadata{},
-          tracer2),
+          *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+          UpdateMetadata{}, tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-      plannedQuery, plannedQuery.queryExecutionTree(), updateMetadata, tracer2);
+      *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+      updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -310,61 +236,6 @@ TEST(ServerTest, createResponseMetadata) {
                   "SPARQL 1.1 Update for QLever is experimental."}));
   EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, adjustParsedQueryLimitOffset) {
-  using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
-    ParsedQuery parsed = parseQuery(std::move(operation));
-    auto* qec = ad_utility::testing::getQec();
-    QueryExecutionTree qet =
-        QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
-            .createExecutionTree(parsed);
-    return {std::move(parsed), std::move(qet), *qec};
-  };
-  auto expectExportLimit =
-      [&makePlannedQuery](
-          ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
-          std::string operation =
-              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
-                                                                      {"12"}}},
-          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(l);
-        auto pq = makePlannedQuery(std::move(operation));
-        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
-        EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
-                    testing::Eq(limit));
-      };
-
-  std::string complexQuery{
-      "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
-      "BIND(RAND() as ?r) . } OFFSET 5"};
-
-  // Check that the export limit is set for `qlever-results+json`.
-  expectExportLimit(qleverJson, 12);
-  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
-                    {{"send", {"13"}}});
-  expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
-
-  // Check that the export limit is set for `sparql-results+json` if and
-  // only if the runtime parameter `sparql-results-json-with-time`  is set.
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
-    expectExportLimit(sparqlJson, 12);
-  }
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
-    expectExportLimit(sparqlJson, std::nullopt);
-  }
-
-  // Check that no export limit is set for other media types.
-  expectExportLimit(csv, std::nullopt);
-  expectExportLimit(csv, std::nullopt, complexQuery);
-  expectExportLimit(tsv, std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -423,30 +294,6 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Verify qec was not modified when exception was thrown
   EXPECT_FALSE(qec->pinResultWithName().has_value());
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, parsePinGeoIndexSimplification) {
-  // No value given - no simplification.
-  EXPECT_EQ(Server::parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
-
-  // A valid positive number is parsed correctly.
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("10.5"),
-              ::testing::Optional(10.5));
-
-  // A non-numeric value throws.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::parsePinGeoIndexSimplification("not-a-number"),
-      testing::HasSubstr(
-          "Invalid value for `pin-geo-index-simplification`: must be a "
-          "floating-point number of meters."));
-
-  // Negative and zero values are not rejected by the parser itself (that is
-  // left to the downstream consumer, see `GeoConverters::simplifyPolyline`).
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("-5"),
-              ::testing::Optional(-5.0));
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("0"),
-              ::testing::Optional(0.0));
 }
 
 // _____________________________________________________________________________

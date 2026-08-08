@@ -13,4 +13,4 @@ addLinkAndDiscoverTest(GraphPatternAnalysisTest sparqlParser)
 addLinkAndDiscoverTest(SparqlAntlrParserTest sparqlParser engine)
 addLinkAndDiscoverTest(SparqlAntlrParserUpdateTest sparqlParser engine)
 addLinkAndDiscoverTest(SparqlAntlrParserExpressionTest sparqlParser sparqlExpressions engine)
-
+addLinkAndDiscoverTest(ParsedQueryTest sparqlParser)

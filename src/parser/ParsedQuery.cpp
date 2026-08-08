@@ -20,6 +20,7 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
+#include "util/http/MediaTypes.h"
 
 using std::string;
 using std::vector;
@@ -380,6 +381,20 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
   } else {
     static const std::vector<Alias> dummyForConstructClause;
     return dummyForConstructClause;
+  }
+}
+
+// ____________________________________________________________________________
+void ParsedQuery::updateExportLimit(const ad_utility::MediaType& mediaType,
+                                    std::optional<uint64_t> sendLimit) {
+  using ad_utility::MediaType;
+  auto& exportLimit = _limitOffset.exportLimit_;
+  bool considerSendParameter =
+      mediaType == MediaType::qleverJson ||
+      (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>() &&
+       mediaType == MediaType::sparqlJson);
+  if (sendLimit.has_value() && considerSendParameter) {
+    exportLimit = sendLimit;
   }
 }
 
