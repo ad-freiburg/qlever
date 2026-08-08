@@ -191,16 +191,16 @@ class Server {
   // The `HttpHandler` passed to `HttpServer` in `run()`. This function
   // satisfies the constraints for the `HttpHandler` in `HttpServer.h`.
   //
-  // Replies to OPTIONS requests immediately by allowing everything. This is
+  // Reply to OPTIONS requests immediately by allowing everything. This is
   // necessary because some POST queries (in particular, from the QLever UI)
   // are preceded by an OPTIONS request (a so-called "preflight" request,
   // which asks permission for the POST query).
   //
-  // All other requests are processed using `process()`. If that throws, the
-  // exception is turned into an HTTP error response via `reportHttpError`
-  // (which also logs it and updates the error metrics).
+  // Process all other requests using `process()`. If that throws, turn the
+  // exception into an HTTP error response via `reportHttpError` (which also
+  // logs it and updates the error metrics).
   //
-  // Every response (including error responses) is sent with a maximally
+  // Send every response (including error responses) with a maximally
   // permissive CORS header, which allows the client that receives the
   // response to do with it what it wants. Strictly, only OPTIONS requests
   // need the "allow headers" header, while GET and POST only need "allow
@@ -210,9 +210,9 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> handleHttpRequest(RequestT request, ResponseT&& send);
 
-  // Builds the `WebSocketHandler` passed to `HttpServer` in `run()`. Called
-  // once at server startup with the server's `io_context` executor; sets up
-  // the `QueryHub` for that executor and returns the handler that dispatches
+  // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
+  // at server startup with the server's `io_context` executor; set up the
+  // `QueryHub` for that executor and return the handler that dispatches
   // individual WebSocket sessions to it.
   std::function<Awaitable<void>(const SimpleRequest&,
                                 boost::asio::ip::tcp::socket)>
