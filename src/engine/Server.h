@@ -82,10 +82,6 @@ class Server {
 
   virtual ~Server() = default;
 
-  // Initialize and register server metrics.
-  void initializeServerMetrics(
-      std::optional<ad_utility::MemorySize> memoryLimit);
-
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
   void run();
@@ -178,6 +174,10 @@ class Server {
                                               CancelTimeout)
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
+
+  // Initialize and register server metrics.
+  void initializeServerMetrics(
+      std::optional<ad_utility::MemorySize> memoryLimit);
 
   // Log `message`, record it under `errorType` in the HTTP error metrics,
   // and build the corresponding HTTP error response for `request`.
