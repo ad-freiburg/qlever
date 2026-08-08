@@ -12,6 +12,7 @@
 
 #include <absl/functional/any_invocable.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -101,8 +102,12 @@ class Server {
   bool noAccessCheck_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
-  /// Non-owning reference to the `QueryHub` instance living inside
-  /// the `WebSocketHandler` created for `HttpServer`.
+  // Non-owning reference to the `QueryHub` instance living inside
+  // the `WebSocketHandler` created for `HttpServer`. Deliberately a
+  // `weak_ptr`, so that `Server` cannot keep the `QueryHub` (and the
+  // `io_context` it references) alive past the `HttpServer`'s lifetime.
+  // May only be locked back into a `shared_ptr` from a task running on
+  // that same `io_context`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   boost::asio::static_thread_pool queryThreadPool_;
@@ -145,6 +150,9 @@ class Server {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
+  using HttpErrorResponse = ad_utility::httpUtils::ResponseT;
+  using SimpleRequest =
+      boost::beast::http::request<boost::beast::http::string_body>;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -167,6 +175,50 @@ class Server {
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
+  // Initialize and register server metrics.
+  void initializeServerMetrics(
+      std::optional<ad_utility::MemorySize> memoryLimit);
+
+  // Log `message`, record it under `errorType` in the HTTP error metrics,
+  // and build the corresponding HTTP error response for `request`.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) HttpErrorResponse
+      reportHttpError(std::string_view message,
+                      ad_utility::httpUtils::http::status status,
+                      const RequestT& request,
+                      ad_utility::metrics::MetricLabel errorType);
+
+  // The `HttpHandler` passed to `HttpServer` in `run()`. This function
+  // satisfies the constraints for the `HttpHandler` in `HttpServer.h`.
+  //
+  // Reply to OPTIONS requests immediately by allowing everything. This is
+  // necessary because some POST queries (in particular, from the QLever UI)
+  // are preceded by an OPTIONS request (a so-called "preflight" request,
+  // which asks permission for the POST query).
+  //
+  // Process all other requests using `process()`. If that throws, turn the
+  // exception into an HTTP error response via `reportHttpError` (which also
+  // logs it and updates the error metrics).
+  //
+  // Send every response (including error responses) with a maximally
+  // permissive CORS header, which allows the client that receives the
+  // response to do with it what it wants. Strictly, only OPTIONS requests
+  // need the "allow headers" header, while GET and POST only need "allow
+  // origin"; the same headers are sent for all three to avoid two similar
+  // code paths.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> handleHttpRequest(RequestT request, ResponseT&& send);
+
+  // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
+  // at server startup with the server's `io_context` executor; set up the
+  // `QueryHub` for that executor and return the handler that dispatches
+  // individual WebSocket sessions to it.
+  std::function<Awaitable<void>(const SimpleRequest&,
+                                boost::asio::ip::tcp::socket)>
+  webSocketSessionSupplier(boost::asio::any_io_executor& ioExecutor);
+  FRIEND_TEST(ServerTest, webSocketSessionSupplier);
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
@@ -182,6 +234,12 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
+
+  // Helper function for unit tests, calls `handleHttpRequest` with the given
+  // request and returns the response that would have been sent.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ResponseT> onlyForTestingHandleHttpRequest(RequestT request);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
