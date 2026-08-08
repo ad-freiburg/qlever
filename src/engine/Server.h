@@ -149,6 +149,8 @@ class Server {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
+  using HttpErrorResponse = ad_utility::httpUtils::http::response<
+      ad_utility::httpUtils::http::string_body>;
 
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
@@ -170,6 +172,24 @@ class Server {
                                               CancelTimeout)
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
+
+  // Log `message`, record it under `errorType` in the HTTP error metrics,
+  // and build the corresponding HTTP error response for `request`.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) HttpErrorResponse
+      reportHttpError(std::string_view message,
+                      ad_utility::httpUtils::http::status status,
+                      const RequestT& request,
+                      ad_utility::metrics::HttpErrorType errorType);
+
+  // The `HttpHandler` passed to `HttpServer` in `run()`. Replies immediately
+  // to CORS preflight (OPTIONS) requests, otherwise dispatches to `process`
+  // and turns any exception it throws into an HTTP error response. This
+  // function satisfies the constraints for the `HttpHandler` in
+  // `HttpServer.h`.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> handleHttpRequest(RequestT request, ResponseT&& send);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
