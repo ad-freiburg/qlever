@@ -746,9 +746,8 @@ TEST(ServerTest, webSocketSessionSupplier) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         server.webSocketSessionSupplier(ioExecutor),
         testing::HasSubstr(
-            "`queryHub_` has been already initialized and second "
-            "initialization is not allowed. This "
-            "must be called exactly once."));
+            "`queryHub_` has already been initialized; "
+            "`webSocketSessionSupplier` must only be called once."));
   }  // Here is the local variable `handler` out of scope and destroyed.
   EXPECT_TRUE(server.queryHub_.expired());
 }

@@ -181,9 +181,8 @@ std::function<Server::Awaitable<void>(const Server::SimpleRequest&,
                                       tcp::socket)>
 Server::webSocketSessionSupplier(net::any_io_executor& ioExecutor) {
   AD_CONTRACT_CHECK(queryHub_.expired(),
-                    "`queryHub_` has been already initialized and second "
-                    "initialization is not allowed. This "
-                    "must be called exactly once.");
+                    "`queryHub_` has already been initialized; "
+                    "`webSocketSessionSupplier` must only be called once.");
   auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
   queryHub_ = queryHub;
   return [this, queryHub = std::move(queryHub)](const SimpleRequest& request,
