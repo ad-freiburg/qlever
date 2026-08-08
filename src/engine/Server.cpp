@@ -177,36 +177,35 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // _____________________________________________________________________________
+std::function<Server::Awaitable<void>(const Server::SimpleRequest&,
+                                      tcp::socket)>
+Server::webSocketSessionSupplier(net::any_io_executor& ioExecutor) {
+  AD_CONTRACT_CHECK(queryHub_.expired(),
+                    "`queryHub_` has been already initialized and second "
+                    "initialization is not allowed. This "
+                    "must be called exactly once.");
+  auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
+  queryHub_ = queryHub;
+  return [this, queryHub = std::move(queryHub)](const SimpleRequest& request,
+                                                tcp::socket socket) {
+    return ad_utility::websocket::WebSocketSession::handleSession(
+        *queryHub, queryRegistry_, request, std::move(socket));
+  };
+}
+
+// _____________________________________________________________________________
 void Server::run() {
-  // Function that handles a request asynchronously, will be passed as argument
-  // to `HttpServer` below.
   auto httpSessionHandler = [this](auto request, auto&& send) {
     return handleHttpRequest(std::move(request), AD_FWD(send));
   };
 
-  auto webSocketSessionSupplier = [this](net::any_io_executor& ioExecutor) {
-    // This must only be called once
-    AD_CONTRACT_CHECK(queryHub_.expired());
-    auto queryHub =
-        std::make_shared<ad_utility::websocket::QueryHub>(ioExecutor);
-    // Make sure the `queryHub` does not outlive the ioContext it has a
-    // reference to, by only storing a `weak_ptr` in the `queryHub_`. Note: This
-    // `weak_ptr` may only be converted back to a `shared_ptr` inside a task
-    // running on the `io_context`.
-    queryHub_ = queryHub;
-    return [this, queryHub = std::move(queryHub)](
-               const http::request<http::string_body>& request,
-               tcp::socket socket) {
-      return ad_utility::websocket::WebSocketSession::handleSession(
-          *queryHub, queryRegistry_, request, std::move(socket));
-    };
-  };
-
-  // First set up the HTTP server, so that it binds to the socket, and
-  // the "socket already in use" error appears quickly.
-  auto httpServer = HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
-                               std::move(httpSessionHandler),
-                               std::move(webSocketSessionSupplier)};
+  // `HttpServer`'s constructor binds the socket synchronously; keep this as
+  // the first statement in `run()` so a port already in use fails fast,
+  // before any other startup work.
+  auto httpServer =
+      HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+                 std::move(httpSessionHandler),
+                 absl::bind_front(&Server::webSocketSessionSupplier, this)};
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;
@@ -1639,10 +1638,9 @@ void Server::adjustParsedQueryLimitOffset(
 
 // _____________________________________________________________________________
 template ad_utility::websocket::MessageSender
-Server::createMessageSender<http::request<http::string_body>>(
+Server::createMessageSender<Server::SimpleRequest>(
     const std::weak_ptr<ad_utility::websocket::QueryHub>&,
-    const http::request<http::string_body>&, std::string_view,
-    std::string_view);
+    const Server::SimpleRequest&, std::string_view, std::string_view);
 
 // _____________________________________________________________________________
 Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
@@ -1813,7 +1811,6 @@ void Server::logAutomaticRebuildFailure(std::exception_ptr exception) {
 
 // For helper function `Server::onlyForTestingProcess`
 using StreamedResponse = http::response<ad_utility::httpUtils::streamable_body>;
-using SimpleRequest = http::request<http::string_body>;
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
@@ -1844,6 +1841,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
 // Explicit template instantiations for unit test helper functions
 template Awaitable<StreamedResponse> Server::onlyForTestingProcess(
-    SimpleRequest&);
+    Server::SimpleRequest&);
 template Awaitable<StreamedResponse> Server::onlyForTestingHandleHttpRequest(
-    SimpleRequest);
+    Server::SimpleRequest);
