@@ -730,6 +730,30 @@ TEST(ServerTest, handleHttpRequest) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, webSocketSessionSupplier) {
+  Server server{4511, 1, "accessToken", getDefaultConfig()};
+  boost::asio::any_io_executor ioExecutor;
+
+  EXPECT_TRUE(server.queryHub_.expired());
+  {
+    auto handler = server.webSocketSessionSupplier(ioExecutor);
+    // `handler` owns the `QueryHub` via its captured `shared_ptr`, so the
+    // `weak_ptr` member is alive as long as `handler` is.
+    EXPECT_FALSE(server.queryHub_.expired());
+
+    // Calling it again while the first handler is still alive violates the
+    // "only once" contract.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        server.webSocketSessionSupplier(ioExecutor),
+        testing::HasSubstr(
+            "`queryHub_` has been already initialized and second "
+            "initialization is not allowed. This "
+            "must be called exactly once."));
+  }  // Here is the local variable `handler` out of scope and destroyed.
+  EXPECT_TRUE(server.queryHub_.expired());
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   // Each request runs on a fresh server, so that the sub-tests are
