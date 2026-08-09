@@ -186,7 +186,7 @@ class Server {
       reportHttpError(std::string_view message,
                       ad_utility::httpUtils::http::status status,
                       const RequestT& request,
-                      ad_utility::metrics::MetricLabel errorType);
+                      const ad_utility::metrics::MetricLabel& errorType) const;
 
   // The `HttpHandler` passed to `HttpServer` in `run()`. This function
   // satisfies the constraints for the `HttpHandler` in `HttpServer.h`.
@@ -208,7 +208,7 @@ class Server {
   // code paths.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> handleHttpRequest(RequestT request, ResponseT&& send);
+      Awaitable<void> handleHttpRequest(RequestT request, ResponseT& send);
 
   // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
   // at server startup with the server's `io_context` executor; set up the

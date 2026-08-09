@@ -121,10 +121,9 @@ void Server::configureQueryEventLog(const ql::filesystem::path& path) {
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::HttpErrorResponse Server::reportHttpError(std::string_view message,
-                                                      http::status status,
-                                                      const RequestT& request,
-                                                      MetricLabel errorType) {
+    Server::HttpErrorResponse Server::reportHttpError(
+        std::string_view message, http::status status, const RequestT& request,
+        const MetricLabel& errorType) const {
   using namespace ad_utility::httpUtils;
   AD_LOG_ERROR << message << std::endl;
   metrics_->httpErrors_->Add(1, {errorType});
@@ -136,7 +135,7 @@ CPP_template_def(typename RequestT)(
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::handleHttpRequest(RequestT request,
-                                              ResponseT&& send) {
+                                              ResponseT& send) {
   using namespace ad_utility::httpUtils;
 
   auto sendWithAccessControlHeaders =
@@ -1816,7 +1815,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
   ResponseT res;
-  auto mockSend = [&](auto response) -> Awaitable<void> {
+  auto mockSend = [&res](auto response) -> Awaitable<void> {
     res = std::move(response);
     co_return;
   };
@@ -1830,7 +1829,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     Awaitable<ResponseT> Server::onlyForTestingHandleHttpRequest(
         RequestT request) {
   ResponseT res;
-  auto mockSend = [&](auto response) -> Awaitable<void> {
+  auto mockSend = [&res](auto response) -> Awaitable<void> {
     res = std::move(response);
     co_return;
   };
