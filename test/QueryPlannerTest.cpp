@@ -2683,6 +2683,25 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 }
 
 // ____________________________________________________________________________
+// Regression test: `FILTER (NOT) EXISTS` used to be applied speculatively to
+// every candidate subplan inside the dynamic-programming rounds, which made
+// planning exponential in the number of such filters (each clause roughly
+// quadrupled planning time and memory, OOMing on any index from about four
+// clauses). With the filters deferred to the final filter passes, this plans
+// in milliseconds.
+TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
+  std::string query =
+      "SELECT ?v WHERE {\n"
+      "  ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .\n";
+  for (int i = 0; i < 8; ++i) {
+    query += absl::StrCat("  FILTER NOT EXISTS { ?v <q", i, "> ?x", i,
+                          " . FILTER (?x", i, " != ?w1) }\n");
+  }
+  query += "}";
+  EXPECT_NO_THROW(
+      h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
+}
+
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
   auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
