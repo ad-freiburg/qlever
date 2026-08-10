@@ -104,8 +104,8 @@ class SparqlQleverVisitor {
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
 
-  // The named subqueries that have been defined so far via `WITH ... AS
-  // %name`, by name (including the leading `%`). Each `INCLUDE %name` is
+  // The named subqueries that have been defined so far via `WITH %name AS
+  // { ... }`, by name (including the leading `%`). Each `INCLUDE %name` is
   // expanded to a copy of the corresponding subquery.
   ad_utility::HashMap<std::string, ParsedQuery> namedSubqueries_{};
 
@@ -206,7 +206,7 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::SelectQueryContext* ctx);
 
-  // Visit the definition of a named subquery (`WITH { ... } AS %name`) and
+  // Visit the definition of a named subquery (`WITH %name AS { ... }`) and
   // store the parsed subquery in the `namedSubqueries_` map.
   void visit(Parser::NamedSubqueryDefinitionContext* ctx);
 
@@ -216,7 +216,8 @@ class SparqlQleverVisitor {
   GraphPatternOperation visit(Parser::IncludeClauseContext* ctx);
 
   // Visit a single renaming `(?a AS ?b)` of an `INCLUDE`.
-  std::pair<Variable, Variable> visit(Parser::IncludeRenamingContext* ctx);
+  static std::pair<Variable, Variable> visit(
+      Parser::IncludeRenamingContext* ctx);
 
   SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
 

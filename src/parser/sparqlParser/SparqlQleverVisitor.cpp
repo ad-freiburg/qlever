@@ -1644,13 +1644,13 @@ GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
   std::vector<Variable> outputVariables;
   for (const auto& variable : selectedVariables) {
     if (auto renaming = renameMap.find(variable); renaming != renameMap.end()) {
-      newSelection.push_back(
+      newSelection.emplace_back(
           Alias{sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
                     variable),
                 renaming->second});
       outputVariables.push_back(renaming->second);
     } else {
-      newSelection.push_back(variable);
+      newSelection.emplace_back(variable);
       outputVariables.push_back(variable);
     }
   }
