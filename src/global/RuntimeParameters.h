@@ -232,10 +232,13 @@ struct RuntimeParameters {
                               "log-level"};
 
   // Controls deduplication of triples in CONSTRUCT query results.
-  // "false" (default): no deduplication, every triple is emitted.
-  // "global": a triple is emitted at most once across the entire result.
-  // N (positive integer): deduplicate against the N most recently seen unique
-  // triples (per template triple); bounded memory, partial deduplication.
+  // "none" (default): no duplicate tracking; every valid instantiated result
+  // triple is emitted.
+  // "full": one shared set stores the full triple keys for the whole query;
+  // repeated result triples are suppressed.
+  // "lru:<positive integer>": one shared LRU cache stores at most that many
+  // recently seen unique full triple keys; bounded memory, partial
+  // deduplication.
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
