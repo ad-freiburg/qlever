@@ -50,9 +50,9 @@ std::vector<std::string> canonicalResult(const QueryExecutionTree& tree) {
 // Expect that the two given queries (one with named subqueries and its manual
 // expansion) yield exactly the same result on the test dataset. Also expect a
 // nonempty result, so that the equivalence check cannot pass vacuously.
-void expectEquivalent(
-    std::string queryWithNamedSubqueries, std::string expandedQuery,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
+void expectEquivalent(std::string queryWithNamedSubqueries,
+                      std::string expandedQuery,
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto* qec = ad_utility::testing::getQec(std::string{testTurtle});
   auto treeA = queryPlannerTestHelpers::parseAndPlan(
