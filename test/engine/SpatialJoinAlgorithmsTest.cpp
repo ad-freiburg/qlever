@@ -1793,9 +1793,6 @@ TEST(SpatialJoin, ParseDe9imFilter) {
       validateDe9imFilterString("012tftf**"),
       Optional(ElementsAre('0', '1', '2', 't', 'f', 't', 'f', '*', '*')));
   EXPECT_THAT(
-      validateDe9imFilterString("*********"),
-      Optional(ElementsAre('*', '*', '*', '*', '*', '*', '*', '*', '*')));
-  EXPECT_THAT(
       validateDe9imFilterString("2FFF1FFF2"),
       Optional(ElementsAre('2', 'F', 'F', 'F', '1', 'F', 'F', 'F', '2')));
   EXPECT_THAT(
@@ -1811,6 +1808,20 @@ TEST(SpatialJoin, ParseDe9imFilter) {
   EXPECT_EQ(validateDe9imFilterString("012TFTF*3"), std::nullopt);
   EXPECT_EQ(validateDe9imFilterString("012TFTF*X"), std::nullopt);
   EXPECT_EQ(validateDe9imFilterString("012TFTF* "), std::nullopt);
+
+  // Invalid: the pattern could match a disjoint pair of geometries (all of
+  // `II`, `IB`, `BI`, `BB` admit `F`), which `libspatialjoin` never reports.
+  EXPECT_EQ(validateDe9imFilterString("*********"), std::nullopt);
+  EXPECT_EQ(validateDe9imFilterString("FF*FF****"), std::nullopt);
+  EXPECT_EQ(validateDe9imFilterString("ff*ff****"), std::nullopt);
+  // Only one of the four positions needs to exclude `F` to guarantee that
+  // disjoint pairs cannot match, so these remain valid.
+  EXPECT_THAT(
+      validateDe9imFilterString("T********"),
+      Optional(ElementsAre('T', '*', '*', '*', '*', '*', '*', '*', '*')));
+  EXPECT_THAT(
+      validateDe9imFilterString("****0****"),
+      Optional(ElementsAre('*', '*', '*', '*', '0', '*', '*', '*', '*')));
 }
 
 // _____________________________________________________________________________

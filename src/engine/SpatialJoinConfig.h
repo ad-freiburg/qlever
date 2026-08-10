@@ -53,9 +53,17 @@ inline constexpr std::array<std::string_view, 10> SpatialJoinTypeString{
 using De9imFilterString = std::array<char, 9>;
 
 // If `filter` is a syntactically valid DE-9IM filter pattern (as described for
-// `De9imFilterString` above), return it as a `De9imFilterString`, else
-// `std::nullopt`. Implemented as a simple character-class check instead of a
-// regex library to keep this frequently-included header cheap to compile.
+// `De9imFilterString` above) that cannot match a disjoint pair of geometries,
+// return it as a `De9imFilterString`, else `std::nullopt`. Implemented as a
+// simple character-class check instead of a regex library to keep this
+// frequently-included header cheap to compile.
+//
+// Patterns that could match disjoint geometries (e.g. `*********` or the
+// literal disjoint pattern `FF*FF****`) are rejected: the pinned
+// `libspatialjoin` never enumerates disjoint candidate pairs to its callback
+// (see `Sweeper::doDE9IMCheck`), regardless of the configured filter, so
+// accepting such a pattern would silently omit matching disjoint pairs from
+// the result.
 constexpr std::optional<De9imFilterString> validateDe9imFilterString(
     std::string_view filter) {
   if (filter.size() != 9) {
@@ -70,6 +78,16 @@ constexpr std::optional<De9imFilterString> validateDe9imFilterString(
       return std::nullopt;
     }
     result[i] = c;
+  }
+  // The DE-9IM matrix entries are ordered II, IB, IE, BI, BB, BE, EI, EB, EE.
+  // A pair of geometries is disjoint iff II, IB, BI, and BB (indices 0, 1, 3,
+  // 4) are all `F`. A filter character only excludes `F` if it is a digit,
+  // `T`, or `t`; `*` and `F`/`f` both admit it. If all four of these
+  // positions admit `F`, the pattern could match a disjoint pair.
+  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
+  if (admitsF(result[0]) && admitsF(result[1]) && admitsF(result[3]) &&
+      admitsF(result[4])) {
+    return std::nullopt;
   }
   return result;
 }
