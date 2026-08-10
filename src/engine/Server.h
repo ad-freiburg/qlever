@@ -13,6 +13,7 @@
 #include <absl/functional/any_invocable.h>
 
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,15 @@ CPP_concept QueryOrUpdate =
 namespace serverTestHelpers {
 class ServerForTesting;
 }
+
+// Thrown when a client chooses an explicit query id (via the `Query-Id`
+// header) that is currently already in use. The server responds with HTTP
+// status 409 Conflict and the client is encouraged to re-submit their
+// request with a different query id.
+class QueryAlreadyInUseError : public std::runtime_error {
+  // Constructors have to be explicitly inherited.
+  using std::runtime_error::runtime_error;
+};
 
 //! The HTTP Server used.
 class Server {
