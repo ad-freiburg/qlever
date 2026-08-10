@@ -20,6 +20,7 @@
 #include "backports/filesystem.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -259,6 +260,12 @@ struct EngineConfig : CommonConfig {
   // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
   // (the default), rebuilds are only triggered manually.
   std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
+
+  // Which `previous.*` index directories to keep after a successful index
+  // rebuild (manual or automatic), see `KeepPreviousIndexDirs`. The default
+  // keeps the original and the most recent one.
+  KeepPreviousIndexDirs keepPreviousIndexDirs_ =
+      KeepPreviousIndexDirs::OriginalAndMostRecent;
 
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
@@ -624,6 +631,27 @@ class Qlever {
       const Index& index, std::optional<std::string> rebuildTmpDir,
       std::optional<std::string> rebuildPreviousIndexDir);
 
+  // Apply the given `policy` to the `previous.*` directories in the directory
+  // of the index with the base name `indexBaseName` (each successful rebuild
+  // retires the index that was served so far into such a directory, see
+  // `makeIndexRebuildConfig`): keep or delete each of them according to
+  // `keepPreviousIndexDir`, where the directories are ordered from the oldest
+  // to the newest. Each decision is appended to the `rebuild-index` log of
+  // the index with the base name `indexBaseName` (the log of the rebuild that
+  // has just finished), not to the server log. This function never throws
+  // (when this is called, the rebuild has already succeeded): a directory
+  // that cannot be deleted is logged as an error in the server log and
+  // skipped, and any other filesystem failure is also only logged.
+  static void cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                       KeepPreviousIndexDirs policy);
+
+ private:
+  // The implementation of `cleanUpPreviousIndexDirs` above, which wraps this
+  // function in a try-catch.
+  static void cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                           KeepPreviousIndexDirs policy);
+
+ public:
   // Move a freshly rebuilt index into the place of the old one. There are two
   // indices involved, both with base names given by `config`: the old index
   // that is currently being served (at `config.oldIndexSource()`), and the
@@ -642,6 +670,10 @@ class Qlever {
   // 4. Remove the directory that contained `config.newIndexSource()`, which
   //    step 2 has emptied (if it is actually empty). A failure here is only
   //    logged as a warning.
+  // 5. Apply the `policy` for which `previous.*` index directories to keep
+  //    (see `cleanUpPreviousIndexDirs` above), right after step 1 has retired
+  //    the old index into such a directory. The default policy `all` keeps
+  //    everything, i.e. performs no cleanup.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
@@ -660,8 +692,9 @@ class Qlever {
   // this function does is string concatenation and moving files around. This
   // function assumes that file handles are never reopened, so moving the files
   // while the file handle is still open is fine in POSIX compliant systems.
-  static void moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
-                                        const IndexRebuildConfig& config);
+  static void moveRebuiltIndexIntoPlace(
+      IndexAndViews& newIndexAndViews, const IndexRebuildConfig& config,
+      KeepPreviousIndexDirs policy = KeepPreviousIndexDirs::All);
 
   // The result of the first phase of an index rebuild (see
   // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
@@ -704,11 +737,13 @@ class Qlever {
   // Before the swap, `moveRebuiltIndexIntoPlace` is called, which moves the
   // files of the old index to `config.oldIndexTarget()` and the files of the
   // new index from `config.newIndexSource()` to `config.newIndexTarget()` (by
-  // default the place of the old index) and removes the directory in which the
-  // new index was built.
+  // default the place of the old index), removes the directory in which the
+  // new index was built, and applies the policy from `keepPreviousIndexDirs`
+  // for which `previous.*` index directories to keep.
   void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
                           const ad_utility::SharedCancellationHandle& handle,
-                          const IndexRebuildConfig& config);
+                          const IndexRebuildConfig& config,
+                          KeepPreviousIndexDirs keepPreviousIndexDirs);
 #endif
 
   QueryResultCache& cache() { return cache_; }
