@@ -96,7 +96,11 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throwIf(!de9imFilter_.has_value(),
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
-            "`T`/`F` (or lowercase), or `*`.");
+            "`T`/`F` (or lowercase), or `*`, and that cannot match disjoint "
+            "geometries (i.e. not all of the `II`, `IB`, `BI`, and `BB` "
+            "positions, at indices 0, 1, 3, and 4, may be `F`/`f`/`*`), "
+            "since disjoint pairs are never reported by the underlying "
+            "spatial join algorithm.");
   } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description
