@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstdint>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -194,37 +195,47 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
       .cpuPercent_ = 50.0,
       .diskIoBytes_ =
           rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u},
-      .ioStallPercent_ = 25.0};
+      .ioStallPercent_ = 25.0,
+      .rebuildId_ = 7u};
   EXPECT_EQ(rm::formatTsvRow(base),
-            "1.0\t1000\t2048\t50.0\t8192\t4096\t25.0\n");
+            "1.0\t1000\t2048\t50.0\t8192\t4096\t25.0\t7\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noRss), "1.0\t1000\t\t50.0\t8192\t4096\t25.0\n");
+  EXPECT_EQ(rm::formatTsvRow(noRss),
+            "1.0\t1000\t\t50.0\t8192\t4096\t25.0\t7\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noCpu), "1.0\t1000\t2048\t\t8192\t4096\t25.0\n");
+  EXPECT_EQ(rm::formatTsvRow(noCpu),
+            "1.0\t1000\t2048\t\t8192\t4096\t25.0\t7\n");
 
   // One failed reading empties both counters, never just one of them.
   auto noDiskIo = base;
   noDiskIo.diskIoBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noDiskIo), "1.0\t1000\t2048\t50.0\t\t\t25.0\n");
+  EXPECT_EQ(rm::formatTsvRow(noDiskIo), "1.0\t1000\t2048\t50.0\t\t\t25.0\t7\n");
 
-  // The row every non-Linux machine writes: the last cell is empty, so the row
-  // ends in a tab. A consumer that strips trailing whitespace before splitting
-  // would lose a column here.
+  // On a non-Linux machine there is no stall reading, so that cell is empty.
   auto noIoStall = base;
   noIoStall.ioStallPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noIoStall),
-            "1.0\t1000\t2048\t50.0\t8192\t4096\t\n");
+            "1.0\t1000\t2048\t50.0\t8192\t4096\t\t7\n");
+
+  // Most rows look like this, because no rebuild is running. `rebuild_id` is
+  // the last column, so the row ends in a tab. A consumer that strips trailing
+  // whitespace before splitting would lose a column.
+  auto noRebuild = base;
+  noRebuild.rebuildId_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(noRebuild),
+            "1.0\t1000\t2048\t50.0\t8192\t4096\t25.0\t\n");
 
   auto nothing = base;
   nothing.rssBytes_ = std::nullopt;
   nothing.cpuPercent_ = std::nullopt;
   nothing.diskIoBytes_ = std::nullopt;
   nothing.ioStallPercent_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\n");
+  nothing.rebuildId_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
@@ -473,17 +484,18 @@ TEST(ResourceMonitor, SamplesWriteWellFormedRows) {
   // The header plus at least one sampled row.
   ASSERT_GE(lines.size(), 2u);
   EXPECT_EQ(lines[0], rm::tsvHeader);
-  // Each data row has the header's seven tab-separated columns (six tabs),
+  // Each data row has the header's eight tab-separated columns (seven tabs),
   // even when an individual reading was empty.
   for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
-    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 6)
-        << "row does not have 7 columns: " << *it;
+    EXPECT_EQ(std::count(it->begin(), it->end(), '\t'), 7)
+        << "row does not have 8 columns: " << *it;
   }
 }
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto signal = std::make_shared<ad_utility::RebuildIndexSignal>();
   {
     ResourceMonitor monitor;
     // Readers that always return the same value, so the row is known in
@@ -495,6 +507,9 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
            return rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u};
          },
          .ioStallReader_ = []() -> std::optional<double> { return 2.0; }});
+    // Marked before the sampler starts, so every row it writes carries the id.
+    monitor.setRebuildIndexSignal(signal);
+    signal->markStart();
     // A short interval plus a longer sleep, so at least one row is written.
     monitor.start(path, ResourceMonitor::Mode::Truncate,
                   std::chrono::milliseconds{5});
@@ -502,11 +517,10 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   }
   auto lines = readLines(path);
   ASSERT_GE(lines.size(), 2u);
-  // Each reading lands in its own column. The first two columns are clocks,
-  // so only the end of the row can be checked. The three raw readings differ
-  // from each other, so a swap among them would fail here; the two computed
-  // columns are both 0 and are only pinned by position.
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t2048\t0.0\t8192\t4096\t0.0"));
+  // Every reading should be in its own column. The first two columns change on
+  // every run, so only the end of the row is checked. The values differ from
+  // each other, so a wrong order would show up here.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t2048\t0.0\t8192\t4096\t0.0\t1"));
 }
 
 // _____________________________________________________________________________
@@ -528,7 +542,8 @@ TEST(ResourceMonitor, IoStallPercentIsClampedToAHundred) {
   }
   auto lines = readLines(path);
   ASSERT_GE(lines.size(), 2u);
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0"));
+  // No signal was set, so the empty `rebuild_id` cell follows the stall.
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t100.0\t"));
 }
 
 // _____________________________________________________________________________
@@ -549,10 +564,11 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
   }
   auto lines = readLines(path);
   ASSERT_GE(lines.size(), 2u);
-  // All seven columns are still there, the last one empty, so the row ends in
-  // a tab rather than losing a column.
-  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 6);
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t"));
+  // All eight columns are still there rather than one being dropped. The stall
+  // cell is empty, and so is the `rebuild_id` cell after it, because no signal
+  // was set.
+  EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 7);
+  EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t"));
 }
 
 // _____________________________________________________________________________
