@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 
@@ -230,7 +231,8 @@ std::string formatTsvRow(const Sample& sample) {
                             formatCell(sample.cpuPercent_),
                             std::move(readBytes),
                             std::move(writeBytes),
-                            formatCell(sample.ioStallPercent_)};
+                            formatCell(sample.ioStallPercent_),
+                            formatCell(sample.rebuildId_)};
 
   return absl::StrJoin(tsvCells, "\t") + "\n";
 }
@@ -339,6 +341,15 @@ void ResourceMonitor::setReadersForTesting(resource_monitor::Readers readers) {
 }
 
 // _____________________________________________________________________________
+void ResourceMonitor::setRebuildIndexSignal(
+    std::shared_ptr<const RebuildIndexSignal> signal) {
+  AD_CONTRACT_CHECK(!started_,
+                    "The rebuild index signal must be set before `start` is "
+                    "called, otherwise this would race the sampling thread.");
+  rebuildIndexSignal_ = std::move(signal);
+}
+
+// _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   const Timer timer{Timer::Started};
   resource_monitor::SecondsToPercentTracker cpuTracker{readers_.cpuReader_()};
@@ -371,7 +382,9 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
          .rssBytes_ = readers_.rssReader_(),
          .cpuPercent_ = cpuTracker.update(readers_.cpuReader_(), elapsed),
          .diskIoBytes_ = readers_.diskIoReader_(),
-         .ioStallPercent_ = ioStallPercent});
+         .ioStallPercent_ = ioStallPercent,
+         .rebuildId_ =
+             rebuildIndexSignal_ ? rebuildIndexSignal_->poll() : std::nullopt});
     stream_.flush();
     if (stream_.fail()) {
       AD_LOG_WARN << "ResourceMonitor: writing to the output file failed; "
