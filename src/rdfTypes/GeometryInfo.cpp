@@ -129,7 +129,7 @@ Centroid GeometryInfo::getCentroid() const {
 
 // ____________________________________________________________________________
 std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [parsed, wktType, crsType] = detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -144,7 +144,7 @@ BoundingBox GeometryInfo::getBoundingBox() const {
 
 // ____________________________________________________________________________
 std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [parsed, wktType, crsType] = detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -166,7 +166,7 @@ MetricArea GeometryInfo::getMetricArea() const { return metricArea_; }
 
 // ____________________________________________________________________________
 std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [parsed, wktType, crsType] = detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -188,7 +188,7 @@ MetricLength GeometryInfo::getMetricLength() const { return metricLength_; };
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(
     const std::string_view& wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [parsed, wktType, crsType] = detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -238,7 +238,7 @@ NumGeometries GeometryInfo::getNumGeometries() const {
 // ____________________________________________________________________________
 std::optional<NumGeometries> GeometryInfo::getNumGeometries(
     std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
+  auto [parsed, wktType, crsType] = detail::parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }

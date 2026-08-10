@@ -187,23 +187,27 @@ const double areaRealWorldMultiPolygonHoleIntersection =
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
-      litPoint,           litLineString,   litPolygon,   litMultiPoint,
+      litPoint,           litPointWGS84,   litPointWebMerc,
+      litLineString,      litPolygon,      litMultiPoint,
       litMultiLineString, litMultiPolygon, litCollection};
 };
 
 const auto getAllExpectedParseResults = []() {
   using enum WKTType;
-  return std::vector<ParseResult>{{POINT, expectedPoint},
-                                  {LINESTRING, expectedLine},
-                                  {POLYGON, expectedPolygon},
-                                  {MULTIPOINT, expectedMultiPoint},
-                                  {MULTILINESTRING, expectedMultiLineString},
-                                  {MULTIPOLYGON, expectedMultiPolygon},
-                                  {COLLECTION, expectedCollection}};
+  return std::vector<ParseResult>{
+      {expectedPoint, POINT, CRS84},
+      {expectedPoint, POINT, WGS84},
+      {expectedPoint, POINT, WEB_MERCATOR},
+      {expectedLine, LINESTRING, CRS84},
+      {expectedPolygon, POLYGON, CRS84},
+      {expectedMultiPoint, MULTIPOINT, CRS84},
+      {expectedMultiLineString, MULTILINESTRING, CRS84},
+      {expectedMultiPolygon, MULTIPOLYGON, CRS84},
+      {expectedCollection, COLLECTION, CRS84}};
 };
 
-constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
-                                                              2, 2, 3};
+constexpr std::array<uint32_t, 9> allTestLiteralNumGeometries{1, 1, 1, 1, 1,
+                                                              2, 2, 2, 3};
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
@@ -440,7 +444,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   auto parseRes4 = parseWkt(litPointWebMerc);
   EXPECT_EQ(parseRes4.wktType, util::geo::WKTType::POINT);
-  EXPECT_EQ(parseRes4.crsType, util::geo::CRSType::WebMerc);
+  EXPECT_EQ(parseRes4.crsType, util::geo::CRSType::WEB_MERCATOR);
   ASSERT_TRUE(parseRes4.parsedWkt.has_value());
 }
 
@@ -619,12 +623,12 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
     expected += getLengthForTesting(lit).length();
 
     auto parsed = parseWkt(lit);
-    ASSERT_TRUE(parsed.second.has_value());
+    ASSERT_TRUE(parsed.parsedWkt.has_value());
     std::visit(
         [&](const auto& value) -> void {
           collection.push_back(AnyGeometry<CoordType>{value});
         },
-        parsed.second.value());
+        parsed.parsedWkt.value());
   }
 
   MetricLength result{computeMetricLength(collection)};
@@ -658,12 +662,12 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
   // Test for `GeoPoint`.
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
-              parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+              parseResultNear(ParseResult{DPoint(2, 1), POINT, CRS84}));
 
   // Explicit test for a real-world WKT string.
-  EXPECT_THAT(
-      parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
-      parseResultNear(ParseResult{POLYGON, expectedSmallRealWorldPolygon1}));
+  EXPECT_THAT(parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
+              parseResultNear(
+                  ParseResult{expectedSmallRealWorldPolygon1, POLYGON, CRS84}));
 
   // Tests for other geometry types (WKT strings).
   auto literals = getAllTestLiterals();
@@ -685,7 +689,7 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    auto parsedWkt = geometries[i].second;
+    auto parsedWkt = geometries[i].parsedWkt;
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
 
@@ -745,7 +749,7 @@ TEST(GeometryInfoTest, GeometryN) {
                 parsedWktNear(expectedGeom));
 
     // Test with already parsed geometry.
-    auto [type, parsed] = parseWkt(wkt);
+    auto [parsed, wktType, crsType] = parseWkt(wkt);
     EXPECT_THAT(getGeometryN(parsed, n), parsedWktNear(expectedGeom));
 
     // Invalid indexes.
@@ -766,15 +770,15 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
   using namespace ad_utility::detail;
 
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-              parseResultNear(ParseResult{NONE, std::nullopt}));
+              parseResultNear(ParseResult{std::nullopt, NONE}));
   EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
   EXPECT_THAT(
       projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
       parseResultNear(ParseResult{
-          POLYGON, projectWebMerc(expectedSmallRealWorldPolygon1)}));
+          projectWebMerc(expectedSmallRealWorldPolygon1), POLYGON}));
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litCollection}}),
               parseResultNear(
-                  ParseResult{COLLECTION, projectWebMerc(expectedCollection)}));
+                  ParseResult{projectWebMerc(expectedCollection), COLLECTION}));
   EXPECT_THAT(projectWebMerc(expectedLine),
               utilLineNear(DLine{{222638.9816, 222684.2085},
                                  {445277.9632, 445640.1097}}));

@@ -353,7 +353,10 @@ inline Matcher<std::optional<ParsedWkt>> ParsedWktNearForwardDecl::operator()(
 // ____________________________________________________________________________
 inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
     [](ParseResult expected) -> Matcher<ParseResult> {
-      return Pair(Eq(expected.first), parsedWktNear(expected.second));
+      return AllOf(
+          AD_FIELD(ParseResult, parsedWkt, parsedWktNear(expected.parsedWkt)),
+          AD_FIELD(ParseResult, wktType, Eq(expected.wktType)),
+          AD_FIELD(ParseResult, crsType, Eq(expected.crsType)));
     });
 
 // ____________________________________________________________________________
