@@ -83,10 +83,15 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
                    h::IndexScanFromStrings("?s", "<p3>", "?o3")));
 
   // When the same predicate is used multiple times, the extra occurrences are
-  // joined normally.
-  qpExpect(qlv, simpleStarJoinPredicateTwice,
-           h::Join(starView("?s", "?o1", "?o2"),
-                   h::IndexScanFromStrings("?s", "<p2>", "?o3")));
+  // joined normally. Since both occurrences of `<p2>` are structurally and
+  // semantically interchangeable here, either occurrence may end up being
+  // rewritten.
+  qpExpect(
+      qlv, simpleStarJoinPredicateTwice,
+      ::testing::AnyOf(h::Join(starView("?s", "?o1", "?o2"),
+                               h::IndexScanFromStrings("?s", "<p2>", "?o3")),
+                       h::Join(starView("?s", "?o1", "?o3"),
+                               h::IndexScanFromStrings("?s", "<p2>", "?o2"))));
 
   // When an object is fixed, star rewriting is not applied.
   qpExpect(qlv, simpleStarFixedObject,
