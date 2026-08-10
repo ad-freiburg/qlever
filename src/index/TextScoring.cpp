@@ -65,10 +65,11 @@ void ScoreData::calculateScoreData(const std::string& docsFileName,
         << wordsNotFoundFromDocuments << std::endl;
   }
   size_t wordsNotFoundFromLiterals = 0;
-  for (VocabIndex index = VocabIndex::make(0); index.get() < vocab.size();
-       index = index.incremented()) {
-    auto text = vocab[index];
-    if (!vocab.isLiteral(index)) {
+  // NOTE: We must iterate via `scanAll()` and not via indices `0, 1, ...,
+  // vocab.size() - 1`, because a `SplitVocabulary` (e.g. for geometries) uses
+  // non-contiguous, marker-encoded indices for its `operator[]`.
+  for (const auto& [index, text] : vocab.scanAll()) {
+    if (!vocab.isLiteral(VocabIndex::make(index))) {
       continue;
     }
     // Reset parameters for loop

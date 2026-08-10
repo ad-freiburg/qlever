@@ -167,16 +167,16 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
+    // NOTE: We must iterate via `scanAll()` and not via indices `0, 1, ...,
+    // vocab_.size() - 1`, because a `SplitVocabulary` (e.g. for geometries)
+    // uses non-contiguous, marker-encoded indices for its `operator[]`.
+    for (const auto& [index, text] : vocab_.scanAll()) {
       if (!isLiteral(text)) {
         continue;
       }
 
-      // We need the explicit cast to `std::string` because the return type of
-      // `indexToString` might be `string_view` if the vocabulary is stored
-      // uncompressed in memory.
+      // We need the explicit cast to `std::string` because `text` is a view
+      // into a buffer that is reused when the range is advanced.
       WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
       co_yield entityLine;
       std::string_view textView = text;

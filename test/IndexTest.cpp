@@ -452,6 +452,28 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3191
+// Building a text index that considers each literal as a text record used to
+// crash with `Assertion unmarkedIdx < vocab.size() failed` when combined with
+// a `SplitVocabulary` (e.g. the geo-split vocabulary), because the words of
+// the KB vocabulary were iterated using contiguous indices `0, ...,
+// vocab.size() - 1`, which are not valid indices for a `SplitVocabulary`.
+// NOTE: The WKT literal must not be a `POINT`, because those are encoded
+// directly as `GeoPoint` IDs and never end up in the (geo) vocabulary, which
+// would not exercise the `SplitVocabulary` codepath that used to crash.
+TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> \"hello world\" . "
+      "<a> <b> \"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www."
+      "opengis.net/ont/geosparql#wktLiteral> ."};
+  config.createTextIndex = true;
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  IdTable result =
+      qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
+  EXPECT_EQ(result.size(), 1u);
+}
+
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedTripleComponent` that matches `content` and the bool
 // `isExternal`.
