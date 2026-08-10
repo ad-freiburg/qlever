@@ -54,6 +54,12 @@ struct StarInfo {
   std::vector<StarArm> arms_;
 };
 
+struct ByCacheKeyInfo {
+  ViewPtr view_;
+  ad_utility::HashMap<size_t, size_t> colMapping_;
+};
+using ByCacheKeyInfoPtr = std::shared_ptr<const ByCacheKeyInfo>;
+
 // Helper class that represents a possible join replacement and indicates the
 // subset of triples it handles.
 struct MaterializedViewJoinReplacement {
@@ -79,13 +85,15 @@ class QueryPatternCache {
   // All star patterns extracted from materialized views.
   ad_utility::HashMap<ViewPtr, StarInfo> starCache_;
 
+  ad_utility::HashMap<std::string, ByCacheKeyInfoPtr> byCacheKey_;
+
   // NOTE: When a new data structure for caching is added here, the unloading
   // should also be implemented in the `removeView` method.
  public:
   // Given a materialized view, analyze the query it was created from and
   // populate the cache. This is called from
   // `MaterializedViewsManager::loadView`.
-  bool analyzeView(ViewPtr view);
+  bool analyzeView(ViewPtr view, QueryExecutionContext* qec);
 
   // Remove all pointers to a view from this `QueryPatternCache`. This is
   // required for unloading materialized views. A call to this function with a
@@ -111,6 +119,8 @@ class QueryPatternCache {
   std::shared_ptr<IndexScan> makeScanForStar(
       QueryExecutionContext* qec, ViewPtr starView,
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
+
+  ByCacheKeyInfoPtr lookupByCacheKey(const std::string& cacheKey) const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
