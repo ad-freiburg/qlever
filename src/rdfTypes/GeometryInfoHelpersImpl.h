@@ -48,12 +48,11 @@ using ParsedWkt =
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 using DAnyGeometry = AnyGeometry<CoordType>;
 
-struct GeoType {
+struct ParseResult {
+  std::optional<ParsedWkt> parsedWkt;
   WKTType wktType;
   CRSType crsType = CRSType::CRS84;
 };
-
-using ParseResult = std::pair<GeoType, std::optional<ParsedWkt>>;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -85,20 +84,28 @@ inline std::string addDatatype(const std::string_view wkt) {
 }
 
 // Tries to extract the geometry type and parse the geometry given by a WKT
-// literal with quotes and datatype using `pb_util`
-inline ParseResult parseWkt(const std::string_view& wkt) {
+// literal with quotes and datatype using `pb_util`.
+// If specified the geometry will be projected to a specific spatial reference
+// system.
+inline ParseResult parseWkt(const std::string_view& wkt,
+                            CRSType projCrs = CRSType::CRS84) {
   auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto crsType = getCRSType(wktLiteral);
   auto type = getWKTType(wktLiteral);
+  auto projFunc = [projCrs](const Point<double>& p, CRSType sourceCrs) {
+    return projectToCRS(Point<CoordType>{static_cast<CoordType>(p.getX()),
+                                         static_cast<CoordType>(p.getY())},
+                        sourceCrs, projCrs);
+  };
   using enum WKTType;
   try {
     switch (type) {
       case POINT:
-        parsed = pointFromWKT<CoordType>(wktLiteral);
+        parsed = pointFromWKTProj<CoordType>(wktLiteral, projFunc);
         break;
       case LINESTRING: {
-        auto line = lineFromWKT<CoordType>(wktLiteral);
+        auto line = lineFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (line.empty()) {
           throw std::runtime_error("Cannot parse line from WKT");
         }
@@ -106,7 +113,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case POLYGON: {
-        auto polygon = polygonFromWKT<CoordType>(wktLiteral);
+        auto polygon = polygonFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (polygon.getOuter().empty()) {
           throw std::runtime_error("Cannot parse polygon from WKT");
         }
@@ -114,7 +121,8 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case MULTIPOINT: {
-        auto multipoint = multiPointFromWKT<CoordType>(wktLiteral);
+        auto multipoint =
+            multiPointFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (multipoint.empty()) {
           throw std::runtime_error("Cannot parse multipoint from WKT");
         }
@@ -122,7 +130,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case MULTILINESTRING: {
-        auto multiline = multiLineFromWKT<CoordType>(wktLiteral);
+        auto multiline = multiLineFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (multiline.empty()) {
           throw std::runtime_error("Cannot parse multiline from WKT");
         }
@@ -130,7 +138,8 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case MULTIPOLYGON: {
-        auto multipolygon = multiPolygonFromWKT<CoordType>(wktLiteral);
+        auto multipolygon =
+            multiPolygonFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (multipolygon.empty()) {
           throw std::runtime_error("Cannot parse multipolygon from WKT");
         }
@@ -138,7 +147,8 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
         break;
       }
       case COLLECTION: {
-        auto collection = collectionFromWKT<CoordType>(wktLiteral);
+        auto collection =
+            collectionFromWKTProj<CoordType>(wktLiteral, projFunc);
         if (collection.empty()) {
           throw std::runtime_error("Cannot parse collection from WKT");
         }
@@ -154,7 +164,7 @@ inline ParseResult parseWkt(const std::string_view& wkt) {
                  << std::endl;
   }
 
-  return {GeoType{type, crsType}, std::move(parsed)};
+  return ParseResult{std::move(parsed), type, crsType};
 }
 
 // Convert a point from `pb_util` to a `GeoPoint`
@@ -448,7 +458,7 @@ static constexpr MetricAreaVisitor computeMetricArea;
 // containing a geometry for `pb_util`.
 struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const GeoPoint& point) const {
-    return {GeoType{WKTType::POINT}, geoPointToUtilPoint(point)};
+    return ParseResult{geoPointToUtilPoint(point), WKTType::POINT};
   }
 
   ParseResult operator()(const std::string& wkt) const { return parseWkt(wkt); }
@@ -460,7 +470,7 @@ struct ParseGeoPointOrWktVisitor {
   template <typename T>
   ParseResult operator()(const std::optional<T>& geoPointOrWkt) const {
     if (!geoPointOrWkt.has_value()) {
-      return {GeoType{WKTType::NONE, CRSType::UNSUPPORTED}, std::nullopt};
+      return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED};
     }
     return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt.value());
   }
@@ -555,7 +565,7 @@ struct GeometryNVisitor {
   // Visitor for `GeoPointOrWkt`.
   std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
                                       int64_t n) const {
-    auto [type, parsed] = parseGeoPointOrWkt(geom);
+    auto [parsed, wktType, crsType] = parseGeoPointOrWkt(geom);
     return GeometryNVisitor{}(parsed, n);
   }
 };
@@ -654,8 +664,9 @@ CPP_template(typename Projection)(
 
   // Handle `GeoPointOrWkt` (raw unparsed geometry).
   ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
-    auto [type, parsed] = ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
-    return {type, (*this)(std::move(parsed))};
+    auto [parsed, wktType, crsType] =
+        ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
+    return ParseResult{(*this)(std::move(parsed)), wktType, crsType};
   }
 };
 
@@ -686,10 +697,10 @@ struct MetricDistanceVisitor {
   // Handle optional geometries that may be contained in a `ParseResult`.
   std::optional<double> operator()(const ParseResult& a,
                                    const ParseResult& b) const {
-    if (!a.second.has_value() || !b.second.has_value()) {
+    if (!a.parsedWkt.has_value() || !b.parsedWkt.has_value()) {
       return std::nullopt;
     }
-    return MetricDistanceVisitor{}(a.second.value(), b.second.value());
+    return MetricDistanceVisitor{}(a.parsedWkt.value(), b.parsedWkt.value());
   }
 };
 

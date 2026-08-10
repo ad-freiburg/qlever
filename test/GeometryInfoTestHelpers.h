@@ -206,7 +206,7 @@ inline T getGeometryOfTypeOrThrow(
   using namespace ad_utility::detail;
   auto l = generateLocationTrace(sourceLocation);
   auto parseRes = parseWkt(wkt);
-  if (!parseRes.second.has_value()) {
+  if (!parseRes.parsedWkt.has_value()) {
     throw std::runtime_error("Could not parse wkt literal");
   }
   return std::visit(
@@ -218,7 +218,7 @@ inline T getGeometryOfTypeOrThrow(
           throw std::runtime_error("Wrong geometry type of parse result");
         }
       },
-      parseRes.second.value());
+      parseRes.parsedWkt.value());
 }
 
 // ____________________________________________________________________________

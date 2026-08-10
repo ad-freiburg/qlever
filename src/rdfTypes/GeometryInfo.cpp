@@ -53,7 +53,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace detail;
-  auto [type, parsed] = parseWkt(wkt);
+  auto [parsed, wktType, crsType] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -78,8 +78,8 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{type.wktType, boundingBox.value(), centroid.value(),
-                      {numGeom},    metricLength,        MetricArea{area}};
+  return GeometryInfo{wktType,   boundingBox.value(), centroid.value(),
+                      {numGeom}, metricLength,        MetricArea{area}};
 }
 
 // ____________________________________________________________________________

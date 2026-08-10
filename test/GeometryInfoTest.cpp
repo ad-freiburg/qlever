@@ -26,6 +26,12 @@ using namespace geoInfoTestHelpers;
 // Example WKT literals for all supported geometry types
 constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointWGS84 =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(4 "
+    "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointWebMerc =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.4723798207 "
+    "445640.10965602624)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
@@ -389,9 +395,10 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
-  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
-  ASSERT_TRUE(parseRes1.second.has_value());
-  auto parsed1 = parseRes1.second.value();
+  EXPECT_EQ(parseRes1.wktType, util::geo::WKTType::POINT);
+  EXPECT_EQ(parseRes1.crsType, util::geo::CRSType::CRS84);
+  ASSERT_TRUE(parseRes1.parsedWkt.has_value());
+  auto parsed1 = parseRes1.parsedWkt.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
   Centroid centroidExp1{{4, 3}};
@@ -415,14 +422,26 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   EXPECT_EQ(computeMetricLength(parsed1).length(), 0);
   auto parseRes2 = parseWkt(litShortRealWorldLine);
-  EXPECT_EQ(parseRes2.first, 2);
-  ASSERT_TRUE(parseRes2.second.has_value());
-  auto parsed2 = parseRes2.second.value();
+  EXPECT_EQ(parseRes2.wktType, 2);
+  EXPECT_EQ(parseRes2.crsType, util::geo::CRSType::CRS84);
+  ASSERT_TRUE(parseRes2.parsedWkt.has_value());
+  auto parsed2 = parseRes2.parsedWkt.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
   EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
 
   EXPECT_EQ(computeMetricArea(ParsedWkt{DPoint{4, 5}}), 0);
   EXPECT_EQ(computeMetricArea(ParsedWkt{DLine{DPoint{1, 2}, DPoint{3, 4}}}), 0);
+
+  // Test different Crs Iris.
+  auto parseRes3 = parseWkt(litPointWGS84);
+  EXPECT_EQ(parseRes3.wktType, util::geo::WKTType::POINT);
+  EXPECT_EQ(parseRes3.crsType, util::geo::CRSType::WGS84);
+  ASSERT_TRUE(parseRes3.parsedWkt.has_value());
+
+  auto parseRes4 = parseWkt(litPointWebMerc);
+  EXPECT_EQ(parseRes4.wktType, util::geo::WKTType::POINT);
+  EXPECT_EQ(parseRes4.crsType, util::geo::CRSType::WebMerc);
+  ASSERT_TRUE(parseRes4.parsedWkt.has_value());
 }
 
 // ____________________________________________________________________________
