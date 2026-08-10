@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "./WordsAndDocsFileLineCreator.h"
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -461,6 +462,22 @@ TEST(IndexTest, emptyTextIndex) {
 // NOTE: The WKT literal must not be a `POINT`, because those are encoded
 // directly as `GeoPoint` IDs and never end up in the (geo) vocabulary, which
 // would not exercise the `SplitVocabulary` codepath that used to crash.
+// NOTE: We use the `TFIDF` scoring metric (instead of the default `EXPLICIT`)
+// because only then is `ScoreData::calculateScoreData` run, which used to
+// misclassify literals from non-default sub-vocabularies (like the WKT
+// literal here) as non-literals: `vocab.isLiteral(index)` only considers the
+// index ranges of the vocabulary's default (marker-0) sub-vocabulary, so it
+// wrongly returned `false` for the (marker-encoded) WKT literal. The `polygon`
+// word from that literal would then silently get a score of 0 instead of
+// throwing, because `ScoreData::getScore` falls back to 0 for an unscored
+// word instead of failing loudly.
+// NOTE: We also add a single dummy word/doc pair (unrelated to `#3191`) so
+// that the literal round doesn't start right at context/document ID 0. If it
+// did, an (unrelated, pre-existing) off-by-one between the context IDs that
+// `TextIndexBuilder` assigns to literals and the document IDs that
+// `ScoreData` assigns to them would coincidentally shift the scores of all
+// but the very first literal onto the wrong document, which would make this
+// test fail for a reason unrelated to the bug it targets.
 TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{
       "<a> <b> \"hello world\" . "
@@ -468,10 +485,23 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
       "opengis.net/ont/geosparql#wktLiteral> ."};
   config.createTextIndex = true;
   config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.scoringMetric = qlever::TextScoringMetric::TFIDF;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
+                createDocsFileLineAsString(1, "dummy")};
   auto* qec = ad_utility::testing::getQec(std::move(config));
-  IdTable result =
+  IdTable helloResult =
       qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
-  EXPECT_EQ(result.size(), 1u);
+  ASSERT_EQ(helloResult.size(), 1u);
+
+  // The WKT literal (stored in the geo sub-vocabulary of the `SplitVocabulary`
+  // due to `on-disk-compressed-geo-split`) must be scored just like the plain
+  // literal above; a score of 0 would indicate that it was wrongly treated as
+  // a non-literal and thus skipped by `ScoreData::calculateScoreData`.
+  IdTable polygonResult =
+      qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
+  ASSERT_EQ(polygonResult.size(), 1u);
+  EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
