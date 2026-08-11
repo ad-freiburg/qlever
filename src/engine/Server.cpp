@@ -102,7 +102,9 @@ void Server::initializeServerMetrics(
       [this]() -> int64_t {
         return static_cast<int64_t>(rebuildInProgress_.load());
       },
-      memoryLimit);
+      memoryLimit,
+      [this]() -> int64_t { return indexAndViewsSnapshot()->index_.numTriples().normal; }
+  );
   metrics_->registerCallbacks();
 }
 
