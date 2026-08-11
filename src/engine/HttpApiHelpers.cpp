@@ -73,7 +73,45 @@ ResultPinning determineResultPinning(const ParamValueMap& params) {
       checkParameter(params, "pin-subresults", "true").has_value();
   const bool pinResult =
       checkParameter(params, "pin-result", "true").has_value();
-  return ResultPinning{pinSubresults, pinResult};
+
+  std::optional<std::string> pinResultWithName =
+      ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
+                                             {});
+  std::optional<std::string> pinNamedGeoIndex =
+      ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
+                                             {});
+  std::optional<std::string> pinGeoIndexSimplificationStr =
+      ad_utility::url_parser::checkParameter(
+          params, "pin-geo-index-simplification", {});
+  std::optional<double> geoIndexSimplificationInMeters =
+      parsePinGeoIndexSimplification(pinGeoIndexSimplificationStr);
+
+  return ResultPinning{pinSubresults, pinResult, pinResultWithName,
+                       pinNamedGeoIndex, geoIndexSimplificationInMeters};
+}
+
+// ____________________________________________________________________________
+std::string ResultPinning::describeForLog() const {
+  std::string namePart;
+  if (pinResultWithName_.has_value()) {
+    // Describe the "with geo index on ?<var>" part (empty if
+    // `pinNamedGeoIndex_` is not set).
+    std::string geoIndexDescription;
+    if (pinNamedGeoIndex_.has_value()) {
+      std::string simplification =
+          geoIndexSimplificationInMeters_
+              ? absl::StrCat(", simplification=",
+                             geoIndexSimplificationInMeters_.value(), "m")
+              : "";
+      geoIndexDescription = absl::StrCat(
+          " with geo index on ?", pinNamedGeoIndex_.value(), simplification);
+    }
+    namePart =
+        absl::StrCat(" [pin result with name \"", pinResultWithName_.value(),
+                     "\"", geoIndexDescription, "]");
+  }
+  return absl::StrCat(pinResult_ ? " [pin result]" : "",
+                      pinSubtrees_ ? " [pin subresults]" : "", namePart);
 }
 
 // ____________________________________________________________________________

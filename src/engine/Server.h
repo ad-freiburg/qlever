@@ -18,6 +18,7 @@
 
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/HttpApiHelpers.h"
 #include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -226,15 +227,6 @@ class Server {
           const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
           std::optional<PlannedQuery>& plannedUpdate);
 
-  // Describe the pinning of a named result (and, if applicable, of its geo
-  // index) for the request log line, e.g. `" [pin result with name
-  // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
-  // string if `pinResultWithName` is `std::nullopt`.
-  static std::string describePinResultWithNameForLog(
-      const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex,
-      std::optional<double> geoIndexSimplificationInMeters);
-  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
@@ -252,9 +244,7 @@ class Server {
   // before indexing. Throw if named pinning is required, but the access token
   // is not okay.
   static void configurePinnedResultWithName(
-      const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex,
-      std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
+      qlever::http_api_helpers::ResultPinning resultPinning, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.

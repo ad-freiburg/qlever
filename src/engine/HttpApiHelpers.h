@@ -41,11 +41,20 @@ std::vector<ad_utility::MediaType> determineMediaTypes(
     const ad_utility::url_parser::ParamValueMap& params,
     std::string_view acceptHeader);
 
-// Helper struct defining the pinning of subtrees and the final result of a
-// query into the cache.
+// Helper struct describing all pinning requested for an operation's result:
+// of subresults, of the whole result, and (optionally) of the whole result
+// under an explicit name, with an optional geo index on one of its columns.
 struct ResultPinning {
   bool pinSubtrees_ = false;
   bool pinResult_ = false;
+  std::optional<std::string> pinResultWithName_;
+  std::optional<std::string> pinNamedGeoIndex_;
+  std::optional<double> geoIndexSimplificationInMeters_;
+
+  // Describe all requested pinning for the request log line, e.g. `" [pin
+  // result] [pin subresults] [pin result with name \"myPin\" with geo index
+  // on ?geom, simplification=5m]"`. Empty parts are omitted.
+  std::string describeForLog() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees_,
                                               pinResult_)

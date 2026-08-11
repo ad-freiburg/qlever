@@ -70,6 +70,53 @@ TEST(HttpApiHelpersTest, determineMediaType) {
 }
 
 // _____________________________________________________________________________
+TEST(HttpApiHelpersTest, describeForLog) {
+  // Nothing pinned.
+  EXPECT_EQ(ResultPinning{}.describeForLog(), "");
+
+  // Pin result only.
+  EXPECT_EQ(ResultPinning{.pinResult_ = true}.describeForLog(),
+            " [pin result]");
+
+  // Pin subresults only.
+  EXPECT_EQ(ResultPinning{.pinSubtrees_ = true}.describeForLog(),
+            " [pin subresults]");
+
+  // Pin result and subresults.
+  EXPECT_EQ((ResultPinning{.pinSubtrees_ = true, .pinResult_ = true}
+                 .describeForLog()),
+            " [pin result] [pin subresults]");
+
+  // Pinned name only.
+  EXPECT_EQ(ResultPinning{.pinResultWithName_ = "myPin"}.describeForLog(),
+            " [pin result with name \"myPin\"]");
+
+  // Pinned name and geo index, but no simplification.
+  EXPECT_EQ(
+      (ResultPinning{.pinResultWithName_ = "myPin", .pinNamedGeoIndex_ = "geom"}
+           .describeForLog()),
+      " [pin result with name \"myPin\" with geo index on ?geom]");
+
+  // Pinned name, geo index, and simplification.
+  EXPECT_EQ((ResultPinning{.pinResultWithName_ = "myPin",
+                           .pinNamedGeoIndex_ = "geom",
+                           .geoIndexSimplificationInMeters_ = 5.0}
+                 .describeForLog()),
+            " [pin result with name \"myPin\" with geo index on ?geom, "
+            "simplification=5m]");
+
+  // Everything combined.
+  EXPECT_EQ((ResultPinning{.pinSubtrees_ = true,
+                           .pinResult_ = true,
+                           .pinResultWithName_ = "myPin",
+                           .pinNamedGeoIndex_ = "geom",
+                           .geoIndexSimplificationInMeters_ = 5.0}
+                 .describeForLog()),
+            " [pin result] [pin subresults] [pin result with name \"myPin\" "
+            "with geo index on ?geom, simplification=5m]");
+}
+
+// _____________________________________________________________________________
 TEST(HttpApiHelpersTest, determineResultPinning) {
   EXPECT_EQ(determineResultPinning(
                 {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),

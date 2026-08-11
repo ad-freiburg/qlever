@@ -284,30 +284,6 @@ auto Server::setupCancellationHandle(
 }
 
 // ____________________________________________________________________________
-std::string Server::describePinResultWithNameForLog(
-    const std::optional<std::string>& pinResultWithName,
-    const std::optional<std::string>& pinNamedGeoIndex,
-    std::optional<double> geoIndexSimplificationInMeters) {
-  if (!pinResultWithName.has_value()) {
-    return "";
-  }
-  // Describe the "with geo index on ?<var>" part (empty if `pinNamedGeoIndex`
-  // is not set).
-  std::string geoIndexDescription;
-  if (pinNamedGeoIndex.has_value()) {
-    std::string simplification =
-        geoIndexSimplificationInMeters
-            ? absl::StrCat(", simplification=",
-                           geoIndexSimplificationInMeters.value(), "m")
-            : "";
-    geoIndexDescription = absl::StrCat(
-        " with geo index on ?", pinNamedGeoIndex.value(), simplification);
-  }
-  return absl::StrCat(" [pin result with name \"", pinResultWithName.value(),
-                      "\"", geoIndexDescription, "]");
-}
-
-// ____________________________________________________________________________
 auto Server::prepareOperation(
     std::string_view operationName, std::string_view operationSPARQL,
     ad_utility::websocket::MessageSender messageSender,
@@ -315,34 +291,15 @@ auto Server::prepareOperation(
     bool accessTokenOk, std::string_view clientIp) {
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+  auto resultPinning = qlever::http_api_helpers::determineResultPinning(params);
 
-  // Do the query planning. This creates a `QueryExecutionTree`, which will
-  // then be used to process the query.
-  auto [pinSubtrees, pinResult] =
-      qlever::http_api_helpers::determineResultPinning(params);
-  std::optional<std::string> pinResultWithName =
-      ad_utility::url_parser::checkParameter(params, "pin-result-with-name",
-                                             {});
-  std::optional<std::string> pinNamedGeoIndex =
-      ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
-                                             {});
-  std::optional<std::string> pinGeoIndexSimplificationStr =
-      ad_utility::url_parser::checkParameter(
-          params, "pin-geo-index-simplification", {});
-  std::optional<double> geoIndexSimplificationInMeters =
-      qlever::http_api_helpers::parsePinGeoIndexSimplification(
-          pinGeoIndexSimplificationStr);
   AD_LOG_INFO << "Processing the following " << operationName
               << (clientIp.empty() ? std::string{}
                                    : absl::StrCat(" from ", clientIp))
-              << ":" << (pinResult ? " [pin result]" : "")
-              << (pinSubtrees ? " [pin subresults]" : "")
-              << describePinResultWithNameForLog(pinResultWithName,
-                                                 pinNamedGeoIndex,
-                                                 geoIndexSimplificationInMeters)
-              << "\n"
+              << ":" << resultPinning.describeForLog() << "\n"
               << ad_utility::truncateOperationString(operationSPARQL)
               << std::endl;
+
   auto sharedMessageSender =
       std::make_shared<ad_utility::websocket::MessageSender>(
           std::move(messageSender));
@@ -350,20 +307,17 @@ auto Server::prepareOperation(
   // it to whichever snapshot is current when the operation runs (see
   // `processUpdate`).
   MakeQueryExecutionContext makeQec =
-      [this, sharedMessageSender = std::move(sharedMessageSender), pinSubtrees,
-       pinResult, pinResultWithName = std::move(pinResultWithName),
-       pinNamedGeoIndex = std::move(pinNamedGeoIndex),
-       geoIndexSimplificationInMeters,
+      [this, sharedMessageSender = std::move(sharedMessageSender),
+       resultPinning = std::move(resultPinning),
        accessTokenOk](SharedIndexAndView indexAndViews) {
         auto qec = qlever().createQueryExecutionContext(
             std::move(indexAndViews),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
-            pinSubtrees, pinResult);
-        configurePinnedResultWithName(pinResultWithName, pinNamedGeoIndex,
-                                      geoIndexSimplificationInMeters,
-                                      accessTokenOk, *qec);
+            resultPinning.pinSubtrees_, resultPinning.pinResult_);
+        configurePinnedResultWithName(std::move(resultPinning), accessTokenOk,
+                                      *qec);
         return qec;
       };
   return std::make_tuple(std::move(makeQec), std::move(cancellationHandle),
@@ -372,11 +326,9 @@ auto Server::prepareOperation(
 
 // _____________________________________________________________________________
 void Server::configurePinnedResultWithName(
-    const std::optional<std::string>& pinResultWithName,
-    const std::optional<std::string>& pinNamedGeoIndex,
-    std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
+    qlever::http_api_helpers::ResultPinning resultPinning, bool accessTokenOk,
     QueryExecutionContext& qec) {
-  if (!pinResultWithName.has_value()) {
+  if (!resultPinning.pinResultWithName_.has_value()) {
     return;
   }
   if (!accessTokenOk) {
@@ -385,14 +337,14 @@ void Server::configurePinnedResultWithName(
         "Pinning a result with a name requires a valid access token");
   }
   auto getGeoCacheVar = [&]() -> std::optional<Variable> {
-    if (!pinNamedGeoIndex.has_value()) {
+    if (!resultPinning.pinNamedGeoIndex_.has_value()) {
       return std::nullopt;
     }
-    return Variable{absl::StrCat("?", pinNamedGeoIndex.value())};
+    return Variable{absl::StrCat("?", resultPinning.pinNamedGeoIndex_.value())};
   };
   qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
-      pinResultWithName.value(), getGeoCacheVar(),
-      geoIndexSimplificationInMeters};
+      resultPinning.pinResultWithName_.value(), getGeoCacheVar(),
+      resultPinning.geoIndexSimplificationInMeters_};
 }
 
 // _____________________________________________________________________________
