@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/CompactStringVector.h"

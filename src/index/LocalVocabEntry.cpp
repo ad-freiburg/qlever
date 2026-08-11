@@ -5,7 +5,7 @@
 #include "index/LocalVocabEntry.h"
 
 #include "global/VocabIndex.h"
-#include "index/IndexImpl.h"
+#include "index/LocalVocabContext.h"
 
 // ___________________________________________________________________________
 ql::strong_ordering LocalVocabEntry::compareThreeWay(
@@ -15,9 +15,8 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
       "Contexts of LocalVocabEntries have to be identical. If this is not the "
       "case this means that stale entries associated with an old index are "
       "falsely carried over somewhere.");
-  int i = context_->getVocab().getCaseComparator().compare(
-      toStringRepresentation(), rhs.toStringRepresentation(),
-      LocaleManager::Level::TOTAL);
+  int i = context_->compareWords(toStringRepresentation(),
+                                 rhs.toStringRepresentation());
   if (i < 0) {
     return ql::strong_ordering::less;
   } else if (i > 0) {
@@ -34,18 +33,15 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // this word would be stored if it were present.
   PositionInVocab positionInVocab;
 
-  const auto& vocab = context_->getVocab();
-
   // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
   // give us a consistent ordering, which is important for determining equality
   // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
   auto [lower, upper] = [&]() {
-    if (auto opt =
-            context_->encodedIriManager().encode(toStringRepresentation());
+    if (auto opt = context_->encodeAsId(toStringRepresentation());
         opt.has_value()) {
       return std::pair{opt.value(), Id::fromBits(opt.value().getBits() + 1)};
     }
-    auto [l, u] = vocab.getPositionOfWord(toStringRepresentation());
+    auto [l, u] = context_->getPositionOfWord(toStringRepresentation());
     AD_CORRECTNESS_CHECK(u.get() - l.get() <= 1);
     return std::pair{Id::makeFromVocabIndex(l), Id::makeFromVocabIndex(u)};
   }();

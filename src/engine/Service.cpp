@@ -16,6 +16,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
@@ -271,7 +272,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
                                            localVocab)
                 : TripleComponent::UNDEF();
 
-        Id id = std::move(tc).toValueId(getIndex(), *localVocab);
+        Id id = toValueId(std::move(tc), getIndex(), *localVocab);
         idTable(rowIdx, colIdx) = id;
         if (id.getDatatype() == Datatype::LocalVocabIndex) {
           ++numLocalVocabPerColumn[colIdx];

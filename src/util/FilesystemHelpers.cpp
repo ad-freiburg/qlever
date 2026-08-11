@@ -36,8 +36,7 @@ std::vector<fs::path> filesWithBaseNameAndSuffix(const fs::path& onDiskBase,
   namespace v = ql::views;
   // With an InputRangeTypeErased (instead of `to_vector`), `ql::directoryRange`
   // backed by the boost filesystem library doesn't work.
-  return ad_utility::OwningView{
-             ::ranges::to_vector(ql::directoryRange(directory))} |
+  return ::ranges::to_vector(ql::directoryRange(directory)) |
          v::filter([](const auto& entry) { return entry.is_regular_file(); }) |
          // Return the paths in the same form as `onDiskBase` (directory part of
          // `onDiskBase` plus the file name; an empty `parent` yields the bare
@@ -97,6 +96,19 @@ size_t deleteFilesInDirectory(
     ad_utility::deleteFile(path);
   }
   return toDelete.size();
+}
+
+// _____________________________________________________________________________
+std::vector<fs::path> directoriesWithPrefix(const fs::path& directory,
+                                            std::string_view prefix) {
+  std::vector<fs::path> result;
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (entry.is_directory() &&
+        ql::starts_with(entry.path().filename().string(), prefix)) {
+      result.push_back(entry.path());
+    }
+  }
+  return result;
 }
 
 // _____________________________________________________________________________

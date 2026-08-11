@@ -7,6 +7,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/UpdateMetadata.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
@@ -123,7 +124,7 @@ ExecuteUpdate::transformTriplesTemplate(
   for (auto& tc : lookupVec) {
     TripleComponent copy{tc};
     lookupMap.emplace(std::move(tc),
-                      std::move(copy).toValueId(index, localVocab));
+                      toValueId(std::move(copy), index, localVocab));
   }
 
   // Lookup the given `TripleComponent` in `lookupMap`. For a variable, return
@@ -134,7 +135,7 @@ ExecuteUpdate::transformTriplesTemplate(
       AD_CORRECTNESS_CHECK(variableColumns.contains(tc.getVariable()));
       return variableColumns.at(tc.getVariable()).columnIndex_;
     }
-    if (auto optionalId = tc.toValueIdIfNotString(&encodedIriManager)) {
+    if (auto optionalId = toValueIdIfNotString(tc, &encodedIriManager)) {
       return optionalId.value();
     }
     auto found = lookupMap.find(tc);

@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 

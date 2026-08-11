@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <vector>
 
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyTestHelpers.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/GTestHelpers.h"

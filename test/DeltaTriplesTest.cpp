@@ -22,6 +22,7 @@
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 
@@ -92,11 +93,10 @@ class DeltaTriplesTest : public ::testing::Test {
             TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI));
       }
       std::array<Id, 4> ids{
-          std::move(triple.subject_).toValueId(index, localVocab),
-          std::move(TripleComponent(triple.predicate_))
-              .toValueId(index, localVocab),
-          std::move(triple.object_).toValueId(index, localVocab),
-          std::move(triple.graphIri_).toValueId(index, localVocab)};
+          toValueId(std::move(triple.subject_), index, localVocab),
+          toValueId(TripleComponent(triple.predicate_), index, localVocab),
+          toValueId(std::move(triple.object_), index, localVocab),
+          toValueId(std::move(triple.graphIri_), index, localVocab)};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(
@@ -387,13 +387,13 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   deltaTriples.clear();
   // Test internal language filter triples are inserted correctly.
   auto toId = [&index, &localVocab](TripleComponent& component) {
-    return std::move(component).toValueId(index, localVocab);
+    return toValueId(std::move(component), index, localVocab);
   };
 
   Id graphId = [&index]() {
-    auto graphOpt =
-        TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
-            .toValueId(index);
+    auto graphOpt = toValueId(
+        TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)),
+        index);
     AD_CORRECTNESS_CHECK(graphOpt.has_value());
     return graphOpt.value();
   }();
@@ -842,8 +842,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   ql::filesystem::remove(tmpFile);
   absl::Cleanup cleanup{[&tmpFile]() { ql::filesystem::remove(tmpFile); }};
   auto defaultGraph =
-      TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))
-          .toValueId(testQec->getIndex().getImpl())
+      toValueId(
+          TripleComponent(TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)),
+          testQec->getIndex().getImpl())
           .value();
   const auto& localVocabContext = testQec->getLocalVocabContext();
   {
@@ -973,13 +974,13 @@ TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   DeltaTriplesManager deltaTriplesManager(index);
 
   std::string iri1 = "<test>";
-  LocalVocabEntry entry1 =
-      LocalVocabEntry::fromStringRepresentation(iri1, index);
+  LocalVocabEntry entry1 = LocalVocabEntry::fromStringRepresentation(
+      iri1, index.getLocalVocabContext());
   IdTriple<> triple1{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
                       Id::makeFromBool(true)}};
   std::string iri2 = "<other>";
-  LocalVocabEntry entry2 =
-      LocalVocabEntry::fromStringRepresentation(iri2, index);
+  LocalVocabEntry entry2 = LocalVocabEntry::fromStringRepresentation(
+      iri2, index.getLocalVocabContext());
   IdTriple<> triple2{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
                       Id::makeFromBool(false)}};
   deltaTriplesManager.modify<void>(
@@ -1062,8 +1063,8 @@ TEST_F(DeltaTriplesTest, remapId) {
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
   LocalVocab localVocab;
 
-  LocalVocabEntry sourceEntry =
-      LocalVocabEntry::fromStringRepresentation("<entry>", index);
+  LocalVocabEntry sourceEntry = LocalVocabEntry::fromStringRepresentation(
+      "<entry>", index.getLocalVocabContext());
   Id entryId = Id::makeFromLocalVocabIndex(&sourceEntry);
 
   auto remap = [&idMapping, &localVocab, &index](Id id) {
@@ -1300,7 +1301,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   ASSERT_THAT(entries, ::testing::SizeIs(1));
   const LocalVocabEntry* carried = entries.at(0);
   ASSERT_NE(carried, nullptr);
-  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getImpl());
+  EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getLocalVocabContext());
   EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(), "\"zzz\"");
 
   // The carried entry must behave exactly like a fresh entry that was created
@@ -1308,7 +1309,8 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   // would have kept the stale position cached against the old vocabulary),
   // and comparing must not access the old index (checked by the ASAN build,
   // since the old index no longer exists at this point).
-  LocalVocabEntry fresh{carried->asLiteralOrIri(), newIndex.getImpl()};
+  LocalVocabEntry fresh{carried->asLiteralOrIri(),
+                        newIndex.getImpl().getLocalVocabContext()};
   EXPECT_EQ(carried->positionInVocab(), fresh.positionInVocab());
   EXPECT_EQ(*carried, fresh);
 }

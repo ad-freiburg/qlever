@@ -13,19 +13,24 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "backports/filesystem.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/RebuildIndexStrategy.h"
 #include "global/RuntimeParameters.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "index/IndexRebuilderTypes.h"
 #include "index/InputFileSpecification.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
@@ -34,6 +39,7 @@
 #include "util/Synchronized.h"
 #include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 namespace qlever {
 
@@ -120,6 +126,12 @@ class IndexRebuildConfig {
   // Typically the same location as the currently served index, so that the
   // "current" index has a stable location.
   const std::string& newIndexTarget() const { return newIndexTarget_; }
+
+  // The JSON that is reported to the client after a successful rebuild: a
+  // human-readable message plus the directory to which the old index was
+  // retired (the resolved value of the `rebuild-previous-index-dir` command
+  // parameter, which the client does not know when the default was used).
+  nlohmann::json successResponseAsJson() const;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -243,6 +255,18 @@ struct EngineConfig : CommonConfig {
   // simply delete this file.
   bool persistUpdates_ = true;
 
+  // If set, an index rebuild (the same operation as the `cmd=rebuild-index`
+  // HTTP request) is triggered automatically in the background after an update,
+  // whenever `RebuildIndexStrategy::shouldTriggerRebuild` says so. If `nullopt`
+  // (the default), rebuilds are only triggered manually.
+  std::optional<RebuildIndexStrategy> rebuildIndexStrategy_ = std::nullopt;
+
+  // Which `previous.*` index directories to keep after a successful index
+  // rebuild (manual or automatic), see `KeepPreviousIndexDirs`. The default
+  // keeps the original and the most recent one.
+  KeepPreviousIndexDirs keepPreviousIndexDirs_ =
+      KeepPreviousIndexDirs::OriginalAndMostRecent;
+
   // If set to true, no permutations will be loaded from disk. This is useful
   // when only queries that don't require accessing the permutations need to be
   // executed (e.g., queries that only compute constant expressions, or query
@@ -275,7 +299,9 @@ struct EngineConfig : CommonConfig {
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
-// `src/engine/LibQleverExample.cpp` for an example use.
+// `src/engine/LibQleverExample.cpp` for an example use. If you extend the
+// interface of this class, consider also adding bindings to
+// `QleverEmscriptenBindings.cpp` so it can be used by JS code.
 class Qlever {
  public:
   using PlannedQuery = qlever::PlannedQuery;
@@ -490,6 +516,8 @@ class Qlever {
   void eraseResultWithName(std::string name);
   // Completely clear the `NamedResultCache`.
   void clearNamedResultCache();
+  // Completely clear the `QueryResultCache` (non-named).
+  void clearQueryResultCache();
 
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
@@ -510,6 +538,10 @@ class Qlever {
   // Preload a materialized view s.t. the first query to the view does not have
   // to load the view.
   void loadMaterializedView(std::string name) const;
+
+  // Unload a materialized view that was previously loaded via
+  // `loadMaterializedView`. Has no effect if the view is not currently loaded.
+  void unloadMaterializedView(const std::string& name) const;
 
   // Check if a materialized view with the given name is currently loaded.
   bool isMaterializedViewLoaded(const std::string& name) const;
@@ -584,6 +616,48 @@ class Qlever {
     *indexAndViews_.wlock() = std::move(indexAndViews);
   }
 
+  // Assemble the `IndexRebuildConfig` for a rebuild of `index` (which has to be
+  // the index that is currently being served) from the two directories a
+  // rebuild can be configured with: `rebuildTmpDir`, in which the new index
+  // is built, and `rebuildPreviousIndexDir`, to which the old index is retired.
+  // Both default (if `std::nullopt`) to a directory that is derived from the
+  // current time resp. from the build date of the current index. Inside these
+  // directories, and for the new index after the swap, the file name of
+  // `index.getOnDiskBase()` is used: the new index has to end up at the base
+  // name the current index is served from, so that a later restart loads it.
+  //
+  // The two directories must be relative paths (they are resolved against the
+  // working directory of the engine, just like the base name of the current
+  // index), must be empty or not exist yet, and must lie inside the directory
+  // of `index.getOnDiskBase()`, so that the index directories are not nested
+  // ever deeper. Throws `std::runtime_error` if one of these conditions is
+  // violated, and (via the `IndexRebuildConfig` constructor) if the resulting
+  // base names collide.
+  static IndexRebuildConfig makeIndexRebuildConfig(
+      const Index& index, std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
+
+  // Apply the given `policy` to the `previous.*` directories in the directory
+  // of the index with the base name `indexBaseName` (each successful rebuild
+  // retires the index that was served so far into such a directory, see
+  // `makeIndexRebuildConfig`): keep or delete each of them according to
+  // `keepPreviousIndexDir`, where the directories are ordered from the oldest
+  // to the newest. Each decision is appended to the `rebuild-index` log of
+  // the index with the base name `indexBaseName` (the log of the rebuild that
+  // has just finished), not to the server log. This function never throws
+  // (when this is called, the rebuild has already succeeded): a directory
+  // that cannot be deleted is logged as an error in the server log and
+  // skipped, and any other filesystem failure is also only logged.
+  static void cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                       KeepPreviousIndexDirs policy);
+
+ private:
+  // The implementation of `cleanUpPreviousIndexDirs` above, which wraps this
+  // function in a try-catch.
+  static void cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                           KeepPreviousIndexDirs policy);
+
+ public:
   // Move a freshly rebuilt index into the place of the old one. There are two
   // indices involved, both with base names given by `config`: the old index
   // that is currently being served (at `config.oldIndexSource()`), and the
@@ -599,6 +673,13 @@ class Qlever {
   // 3. Re-anchor all path-derived state of the new index in memory (on-disk
   //    base name, files for persisted updates and graph names, and the views
   //    manager) to `config.newIndexTarget()`.
+  // 4. Remove the directory that contained `config.newIndexSource()`, which
+  //    step 2 has emptied (if it is actually empty). A failure here is only
+  //    logged as a warning.
+  // 5. Apply the `policy` for which `previous.*` index directories to keep
+  //    (see `cleanUpPreviousIndexDirs` above), right after step 1 has retired
+  //    the old index into such a directory. The default policy `all` keeps
+  //    everything, i.e. performs no cleanup.
   //
   // Typically, `config.newIndexTarget()` is `config.oldIndexSource()`, i.e. the
   // new index is served from the place of the old index (so that a later
@@ -617,8 +698,59 @@ class Qlever {
   // this function does is string concatenation and moving files around. This
   // function assumes that file handles are never reopened, so moving the files
   // while the file handle is still open is fine in POSIX compliant systems.
-  static void moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
-                                        const IndexRebuildConfig& config);
+  static void moveRebuiltIndexIntoPlace(
+      IndexAndViews& newIndexAndViews, const IndexRebuildConfig& config,
+      KeepPreviousIndexDirs policy = KeepPreviousIndexDirs::All);
+
+  // The result of the first phase of an index rebuild (see
+  // `rebuildIndexToDisk`): a snapshot of the delta triples taken at the start
+  // of the rebuild, the mapping from the old vocabulary `Id`s to the new ones,
+  // and the freshly built index (loaded from disk) paired with a fresh, empty
+  // `MaterializedViewsManager`.
+  using RebuildResult =
+      std::tuple<LocatedTriplesSharedState, indexRebuilder::IndexRebuildMapping,
+                 std::shared_ptr<IndexAndViews>>;
+
+  // The two functions below implement an index rebuild. They are only available
+  // in the C++20 build. They rely on `materializeToIndex` and
+  // `DeltaTriples::addFromSnapshotDiff`, which are excluded from the reduced
+  // C++17 feature set.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+  // Build a new index from the current state of `index` and write it to disk
+  // under the base name `config.newIndexSource()` (the containing directory is
+  // created if it does not exist), then load it into a fresh `IndexAndViews`.
+  // This is the expensive, read-only first phase of an index rebuild. It
+  // returns the data required by `swapInRebuiltIndex` to atomically switch over
+  // to the new index. `handle` can be used to cancel the rebuild. The reason
+  // why `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs.
+  [[nodiscard]] RebuildResult rebuildIndexToDisk(
+      Index& index, const IndexRebuildConfig& config,
+      const ad_utility::SharedCancellationHandle& handle) const;
+
+  // Remap the delta triples that accumulated on the old `index` (which has to
+  // be the exact same index that was used to create `rebuildResult`) onto the
+  // freshly built index (using the `rebuildResult` produced by
+  // `rebuildIndexToDisk`) and atomically swap the new index in. Calling this
+  // also persists the remapped delta triples to disk so that they are not lost
+  // if the engine is later restarted on the rebuilt index. The reason why
+  // `index` has to be passed in manually instead of using
+  // `indexAndViewsSnapshot()` is to avoid a TOCTOU class of bugs. It is crucial
+  // that this function is only called when you can guarantee no updates are
+  // added during the duration of this function call.
+  //
+  // Before the swap, `moveRebuiltIndexIntoPlace` is called, which moves the
+  // files of the old index to `config.oldIndexTarget()` and the files of the
+  // new index from `config.newIndexSource()` to `config.newIndexTarget()` (by
+  // default the place of the old index), removes the directory in which the
+  // new index was built, and applies the policy from `keepPreviousIndexDirs`
+  // for which `previous.*` index directories to keep.
+  void swapInRebuiltIndex(const Index& index, RebuildResult rebuildResult,
+                          const ad_utility::SharedCancellationHandle& handle,
+                          const IndexRebuildConfig& config,
+                          KeepPreviousIndexDirs keepPreviousIndexDirs);
+#endif
 
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }

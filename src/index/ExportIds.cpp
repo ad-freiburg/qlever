@@ -17,7 +17,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
-#include "index/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "util/Exception.h"
 
 namespace ql::exportIds {
