@@ -90,9 +90,10 @@ inline std::string addDatatype(const std::string_view wkt) {
 inline ParseResult parseWkt(const std::string_view& wkt,
                             CRSType projCrs = CRSType::CRS84) {
   auto wktLiteral = removeDatatype(wkt);
+  auto c = wktLiteral.c_str();
   std::optional<ParsedWkt> parsed = std::nullopt;
-  auto crsType = getCRSType(wktLiteral);
-  auto type = getWKTType(wktLiteral);
+  auto crsType = getCRSType(c, &c);
+  auto type = getWKTType(c, &c);
   auto projFunc = [projCrs](const Point<double>& p, CRSType sourceCrs) {
     return projectToCRS(Point<CoordType>{static_cast<CoordType>(p.getX()),
                                          static_cast<CoordType>(p.getY())},
@@ -102,10 +103,10 @@ inline ParseResult parseWkt(const std::string_view& wkt,
   try {
     switch (type) {
       case POINT:
-        parsed = pointFromWKTProj<CoordType>(wktLiteral, projFunc);
+        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         break;
       case LINESTRING: {
-        auto line = lineFromWKTProj<CoordType>(wktLiteral, projFunc);
+        auto line = lineFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         if (line.empty()) {
           throw std::runtime_error("Cannot parse line from WKT");
         }
@@ -113,7 +114,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case POLYGON: {
-        auto polygon = polygonFromWKTProj<CoordType>(wktLiteral, projFunc);
+        auto polygon = polygonFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         if (polygon.getOuter().empty()) {
           throw std::runtime_error("Cannot parse polygon from WKT");
         }
@@ -122,7 +123,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case MULTIPOINT: {
         auto multipoint =
-            multiPointFromWKTProj<CoordType>(wktLiteral, projFunc);
+            multiPointFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         if (multipoint.empty()) {
           throw std::runtime_error("Cannot parse multipoint from WKT");
         }
@@ -130,7 +131,8 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case MULTILINESTRING: {
-        auto multiline = multiLineFromWKTProj<CoordType>(wktLiteral, projFunc);
+        auto multiline =
+            multiLineFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         if (multiline.empty()) {
           throw std::runtime_error("Cannot parse multiline from WKT");
         }
@@ -139,7 +141,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case MULTIPOLYGON: {
         auto multipolygon =
-            multiPolygonFromWKTProj<CoordType>(wktLiteral, projFunc);
+            multiPolygonFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         if (multipolygon.empty()) {
           throw std::runtime_error("Cannot parse multipolygon from WKT");
         }
@@ -148,7 +150,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case COLLECTION: {
         auto collection =
-            collectionFromWKTProj<CoordType>(wktLiteral, projFunc);
+            collectionFromWKTProj<CoordType>(c, &c, projFunc, crsType);
         if (collection.empty()) {
           throw std::runtime_error("Cannot parse collection from WKT");
         }
