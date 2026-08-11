@@ -11,6 +11,7 @@
 #include <array>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -288,11 +289,17 @@ void VocabularyOnDisk::open(const std::string& filename) {
   size_ = numOffsets - 1;
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
+  size_t numManagers =
+      getRuntimeParameter<
+          &RuntimeParameters::vocabBatchIoNumManagers_>();
+  size_t ringSize = getRuntimeParameter<
+      &RuntimeParameters::vocabBatchIoRingSize_>();
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
-      NUM_VOCAB_BATCH_IO_MANAGERS);
+      numManagers);
   bool preferIoUring = true;
-  for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
+  for (size_t i = 0; i < numManagers; ++i) {
+    ioManagers_->push(
+        ad_utility::makeBatchManager(preferIoUring, ringSize));
   }
 }

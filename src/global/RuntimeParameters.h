@@ -239,6 +239,18 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
+  // Size of the io_uring submission queue (ring size) per batch I/O manager.
+  // Powers of two are preferred; liburing rounds up.  Larger rings increase
+  // in-flight I/O concurrency at the cost of registered buffer memory.
+  SizeT vocabBatchIoRingSize_{256, "vocab-batch-io-ring-size"};
+
+  // Number of persistent BatchIoManager instances in the pool.  Each manager
+  // holds its own io_uring ring, so this bounds the number of concurrent
+  // batch vocabulary lookups.  More managers = more parallelism for
+  // multi-query workloads, at the cost of memory for rings + registered
+  // buffers.
+  SizeT vocabBatchIoNumManagers_{8, "vocab-batch-io-num-managers"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
