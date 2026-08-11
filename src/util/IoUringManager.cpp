@@ -57,14 +57,17 @@ void SyncIoPolicy::addBatch(int fd,
 
 //______________________________________________________________________________
 IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
-  // Set up the submission and completion queues, shared between this process
-  // and the kernel, with (at least) `ringSize_` submission slots in the
-  // submission queue. liburing rounds the requested size up to a power of two,
-  // so the actual ring may be larger than `ringSize`; `ringSize_` is therefore
-  // a conservative (lower) bound for the "ring full" check below. See
-  // https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
-  // details.
-  int ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
+  // Set up the submission and completion queues.  `IORING_SETUP_DEFER_TASKRUN`
+  // prevents the kernel from running task_work (completion processing) on
+  // arbitrary kernel-user transitions (e.g. inside malloc's brk syscall).
+  // Together with `IORING_SETUP_SINGLE_ISSUER` (the required prerequisite),
+  // this confines CQE reaping to explicit `io_uring_enter` calls, eliminating
+  // unwanted preemptions and giving the application full control over when
+  // completions are processed.  See https://man7.org/linux/man-pages/man3/
+  // io_uring_queue_init.3.html for details.
+  int ret = io_uring_queue_init(ringSize_, &ring_,
+                                IORING_SETUP_DEFER_TASKRUN |
+                                    IORING_SETUP_SINGLE_ISSUER);
   if (ret < 0) {
     AD_THROW("io_uring_queue_init failed in IoUringManager");
   }
