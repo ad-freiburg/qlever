@@ -66,7 +66,9 @@ RuntimeParameters::RuntimeParameters() {
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
-  add(constructDeduplication_);\n  add(vocabBatchIoRingSize_);\n  add(vocabBatchIoNumManagers_);
+  add(constructDeduplication_);
+  add(vocabBatchIoRingSize_);
+  add(vocabBatchIoNumManagers_);
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is
