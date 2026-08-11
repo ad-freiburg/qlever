@@ -42,36 +42,37 @@ std::optional<uint64_t> rssBytesFromStatm(std::istream& statm);
 // Total CPU time (user + system) used by this process so far, in seconds.
 std::optional<double> cpuTimeSeconds();
 
-// Turns successive readings of a cumulative "seconds spent doing X" counter
-// into a percentage of the elapsed wall time. Stateful: each `update` is the
-// baseline for the next. Used for both `cpu_percent` and `io_stall_percent`.
-class SecondsToPercentTracker {
+// Turns successive readings of a cumulative counter into its rate of change per
+// second of elapsed wall time. Stateful: each `update` is the baseline for the
+// next. Used for `cpu_percent`, `io_stall_percent` and disk I/O rates.
+class RateTracker {
  public:
-  explicit SecondsToPercentTracker(std::optional<double> initialSeconds)
-      : lastSeconds_{initialSeconds} {}
+  explicit RateTracker(std::optional<double> initialValue)
+      : lastValue_{initialValue} {}
 
   // `std::nullopt` when usage cannot be computed yet: no reading this tick,
   // no baseline, or no time elapsed since the baseline.
-  std::optional<double> update(std::optional<double> seconds, double elapsed);
+  std::optional<double> update(std::optional<double> value, double elapsed);
 
  private:
-  std::optional<double> lastSeconds_;
+  std::optional<double> lastValue_;
   double lastElapsed_ = 0.0;
 };
 
-// Cumulative bytes this process has read from and written to disk.
+// Cumulative bytes read from and written to disk, as `double` to feed a
+// `RateTracker`. Each counter is empty if the OS did not report it.
 struct DiskIoBytes {
-  uint64_t readBytes_;
-  uint64_t writeBytes_;
+  std::optional<double> readBytes_;
+  std::optional<double> writeBytes_;
 };
 
-// Cumulative disk bytes of this process, or `std::nullopt` if unavailable.
-std::optional<DiskIoBytes> currentDiskIoBytes();
+// Cumulative disk bytes of this process; both empty when unavailable.
+DiskIoBytes currentDiskIoBytes();
 
 #if defined(__linux__)
 // Disk bytes from a `/proc/self/io` stream, read by the `read_bytes:` and
 // `write_bytes:` keys, never by position.
-std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo);
+DiskIoBytes diskIoBytesFromProcIo(std::istream& procIo);
 #endif
 
 // Cumulative seconds during which at least one task was stalled on I/O, or
@@ -90,7 +91,8 @@ struct Sample {
   int64_t timestampMs_;
   std::optional<uint64_t> rssBytes_;
   std::optional<double> cpuPercent_;
-  std::optional<DiskIoBytes> diskIoBytes_;
+  std::optional<double> readBytesPerSecond_;
+  std::optional<double> writeBytesPerSecond_;
   std::optional<double> ioStallPercent_;
   // id of the index rebuild running at this sample, empty (and not 0) when no
   // rebuild in progress.
@@ -101,8 +103,8 @@ struct Sample {
 // newline. `start` also compares it against an existing file's first line to
 // notice that the format has changed since that file was written.
 inline constexpr std::string_view tsvHeader =
-    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes\twrite_bytes\t"
-    "io_stall_percent\trebuild_id";
+    "elapsed_s\ttimestamp_ms\trss\tcpu_percent\tread_bytes_per_s\t"
+    "write_bytes_per_s\tio_stall_percent\trebuild_id";
 
 // One TSV row; a missing field becomes an empty cell.
 std::string formatTsvRow(const Sample& sample);
@@ -111,7 +113,7 @@ std::string formatTsvRow(const Sample& sample);
 // `ResourceMonitor::setReadersForTesting`).
 using RssReader = absl::AnyInvocable<std::optional<uint64_t>()>;
 using CpuReader = absl::AnyInvocable<std::optional<double>()>;
-using DiskIoReader = absl::AnyInvocable<std::optional<DiskIoBytes>()>;
+using DiskIoReader = absl::AnyInvocable<DiskIoBytes()>;
 using IoStallReader = absl::AnyInvocable<std::optional<double>()>;
 
 // The readers the sampler calls each tick. Each starts out as the real OS
@@ -152,11 +154,12 @@ class RebuildIndexSignal {
   std::atomic<uint64_t> currentId_{0};
 };
 
-// Samples the RSS, CPU usage, and disk IO of this process, plus system-wide IO
-// stall on a background thread and appends one TSV row (`elapsed_s`,
-// `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes`, `write_bytes`,
-// `io_stall_percent`) per interval; failed readings become empty cells. The
-// destructor stops the sampling thread and closes the file.
+// Samples the RSS, CPU usage, and disk IO rate of this process, plus
+// system-wide IO stall on a background thread and appends one TSV row
+// (`elapsed_s`, `timestamp_ms`, `rss`, `cpu_percent`, `read_bytes_per_s`,
+// `write_bytes_per_s`, `io_stall_percent`, `rebuild_id`) per interval; failed
+// readings become empty cells. The destructor stops the sampling thread and
+// closes the file.
 class ResourceMonitor {
  public:
   // `Truncate` starts a fresh file per run (index builds); `Append`

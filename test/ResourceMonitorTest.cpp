@@ -6,6 +6,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -20,6 +21,7 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -65,17 +67,21 @@ TEST(ResourceMonitor, ReadsCumulativeDiskIoBytes) {
   // On Linux this needs `CONFIG_TASK_IO_ACCOUNTING`, which mainstream kernels
   // enable; a failure here means the kernel lacks it, not a parse failure.
   auto first = rm::currentDiskIoBytes();
-  ASSERT_TRUE(first.has_value());
+  ASSERT_TRUE(first.readBytes_.has_value());
+  ASSERT_TRUE(first.writeBytes_.has_value());
 
   // The counters are cumulative, which is the property the rate computation
   // depends on: a later reading is never smaller. Not `EXPECT_GT`, since a
   // process can go a moment without touching the disk at all.
   auto second = rm::currentDiskIoBytes();
-  ASSERT_TRUE(second.has_value());
-  EXPECT_GE(second.value().readBytes_, first.value().readBytes_);
-  EXPECT_GE(second.value().writeBytes_, first.value().writeBytes_);
+  ASSERT_TRUE(second.readBytes_.has_value());
+  ASSERT_TRUE(second.writeBytes_.has_value());
+  EXPECT_GE(second.readBytes_.value(), first.readBytes_.value());
+  EXPECT_GE(second.writeBytes_.value(), first.writeBytes_.value());
 #else
-  EXPECT_FALSE(rm::currentDiskIoBytes().has_value());
+  auto bytes = rm::currentDiskIoBytes();
+  EXPECT_FALSE(bytes.readBytes_.has_value());
+  EXPECT_FALSE(bytes.writeBytes_.has_value());
 #endif
 }
 
@@ -125,7 +131,7 @@ TEST(ResourceMonitor, RssBytesFromStatmScalesSecondFieldAndRejectsGarbage) {
 #if defined(__linux__)
 // _____________________________________________________________________________
 TEST(ResourceMonitor,
-     DiskIoBytesFromProcIoMatchesKeysAndRejectsIncompleteInput) {
+     DiskIoBytesFromProcIoMatchesKeysAndReportsCountersIndependently) {
   // A realistic `/proc/self/io`: the keys we want are neither first nor last,
   // and every value differs, so a parser reading by position would fail.
   std::istringstream valid{
@@ -137,19 +143,28 @@ TEST(ResourceMonitor,
       "write_bytes: 4096\n"
       "cancelled_write_bytes: 64\n"};
   auto bytes = rm::diskIoBytesFromProcIo(valid);
-  ASSERT_TRUE(bytes.has_value());
-  EXPECT_EQ(bytes.value().readBytes_, 8192u);
-  EXPECT_EQ(bytes.value().writeBytes_, 4096u);
+  ASSERT_TRUE(bytes.readBytes_.has_value());
+  ASSERT_TRUE(bytes.writeBytes_.has_value());
+  EXPECT_DOUBLE_EQ(bytes.readBytes_.value(), 8192.0);
+  EXPECT_DOUBLE_EQ(bytes.writeBytes_.value(), 4096.0);
 
   std::istringstream garbage{"not a number"};
-  EXPECT_FALSE(rm::diskIoBytesFromProcIo(garbage).has_value());
+  auto fromGarbage = rm::diskIoBytesFromProcIo(garbage);
+  EXPECT_FALSE(fromGarbage.readBytes_.has_value());
+  EXPECT_FALSE(fromGarbage.writeBytes_.has_value());
 
   std::istringstream empty{""};
-  EXPECT_FALSE(rm::diskIoBytesFromProcIo(empty).has_value());
+  auto fromEmpty = rm::diskIoBytesFromProcIo(empty);
+  EXPECT_FALSE(fromEmpty.readBytes_.has_value());
+  EXPECT_FALSE(fromEmpty.writeBytes_.has_value());
 
-  // One key alone is a failed reading, not a zero for the other.
+  // Each counter stands on its own: a missing key empties only its own column
+  // instead of discarding the one that was there.
   std::istringstream onlyRead{"read_bytes: 8192\n"};
-  EXPECT_FALSE(rm::diskIoBytesFromProcIo(onlyRead).has_value());
+  auto fromOnlyRead = rm::diskIoBytesFromProcIo(onlyRead);
+  ASSERT_TRUE(fromOnlyRead.readBytes_.has_value());
+  EXPECT_DOUBLE_EQ(fromOnlyRead.readBytes_.value(), 8192.0);
+  EXPECT_FALSE(fromOnlyRead.writeBytes_.has_value());
 }
 #endif
 
@@ -188,38 +203,44 @@ TEST(ResourceMonitor, IoStallSecondsFromPressureReadsSomeAndRejectsGarbage) {
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
-  constexpr rm::Sample base{
-      .elapsedSeconds_ = 1.0,
-      .timestampMs_ = 1000,
-      .rssBytes_ = 2048u,
-      .cpuPercent_ = 50.0,
-      .diskIoBytes_ =
-          rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u},
-      .ioStallPercent_ = 25.0,
-      .rebuildId_ = 7u};
+  constexpr rm::Sample base{.elapsedSeconds_ = 1.0,
+                            .timestampMs_ = 1000,
+                            .rssBytes_ = 2048u,
+                            .cpuPercent_ = 50.0,
+                            .readBytesPerSecond_ = 8192.0,
+                            .writeBytesPerSecond_ = 4096.0,
+                            .ioStallPercent_ = 25.0,
+                            .rebuildId_ = 7u};
   EXPECT_EQ(rm::formatTsvRow(base),
-            "1.0\t1000\t2048\t50.0\t8192\t4096\t25.0\t7\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t7\n");
 
   auto noRss = base;
   noRss.rssBytes_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noRss),
-            "1.0\t1000\t\t50.0\t8192\t4096\t25.0\t7\n");
+            "1.0\t1000\t\t50.0\t8192.0\t4096.0\t25.0\t7\n");
 
   auto noCpu = base;
   noCpu.cpuPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noCpu),
-            "1.0\t1000\t2048\t\t8192\t4096\t25.0\t7\n");
+            "1.0\t1000\t2048\t\t8192.0\t4096.0\t25.0\t7\n");
 
-  // One failed reading empties both counters, never just one of them.
-  auto noDiskIo = base;
-  noDiskIo.diskIoBytes_ = std::nullopt;
-  EXPECT_EQ(rm::formatTsvRow(noDiskIo), "1.0\t1000\t2048\t50.0\t\t\t25.0\t7\n");
+  // The two rates are independent, and the differing values show that each
+  // lands in its own column.
+  auto noReadRate = base;
+  noReadRate.readBytesPerSecond_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(noReadRate),
+            "1.0\t1000\t2048\t50.0\t\t4096.0\t25.0\t7\n");
+
+  auto noWriteRate = base;
+  noWriteRate.writeBytesPerSecond_ = std::nullopt;
+  EXPECT_EQ(rm::formatTsvRow(noWriteRate),
+            "1.0\t1000\t2048\t50.0\t8192.0\t\t25.0\t7\n");
 
   // On a non-Linux machine there is no stall reading, so that cell is empty.
   auto noIoStall = base;
   noIoStall.ioStallPercent_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noIoStall),
-            "1.0\t1000\t2048\t50.0\t8192\t4096\t\t7\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t\t7\n");
 
   // Most rows look like this, because no rebuild is running. `rebuild_id` is
   // the last column, so the row ends in a tab. A consumer that strips trailing
@@ -227,40 +248,59 @@ TEST(ResourceMonitor, FormatTsvRowFillsMissingReadingsWithEmptyCells) {
   auto noRebuild = base;
   noRebuild.rebuildId_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(noRebuild),
-            "1.0\t1000\t2048\t50.0\t8192\t4096\t25.0\t\n");
+            "1.0\t1000\t2048\t50.0\t8192.0\t4096.0\t25.0\t\n");
 
   auto nothing = base;
   nothing.rssBytes_ = std::nullopt;
   nothing.cpuPercent_ = std::nullopt;
-  nothing.diskIoBytes_ = std::nullopt;
+  nothing.readBytesPerSecond_ = std::nullopt;
+  nothing.writeBytesPerSecond_ = std::nullopt;
   nothing.ioStallPercent_ = std::nullopt;
   nothing.rebuildId_ = std::nullopt;
   EXPECT_EQ(rm::formatTsvRow(nothing), "1.0\t1000\t\t\t\t\t\t\n");
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, SecondsToPercentTrackerComputesPercentBetweenReadings) {
-  // Baseline 0.0s at elapsed 0.0s; 0.5 CPU-s over 1.0 wall-s is 50% of a core.
-  rm::SecondsToPercentTracker tracker{0.0};
+TEST(ResourceMonitor, RateTrackerComputesRateBetweenReadings) {
+  // Baseline 0.0s at elapsed 0.0s; 0.5 CPU-s over 1.0 wall-s is a rate of 0.5,
+  // which the caller turns into the 50% of a core that the log shows.
+  rm::RateTracker tracker{0.0};
   auto first = tracker.update(0.5, 1.0);
   ASSERT_TRUE(first.has_value());
-  EXPECT_DOUBLE_EQ(first.value(), 50.0);
-  // Baseline advanced: 1.0 more CPU-s over 1.0 more wall-s is 100%.
+  EXPECT_DOUBLE_EQ(first.value(), 0.5);
+  // Baseline advanced: 1.0 more CPU-s over 1.0 more wall-s is a rate of 1.0.
   auto second = tracker.update(1.5, 2.0);
   ASSERT_TRUE(second.has_value());
-  EXPECT_DOUBLE_EQ(second.value(), 100.0);
+  EXPECT_DOUBLE_EQ(second.value(), 1.0);
 }
 
 // _____________________________________________________________________________
-TEST(ResourceMonitor, SecondsToPercentTrackerReportsNothingWhenUncomputable) {
+TEST(ResourceMonitor, RateTrackerReportsNothingWhenUncomputable) {
   // No reading this tick.
-  EXPECT_FALSE(
-      rm::SecondsToPercentTracker{0.0}.update(std::nullopt, 1.0).has_value());
+  EXPECT_FALSE(rm::RateTracker{0.0}.update(std::nullopt, 1.0).has_value());
   // No baseline yet.
-  EXPECT_FALSE(
-      rm::SecondsToPercentTracker{std::nullopt}.update(0.5, 1.0).has_value());
+  EXPECT_FALSE(rm::RateTracker{std::nullopt}.update(0.5, 1.0).has_value());
   // No time elapsed since the baseline.
-  EXPECT_FALSE(rm::SecondsToPercentTracker{0.0}.update(0.5, 0.0).has_value());
+  EXPECT_FALSE(rm::RateTracker{0.0}.update(0.5, 0.0).has_value());
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, RebuildIndexSignalNumbersRebuildsFromOne) {
+  ad_utility::RebuildIndexSignal signal;
+  // No rebuild yet. The answer is empty and not 0, which a consumer reading
+  // the column would take for a rebuild that has the id 0.
+  EXPECT_FALSE(signal.poll().has_value());
+
+  signal.markStart();
+  EXPECT_THAT(signal.poll(), ::testing::Optional(1u));
+
+  signal.markEnd();
+  EXPECT_FALSE(signal.poll().has_value());
+
+  // The next rebuild gets the next number, so two rebuilds of one server run
+  // can be told apart in the log.
+  signal.markStart();
+  EXPECT_THAT(signal.poll(), ::testing::Optional(2u));
 }
 
 // _____________________________________________________________________________
@@ -286,6 +326,20 @@ TEST(ResourceMonitor, SetReadersAfterStartThrows) {
   // must throw.
   AD_EXPECT_THROW_WITH_MESSAGE(monitor.setReadersForTesting({}),
                                ::testing::HasSubstr("before `start`"));
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, SetRebuildIndexSignalAfterStartThrows) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  ResourceMonitor monitor;
+  // A long interval so the sampling thread never actually writes a row.
+  monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
+  // The sampling thread reads the signal on every tick, so replacing it
+  // afterwards would race that read and must throw.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      monitor.setRebuildIndexSignal(
+          std::make_shared<ad_utility::RebuildIndexSignal>()),
+      ::testing::HasSubstr("before `start`"));
 }
 
 // _____________________________________________________________________________
@@ -334,7 +388,8 @@ TEST(ResourceMonitor, AppendModeKeepsAMatchingHeader) {
   // The steady state: a log written by a server of this same version, so its
   // header is the one this build writes. Append mode adds no second header
   // and leaves the existing row alone.
-  const std::string existingRow = "0.0\t1000\t2048\t10.0\t8192\t4096\t1.0";
+  const std::string existingRow =
+      "0.0\t1000\t2048\t10.0\t8192.0\t4096.0\t1.0\t";
   {
     std::ofstream existing{path};
     existing << rm::tsvHeader << "\n" << existingRow << "\n";
@@ -362,7 +417,7 @@ TEST(ResourceMonitor, AppendModeRotatesAFileWithAnOutdatedHeader) {
       ad_utility::testing::makeTemporaryDirectory("resourceMonitorRotation");
   const fs::path path = fs::path{directory} / "resource-usage.tsv";
   // A log left over from a server that ran before the disk IO columns existed:
-  // a four-column header plus one four-column row. Appending seven-column rows
+  // a four-column header plus one four-column row. Appending eight-column rows
   // to it would leave one file holding rows of two widths, which no
   // header-driven reader can parse. So the old file is moved aside intact and
   // a fresh one is started, and every file on disk keeps a single width.
@@ -498,13 +553,17 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   auto signal = std::make_shared<ad_utility::RebuildIndexSignal>();
   {
     ResourceMonitor monitor;
-    // Readers that always return the same value, so the row is known in
-    // advance. Neither cumulative counter grows, so both percentages are 0.
+    // The RSS reading is written out as it is; the other three are cumulative
+    // counters that become rates. All of them stand still except the written
+    // bytes, so exactly one rate column is positive and a rate landing in a
+    // neighbouring column would show up. The rate itself is not asserted: it
+    // is the growth divided by an interval the test does not control.
     monitor.setReadersForTesting(
         {.rssReader_ = []() -> std::optional<uint64_t> { return 2048u; },
          .cpuReader_ = []() -> std::optional<double> { return 1.0; },
-         .diskIoReader_ = []() -> std::optional<rm::DiskIoBytes> {
-           return rm::DiskIoBytes{.readBytes_ = 8192u, .writeBytes_ = 4096u};
+         .diskIoReader_ = [writeBytes = 0.0]() mutable -> rm::DiskIoBytes {
+           writeBytes += 1e6;
+           return {.readBytes_ = 8192.0, .writeBytes_ = writeBytes};
          },
          .ioStallReader_ = []() -> std::optional<double> { return 2.0; }});
     // Marked before the sampler starts, so every row it writes carries the id.
@@ -517,10 +576,49 @@ TEST(ResourceMonitor, SampledRowsCarryTheReadings) {
   }
   auto lines = readLines(path);
   ASSERT_GE(lines.size(), 2u);
-  // Every reading should be in its own column. The first two columns change on
-  // every run, so only the end of the row is checked. The values differ from
-  // each other, so a wrong order would show up here.
-  EXPECT_THAT(lines[1], ::testing::EndsWith("\t2048\t0.0\t8192\t4096\t0.0\t1"));
+  // Every reading has to land in its own column, so the row is checked cell by
+  // cell. The first two hold the elapsed time and a timestamp, which differ on
+  // every run.
+  const std::vector<std::string> cells = absl::StrSplit(lines[1], '\t');
+  ASSERT_EQ(cells.size(), 8u);
+  EXPECT_EQ(cells[2], "2048");          // rss, taken over unchanged
+  EXPECT_EQ(cells[3], "0.0");           // cpu, a counter that stands still
+  EXPECT_EQ(cells[4], "0.0");           // read bytes, likewise
+  EXPECT_GT(std::stod(cells[5]), 0.0);  // written bytes, the growing counter
+  EXPECT_EQ(cells[6], "0.0");           // io stall, standing again
+  EXPECT_EQ(cells[7], "1");             // the running rebuild's id
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, RowsCarryTheRebuildIdOnlyWhileARebuildRuns) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto signal = std::make_shared<ad_utility::RebuildIndexSignal>();
+  {
+    ResourceMonitor monitor;
+    monitor.setRebuildIndexSignal(signal);
+    // A short interval and a sleep per phase, so about ten rows are written
+    // before the rebuild, ten during it and ten after it.
+    monitor.start(path, ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    signal->markStart();
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    signal->markEnd();
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+  }
+  auto lines = readLines(path);
+  ASSERT_GE(lines.size(), 2u);
+  // The signal is polled every tick rather than read once at startup, so the
+  // column changes during the run: rows written while the rebuild ran carry
+  // its id, the rest are empty. Which row lands on a phase boundary is up to
+  // the scheduler, so the values that occur are checked, not how often.
+  std::set<std::string> rebuildIds;
+  for (auto it = lines.begin() + 1; it != lines.end(); ++it) {
+    const std::vector<std::string> cells = absl::StrSplit(*it, '\t');
+    ASSERT_EQ(cells.size(), 8u);
+    rebuildIds.insert(cells[7]);
+  }
+  EXPECT_THAT(rebuildIds, ::testing::UnorderedElementsAre("", "1"));
 }
 
 // _____________________________________________________________________________
@@ -569,6 +667,33 @@ TEST(ResourceMonitor, AMissingIoStallReadingLeavesTheColumnEmpty) {
   // was set.
   EXPECT_EQ(std::count(lines[1].begin(), lines[1].end(), '\t'), 7);
   EXPECT_THAT(lines[1], ::testing::EndsWith("\t\t"));
+}
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, AMissingDiskIoReadingLeavesBothColumnsEmpty) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    ResourceMonitor monitor;
+    // What a kernel built without `CONFIG_TASK_IO_ACCOUNTING` does, and every
+    // machine that is neither Linux nor macOS: no counter is ever reported, so
+    // neither tracker ever gets a baseline.
+    monitor.setReadersForTesting(
+        {.rssReader_ = []() -> std::optional<uint64_t> { return 2048u; },
+         .diskIoReader_ = []() -> rm::DiskIoBytes { return {}; }});
+    // A short interval plus a longer sleep, so at least one row is written.
+    monitor.start(path, ResourceMonitor::Mode::Truncate,
+                  std::chrono::milliseconds{5});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+  }
+  auto lines = readLines(path);
+  ASSERT_GE(lines.size(), 2u);
+  // Only the two disk cells are empty; the row keeps all eight columns and the
+  // readings around them still arrive.
+  const std::vector<std::string> cells = absl::StrSplit(lines[1], '\t');
+  ASSERT_EQ(cells.size(), 8u);
+  EXPECT_EQ(cells[2], "2048");
+  EXPECT_EQ(cells[4], "");
+  EXPECT_EQ(cells[5], "");
 }
 
 // _____________________________________________________________________________

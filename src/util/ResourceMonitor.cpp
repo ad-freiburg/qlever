@@ -96,66 +96,60 @@ std::optional<double> cpuTimeSeconds() {
 }
 
 // _____________________________________________________________________________
-std::optional<double> SecondsToPercentTracker::update(
-    std::optional<double> seconds, double elapsed) {
+std::optional<double> RateTracker::update(std::optional<double> value,
+                                          double elapsed) {
   // Keep the old baseline on a failed reading, so the next value averages
   // over the whole gap rather than jumping.
-  if (!seconds.has_value()) {
+  if (!value.has_value()) {
     return std::nullopt;
   }
-  std::optional<double> percent;
-  if (lastSeconds_.has_value() && elapsed > lastElapsed_) {
-    percent = (seconds.value() - lastSeconds_.value()) /
-              (elapsed - lastElapsed_) * 100.0;
+  std::optional<double> rate;
+  if (lastValue_.has_value() && elapsed > lastElapsed_) {
+    rate = (value.value() - lastValue_.value()) / (elapsed - lastElapsed_);
   }
-  lastSeconds_ = seconds;
+  lastValue_ = value;
   lastElapsed_ = elapsed;
-  return percent;
+  return rate;
 }
 
 // _____________________________________________________________________________
-std::optional<DiskIoBytes> currentDiskIoBytes() {
+DiskIoBytes currentDiskIoBytes() {
 #if defined(__APPLE__)
   // Not `getrusage`'s `ru_inblock`/`ru_oublock`: macOS leaves those at zero.
   rusage_info_current info;
   if (proc_pid_rusage(getpid(), RUSAGE_INFO_CURRENT,
                       reinterpret_cast<rusage_info_t*>(&info)) != 0) {
-    return std::nullopt;
+    return {};
   }
-  return DiskIoBytes{.readBytes_ = info.ri_diskio_bytesread,
-                     .writeBytes_ = info.ri_diskio_byteswritten};
+  return DiskIoBytes{
+      .readBytes_ = static_cast<double>(info.ri_diskio_bytesread),
+      .writeBytes_ = static_cast<double>(info.ri_diskio_byteswritten)};
 #elif defined(__linux__)
   std::ifstream procIo{"/proc/self/io"};
   return diskIoBytesFromProcIo(procIo);
 #else
-  return std::nullopt;
+  return {};
 #endif
 }
 
 #if defined(__linux__)
 // _____________________________________________________________________________
-std::optional<DiskIoBytes> diskIoBytesFromProcIo(std::istream& procIo) {
+DiskIoBytes diskIoBytesFromProcIo(std::istream& procIo) {
   // `/proc/self/io` is a list of `key: value` lines whose set has grown
-  // across kernel versions, so scan for the two keys instead of counting
-  // lines.
-  std::optional<uint64_t> readBytes;
-  std::optional<uint64_t> writeBytes;
+  // across kernel versions, so scan for the two keys instead of counting lines.
+  DiskIoBytes bytes;
   std::string key;
   uint64_t value;
 
   while (procIo >> key >> value) {
     if (key == "read_bytes:") {
-      readBytes = value;
+      bytes.readBytes_ = static_cast<double>(value);
     } else if (key == "write_bytes:") {
-      writeBytes = value;
+      bytes.writeBytes_ = static_cast<double>(value);
     }
   }
 
-  if (!readBytes.has_value() || !writeBytes.has_value()) {
-    return std::nullopt;
-  }
-  return DiskIoBytes{.readBytes_ = readBytes.value(),
-                     .writeBytes_ = writeBytes.value()};
+  return bytes;
 }
 #endif
 
@@ -218,22 +212,14 @@ std::string formatCell(const T& value) {
 
 // _____________________________________________________________________________
 std::string formatTsvRow(const Sample& sample) {
-  std::string readBytes;
-  std::string writeBytes;
-  if (sample.diskIoBytes_.has_value()) {
-    readBytes = formatCell(sample.diskIoBytes_->readBytes_);
-    writeBytes = formatCell(sample.diskIoBytes_->writeBytes_);
-  }
-
   const std::array tsvCells{formatCell(sample.elapsedSeconds_),
                             formatCell(sample.timestampMs_),
                             formatCell(sample.rssBytes_),
                             formatCell(sample.cpuPercent_),
-                            std::move(readBytes),
-                            std::move(writeBytes),
+                            formatCell(sample.readBytesPerSecond_),
+                            formatCell(sample.writeBytesPerSecond_),
                             formatCell(sample.ioStallPercent_),
                             formatCell(sample.rebuildId_)};
-
   return absl::StrJoin(tsvCells, "\t") + "\n";
 }
 
@@ -352,9 +338,20 @@ void ResourceMonitor::setRebuildIndexSignal(
 // _____________________________________________________________________________
 void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
   const Timer timer{Timer::Started};
-  resource_monitor::SecondsToPercentTracker cpuTracker{readers_.cpuReader_()};
-  resource_monitor::SecondsToPercentTracker ioStallTracker{
-      readers_.ioStallReader_()};
+  resource_monitor::RateTracker cpuTracker{readers_.cpuReader_()};
+  resource_monitor::RateTracker ioStallTracker{readers_.ioStallReader_()};
+  const auto initialDiskIo = readers_.diskIoReader_();
+  resource_monitor::RateTracker readBytesTracker{initialDiskIo.readBytes_};
+  resource_monitor::RateTracker writeBytesTracker{initialDiskIo.writeBytes_};
+
+  // Cpu time and I/O stall are in seconds, so their rate is a fraction of
+  // the wall clock; the log stores it as a percentage.
+  auto toPercent = [](std::optional<double> rate) -> std::optional<double> {
+    if (!rate.has_value()) {
+      return std::nullopt;
+    }
+    return rate.value() * 100.0;
+  };
 
   // Absolute deadlines keep the ticks on a steady grid, no matter how
   // long each sample takes.
@@ -368,11 +365,13 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
     deadline += interval;
     const double elapsed = Timer::toSeconds(timer.value());
 
+    const auto [readBytes, writeBytes] = readers_.diskIoReader_();
+
     // A stall is a fraction of one timeline, so it cannot exceed 100%; the
     // reading and the elapsed clock are taken at slightly different instants,
     // so a tick can still compute a hair over.
     std::optional<double> ioStallPercent{
-        ioStallTracker.update(readers_.ioStallReader_(), elapsed)};
+        toPercent(ioStallTracker.update(readers_.ioStallReader_(), elapsed))};
     if (ioStallPercent.has_value()) {
       ioStallPercent = std::clamp(ioStallPercent.value(), 0.0, 100.0);
     }
@@ -380,8 +379,10 @@ void ResourceMonitor::runLoop(std::chrono::milliseconds interval) {
         {.elapsedSeconds_ = elapsed,
          .timestampMs_ = epochMillis(std::chrono::system_clock::now()),
          .rssBytes_ = readers_.rssReader_(),
-         .cpuPercent_ = cpuTracker.update(readers_.cpuReader_(), elapsed),
-         .diskIoBytes_ = readers_.diskIoReader_(),
+         .cpuPercent_ =
+             toPercent(cpuTracker.update(readers_.cpuReader_(), elapsed)),
+         .readBytesPerSecond_ = readBytesTracker.update(readBytes, elapsed),
+         .writeBytesPerSecond_ = writeBytesTracker.update(writeBytes, elapsed),
          .ioStallPercent_ = ioStallPercent,
          .rebuildId_ =
              rebuildIndexSignal_ ? rebuildIndexSignal_->poll() : std::nullopt});
