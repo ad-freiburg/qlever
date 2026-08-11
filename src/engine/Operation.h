@@ -379,7 +379,7 @@ class Operation {
     return _executionContext;
   }
 
-  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+  const qlever::Allocator<Id>& allocator() const {
     return getExecutionContext()->getAllocator();
   }
 

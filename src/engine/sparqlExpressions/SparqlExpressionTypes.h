@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
@@ -120,7 +121,7 @@ struct EvaluationContext {
   std::vector<ColumnIndex> _columnsByWhichResultIsSorted;
 
   /// Let the expression evaluation also respect the memory limit.
-  ad_utility::AllocatorWithLimit<Id> _allocator;
+  qlever::Allocator<Id> _allocator;
 
   /// The local vocabulary of the input.
   LocalVocab& _localVocab;
@@ -158,7 +159,7 @@ struct EvaluationContext {
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     IdTableView<0> inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    const qlever::Allocator<Id>& allocator,
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
@@ -167,7 +168,7 @@ struct EvaluationContext {
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    const qlever::Allocator<Id>& allocator,
                     LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline)

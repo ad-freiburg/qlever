@@ -23,7 +23,7 @@ std::chrono::milliseconds QueryExecutionContext::websocketUpdateInterval() {
 // _____________________________________________________________________________
 QueryExecutionContext::QueryExecutionContext(
     std::shared_ptr<const Index> index, QueryResultCache* const cache,
-    ad_utility::AllocatorWithLimit<Id> allocator,
+    qlever::Allocator<Id> allocator,
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,

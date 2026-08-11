@@ -27,7 +27,7 @@ void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
     const VariableToColumnMap& variableToColumnMap, IdTableView<0> inputTable,
-    const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
+    const qlever::Allocator<Id>& allocator, LocalVocab& localVocab,
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
