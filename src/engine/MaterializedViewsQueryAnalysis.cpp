@@ -276,6 +276,14 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   }
   auto bObj = b.o_.getVariable();
 
+  // All three variables must actually be columns of the view (e.g. this is
+  // not the case if the view's query aggregates them away).
+  const auto& viewCols = view->variableToColumnMap();
+  if (!viewCols.contains(aSubj) || !viewCols.contains(chainVar) ||
+      !viewCols.contains(bObj)) {
+    return false;
+  }
+
   // Insert chain to cache.
   ChainedPredicates preds{aPred.value(), bPred.value()};
   auto [it, wasNew] = simpleChainCache_.try_emplace(preds, nullptr);
@@ -297,6 +305,13 @@ bool QueryPatternCache::analyzeJoinStar(
     return false;
   }
   Variable subject = triples[0].s_.getVariable();
+
+  // The subject must actually be a column of the view (e.g. this is not the
+  // case if the view's query aggregates it away).
+  const auto& viewCols = view->variableToColumnMap();
+  if (!viewCols.contains(subject)) {
+    return false;
+  }
 
   std::vector<StarArm> arms;
   ad_utility::HashSet<std::string> predicates;
@@ -326,6 +341,10 @@ bool QueryPatternCache::analyzeJoinStar(
     }
     // Object variables must be distinct.
     if (!objects.insert(obj).second) {
+      return false;
+    }
+    // The object must actually be a column of the view.
+    if (!viewCols.contains(obj)) {
       return false;
     }
     arms.push_back({std::string{pred.value()}, obj});

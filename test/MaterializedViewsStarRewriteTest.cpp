@@ -137,3 +137,29 @@ INSTANTIATE_TEST_SUITE_P(MaterializedViewsTest,
 
                              // Forced greedy planning.
                              RewriteTestParams{std::string{simpleStar}, 1}));
+
+// _____________________________________________________________________________
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3193: the
+// view's query aggregates one of the star's arms away (`?o1` only occurs
+// inside `COUNT(?o1)`), so `?o1` is not an actual column of the view and the
+// star must not be registered for pattern-based rewriting.
+TEST(MaterializedViewsStarRewriteAggregationTest, aggregatingStarNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingStarView",
+      "SELECT ?s (COUNT(?o1) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
+      "GROUP BY ?s");
+}
