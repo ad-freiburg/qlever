@@ -575,11 +575,15 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // `wrap()` / `std::ref`; the declaration order here guarantees that.
   ad_utility::ExceptionCollector exceptionCollector;
 
+  // NOTE: The init-captures of `insertionPositions` (instead of capturing the
+  // structured binding directly) are needed because Clang with `-fopenmp` does
+  // not support capturing structured bindings.
   if (index.usePatterns()) {
     net::post(threadPool, exceptionCollector.wrap([&newIndex, &index,
-                                                   &insertionPositions]() {
+                                                   &insertionPositions =
+                                                       insertionPositions]() {
       newIndex.getPatterns() = index.getPatterns().cloneAndRemap(
-          [&insertionPositions](const Id& oldId) {
+          [&insertionPositions = insertionPositions](const Id& oldId) {
             return remapVocabId(oldId, insertionPositions);
           });
       newIndex.writePatternsToFile();
@@ -601,7 +605,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   for (const auto& [permutationEnums, isInternal] : permutationSettings) {
     auto [a, b] = permutationEnums;
     auto getPermutation =
-        [&index, isInternal](Permutation::Enum permEnum) -> const Permutation& {
+        [&index, isInternal = isInternal](
+            Permutation::Enum permEnum) -> const Permutation& {
       const auto& perm = index.getPermutation(permEnum);
       return isInternal ? perm.internalPermutation() : perm;
     };

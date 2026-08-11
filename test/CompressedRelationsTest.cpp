@@ -313,7 +313,10 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
   // the `bool` is true if the `col0` is a "large" relation, meaning that the
   // metadata is explicitly stored and not extracted from the compressed data on
   // the fly.
-  auto getMetadataFromId = [&](Id col0) {
+  //
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto getMetadataFromId = [&, &metaData = metaData](Id col0) {
     auto it = ql::ranges::lower_bound(metaData, col0, {},
                                       &CompressedRelationMetadata::col0Id_);
     if (it != metaData.end() && it->col0Id_ == col0) {
@@ -482,7 +485,10 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   // Test that the result of calling `getFirstAndLastTriple` for the index from
   // above with the given `ScanSpecification` matches the given `matcher`.
   using Loc = ad_utility::source_location;
-  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto testFirstAndLastBlock = [&, &readerPtr = readerPtr](
+                                   ScanSpecification spec, auto matcher,
                                    const LocatedTriplesPerBlock& =
                                        emptyLocatedTriples,
                                    Loc loc = AD_CURRENT_SOURCE_LOC()) {
@@ -539,7 +545,10 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
 
   // Test infrastructure.
   using Loc = ad_utility::source_location;
-  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto testFirstAndLastBlock = [&, &readerPtr = readerPtr](
+                                   ScanSpecification spec, auto matcher,
                                    Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
     auto blockMetadata =

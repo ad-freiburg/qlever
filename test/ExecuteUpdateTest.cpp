@@ -476,9 +476,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         auto [transformedTriples, localVocab] =
             ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
                                                     triples);
+        // NOTE: The init-capture is needed because Clang with `-fopenmp` does
+        // not support capturing a structured binding directly.
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
-            [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
+            [&localVocab = localVocab,
+             &TripleComponentMatcher](const auto& expectedTriple) {
               return ElementsAre(
                   TripleComponentMatcher(localVocab, expectedTriple.at(0)),
                   TripleComponentMatcher(localVocab, expectedTriple.at(1)),

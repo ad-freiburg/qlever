@@ -190,8 +190,11 @@ CPP_template_def(typename Visitor)(
   // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
   ql::ranges::for_each(hashMapEntries, [&vis](const Pair& pair) {
     auto& [jsonPath, hashMapEntry] = pair;
-    hashMapEntry.visit(
-        [&jsonPath, &vis](auto& data) { std::invoke(vis, jsonPath, data); });
+    // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+    // support capturing a structured binding directly.
+    hashMapEntry.visit([&jsonPath = jsonPath, &vis](auto& data) {
+      std::invoke(vis, jsonPath, data);
+    });
   });
 }
 

@@ -173,12 +173,14 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
 
   auto [localVocabOut, mapping] = ad_utility::detail::deserializeLocalVocab(
       reader, qec->getLocalVocabContext());
-  auto fromMapping = [&]() {
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto fromMapping = [&mapping = mapping]() {
     return ::ranges::to<std::vector>(
         mapping | ql::views::values |
         ql::views::transform([](Id id) { return *id.getLocalVocabIndex(); }));
   };
-  auto fromMappingOrigin = [&]() {
+  auto fromMappingOrigin = [&mapping = mapping]() {
     return ::ranges::to<std::vector>(
         mapping | ql::views::keys | ql::views::transform([](Id::T id) {
           return *Id::fromBits(id).getLocalVocabIndex();

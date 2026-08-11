@@ -1070,7 +1070,12 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
       }
     } else {
       // Multiple `colId`s -> we have to read the block.
-      const auto& optionalBlock = [&]() -> std::optional<DecompressedBlock> {
+      //
+      // NOTE: The init-captures (here and in the other lambdas of this file)
+      // are needed because Clang with `-fopenmp` does not support capturing a
+      // structured binding directly.
+      const auto& optionalBlock = [&, &i = i, &blockMetadata = blockMetadata]()
+          -> std::optional<DecompressedBlock> {
         if (i == 0) {
           return readPossiblyIncompleteBlock(scanSpec, scanConfig,
                                              blockMetadata, std::nullopt,
@@ -1753,13 +1758,15 @@ CPP_template(typename Range)(
   auto checkUniquenessAndOrder = [](const auto& blockPair) {
     const auto& [b1, b2] = blockPair;
     // Blocks must be unique.
-    AD_CONTRACT_CHECK(b1 != b2 && b1.blockIndex_ != b2.blockIndex_, [&] {
-      return createErrorMessage(b1, b2, "Found block metadata duplicates\n");
-    });
+    AD_CONTRACT_CHECK(b1 != b2 && b1.blockIndex_ != b2.blockIndex_,
+                      [&, &b1 = b1, &b2 = b2] {
+                        return createErrorMessage(
+                            b1, b2, "Found block metadata duplicates\n");
+                      });
     // Blocks must adhere to ascending order.
     AD_CONTRACT_CHECK(
         b1.lastTriple_ < b2.lastTriple_ && b1.blockIndex_ < b2.blockIndex_,
-        [&] {
+        [&, &b1 = b1, &b2 = b2] {
           return createErrorMessage(b1, b2,
                                     "Found block metadata order violation\n");
         });
@@ -1785,15 +1792,17 @@ CPP_template(typename Range)(requires ql::ranges::input_range<Range>) static voi
     const auto& [b1, b2] = blockPair;
     // Consecutive blocks must contain equivalent values over the fixed
     // columns.
-    AD_CONTRACT_CHECK(b1.isConsistentWith(b2, firstFreeColIndex), [&] {
-      return createErrorMessage(
-          b1, b2, "Found column inconsistency between two blocks\n");
-    });
+    AD_CONTRACT_CHECK(
+        b1.isConsistentWith(b2, firstFreeColIndex), [&, &b1 = b1, &b2 = b2] {
+          return createErrorMessage(
+              b1, b2, "Found column inconsistency between two blocks\n");
+        });
     // All blocks, except the first and last, must contain consistent column
     // values over their triples up to the first free column.
     if (i > 0) {
       AD_CONTRACT_CHECK(
-          !b1.containsInconsistentTriples(firstFreeColIndex), [&] {
+          !b1.containsInconsistentTriples(firstFreeColIndex),
+          [&, &b1 = b1, &b2 = b2] {
             return createErrorMessage(
                 b1, b2,
                 absl::StrCat("The following First Block contains non-constant "

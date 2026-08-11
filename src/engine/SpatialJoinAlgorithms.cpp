@@ -130,11 +130,14 @@ SpatialJoinAlgorithms::libspatialjoinParse(
 
   // Iterate over all rows in `idTable` and add the geometries from `column`
   // to the parallel WKT parser.
+  //
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
   const auto& geoms = idTable->getColumn(column);
   ad_utility::chunkedForLoop<wktParserChunkSizeForCancellationCheck>(
       0, idTable->size(),
-      [&parser, &geoms, &leftOrRightSide, &idTable,
-       &boundingBoxes](size_t row) {
+      [&parser, &geoms, &leftOrRightSide, &idTable = idTable,
+       &boundingBoxes = boundingBoxes](size_t row) {
         parser.addValueIdToQueue(
             geoms[row], row, leftOrRightSide,
             getBoundingBoxFromIdTable(idTable, boundingBoxes, row));
@@ -1108,27 +1111,32 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     });
 
     std::set<AddedPair> pairs;
-    ql::ranges::for_each(results, [&](Value& res) {
-      size_t rowLeft = res.second.row_;
-      size_t rowRight = i;
-      if (!leftResSmaller) {
-        std::swap(rowLeft, rowRight);
-      }
-      auto distance = computeDist(res.second, entry.value());
-      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
-      if (distance.getDouble() * 1000 <= maxDist.value()) {
-        // make sure, that no duplicate elements are inserted in the result
-        // table. As duplicates can only occur, when areas are not approximated
-        // as midpoints, the additional runtime can be saved in that case
-        if (useMidpointForAreas_) {
-          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                              rowRight, distance);
-        } else if (pairs.insert(AddedPair{rowLeft, rowRight}).second) {
-          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                              rowRight, distance);
-        }
-      }
-    });
+    // NOTE: The init-captures are needed because Clang with `-fopenmp` does
+    // not support capturing a structured binding directly.
+    ql::ranges::for_each(
+        results, [&, &idTableLeft = idTableLeft, &idTableRight = idTableRight,
+                  &maxDist = maxDist](Value& res) {
+          size_t rowLeft = res.second.row_;
+          size_t rowRight = i;
+          if (!leftResSmaller) {
+            std::swap(rowLeft, rowRight);
+          }
+          auto distance = computeDist(res.second, entry.value());
+          AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
+          if (distance.getDouble() * 1000 <= maxDist.value()) {
+            // make sure, that no duplicate elements are inserted in the result
+            // table. As duplicates can only occur, when areas are not
+            // approximated as midpoints, the additional runtime can be saved in
+            // that case
+            if (useMidpointForAreas_) {
+              addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                                  rowRight, distance);
+            } else if (pairs.insert(AddedPair{rowLeft, rowRight}).second) {
+              addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                                  rowRight, distance);
+            }
+          }
+        });
   }
   auto resTable =
       Result(std::move(result), std::vector<ColumnIndex>{},

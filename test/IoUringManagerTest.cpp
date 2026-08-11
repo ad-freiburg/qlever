@@ -250,8 +250,10 @@ TYPED_TEST(IoUringManagerTest, MultipleBatchesSequential) {
 
   TypeParam manager(64);
 
-  auto makeAndWait = [&](uint64_t offset, size_t numBytes,
-                         std::string_view expected) {
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto makeAndWait = [&, &fd = fd](uint64_t offset, size_t numBytes,
+                                   std::string_view expected) {
     ReadBatchForTesting batch;
     batch.add(offset, numBytes);
     manager.wait(batch.submitTo(manager, fd));

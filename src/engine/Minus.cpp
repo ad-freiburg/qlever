@@ -155,11 +155,14 @@ IdTable Minus::copyMatchingRows(
   }
   result.resize(nonMatchingIndices.size());
 
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
   for (const auto& [outputCol, inputCol] :
        ::ranges::views::zip(result.getColumns(), left.getColumns())) {
     ad_utility::chunkedCopy(
-        ql::views::transform(nonMatchingIndices,
-                             [&inputCol](size_t row) { return inputCol[row]; }),
+        ql::views::transform(
+            nonMatchingIndices,
+            [&inputCol = inputCol](size_t row) { return inputCol[row]; }),
         outputCol.begin(), qlever::joinHelpers::CHUNK_SIZE,
         [this]() { checkCancellation(); });
   }

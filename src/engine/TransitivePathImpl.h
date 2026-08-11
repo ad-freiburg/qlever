@@ -352,8 +352,10 @@ class TransitivePathImpl : public TransitivePathBase {
     std::optional<ColumnIndex> graphColumn = getActualGraphColumnIndex(tree);
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
         computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);
+    // NOTE: The init-capture of `joinColumn` is needed because Clang with
+    // `-fopenmp` does not support capturing a structured binding directly.
     auto columnsToRange = [graphColumn = std::move(graphColumn),
-                           joinColumn](const auto& idTable) {
+                           joinColumn = joinColumn](const auto& idTable) {
       ql::span<const Id> startNodes = idTable.getColumn(joinColumn);
       return graphColumn.has_value()
                  ? InputRangeTypeErased{zipColumns(

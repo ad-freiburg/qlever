@@ -172,12 +172,16 @@ class MinusRowHandler {
     resultTable_.resize(oldSize + indexBuffer_.size());
 
     auto action = [this]() { cancellationHandle_->throwIfCancelled(); };
+    // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+    // support capturing a structured binding directly.
     for (const auto& [outputColumn, inputColumn] : ::ranges::zip_view(
              resultTable_.getColumns(), inputLeft_.value().getColumns())) {
-      chunkedCopy(ql::views::transform(
-                      indexBuffer_,
-                      [&inputColumn](size_t row) { return inputColumn[row]; }),
-                  outputColumn.begin() + oldSize, CHUNK_SIZE, action);
+      chunkedCopy(
+          ql::views::transform(indexBuffer_,
+                               [&inputColumn = inputColumn](size_t row) {
+                                 return inputColumn[row];
+                               }),
+          outputColumn.begin() + oldSize, CHUNK_SIZE, action);
     }
   }
 };

@@ -1217,7 +1217,10 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
                                    io(begR, itFromR, endFromR));
     };
 
-    auto addNotFoundRowIndex = [&]() {
+    // NOTE: The init-captures (also in `doJoin` below) are needed because
+    // Clang with `-fopenmp` does not support capturing a structured binding
+    // directly.
+    auto addNotFoundRowIndex = [&, &fullBlockLeft = fullBlockLeft]() {
       if constexpr (DoOptionalJoinOrMinus) {
         return [this, begL = fullBlockLeft.begin()](auto itFromL) {
           AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
@@ -1235,7 +1238,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
     // Lambda that binds the common arguments for the various calls below
     // (the inputs and the `rowAdder` are always the same, it is just the
     // UNDEF configuration that is different.
-    auto doJoin = [&](auto&&... args) {
+    auto doJoin = [&, &subrangeLeft = subrangeLeft,
+                   &subrangeRight = subrangeRight, &currentElItL = currentElItL,
+                   &currentElItR = currentElItR](auto&&... args) {
       return static_cast<Derived*>(this)->joinSubranges(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR},

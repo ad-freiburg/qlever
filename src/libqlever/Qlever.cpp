@@ -794,8 +794,10 @@ void Qlever::swapInRebuiltIndex(
   // the rebuilt index. The triples that were persisted for the old index
   // are not compatible with the freshly built index (their `Id`s refer to
   // the old vocabulary), so they have to be regenerated.
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
   newIndexAndViews->index_.deltaTriplesManager().modify<void>(
-      [&oldSnapshot, &newSnapshot, &mapping,
+      [&oldSnapshot = oldSnapshot, &newSnapshot, &mapping = mapping,
        &handle](DeltaTriples& deltaTriples) {
         ad_utility::timer::TimeTracer tracer{"swapIndex"};
         deltaTriples.addFromSnapshotDiff(*oldSnapshot, *newSnapshot, mapping,
