@@ -996,12 +996,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, ResponseT& send, MediaType mediaType,
-        const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-        const ad_utility::Timer& requestTimer,
+        const PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
         SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      plannedQuery.parsedQuery(), qet, mediaType, requestTimer,
-      std::move(cancellationHandle));
+      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
+      requestTimer, std::move(cancellationHandle));
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -1192,9 +1191,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // This actually processes the query and sends the result in the
   // requested format.
   co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
-                                  plannedQuery.value(),
-                                  plannedQuery.value().queryExecutionTree(),
-                                  requestTimer, cancellationHandle);
+                                  plannedQuery.value(), requestTimer,
+                                  cancellationHandle);
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"
@@ -1221,12 +1219,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 nlohmann::ordered_json Server::createResponseMetadataForUpdate(
     const Index& index, const LocatedTriplesState& locatedTriples,
-    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-    const UpdateMetadata& updateMetadata,
+    const PlannedQuery& plannedQuery, const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
   AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
   AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
   AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto& qet = plannedQuery.queryExecutionTree();
   auto warnings = qet.collectWarnings();
   warnings.emplace(warnings.begin(),
                    "SPARQL 1.1 Update for QLever is experimental.");
@@ -1376,8 +1374,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 results.push_back(createResponseMetadataForUpdate(
                     index,
                     *deltaTriples.getLocatedTriplesSharedStateReference(),
-                    *plannedUpdate, plannedUpdate->queryExecutionTree(),
-                    updateMetadata, tracer));
+                    *plannedUpdate, updateMetadata, tracer));
                 metadatas.push_back(std::move(updateMetadata));
 
                 AD_LOG_INFO << "Done processing update, total time was "

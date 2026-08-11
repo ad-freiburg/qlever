@@ -224,8 +224,7 @@ class Server {
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
       const Index& index, const LocatedTriplesState& locatedTriples,
-      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-      const UpdateMetadata& updateMetadata,
+      const PlannedQuery& plannedQuery, const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
@@ -393,7 +392,7 @@ class Server {
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, ResponseT& send,
           ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-          const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
+          const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
