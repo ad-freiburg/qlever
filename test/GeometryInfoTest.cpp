@@ -800,41 +800,38 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
   using namespace ad_utility::detail;
   // Distance between points (Freiburg Central Railway Station and Freiburg
   // Cathedral).
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}}),
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
-              Optional(DoubleNear(900, 25)));
+  EXPECT_THAT(
+      computeMetricDistance(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}},
+                            GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
+      Optional(DoubleNear(900, 25)));
 
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // Freiburg Cathedral.
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{
-                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
-              Optional(DoubleNear(2'300, 50)));
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
+      Optional(DoubleNear(2'300, 50)));
 
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // a short line in Freiburg.
   EXPECT_THAT(
       computeMetricDistance(
-          projectWebMerc(GeoPointOrWkt{
-              std::string{litRealWorldMultiPolygonNonIntersecting}}),
-          projectWebMerc(GeoPointOrWkt{std::string{litShortRealWorldLine}})),
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{std::string{litShortRealWorldLine}}),
       Optional(DoubleNear(1'700, 50)));
 
   // One polygon is contained in the larger multi-polygon.
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{
-                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
-                  projectWebMerc(
-                      GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
-              Optional(Eq(0.0)));
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+      Optional(Eq(0.0)));
 
   // Test invalid case.
   EXPECT_EQ(computeMetricDistance(
-                projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-                projectWebMerc(
-                    GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
+                GeoPointOrWkt{std::string{litInvalidType}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
             std::nullopt);
 }
 

@@ -206,8 +206,14 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
 }
 
 // Convert a `GeoPoint` to a point as required by `pb_util`.
-inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
-  return {point.getLng(), point.getLat()};
+// Optionally this can directly project the point into a different goal CRS.
+inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
+                                            CRSType projCrs = CRS84) {
+  if (projCrs == CRS84)
+    return {point.getLng(), point.getLat()};
+  else
+    return projectToCRS(Point<CoordType>{point.getLng(), point.getLat()}, CRS84,
+                        projCrs);
 }
 
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
@@ -459,22 +465,33 @@ static constexpr MetricAreaVisitor computeMetricArea;
 // Helper to convert an instance of the `GeoPointOrWkt` variant to `ParseResult`
 // containing a geometry for `pb_util`.
 struct ParseGeoPointOrWktVisitor {
-  ParseResult operator()(const GeoPoint& point) const {
-    return ParseResult{geoPointToUtilPoint(point), WKTType::POINT};
+  ParseResult operator()(const GeoPoint& point,
+                         CRSType projCrs = CRSType::CRS84) const {
+    return ParseResult{geoPointToUtilPoint(point, projCrs), WKTType::POINT,
+                       projCrs};
   }
 
-  ParseResult operator()(const std::string& wkt) const { return parseWkt(wkt); }
+  ParseResult operator()(const std::string& wkt,
+                         CRSType projCrs = CRSType::CRS84) const {
+    return parseWkt(wkt, projCrs);
+  }
 
-  ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt) const {
-    return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt);
+  ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt,
+                         CRSType projCrs = CRSType::CRS84) const {
+    return std::visit(
+        [projCrs](const auto& value) {
+          return ParseGeoPointOrWktVisitor{}(value, projCrs);
+        },
+        geoPointOrWkt);
   }
 
   template <typename T>
-  ParseResult operator()(const std::optional<T>& geoPointOrWkt) const {
+  ParseResult operator()(const std::optional<T>& geoPointOrWkt,
+                         CRSType projCrs = CRSType::CRS84) const {
     if (!geoPointOrWkt.has_value()) {
       return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED};
     }
-    return std::visit(ParseGeoPointOrWktVisitor{}, geoPointOrWkt.value());
+    return ParseGeoPointOrWktVisitor{}(geoPointOrWkt.value(), projCrs);
   }
 };
 
@@ -703,6 +720,15 @@ struct MetricDistanceVisitor {
       return std::nullopt;
     }
     return MetricDistanceVisitor{}(a.parsedWkt.value(), b.parsedWkt.value());
+  }
+
+  // Handle `GeoPointOrWkt` (raw unparsed geometries).
+  std::optional<double> operator()(std::optional<GeoPointOrWkt> a,
+                                   std::optional<GeoPointOrWkt> b) const {
+    // Projection to WebMerc is handled by 'ParseGeoPointOrWktVisitor'.
+    return MetricDistanceVisitor{}(
+        ParseGeoPointOrWktVisitor{}(a, CRSType::WEB_MERCATOR),
+        ParseGeoPointOrWktVisitor{}(b, CRSType::WEB_MERCATOR));
   }
 };
 
