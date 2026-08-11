@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "backports/three_way_comparison.h"
 #include "util/http/MediaTypes.h"
@@ -35,7 +36,7 @@ std::optional<double> parsePinGeoIndexSimplification(
 // `?action=[some-export-specification]` HTTP query parameter, e.g.
 // `?action=csv_export` requests CSV) and by the "Accept" header of the request.
 // The latter option can produce multiple candidates. The explicit
-// `action=..._export` parameter have precedence over the `Accept:...` header
+// `action=..._export` parameter has precedence over the `Accept:...` header
 // field.
 std::vector<ad_utility::MediaType> determineMediaTypes(
     const ad_utility::url_parser::ParamValueMap& params,
@@ -72,6 +73,12 @@ ResultPinning determineResultPinning(
 // if the parameter is set, but is not a valid non-negative integer.
 std::optional<uint64_t> parseSendLimit(
     const ad_utility::url_parser::ParamValueMap& params);
+
+// Determine whether the `send` parameter (see `parseSendLimit`) should be
+// applied to a response of the given `mediaType`. This always holds for
+// `qleverJson`; for `sparqlJson` it only holds if the runtime parameter
+// `sparql-results-json-with-time` is enabled (the default).
+bool considerSendParameter(ad_utility::MediaType mediaType);
 }  // namespace qlever::http_api_helpers
 
 #endif  // QLEVER_SRC_ENGINE_HTTPAPIHELPERS_H

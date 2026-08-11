@@ -309,7 +309,7 @@ auto Server::prepareOperation(
   MakeQueryExecutionContext makeQec =
       [this, sharedMessageSender = std::move(sharedMessageSender),
        resultPinning = std::move(resultPinning),
-       accessTokenOk](SharedIndexAndView indexAndViews) {
+       accessTokenOk](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
             std::move(indexAndViews),
             [sharedMessageSender](std::string json) {
@@ -1087,8 +1087,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Update the `ParsedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` (or, if enabled via
   // runtime parameter, `application/sparql-results+json`).
-  plannedQuery->parsedQuery().updateExportLimit(
-      mediaType, qlever::http_api_helpers::parseSendLimit(params));
+  if (qlever::http_api_helpers::considerSendParameter(mediaType)) {
+    plannedQuery->parsedQuery().updateExportLimit(
+        qlever::http_api_helpers::parseSendLimit(params));
+  }
 
   // This actually processes the query and sends the result in the
   // requested format.

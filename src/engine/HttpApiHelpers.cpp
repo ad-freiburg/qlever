@@ -9,6 +9,8 @@
 
 #include "engine/HttpApiHelpers.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <array>
 #include <optional>
 #include <stdexcept>
@@ -16,6 +18,7 @@
 #include <utility>
 
 #include "engine/HttpError.h"
+#include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 #include "util/http/HttpServer.h"
 #include "util/http/MediaTypes.h"
@@ -24,7 +27,7 @@
 namespace qlever::http_api_helpers {
 using namespace ad_utility::url_parser;
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<double> parsePinGeoIndexSimplification(
     const std::optional<std::string>& simplificationStr) {
   if (!simplificationStr.has_value()) {
@@ -39,7 +42,7 @@ std::optional<double> parsePinGeoIndexSimplification(
   }
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::vector<ad_utility::MediaType> determineMediaTypes(
     const ad_utility::url_parser::ParamValueMap& params,
     std::string_view acceptHeader) {
@@ -67,7 +70,7 @@ std::vector<ad_utility::MediaType> determineMediaTypes(
   }
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 ResultPinning determineResultPinning(const ParamValueMap& params) {
   const bool pinSubresults =
       checkParameter(params, "pin-subresults", "true").has_value();
@@ -90,7 +93,7 @@ ResultPinning determineResultPinning(const ParamValueMap& params) {
                        pinNamedGeoIndex, geoIndexSimplificationInMeters};
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::string ResultPinning::describeForLog() const {
   std::string namePart;
   if (pinResultWithName_.has_value()) {
@@ -114,7 +117,7 @@ std::string ResultPinning::describeForLog() const {
                       pinSubtrees_ ? " [pin subresults]" : "", namePart);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<uint64_t> parseSendLimit(const ParamValueMap& params) {
   auto sendParameter = getParameterCheckAtMostOnce(params, "send");
   if (!sendParameter.has_value()) {
@@ -130,6 +133,15 @@ std::optional<uint64_t> parseSendLimit(const ParamValueMap& params) {
         "Invalid value for `send`: must be a "
         "positive integer specifying the number of bindings to be exported.");
   }
+}
+
+// _____________________________________________________________________________
+bool considerSendParameter(ad_utility::MediaType mediaType) {
+  using enum ad_utility::MediaType;
+  return mediaType == qleverJson ||
+         (getRuntimeParameter<
+              &RuntimeParameters::sparqlResultsJsonWithTime_>() &&
+          mediaType == sparqlJson);
 }
 
 }  // namespace qlever::http_api_helpers

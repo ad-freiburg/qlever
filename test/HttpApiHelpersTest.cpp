@@ -12,6 +12,7 @@
 
 #include "engine/HttpApiHelpers.h"
 #include "util/GTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 using namespace qlever::http_api_helpers;
@@ -148,4 +149,28 @@ TEST(HttpApiHelpersTest, parseSendLimit) {
   expectInvalidSendLimit("not-a-number");
   // A negative value throws.
   expectInvalidSendLimit("-1");
+}
+
+// _____________________________________________________________________________
+TEST(HttpApiHelpersTest, considerSendParameter) {
+  using enum ad_utility::MediaType;
+  // Always considered for `qlever-results+json`.
+  EXPECT_TRUE(considerSendParameter(qleverJson));
+
+  // Considered for `sparql-results+json` if and only if the runtime
+  // parameter `sparql-results-json-with-time` is set.
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
+    EXPECT_TRUE(considerSendParameter(sparqlJson));
+  }
+  {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+    EXPECT_FALSE(considerSendParameter(sparqlJson));
+  }
+
+  // Not considered for other media types.
+  EXPECT_FALSE(considerSendParameter(csv));
+  EXPECT_FALSE(considerSendParameter(tsv));
 }

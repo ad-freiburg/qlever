@@ -7,7 +7,6 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/ParseException.h"
-#include "util/ParsedQueryTestHelpers.h"
 #include "util/SourceLocation.h"
 
 using ad_utility::testing::parseQuery;

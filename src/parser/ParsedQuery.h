@@ -28,7 +28,6 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
-#include "util/http/MediaTypes.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/ResponseMiddleware.h"
 #endif
@@ -258,13 +257,8 @@ class ParsedQuery {
 
   // Update the export limit based on the `send` parameter (historical name).
   // The limit controls the maximum number of bindings exported by
-  // `ExportQueryExecutionTrees` and is only applied for supported media types.
-  //
-  // NOTE: This was originally designed exclusively for `qlever-results+json`.
-  // However, when the runtime parameter `sparql-results-json-with-time` is set
-  // (which is the default), we now also apply it to `sparql-results+json`.
-  void updateExportLimit(const ad_utility::MediaType& mediaType,
-                         std::optional<uint64_t> sendLimit);
+  // `ExportQueryExecutionTrees`. Do nothing if `sendLimit` is `std::nullopt`.
+  void updateExportLimit(std::optional<uint64_t> sendLimit);
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H
