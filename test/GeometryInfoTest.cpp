@@ -77,6 +77,12 @@ constexpr std::string_view litInvalidNumCoords =
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litUnsupportedCrsIri =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/5070> LINESTRING(2 2,4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidCrsIri =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3485 LINESTRING(2 2,4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
@@ -395,6 +401,11 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto p2 = geoPointToUtilPoint(g);
   EXPECT_NEAR(g.getLng(), p2.getX(), 0.0001);
   EXPECT_NEAR(g.getLat(), p2.getY(), 0.0001);
+
+  // Test projection to WGS84 (swapped coordinates).
+  auto p3 = geoPointToUtilPoint(g, WGS84);
+  EXPECT_NEAR(g.getLng(), p3.getY(), 0.0001);
+  EXPECT_NEAR(g.getLat(), p3.getX(), 0.0001);
 
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
@@ -805,6 +816,33 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
                             GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
       Optional(DoubleNear(900, 25)));
 
+  // Distance between same points (in WGS84).
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{
+              "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(47.997731 "
+              "7.841295)\"^^<http://www.opengis.net/ont/"
+              "geosparql#wktLiteral>"}},
+          GeoPointOrWkt{std::string{
+              "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(47.995562 "
+              "7.852918)\"^^<http://www.opengis.net/ont/"
+              "geosparql#wktLiteral>"}}),
+      Optional(DoubleNear(900, 25)));
+
+  // Distance between same points (in WebMercator).
+  EXPECT_THAT(
+      computeMetricDistance(GeoPointOrWkt{std::string{
+                                "\"<http://www.opengis.net/def/crs/EPSG/0/"
+                                "3857> POINT(872888.9665598421 "
+                                "6106477.362433697)\"^^<http://www.opengis.net/"
+                                "ont/geosparql#wktLiteral>"}},
+                            GeoPointOrWkt{std::string{
+                                "\"<http://www.opengis.net/def/crs/EPSG/0/"
+                                "3857> POINT(874182.8330013324 "
+                                "6106116.541572356)\"^^<http://www.opengis.net/"
+                                "ont/geosparql#wktLiteral>"}}),
+      Optional(DoubleNear(900, 25)));
+
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // Freiburg Cathedral.
   EXPECT_THAT(
@@ -831,6 +869,18 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
   // Test invalid case.
   EXPECT_EQ(computeMetricDistance(
                 GeoPointOrWkt{std::string{litInvalidType}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+            std::nullopt);
+
+  // Test case with unsupported CRS IRI.
+  EXPECT_EQ(computeMetricDistance(
+                GeoPointOrWkt{std::string{litUnsupportedCrsIri}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+            std::nullopt);
+
+  // Test case with invalid CRS IRI.
+  EXPECT_EQ(computeMetricDistance(
+                GeoPointOrWkt{std::string{litInvalidCrsIri}},
                 GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
             std::nullopt);
 }
