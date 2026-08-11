@@ -9,6 +9,13 @@ on:
 
 env:
   IMAGE: adfreiburg/qlever
+  # With the standard length 7 having a collision is possible though not
+  # likely. For 3000 commits the chance is ~1.6%. With a length of 10 the
+  # chance is ~0.0004%.
+  #
+  # NOTE: The `type=sha` tag rule is evaluated in both jobs, so set the length
+  # for the whole workflow.
+  DOCKER_METADATA_SHORT_SHA_LENGTH: 10
 
 concurrency:
   # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
@@ -45,7 +52,7 @@ jobs:
           # for the per-arch labels and the multi-arch index annotations.
           tags: &image_tags |
             # `type=semver` only runs for pushed tags.
-            type=semver,pattern={{version}}         # short for {{major}}.{{minor}}.{{patch}}
+            type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
             # For pushes to the primary branch, use the normal tags.
@@ -128,9 +135,6 @@ jobs:
           # We build multiplatform images which have an image index above the
           # image manifests. Attach the annotations directly to the image index.
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
-          # With the standard length 7 having a collision is possible though not likely.
-          # For 3000 commits the chance is ~1.6%. With a length of 10 the chance is ~0.0004%.
-          DOCKER_METADATA_SHORT_SHA_LENGTH: 10
         with:
           images: ${{ env.IMAGE }}
           # Reuse the tag rules defined in the `build` job (the `image_tags`
