@@ -156,7 +156,7 @@ void ServerMetrics::observe(opentelemetry::metrics::ObserverResult result,
 }
 
 // _____________________________________________________________________________
-template <absl::AnyInvocable<int64_t() const> ServerMetrics::* Getter>
+template <absl::AnyInvocable<int64_t() const> ServerMetrics::*Getter>
 void ServerMetrics::observeCallback(
     opentelemetry::metrics::ObserverResult result, void* state) {
   const auto& self = *static_cast<const ServerMetrics*>(state);
