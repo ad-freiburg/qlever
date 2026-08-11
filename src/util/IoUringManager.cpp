@@ -57,14 +57,20 @@ void SyncIoPolicy::addBatch(int fd,
 
 //______________________________________________________________________________
 IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
-  // Set up the submission and completion queues, shared between this process
-  // and the kernel, with (at least) `ringSize_` submission slots in the
-  // submission queue. liburing rounds the requested size up to a power of two,
-  // so the actual ring may be larger than `ringSize`; `ringSize_` is therefore
-  // a conservative (lower) bound for the "ring full" check below. See
-  // https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
-  // details.
-  int ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
+  // Set up the submission and completion queues with kernel-side SQ polling.
+  // `IORING_SETUP_SQPOLL` creates a dedicated kernel thread that continuously
+  // polls the submission queue, so the application never needs to call
+  // `io_uring_enter` for submission — `io_uring_submit` becomes a cheap
+  // wake-up hint.  The kernel thread sleeps after `sq_thread_idle` ms of
+  // inactivity (waking costs ~30 µs).  2000 ms balances CPU consumption
+  // against wake-up latency for QLever's bursty batch workload.
+  //
+  // `IORING_SETUP_SINGLE_ISSUER` is required for SQPOLL on modern kernels.
+  struct io_uring_params params {};
+  params.flags = IORING_SETUP_SQPOLL | IORING_SETUP_SINGLE_ISSUER;
+  params.sq_thread_idle = 2000;  // ms before the SQ poller sleeps
+
+  int ret = io_uring_queue_init_params(ringSize_, &ring_, &params);
   if (ret < 0) {
     AD_THROW("io_uring_queue_init failed in IoUringManager");
   }
