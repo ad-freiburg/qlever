@@ -102,7 +102,7 @@ std::string ResultPinning::describeForLog() const {
     std::string geoIndexDescription;
     if (pinNamedGeoIndex_.has_value()) {
       std::string simplification =
-          geoIndexSimplificationInMeters_
+          geoIndexSimplificationInMeters_.has_value()
               ? absl::StrCat(", simplification=",
                              geoIndexSimplificationInMeters_.value(), "m")
               : "";
