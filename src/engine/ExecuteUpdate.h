@@ -34,7 +34,8 @@ class ExecuteUpdate {
   static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
   transformTriplesTemplate(
       const IndexImpl& index, const VariableToColumnMap& variableColumns,
-      const std::vector<SparqlTripleSimpleWithGraph>& triples);
+      const std::vector<SparqlTripleSimpleWithGraph>& triples,
+      const ad_utility::AllocatorWithLimit<Id>& allocator);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the
@@ -68,6 +69,7 @@ class ExecuteUpdate {
                           const VariableToColumnMap& variableColumns,
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata,
+                          const ad_utility::AllocatorWithLimit<Id>& allocator,
                           ad_utility::timer::TimeTracer& tracer =
                               ad_utility::timer::DEFAULT_TIME_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);

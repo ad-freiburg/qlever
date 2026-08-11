@@ -10,7 +10,8 @@
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
-  LocalVocab result;
+  // The clone draws from the same memory pool as this `LocalVocab`.
+  LocalVocab result{allocator_};
   result.mergeWith(*this);
   AD_CORRECTNESS_CHECK(result.size_ == size_);
   return result;
@@ -18,9 +19,24 @@ LocalVocab LocalVocab::clone() const {
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs) {
-  LocalVocab result;
+  // The result draws from the same memory pool as the first of the merged
+  // `LocalVocab`s (if any), so that words later added to the result's primary
+  // set are accounted against the correct limit.
+  LocalVocab result =
+      vocabs.empty() ? LocalVocab{} : LocalVocab{vocabs.front()->allocator_};
   result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;
+}
+
+// _____________________________________________________________________________
+ad_utility::MemorySize LocalVocab::memoryFootprint(
+    const LocalVocabEntry& entry) {
+  // A fixed overhead for the node itself (which stores short strings inline via
+  // SSO) plus the slot in the hash table's control array, plus the dynamically
+  // allocated part of the entry's string (which is empty for short strings).
+  static constexpr size_t fixedOverhead = sizeof(LocalVocabEntry) + 16;
+  return ad_utility::MemorySize::bytes(
+      fixedOverhead + entry.toStringRepresentation().capacity());
 }
 
 // _____________________________________________________________________________
@@ -39,7 +55,14 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // implementations.
   AD_CORRECTNESS_CHECK(!copied_->load());
   auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
-  size_ += static_cast<size_t>(isNewWord);
+  if (isNewWord) {
+    ++size_;
+    // Account for the memory of the newly inserted word against the memory
+    // limit. This might throw an `AllocationExceedsLimitException`, in which
+    // case the query is aborted and this `LocalVocab` is destroyed shortly
+    // after, releasing all its reserved memory.
+    primaryWordSet_->reservation_.account(memoryFootprint(*wordIterator));
+  }
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
   // the MacOS build.
   return &(*wordIterator);

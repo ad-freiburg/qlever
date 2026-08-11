@@ -60,7 +60,7 @@ Result TextIndexScanForEntity::computeResult(
   }
   runtimeInfo().addDetail("word: ", config_.word_);
 
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), makeLocalVocab()};
 }
 
 // _____________________________________________________________________________

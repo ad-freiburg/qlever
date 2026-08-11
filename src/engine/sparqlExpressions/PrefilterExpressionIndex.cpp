@@ -475,7 +475,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
-  LocalVocab localVocab{};
+  LocalVocab localVocab = LocalVocab::unlimited();
   auto prefixQuoted =
       absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
   auto [lowerVocabIndex, upperVocabIndex] =
@@ -551,7 +551,7 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
-  LocalVocab localVocab{};
+  LocalVocab localVocab = LocalVocab::unlimited();
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges

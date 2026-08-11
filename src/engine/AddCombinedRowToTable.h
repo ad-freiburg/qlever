@@ -41,7 +41,7 @@ class AddCombinedRowToIdTable {
   bool keepJoinColumns_ = true;
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
-  LocalVocab mergedVocab_{};
+  LocalVocab mergedVocab_ = LocalVocab::unlimited();
   std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
  public:
@@ -201,7 +201,7 @@ class AddCombinedRowToIdTable {
       // optimize this case (clear the local vocab more often, but still
       // correctly) by considering the situation after all the relevant inputs
       // have been processed.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = LocalVocab::unlimited();
     }
   }
 
@@ -411,7 +411,7 @@ class AddCombinedRowToIdTable {
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
-      mergedVocab_ = LocalVocab{};
+      mergedVocab_ = LocalVocab::unlimited();
       // Only merge non-null vocabs.
       // Note: On QCC 8.3, the elegant lazy range pipeline gives us trouble, so
       // we use an `absl::InlinedVector<reference_wrapper>` instead, which can

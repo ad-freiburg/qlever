@@ -71,7 +71,7 @@ std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
 Result Load::computeResult(bool requestLaziness) {
   auto makeSilentResult = [this]() -> Result {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), LocalVocab::unlimited()};
   };
 
   // In the syntax test mode we don't even try to compute the result, as this
@@ -146,7 +146,7 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
   parser.setInputStream(body);
-  LocalVocab lv;
+  LocalVocab lv{getExecutionContext()->getAllocator()};
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   auto toId = [this, &lv](TripleComponent&& tc) {
     return toValueId(std::move(tc), getIndex(), lv);

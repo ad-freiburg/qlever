@@ -99,7 +99,7 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
         return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),
-                                                       LocalVocab{});
+                                                       LocalVocab::unlimited());
       });
 
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};

@@ -249,8 +249,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       UpdateMetadata metadata;
       auto result = qet.getResult(false);
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, *result, qet.getVariableColumns(), sharedHandle,
-          metadata));
+          index, pq, *result, qet.getVariableColumns(), sharedHandle, metadata,
+          ad_utility::makeUnlimitedAllocator<::Id>()));
       ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
     }
     return results;
@@ -474,8 +474,9 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
               AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
         auto [transformedTriples, localVocab] =
-            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
-                                                    triples);
+            ExecuteUpdate::transformTriplesTemplate(
+                index, variableColumns, triples,
+                ad_utility::makeUnlimitedAllocator<::Id>());
         const auto transformedTriplesMatchers = ad_utility::transform(
             expectedTransformedTriples,
             [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
@@ -495,9 +496,10 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                ad_utility::source_location sourceLocation =
                    AD_CURRENT_SOURCE_LOC()) {
         auto loc = generateLocationTrace(sourceLocation);
+        auto unlimitedAllocator = ad_utility::makeUnlimitedAllocator<::Id>();
         AD_EXPECT_THROW_WITH_MESSAGE(
-            ExecuteUpdate::transformTriplesTemplate(index, variableColumns,
-                                                    std::move(triples)),
+            ExecuteUpdate::transformTriplesTemplate(
+                index, variableColumns, std::move(triples), unlimitedAllocator),
             messageMatcher);
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s

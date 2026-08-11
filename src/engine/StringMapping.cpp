@@ -13,7 +13,7 @@ namespace qlever::binary_export {
 
 // _____________________________________________________________________________
 std::vector<std::string> StringMapping::flush(const Index& index) {
-  LocalVocab dummy;
+  LocalVocab dummy = LocalVocab::unlimited();
   std::vector<std::string> sortedStrings;
   sortedStrings.resize(stringMapping_.size());
   for (const auto& [oldId, newId] : stringMapping_) {

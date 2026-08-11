@@ -214,7 +214,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
   ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-  LocalVocab mergedVocab{};
+  LocalVocab mergedVocab = LocalVocab::unlimited();
   for (auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] : hull) {
     timer.cont();
     // As an optimization nodes without any linked nodes should not get yielded

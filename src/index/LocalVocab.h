@@ -17,6 +17,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "index/LocalVocabEntry.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
@@ -35,13 +36,30 @@
 // `LocalVocab`.
 class LocalVocab {
  private:
-  // The primary set of `LocalVocabEntry`s, which can grow dynamically.
+  // The type of the sets that store the `LocalVocabEntry`s.
   //
-  // NOTE: This is a `absl::node_hash_set` because we hand out pointers to
-  // the `LocalVocabEntry`s and it is hence essential that their addresses
-  // remain stable over their lifetime in the hash set.
-  using Set = absl::node_hash_set<LocalVocabEntry>;
-  std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
+  // NOTE: This derives from `absl::node_hash_set` because we hand out pointers
+  // to the `LocalVocabEntry`s and it is hence essential that their addresses
+  // remain stable over their lifetime in the hash set. It additionally carries
+  // a `MemoryLimitReservation` that accounts for the memory used by its entries
+  // against the memory limit (see `allocator_` and `memoryFootprint`). As the
+  // sets are shared between `LocalVocab`s (see `mergeWith`), storing the
+  // reservation inside the set ensures that the memory is accounted for exactly
+  // as long as the set (and thus its entries) is alive.
+  struct Set : absl::node_hash_set<LocalVocabEntry> {
+    ad_utility::MemoryLimitReservation reservation_;
+    explicit Set(ad_utility::MemoryLimitReservation reservation)
+        : reservation_{std::move(reservation)} {}
+  };
+
+  // The allocator whose memory limit all the sets of this `LocalVocab` are
+  // accounted against. By default it is unlimited (see the default
+  // constructor), so that `LocalVocab`s that are not associated with a query
+  // (e.g. in tests) don't need to know about a limit.
+  ad_utility::AllocatorWithLimit<char> allocator_;
+
+  // The primary set of `LocalVocabEntry`s, which can grow dynamically.
+  std::shared_ptr<Set> primaryWordSet_;
 
   using LocalBlankNodeManager =
       ad_utility::BlankNodeManager::LocalBlankNodeManager;
@@ -61,8 +79,28 @@ class LocalVocab {
       std::make_unique<std::atomic_bool>(false);
 
  public:
-  // Create a new, empty local vocabulary.
-  LocalVocab() = default;
+  // Create a new, empty local vocabulary whose memory is not limited. This is
+  // used for `LocalVocab`s that are not associated with a query (e.g. in
+  // tests).
+  LocalVocab() : LocalVocab(ad_utility::makeUnlimitedAllocator<char>()) {}
+
+  // Create a new, empty local vocabulary whose memory is accounted against the
+  // limit of the given `allocator`. Typically the allocator is obtained via
+  // `QueryExecutionContext::getAllocator()`.
+  template <typename T>
+  explicit LocalVocab(const ad_utility::AllocatorWithLimit<T>& allocator)
+      : allocator_{allocator.template as<char>()},
+        primaryWordSet_{makeWordSet()} {}
+
+  // Create a new, empty local vocabulary whose memory is deliberately NOT
+  // accounted against any memory limit. For `LocalVocab`s that are part of a
+  // query result, prefer the allocator-taking constructor above (or
+  // `Operation::makeLocalVocab`). Use this named factory (instead of the
+  // default constructor) at the call sites where an unlimited local vocab is
+  // used on purpose (e.g. pass-through merges that never add new words, or code
+  // outside of query execution), so that these sites can be easily spotted
+  // during review.
+  static LocalVocab unlimited() { return LocalVocab{}; }
 
   // Prevent accidental copying of a local vocabulary.
   LocalVocab(const LocalVocab&) = delete;
@@ -223,6 +261,19 @@ class LocalVocab {
  private:
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
+
+  // Create a new, empty `Set` with a fresh `MemoryLimitReservation` that draws
+  // from the pool of `allocator_`.
+  std::shared_ptr<Set> makeWordSet() const {
+    return std::make_shared<Set>(
+        ad_utility::MemoryLimitReservation{allocator_});
+  }
+
+  // Return the amount of memory that the given `entry`, when stored in a `Set`,
+  // occupies. This is the size of the node itself (which includes short strings
+  // via SSO) plus a fixed overhead for the slot in the hash table, plus the
+  // dynamically allocated part of the entry's string (empty for short strings).
+  static ad_utility::MemorySize memoryFootprint(const LocalVocabEntry& entry);
 
   // Common implementation for the two methods `getIndexAndAddIfNotContained`
   // and `getIndexOrNullopt` above.
