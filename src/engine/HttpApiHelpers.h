@@ -58,7 +58,9 @@ struct ResultPinning {
   std::string describeForLog() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees_,
-                                              pinResult_)
+                                              pinResult_, pinResultWithName_,
+                                              pinNamedGeoIndex_,
+                                              geoIndexSimplificationInMeters_)
 };
 
 // Determine `ResultPinning` from the `pin-subresults` and `pin-result` URL

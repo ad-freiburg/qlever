@@ -126,6 +126,33 @@ TEST(HttpApiHelpersTest, determineResultPinning) {
             ResultPinning(false, true));
   EXPECT_EQ(determineResultPinning({{"pin-subresults", {"otherValue"}}}),
             ResultPinning(false, false));
+
+  // `pin-result-with-name` is parsed into `pinResultWithName_`.
+  EXPECT_EQ(determineResultPinning({{"pin-result-with-name", {"myPin"}}}),
+            (ResultPinning{.pinResultWithName_ = "myPin"}));
+
+  // `pin-geo-index-on-var` is parsed into `pinNamedGeoIndex_`.
+  EXPECT_EQ(determineResultPinning({{"pin-result-with-name", {"myPin"}},
+                                    {"pin-geo-index-on-var", {"geom"}}}),
+            (ResultPinning{.pinResultWithName_ = "myPin",
+                           .pinNamedGeoIndex_ = "geom"}));
+
+  // `pin-geo-index-simplification` is parsed into
+  // `geoIndexSimplificationInMeters_`.
+  EXPECT_EQ(determineResultPinning({{"pin-result-with-name", {"myPin"}},
+                                    {"pin-geo-index-on-var", {"geom"}},
+                                    {"pin-geo-index-simplification", {"5.0"}}}),
+            (ResultPinning{.pinResultWithName_ = "myPin",
+                           .pinNamedGeoIndex_ = "geom",
+                           .geoIndexSimplificationInMeters_ = 5.0}));
+
+  // An invalid `pin-geo-index-simplification` value throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      determineResultPinning(
+          {{"pin-geo-index-simplification", {"not-a-number"}}}),
+      ::testing::HasSubstr(
+          "Invalid value for `pin-geo-index-simplification`: must be a "
+          "floating-point number of meters."));
 }
 
 // _____________________________________________________________________________
