@@ -84,7 +84,9 @@ Server::Server(
       [this]() -> int64_t {
         return static_cast<int64_t>(rebuildInProgress_.load());
       },
-      config.memoryLimit_);
+      config.memoryLimit_,
+      [this]() -> int64_t { return indexAndViewsSnapshot()->index_.numTriples().normal; }
+  );
   metrics_->registerCallbacks();
 
   if (noAccessCheck_) {
