@@ -20,8 +20,8 @@
 #include "util/Timer.h"
 #include "util/json.h"
 
-// Compose the JSON response bodies for `Server`'s
-// query-processing HTTP endpoints.
+// Compose the JSON response bodies for `Server`'s HTTP endpoints: index and
+// cache statistics, and error responses for failed queries and updates.
 namespace responseJson {
 using nlohmann::json;
 

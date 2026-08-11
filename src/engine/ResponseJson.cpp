@@ -71,7 +71,7 @@ json composeError(const std::string& query, const std::string& errorMsg,
   j["time"]["computeResult"] = requestTimer.msecs().count();
   j["exception"] = errorMsg;
 
-  // If the error location is truncated don't send it's location.
+  // If the error location is truncated don't send its location.
   if (metadata.has_value() &&
       metadata.value().stopIndex_ < MAX_LENGTH_OPERATION_ECHO) {
     auto& value = metadata.value();

@@ -58,52 +58,36 @@ TEST(ResponseJsonTest, composeCacheStats) {
 }
 
 // _____________________________________________________________________________
-TEST(ResponseJsonTest, composeErrorWithoutMetadata) {
+TEST(ResponseJsonTest, composeError) {
   ad_utility::Timer requestTimer{ad_utility::Timer::Stopped};
-  json expectedJson{{"query", "SELECT * WHERE { ?a ?b ?c }"},
-                    {"status", "ERROR"},
-                    {"resultsize", 0},
-                    {"time", {{"total", 0}, {"computeResult", 0}}},
-                    {"exception", "some error message"}};
+  json baseJson{{"query", "SELECT * WHERE { ?a ?b ?c }"},
+                {"status", "ERROR"},
+                {"resultsize", 0},
+                {"time", {{"total", 0}, {"computeResult", 0}}},
+                {"exception", "some error message"}};
+
+  // Without metadata, the response has no `metadata` key.
   EXPECT_THAT(responseJson::composeError("SELECT * WHERE { ?a ?b ?c }",
                                          "some error message", requestTimer),
-              testing::Eq(expectedJson));
-}
+              testing::Eq(baseJson));
 
-// _____________________________________________________________________________
-TEST(ResponseJsonTest, composeErrorWithMetadata) {
-  ad_utility::Timer requestTimer{ad_utility::Timer::Stopped};
+  // With metadata whose location fits inside the echoed query, the response
+  // includes the `metadata` key.
   ExceptionMetadata metadata{"SELECT * WHERE { ?a ?b ?c }", 7, 10, 1, 7};
-  json expectedJson{{"query", "SELECT * WHERE { ?a ?b ?c }"},
-                    {"status", "ERROR"},
-                    {"resultsize", 0},
-                    {"time", {{"total", 0}, {"computeResult", 0}}},
-                    {"exception", "some error message"},
-                    {"metadata",
-                     {{"startIndex", 7},
-                      {"stopIndex", 10},
-                      {"line", 1},
-                      {"positionInLine", 7}}}};
+  json withMetadataJson = baseJson;
+  withMetadataJson["metadata"] = {
+      {"startIndex", 7}, {"stopIndex", 10}, {"line", 1}, {"positionInLine", 7}};
   EXPECT_THAT(
       responseJson::composeError("SELECT * WHERE { ?a ?b ?c }",
                                  "some error message", requestTimer, metadata),
-      testing::Eq(expectedJson));
-}
+      testing::Eq(withMetadataJson));
 
-// _____________________________________________________________________________
-TEST(ResponseJsonTest, composeErrorWithTruncatedMetadataOmitsLocation) {
-  ad_utility::Timer requestTimer{ad_utility::Timer::Stopped};
   // `stopIndex_` at or beyond `MAX_LENGTH_OPERATION_ECHO` means the location
   // falls outside the (truncated) echoed query, so it must not be sent.
-  ExceptionMetadata metadata{"SELECT * WHERE { ?a ?b ?c }", 0,
-                             MAX_LENGTH_OPERATION_ECHO, 1, 0};
-  json expectedJson{{"query", "SELECT * WHERE { ?a ?b ?c }"},
-                    {"status", "ERROR"},
-                    {"resultsize", 0},
-                    {"time", {{"total", 0}, {"computeResult", 0}}},
-                    {"exception", "some error message"}};
-  EXPECT_THAT(
-      responseJson::composeError("SELECT * WHERE { ?a ?b ?c }",
-                                 "some error message", requestTimer, metadata),
-      testing::Eq(expectedJson));
+  ExceptionMetadata truncatedMetadata{"SELECT * WHERE { ?a ?b ?c }", 0,
+                                      MAX_LENGTH_OPERATION_ECHO, 1, 0};
+  EXPECT_THAT(responseJson::composeError("SELECT * WHERE { ?a ?b ?c }",
+                                         "some error message", requestTimer,
+                                         truncatedMetadata),
+              testing::Eq(baseJson));
 }
