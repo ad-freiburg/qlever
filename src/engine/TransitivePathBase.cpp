@@ -631,8 +631,7 @@ void TransitivePathBase::insertPayloadColumnsToPlan(
     // Don't add the same payload column twice if it is present on both sides.
     if (otherOpAndCol.has_value()) {
       const auto& [otherOp, otherCol] = otherOpAndCol.value();
-      if (otherOp->getVariableColumns().contains(variable) &&
-          plan->variableColumns_.contains(variable)) {
+      if (otherOp->getVariableColumns().contains(variable)) {
         continue;
       }
     }

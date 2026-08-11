@@ -112,8 +112,10 @@ IdWithGraphs BinSearchMap::getEquivalentIdAndMatchingGraphs(Id node) const {
       graphIdsIt = graphIdsUpper;
     }
   }
-  if (result.empty() && !node.isUndefined() && targetIdLookup_.contains(node)) {
-    result.emplace_back(node, Id::makeUndefined());
+  if (result.empty()) {
+    if (!node.isUndefined() && targetIdLookup_.contains(node)) {
+      result.emplace_back(node, Id::makeUndefined());
+    }
   }
   return result;
 }
