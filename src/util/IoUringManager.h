@@ -164,6 +164,13 @@ struct SyncIoPolicy {
 // (blocking if the ring is full), and lets the caller block on a specific batch
 // via `wait()`. Single-threaded use only. See https://github.com/axboe/liburing
 // for more details.
+//
+// Registered buffers: the policy pre-allocates and registers a pool of buffers
+// with io_uring so the kernel performs DMA directly into them (zero-copy from
+// the kernel's perspective). On completion, data is copied from the registered
+// buffer into the caller's target buffer. This user-space memcpy is cheaper
+// than the per-request kernel-user copy that would otherwise occur in the read
+// path.
 #ifdef QLEVER_HAS_IO_URING
 
 class IoUringPolicy {
@@ -171,6 +178,11 @@ class IoUringPolicy {
   using BatchHandle = uint64_t;
 
  private:
+  // Size in bytes of each individual buffer in the registered buffer pool.
+  // 4 KiB covers every single vocab word read (offset pairs are 16 bytes,
+  // word data is at most a few hundred bytes for a single RDF term).
+  static constexpr size_t REGISTERED_BUFFER_SIZE = 4096;
+
   io_uring ring_{};
   unsigned ringSize_;
 
@@ -186,13 +198,32 @@ class IoUringPolicy {
   ad_utility::HashMap<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
 
   // Per-read metadata needed when a completion is reaped: which batch the read
-  // belongs to, and how many bytes it was supposed to read (so that reading
-  // fewer bytes than expected can be detected). See
-  // `inFlightReadsByRequestId_`.
+  // belongs to, how many bytes it was supposed to read (so that reading fewer
+  // bytes than expected can be detected), and the index of the registered buffer
+  // that received the data so it can be returned to the free pool and the data
+  // copied to the caller's target. See `inFlightReadsByRequestId_`.
   struct InFlightRead {
     BatchHandle batchHandle;
     size_t expectedNumBytes;
+    size_t poolBufferIndex;
   };
+
+  // --- Registered buffer pool ------------------------------------------------
+  // The pre-allocated memory for the registered buffers. Each entry is a
+  // `REGISTERED_BUFFER_SIZE`-byte buffer that io_uring writes into directly.
+  // The outer vector owns the memory; its size equals `ringSize_`.
+  std::vector<std::vector<char>> registeredBuffers_;
+
+  // The `iovec` descriptors for `io_uring_register_buffers`. One per pool
+  // buffer, pointing into `registeredBuffers_`.
+  std::vector<struct iovec> registeredIovecs_;
+
+  // Indices of registered buffers that are currently free (not in use by any
+  // in-flight read). Popped when a buffer is claimed in `addBatch`, pushed when
+  // a completion returns it in `drainOneCqe`.
+  std::vector<size_t> freeBufferIndices_;
+
+  // --- End registered buffer pool --------------------------------------------
 
   // Monotonically increasing counter that mints a unique request id for each
   // individual read. The id is stored in the SQE's `user_data` and recovered
@@ -204,7 +235,25 @@ class IoUringPolicy {
   // `drainOneCqe`.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
-  // Wait for one CQE and update the in-flight bookkeeping.
+  // Maps a request id to the caller's target buffer and the number of bytes to
+  // copy there from the registered buffer when the read completes.
+  struct CallerTarget {
+    char* buffer;
+    size_t numBytes;
+  };
+  ad_utility::HashMap<uint64_t, CallerTarget> callerTargetsByRequestId_;
+
+  // Allocate a buffer from the registered pool. Blocks (draining completions)
+  // if no buffer is free. Returns the pool index.
+  // Precondition: at least one buffer will become free (i.e. there is at least
+  // one in-flight read that can complete).
+  size_t allocatePoolBuffer();
+
+  // Return a buffer to the free pool.
+  void freePoolBuffer(size_t index);
+
+  // Wait for one CQE, copy data from the registered buffer into the caller's
+  // target, return the pool buffer, and update the in-flight bookkeeping.
   void drainOneCqe();
 
  public:
