@@ -17,7 +17,6 @@
 #include <variant>
 #include <vector>
 
-#include "CompilationInfo.h"
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -26,6 +25,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
+#include "engine/ResponseJson.h"
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
@@ -461,24 +461,28 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
-    response = createJsonResponse(composeStatsJson(index), request);
+    response = createJsonResponse(responseJson::composeStats(index), request);
   } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
     logCommand(cmd, "get cache statistics");
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = createJsonResponse(
+        responseJson::composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
     logCommand(cmd, "clear the cache (unpinned elements only)");
     cache().clearUnpinnedOnly();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = createJsonResponse(
+        responseJson::composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
     requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache().clearAll();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = createJsonResponse(
+        responseJson::composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
     logCommand(cmd, "clear the cache for named results");
     namedResultCache().clear();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = createJsonResponse(
+        responseJson::composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
@@ -695,7 +699,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setKbName(std::string{description.value()});
-    response = createJsonResponse(composeStatsJson(index), request);
+    response = createJsonResponse(responseJson::composeStats(index), request);
   }
 
   // Set description of text index.
@@ -704,7 +708,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setTextName(std::string{description.value()});
-    response = createJsonResponse(composeStatsJson(index), request);
+    response = createJsonResponse(responseJson::composeStats(index), request);
   }
 
   // Set one or several of the runtime parameters.
@@ -899,76 +903,6 @@ Server::PlannedQuery Server::planQuery(
               << " ms" << std::endl;
   AD_LOG_TRACE << qet.getCacheKey() << std::endl;
   return plannedQuery;
-}
-
-// _____________________________________________________________________________
-nlohmann::json Server::composeErrorResponseJson(
-    const std::string& query, const std::string& errorMsg,
-    const ad_utility::Timer& requestTimer,
-    const std::optional<ExceptionMetadata>& metadata) {
-  json j;
-  using ad_utility::Timer;
-  j["query"] = ad_utility::truncateOperationString(query);
-  j["status"] = "ERROR";
-  j["resultsize"] = 0;
-  j["time"]["total"] = requestTimer.msecs().count();
-  j["time"]["computeResult"] = requestTimer.msecs().count();
-  j["exception"] = errorMsg;
-
-  // If the error location is truncated don't send it's location.
-  if (metadata.has_value() &&
-      metadata.value().stopIndex_ < MAX_LENGTH_OPERATION_ECHO) {
-    auto& value = metadata.value();
-    j["metadata"]["startIndex"] = value.startIndex_;
-    j["metadata"]["stopIndex"] = value.stopIndex_;
-    j["metadata"]["line"] = value.line_;
-    j["metadata"]["positionInLine"] = value.charPositionInLine_;
-  }
-
-  return j;
-}
-
-// _____________________________________________________________________________
-nlohmann::json Server::composeStatsJson(const Index& index) {
-  json result;
-  result["name-index"] = index.getKbName();
-  result["git-hash-index"] = index.getGitShortHash();
-  result["git-hash-server"] =
-      *qlever::version::gitShortHashWithoutLinking.wlock();
-  result["version-server"] =
-      *qlever::version::projectVersionWithoutLinking.wlock();
-  result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
-  result["num-predicates-normal"] = index.numDistinctPredicates().normal;
-  result["num-predicates-internal"] = index.numDistinctPredicates().internal;
-  if (index.hasAllPermutations()) {
-    result["num-subjects-normal"] = index.numDistinctSubjects().normal;
-    result["num-subjects-internal"] = index.numDistinctSubjects().internal;
-    result["num-objects-normal"] = index.numDistinctObjects().normal;
-    result["num-objects-internal"] = index.numDistinctObjects().internal;
-  }
-
-  auto numTriples = index.numTriples();
-  result["num-triples-normal"] = numTriples.normal;
-  result["num-triples-internal"] = numTriples.internal;
-  result["name-text-index"] = index.getTextName();
-  result["num-text-records"] = index.getNofTextRecords();
-  result["num-word-occurrences"] = index.getNofWordPostings();
-  result["num-entity-occurrences"] = index.getNofEntityPostings();
-  return result;
-}
-
-// _______________________________________
-nlohmann::json Server::composeCacheStatsJson() const {
-  nlohmann::json result;
-  result["num-results-unpinned"] = cache().numNonPinnedEntries();
-  result["num-results-pinned-unnamed"] = cache().numPinnedEntries();
-  result["num-results-pinned-named"] = namedResultCache().numEntries();
-
-  // TODO: Get rid of the `getByte()`, once `MemorySize` has it's own JSON
-  // converter.
-  result["cache-size-unpinned"] = cache().nonPinnedSize().getBytes();
-  result["cache-size-pinned"] = cache().pinnedSize().getBytes();
-  return result;
 }
 
 // _____________________________________________
@@ -1513,7 +1447,7 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
         AD_LOG_ERROR << metadata.value().query_ << std::endl;
       }
     }
-    auto errorResponseJson = composeErrorResponseJson(
+    auto errorResponseJson = responseJson::composeError(
         operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
       errorResponseJson["runtimeInformation"] =

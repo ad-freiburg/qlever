@@ -190,30 +190,6 @@ TEST(ServerTest, getQueryId) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, composeStatsJson) {
-  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
-  json expectedJson{{"git-hash-index", "git short hash not set"},
-                    {"git-hash-server", "git short hash not set"},
-                    {"version-server", "project version not set"},
-                    {"name-index", ""},
-                    {"name-text-index", ""},
-                    {"num-entity-occurrences", 0},
-                    {"num-objects-internal", 0},
-                    {"num-objects-normal", 1},
-                    {"num-permutations", 6},
-                    {"num-predicates-internal", 1},
-                    {"num-predicates-normal", 1},
-                    {"num-subjects-internal", 0},
-                    {"num-subjects-normal", 1},
-                    {"num-text-records", 0},
-                    {"num-triples-internal", 1},
-                    {"num-triples-normal", 1},
-                    {"num-word-occurrences", 0}};
-  EXPECT_THAT(server.composeStatsJson(server.indexAndViewsSnapshot()->index_),
-              testing::Eq(expectedJson));
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");

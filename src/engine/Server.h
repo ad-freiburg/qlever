@@ -72,7 +72,6 @@ class Server {
       absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
           SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
-  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
@@ -98,10 +97,6 @@ class Server {
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
   void configureQueryEventLog(const ql::filesystem::path& path);
-
-  // Get server statistics.
-  static json composeStatsJson(const Index& index);
-  json composeCacheStatsJson() const;
 
  private:
   qlever::Qlever qlever_;
@@ -313,11 +308,6 @@ class Server {
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
-
-  static json composeErrorResponseJson(
-      const std::string& query, const std::string& errorMsg,
-      const ad_utility::Timer& requestTimer,
-      const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
