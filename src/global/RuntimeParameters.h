@@ -248,7 +248,8 @@ struct RuntimeParameters {
   // holds its own io_uring ring, so this bounds the number of concurrent
   // batch vocabulary lookups.  More managers = more parallelism for
   // multi-query workloads, at the cost of memory for rings + registered
-  // buffers.
+  // buffers.  The default value matches NUM_VOCAB_BATCH_IO_MANAGERS
+  // (Constants.h), which this runtime parameter replaces.
   SizeT vocabBatchIoNumManagers_{8, "vocab-batch-io-num-managers"};
 
   // ___________________________________________________________________________
