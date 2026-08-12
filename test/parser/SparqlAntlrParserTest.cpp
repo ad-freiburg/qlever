@@ -12,6 +12,7 @@
 
 #include "../QueryPlannerTestHelpers.h"
 #include "../SparqlExpressionTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"

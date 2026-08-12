@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "../util/ParsedQueryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"

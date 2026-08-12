@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
+#include "engine/QueryExecutionContext.h"
 #include "util/http/MediaTypes.h"
 #include "util/http/UrlParser.h"
 
@@ -48,9 +49,7 @@ std::vector<ad_utility::MediaType> determineMediaTypes(
 struct ResultPinning {
   bool pinSubtrees_ = false;
   bool pinResult_ = false;
-  std::optional<std::string> pinResultWithName_;
-  std::optional<std::string> pinNamedGeoIndex_;
-  std::optional<double> geoIndexSimplificationInMeters_;
+  std::optional<QueryExecutionContext::PinResultWithName> pinResultWithName_;
 
   // Describe all requested pinning for the request log line, e.g. `" [pin
   // result] [pin subresults] [pin result with name \"myPin\" with geo index
@@ -58,14 +57,16 @@ struct ResultPinning {
   std::string describeForLog() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(ResultPinning, pinSubtrees_,
-                                              pinResult_, pinResultWithName_,
-                                              pinNamedGeoIndex_,
-                                              geoIndexSimplificationInMeters_)
+                                              pinResult_, pinResultWithName_)
 };
 
-// Determine `ResultPinning` from the `pin-subresults` and `pin-result` URL
-// parameters, e.g. `?pin-subresults=true&pin-result=true` pins both. Either
-// parameter defaults to `false` if not present.
+// Determine `ResultPinning` from the URL parameters `pin-subresults`,
+// `pin-result`, `pin-result-with-name`, `pin-geo-index-on-var`, and
+// `pin-geo-index-simplification`, e.g. `?pin-result-with-name=myPin` pins the
+// result under the name "myPin". `pin-subresults` and `pin-result` default to
+// `false`. Throw if `pin-geo-index-on-var` or `pin-geo-index-simplification`
+// is given without `pin-result-with-name`, or if
+// `pin-geo-index-simplification` is given without `pin-geo-index-on-var`.
 ResultPinning determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params);
 
@@ -81,6 +82,15 @@ std::optional<uint64_t> parseSendLimit(
 // `qleverJson`; for `sparqlJson` it only holds if the runtime parameter
 // `sparql-results-json-with-time` is enabled (the default).
 bool considerSendParameter(ad_utility::MediaType mediaType);
+
+// Determine the export limit for a response of the given `mediaType` from
+// the `send` parameter (see `parseSendLimit`). Always validates `send`
+// (throws on an invalid or duplicated value) regardless of `mediaType`, but
+// only returns a limit for media types where `considerSendParameter` holds;
+// returns `std::nullopt` otherwise.
+std::optional<uint64_t> determineSendLimit(
+    const ad_utility::url_parser::ParamValueMap& params,
+    ad_utility::MediaType mediaType);
 }  // namespace qlever::http_api_helpers
 
 #endif  // QLEVER_SRC_ENGINE_HTTPAPIHELPERS_H

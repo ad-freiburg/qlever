@@ -13,7 +13,6 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
-#include "engine/HttpApiHelpers.h"
 #include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
@@ -243,18 +242,13 @@ TEST(ServerTest, createResponseMetadata) {
 TEST(ServerTest, configurePinnedResultWithName) {
   auto qec = ad_utility::testing::getQec();
 
-  // Test with no pinNamed value - should not modify qec
-  std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(
-      qlever::http_api_helpers::ResultPinning{.pinResultWithName_ = noPinNamed},
-      true, *qec);
+  // Test with no pin - should not modify qec
+  Server::configurePinnedResultWithName(std::nullopt, true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
-  // Test with pinNamed and valid access token - should set the pin name
-  std::optional<std::string> pinNamed = "test_query_name";
+  // Test with a name and valid access token - should set the pin name
   Server::configurePinnedResultWithName(
-      qlever::http_api_helpers::ResultPinning{.pinResultWithName_ = pinNamed},
-      true, *qec);
+      QueryExecutionContext::PinResultWithName{"test_query_name"}, true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
@@ -262,10 +256,10 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
-  // Test with pinNamed AND pinned geo Var.
+  // Test with name AND pinned geo var.
   Server::configurePinnedResultWithName(
-      qlever::http_api_helpers::ResultPinning{.pinResultWithName_ = pinNamed,
-                                              .pinNamedGeoIndex_ = "geom_var"},
+      QueryExecutionContext::PinResultWithName{"test_query_name",
+                                               Variable{"?geom_var"}},
       true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
@@ -276,12 +270,10 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
-  // Test with pinNamed, geo var, AND simplification.
+  // Test with name, geo var, AND simplification.
   Server::configurePinnedResultWithName(
-      qlever::http_api_helpers::ResultPinning{
-          .pinResultWithName_ = pinNamed,
-          .pinNamedGeoIndex_ = "geom_var",
-          .geoIndexSimplificationInMeters_ = 10.0},
+      QueryExecutionContext::PinResultWithName{"test_query_name",
+                                               Variable{"?geom_var"}, 10.0},
       true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
@@ -297,9 +289,8 @@ TEST(ServerTest, configurePinnedResultWithName) {
   expectForbiddenError(
       [&] {
         Server::configurePinnedResultWithName(
-            qlever::http_api_helpers::ResultPinning{.pinResultWithName_ =
-                                                        pinNamed},
-            false, *qec);
+            QueryExecutionContext::PinResultWithName{"test_query_name"}, false,
+            *qec);
       },
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));

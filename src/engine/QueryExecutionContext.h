@@ -232,6 +232,10 @@ class QueryExecutionContext
     std::string name_;
     std::optional<Variable> geoIndexVar_ = std::nullopt;
     std::optional<double> geoIndexSimplificationInMeters_ = std::nullopt;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PinResultWithName, name_,
+                                                geoIndexVar_,
+                                                geoIndexSimplificationInMeters_)
   };
 
   // Accessors; see `pinResultWithName_` for an explanation.

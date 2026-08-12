@@ -18,7 +18,9 @@
 #include <utility>
 
 #include "engine/HttpError.h"
+#include "engine/QueryExecutionContext.h"
 #include "global/RuntimeParameters.h"
+#include "rdfTypes/Variable.h"
 #include "util/Exception.h"
 #include "util/http/HttpServer.h"
 #include "util/http/MediaTypes.h"
@@ -83,35 +85,56 @@ ResultPinning determineResultPinning(const ParamValueMap& params) {
   std::optional<std::string> pinNamedGeoIndex =
       ad_utility::url_parser::checkParameter(params, "pin-geo-index-on-var",
                                              {});
-  std::optional<std::string> pinGeoIndexSimplificationStr =
-      ad_utility::url_parser::checkParameter(
-          params, "pin-geo-index-simplification", {});
   std::optional<double> geoIndexSimplificationInMeters =
-      parsePinGeoIndexSimplification(pinGeoIndexSimplificationStr);
+      parsePinGeoIndexSimplification(ad_utility::url_parser::checkParameter(
+          params, "pin-geo-index-simplification", {}));
 
-  return ResultPinning{pinSubresults, pinResult, pinResultWithName,
-                       pinNamedGeoIndex, geoIndexSimplificationInMeters};
+  if (!pinResultWithName.has_value()) {
+    if (pinNamedGeoIndex.has_value() ||
+        geoIndexSimplificationInMeters.has_value()) {
+      throw std::runtime_error(
+          "`pin-geo-index-on-var` and `pin-geo-index-simplification` "
+          "require `pin-result-with-name` to be set");
+    }
+    return ResultPinning{pinSubresults, pinResult, std::nullopt};
+  }
+  if (!pinNamedGeoIndex.has_value() &&
+      geoIndexSimplificationInMeters.has_value()) {
+    throw std::runtime_error(
+        "`pin-geo-index-simplification` requires `pin-geo-index-on-var` to "
+        "be set");
+  }
+
+  std::optional<Variable> geoIndexVar =
+      pinNamedGeoIndex.has_value()
+          ? std::optional{Variable{absl::StrCat("?", pinNamedGeoIndex.value())}}
+          : std::nullopt;
+  return ResultPinning{
+      pinSubresults, pinResult,
+      QueryExecutionContext::PinResultWithName{
+          std::move(pinResultWithName).value(), std::move(geoIndexVar),
+          geoIndexSimplificationInMeters}};
 }
 
 // _____________________________________________________________________________
 std::string ResultPinning::describeForLog() const {
   std::string namePart;
   if (pinResultWithName_.has_value()) {
-    // Describe the "with geo index on ?<var>" part (empty if
-    // `pinNamedGeoIndex_` is not set).
+    const auto& pin = pinResultWithName_.value();
+    // Describe the "with geo index on ?<var>" part (empty if `geoIndexVar_`
+    // is not set).
     std::string geoIndexDescription;
-    if (pinNamedGeoIndex_.has_value()) {
+    if (pin.geoIndexVar_.has_value()) {
       std::string simplification =
-          geoIndexSimplificationInMeters_.has_value()
+          pin.geoIndexSimplificationInMeters_.has_value()
               ? absl::StrCat(", simplification=",
-                             geoIndexSimplificationInMeters_.value(), "m")
+                             pin.geoIndexSimplificationInMeters_.value(), "m")
               : "";
       geoIndexDescription = absl::StrCat(
-          " with geo index on ?", pinNamedGeoIndex_.value(), simplification);
+          " with geo index on ", pin.geoIndexVar_->name(), simplification);
     }
-    namePart =
-        absl::StrCat(" [pin result with name \"", pinResultWithName_.value(),
-                     "\"", geoIndexDescription, "]");
+    namePart = absl::StrCat(" [pin result with name \"", pin.name_, "\"",
+                            geoIndexDescription, "]");
   }
   return absl::StrCat(pinResult_ ? " [pin result]" : "",
                       pinSubtrees_ ? " [pin subresults]" : "", namePart);
@@ -142,6 +165,13 @@ bool considerSendParameter(ad_utility::MediaType mediaType) {
          (getRuntimeParameter<
               &RuntimeParameters::sparqlResultsJsonWithTime_>() &&
           mediaType == sparqlJson);
+}
+
+// _____________________________________________________________________________
+std::optional<uint64_t> determineSendLimit(const ParamValueMap& params,
+                                           ad_utility::MediaType mediaType) {
+  auto sendLimit = parseSendLimit(params);
+  return considerSendParameter(mediaType) ? sendLimit : std::nullopt;
 }
 
 }  // namespace qlever::http_api_helpers

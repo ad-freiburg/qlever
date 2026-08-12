@@ -316,8 +316,8 @@ auto Server::prepareOperation(
               (*sharedMessageSender)(std::move(json));
             },
             resultPinning.pinSubtrees_, resultPinning.pinResult_);
-        configurePinnedResultWithName(std::move(resultPinning), accessTokenOk,
-                                      *qec);
+        configurePinnedResultWithName(
+            std::move(resultPinning.pinResultWithName_), accessTokenOk, *qec);
         return qec;
       };
   return std::make_tuple(std::move(makeQec), std::move(cancellationHandle),
@@ -326,9 +326,9 @@ auto Server::prepareOperation(
 
 // _____________________________________________________________________________
 void Server::configurePinnedResultWithName(
-    qlever::http_api_helpers::ResultPinning resultPinning, bool accessTokenOk,
-    QueryExecutionContext& qec) {
-  if (!resultPinning.pinResultWithName_.has_value()) {
+    std::optional<QueryExecutionContext::PinResultWithName> pinResultWithName,
+    bool accessTokenOk, QueryExecutionContext& qec) {
+  if (!pinResultWithName.has_value()) {
     return;
   }
   if (!accessTokenOk) {
@@ -336,15 +336,7 @@ void Server::configurePinnedResultWithName(
         http::status::forbidden,
         "Pinning a result with a name requires a valid access token");
   }
-  auto getGeoCacheVar = [&]() -> std::optional<Variable> {
-    if (!resultPinning.pinNamedGeoIndex_.has_value()) {
-      return std::nullopt;
-    }
-    return Variable{absl::StrCat("?", resultPinning.pinNamedGeoIndex_.value())};
-  };
-  qec.pinResultWithName() = QueryExecutionContext::PinResultWithName{
-      resultPinning.pinResultWithName_.value(), getGeoCacheVar(),
-      resultPinning.geoIndexSimplificationInMeters_};
+  qec.pinResultWithName() = std::move(pinResultWithName);
 }
 
 // _____________________________________________________________________________
@@ -1086,11 +1078,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Update the `ParsedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` (or, if enabled via
-  // runtime parameter, `application/sparql-results+json`).
-  if (qlever::http_api_helpers::considerSendParameter(mediaType)) {
-    plannedQuery->parsedQuery().updateExportLimit(
-        qlever::http_api_helpers::parseSendLimit(params));
-  }
+  // runtime parameter, `application/sparql-results+json`). The `send`
+  // parameter is validated regardless of the content-type.
+  plannedQuery->parsedQuery().updateExportLimit(
+      qlever::http_api_helpers::determineSendLimit(params, mediaType));
 
   // This actually processes the query and sends the result in the
   // requested format.

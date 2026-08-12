@@ -13,16 +13,10 @@
 #include <string>
 #include <vector>
 
+#include "IndexTestHelpers.h"
 #include "parser/SparqlParser.h"
 
 namespace ad_utility::testing {
-// Return a pointer to a single, lazily-initialized `EncodedIriManager`
-// instance shared across all tests.
-inline const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager instance;
-  return &instance;
-}
-
 // Parse a SPARQL query string into a typed `ParsedQuery` object.
 inline auto parseQuery(std::string query,
                        const std::vector<DatasetClause>& datasets = {}) {

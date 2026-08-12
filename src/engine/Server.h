@@ -235,17 +235,13 @@ class Server {
                         TimeLimit timeLimit, bool accessTokenOk,
                         std::string_view clientIp);
 
-  // Configure pinned of named results on the `qec`. If `pinResultWithName` is
-  // set, then the `qec` is configured such that the query result will be stored
-  // in the named result cache. If `pinNamedGeoIndex` is also set, it is
-  // expected to be the variable name of a column (without leading `?`) on which
-  // a geometry index should be built. If `geoIndexSimplificationInMeters` is
-  // also set, geometries are simplified with the given maximum error in meters
-  // before indexing. Throw if named pinning is required, but the access token
-  // is not okay.
+  // Configure pinning of a named result on the `qec`. If `pinResultWithName`
+  // is set, then the `qec` is configured such that the query result will be
+  // stored in the named result cache accordingly. Throw if `pinResultWithName`
+  // is set, but the access token is not okay.
   static void configurePinnedResultWithName(
-      qlever::http_api_helpers::ResultPinning resultPinning, bool accessTokenOk,
-      QueryExecutionContext& qec);
+      std::optional<QueryExecutionContext::PinResultWithName> pinResultWithName,
+      bool accessTokenOk, QueryExecutionContext& qec);
 
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,

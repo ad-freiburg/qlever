@@ -13,6 +13,7 @@
 #include <string>
 
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"

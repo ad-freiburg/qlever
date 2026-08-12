@@ -7,6 +7,7 @@
 #include <bitset>
 
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "global/Constants.h"
 #include "index/TripleComponentConversions.h"
