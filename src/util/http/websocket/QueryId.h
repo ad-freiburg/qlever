@@ -75,6 +75,20 @@ inline std::string_view toString(QueryStatus s) noexcept {
   return "unknown";
 }
 
+// Which kind of SPARQL operation a query ID was registered for.
+enum class QueryOperation { QUERY, UPDATE };
+
+inline std::string_view toString(QueryOperation op) noexcept {
+  using enum QueryOperation;
+  switch (op) {
+    case QUERY:
+      return "query";
+    case UPDATE:
+      return "update";
+  }
+  return "unknown";
+}
+
 // This class is similar to QueryId, but it's instances are all unique within
 // the registry it was created with. (It can not be created without a registry)
 // Therefore it is not copyable and removes itself from said registry
@@ -161,6 +175,7 @@ class QueryRegistry {
     std::string_view query_;
     std::string_view clientIp_;
     std::chrono::system_clock::time_point startedAt_;
+    QueryOperation operation_;
 
     // Field-by-field so `ordered_json` keeps insertion order (the on-disk
     // contract); a brace-init can't mix the foreign `qid` json with the rest.
@@ -168,6 +183,7 @@ class QueryRegistry {
       json["ts-ms"] = epochMillis(info.startedAt_);
       json["event"] = "start";
       json["qid"] = nlohmann::json(info.queryId_);
+      json["type"] = toString(info.operation_);
       json["client-ip"] = info.clientIp_;
       json["query"] = info.query_;
     }
@@ -208,7 +224,8 @@ class QueryRegistry {
   //         if it was not present in the registry before. An empty
   //         std::optional if the id already existed before.
   std::optional<OwningQueryId> uniqueIdFromString(
-      std::string id, std::string_view query, std::string_view clientIp = {}) {
+      std::string id, std::string_view query, std::string_view clientIp = {},
+      QueryOperation operation = QueryOperation::QUERY) {
     auto queryId = QueryId::idFromString(std::move(id));
 
     // The `end` event reports a failure unless the query thread
@@ -248,7 +265,8 @@ class QueryRegistry {
     // removes the entry again.
     OwningQueryId owningQueryId{std::move(queryId), std::move(status),
                                 std::move(unregister)};
-    StartInfo info{owningQueryId.toQueryId(), query, clientIp, startedAt};
+    StartInfo info{owningQueryId.toQueryId(), query, clientIp, startedAt,
+                   operation};
     for (const auto& cb : onStart_) {
       cb(info);
     }
@@ -257,14 +275,14 @@ class QueryRegistry {
 
   // Generates a unique pseudo-random OwningQueryId object for this registry
   // and associates it with the given query.
-  OwningQueryId uniqueId(std::string_view query,
-                         std::string_view clientIp = {}) {
+  OwningQueryId uniqueId(std::string_view query, std::string_view clientIp = {},
+                         QueryOperation operation = QueryOperation::QUERY) {
     static thread_local std::mt19937 generator(std::random_device{}());
     std::uniform_int_distribution<uint64_t> distrib{};
     std::optional<OwningQueryId> result;
     do {
       result = uniqueIdFromString(std::to_string(distrib(generator)), query,
-                                  clientIp);
+                                  clientIp, operation);
     } while (!result.has_value());
     return std::move(result.value());
   }

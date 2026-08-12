@@ -295,7 +295,8 @@ class Server {
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
           const RequestT& request, std::string_view operation,
-          std::string_view clientIp = {});
+          std::string_view clientIp,
+          ad_utility::websocket::QueryOperation queryOperation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
@@ -328,6 +329,8 @@ class Server {
   ///
   /// \param request The HTTP request to extract the id from.
   /// \param query A string representation of the query to register an id for.
+  /// \param clientIp Client IP address
+  /// \param queryOperation Query operation type: "query" or "update"
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
@@ -335,7 +338,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
       getQueryId(const RequestT& request, std::string_view query,
-                 std::string_view clientIp = {});
+                 std::string_view clientIp,
+                 ad_utility::websocket::QueryOperation queryOperation);
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
