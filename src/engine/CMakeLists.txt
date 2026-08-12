@@ -20,8 +20,7 @@ add_library(engine
         ExplicitIdTableOperation.cpp StringMapping.cpp MaterializedViews.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
-        ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp
-        ResponseJson.cpp)
+        ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp UpdateMetadata.cpp ExternalValues.cpp)
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
@@ -45,7 +44,7 @@ endif()
 # boost::beast HTTP session coroutine produces irreducible control flow
 # containing EH pads — the same LLVM bug that disables `HttpTest`).
 if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
-    add_library(server Server.cpp)
+    add_library(server Server.cpp ResponseJson.cpp)
     qlever_target_link_libraries(server engine qlever_util index sparqlParser global http
     sortPerformanceEstimator qlever metrics)
 endif ()

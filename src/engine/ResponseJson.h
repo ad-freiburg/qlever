@@ -29,7 +29,7 @@ using nlohmann::json;
 // that set the index resp. text index description): name, git hash, and
 // version of the index and server, as well as counts of predicates,
 // subjects, objects, and triples.
-json composeStats(const Index& index);
+json composeIndexStats(const Index& index);
 
 // Compose the response for the `?cmd=cache-stats` endpoint, as well as the
 // `?cmd=clear-cache`, `?cmd=clear-cache-complete`, and

@@ -476,7 +476,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
-    response = createJsonResponse(composeStats(index), request);
+    response = createJsonResponse(composeIndexStats(index), request);
   } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
     logCommand(cmd, "get cache statistics");
     response = createJsonResponse(
@@ -714,7 +714,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setKbName(std::string{description.value()});
-    response = createJsonResponse(composeStats(index), request);
+    response = createJsonResponse(composeIndexStats(index), request);
   }
 
   // Set description of text index.
@@ -723,7 +723,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setTextName(std::string{description.value()});
-    response = createJsonResponse(composeStats(index), request);
+    response = createJsonResponse(composeIndexStats(index), request);
   }
 
   // Set one or several of the runtime parameters.

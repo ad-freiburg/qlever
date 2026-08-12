@@ -16,7 +16,7 @@
 namespace responseJson {
 
 // _____________________________________________________________________________
-json composeStats(const Index& index) {
+json composeIndexStats(const Index& index) {
   json result;
   result["name-index"] = index.getKbName();
   result["git-hash-index"] = index.getGitShortHash();

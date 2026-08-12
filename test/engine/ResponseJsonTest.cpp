@@ -22,7 +22,7 @@
 using nlohmann::json;
 
 // _____________________________________________________________________________
-TEST(ResponseJsonTest, composeStats) {
+TEST(ResponseJsonTest, composeIndexStats) {
   const Index& index = ad_utility::testing::getQec("<a> <b> <c>")->getIndex();
   json expectedJson{{"git-hash-index", "git short hash not set"},
                     {"git-hash-server", "git short hash not set"},
@@ -41,7 +41,8 @@ TEST(ResponseJsonTest, composeStats) {
                     {"num-triples-internal", 1},
                     {"num-triples-normal", 1},
                     {"num-word-occurrences", 0}};
-  EXPECT_THAT(responseJson::composeStats(index), testing::Eq(expectedJson));
+  EXPECT_THAT(responseJson::composeIndexStats(index),
+              testing::Eq(expectedJson));
 }
 
 // _____________________________________________________________________________
