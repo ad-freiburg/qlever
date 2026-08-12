@@ -292,7 +292,11 @@ void VocabularyOnDisk::open(const std::string& filename) {
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
   bool preferIoUring = true;
+  // Ring capacity for each batch I/O manager.  A larger ring allows more
+  // in-flight vocab reads per batch before blocking, at the cost of kernel
+  // memory per manager.
+  constexpr unsigned ringSize = 1024;
   for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
+    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring, ringSize));
   }
 }
