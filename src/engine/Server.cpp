@@ -398,6 +398,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
+  using namespace responseJson;
   // Acquire the current index and the materialized views manager exactly once
   // for the whole request, under a single read lock. This way a concurrent
   // rebuild that swaps both in cannot make different helpers observe a
@@ -461,28 +462,28 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
   if (auto cmd = checkParameter("cmd", "stats")) {
     logCommand(cmd, "get index statistics");
-    response = createJsonResponse(responseJson::composeStats(index), request);
+    response = createJsonResponse(composeStats(index), request);
   } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
     logCommand(cmd, "get cache statistics");
     response = createJsonResponse(
-        responseJson::composeCacheStats(cache(), namedResultCache()), request);
+        composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
     logCommand(cmd, "clear the cache (unpinned elements only)");
     cache().clearUnpinnedOnly();
     response = createJsonResponse(
-        responseJson::composeCacheStats(cache(), namedResultCache()), request);
+        composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
     requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache().clearAll();
     response = createJsonResponse(
-        responseJson::composeCacheStats(cache(), namedResultCache()), request);
+        composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
     requireValidAccessToken("clear-named-cache");
     logCommand(cmd, "clear the cache for named results");
     namedResultCache().clear();
     response = createJsonResponse(
-        responseJson::composeCacheStats(cache(), namedResultCache()), request);
+        composeCacheStats(cache(), namedResultCache()), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
@@ -699,7 +700,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setKbName(std::string{description.value()});
-    response = createJsonResponse(responseJson::composeStats(index), request);
+    response = createJsonResponse(composeStats(index), request);
   }
 
   // Set description of text index.
@@ -708,7 +709,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setTextName(std::string{description.value()});
-    response = createJsonResponse(responseJson::composeStats(index), request);
+    response = createJsonResponse(composeStats(index), request);
   }
 
   // Set one or several of the runtime parameters.
