@@ -48,7 +48,7 @@ class ServerMetrics {
                 absl::AnyInvocable<int64_t() const> getCacheLimit,
                 absl::AnyInvocable<int64_t() const> getRebuildInProgress,
                 std::optional<ad_utility::MemorySize> maxMem,
-                absl::AnyInvocable<int64_t() const> getTotalTriples);
+                absl::AnyInvocable<int64_t() const> getNumTriplesIndex);
   void registerCallbacks();
 
  private:
@@ -63,7 +63,8 @@ class ServerMetrics {
   absl::AnyInvocable<int64_t() const> getCacheUsed_;
   absl::AnyInvocable<int64_t() const> getCacheLimit_;
   absl::AnyInvocable<int64_t() const> getRebuildInProgress_;
-  absl::AnyInvocable<int64_t() const> getTotalTriples_;
+  absl::AnyInvocable<int64_t() const> getNumTriplesIndex_;
+  absl::AnyInvocable<int64_t() const> getNumTriplesTotal_;
 
   // Observable instruments: SDK invokes callbacks on scrape; RemoveCallback
   // in ~ServerMetrics() blocks until any in-flight callback returns.
@@ -78,7 +79,9 @@ class ServerMetrics {
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
       rebuildInProgressMetric_;
   std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
-      totalTriplesMetric_;
+      numTriplesIndex_;
+  std::shared_ptr<opentelemetry::metrics::ObservableInstrument>
+      numTriplesTotal_;
 };
 
 #endif  // QLEVER_SRC_UTIL_METRICS_SERVERMETRICS_H
