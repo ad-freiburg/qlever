@@ -199,9 +199,9 @@ class IoUringPolicy {
 
   // Per-read metadata needed when a completion is reaped: which batch the read
   // belongs to, how many bytes it was supposed to read (so that reading fewer
-  // bytes than expected can be detected), and the index of the registered buffer
-  // that received the data so it can be returned to the free pool and the data
-  // copied to the caller's target. See `inFlightReadsByRequestId_`.
+  // bytes than expected can be detected), and the index of the registered
+  // buffer that received the data so it can be returned to the free pool and
+  // the data copied to the caller's target. See `inFlightReadsByRequestId_`.
   struct InFlightRead {
     BatchHandle batchHandle;
     size_t expectedNumBytes;

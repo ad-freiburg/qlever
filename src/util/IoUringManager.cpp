@@ -88,7 +88,7 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
   }
 
   ret = io_uring_register_buffers(&ring_, registeredIovecs_.data(),
-                                   registeredIovecs_.size());
+                                  registeredIovecs_.size());
   if (ret < 0) {
     AD_THROW("io_uring_register_buffers failed in IoUringManager");
   }
@@ -164,8 +164,7 @@ void IoUringPolicy::addBatch(int fd,
     // Both the ring and the buffer pool have limited capacity. If either is
     // full, flush the prepared SQEs and drain completions until slots and
     // buffers are available again.
-    if (numInFlightReadRequests_ >= ringSize_ ||
-        freeBufferIndices_.empty()) {
+    if (numInFlightReadRequests_ >= ringSize_ || freeBufferIndices_.empty()) {
       io_uring_submit(&ring_);
       while (numInFlightReadRequests_ >= ringSize_ ||
              freeBufferIndices_.empty()) {
@@ -182,8 +181,7 @@ void IoUringPolicy::addBatch(int fd,
     // io_uring will DMA the data directly into `registeredBuffers_[poolIdx]`.
     // The `addr` parameter is ignored for fixed-buffer reads; the kernel
     // resolves the buffer via the registered iovec at `poolIdx`.
-    io_uring_prep_read_fixed(sqe, fd,
-                             registeredBuffers_[poolIdx].data(),
+    io_uring_prep_read_fixed(sqe, fd, registeredBuffers_[poolIdx].data(),
                              static_cast<unsigned>(numBytesToRead),
                              static_cast<__u64>(fileOffset), poolIdx);
 
