@@ -13,7 +13,9 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <array>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -49,6 +51,37 @@ using namespace ad_utility::metrics;
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
+
+namespace {
+// Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
+// the log message and whether it requires a valid access token.
+struct CommandMeta {
+  std::string_view name;
+  std::string_view description;
+  bool requiresAuth;
+};
+
+constexpr std::array kCommands = {
+    CommandMeta{"stats", "get index statistics", false},
+    CommandMeta{"cache-stats", "get cache statistics", false},
+    CommandMeta{"clear-cache", "clear the cache (unpinned elements only)",
+                false},
+    CommandMeta{"clear-cache-complete",
+                "clear cache completely (including unpinned elements)", true},
+    CommandMeta{"clear-named-cache", "clear the cache for named results", true},
+    CommandMeta{"clear-delta-triples", "clear delta triples", true},
+    CommandMeta{"vacuum-delta-triples",
+                "vacuum (remove redundant) delta triples", true},
+    CommandMeta{"get-settings", "get server settings", false},
+    CommandMeta{"get-index-id", "get index ID", false},
+    CommandMeta{"dump-active-queries", "dump active queries", true},
+    CommandMeta{"rebuild-index", "rebuilding index", true},
+    CommandMeta{"write-materialized-view", "write materialized view", true},
+    CommandMeta{"load-materialized-view", "explicitly load materialized view",
+                true},
+    CommandMeta{"delete-materialized-view", "delete materialized view", true},
+};
+}  // namespace
 
 // __________________________________________________________________________
 Server::Server(
@@ -467,35 +500,46 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // parameter is ignored.
   std::optional<http::response<streamable_body>> response;
 
-  // Execute commands (URL parameter with key "cmd").
-  auto logCommand = [](const std::optional<std::string_view>& cmd,
-                       std::string_view actionMsg) {
-    AD_LOG_INFO << "Processing command \"" << cmd.value() << "\"" << ": "
-                << actionMsg << std::endl;
+  // Execute commands (URL parameter with key "cmd"). Looks up metadata for
+  // `cmd` in `kCommands`, runs the access-token check (if required), and logs
+  // it. `cmd` must name an entry in `kCommands` — it always comes from a
+  // literal used in the `process()` dispatch below, so a missing entry would
+  // be a programming error.
+  auto dispatchLog = [&requireValidAccessToken](std::string_view cmd) {
+    auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name);
+    AD_CORRECTNESS_CHECK(it != kCommands.end());
+    if (it->requiresAuth) {
+      requireValidAccessToken(std::string{it->name});
+    }
+    AD_LOG_INFO << "Processing command \"" << it->name
+                << "\": " << it->description << std::endl;
   };
+
+  // We call `createJsonResponse` always with the `request` parameter
+  auto jsonResponse = [&request](json j) {
+    return createJsonResponse(j, request);
+  };
+
   if (auto cmd = checkParameter("cmd", "stats")) {
-    logCommand(cmd, "get index statistics");
-    response = createJsonResponse(composeStatsJson(index), request);
+    dispatchLog(*cmd);
+    response = jsonResponse(composeStatsJson(index));
   } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
-    logCommand(cmd, "get cache statistics");
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    dispatchLog(*cmd);
+    response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
-    logCommand(cmd, "clear the cache (unpinned elements only)");
+    dispatchLog(*cmd);
     cache().clearUnpinnedOnly();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
-    requireValidAccessToken("clear-cache-complete");
-    logCommand(cmd, "clear cache completely (including unpinned elements)");
+    dispatchLog(*cmd);
     cache().clearAll();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
-    requireValidAccessToken("clear-named-cache");
-    logCommand(cmd, "clear the cache for named results");
+    dispatchLog(*cmd);
     namedResultCache().clear();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
-    requireValidAccessToken("clear-delta-triples");
-    logCommand(cmd, "clear delta triples");
+    dispatchLog(*cmd);
     // The function requires a SharedCancellationHandle, but the operation is
     // not cancellable.
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -517,10 +561,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         },
         handle);
     auto countAfterClear = co_await std::move(coroutine);
-    response = createJsonResponse(json(countAfterClear), request);
+    response = jsonResponse(json(countAfterClear));
   } else if (auto cmd = checkParameter("cmd", "vacuum-delta-triples")) {
-    requireValidAccessToken("vacuum-delta-triples");
-    logCommand(cmd, "vacuum (remove redundant) delta triples");
+    dispatchLog(*cmd);
 
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     std::optional<TimeLimit> timeLimit =
@@ -547,39 +590,35 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         },
         handle);
     auto vacuumStats = co_await std::move(coroutine);
-    response = createJsonResponse(vacuumStats, request);
+    response = jsonResponse(vacuumStats);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
-    logCommand(cmd, "get server settings");
-    response = createJsonResponse(
-        json(globalRuntimeParameters.rlock()->toMap()), request);
+    dispatchLog(*cmd);
+    response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
-    logCommand(cmd, "get index ID");
+    dispatchLog(*cmd);
     response =
         createOkResponse(index.getIndexId(), request, MediaType::textPlain);
   } else if (auto cmd = checkParameter("cmd", "dump-active-queries")) {
-    requireValidAccessToken("dump-active-queries");
-    logCommand(cmd, "dump active queries");
+    dispatchLog(*cmd);
     auto json = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       json[nlohmann::json(key)] = std::move(value);
     }
-    response = createJsonResponse(json, request);
+    response = jsonResponse(json);
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
-    requireValidAccessToken("rebuild-index");
-    logCommand(cmd, "rebuilding index");
+    dispatchLog(*cmd);
     auto config = co_await rebuildIndexUnlessInProgress(
         checkParameter("rebuild-tmp-dir", std::nullopt),
         checkParameter("rebuild-previous-index-dir", std::nullopt));
     if (config.has_value()) {
-      response = createJsonResponse(config->successResponseAsJson(), request);
+      response = jsonResponse(config->successResponseAsJson());
     } else {
       response = createHttpResponseFromString(
           "Another rebuild is currently in progress!",
           http::status::too_many_requests, request, MediaType::textPlain);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
-    requireValidAccessToken("write-materialized-view");
-    logCommand(cmd, "write materialized view");
+    dispatchLog(*cmd);
 
     // Extract name parameter for materialized view.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
@@ -629,13 +668,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-written", name.value()}};
-    response = createJsonResponse(json, request);
+    response = jsonResponse(json);
 
     // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
-    requireValidAccessToken("load-materialized-view");
-    logCommand(cmd, "explicitly load materialized view");
+    dispatchLog(*cmd);
 
     // Extract materialized view name parameter.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
@@ -647,13 +685,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-loaded", name.value()}};
-    response = createJsonResponse(json, request);
+    response = jsonResponse(json);
 
     // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
-    requireValidAccessToken("delete-materialized-view");
-    logCommand(cmd, "delete materialized view");
+    dispatchLog(*cmd);
 
     // Extract materialized view name parameter.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
@@ -673,7 +710,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
     // Construct simple response JSON.
     nlohmann::json json{{"materialized-view-deleted", name.value()}};
-    response = createJsonResponse(json, request);
+    response = jsonResponse(json);
 
     // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
@@ -709,7 +746,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setKbName(std::string{description.value()});
-    response = createJsonResponse(composeStatsJson(index), request);
+    response = jsonResponse(composeStatsJson(index));
   }
 
   // Set description of text index.
@@ -718,7 +755,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setTextName(std::string{description.value()});
-    response = createJsonResponse(composeStatsJson(index), request);
+    response = jsonResponse(composeStatsJson(index));
   }
 
   // Set one or several of the runtime parameters.
@@ -729,8 +766,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                   << " to value \"" << value.value() << "\"" << std::endl;
       globalRuntimeParameters.wlock()->setFromString(
           key, std::string{value.value()});
-      response = createJsonResponse(
-          json(globalRuntimeParameters.rlock()->toMap()), request);
+      response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
     }
   }
 
