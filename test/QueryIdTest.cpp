@@ -16,6 +16,7 @@
 using ad_utility::epochMillis;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryOperation;
 using ad_utility::websocket::QueryRegistry;
 using ad_utility::websocket::QueryStatus;
 using ::testing::Field;
@@ -261,8 +262,9 @@ TEST(QueryRegistry, onStartFiresWithQueryDetails) {
     starts.push_back(info);
   });
 
-  auto owned = registry.uniqueIdFromString("01123581321345589144",
-                                           "SELECT * WHERE {}", "10.0.0.5");
+  auto owned =
+      registry.uniqueIdFromString("01123581321345589144", "SELECT * WHERE {}",
+                                  "10.0.0.5", QueryOperation::QUERY);
   ASSERT_TRUE(owned.has_value());
 
   ASSERT_EQ(starts.size(), 1u);
@@ -272,6 +274,7 @@ TEST(QueryRegistry, onStartFiresWithQueryDetails) {
   EXPECT_EQ(starts.at(0).at("query").get<std::string_view>(),
             "SELECT * WHERE {}");
   EXPECT_EQ(starts.at(0).at("client-ip").get<std::string_view>(), "10.0.0.5");
+  EXPECT_EQ(starts.at(0).at("type").get<std::string_view>(), "query");
   auto active = registry.getActiveQueries();
   EXPECT_EQ(starts.at(0).at("ts-ms").get<int64_t>(),
             epochMillis(active.at(owned->toQueryId()).startedAt_));
