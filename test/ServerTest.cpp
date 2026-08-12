@@ -695,6 +695,52 @@ TEST(ServerTest, metricsEndpoint) {
 }
 
 // _____________________________________________________________________________
+TEST(ServerTest, clearDeltaTriples) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto insertRequest =
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <d> <e> <f> }");
+  EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
+  EXPECT_THAT(server.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+
+  auto clearRequest = [](std::optional<std::string> accessToken) {
+    auto request = makeGetRequest("/?cmd=clear-delta-triples");
+    if (accessToken.has_value()) {
+      request.set(http::field::authorization, "Bearer " + accessToken.value());
+    }
+    return request;
+  };
+
+  // The command requires a valid access token.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.process(clearRequest(std::nullopt)),
+      testing::HasSubstr("clear-delta-triples requires a valid access token"));
+  EXPECT_THAT(server.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+
+  // With a valid access token, the delta triples are cleared and the response
+  // reports the (now empty) resulting counts.
+  auto response = server.process(clearRequest("accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyAsJson(std::move(response)),
+              testing::Optional(testing::Eq(
+                  json{{"inserted", 0}, {"deleted", 0}, {"total", 0}})));
+  EXPECT_THAT(server.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              testing::Optional(testing::Eq(DeltaTriplesCount{0, 0})));
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, gspHead) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
   // Each request runs on a fresh server, so that the sub-tests are

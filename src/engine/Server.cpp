@@ -81,6 +81,30 @@ constexpr std::array kCommands = {
                 true},
     CommandMeta{"delete-materialized-view", "delete materialized view", true},
 };
+
+// Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
+// action being authorized, for the error message.
+void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
+  if (!accessTokenOk) {
+    throw HttpError(boost::beast::http::status::forbidden,
+                    absl::StrCat(actionName,
+                                 " requires a valid access token but no "
+                                 "access token was provided"));
+  }
+}
+
+// Look up metadata for `cmd` in `kCommands`, run the access-token check (if
+// required), and log it. `cmd` must name an entry in `kCommands` -- it always
+// comes from a literal used in the `process()` dispatch below.
+void dispatchLog(std::string_view cmd, bool accessTokenOk) {
+  auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name);
+  AD_CORRECTNESS_CHECK(it != kCommands.end());
+  if (it->requiresAuth) {
+    requireValidAccessToken(accessTokenOk, it->name);
+  }
+  AD_LOG_INFO << "Processing command \"" << it->name
+              << "\": " << it->description << std::endl;
+}
 }  // namespace
 
 // __________________________________________________________________________
@@ -441,6 +465,32 @@ void Server::configurePinnedResultWithName(
 }
 
 // _____________________________________________________________________________
+Awaitable<DeltaTriplesCount> Server::clearDeltaTriples() {
+  // The function requires a SharedCancellationHandle, but the operation is
+  // not cancellable.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // We don't directly `co_await` because of lifetime issues (bugs) in the
+  // Conan setup.
+  auto coroutine = computeInNewThread(
+      updateThreadPool_,
+      [this] {
+        // Snapshot here, on the (single-threaded) `updateThreadPool_`, so we
+        // modify the currently active index and not a stale one that a
+        // concurrent rebuild may have swapped out (whose changes would be
+        // lost).
+        auto snapshot = indexAndViewsSnapshot();
+        return snapshot->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
+            [](auto& deltaTriples) {
+              deltaTriples.clear();
+              return deltaTriples.getCounts();
+            });
+      },
+      handle);
+  auto countAfterClear = co_await std::move(coroutine);
+  co_return countAfterClear;
+}
+
+// _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
@@ -481,15 +531,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
   bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
-  auto requireValidAccessToken =
-      [&accessTokenOk](const std::string& actionName) {
-        if (!accessTokenOk) {
-          throw HttpError(http::status::forbidden,
-                          absl::StrCat(actionName,
-                                       " requires a valid access token but no "
-                                       "access token was provided"));
-        }
-      };
+
+  // We call `createJsonResponse` always with the same `request` parameter
+  auto jsonResponse = [&request](json j) {
+    return createJsonResponse(j, request);
+  };
+  std::optional<http::response<streamable_body>> response;
 
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
@@ -498,72 +545,30 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   //
   // Some parameters require that "access-token" is set correctly. If not, that
   // parameter is ignored.
-  std::optional<http::response<streamable_body>> response;
-
-  // Execute commands (URL parameter with key "cmd"). Looks up metadata for
-  // `cmd` in `kCommands`, runs the access-token check (if required), and logs
-  // it. `cmd` must name an entry in `kCommands` — it always comes from a
-  // literal used in the `process()` dispatch below, so a missing entry would
-  // be a programming error.
-  auto dispatchLog = [&requireValidAccessToken](std::string_view cmd) {
-    auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name);
-    AD_CORRECTNESS_CHECK(it != kCommands.end());
-    if (it->requiresAuth) {
-      requireValidAccessToken(std::string{it->name});
-    }
-    AD_LOG_INFO << "Processing command \"" << it->name
-                << "\": " << it->description << std::endl;
-  };
-
-  // We call `createJsonResponse` always with the `request` parameter
-  auto jsonResponse = [&request](json j) {
-    return createJsonResponse(j, request);
-  };
-
   if (auto cmd = checkParameter("cmd", "stats")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     response = jsonResponse(composeStatsJson(index));
   } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     cache().clearUnpinnedOnly();
     response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     cache().clearAll();
     response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     namedResultCache().clear();
     response = jsonResponse(composeCacheStatsJson());
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
-    dispatchLog(*cmd);
-    // The function requires a SharedCancellationHandle, but the operation is
-    // not cancellable.
-    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    // We don't directly `co_await` because of lifetime issues (bugs) in the
-    // Conan setup.
-    auto coroutine = computeInNewThread(
-        updateThreadPool_,
-        [this] {
-          // Snapshot here, on the (single-threaded) `updateThreadPool_`, so we
-          // modify the currently active index and not a stale one that a
-          // concurrent rebuild may have swapped out (whose changes would be
-          // lost).
-          auto snapshot = indexAndViewsSnapshot();
-          return snapshot->index_.deltaTriplesManager()
-              .modify<DeltaTriplesCount>([](auto& deltaTriples) {
-                deltaTriples.clear();
-                return deltaTriples.getCounts();
-              });
-        },
-        handle);
-    auto countAfterClear = co_await std::move(coroutine);
+    dispatchLog(*cmd, accessTokenOk);
+    auto countAfterClear = co_await clearDeltaTriples();
     response = jsonResponse(json(countAfterClear));
   } else if (auto cmd = checkParameter("cmd", "vacuum-delta-triples")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
 
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     std::optional<TimeLimit> timeLimit =
@@ -592,21 +597,21 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     auto vacuumStats = co_await std::move(coroutine);
     response = jsonResponse(vacuumStats);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     response =
         createOkResponse(index.getIndexId(), request, MediaType::textPlain);
   } else if (auto cmd = checkParameter("cmd", "dump-active-queries")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     auto json = nlohmann::json::object();
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
       json[nlohmann::json(key)] = std::move(value);
     }
     response = jsonResponse(json);
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
     auto config = co_await rebuildIndexUnlessInProgress(
         checkParameter("rebuild-tmp-dir", std::nullopt),
         checkParameter("rebuild-previous-index-dir", std::nullopt));
@@ -618,7 +623,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           http::status::too_many_requests, request, MediaType::textPlain);
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
 
     // Extract name parameter for materialized view.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
@@ -673,7 +678,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
 
     // Extract materialized view name parameter.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
@@ -690,7 +695,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     // Prevent regular query processing by removing the query from the request.
     parsedHttpRequest.operation_ = None{};
   } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
-    dispatchLog(*cmd);
+    dispatchLog(*cmd, accessTokenOk);
 
     // Extract materialized view name parameter.
     auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
@@ -730,7 +735,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Prometheus metrics scrape endpoint.
   if (parsedHttpRequest.path_ == "/metrics") {
-    requireValidAccessToken("metrics");
+    requireValidAccessToken(accessTokenOk, "metrics");
     if (!metricsReader_) {
       response = createNotFoundResponse(
           "Metrics not enabled (use --enable-metrics)", request);
@@ -742,7 +747,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Set description of KB index.
   if (auto description = checkParameter("index-description", std::nullopt)) {
-    requireValidAccessToken("index-description");
+    requireValidAccessToken(accessTokenOk, "index-description");
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setKbName(std::string{description.value()});
@@ -751,7 +756,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Set description of text index.
   if (auto description = checkParameter("text-description", std::nullopt)) {
-    requireValidAccessToken("text-description");
+    requireValidAccessToken(accessTokenOk, "text-description");
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setTextName(std::string{description.value()});
@@ -761,7 +766,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Set one or several of the runtime parameters.
   for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
     if (auto value = checkParameter(key, std::nullopt)) {
-      requireValidAccessToken("setting runtime parameters");
+      requireValidAccessToken(accessTokenOk, "setting runtime parameters");
       AD_LOG_INFO << "Setting runtime parameter \"" << key << "\""
                   << " to value \"" << value.value() << "\"" << std::endl;
       globalRuntimeParameters.wlock()->setFromString(
@@ -851,9 +856,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "following update was sent instead of an query: ",
         dummy);
   };
-  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
-                         Update update) -> Awaitable<void> {
-    requireValidAccessToken("SPARQL Update");
+  auto visitUpdate = [&index, &visitOperation,
+                      &accessTokenOk](Update update) -> Awaitable<void> {
+    requireValidAccessToken(accessTokenOk, "SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
@@ -869,9 +874,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "following query was sent instead of an update: ",
         tracer);
   };
-  auto visitGraphStore =
-      [&request, &visitOperation, &requireValidAccessToken,
-       &index](GraphStoreOperation operation) -> Awaitable<void> {
+  auto visitGraphStore = [&request, &visitOperation, &accessTokenOk, &index](
+                             GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
@@ -882,7 +886,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
       AD_CORRECTNESS_CHECK(
           ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
-      requireValidAccessToken("Update from Graph Store Protocol");
+      requireValidAccessToken(accessTokenOk,
+                              "Update from Graph Store Protocol");
     }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here

@@ -167,6 +167,11 @@ class Server {
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
+  // Clear the delta triples of the currently active index (not a stale
+  // snapshot, even if a concurrent rebuild swaps the index while this is
+  // running) and return the resulting counts. Not cancellable.
+  Awaitable<DeltaTriplesCount> clearDeltaTriples();
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
