@@ -453,31 +453,17 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3191
-// Building a text index that considers each literal as a text record used to
-// crash with `Assertion unmarkedIdx < vocab.size() failed` when combined with
-// a `SplitVocabulary` (e.g. the geo-split vocabulary), because the words of
-// the KB vocabulary were iterated using contiguous indices `0, ...,
-// vocab.size() - 1`, which are not valid indices for a `SplitVocabulary`.
-// NOTE: The WKT literal must not be a `POINT`, because those are encoded
-// directly as `GeoPoint` IDs and never end up in the (geo) vocabulary, which
-// would not exercise the `SplitVocabulary` codepath that used to crash.
-// NOTE: We use the `TFIDF` scoring metric (instead of the default `EXPLICIT`)
-// because only then is `ScoreData::calculateScoreData` run, which used to
-// misclassify literals from non-default sub-vocabularies (like the WKT
-// literal here) as non-literals: `vocab.isLiteral(index)` only considers the
-// index ranges of the vocabulary's default (marker-0) sub-vocabulary, so it
-// wrongly returned `false` for the (marker-encoded) WKT literal. The `polygon`
-// word from that literal would then silently get a score of 0 instead of
-// throwing, because `ScoreData::getScore` falls back to 0 for an unscored
-// word instead of failing loudly.
-// NOTE: We also add a single dummy word/doc pair (unrelated to `#3191`) so
-// that the literal round doesn't start right at context/document ID 0. If it
-// did, an (unrelated, pre-existing) off-by-one between the context IDs that
-// `TextIndexBuilder` assigns to literals and the document IDs that
-// `ScoreData` assigns to them would coincidentally shift the scores of all
-// but the very first literal onto the wrong document, which would make this
-// test fail for a reason unrelated to the bug it targets.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3191.
+// With a `SplitVocabulary`, iterating KB words via contiguous indices
+// `0, ..., vocab.size() - 1` used to crash, and `vocab.isLiteral(index)`
+// (only checking the default sub-vocabulary's ranges) misclassified
+// non-default-sub-vocabulary literals (e.g. WKT) as non-literals, so their
+// words silently scored 0 instead of throwing. The WKT literal must not be a
+// `POINT` (those become `GeoPoint` IDs, never entering the vocabulary), and
+// scoring must be `TFIDF` (only then does `ScoreData::calculateScoreData`
+// run). A leading dummy word/doc pair avoids starting at context/document ID
+// 0, which would otherwise mask a separate, unrelated off-by-one between
+// literal context IDs and `ScoreData` document IDs.
 TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{
       "<a> <b> \"hello world\" . "
