@@ -290,16 +290,13 @@ void VocabularyOnDisk::open(const std::string& filename) {
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
   size_t numManagers =
-      getRuntimeParameter<
-          &RuntimeParameters::vocabBatchIoNumManagers_>();
-  size_t ringSize = getRuntimeParameter<
-      &RuntimeParameters::vocabBatchIoRingSize_>();
+      getRuntimeParameter<&RuntimeParameters::vocabBatchIoNumManagers_>();
+  size_t ringSize =
+      getRuntimeParameter<&RuntimeParameters::vocabBatchIoRingSize_>();
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
-      std::unique_ptr<ad_utility::BatchManagerBase>>>(
-      numManagers);
+      std::unique_ptr<ad_utility::BatchManagerBase>>>(numManagers);
   bool preferIoUring = true;
   for (size_t i = 0; i < numManagers; ++i) {
-    ioManagers_->push(
-        ad_utility::makeBatchManager(preferIoUring, ringSize));
+    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring, ringSize));
   }
 }
