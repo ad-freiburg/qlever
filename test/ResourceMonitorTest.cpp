@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cstdint>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <set>
@@ -404,8 +405,6 @@ TEST(ResourceMonitor, AppendModeKeepsAMatchingHeader) {
   ASSERT_EQ(lines.size(), 2u);
   EXPECT_EQ(lines[0], rm::tsvHeader);
   EXPECT_EQ(lines[1], existingRow);
-  // Nothing was rotated: there is only ever one log file in the steady state.
-  EXPECT_FALSE(fs::exists(path.string() + ".old"));
 }
 
 // _____________________________________________________________________________
@@ -433,10 +432,23 @@ TEST(ResourceMonitor, AppendModeRotatesAFileWithAnOutdatedHeader) {
     // exactly the current header.
     monitor.start(path, ResourceMonitor::Mode::Append, std::chrono::hours{1});
   }
-  const fs::path rotated = path.string() + ".old";
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 1u);
   EXPECT_EQ(lines[0], rm::tsvHeader);
+
+  // The archive is the one entry in the directory that is not the live log.
+  // Its name carries the rotation time, so the test cannot predict it.
+  std::vector<fs::path> resourceLogs;
+  for (const auto& resourceLog : fs::directory_iterator(fs::path{directory})) {
+    if (resourceLog.path() != path) {
+      resourceLogs.push_back(resourceLog.path());
+    }
+  }
+  ASSERT_EQ(resourceLogs.size(), 1u);
+  const fs::path rotated = resourceLogs.front();
+  EXPECT_THAT(ql::pathFilename(rotated).string(),
+              ::testing::StartsWith("resource-usage."));
+  EXPECT_THAT(ql::pathFilename(rotated).string(), ::testing::EndsWith(".tsv"));
 
   // The old log is preserved unchanged next to it.
   ASSERT_TRUE(fs::exists(rotated));
@@ -450,18 +462,21 @@ TEST(ResourceMonitor, AppendModeRotatesAFileWithAnOutdatedHeader) {
 TEST(ResourceMonitor, AppendModeWritesASecondHeaderWhenRotationFails) {
   auto [directory, cleanup] =
       ad_utility::testing::makeTemporaryDirectory("resourceMonitorNoRotate");
-  const fs::path path = fs::path{directory} / "resource-usage.tsv";
+  // A name that is close to the 255-character limit for file names: splicing
+  // the 20-character timestamp into it pushes the name of the archive past
+  // that limit, so the rename below fails with `ENAMETOOLONG`.
+  const fs::path path = fs::path{directory} / (std::string(250, 'a') + ".tsv");
   const std::string oldHeader = "elapsed_s\ttimestamp_ms\trss\tcpu_percent";
   const std::string oldRow = "0.0\t1000\t2048\t10.0";
   {
     std::ofstream existing{path};
+    if (!fs::exists(path)) {
+      // Some filesystems (e.g. eCryptfs) allow much shorter names than the
+      // usual 255 characters, so the trick above does not apply there.
+      GTEST_SKIP_("File names of 254 characters are not supported here");
+    }
     existing << oldHeader << "\n" << oldRow << "\n";
   }
-  // A directory of that name makes the rename fail with `EISDIR`, which is the
-  // only reliable way to reach the fallback. Monitoring is optional, so this
-  // warns rather than throwing, and writes a second header line so that the
-  // format change is at least visible inside the file.
-  fs::create_directory(path.string() + ".old");
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   {
     ResourceMonitor monitor;
@@ -491,13 +506,16 @@ TEST(ResourceMonitor, TruncateModeNeverRotates) {
   }
   {
     ResourceMonitor monitor;
-    // Long interval so the file holds only the header afterwards.
+    // Long interval so the file holds only the header afterward.
     monitor.start(path, ResourceMonitor::Mode::Truncate, std::chrono::hours{1});
   }
   auto lines = readLines(path);
   ASSERT_EQ(lines.size(), 1u);
   EXPECT_EQ(lines[0], rm::tsvHeader);
-  EXPECT_FALSE(fs::exists(path.string() + ".old"));
+  // Nothing was rotated: the directory holds only the live log.
+  EXPECT_EQ(std::distance(fs::directory_iterator{fs::path{directory}},
+                          fs::directory_iterator{}),
+            1);
 }
 
 // _____________________________________________________________________________

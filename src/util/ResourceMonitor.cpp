@@ -8,9 +8,12 @@
 
 #include "util/ResourceMonitor.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
 #include <algorithm>
 #include <array>
@@ -20,6 +23,7 @@
 #include <type_traits>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/Timer.h"
@@ -265,8 +269,13 @@ void ResourceMonitor::start(const ql::filesystem::path& path, Mode mode,
       std::getline(existingFile, firstLine);
     }
     if (firstLine != resource_monitor::tsvHeader) {
-      auto rotated = path;
-      rotated += ".old";
+      // Name the archive `<name_without_extension>.<rotation_time>.tsv`
+      auto rotated =
+          path.parent_path() /
+          absl::StrCat(path.stem().string(), ".",
+                       absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, absl::Now(),
+                                        absl::UTCTimeZone()),
+                       path.extension().string());
       ql::error_code renameEc;
       fs::rename(path, rotated, renameEc);
       if (renameEc) {
