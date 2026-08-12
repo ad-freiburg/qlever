@@ -66,9 +66,6 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
   // https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
   // details.
   //
-  // No flags are set here — deferred task work (DEFER_TASKRUN), SQ polling
-  // (SQPOLL), and I/O polling (IOPOLL) are separate optimization dimensions
-  // that are added in later iterations.
   int ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
   if (ret < 0) {
     AD_THROW("io_uring_queue_init failed in IoUringManager");
@@ -110,8 +107,7 @@ IoUringPolicy::~IoUringPolicy() {
   // deliberately do not call `drainOneCqe` here: it throws on I/O errors,
   // and a destructor must not throw. We also stop if `io_uring_wait_cqe`
   // fails, to avoid spinning forever (it would not decrement the in-flight
-  // count). We do NOT copy data into caller targets here — the caller has
-  // already abandoned the batch, so copying is wasted work.
+  // count).
   while (numInFlightReadRequests_ > 0) {
     io_uring_cqe* cqe = nullptr;
     if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
