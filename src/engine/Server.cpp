@@ -42,6 +42,7 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
+using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::metrics;
 
@@ -231,6 +232,19 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   co_return std::chrono::duration_cast<TimeLimit>(
       decltype(defaultTimeout)::DurationType{defaultTimeout});
 }
+
+// _____________________________________________
+/// Special type of std::runtime_error used to indicate that there has been
+/// a collision of query ids. This will happen when a HTTP client chooses an
+/// explicit id that is currently already in use. In this case the server
+/// will respond with HTTP status 409 Conflict and the client is encouraged
+/// to re-submit their request with a different query id.
+class QueryAlreadyInUseError : public std::runtime_error {
+ public:
+  explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
+      : std::runtime_error{"Query id '"s + proposedQueryId +
+                           "' is already in use!"} {}
+};
 
 // _____________________________________________________________________________
 auto Server::cancelAfterDeadline(
@@ -920,8 +934,7 @@ CPP_template_def(typename RequestT)(
   auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader),
                                                    query, clientIp);
   if (!queryId) {
-    throw QueryAlreadyInUseError{
-        absl::StrCat("Query id '", queryIdHeader, "' is already in use!")};
+    throw QueryAlreadyInUseError{queryIdHeader};
   }
   return std::move(queryId.value());
 }
