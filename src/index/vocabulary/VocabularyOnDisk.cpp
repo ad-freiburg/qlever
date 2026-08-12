@@ -11,6 +11,7 @@
 #include <array>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -288,14 +289,10 @@ void VocabularyOnDisk::open(const std::string& filename) {
   size_ = numOffsets - 1;
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
-  // These defaults can be overridden at runtime via the
-  // `vocab-batch-io-ring-size` and `vocab-batch-io-num-managers`
-  // server runtime parameters, which are read by
-  // `QueryExecutionContext` and passed through `Index` to here.
-  // TODO: Wire runtime parameters through the Index → Vocabulary
-  //       initialization path so these aren't compile-time only.
-  size_t numManagers = NUM_VOCAB_BATCH_IO_MANAGERS;
-  size_t ringSize = 256;
+  size_t numManagers =
+      getRuntimeParameter<&RuntimeParameters::vocabBatchIoNumManagers_>();
+  size_t ringSize =
+      getRuntimeParameter<&RuntimeParameters::vocabBatchIoRingSize_>();
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>(numManagers);
   bool preferIoUring = true;
