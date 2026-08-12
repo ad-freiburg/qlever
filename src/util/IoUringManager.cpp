@@ -65,9 +65,9 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
   // unwanted preemptions and giving the application full control over when
   // completions are processed.  See https://man7.org/linux/man-pages/man3/
   // io_uring_queue_init.3.html for details.
-  int ret = io_uring_queue_init(ringSize_, &ring_,
-                                IORING_SETUP_DEFER_TASKRUN |
-                                    IORING_SETUP_SINGLE_ISSUER);
+  int ret = io_uring_queue_init(
+      ringSize_, &ring_,
+      IORING_SETUP_DEFER_TASKRUN | IORING_SETUP_SINGLE_ISSUER);
   if (ret < 0) {
     AD_THROW("io_uring_queue_init failed in IoUringManager");
   }
