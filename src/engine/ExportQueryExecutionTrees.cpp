@@ -894,8 +894,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   size_t maxGroups = std::max<size_t>(1, 4 * numThreads);
   size_t rowsPerGroup = bufferMemory / (numThreads * triplesPerRow * 128);
   rowsPerGroup = std::max<size_t>(1, rowsPerGroup);
-  maxGroups =
-      std::min(maxGroups, (totalRows + rowsPerGroup - 1) / rowsPerGroup);
+  maxGroups = std::min(
+      maxGroups,
+      static_cast<size_t>((totalRows + rowsPerGroup - 1) / rowsPerGroup));
   maxGroups = std::max<size_t>(1, maxGroups);
   std::vector<std::vector<TableWithRange>> groups =
       splitBlocksIntoGroups(blocks, maxGroups);
