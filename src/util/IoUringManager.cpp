@@ -12,6 +12,8 @@
 
 #include <unistd.h>
 
+#include <cerrno>
+#include <cstring>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -57,19 +59,42 @@ void SyncIoPolicy::addBatch(int fd,
 
 //______________________________________________________________________________
 IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
-  // Set up the submission and completion queues.  `IORING_SETUP_DEFER_TASKRUN`
-  // prevents the kernel from running task_work (completion processing) on
-  // arbitrary kernel-user transitions (e.g. inside malloc's brk syscall).
-  // Together with `IORING_SETUP_SINGLE_ISSUER` (the required prerequisite),
-  // this confines CQE reaping to explicit `io_uring_enter` calls, eliminating
-  // unwanted preemptions and giving the application full control over when
-  // completions are processed.  See https://man7.org/linux/man-pages/man3/
-  // io_uring_queue_init.3.html for details.
+  // Set up the submission and completion queues. liburing rounds the
+  // requested `ringSize_` up to a power of two, so `ringSize_` remains a
+  // conservative lower bound for the ring-full check below.
+  // `IORING_SETUP_DEFER_TASKRUN` prevents the kernel from running task_work
+  // (completion processing) on arbitrary kernel-user transitions (e.g. inside
+  // malloc's brk syscall). Together with `IORING_SETUP_SINGLE_ISSUER` (the
+  // required prerequisite), this confines CQE reaping to explicit
+  // `io_uring_enter` calls, eliminating unwanted preemptions and giving the
+  // application full control over when completions are processed. See
+  // https://man7.org/linux/man-pages/man3/io_uring_queue_init.3.html for
+  // details.
+  //
+  // NOTE on `IORING_SETUP_SINGLE_ISSUER`: the ring is bound to the first task
+  // that submits to it, and every later submission must come from that same
+  // task. This is why an `IoUringPolicy` must not be moved between threads
+  // once it has been used; see `VocabularyOnDisk::open`, which hands out one
+  // manager per concurrent lookup and takes it back before another thread can
+  // pick it up.
+  //
+  // Both flags require Linux 5.19. On older kernels (e.g. Ubuntu 22.04 with
+  // Linux 5.15) `io_uring_queue_init` fails with `-EINVAL`, in which case we
+  // retry without them rather than failing outright: the flags are an
+  // optimization, not a requirement.
   int ret = io_uring_queue_init(
       ringSize_, &ring_,
       IORING_SETUP_DEFER_TASKRUN | IORING_SETUP_SINGLE_ISSUER);
+  if (ret == -EINVAL) {
+    AD_LOG_INFO << "io_uring: the kernel does not support "
+                   "IORING_SETUP_DEFER_TASKRUN/IORING_SETUP_SINGLE_ISSUER "
+                   "(Linux 5.19+ is required), falling back to a ring without "
+                   "them.\n";
+    ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
+  }
   if (ret < 0) {
-    AD_THROW("io_uring_queue_init failed in IoUringManager");
+    AD_THROW("io_uring_queue_init failed in IoUringManager: " +
+             std::string(strerror(-ret)));
   }
 }
 
