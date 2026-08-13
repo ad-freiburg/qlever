@@ -275,7 +275,7 @@ class WktSimplify {
 
 // A generic operation for all geometric relation functions, like
 // `geof:sfIntersects`.
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 class WktGeometricRelation {
  public:
   ValueId operator()(

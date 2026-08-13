@@ -435,31 +435,31 @@ TEST(SparqlParser, FunctionCall) {
   // Geometric relation functions
   expectFunctionCall(
       absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::INTERSECTS>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::INTERSECTS>,
                 Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfContains>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CONTAINS>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::CONTAINS>,
                 Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::CROSSES>,
                 Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfTouches>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::TOUCHES>,
                 Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfEquals>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::EQUALS>,
                 Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::OVERLAPS>,
                 Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(
       absl::StrCat(geof, "sfWithin>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::WITHIN>,
                 Variable{"?a"}, Variable{"?b"}));
 
   // Math functions

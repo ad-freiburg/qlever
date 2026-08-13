@@ -431,9 +431,9 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 // ____________________________________________________________________________
 sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   auto sep = [](SpatialJoinType type) {
-    return std::string{static_cast<char>(type)};
+    return std::string{static_cast<char>(type.value())};
   };
   AD_CORRECTNESS_CHECK(threads > 0);
 
@@ -525,7 +525,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       // `libspatialjoin` only invokes this callback for pairs that already
       // matched `sweeperCfg.de9imFilter`.
       results[t].push_back({std::atoi(a), std::atoi(b)});
-    } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+    } else if (pred[0] == static_cast<char>(joinTypeVal.value())) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
     }
   };
