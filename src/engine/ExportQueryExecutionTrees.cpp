@@ -461,6 +461,61 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
 }
 
 // _____________________________________________________________________________
+// Assemble one CSV/TSV row into `rowBuffer`, reusing `cellStrings` across all
+// rows of the request.  This helper is NOT a coroutine and holds no state: the
+// two buffers are coroutine-frame locals in the caller and are passed by
+// reference, so their capacity is retained across rows.  They must not be
+// `thread_local` — a coroutine may be suspended and resumed on a different
+// thread, so thread_local state would alias another thread's buffers there.
+template <ad_utility::MediaType format>
+static void assembleCsvRowForStream(
+    std::string& rowBuffer,
+    std::vector<std::optional<std::string>>& cellStrings,
+    const QueryExecutionTree::ColumnIndicesAndTypes& selectedColumnIndices,
+    const TableConstRefWithVocab& tableWithVocab, size_t rowIndex,
+    const Index& index, char separator) {
+  constexpr auto& escapeFunction = format == ad_utility::MediaType::tsv
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+  // Resolve all cells of the row first, so that the exact size of the row is
+  // known and the row buffer can be reserved exactly once before assembling
+  // the row.
+  cellStrings.clear();
+  cellStrings.resize(selectedColumnIndices.size());
+  size_t estimatedRowSize = 1;  // the trailing newline
+  for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+    if (selectedColumnIndices[j].has_value()) {
+      const auto& val = selectedColumnIndices[j].value();
+      Id id = tableWithVocab.idTable()(rowIndex, val.columnIndex_);
+      auto optionalStringAndType =
+          ql::exportIds::idToStringAndType<format ==
+                                           ad_utility::MediaType::csv>(
+              index, id, tableWithVocab.localVocab(), escapeFunction);
+      if (optionalStringAndType.has_value()) [[likely]] {
+        cellStrings[j] = std::move(optionalStringAndType.value().first);
+        estimatedRowSize += cellStrings[j]->size();
+      }
+    }
+    if (j + 1 < selectedColumnIndices.size()) {
+      ++estimatedRowSize;  // the separator
+    }
+  }
+  rowBuffer.clear();
+  // Reserve the exact row size once; this is a no-op unless the current row
+  // is larger than any previous one (the capacity is retained in `rowBuffer`).
+  rowBuffer.reserve(estimatedRowSize);
+  for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+    if (cellStrings[j].has_value()) {
+      rowBuffer.append(*cellStrings[j]);
+    }
+    if (j + 1 < selectedColumnIndices.size()) {
+      rowBuffer.push_back(separator);
+    }
+  }
+  rowBuffer.push_back('\n');
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     const QueryExecutionTree& qet,
@@ -514,54 +569,20 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
   STREAMABLE_YIELD(absl::StrJoin(variables, std::string_view{&separator, 1}));
   STREAMABLE_YIELD('\n');
 
-  constexpr auto& escapeFunction =
-      format == tsv ? RdfEscaping::escapeForTsv : RdfEscaping::escapeForCsv;
   uint64_t resultSize = 0;
-  // Buffers that are reused across all rows (and across requests on the same
-  // thread): their capacity is retained, so only rows that are larger than
-  // any previous one trigger a reallocation.
-  thread_local std::string rowBuffer;
-  thread_local std::vector<std::optional<std::string>> cellStrings;
+  // Buffers that are reused across all rows of this request: their capacity
+  // is retained, so only rows that are larger than any previous one trigger
+  // a reallocation.  They are coroutine-frame locals (NOT `thread_local`): a
+  // coroutine may be suspended and resumed on a different thread, so
+  // thread_local state would be unsafe there (see `assembleCsvRowForStream`).
+  std::string rowBuffer;
+  std::vector<std::optional<std::string>> cellStrings;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
-      // Resolve all cells of the row first, so that the exact size of the row
-      // is known and the row buffer can be reserved exactly once before
-      // assembling the row.
-      cellStrings.clear();
-      cellStrings.resize(selectedColumnIndices.size());
-      size_t estimatedRowSize = 1;  // the trailing newline
-      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-        if (selectedColumnIndices[j].has_value()) {
-          const auto& val = selectedColumnIndices[j].value();
-          Id id = pair.idTable()(i, val.columnIndex_);
-          auto optionalStringAndType =
-              ql::exportIds::idToStringAndType<format == csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab(),
-                  escapeFunction);
-          if (optionalStringAndType.has_value()) [[likely]] {
-            cellStrings[j] = std::move(optionalStringAndType.value().first);
-            estimatedRowSize += cellStrings[j]->size();
-          }
-        }
-        if (j + 1 < selectedColumnIndices.size()) {
-          ++estimatedRowSize;  // the separator
-        }
-      }
-      rowBuffer.clear();
-      // Reserve the exact row size once; this is a no-op unless the current
-      // row is larger than any previous one (the capacity is retained in
-      // `rowBuffer`).
-      rowBuffer.reserve(estimatedRowSize);
-      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-        if (cellStrings[j].has_value()) {
-          rowBuffer.append(*cellStrings[j]);
-        }
-        if (j + 1 < selectedColumnIndices.size()) {
-          rowBuffer.push_back(separator);
-        }
-      }
-      rowBuffer.push_back('\n');
+      assembleCsvRowForStream<format>(rowBuffer, cellStrings,
+                                      selectedColumnIndices, pair, i,
+                                      qet.getQec()->getIndex(), separator);
       STREAMABLE_YIELD(std::move(rowBuffer));
       cancellationHandle->throwIfCancelled();
     }
