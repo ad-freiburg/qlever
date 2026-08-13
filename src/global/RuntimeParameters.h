@@ -51,6 +51,17 @@ struct RuntimeParameters {
                                          "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
 
+  // The number of threads used for the parallel serialization of CONSTRUCT
+  // export results (row-to-string formatting). 0 means: use all logical
+  // cores, consistent with `computeInParallelChunks`. Defaults to 1 (serial
+  // path) until the Ural measurement gate for the parallel export has passed.
+  SizeT constructExportNumThreads_{1, "construct-export-num-threads"};
+  // The total memory budget for the per-worker output buffers of the parallel
+  // CONSTRUCT export serialization, split evenly across the workers. Only
+  // relevant when `construct-export-num-threads` is greater than 1.
+  MemorySizeParameter constructExportBufferMemory_{
+      ad_utility::MemorySize::megabytes(64), "construct-export-buffer-memory"};
+
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
                                     "cache-max-size"};
   MemorySizeParameter cacheMaxSizeSingleEntry_{
