@@ -228,14 +228,14 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   // rewrites the content and leaves the suffix untouched. The scan is a
   // single vectorized sweep (SSE2/AVX2 with runtime dispatch, see
   // `util/SimdUtils.h`).
+  std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
   if (!ad_utility::simd::containsAnyByte<'"', '\\', '\n', '\r'>(
-          normLiteral.substr(1, posLastQuote - 1))) [[likely]] {
+          normalizedContent)) [[likely]] {
     return std::string{normLiteral};
   }
   // Otherwise escape first all backslashes then all quotes (the order is
   // important) in the part between the first and the last quote and leave the
   // rest unchanged.
-  std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
   std::string content = absl::StrReplaceAll(
       normalizedContent,
       {{R"(\)", R"(\\)"}, {"\n", "\\n"}, {"\r", "\\r"}, {R"(")", R"(\")"}});

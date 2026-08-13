@@ -2,13 +2,17 @@
 // Chair of Algorithms and Data Structures.
 // Author: Marvin Stoetzel <marvin.stoetzel@mailbox.org>
 
-#ifndef QLEVER_SIMDUTILS_H
-#define QLEVER_SIMDUTILS_H
+#ifndef QLEVER_SRC_UTIL_SIMDUTILS_H
+#define QLEVER_SRC_UTIL_SIMDUTILS_H
 
 #include <cstddef>
 #include <string_view>
 
-#if defined(__x86_64__) || defined(_M_X64)
+// The x86 code below uses GCC/clang-only facilities (`__attribute__((target))`,
+// `__builtin_cpu_supports`), which MSVC does not provide, so it is enabled only
+// for those compilers. Everything else uses the scalar fallback.
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+#define QLEVER_SIMD_X86 1
 #include <immintrin.h>
 #endif
 
@@ -18,21 +22,31 @@ namespace detail {
 
 // Scalar fallback: return true iff `data[0 .. size)` contains any byte from
 // the compile-time set `SpecialChars`. This is the reference implementation
-// that all SIMD variants must agree with.
+// that all SIMD variants must agree with. It delegates to `find_first_of`,
+// which the standard libraries implement with a 256-bit lookup bitmap plus a
+// vectorized scan, and is therefore much faster than a naive nested loop for
+// the short inputs that dominate the non-SIMD paths.
 template <char... SpecialChars>
 bool containsAnyByteScalar(const char* data, size_t size) {
-  constexpr char specialChars[] = {SpecialChars...};
-  for (size_t i = 0; i < size; ++i) {
-    for (char specialChar : specialChars) {
-      if (data[i] == specialChar) {
-        return true;
-      }
-    }
-  }
-  return false;
+  static constexpr char specialChars[] = {SpecialChars...};
+  static constexpr std::string_view specialCharsView{specialChars,
+                                                     sizeof...(SpecialChars)};
+  return std::string_view{data, size}.find_first_of(specialCharsView) !=
+         std::string_view::npos;
 }
 
-#if defined(__x86_64__) || defined(_M_X64)
+#ifdef QLEVER_SIMD_X86
+// True iff the CPU running this binary supports AVX2. Deliberately a
+// non-template function so that there is a single guarded static for the whole
+// program instead of one per instantiation of `containsAnyByte`.
+inline bool hasAvx2() {
+  static const bool kHasAvx2 = [] {
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx2");
+  }();
+  return kHasAvx2;
+}
+
 // SSE2 (baseline on x86-64): scan 16 bytes at a time. After the loop, one
 // overlapping load of the last 16 bytes covers the tail; since that window
 // ends exactly at `data[size]`, it never reads past the end of the buffer.
@@ -94,7 +108,7 @@ __attribute__((target("avx2"))) bool containsAnyByteAVX2(const char* data,
   }
   return avx2ChunkContainsSpecial<SpecialChars...>(data + size - chunkSize);
 }
-#endif  // __x86_64__ || _M_X64
+#endif  // QLEVER_SIMD_X86
 
 }  // namespace detail
 
@@ -110,12 +124,8 @@ bool containsAnyByte(std::string_view sv) {
   static_assert(sizeof...(SpecialChars) > 0);
   const char* data = sv.data();
   const size_t size = sv.size();
-#if defined(__x86_64__) || defined(_M_X64)
-  static const bool kHasAvx2 = [] {
-    __builtin_cpu_init();
-    return __builtin_cpu_supports("avx2");
-  }();
-  if (kHasAvx2) {
+#ifdef QLEVER_SIMD_X86
+  if (detail::hasAvx2()) {
     return detail::containsAnyByteAVX2<SpecialChars...>(data, size);
   }
   return detail::containsAnyByteSSE2<SpecialChars...>(data, size);
@@ -126,4 +136,4 @@ bool containsAnyByte(std::string_view sv) {
 
 }  // namespace ad_utility::simd
 
-#endif  // QLEVER_SIMDUTILS_H
+#endif  // QLEVER_SRC_UTIL_SIMDUTILS_H
