@@ -841,10 +841,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   // disabled when triple deduplication is active, because the deduplicator is
   // shared mutable state that is not thread-safe.
   size_t numThreads =
-      getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>()
-          .get();
+      getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>();
   const auto& dedupMode =
-      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>().get();
+      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
   bool dedupActive =
       !std::holds_alternative<ad_utility::DeduplicationMode::None>(
           dedupMode.value_);
@@ -890,7 +889,6 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   // one serialized triple in bytes).
   const size_t bufferMemory =
       getRuntimeParameter<&RuntimeParameters::constructExportBufferMemory_>()
-          .get()
           .getBytes();
   const size_t triplesPerRow = std::max<size_t>(1, constructTriples.size());
   size_t maxGroups = std::max<size_t>(1, 4 * numThreads);
