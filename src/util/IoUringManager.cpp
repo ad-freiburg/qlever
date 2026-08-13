@@ -12,6 +12,7 @@
 
 #include <unistd.h>
 
+#include <cerrno>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -57,22 +58,51 @@ void SyncIoPolicy::addBatch(int fd,
 
 //______________________________________________________________________________
 IoUringPolicy::IoUringPolicy(unsigned ringSize) : ringSize_(ringSize) {
+  // Idle time in ms after which the SQPOLL kernel thread goes to sleep.
+  static constexpr uint32_t kSqThreadIdleMs = 100;
   // Set up the submission and completion queues with kernel-side SQ polling.
   // `IORING_SETUP_SQPOLL` creates a dedicated kernel thread that continuously
-  // polls the submission queue, so the application never needs to call
-  // `io_uring_enter` for submission — `io_uring_submit` becomes a cheap
-  // wake-up hint.  The kernel thread sleeps after `sq_thread_idle` ms of
-  // inactivity (waking costs ~30 µs).  2000 ms balances CPU consumption
-  // against wake-up latency for QLever's bursty batch workload.
+  // polls the submission queue.  The application calls `io_uring_submit` for
+  // each batch; liburing wakes an idle SQPOLL kernel thread via
+  // `io_uring_enter` when needed.  The kernel thread sleeps after
+  // `sq_thread_idle` ms of inactivity (waking costs ~30 µs).  The value
+  // below balances CPU consumption against wake-up latency for QLever's
+  // bursty batch workload.
   //
-  // `IORING_SETUP_SINGLE_ISSUER` is required for SQPOLL on modern kernels.
+  // `IORING_SETUP_SINGLE_ISSUER` tells the kernel that a single thread will
+  // submit all requests; it is safe here because QLever submits from a single
+  // thread.  An `IoUringPolicy` must therefore not be submitted to from more
+  // than one thread over its lifetime.
+  //
+  // liburing rounds the requested ring size up to a power of two, so
+  // `ringSize_` is a conservative lower bound for the ring-full check below.
+  //
+  // `sq_thread_idle` is deliberately short: the poller thread burns a full
+  // core while awake, and with one ring per batch manager a long idle period
+  // means several kernel threads spinning against the query threads. QLever's
+  // batch lookups arrive in bursts that are much shorter than the gaps
+  // between them, so a short idle window costs one ~30 µs wake-up per burst
+  // and saves the rest.
   struct io_uring_params params {};
   params.flags = IORING_SETUP_SQPOLL | IORING_SETUP_SINGLE_ISSUER;
-  params.sq_thread_idle = 2000;  // ms before the SQ poller sleeps
+  params.sq_thread_idle = kSqThreadIdleMs;  // ms before the SQ poller sleeps
 
+  // SQPOLL requires Linux 5.13+ for unprivileged use (before that,
+  // `CAP_SYS_ADMIN`), and `IORING_SETUP_SINGLE_ISSUER` requires 6.0. On any
+  // kernel that rejects the combination, fall back to a plain ring instead of
+  // failing to open the vocabulary: SQPOLL is an optimization, not a
+  // requirement.
   int ret = io_uring_queue_init_params(ringSize_, &ring_, &params);
+  if (ret == -EINVAL || ret == -EPERM) {
+    AD_LOG_INFO << "io_uring: the kernel refused IORING_SETUP_SQPOLL "
+                   "(unprivileged SQPOLL requires Linux 5.13+, "
+                   "IORING_SETUP_SINGLE_ISSUER requires 6.0), falling back to "
+                   "a ring without kernel-side submission polling.\n";
+    ret = io_uring_queue_init(ringSize_, &ring_, /*flags=*/0);
+  }
   if (ret < 0) {
-    AD_THROW("io_uring_queue_init failed in IoUringManager");
+    AD_THROW("io_uring_queue_init_params failed in IoUringManager: " +
+             std::to_string(ret));
   }
 }
 
