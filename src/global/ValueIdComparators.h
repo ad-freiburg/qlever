@@ -140,7 +140,7 @@ class RangeFilter {
   Vec _result;
 
  public:
-  explicit RangeFilter(Comparison comparison) : _comparison{comparison} {};
+  explicit RangeFilter(Comparison comparison) : _comparison{comparison} {}
   Vec getResult() && { return std::move(_result); }
 
   // Let X be the set of numbers x for which x _comparison _value is true. The

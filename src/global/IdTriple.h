@@ -46,7 +46,7 @@ struct IdTriple {
 
   explicit IdTriple(const std::array<Id, NumCols>& idsIn,
                     const Payload& payload)
-      : data_{idsIn, payload} {};
+      : data_{idsIn, payload} {}
 
   friend std::ostream& operator<<(std::ostream& os, const IdTriple& triple) {
     os << "IdTriple(";

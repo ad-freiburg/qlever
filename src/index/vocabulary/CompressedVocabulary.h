@@ -362,7 +362,7 @@ CPP_template(typename UnderlyingVocabulary,
   // ____________________________________________________
   static constexpr ad_utility::MemorySize bytes(size_t numBytes) {
     return ad_utility::MemorySize::bytes(numBytes);
-  };
+  }
 
   // _________________________________________________________________
   template <typename T>

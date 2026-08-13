@@ -59,7 +59,7 @@ struct TableColumnWithVocab {
     }
   }
 };
-};  // namespace detail
+}  // namespace detail
 
 /**
  * @class TransitivePathImpl
@@ -122,7 +122,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-  };
+  }
 
   /**
    * @brief Compute the transitive hull.

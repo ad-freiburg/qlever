@@ -153,7 +153,7 @@ class QueryExecutionContext
 
   [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
-  };
+  }
 
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
@@ -218,7 +218,7 @@ class QueryExecutionContext
   // Get a reference to the `MaterializedViewsManager`.
   const MaterializedViewsManager& materializedViewsManager() const {
     return *materializedViewsManager_;
-  };
+  }
 
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using

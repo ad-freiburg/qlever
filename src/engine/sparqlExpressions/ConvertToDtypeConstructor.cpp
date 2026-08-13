@@ -63,7 +63,7 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
       }
     }
     return Id::makeUndefined();
-  };
+  }
 
   // ___________________________________________________________________________
   template <typename N>

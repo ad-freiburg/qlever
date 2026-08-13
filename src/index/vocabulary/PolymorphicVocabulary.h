@@ -175,7 +175,7 @@ class PolymorphicVocabulary {
           }
         },
         vocab_);
-  };
+  }
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   bool isGeoInfoAvailable() const {

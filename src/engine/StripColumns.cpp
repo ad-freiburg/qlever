@@ -44,7 +44,7 @@ StripColumns::StripColumns(QueryExecutionContext* ctx,
     : Operation{ctx},
       child_{std::move(child)},
       subset_{std::move(subset)},
-      varToCol_{std::move(varToCol)} {};
+      varToCol_{std::move(varToCol)} {}
 
 // _____________________________________________________________________________
 std::vector<QueryExecutionTree*> StripColumns::getChildren() {

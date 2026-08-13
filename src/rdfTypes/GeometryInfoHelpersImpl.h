@@ -432,7 +432,7 @@ struct MetricAreaVisitor {
 
   double operator()(const ParsedWkt& geom) const {
     return std::visit(MetricAreaVisitor{}, geom);
-  };
+  }
 };
 
 static constexpr MetricAreaVisitor computeMetricArea;
