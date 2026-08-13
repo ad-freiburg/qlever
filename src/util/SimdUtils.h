@@ -111,6 +111,7 @@ __attribute__((target("avx2"))) bool containsAnyByteAVX2(const char* data,
   return avx2ChunkContainsSpecial<SpecialChars...>(data + size - chunkSize);
 }
 #endif  // QLEVER_SIMD_X86
+}  // namespace detail
 
 namespace detail {
 
@@ -120,14 +121,6 @@ template <char... SpecialChars>
 struct CharacterSet {};
 
 }  // namespace detail
-
-// Overload of `containsAnyByte` that takes a named `CharacterSet` instead of
-// the raw template arguments.
-template <char... SpecialChars>
-bool containsAnyByte(detail::CharacterSet<SpecialChars...>,
-                     std::string_view sv) {
-  return containsAnyByte<SpecialChars...>(sv);
-}
 
 // Return true iff `sv` contains any of the bytes in the compile-time set
 // `SpecialChars`. Uses a single vectorized sweep (AVX2 if the CPU supports it,
@@ -150,6 +143,14 @@ bool containsAnyByte(std::string_view sv) {
   return detail::containsAnyByteScalar<SpecialChars...>(
       std::string_view{data, size});
 #endif
+}
+
+// Overload of `containsAnyByte` that takes a named `CharacterSet` instead of
+// the raw template arguments.
+template <char... SpecialChars>
+bool containsAnyByte(detail::CharacterSet<SpecialChars...>,
+                     std::string_view sv) {
+  return containsAnyByte<SpecialChars...>(sv);
 }
 
 }  // namespace ad_utility::simd
