@@ -286,7 +286,8 @@ class WktGeometricRelation {
     AD_THROW(
         "Geometric relations via the `geof:sfIntersects` ... functions are "
         "currently only implemented for a subset of all possible queries. More "
-        "details on GeoSPARQL support can be found on the QLever Wiki.");
+        "details on GeoSPARQL support can be found in the QLever Docs "
+        "(https://docs.qlever.dev/geosparql/).");
   }
 };
 

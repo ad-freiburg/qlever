@@ -127,11 +127,12 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
-  // Default algorithm
-  SpatialJoinAlgorithm algo = SPATIAL_JOIN_DEFAULT_ALGORITHM;
-  if (algo_.has_value()) {
-    algo = algo_.value();
-  }
+  throwIf(!algo_.has_value(),
+          "Missing parameter `<algorithm>` in spatial search. Please "
+          "explicitly select an algorithm: `<baseline>`, `<s2>`, "
+          "`<libspatialjoin>`, or `<boundingBox>`. See the QLever Docs "
+          "(https://docs.qlever.dev/geosparql/) for details.");
+  SpatialJoinAlgorithm algo = algo_.value();
 
   throwIf(!left_.has_value(), "Missing parameter `<left>` in spatial search.");
 
@@ -243,6 +244,10 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
                     "that specifies a spatial join have to be variables.");
   setVariable("left", triple.s_, left_);
   setVariable("right", triple.o_, right_);
+
+  // This legacy predicate syntax has no way to specify an algorithm, so we
+  // pick the same algorithm that used to be the implicit default.
+  algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
 
   // Helper to convert a ctre match to an integer
   auto matchToInt = [](std::string_view match) -> std::optional<size_t> {

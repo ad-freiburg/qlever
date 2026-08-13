@@ -232,7 +232,7 @@ using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 // Helper function to create a spatial join from VALUEs
 std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
     QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
-    SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+    SpatialJoinAlgorithm alg = SpatialJoinAlgorithm::S2_GEOMETRY) {
   EncodedIriManager encodedIriManager;
   const auto sharedHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -310,7 +310,7 @@ class SpatialJoinVarColParamTest
   std::shared_ptr<SpatialJoin> makeSpatialJoin(
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
       bool addDist = true, PayloadVariables pv = PayloadVariables::all(),
-      SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM,
+      SpatialJoinAlgorithm alg = SpatialJoinAlgorithm::S2_GEOMETRY,
       SpatialJoinType joinType = SpatialJoinType::WITHIN_DIST) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
@@ -347,7 +347,7 @@ class SpatialJoinVarColParamTest
   // computeVariableToColumnMap() if only one of them is wrong
   void testGetResultWidthOrVariableToColumnMap(
       VarColTestSuiteParam parameters,
-      SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+      SpatialJoinAlgorithm alg = SpatialJoinAlgorithm::S2_GEOMETRY) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildTestQEC();

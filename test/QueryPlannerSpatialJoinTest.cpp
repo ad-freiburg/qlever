@@ -53,18 +53,6 @@ TEST(QueryPlanner, SpatialJoinService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
-      "_:config spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 1 . "
-      "{ ?a <p> ?b } }}",
-      h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
-                     std::nullopt, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
-  h::expect(
-      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
-      "SELECT * WHERE {"
-      "?x <p> ?y."
-      "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:baseline ;"
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
@@ -576,7 +564,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:right ?b ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:right ?b ;"
                 "spatialSearch:maxDistance 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -588,7 +577,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:right ?b ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:right ?b ;"
                 "spatialSearch:numNearestNeighbors 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -600,7 +590,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -612,7 +603,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
                 "spatialSearch:numNearestNeighbors 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -624,13 +616,28 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
                 " spatialSearch:right ?b ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("Neither `<numNearestNeighbors>` nor "
                                "`<maxDistance>` were provided"));
+  // The `<algorithm>` parameter is mandatory and must be set explicitly.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter `<algorithm>`"));
 }
 
 // _____________________________________________________________________________

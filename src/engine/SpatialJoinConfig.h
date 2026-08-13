@@ -73,8 +73,6 @@ enum class SpatialJoinAlgorithm {
   LIBSPATIALJOIN,
   S2_POINT_POLYLINE
 };
-const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
-    SpatialJoinAlgorithm::S2_GEOMETRY;
 
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
@@ -95,7 +93,7 @@ struct SpatialJoinConfiguration {
   PayloadVariables payloadVariables_ = PayloadVariables::all();
 
   // Choice of algorithm.
-  SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
+  SpatialJoinAlgorithm algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
 
   // Join type for `libspatialjoin` algorithm.
   std::optional<SpatialJoinType> joinType_ = std::nullopt;
