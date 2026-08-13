@@ -4,6 +4,8 @@
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include <algorithm>
 #include <array>
 #include <deque>
@@ -63,6 +65,14 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   }
 
   auto manager = ioManagers_->pop().value();
+  // Return the manager to the pool even if one of the I/O operations below
+  // throws. Without this, an exception would leak the io_uring resources and
+  // slowly empty the pool.
+  absl::Cleanup returnManager{[&manager, this]() {
+    ad_utility::terminateIfThrows(
+        [&manager, this]() { ioManagers_->push(std::move(manager)); },
+        "Returning the io manager to the pool after `lookupBatch`");
+  }};
   auto offsetHandle = manager->addBatch(offsetsFile_.fd(), offsetSizes,
                                         offsetFileOffsets, offsetTargets);
   manager->wait(offsetHandle);
@@ -94,7 +104,6 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   auto stringHandle =
       manager->addBatch(file_.fd(), sizes, fileOffsets, targetPointers);
   manager->wait(stringHandle);
-  ioManagers_->push(std::move(manager));
 
   // Build string_views pointing into the buffer.
   for (size_t i = 0; i < numIndices; ++i) {

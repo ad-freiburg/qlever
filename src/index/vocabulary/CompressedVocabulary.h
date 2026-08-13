@@ -91,9 +91,17 @@ CPP_template(typename UnderlyingVocabulary,
     data->views().resize(indices.size());
 
     // Scratch buffer for intermediate decompression passes (e.g. FSST^2).
-    // Reused across all words.
-    constexpr size_t kScratchSize = 1 << 16;  // 65 kB
-    auto scratchBuf = std::make_unique<char[]>(kScratchSize);
+    // Size it once per batch so that it is definitely large enough for every
+    // word (FSST expands by at most a factor of 8 per pass; for FSST^2 the
+    // intermediate pass expands by at most 8x and the final pass by at most
+    // 64x), then reuse it across all words without ever resizing.
+    size_t maxCompressedSize = 0;
+    for (size_t i = 0; i < compressedViews.size(); ++i) {
+      if (compressedViews[i].size() > maxCompressedSize) {
+        maxCompressedSize = compressedViews[i].size();
+      }
+    }
+    auto scratchBuf = std::make_unique<char[]>(maxCompressedSize * 64 + 64);
 
     for (size_t i = 0; i < indices.size(); ++i) {
       // FSST decompresses at most 8x per pass; for FSST^2 max is 64x.
