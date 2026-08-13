@@ -67,7 +67,10 @@ jobs:
             build-type: Release
           # Exercise the PMR allocator backend in one ordinary configuration so
           # that `QLEVER_USE_PMR_ALLOCATOR` code is actually built and tested in
-          # CI (the other configurations keep the default `limit` backend).
+          # CI. NOTE: This entry does not add a new job. Since all its other
+          # values match the existing clang-21 configuration, it is merged into
+          # that job, which hence builds with the PMR backend INSTEAD OF the
+          # default `limit` backend (all other configurations are unaffected).
           - compiler: clang
             compiler-version: 21
             allocator-backend: pmr
