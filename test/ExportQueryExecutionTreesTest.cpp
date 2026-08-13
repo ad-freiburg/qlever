@@ -2366,7 +2366,7 @@ TEST(ExportQueryExecutionTrees, ParallelConstructSerializationBlankNodes) {
     std::string parallel =
         constructResultWithThreads(kg, q, turtle, 4, smallBuffer);
     EXPECT_EQ(parallel, expected);
-    EXPECT_NE(parallel.find("_:b"), std::string::npos);
+    EXPECT_NE(parallel.find("_:u"), std::string::npos);
   }
 }
 
