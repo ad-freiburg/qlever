@@ -159,7 +159,7 @@ string IndexScan::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 bool IndexScan::resultDoesMatchCacheKey() const {
   return !scanSpecAndBlocksIsPrefiltered_;
-};
+}
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
@@ -474,14 +474,14 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       ad_utility::CachingTransformInputRange{
           std::move(lazyScanAllCols), makeApplyColumnSubset(),
           ql::type_identity<LazyScanMetadata>{}}};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
                                             locatedTriplesState());
-};
+}
 
 // _____________________________________________________________________________
 std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>

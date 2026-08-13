@@ -186,7 +186,7 @@ class SubstrImpl {
   static bool isNan(NumericValue n) {
     auto ptr = std::get_if<double>(&n);
     return ptr != nullptr && std::isnan(*ptr);
-  };
+  }
 
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.
@@ -543,7 +543,8 @@ class ConcatExpression : public detail::VariadicExpression {
 
 // ENCODE_FOR_URI
 struct EncodeForUriImpl {
-  IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
+  IdOrLiteralOrIri operator()(
+      [[maybe_unused]] std::optional<std::string> input) const {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     if (!input.has_value()) {
       return Id::makeUndefined();

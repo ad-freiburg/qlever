@@ -89,7 +89,7 @@ namespace {
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
-};
+}
 }  // namespace
 
 // Return a `std::tie` of the relevant entries of a row, according to
@@ -255,6 +255,18 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 }
 
 namespace {
+// Permute the `Id`s of a triple (given as a tuple `ids`, in the order specified
+// by `inverseKeys`) into an array in SPO order. Note: This is a named function
+// template and not a local lambda, because lambdas with an explicit template
+// parameter list are not available in C++17.
+template <typename Ids, size_t... I>
+std::array<Id, 4> permuteIdsToSpo(const qlever::KeyOrder::Array& inverseKeys,
+                                  Ids& ids, std::index_sequence<I...>) {
+  std::array<Id, 4> spo{};
+  ((spo[inverseKeys[I]] = std::get<I>(ids)), ...);
+  return spo;
+}
+
 // Identify the triples to vacuum for a single block by comparing the
 // `locatedTriples` with the `idTable` of the block (which has no updates
 // applied).
@@ -264,11 +276,8 @@ VacuumStatistics processBlockForVacuum(
     std::vector<IdTriple<0>>& allDeletionsToRemove,
     std::vector<IdTriple<0>>& allInsertionsToRemove) {
   auto toSpo = [&inverseKeys](auto& ids) {
-    return IdTriple<0>{[&]<size_t... I>(std::index_sequence<I...>) {
-      std::array<Id, 4> spo{};
-      ((spo[inverseKeys[I]] = std::get<I>(ids)), ...);
-      return spo;
-    }(std::make_index_sequence<4>{})};
+    return IdTriple<0>{
+        permuteIdsToSpo(inverseKeys, ids, std::make_index_sequence<4>{})};
   };
 
   auto ltProj = [](const LocatedTriple& lt)

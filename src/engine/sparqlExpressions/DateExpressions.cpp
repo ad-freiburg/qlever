@@ -99,7 +99,7 @@ struct ExtractTimeComponentImpl {
 
 //______________________________________________________________________________
 struct ExtractEpoch {
-  Id operator()(std::optional<DateYearOrDuration> d) const {
+  Id operator()([[maybe_unused]] std::optional<DateYearOrDuration> d) const {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     if (!d.has_value() || !d->isDate()) {
       return Id::makeUndefined();

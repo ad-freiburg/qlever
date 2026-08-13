@@ -41,6 +41,18 @@ jobs:
 
     env:
       warnings:   ""
+      # Compile QLever's own code with `-pedantic-errors`, so that any use of a
+      # C++20 (or GNU) extension that is not valid C++17 becomes a hard error
+      # instead of a diagnostic that GCC and Clang silently accept. Examples that
+      # this catches are designated initializers, lambda templates, default
+      # member initializers for bit-fields, `auto` function parameters, and
+      # variadic macros that are invoked without any argument for their `...`.
+      # These flags are deliberately passed via
+      # `ADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY` and not via
+      # `ADDITIONAL_COMPILER_FLAGS`, because several of the third-party
+      # dependencies are not pedantically clean (see the comment at the
+      # definition of that variable in `CMakeLists.txt`).
+      pedantic-flags: "-pedantic-errors"
       build-type: Release
       expensive-tests: true
       compiler: gcc
@@ -117,7 +129,7 @@ jobs:
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}} -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold"
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY="${{env.pedantic-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}} -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold"
 
       - name: Build
         # Build your program with the given configuration
