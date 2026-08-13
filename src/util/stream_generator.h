@@ -239,6 +239,10 @@ class stream_generator_iterator {
 template <size_t BUFFER_SIZE>
 class [[nodiscard]] basic_stream_generator {
  public:
+  // The size of the internal buffer, which is also the maximum size of a
+  // single block that the generator yields.
+  static constexpr size_t bufferSize = BUFFER_SIZE;
+
   using promise_type = detail::stream_generator_promise<BUFFER_SIZE>;
   using iterator = detail::stream_generator_iterator<BUFFER_SIZE>;
   using value_type = typename iterator::value_type;
