@@ -102,12 +102,8 @@ class Server {
   bool noAccessCheck_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
-  // Non-owning reference to the `QueryHub` instance living inside
-  // the `WebSocketHandler` created for `HttpServer`. Deliberately a
-  // `weak_ptr`, so that `Server` cannot keep the `QueryHub` (and the
-  // `io_context` it references) alive past the `HttpServer`'s lifetime.
-  // May only be locked back into a `shared_ptr` from a task running on
-  // that same `io_context`.
+  /// Non-owning reference to the `QueryHub` instance living inside
+  /// the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   boost::asio::static_thread_pool queryThreadPool_;
