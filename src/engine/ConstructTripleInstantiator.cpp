@@ -186,7 +186,7 @@ void appendValidRDFLiteral(std::string& out, std::string_view normLiteral) {
   absl::StrAppend(
       &out, absl::StrReplaceAll(
                 normalizedContent,
-                {Replacement{R"(\\)", R"(\\\\)"}, Replacement{"\n", "\\n"},
+                {Replacement{R"(\)", R"(\\)"}, Replacement{"\n", "\\n"},
                  Replacement{"\r", "\\r"}, Replacement{R"(")", R"(\")"}}));
   out.append(normLiteral.substr(posLastQuote));
 }
