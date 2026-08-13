@@ -48,7 +48,7 @@ class ConstructTripleGenerator {
 
  public:
   // the number of `IdTable` rows that one batch consists of.
-  static constexpr size_t BATCH_SIZE = 4096;
+  static constexpr size_t BATCH_SIZE = 8192;
   // the number of entries in the `IdCache` for each variable in the construct
   // clause template.
   static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
