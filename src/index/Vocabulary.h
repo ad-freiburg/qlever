@@ -1,11 +1,13 @@
-// Copyright 2011 - 2025
-// University of Freiburg
-// Chair of Algorithms and Data Structures
+// Copyright 2011 - 2026, The QLever Authors, in particular:
 //
-// Authors: Björn Buchhold <buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// 2011        University of Freiburg, UFR
+// 2011 Björn Buchhold <buchhold@gmail.com>, UFR
+// 2011        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2011        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2011        Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H

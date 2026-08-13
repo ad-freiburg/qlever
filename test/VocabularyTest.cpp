@@ -1,6 +1,9 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Copyright 2011 - 2026, The QLever Authors, in particular:
+//
+// 2011 Björn Buchhold <buchholb>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gtest/gtest.h>
 
