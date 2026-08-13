@@ -149,7 +149,7 @@ class RangeFilter {
   template <typename T>
   void addEqual(T begin, T end) {
     addImpl<Comparison::LE, Comparison::EQ, Comparison::GE>(begin, end);
-  };
+  }
 
   // Analogous to `addEqual`.
   template <typename T>

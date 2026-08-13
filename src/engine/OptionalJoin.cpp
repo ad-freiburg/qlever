@@ -550,7 +550,8 @@ Result OptionalJoin::optionalJoinWithIndexScan(
                std::function<void(IdTable&, LocalVocab&)> yieldTable) {
       auto rowAdder = getRowAdderForJoin(
           *this, _joinColumns.size(), keepJoinColumns_, std::move(yieldTable));
-      auto getLeftAndRightRange = [&]<size_t numJoinCols>() {
+      auto getLeftAndRightRange = [&](auto numJoinColsV) {
+        static constexpr size_t numJoinCols = numJoinColsV;
         auto firstJoinColLeft = _joinColumns.at(0).at(0);
         if constexpr (leftIsMaterialized) {
           auto rightBlocksInternal = rightScan->lazyScanForJoinOfColumnWithScan(
@@ -583,16 +584,14 @@ Result OptionalJoin::optionalJoinWithIndexScan(
         // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
         // switches to a more efficient implementation if there are no UNDEF
         // values in any of the inputs.
-        auto [leftRange, rightRange] =
-            getLeftAndRightRange.template operator()<1>();
+        auto [leftRange, rightRange] = getLeftAndRightRange(vi<1>);
         zipperJoinForBlocksWithPotentialUndef(
             std::move(leftRange), std::move(rightRange), std::less{}, rowAdder,
             {}, {}, ad_utility::OptionalJoinTag{});
       } else {
         AD_CORRECTNESS_CHECK(implementation_ ==
                              Implementation::OnlyUndefInLastJoinColumnOfLeft);
-        auto [leftRange, rightRange] =
-            getLeftAndRightRange.template operator()<2>();
+        auto [leftRange, rightRange] = getLeftAndRightRange(vi<2>);
         specialOptionalJoinForBlocks(
             std::move(leftRange), std::move(rightRange),
             std::integral_constant<size_t, 2>{}, rowAdder);

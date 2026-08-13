@@ -665,6 +665,21 @@ if (EMSCRIPTEN)
 endif ()
 FetchContent_MakeAvailable(googletest ctre abseil fsst nlohmann-json antlr range-v3 spatialjoin uriparser opentelemetry-cpp s2 re2)
 
+# Additional compiler flags that are applied to QLever's own targets only, and
+# not to the third-party dependencies that were made available above. This is
+# how the CI enables `-pedantic-errors`: QLever's own code has to be free of
+# pedantic diagnostics, but several of the dependencies (in particular `re2` and
+# `s2`) are not pedantically clean and are not ours to fix. This works because
+# `add_compile_options` only affects targets that are created after the call, and
+# all of QLever's own targets are created below, whereas the dependencies have
+# just been added above. Use `ADDITIONAL_COMPILER_FLAGS` for flags that shall
+# apply to the dependencies as well.
+set(ADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY "" CACHE STRING "Additional compiler flags for QLever's own targets, but not for the third-party dependencies (see the comment in `CMakeLists.txt`)")
+if (ADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY)
+    separate_arguments(ADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY_LIST UNIX_COMMAND "${ADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY}")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${ADDITIONAL_COMPILER_FLAGS_QLEVER_ONLY_LIST}>")
+endif ()
+
 # Depending on `BUILD_SHARED_LIBS`, the `antlr4` build creates either a shared or
 # a static library target. Define the alias `antlr4_umbrella` such that the rest
 # of the build can link against the correct one without further case

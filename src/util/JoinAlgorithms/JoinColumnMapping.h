@@ -117,14 +117,22 @@ class JoinColumnMapping {
 struct GetColsFromTable {
   template <size_t numCols, typename Table>
   decltype(auto) operator()(Table& table) {
-    return [&table]<size_t... I>(std::index_sequence<I...>) {
-      return ::ranges::views::zip(table.getColumn(I)...) |
-             ::ranges::views::transform([](auto&& tuple) {
-               return std::apply(
-                   [](auto&... refs) { return std::array{refs...}; },
-                   AD_FWD(tuple));
-             });
-    }(std::make_index_sequence<numCols>());
+    return getCols(table, std::make_index_sequence<numCols>());
+  }
+
+ private:
+  // Implementation of `operator()` above, with the column indices expanded into
+  // a parameter pack. Note: This is a named function template and not a local
+  // lambda, because lambdas with an explicit template parameter list are not
+  // available in C++17.
+  template <typename Table, size_t... I>
+  static decltype(auto) getCols(Table& table, std::index_sequence<I...>) {
+    return ::ranges::views::zip(table.getColumn(I)...) |
+           ::ranges::views::transform([](auto&& tuple) {
+             return std::apply(
+                 [](auto&... refs) { return std::array{refs...}; },
+                 AD_FWD(tuple));
+           });
   }
 };
 

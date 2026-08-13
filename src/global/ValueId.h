@@ -450,7 +450,8 @@ class ValueId {
 
   // Enable the serialization of `ValueId` in the `ad_utility::serialization`
   // framework.
-  friend void allowTrivialSerialization(ValueId, auto);
+  template <typename T>
+  friend void allowTrivialSerialization(ValueId, T);
 
   // Similar to `std::visit` for `std::variant`. First gets the datatype and
   // then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method

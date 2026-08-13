@@ -220,7 +220,8 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
 }
 
 std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
-    const IdTableView<0>* idtable, size_t row, size_t col) {
+    [[maybe_unused]] const IdTableView<0>* idtable, [[maybe_unused]] size_t row,
+    [[maybe_unused]] size_t col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
@@ -988,7 +989,8 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 
 // ____________________________________________________________________________
 std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
-    const IdTableView<0>* idTable, const size_t row, const ColumnIndex col) {
+    [[maybe_unused]] const IdTableView<0>* idTable,
+    [[maybe_unused]] const size_t row, [[maybe_unused]] const ColumnIndex col) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   throw std::runtime_error("getRtreeEntry is not supported in this build");
 #else

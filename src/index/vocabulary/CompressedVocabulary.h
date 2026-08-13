@@ -357,7 +357,7 @@ CPP_template(typename UnderlyingVocabulary,
     }();
     return compressionWrapper_.decompress(toStringView(*it),
                                           getDecoderIdx(idx));
-  };
+  }
 
   // ____________________________________________________
   static constexpr ad_utility::MemorySize bytes(size_t numBytes) {

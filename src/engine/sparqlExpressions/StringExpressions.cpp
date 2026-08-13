@@ -543,7 +543,8 @@ class ConcatExpression : public detail::VariadicExpression {
 
 // ENCODE_FOR_URI
 struct EncodeForUriImpl {
-  IdOrLiteralOrIri operator()(std::optional<std::string> input) const {
+  IdOrLiteralOrIri operator()(
+      [[maybe_unused]] std::optional<std::string> input) const {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
     if (!input.has_value()) {
       return Id::makeUndefined();
