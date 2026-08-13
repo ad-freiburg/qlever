@@ -10,6 +10,7 @@
 #include "engine/ConstructTripleInstantiator.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/ConstructDeduplicator.h"
