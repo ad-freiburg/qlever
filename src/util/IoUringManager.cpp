@@ -12,6 +12,7 @@
 
 #include <unistd.h>
 
+#include <array>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -152,26 +153,52 @@ void IoUringPolicy::wait(BatchHandle handle) {
   // Drain completions until this batch is gone. `drainOneCqe` erases a batch as
   // soon as its last read completes, so a present entry always still has
   // outstanding reads.
+  //
+  // To amortize the `io_uring_enter` syscalls (the paper's central point),
+  // each blocking wait is followed by consuming ALL completions that are ready
+  // at that point, not just one. When completions arrive in bursts (e.g. the
+  // two-phase reads of a depth-2 pipeline), this replaces one syscall per CQE
+  // with one syscall per burst.
   while (numInFlightReadRequestsPerBatch_.find(handle) !=
          numInFlightReadRequestsPerBatch_.end()) {
-    drainOneCqe();
+    io_uring_cqe* cqe = nullptr;
+    int ret = io_uring_wait_cqe(&ring_, &cqe);
+    if (ret < 0) {
+      AD_THROW("io_uring_wait_cqe failed in IoUringPolicy");
+    }
+    drainAllReadyCqes();
   }
 }
 
 //______________________________________________________________________________
-void ad_utility::IoUringPolicy::drainOneCqe() {
-  // Block until at least one completion queue entry (CQE) is available.
-  io_uring_cqe* cqe = nullptr;
-  int ret = io_uring_wait_cqe(&ring_, &cqe);
-  if (ret < 0) {
-    AD_THROW("io_uring_wait_cqe failed in IoUringPolicy");
+void IoUringPolicy::drainAllReadyCqes() {
+  // Consume every completion that is ready right now. Each CQE is consumed
+  // (advanced) before its result is processed, so a throwing `processCqe`
+  // cannot leave a half-processed CQE in the ring (which would process it a
+  // second time on the next iteration).
+  constexpr size_t MAX_CQES_PER_ITERATION = 64;
+  std::array<io_uring_cqe*, MAX_CQES_PER_ITERATION> cqes;
+  while (true) {
+    const unsigned numReady =
+        io_uring_peek_batch_cqe(&ring_, cqes.data(), MAX_CQES_PER_ITERATION);
+    if (numReady == 0) {
+      break;
+    }
+    for (unsigned i = 0; i < numReady; ++i) {
+      // Recover the read's result (`cqe->res`) and the request id we stored in
+      // the SQE, then consume the CQE so its slot is freed. Do this before any
+      // throw.
+      const int numBytesRead = cqes[i]->res;
+      const uint64_t requestId = io_uring_cqe_get_data64(cqes[i]);
+      io_uring_cq_advance(&ring_, 1);
+      processCqe(numBytesRead, requestId);
+    }
   }
+}
 
-  // Recover the read's result (`cqe->res`) and the request id we stored in the
-  // SQE, then consume the CQE so its slot is freed. Do this before any throw.
-  const int numBytesRead = cqe->res;
-  const uint64_t requestId = io_uring_cqe_get_data64(cqe);
-  io_uring_cqe_seen(&ring_, cqe);
+//______________________________________________________________________________
+void ad_utility::IoUringPolicy::processCqe(int numBytesRead,
+                                           uint64_t requestId) {
   numInFlightReadRequests_--;
 
   // Every reaped CQE corresponds to exactly one in-flight read whose id we
@@ -201,6 +228,23 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
   if (--it->second == 0) {
     numInFlightReadRequestsPerBatch_.erase(it);
   }
+}
+
+//______________________________________________________________________________
+void ad_utility::IoUringPolicy::drainOneCqe() {
+  // Block until at least one completion queue entry (CQE) is available.
+  io_uring_cqe* cqe = nullptr;
+  int ret = io_uring_wait_cqe(&ring_, &cqe);
+  if (ret < 0) {
+    AD_THROW("io_uring_wait_cqe failed in IoUringPolicy");
+  }
+
+  // Recover the read's result (`cqe->res`) and the request id we stored in the
+  // SQE, then consume the CQE so its slot is freed. Do this before any throw.
+  const int numBytesRead = cqe->res;
+  const uint64_t requestId = io_uring_cqe_get_data64(cqe);
+  io_uring_cqe_seen(&ring_, cqe);
+  processCqe(numBytesRead, requestId);
 }
 
 #endif  // QLEVER_HAS_IO_URING

@@ -201,11 +201,22 @@ class IoUringPolicy {
 
   // Maps a read's request id to its metadata. An entry is inserted when the
   // read is prepared in `addBatch` and erased when its completion is reaped in
-  // `drainOneCqe`.
+  // `drainOneCqe` / `processCqe`.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
   // Wait for one CQE and update the in-flight bookkeeping.
   void drainOneCqe();
+
+  // Consume and process every completion that is ready right now (without
+  // blocking). Used by `wait` to amortize the `io_uring_enter` syscalls over
+  // bursts of completions.
+  void drainAllReadyCqes();
+
+  // Update the in-flight bookkeeping for one completion. `numBytesRead` and
+  // `requestId` must be the completion's `res` and `user_data`, and the
+  // corresponding CQE must already have been consumed from the ring (so a
+  // throwing validation cannot leave it in the ring).
+  void processCqe(int numBytesRead, uint64_t requestId);
 
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
