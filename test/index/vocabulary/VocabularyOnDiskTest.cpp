@@ -16,13 +16,13 @@
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
+#include "../../util/RuntimeParametersTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MmapVector.h"
-#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 using namespace vocabulary_test;
@@ -364,7 +364,8 @@ TEST(VocabularyOnDisk, BatchIoRuntimeParametersAreValidated) {
   // A ring size above `UINT_MAX` must be rejected instead of being wrapped by
   // the `static_cast<unsigned>` in `open`.
   testInvalid([] {
-    return setRuntimeParameterForTest<&RuntimeParameters::vocabBatchIoRingSize_>(
+    return setRuntimeParameterForTest<
+        &RuntimeParameters::vocabBatchIoRingSize_>(
         static_cast<size_t>(std::numeric_limits<unsigned>::max()) + 1);
   });
 }
@@ -372,10 +373,12 @@ TEST(VocabularyOnDisk, BatchIoRuntimeParametersAreValidated) {
 // With valid runtime parameter values, `open` must create a working manager
 // pool: batch lookups still return the correct results.
 TEST(VocabularyOnDisk, BatchIoRuntimeParametersAreApplied) {
-  auto resetManagers = setRuntimeParameterForTest<
-      &RuntimeParameters::vocabBatchIoNumManagers_>(2);
-  auto resetRingSize = setRuntimeParameterForTest<
-      &RuntimeParameters::vocabBatchIoRingSize_>(128);
+  auto resetManagers =
+      setRuntimeParameterForTest<&RuntimeParameters::vocabBatchIoNumManagers_>(
+          2);
+  auto resetRingSize =
+      setRuntimeParameterForTest<&RuntimeParameters::vocabBatchIoRingSize_>(
+          128);
   auto vocab = createExampleVocabulary();
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
   auto result = vocab->lookupBatch(indices);
