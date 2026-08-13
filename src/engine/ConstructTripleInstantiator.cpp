@@ -182,11 +182,12 @@ void appendValidRDFLiteral(std::string& out, std::string_view normLiteral) {
   size_t posLastQuote = normLiteral.rfind('"');
   std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
   out.push_back('"');
+  using Replacement = std::pair<absl::string_view, absl::string_view>;
   absl::StrAppend(
-      &out,
-      absl::StrReplaceAll(
-          normalizedContent,
-          {{R"(\", R"(\\)"}, {"\n", "\\n"}, {"\r", "\\r"}, {R"(")", R"(\")"}}));
+      &out, absl::StrReplaceAll(
+                normalizedContent,
+                {Replacement{R"(\\)", R"(\\\\)"}, Replacement{"\n", "\\n"},
+                 Replacement{"\r", "\\r"}, Replacement{R"(")", R"(\")"}}));
   out.append(normLiteral.substr(posLastQuote));
 }
 
@@ -198,7 +199,9 @@ void appendEscapedForCsv(std::string& out, std::string_view input) {
     return;
   }
   out.push_back('"');
-  absl::StrAppend(&out, absl::StrReplaceAll(input, {{"\"", "\"\""}}));
+  using Replacement = std::pair<absl::string_view, absl::string_view>;
+  absl::StrAppend(&out,
+                  absl::StrReplaceAll(input, {Replacement{"\"", "\"\""}}));
   out.push_back('"');
 }
 
@@ -209,8 +212,9 @@ void appendEscapedForTsv(std::string& out, std::string_view input) {
     out.append(input);
     return;
   }
-  absl::StrAppend(&out,
-                  absl::StrReplaceAll(input, {{"\t", " "}, {"\n", "\\n"}}));
+  using Replacement = std::pair<absl::string_view, absl::string_view>;
+  absl::StrAppend(&out, absl::StrReplaceAll(input, {Replacement{"\t", " "},
+                                                    Replacement{"\n", "\\n"}}));
 }
 }  // namespace
 
