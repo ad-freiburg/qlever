@@ -562,7 +562,7 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
         }
       }
       rowBuffer.push_back('\n');
-      STREAMABLE_YIELD(rowBuffer);
+      STREAMABLE_YIELD(std::move(rowBuffer));
       cancellationHandle->throwIfCancelled();
     }
   }
