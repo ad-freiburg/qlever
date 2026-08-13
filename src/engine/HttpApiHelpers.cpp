@@ -48,7 +48,6 @@ std::optional<double> parsePinGeoIndexSimplification(
 std::vector<ad_utility::MediaType> determineMediaTypes(
     const ad_utility::url_parser::ParamValueMap& params,
     std::string_view acceptHeader) {
-  using namespace ad_utility::url_parser;
   using enum ad_utility::MediaType;
 
   static const std::array<std::pair<std::string, ad_utility::MediaType>, 6>
@@ -140,6 +139,7 @@ std::string ResultPinning::describeForLog() const {
                       pinSubtrees_ ? " [pin subresults]" : "", namePart);
 }
 
+namespace detail {
 // _____________________________________________________________________________
 std::optional<uint64_t> parseSendLimit(const ParamValueMap& params) {
   auto sendParameter = getParameterCheckAtMostOnce(params, "send");
@@ -166,12 +166,13 @@ bool considerSendParameter(ad_utility::MediaType mediaType) {
               &RuntimeParameters::sparqlResultsJsonWithTime_>() &&
           mediaType == sparqlJson);
 }
+}  // namespace detail
 
 // _____________________________________________________________________________
 std::optional<uint64_t> determineSendLimit(const ParamValueMap& params,
                                            ad_utility::MediaType mediaType) {
-  auto sendLimit = parseSendLimit(params);
-  return considerSendParameter(mediaType) ? sendLimit : std::nullopt;
+  auto sendLimit = detail::parseSendLimit(params);
+  return detail::considerSendParameter(mediaType) ? sendLimit : std::nullopt;
 }
 
 }  // namespace qlever::http_api_helpers

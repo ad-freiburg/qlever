@@ -46,7 +46,7 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
 };
 }  // namespace
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
   auto askQuery = parseQuery("ASK {}");
   auto selectQuery = parseQuery("SELECT * {}");

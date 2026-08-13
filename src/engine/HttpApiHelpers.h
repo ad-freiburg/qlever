@@ -70,6 +70,17 @@ struct ResultPinning {
 ResultPinning determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params);
 
+// Determine the export limit for a response of the given `mediaType` from
+// the `send` parameter (see `parseSendLimit`). Always validates `send`
+// (throws on an invalid or duplicated value) regardless of `mediaType`, but
+// only returns a limit for media types where `considerSendParameter` holds;
+// returns `std::nullopt` otherwise.
+std::optional<uint64_t> determineSendLimit(
+    const ad_utility::url_parser::ParamValueMap& params,
+    ad_utility::MediaType mediaType);
+
+// Implementation details for the function `determineSendLimit`.
+namespace detail {
 // Parse the `send` parameter (historical name): the maximum number of
 // bindings to export, e.g. `?send=100` limits the response to (at most)
 // 100 bindings. Return `std::nullopt` if the parameter is not set. Throw
@@ -83,14 +94,7 @@ std::optional<uint64_t> parseSendLimit(
 // `sparql-results-json-with-time` is enabled (the default).
 bool considerSendParameter(ad_utility::MediaType mediaType);
 
-// Determine the export limit for a response of the given `mediaType` from
-// the `send` parameter (see `parseSendLimit`). Always validates `send`
-// (throws on an invalid or duplicated value) regardless of `mediaType`, but
-// only returns a limit for media types where `considerSendParameter` holds;
-// returns `std::nullopt` otherwise.
-std::optional<uint64_t> determineSendLimit(
-    const ad_utility::url_parser::ParamValueMap& params,
-    ad_utility::MediaType mediaType);
+}  // namespace detail
 }  // namespace qlever::http_api_helpers
 
 #endif  // QLEVER_SRC_ENGINE_HTTPAPIHELPERS_H

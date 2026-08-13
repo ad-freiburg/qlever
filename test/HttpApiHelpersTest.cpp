@@ -43,7 +43,7 @@ TEST(HttpApiHelpersTest, parsePinGeoIndexSimplification) {
 }
 
 // _____________________________________________________________________________
-TEST(HttpApiHelpersTest, determineMediaType) {
+TEST(HttpApiHelpersTest, determineMediaTypes) {
   auto checkActionMediatype = [&](const std::string& actionName,
                                   ad_utility::MediaType expectedMediaType) {
     EXPECT_THAT(determineMediaTypes({{"action", {actionName}}}, ""),
@@ -189,6 +189,7 @@ TEST(HttpApiHelpersTest, determineResultPinning) {
 
 // _____________________________________________________________________________
 TEST(HttpApiHelpersTest, parseSendLimit) {
+  using namespace qlever::http_api_helpers::detail;
   auto expectInvalidSendLimit = [](std::string value,
                                    ad_utility::source_location l =
                                        AD_CURRENT_SOURCE_LOC()) {
@@ -212,6 +213,7 @@ TEST(HttpApiHelpersTest, parseSendLimit) {
 
 // _____________________________________________________________________________
 TEST(HttpApiHelpersTest, considerSendParameter) {
+  using namespace qlever::http_api_helpers::detail;
   using enum ad_utility::MediaType;
   // Always considered for `qlever-results+json`.
   EXPECT_TRUE(considerSendParameter(qleverJson));
