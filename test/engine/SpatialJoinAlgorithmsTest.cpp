@@ -26,6 +26,7 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
 #include "util/SourceLocation.h"
