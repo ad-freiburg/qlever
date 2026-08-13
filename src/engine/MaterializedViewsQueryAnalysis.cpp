@@ -18,8 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/PropertyPath.h"
-#include "parser/SparqlParser.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
 
@@ -341,11 +340,11 @@ bool QueryPatternCache::analyzeJoinStar(
 }
 
 // _____________________________________________________________________________
-bool QueryPatternCache::analyzeView(ViewPtr view) {
+bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
-                << "' will not be added to the query pattern cache for query "
-                   "rewriting. Reason: "
+                << "' will not be added to the query pattern cache for "
+                   "pattern-based (star/chain) query rewriting. Reason: "
                 << reason << "." << std::endl;
   };
 
@@ -356,23 +355,52 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
     return false;
   }
 
+  // Save the cache key for this view: once in full for matching the entire
+  // unchanged view query, and once with invariant patterns (such as `BIND`s)
+  // removed for matching queries that do not contain all of these patterns.
+  auto [full, withoutInvariant] = view->computeCacheKey(qec);
+  auto insert = [&](auto& cacheKeyAndCol) {
+    if (!cacheKeyAndCol.has_value()) {
+      return false;
+    }
+    auto [it, inserted] = byCacheKey_.insert(
+        {std::move(cacheKeyAndCol.value().cacheKey_),
+         std::make_shared<ByCacheKeyInfo>(
+             view, std::move(cacheKeyAndCol.value().columnMapping_))});
+    // If `inserted` is `false` because the entry already belongs to `view`
+    // itself (its "full" and "without invariants" cache keys coincide, e.g.
+    // because the view has no `BIND` to strip), this is expected and not a
+    // collision worth logging.
+    if (!inserted && it->second->view_ != view) {
+      AD_LOG_INFO << "Materialized view '" << view->name()
+                  << "' has the same cache key as the already loaded view '"
+                  << it->second->view_->name()
+                  << "'. Only the latter can be matched by cache key."
+                  << std::endl;
+    }
+    return inserted;
+  };
+  // Not `||`: both calls must always be evaluated.
+  bool cacheKeyAdded = insert(full);
+  cacheKeyAdded = insert(withoutInvariant) || cacheKeyAdded;
+
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(
         "The view has more than one graph pattern (even after skipping ignored "
         "patterns)");
-    return false;
+    return cacheKeyAdded;
   }
   const auto& graphPattern = graphPatternsFiltered.at(0);
   if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
     explainIgnore("The graph pattern is not a basic set of triples");
-    return false;
+    return cacheKeyAdded;
   }
   // TODO<ullingerc> Property path is stored as a single predicate here.
   const auto& triples = graphPattern.getBasic()._triples;
   if (triples.size() == 0) {
     explainIgnore("The query body is empty");
-    return false;
+    return cacheKeyAdded;
   }
   bool patternFound = false;
 
@@ -405,10 +433,12 @@ bool QueryPatternCache::analyzeView(ViewPtr view) {
   }
 
   if (!patternFound) {
-    explainIgnore("No supported query pattern for rewriting joins was found");
+    explainIgnore(
+        "No supported query pattern for rewriting joins was found (this does "
+        "not affect cache-key based rewriting)");
   }
 
-  return patternFound;
+  return patternFound || cacheKeyAdded;
 }
 
 // _____________________________________________________________________________
@@ -440,6 +470,13 @@ void QueryPatternCache::removeView(ViewPtr view) {
 
   // Remove `view` from star cache.
   starCache_.erase(view);
+
+  // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
+  // works natively with our hash map unlike `ql::erase_if`.
+  absl::erase_if(byCacheKey_, [&view](const auto& pair) {
+    AD_CORRECTNESS_CHECK(pair.second != nullptr);
+    return pair.second->view_ == view;
+  });
 }
 
 // _____________________________________________________________________________
@@ -471,6 +508,15 @@ BindExpressionAndTargetCol extractBindExpressions(
                 varToColMap.at(bind._target).columnIndex_});
   }
   return map;
+}
+
+// _____________________________________________________________________________
+ByCacheKeyInfoPtr QueryPatternCache::lookupByCacheKey(
+    const std::string& cacheKey) const {
+  if (auto info = ad_utility::findOptional(byCacheKey_, cacheKey)) {
+    return info.value();
+  }
+  return nullptr;
 }
 
 }  // namespace materializedViewsQueryAnalysis
