@@ -19,21 +19,43 @@
 // against `Boost::filesystem`.
 //
 // The APIs of `std::filesystem` and `boost::filesystem` are almost identical
-// for the subset of functionality used by QLever. The one notable difference is
+// for the subset of functionality used by QLever. One notable difference is
 // the `perms` enum, where `std::filesystem` uses the scoped enumerator
 // `perms::none` while `boost::filesystem` uses the (unscoped)
 // `perms::no_perms`. Use `ql::filesystem_perms_none` (defined below) instead of
-// either.
+// either. The other differences are bridged by the helpers below; note that
+// these also have to work with Boost 1.74, the oldest version that QLever is
+// tested with (see the `CPP17 libQLever` CI workflow).
 
 #ifdef QLEVER_CPP_17
 #include <boost/filesystem.hpp>
 #include <boost/system/error_code.hpp>
+#include <boost/version.hpp>
+#include <string_view>
 #else
 #include <filesystem>
 #include <system_error>
 #endif
 
 #include <utility>
+
+// `boost::filesystem::path` can only be constructed (and assigned, appended,
+// and concatenated) from a `std::string_view` since Boost 1.81. For older Boost
+// versions we opt in to that support by specializing the `is_pathable` trait,
+// which is the customization point that all those member templates are
+// constrained on. The corresponding `dispatch()` overload for arbitrary
+// containers of characters already exists, so the specialization is all that is
+// needed. Note that `is_pathable` was removed in Boost 1.81 (together with the
+// introduction of the native `std::string_view` support), hence the version
+// check.
+#if defined(QLEVER_CPP_17) && BOOST_VERSION < 108100
+namespace boost::filesystem::path_traits {
+template <>
+struct is_pathable<std::string_view> {
+  static const bool value = true;
+};
+}  // namespace boost::filesystem::path_traits
+#endif
 
 namespace ql {
 #ifdef QLEVER_CPP_17
@@ -89,6 +111,19 @@ class DirectoryRange {
 // Return a `DirectoryRange` over the entries of `directory`.
 inline DirectoryRange directoryRange(filesystem::path directory) {
   return DirectoryRange{std::move(directory)};
+}
+
+// Return true if `entry` is a regular file resp. a directory. The member
+// functions `directory_entry::is_regular_file()` and
+// `directory_entry::is_directory()` only exist in `std::filesystem` and in
+// recent versions of `boost::filesystem`, but the (cached) `status()` of an
+// entry together with the corresponding free functions works with all backends
+// and versions.
+inline bool isRegularFile(const filesystem::directory_entry& entry) {
+  return filesystem::is_regular_file(entry.status());
+}
+inline bool isDirectory(const filesystem::directory_entry& entry) {
+  return filesystem::is_directory(entry.status());
 }
 
 // Return the filename component of `path`, with `std::filesystem` semantics

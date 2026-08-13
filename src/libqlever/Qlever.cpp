@@ -34,7 +34,6 @@
 #include "util/FilesystemHelpers.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
-#include "util/http/UrlParser.h"
 
 namespace qlever {
 
