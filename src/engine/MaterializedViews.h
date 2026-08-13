@@ -263,6 +263,27 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
       QueryExecutionContext* qec,
       const parsedQuery::MaterializedViewQuery& viewQuery) const;
 
+  using ColumnMapping = ad_utility::HashMap<size_t, size_t>;
+  std::shared_ptr<IndexScan> makeIndexScan(QueryExecutionContext* qec,
+                                           const VariableToColumnMap& varToCol,
+                                           const ColumnMapping& colMap) const;
+
+  // Compute the cache key corresponding to the query of this materialized view.
+  // Requires a `QueryExecutionContext` to access the index, and the
+  // materialized view must know its original query. If `qec` is `nullptr` or
+  // the view does not know its original query, both members of the returned
+  // struct are `nullopt` (currently used by tests).
+  struct CacheKeyAndColumnMapping {
+    std::string cacheKey_;
+    ColumnMapping columnMapping_;
+  };
+  struct CacheKeyWithAndWithoutInvariantPatterns {
+    std::optional<CacheKeyAndColumnMapping> full_;
+    std::optional<CacheKeyAndColumnMapping> withoutInvariants_;
+  };
+  CacheKeyWithAndWithoutInvariantPatterns computeCacheKey(
+      QueryExecutionContext* qec) const;
+
   // If the materialized view contains a top-level `BIND` statement where the
   // expression matches the given cache key, return the column index of the
   // `BIND`'s target variable.
@@ -274,6 +295,7 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
       const std::string& bindCacheKey) const;
 
   // Dummy variables for internal use.
+  static const Variable& dummySubject();
   static const Variable& dummyPredicate();
   static const Variable& dummyObject();
 };
@@ -343,7 +365,8 @@ class MaterializedViewsManager {
   // helper for `loadView` and `getView`, so that the latter can look up the
   // view atomically with loading it, without releasing the lock in between).
   std::shared_ptr<MaterializedView> loadViewIntoLockedState(
-      const std::string& name, LoadedViews& state) const;
+      const std::string& name, LoadedViews& state,
+      QueryExecutionContext* qec) const;
 
  public:
   MaterializedViewsManager() = default;
@@ -390,7 +413,10 @@ class MaterializedViewsManager {
   // Since we don't want to break the const-ness in a lot of places just for the
   // loading of views, `loadedViews_` is mutable. Note that this is okay,
   // because the views themselves aren't changed (only loaded on-demand).
-  void loadView(const std::string& name) const;
+  // `qec` is forwarded to `MaterializedView::computeCacheKey` for cache-key
+  // based query rewriting; passing `nullptr` skips that analysis (currently
+  // used by tests that do not care about it).
+  void loadView(const std::string& name, QueryExecutionContext* qec) const;
 
   // Unload a materialized view if it is loaded. This function is a no-op
   // otherwise. It is `const` for the same reason described above.
@@ -401,9 +427,10 @@ class MaterializedViewsManager {
   void deleteView(const std::string& name) const;
 
   // Load the given view if it is not already loaded and return it. This pointer
-  // is never `nullptr`. If the view does not exist, the function throws.
+  // is never `nullptr`. If the view does not exist, the function throws. See
+  // `loadView` above for details on the use of the `QueryExecutionContext`.
   std::shared_ptr<const MaterializedView> getView(
-      const std::string& name) const;
+      const std::string& name, QueryExecutionContext* qec) const;
 
   // The same as `MaterializedView::makeIndexScan` above, but load and use the
   // right view automatically as requested in the `MaterializedViewQuery`.
@@ -418,6 +445,13 @@ class MaterializedViewsManager {
   std::vector<MaterializedViewJoinReplacement> makeJoinReplacementIndexScans(
       QueryExecutionContext* qec,
       const parsedQuery::BasicGraphPattern& triples) const;
+
+  //  Check if there is a materialized view that can be used to replace a query
+  //  with the given cache key. The `VariableToColumnMap` needs to be provided
+  //  to apply the view's column permutation.
+  std::shared_ptr<IndexScan> makeIndexScan(
+      QueryExecutionContext* qec, const std::string& cacheKey,
+      const VariableToColumnMap& varToCol) const;
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
   // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
