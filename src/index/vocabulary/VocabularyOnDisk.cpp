@@ -156,28 +156,6 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
 }
 
 // _____________________________________________________________________________
-std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
-    ad_utility::BatchManagerBase& manager,
-    ql::span<const size_t> indices) const {
-  // For each requested index `i`, read its offset together with the next offset
-  // (which bounds the string) as one 16-byte pair from `.offsets`.
-  const size_t numIndices = indices.size();
-  std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
-  std::vector<uint64_t> fileOffsets(numIndices);
-  std::vector<char*> targets(numIndices);
-  for (auto&& [fileOffset, index, target, offsetPair] :
-       ::ranges::views::zip(fileOffsets, indices, targets, offsetPairs)) {
-    AD_CONTRACT_CHECK(index < size());
-    fileOffset = index * sizeof(uint64_t);
-    target = reinterpret_cast<char*>(&offsetPair);
-  }
-  manager.wait(
-      manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
-  return offsetPairs;
-}
-
-// _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::readStrings(
     ad_utility::BatchManagerBase& manager,
     ql::span<const OffsetPair> offsetPairs) const {
@@ -210,23 +188,98 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
 }
 
 // _____________________________________________________________________________
-VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
+std::unique_ptr<VocabLookupHandleBase> VocabularyOnDisk::beginLookup(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
   auto manager = ioManagers_->pop().value();
   // Return the `manager` to the pool on every exit path (including exceptions,
-  // e.g. an out-of-range index in phase 1), so we never leak an `IoManager`
-  // (and its io_uring buffers) out of the pool.
-  absl::Cleanup returnManager{[this, &manager]() {
+  // e.g. an out-of-range index), so we never leak an `IoManager` (and its
+  // io_uring buffers) out of the pool.
+  absl::Cleanup returnManagerOnThrow{[this, &manager]() {
     ad_utility::terminateIfThrows(
         [this, &manager]() { ioManagers_->push(std::move(manager)); },
         "returning the `IoManager` to the pool in "
-        "`VocabularyOnDisk::lookupBatch`");
+        "`VocabularyOnDisk::beginLookup`");
   }};
 
-  auto offsetPairs = readOffsetPairs(*manager, indices);
-  return readStrings(*manager, offsetPairs);
+  auto handle = std::make_unique<LookupHandle>();
+  handle->vocab_ = this;
+  handle->indices_.assign(indices.begin(), indices.end());
+  handle->manager_ = std::move(manager);
+
+  // Submit the offset reads (Phase 1) without waiting for them: the caller
+  // decides when to block (in `finishLookup`), which is what allows the reads
+  // of the next batch to be in flight while the current batch is consumed.
+  const size_t numIndices = handle->indices_.size();
+  handle->offsetPairs_.resize(numIndices);
+  std::vector sizes(numIndices, sizeof(OffsetPair));
+  std::vector<uint64_t> fileOffsets(numIndices);
+  std::vector<char*> targets(numIndices);
+  for (auto&& [fileOffset, index, target, offsetPair] : ::ranges::views::zip(
+           fileOffsets, handle->indices_, targets, handle->offsetPairs_)) {
+    AD_CONTRACT_CHECK(index < size());
+    fileOffset = index * sizeof(uint64_t);
+    target = reinterpret_cast<char*>(&offsetPair);
+  }
+  handle->offsetBatch_ = handle->manager_->addBatch(offsetsFile_.fd(), sizes,
+                                                    fileOffsets, targets);
+
+  returnManagerOnThrow.release();
+  return handle;
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyOnDisk::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handleBase) const {
+  auto* handle = static_cast<LookupHandle*>(handleBase.get());
+  AD_CONTRACT_CHECK(handle != nullptr && handle->vocab_ == this);
+  return handle->finish();
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyOnDisk::LookupHandle::finish() {
+  // Complete the lookup and hand the `manager` back to the pool on every exit
+  // path (including exceptions, e.g. an I/O error while waiting). The handle
+  // itself (and not `VocabularyOnDisk::finishLookup`) owns the return, because
+  // wrapping vocabularies (e.g. `CompressedVocabulary`) complete the lookup
+  // through the type-erased `VocabLookupHandleBase` interface, where the
+  // concrete `VocabularyOnDisk::finishLookup` cannot be called.
+  absl::Cleanup returnManager{[this]() {
+    ad_utility::terminateIfThrows([this]() { returnManagerToPool(); },
+                                  "returning the `IoManager` to the pool in "
+                                  "`VocabularyOnDisk::LookupHandle::finish`");
+  }};
+  // Wait for the offset reads submitted by `beginLookup`, then read the string
+  // data (Phase 2) and return it.
+  manager_->wait(offsetBatch_);
+  return vocab_->readStrings(*manager_, offsetPairs_);
+}
+
+// _____________________________________________________________________________
+VocabularyOnDisk::LookupHandle::~LookupHandle() {
+  // If `finish` was never called (e.g. an exception was thrown between
+  // `beginLookup` and `finishLookup`), return the `manager` to the pool so the
+  // pool does not leak managers out of its `NUM_VOCAB_BATCH_IO_MANAGERS`
+  // budget. After a successful `finish`, `manager_` is null and this is a
+  // no-op.
+  if (manager_) {
+    ad_utility::terminateIfThrows(
+        [this]() { returnManagerToPool(); },
+        "returning the `IoManager` to the pool in the destructor of "
+        "`VocabularyOnDisk::LookupHandle`");
+  }
+}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::LookupHandle::returnManagerToPool() {
+  vocab_->ioManagers_->push(std::move(manager_));
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
+    ql::span<const size_t> indices) const {
+  return finishLookup(beginLookup(indices));
 }
 
 // _____________________________________________________________________________

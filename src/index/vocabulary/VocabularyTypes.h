@@ -131,6 +131,58 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
+// A vocabulary batch-lookup result that combines words read from disk via a
+// batched read with words copied from an in-RAM vocabulary (used by
+// `VocabularyInternalExternal`, which serves some indices from its RAM-resident
+// internal vocabulary and the rest from the on-disk vocabulary). Owns the disk
+// result (which keeps the disk-read buffer alive) and one `string_view` per
+// looked-up index: the views for the on-disk words point into that buffer, the
+// views for the RAM-resident words point into the owned `internalWords_`
+// copies.
+struct MixedVocabBatchLookupData {
+  // Owns the disk-read buffer that the on-disk words' views point into.
+  VocabBatchLookupResult diskResult_;
+  // Owned copies of the words that were resolved from the in-RAM vocabulary.
+  std::vector<std::string> internalWords_;
+  // One `string_view` per looked-up index, pointing either into
+  // `internalWords_` or into the buffer owned by `diskResult_`.
+  std::vector<std::string_view> views_;
+  // The span over `views_`, populated by `finalize()` and exposed by
+  // `asResult()`.
+  ql::span<std::string_view> span_;
+
+  static VocabBatchLookupResult asResult(
+      std::shared_ptr<MixedVocabBatchLookupData> self) {
+    self->span_ = ql::span<std::string_view>{self->views_};
+    return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
+                                                       &self->span_);
+  }
+};
+
+// Base class for the state of a split-phase vocabulary lookup, as returned by
+// a vocabulary's `beginLookup` and consumed by its `finishLookup`. The
+// concrete vocabulary stores the state it needs (e.g. the pooled I/O manager
+// and the in-flight read batch, for `VocabularyOnDisk`) in a derived class and
+// implements `finish()`, which blocks until all I/O of the lookup has
+// completed and returns the resolved strings.
+class VocabLookupHandleBase {
+ public:
+  virtual ~VocabLookupHandleBase() = default;
+
+  // Block until every read of the lookup has completed and return the resolved
+  // string representations, in the same order as the indices passed to the
+  // corresponding `beginLookup`.
+  [[nodiscard]] virtual VocabBatchLookupResult finish() = 0;
+};
+
+// A split-phase lookup handle for vocabularies whose lookups complete without
+// any I/O (e.g. fully in-memory vocabularies): `beginLookup` performs the full
+// lookup and `finish` just returns the stored result.
+struct EagerVocabLookupHandle : VocabLookupHandleBase {
+  VocabBatchLookupResult finish() override { return result_; }
+  VocabBatchLookupResult result_;
+};
+
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
 // implementation. They simply loop over the indices and issue the ordinary
