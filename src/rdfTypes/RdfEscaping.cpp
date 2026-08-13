@@ -22,6 +22,17 @@ namespace RdfEscaping {
 using namespace std::string_literals;
 namespace detail {
 
+// The characters that must be escaped in the respective output formats. Named
+// so that the call sites of the SIMD scan do not repeat the raw character
+// lists (the individual formats use different sets).
+using LiteralContentSpecialChars =
+    ad_utility::simd::detail::CharacterSet<'"', '\\', '\n', '\r'>;
+using CsvSpecialChars = ad_utility::simd::detail::CharacterSet<'\r', '\n', '"', ','>;
+using TsvSpecialChars = ad_utility::simd::detail::CharacterSet<'\t', '\n'>;
+using XmlSpecialChars =
+    ad_utility::simd::detail::CharacterSet<'&', '"', '<', '>', '\''>;
+
+
 // _____________________________________________________________________________
 std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
   // The input encodes a single Unicode codepoint, so it is at most 8 hex digits
@@ -213,24 +224,15 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   // is checked here; it is equivalent to the old
   // `AD_CONTRACT_CHECK(find('"', 1) != npos)`.
   AD_CONTRACT_CHECK(posLastQuote != 0);
-  // Fast path: a normalized literal (e.g. `"content"`, `"content"@en` or
-  // `"content"^^<datatype>`) only needs escaping if it contains a quote,
-  // backslash, newline, or carriage return in the content, i.e. between the
-  // first and the last quote. This is exactly equivalent to the previous
-  // check `find('"', 1) == rfind('"') && find_first_of("\\\n\r") == npos`:
-  // the last quote is by definition the closing quote, so scanning the window
-  // `[1, posLastQuote)` (exclusive end) for `{'"', '\\', '\n', '\r'}` finds a
-  // quote iff there is one inside the content (a quote in the suffix
-  // `@lang`/`^^<type>` would make `rfind` point at it, so it is excluded from
-  // the window and correctly counts as "content contains a quote"), and a
-  // backslash/newline/CR in the suffix (only possible in malformed input)
-  // makes no difference to the output, because the escape path below only
-  // rewrites the content and leaves the suffix untouched. The scan is a
-  // single vectorized sweep (SSE2/AVX2 with runtime dispatch, see
-  // `util/SimdUtils.h`).
+  // Fast path: a normalized literal only needs escaping if its content (the
+  // part between the first and the last quote) contains a quote, backslash,
+  // newline, or carriage return. The equivalence with the previous
+  // `find`/`find_first_of` check and the window semantics are covered by the
+  // boundary tests in `RdfEscapingTest.cpp`; the scan itself is a vectorized
+  // sweep (see `util/SimdUtils.h`).
   std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
-  if (!ad_utility::simd::containsAnyByte<'"', '\\', '\n', '\r'>(
-          normalizedContent)) [[likely]] {
+  if (!ad_utility::simd::containsAnyByte(detail::LiteralContentSpecialChars{},
+                                         normalizedContent)) [[likely]] {
     return std::string{normLiteral};
   }
   // Otherwise escape first all backslashes then all quotes (the order is
@@ -303,7 +305,7 @@ std::string unescapePrefixedIri(std::string_view literal) {
 
 // __________________________________________________________________________
 std::string escapeForCsv(std::string input) {
-  if (!ad_utility::simd::containsAnyByte<'\r', '\n', '"', ','>(input))
+  if (!ad_utility::simd::containsAnyByte(detail::CsvSpecialChars{}, input))
       [[likely]] {
     return input;
   }
@@ -312,7 +314,8 @@ std::string escapeForCsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForTsv(std::string input) {
-  if (ad_utility::simd::containsAnyByte<'\t', '\n'>(input)) [[unlikely]] {
+  if (ad_utility::simd::containsAnyByte(detail::TsvSpecialChars{}, input))
+      [[unlikely]] {
     absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}}, &input);
   }
   return input;
@@ -320,7 +323,7 @@ std::string escapeForTsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForXml(std::string input) {
-  if (ad_utility::simd::containsAnyByte<'&', '"', '<', '>', '\''>(input))
+  if (ad_utility::simd::containsAnyByte(detail::XmlSpecialChars{}, input))
       [[unlikely]] {
     absl::StrReplaceAll({{"&", "&amp;"},
                          {"<", "&lt;"},

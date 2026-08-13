@@ -1,7 +1,10 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
-//          Hannah bast <bast@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/strings/escaping.h>
 #include <gtest/gtest.h>

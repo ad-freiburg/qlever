@@ -6,6 +6,7 @@
 #define QLEVER_SRC_UTIL_SIMDUTILS_H
 
 #include <cstddef>
+#include <cstring>
 #include <string_view>
 
 // The x86 code below uses GCC/clang-only facilities (`__attribute__((target))`,
@@ -27,12 +28,11 @@ namespace detail {
 // vectorized scan, and is therefore much faster than a naive nested loop for
 // the short inputs that dominate the non-SIMD paths.
 template <char... SpecialChars>
-bool containsAnyByteScalar(const char* data, size_t size) {
+bool containsAnyByteScalar(std::string_view data) {
   static constexpr char specialChars[] = {SpecialChars...};
   static constexpr std::string_view specialCharsView{specialChars,
                                                      sizeof...(SpecialChars)};
-  return std::string_view{data, size}.find_first_of(specialCharsView) !=
-         std::string_view::npos;
+  return data.find_first_of(specialCharsView) != std::string_view::npos;
 }
 
 #ifdef QLEVER_SIMD_X86
@@ -54,10 +54,12 @@ template <char... SpecialChars>
 bool containsAnyByteSSE2(const char* data, size_t size) {
   constexpr size_t chunkSize = 16;
   if (size < chunkSize) {
-    return containsAnyByteScalar<SpecialChars...>(data, size);
+    return containsAnyByteScalar<SpecialChars...>(
+      std::string_view{data, size});
   }
   auto chunkContainsSpecial = [](const char* p) {
-    const auto chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+    __m128i chunk;
+    std::memcpy(&chunk, p, sizeof(chunk));
     __m128i mask = _mm_setzero_si128();
     ((mask = _mm_or_si128(mask,
                           _mm_cmpeq_epi8(chunk, _mm_set1_epi8(SpecialChars)))),
@@ -86,7 +88,8 @@ bool containsAnyByteSSE2(const char* data, size_t size) {
 // does not). See PR #3211.
 template <char... SpecialChars>
 __attribute__((target("avx2"))) bool avx2ChunkContainsSpecial(const char* p) {
-  const auto chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p));
+  __m256i chunk;
+  std::memcpy(&chunk, p, sizeof(chunk));
   __m256i mask = _mm256_setzero_si256();
   ((mask = _mm256_or_si256(
         mask, _mm256_cmpeq_epi8(chunk, _mm256_set1_epi8(SpecialChars)))),
@@ -110,7 +113,22 @@ __attribute__((target("avx2"))) bool containsAnyByteAVX2(const char* data,
 }
 #endif  // QLEVER_SIMD_X86
 
+namespace detail {
+
+// A compile-time set of characters, used to give the special-character lists
+// of the individual output formats a name (see `RdfEscaping.cpp`).
+template <char... SpecialChars>
+struct CharacterSet {};
+
 }  // namespace detail
+
+// Overload of `containsAnyByte` that takes a named `CharacterSet` instead of
+// the raw template arguments.
+template <char... SpecialChars>
+bool containsAnyByte(detail::CharacterSet<SpecialChars...>,
+                     std::string_view sv) {
+  return containsAnyByte<SpecialChars...>(sv);
+}
 
 // Return true iff `sv` contains any of the bytes in the compile-time set
 // `SpecialChars`. Uses a single vectorized sweep (AVX2 if the CPU supports it,
@@ -130,7 +148,8 @@ bool containsAnyByte(std::string_view sv) {
   }
   return detail::containsAnyByteSSE2<SpecialChars...>(data, size);
 #else
-  return detail::containsAnyByteScalar<SpecialChars...>(data, size);
+  return detail::containsAnyByteScalar<SpecialChars...>(
+      std::string_view{data, size});
 #endif
 }
 
