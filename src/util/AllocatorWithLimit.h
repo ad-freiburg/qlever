@@ -26,7 +26,7 @@ class AllocationExceedsLimitException : public std::exception {
                                   MemorySize freeMemory)
       : _message{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
                               ", but only ", freeMemory.asString(),
-                              " were available")} {};
+                              " were available")} {}
 
   const char* what() const noexcept override { return _message.c_str(); }
 

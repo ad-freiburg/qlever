@@ -77,7 +77,7 @@ CPP_template(typename Derived,
   }
 
   // Constructors.
-  EnumWithStrings() noexcept { check(); };
+  EnumWithStrings() noexcept { check(); }
   // Deliberately implicit, s.t. we can directly construct from the underlying
   // enum.
   QL_EXPLICIT(false) EnumWithStrings(Enum value) : value_{value} { check(); }

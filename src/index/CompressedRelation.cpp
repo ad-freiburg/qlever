@@ -231,7 +231,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
                                                  scanConfig_, blockMetadata);
       return std::pair{myIndex,
                        std::optional{std::move(decompressedBlockAndMetadata)}};
-    };
+    }
 
     std::optional<IdTable> get() override {
       if (std::exchange(needsStart_, false)) {
@@ -449,7 +449,7 @@ CompressedRelationReader::lazyScan(
           locatedTriplesPerBlock_);
 
       return result;
-    };
+    }
 
     auto getPrunedBlockAndUpdateDetails(CompressedBlockMetadataIterator it) {
       auto block = getIncompleteBlock(it);
@@ -892,7 +892,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // Return the result.
   return result;
-};
+}
 
 // ____________________________________________________________________________
 template <bool exactSize>
@@ -1272,7 +1272,7 @@ size_t CompressedRelationReader::getNumberOfBlockMetadataValues(
                               [](auto acc, const auto& block) {
                                 return acc + ql::ranges::size(block);
                               });
-};
+}
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata>
@@ -1739,7 +1739,7 @@ CPP_template(typename Range)(
   auto begin = ql::ranges::begin(blockMetadataRange);
   auto end = ql::ranges::end(blockMetadataRange);
   return begin == end || ql::ranges::next(begin) == end;
-};
+}
 
 // _____________________________________________________________________________
 CPP_template(typename Range)(
