@@ -14,6 +14,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <cstdint>
+#include <limits>
 #include <unordered_map>
 
 #include "backports/algorithm.h"
@@ -175,14 +176,27 @@ class IoUringPolicy {
  public:
   using BatchHandle = uint64_t;
 
- private:
-  // Size in bytes of each individual buffer in the registered buffer pool.
-  // 4 KiB covers every single vocab word read (offset pairs are 16 bytes,
-  // word data is at most a few hundred bytes for a single RDF term).
-  static constexpr size_t REGISTERED_BUFFER_SIZE = 4096;
+ public:
+  // Default size in bytes of each individual buffer in the registered buffer
+  // pool. Offset pairs are 16 bytes and the vast majority of RDF terms are a
+  // few hundred bytes, but a vocabulary word has no fixed upper bound (long
+  // abstracts and WKT geometries run into the tens of kilobytes), so this is
+  // sized generously. Reads that still do not fit take the unregistered
+  // fallback path in `addBatch`, so this value is a performance knob and never
+  // a correctness limit.
+  //
+  // NOTE: it would be tempting to size this to the longest word of the
+  // vocabulary at hand, but that length is not known without scanning the
+  // entire offsets file (8 bytes per word, i.e. gigabytes for a Wikidata-sized
+  // index) at every index load, which is far more expensive than the
+  // occasional fallback read.
+  static constexpr size_t DEFAULT_REGISTERED_BUFFER_SIZE = 64 * 1024;
 
+ private:
   io_uring ring_{};
   unsigned ringSize_;
+  // Size in bytes of each individual buffer in the registered buffer pool.
+  size_t registeredBufferSize_;
 
   // Total number of reads that occupy a ring slot but have not yet been reaped
   // via a completion queue entry (CQE), i.e. that are prepared or submitted but
@@ -197,23 +211,33 @@ class IoUringPolicy {
 
   // Per-read metadata needed when a completion is reaped: which batch the read
   // belongs to, how many bytes it was supposed to read (so that reading fewer
-  // bytes than expected can be detected), and the index of the registered
-  // buffer that received the data so it can be returned to the free pool and
-  // the data copied to the caller's target. See `inFlightReadsByRequestId_`.
+  // bytes than expected can be detected), where the caller wants the data
+  // copied, and the index of the registered buffer that received the data so
+  // it can be returned to the free pool. See `inFlightReadsByRequestId_`.
   struct InFlightRead {
     BatchHandle batchHandle;
     size_t expectedNumBytes;
+    // `noPoolBuffer` for reads that were too large for a pool buffer and went
+    // straight into the caller's buffer; then there is nothing to copy back
+    // and nothing to return to the pool.
     size_t poolBufferIndex;
+    char* targetBuffer;
   };
 
+  // Sentinel for `InFlightRead::poolBufferIndex`, see there.
+  static constexpr size_t noPoolBuffer = std::numeric_limits<size_t>::max();
+
   // --- Registered buffer pool ------------------------------------------------
-  // The pre-allocated memory for the registered buffers. Each entry is a
-  // `REGISTERED_BUFFER_SIZE`-byte buffer that io_uring writes into directly.
-  // The outer vector owns the memory; its size equals `ringSize_`.
-  std::vector<std::vector<char>> registeredBuffers_;
+  // The pre-allocated memory for the registered buffers: one contiguous block
+  // of `ringSize_ * registeredBufferSize_` bytes that io_uring writes into
+  // directly. Ring slot `i` owns the byte range
+  // `[i * registeredBufferSize_, (i + 1) * registeredBufferSize_)`. Empty
+  // when buffer registration failed at construction time.
+  std::vector<char> registeredBufferPool_;
 
   // The `iovec` descriptors for `io_uring_register_buffers`. One per pool
-  // buffer, pointing into `registeredBuffers_`.
+  // buffer, pointing into the corresponding sub-range of
+  // `registeredBufferPool_`.
   std::vector<struct iovec> registeredIovecs_;
 
   // Indices of registered buffers that are currently free (not in use by any
@@ -233,14 +257,6 @@ class IoUringPolicy {
   // `drainOneCqe`.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
-  // Maps a request id to the caller's target buffer and the number of bytes to
-  // copy there from the registered buffer when the read completes.
-  struct CallerTarget {
-    char* buffer;
-    size_t numBytes;
-  };
-  ad_utility::HashMap<uint64_t, CallerTarget> callerTargetsByRequestId_;
-
   // Allocate a buffer from the registered pool. Blocks (draining completions)
   // if no buffer is free. Returns the pool index.
   // Precondition: at least one buffer will become free (i.e. there is at least
@@ -259,7 +275,10 @@ class IoUringPolicy {
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;
 
   // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
-  explicit IoUringPolicy(unsigned ringSize);
+  // `registeredBufferSize` is the size of each buffer in the registered pool;
+  // reads larger than that bypass the pool (see `addBatch`).
+  explicit IoUringPolicy(unsigned ringSize, size_t registeredBufferSize =
+                                                DEFAULT_REGISTERED_BUFFER_SIZE);
   ~IoUringPolicy();
 
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
