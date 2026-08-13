@@ -62,8 +62,7 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
-  ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
-                                                                      "w+"};
+  ad_utility::Synchronized<ad_utility::File> file_{filename_, "w+"};
   // For a single column, the concatenation of the blocks for that column of all
   // `IdTables`.
   using ColumnMetadata = std::vector<CompressedBlockMetadata>;

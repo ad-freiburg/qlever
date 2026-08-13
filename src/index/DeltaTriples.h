@@ -418,7 +418,7 @@ class DeltaTriples {
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
-  ad_utility::Synchronized<LocatedTriplesSharedState, std::shared_mutex>
+  ad_utility::Synchronized<LocatedTriplesSharedState>
       currentLocatedTriplesSharedState_;
 
  public:

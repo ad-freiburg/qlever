@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <mutex>
 #include <shared_mutex>
 
 #include "backports/atomic_flag.h"
@@ -73,9 +74,9 @@ class LockPtr;
  *
  * @tparam T The actual type that is stored
  * @tparam Mutex A Mutex like type (e.g. std::mutex or std::shared_mutex).
- * Defaults to std::shared_mutex
+ * Defaults to std::mutex
  */
-template <typename T, typename Mutex = std::shared_mutex,
+template <typename T, typename Mutex = std::mutex,
           typename = std::enable_if_t<AllowsLocking<Mutex>::value>>
 class Synchronized {
  public:
@@ -149,20 +150,19 @@ class Synchronized {
     return f(data_);
   }
 
-  /** @brief Obtain a shared lock and then call f() on the underlying data type,
-   * return the result.
+  /** @brief Obtain a read-only lock and then call f() on the underlying data
+   * type, return the result.
    *
    * Note that return type deduction is done via auto which means,
    * that no references are passed out. This happens deliberately as
    * passing out references to the underlying type would ignore the locking.
-   * Only supported if the mutex allows shared locking and the
-   * function type F only treats its object as const.
+   * If the mutex supports shared locking, the lock is shared. Otherwise it is
+   * exclusive. The function type F must treat its object as const.
    */
-  template <typename F, bool s = isShared,
-            typename Res = std::invoke_result_t<F, const T&>>
-  std::enable_if_t<s, Res> withReadLock(F f) const {
-    std::shared_lock l(mutex());
-    return f(data_);
+  template <typename F, typename = std::invoke_result_t<F, const value_type&>>
+  auto withReadLock(F f) const {
+    auto lock = rlock();
+    return f(*lock);
   }
 
   /**
@@ -192,34 +192,28 @@ class Synchronized {
 
   /**
    * @brief Obtain a handle that can be treated like a const T* to the
-   * underlying type with shared access. Only works if the Mutex type allows
-   * shared locking.
+   * underlying type with read-only access. If the mutex supports shared
+   * locking, the lock is shared. Otherwise it is exclusive.
    *
-   * If the Return value is stored, then the T will remain shared_locked until
-   * the return value is destroyed. If the return value outlives the
-   * Synchronized element by which it was obtained, the behavior is undefined.
+   * If the return value is stored, then the T will remain locked until the
+   * return value is destroyed. If the return value outlives the Synchronized
+   * element by which it was obtained, the behavior is undefined.
    *
    * Examples:
    * Synchronized<std::vector<int>> s;
-   * cout << s.rlock()->size();  // obtain shared_lock, obtain size, release
-   * shared_lock
+   * cout << s.rlock()->size();  // obtain lock, obtain size, release lock
    * // s.rlock()->push_back(3);  // does not compile, because rlock() only
    * allows access to const members
    * {
-   *   auto l = s.rlock(); // s is now shared_locked by l;
-   *   cout << l->size(); // get size, remain shared_locked.
+   *   auto l = s.rlock(); // s is now locked by l;
+   *   cout << l->size(); // get size, remain locked.
    *   // s.wlock()->push_back(0) // would deadlock, because s is still locked
-   * by l; cout << s.rlock()->size(); // works because multiple shared locks at
-   * the same time are ok } // l goes out of scope and unlocks s again;
+   * by l;
+   * } // l goes out of scope and unlocks s again;
    * s.wlock()->push_back(7);
    *
    */
-  template <typename M = Mutex>
-  std::enable_if_t<AllowsSharedLocking<M>::value,
-                   LockPtr<Synchronized, true, true>>
-  rlock() const {
-    return LockPtr<Synchronized, true, true>{this};
-  };
+  auto rlock() const { return LockPtr<Synchronized, isShared, true>{this}; }
 
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.
