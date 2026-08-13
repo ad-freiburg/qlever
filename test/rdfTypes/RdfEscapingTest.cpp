@@ -126,10 +126,12 @@ TEST(RdfEscapingTest, validRDFLiteralFromNormalizedBoundaries) {
     }
   }
 
-  // Special byte at the very START of the window (first chunk of the scan).
+  // Special byte at the very START of the window (first chunk of the scan):
+  // the leading backslash must be escaped, so the expected literal carries the
+  // doubled backslash.
   ASSERT_EQ(
       validRDFLiteralFromNormalized("\"\\n" + std::string(40, 'a') + "\""),
-      "\"\\n" + std::string(40, 'a') + "\"");
+      "\"\\\\n" + std::string(40, 'a') + "\"");
 }
 
 // ___________________________________________________________________________
