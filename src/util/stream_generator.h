@@ -116,13 +116,16 @@ class stream_generator_promise {
   // implicitly convert to char are not accepted.
   CPP_template(typename CharT)(requires SimilarTo<CharT, char>)
       suspend_sometimes yield_value(CharT value) {
-    std::string_view singleView{&value, 1};
-    // This is only safe to do if we can write into the buffer immediately.
-    AD_CORRECTNESS_CHECK(isBufferLargeEnough(singleView));
-    // Disable false positive warning on GCC.
-    DISABLE_OVERREAD_WARNINGS
-    return yield_value(singleView);
-    GCC_REENABLE_WARNINGS
+    // Write the character directly instead of going through the
+    // `std::string_view` overload: the fortified `memcpy` there triggers a
+    // GCC 11 `-Wstringop-overread` false positive whose warning location is
+    // in the system header (string_fortified.h), so it cannot be suppressed
+    // with a diagnostic pragma. The direct write is always safe: the
+    // correctness check guarantees that at least one byte of buffer capacity
+    // remains.
+    AD_CORRECTNESS_CHECK(currentIndex_ < BUFFER_SIZE);
+    data_[currentIndex_++] = value;
+    return suspend_sometimes{currentIndex_ == BUFFER_SIZE};
   }
 
   // Return true if the overflow has been completely consumed.
