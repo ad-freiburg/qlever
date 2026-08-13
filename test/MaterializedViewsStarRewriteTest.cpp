@@ -139,11 +139,12 @@ INSTANTIATE_TEST_SUITE_P(MaterializedViewsTest,
                              RewriteTestParams{std::string{simpleStar}, 1}));
 
 // _____________________________________________________________________________
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3193: the
-// view's query aggregates one of the star's arms away (`?o1` only occurs
-// inside `COUNT(?o1)`), so `?o1` is not an actual column of the view and the
-// star must not be registered for pattern-based rewriting.
-TEST(MaterializedViewsStarRewriteAggregationTest, aggregatingStarNotRewritten) {
+// Regression test for #3193: an aggregate in the view's query removes one of
+// the pattern's variables from the view's columns (`?o1`/`?m` only occur inside
+// `COUNT(...)`), so neither the star nor the chain must be registered for
+// pattern-based rewriting.
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     aggregatingPatternsNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string starTtl =
       " <s1> <p1> <o1a> . \n"
@@ -161,5 +162,9 @@ TEST(MaterializedViewsStarRewriteAggregationTest, aggregatingStarNotRewritten) {
   expectNotSuitableForRewrite(
       qlv, manager, "aggregatingStarView",
       "SELECT ?s (COUNT(?o1) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
+      "GROUP BY ?s");
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingChainView",
+      "SELECT ?s (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
       "GROUP BY ?s");
 }

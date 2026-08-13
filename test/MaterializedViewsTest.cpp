@@ -1905,31 +1905,6 @@ INSTANTIATE_TEST_SUITE_P(
         RewriteTestParams{std::string{simpleChainRenamedPlusBind}, 1500}));
 
 // _____________________________________________________________________________
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3193: the
-// view's query aggregates the chain variable away (`?m` only occurs inside
-// `COUNT(?m)`), so `?m` is not an actual column of the view and the chain
-// must not be registered for pattern-based rewriting.
-TEST_F(MaterializedViewsTest, AggregatingChainNotRewritten) {
-  auto plan = qlv().parseAndPlanQuery(
-      "SELECT ?s (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } GROUP BY ?s");
-  MaterializedViewsManager manager{testIndexBase_};
-  manager.writeViewToDisk("aggregatingChainView", plan);
-  auto qec = getQec();
-  auto view = manager.getView("aggregatingChainView", qec.get());
-  materializedViewsQueryAnalysis::QueryPatternCache qpc;
-  qpc.analyzeView(view, qec.get());
-
-  auto rewritePlan =
-      qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?m . ?m <p2> ?o }");
-  const auto& graphPattern = rewritePlan.parsedQuery()._rootGraphPattern;
-  ASSERT_EQ(graphPattern._graphPatterns.size(), 1u);
-  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(
-                     qec.get(), graphPattern._graphPatterns.at(0).getBasic())
-                  .empty());
-  manager.unloadViewIfLoaded("aggregatingChainView");
-}
-
-// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   // Regression test for #2866.
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
