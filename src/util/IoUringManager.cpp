@@ -113,8 +113,7 @@ IoUringPolicy::~IoUringPolicy() {
     if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
       break;
     }
-    // Return the buffer to the pool so the destructor below doesn't complain
-    // about leaked buffers.
+    // Reap the completion and return the buffer to the free list.
     const uint64_t requestId = io_uring_cqe_get_data64(cqe);
     auto it = inFlightReadsByRequestId_.find(requestId);
     if (it != inFlightReadsByRequestId_.end()) {
@@ -178,9 +177,8 @@ void IoUringPolicy::addBatch(int fd,
     const size_t poolIdx = allocatePoolBuffer();
 
     // Record the read's parameters in the SQE using a fixed-buffer read:
-    // io_uring will DMA the data directly into `registeredBuffers_[poolIdx]`.
-    // The `addr` parameter is ignored for fixed-buffer reads; the kernel
-    // resolves the buffer via the registered iovec at `poolIdx`.
+    // The buffer is selected via `poolIdx`; `addr` must point into that
+    // registered buffer (here its base, so the read starts at offset 0).
     io_uring_prep_read_fixed(sqe, fd, registeredBuffers_[poolIdx].data(),
                              static_cast<unsigned>(numBytesToRead),
                              static_cast<__u64>(fileOffset), poolIdx);

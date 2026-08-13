@@ -166,11 +166,9 @@ struct SyncIoPolicy {
 // for more details.
 //
 // Registered buffers: the policy pre-allocates and registers a pool of buffers
-// with io_uring so the kernel performs DMA directly into them (zero-copy from
-// the kernel's perspective). On completion, data is copied from the registered
-// buffer into the caller's target buffer. This user-space memcpy is cheaper
-// than the per-request kernel-user copy that would otherwise occur in the read
-// path.
+// with io_uring. Registration pins the pages once and avoids repeated
+// page-pinning for each read. On completion, the data is memcpy'd from the
+// registered buffer into the caller's target buffer.
 #ifdef QLEVER_HAS_IO_URING
 
 class IoUringPolicy {
