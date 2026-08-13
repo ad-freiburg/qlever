@@ -32,27 +32,10 @@ using De9imFilterString = std::array<char, 9>;
 // If `filter` is a syntactically valid DE-9IM filter pattern (i.e. exactly 9
 // characters, each one of `0`-`2`, `T`/`t`, `F`/`f`, or `*`, see
 // `De9imFilterString` above), return it as a `De9imFilterString`, else
-// `std::nullopt`. Implemented as a simple character-class check instead of a
-// regex library to keep this frequently-included header cheap to compile.
-// Note: this does not check whether the pattern can match disjoint
-// geometries, see `de9imFilterCanMatchDisjoint` below for that.
-constexpr std::optional<De9imFilterString> parseDe9imFilterString(
-    std::string_view filter) {
-  if (filter.size() != 9) {
-    return std::nullopt;
-  }
-  De9imFilterString result{};
-  for (size_t i = 0; i < result.size(); ++i) {
-    char c = filter[i];
-    bool isValidChar = (c >= '0' && c <= '2') || c == 'T' || c == 't' ||
-                       c == 'F' || c == 'f' || c == '*';
-    if (!isValidChar) {
-      return std::nullopt;
-    }
-    result[i] = c;
-  }
-  return result;
-}
+// `std::nullopt`. Note: this does not check whether the pattern can match
+// disjoint geometries, see `de9imFilterCanMatchDisjoint` below for that.
+std::optional<De9imFilterString> parseDe9imFilterString(
+    std::string_view filter);
 
 // Whether the given (syntactically valid) DE-9IM `filter` could match a
 // disjoint pair of geometries. Patterns for which this holds (e.g.
@@ -67,11 +50,7 @@ constexpr std::optional<De9imFilterString> parseDe9imFilterString(
 // are all `F`. A filter character only excludes `F` if it is a digit, `T`, or
 // `t`; `*` and `F`/`f` both admit it. If all four of these positions admit
 // `F`, the pattern could match a disjoint pair.
-constexpr bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
-  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
-  return admitsF(filter[0]) && admitsF(filter[1]) && admitsF(filter[3]) &&
-         admitsF(filter[4]);
-}
+bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter);
 
 // If `filter` is a syntactically valid DE-9IM filter pattern that cannot
 // match a disjoint pair of geometries, return it as a `De9imFilterString`,
@@ -79,14 +58,8 @@ constexpr bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
 // `de9imFilterCanMatchDisjoint` above, which this combines and which should
 // be used directly if the two failure cases need to be reported separately
 // (as in `SpatialQuery.cpp`).
-constexpr std::optional<De9imFilterString> validateDe9imFilterString(
-    std::string_view filter) {
-  auto result = parseDe9imFilterString(filter);
-  if (!result.has_value() || de9imFilterCanMatchDisjoint(result.value())) {
-    return std::nullopt;
-  }
-  return result;
-}
+std::optional<De9imFilterString> validateDe9imFilterString(
+    std::string_view filter);
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
