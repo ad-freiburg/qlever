@@ -12,6 +12,8 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <limits>
+
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
 #include "./VocabularyTestHelpers.h"
@@ -20,6 +22,7 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MmapVector.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 using namespace vocabulary_test;
@@ -335,4 +338,47 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
     for ([[maybe_unused]] auto& r : streamed) {
     }
   });
+}
+
+// The new runtime parameters `vocabBatchIoNumManagers_` and
+// `vocabBatchIoRingSize_` control the pool of persistent `BatchIoManager`s
+// created by `open`. They must be validated: a pool without managers would
+// make every batch lookup block forever, and the ring size is narrowed to an
+// `unsigned` by the batch manager API, so values outside that range must be
+// rejected instead of silently wrapped.
+TEST(VocabularyOnDisk, BatchIoRuntimeParametersAreValidated) {
+  auto testInvalid = [](auto setInvalid) {
+    auto cleanup = setInvalid();
+    EXPECT_ANY_THROW(createExampleVocabulary());
+  };
+  // A pool of zero managers must be rejected.
+  testInvalid([] {
+    return setRuntimeParameterForTest<
+        &RuntimeParameters::vocabBatchIoNumManagers_>(size_t{0});
+  });
+  // A ring size of zero must be rejected.
+  testInvalid([] {
+    return setRuntimeParameterForTest<
+        &RuntimeParameters::vocabBatchIoRingSize_>(size_t{0});
+  });
+  // A ring size above `UINT_MAX` must be rejected instead of being wrapped by
+  // the `static_cast<unsigned>` in `open`.
+  testInvalid([] {
+    return setRuntimeParameterForTest<&RuntimeParameters::vocabBatchIoRingSize_>(
+        static_cast<size_t>(std::numeric_limits<unsigned>::max()) + 1);
+  });
+}
+
+// With valid runtime parameter values, `open` must create a working manager
+// pool: batch lookups still return the correct results.
+TEST(VocabularyOnDisk, BatchIoRuntimeParametersAreApplied) {
+  auto resetManagers = setRuntimeParameterForTest<
+      &RuntimeParameters::vocabBatchIoNumManagers_>(2);
+  auto resetRingSize = setRuntimeParameterForTest<
+      &RuntimeParameters::vocabBatchIoRingSize_>(128);
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
+  auto result = vocab->lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
+                                                                indices);
 }

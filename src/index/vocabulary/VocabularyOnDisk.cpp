@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
@@ -167,7 +168,7 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
   // (which bounds the string) as one 16-byte pair from `.offsets`.
   const size_t numIndices = indices.size();
   std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector sizes(numIndices, sizeof(OffsetPair));
+  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
   std::vector<uint64_t> fileOffsets(numIndices);
   std::vector<char*> targets(numIndices);
   for (auto&& [fileOffset, index, target, offsetPair] :
@@ -296,13 +297,19 @@ void VocabularyOnDisk::open(const std::string& filename) {
       getRuntimeParameter<&RuntimeParameters::vocabBatchIoNumManagers_>();
   size_t ringSize =
       getRuntimeParameter<&RuntimeParameters::vocabBatchIoRingSize_>();
+  // A pool without managers would make every `lookupBatch` block forever, and
+  // the batch manager API takes an `unsigned` ring size, so reject values that
+  // do not fit into the `unsigned` range (instead of silently wrapping them).
+  AD_CONTRACT_CHECK(numManagers > 0);
+  AD_CONTRACT_CHECK(ringSize > 0 &&
+                    ringSize <= std::numeric_limits<unsigned>::max());
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>(numManagers);
   bool preferIoUring = true;
   for (size_t i = 0; i < numManagers; ++i) {
-    // The runtime parameter is a size_t; the batch manager API takes an
-    // unsigned ring size. The default (256) is far below the unsigned
-    // range, and liburing rejects impractically large rings anyway.
+    // The runtime parameter is a `size_t`; the batch manager API takes an
+    // `unsigned` ring size. Values above `UINT_MAX` were rejected above, so
+    // the cast is safe.
     ioManagers_->push(ad_utility::makeBatchManager(
         preferIoUring, static_cast<unsigned>(ringSize)));
   }
