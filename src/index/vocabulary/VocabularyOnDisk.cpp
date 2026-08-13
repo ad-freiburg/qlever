@@ -164,7 +164,7 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
   // (which bounds the string) as one 16-byte pair from `.offsets`.
   const size_t numIndices = indices.size();
   std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
+  std::vector sizes(numIndices, sizeof(OffsetPair));
   std::vector<uint64_t> fileOffsets(numIndices);
   std::vector<char*> targets(numIndices);
   for (auto&& [fileOffset, index, target, offsetPair] :
@@ -297,6 +297,10 @@ void VocabularyOnDisk::open(const std::string& filename) {
       std::unique_ptr<ad_utility::BatchManagerBase>>>(numManagers);
   bool preferIoUring = true;
   for (size_t i = 0; i < numManagers; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring, ringSize));
+    // The runtime parameter is a size_t; the batch manager API takes an
+    // unsigned ring size. The default (256) is far below the unsigned
+    // range, and liburing rejects impractically large rings anyway.
+    ioManagers_->push(ad_utility::makeBatchManager(
+        preferIoUring, static_cast<unsigned>(ringSize)));
   }
 }
