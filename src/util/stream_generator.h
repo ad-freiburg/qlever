@@ -89,6 +89,12 @@ class stream_generator_promise {
   // this case the buffer will be filled to maximum capacity, so eventually
   // every bit of `value` is written, then the coroutine will be resumed.
   suspend_sometimes yield_value(std::string_view value) noexcept {
+    // GCC 11-15 emit spurious `-Wstringop-overread` warnings for the `memcpy`
+    // calls below when this function is inlined into a large coroutine frame
+    // and the size of `value` cannot be proven to fit into the buffer. The
+    // copies are always safe: `isBufferLargeEnough` guarantees that at most
+    // `value.size()` bytes are read from `value`.
+    DISABLE_OVERREAD_WARNINGS
     if (isBufferLargeEnough(value)) {
       if (!value.empty()) {
         std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
@@ -103,6 +109,7 @@ class stream_generator_promise {
     currentIndex_ = BUFFER_SIZE;
     overflow_ = value.substr(fittingSize);
     return suspend_sometimes{true};
+    GCC_REENABLE_WARNINGS
   }
 
   // Overload so we can also pass char values, template such that all types that
