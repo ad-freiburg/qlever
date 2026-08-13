@@ -1,0 +1,129 @@
+// Copyright 2026, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Marvin Stoetzel <marvin.stoetzel@mailbox.org>
+
+#ifndef QLEVER_SIMDUTILS_H
+#define QLEVER_SIMDUTILS_H
+
+#include <cstddef>
+#include <string_view>
+
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
+
+namespace ad_utility::simd {
+
+namespace detail {
+
+// Scalar fallback: return true iff `data[0 .. size)` contains any byte from
+// the compile-time set `SpecialChars`. This is the reference implementation
+// that all SIMD variants must agree with.
+template <char... SpecialChars>
+bool containsAnyByteScalar(const char* data, size_t size) {
+  constexpr char specialChars[] = {SpecialChars...};
+  for (size_t i = 0; i < size; ++i) {
+    for (char specialChar : specialChars) {
+      if (data[i] == specialChar) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+#if defined(__x86_64__) || defined(_M_X64)
+// SSE2 (baseline on x86-64): scan 16 bytes at a time. After the loop, one
+// overlapping load of the last 16 bytes covers the tail; since that window
+// ends exactly at `data[size]`, it never reads past the end of the buffer.
+template <char... SpecialChars>
+bool containsAnyByteSSE2(const char* data, size_t size) {
+  constexpr size_t chunkSize = 16;
+  if (size < chunkSize) {
+    return containsAnyByteScalar<SpecialChars...>(data, size);
+  }
+  auto chunkContainsSpecial = [](const char* p) {
+    const auto chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+    __m128i mask = _mm_setzero_si128();
+    ((mask = _mm_or_si128(mask,
+                          _mm_cmpeq_epi8(chunk, _mm_set1_epi8(SpecialChars)))),
+     ...);
+    return _mm_movemask_epi8(mask) != 0;
+  };
+  for (size_t i = 0; i + chunkSize <= size; i += chunkSize) {
+    if (chunkContainsSpecial(data + i)) {
+      return true;
+    }
+  }
+  return chunkContainsSpecial(data + size - chunkSize);
+}
+
+// AVX2: scan 32 bytes at a time, otherwise identical to the SSE2 variant.
+// Compiled with the `target` attribute so that only these functions require
+// AVX2 support; they are only called after a runtime check via
+// `__builtin_cpu_supports("avx2")`.
+//
+// NOTE: the actual chunk predicate must be a free function carrying its own
+// `target` attribute rather than a lambda inside the AVX2 function. Clang
+// does not propagate the enclosing function's `target` attribute to lambdas
+// defined inside it, which made the always_inline `_mm256_*` intrinsics fail
+// with "requires target feature 'avx', but would be inlined into function
+// 'operator()' compiled without support" (GCC accepts the lambda form, clang
+// does not). See PR #3211.
+template <char... SpecialChars>
+__attribute__((target("avx2"))) bool avx2ChunkContainsSpecial(const char* p) {
+  const auto chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p));
+  __m256i mask = _mm256_setzero_si256();
+  ((mask = _mm256_or_si256(
+        mask, _mm256_cmpeq_epi8(chunk, _mm256_set1_epi8(SpecialChars)))),
+   ...);
+  return _mm256_movemask_epi8(mask) != 0;
+}
+
+template <char... SpecialChars>
+__attribute__((target("avx2"))) bool containsAnyByteAVX2(const char* data,
+                                                         size_t size) {
+  constexpr size_t chunkSize = 32;
+  if (size < chunkSize) {
+    return containsAnyByteSSE2<SpecialChars...>(data, size);
+  }
+  for (size_t i = 0; i + chunkSize <= size; i += chunkSize) {
+    if (avx2ChunkContainsSpecial<SpecialChars...>(data + i)) {
+      return true;
+    }
+  }
+  return avx2ChunkContainsSpecial<SpecialChars...>(data + size - chunkSize);
+}
+#endif  // __x86_64__ || _M_X64
+
+}  // namespace detail
+
+// Return true iff `sv` contains any of the bytes in the compile-time set
+// `SpecialChars`. Uses a single vectorized sweep (AVX2 if the CPU supports it,
+// else SSE2, which is baseline on x86-64) and falls back to the scalar
+// implementation on other architectures. All variants are guaranteed to return
+// the same result, so this function is safe to use as a fast replacement for
+// `std::string_view::find_first_of` (or a regex character-class search) in
+// hot paths. The set must contain at least one byte.
+template <char... SpecialChars>
+bool containsAnyByte(std::string_view sv) {
+  static_assert(sizeof...(SpecialChars) > 0);
+  const char* data = sv.data();
+  const size_t size = sv.size();
+#if defined(__x86_64__) || defined(_M_X64)
+  static const bool kHasAvx2 = [] {
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx2");
+  }();
+  if (kHasAvx2) {
+    return detail::containsAnyByteAVX2<SpecialChars...>(data, size);
+  }
+  return detail::containsAnyByteSSE2<SpecialChars...>(data, size);
+#else
+  return detail::containsAnyByteScalar<SpecialChars...>(data, size);
+#endif
+}
+
+}  // namespace ad_utility::simd
+
+#endif  // QLEVER_SIMDUTILS_H

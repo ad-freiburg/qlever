@@ -8,7 +8,6 @@
 #include <absl/strings/str_replace.h>
 
 #include <charconv>
-#include <ctre-unicode.hpp>
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -16,16 +15,12 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
+#include "util/SimdUtils.h"
 #include "util/StringUtils.h"
 
 namespace RdfEscaping {
 using namespace std::string_literals;
 namespace detail {
-
-// CTRE regex patterns for C++17 compatibility
-constexpr ctll::fixed_string csvSpecialCharsRegex = "[\r\n\",]";
-constexpr ctll::fixed_string tsvSpecialCharsRegex = "[\n\t]";
-constexpr ctll::fixed_string xmlSpecialCharsRegex = "[&\"<>']";
 
 // _____________________________________________________________________________
 std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
@@ -210,19 +205,34 @@ NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
   return NormalizedRDFString{std::move(res)};
 }
 
-// ____________________________________________________________________________
+// __________________________________________________________________________
 std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   AD_CONTRACT_CHECK(ql::starts_with(normLiteral, '"'));
-  size_t posSecondQuote = normLiteral.find('"', 1);
-  AD_CONTRACT_CHECK(posSecondQuote != std::string::npos);
   size_t posLastQuote = normLiteral.rfind('"');
-  // If there are only two quotes (the first and the last, which every
-  // normalized literal has), there is nothing to do.
-  if (posSecondQuote == posLastQuote &&
-      normLiteral.find_first_of("\\\n\r") == std::string::npos) {
+  // The contract that there is a closing quote (a quote at a position > 0)
+  // is checked here; it is equivalent to the old
+  // `AD_CONTRACT_CHECK(find('"', 1) != npos)`.
+  AD_CONTRACT_CHECK(posLastQuote != 0);
+  // Fast path: a normalized literal (e.g. `"content"`, `"content"@en` or
+  // `"content"^^<datatype>`) only needs escaping if it contains a quote,
+  // backslash, newline, or carriage return in the content, i.e. between the
+  // first and the last quote. This is exactly equivalent to the previous
+  // check `find('"', 1) == rfind('"') && find_first_of("\\\n\r") == npos`:
+  // the last quote is by definition the closing quote, so scanning the window
+  // `[1, posLastQuote)` (exclusive end) for `{'"', '\\', '\n', '\r'}` finds a
+  // quote iff there is one inside the content (a quote in the suffix
+  // `@lang`/`^^<type>` would make `rfind` point at it, so it is excluded from
+  // the window and correctly counts as "content contains a quote"), and a
+  // backslash/newline/CR in the suffix (only possible in malformed input)
+  // makes no difference to the output, because the escape path below only
+  // rewrites the content and leaves the suffix untouched. The scan is a
+  // single vectorized sweep (SSE2/AVX2 with runtime dispatch, see
+  // `util/SimdUtils.h`).
+  if (!ad_utility::simd::containsAnyByte<'"', '\\', '\n', '\r'>(
+          normLiteral.substr(1, posLastQuote - 1))) [[likely]] {
     return std::string{normLiteral};
   }
-  // Otherwise escape first all backlashes then all quotes (the order is
+  // Otherwise escape first all backslashes then all quotes (the order is
   // important) in the part between the first and the last quote and leave the
   // rest unchanged.
   std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
@@ -293,7 +303,8 @@ std::string unescapePrefixedIri(std::string_view literal) {
 
 // __________________________________________________________________________
 std::string escapeForCsv(std::string input) {
-  if (!ctre::search<detail::csvSpecialCharsRegex>(input)) [[likely]] {
+  if (!ad_utility::simd::containsAnyByte<'\r', '\n', '"', ','>(input))
+      [[likely]] {
     return input;
   }
   return absl::StrCat("\"", absl::StrReplaceAll(input, {{"\"", "\"\""}}), "\"");
@@ -301,7 +312,7 @@ std::string escapeForCsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForTsv(std::string input) {
-  if (ctre::search<detail::tsvSpecialCharsRegex>(input)) [[unlikely]] {
+  if (ad_utility::simd::containsAnyByte<'\t', '\n'>(input)) [[unlikely]] {
     absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}}, &input);
   }
   return input;
@@ -309,7 +320,8 @@ std::string escapeForTsv(std::string input) {
 
 // __________________________________________________________________________
 std::string escapeForXml(std::string input) {
-  if (ctre::search<detail::xmlSpecialCharsRegex>(input)) [[unlikely]] {
+  if (ad_utility::simd::containsAnyByte<'&', '"', '<', '>', '\''>(input))
+      [[unlikely]] {
     absl::StrReplaceAll({{"&", "&amp;"},
                          {"<", "&lt;"},
                          {">", "&gt;"},
