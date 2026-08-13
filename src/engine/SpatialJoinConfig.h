@@ -74,6 +74,13 @@ enum class SpatialJoinAlgorithm {
   S2_POINT_POLYLINE
 };
 
+// Default algorithm used where an explicit choice is not required: the
+// deprecated magic-predicate spatial search syntax (which has no way to
+// specify an algorithm) and internal/test construction of a
+// `SpatialJoinConfiguration` that doesn't care about the algorithm.
+const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
+    SpatialJoinAlgorithm::S2_GEOMETRY;
+
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
   // The task defines search parameters
@@ -93,7 +100,7 @@ struct SpatialJoinConfiguration {
   PayloadVariables payloadVariables_ = PayloadVariables::all();
 
   // Choice of algorithm.
-  SpatialJoinAlgorithm algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
+  SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
   // Join type for `libspatialjoin` algorithm.
   std::optional<SpatialJoinType> joinType_ = std::nullopt;

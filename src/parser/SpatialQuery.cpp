@@ -247,7 +247,7 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
 
   // This legacy predicate syntax has no way to specify an algorithm, so we
   // pick the same algorithm that used to be the implicit default.
-  algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
+  algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
   // Helper to convert a ctre match to an integer
   auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
