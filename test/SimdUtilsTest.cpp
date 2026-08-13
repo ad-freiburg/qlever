@@ -19,8 +19,7 @@ using namespace ad_utility::simd;
 // correct if they are indistinguishable from the reference for every input.
 template <char... SpecialChars>
 bool checkAllImplementationsAgree(std::string_view sv) {
-  const bool expected =
-      detail::containsAnyByteScalar<SpecialChars...>(sv.data(), sv.size());
+  const bool expected = detail::containsAnyByteScalar<SpecialChars...>(sv);
 #ifdef QLEVER_SIMD_X86
   EXPECT_EQ(detail::containsAnyByteSSE2<SpecialChars...>(sv.data(), sv.size()),
             expected);

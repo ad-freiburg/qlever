@@ -54,8 +54,7 @@ template <char... SpecialChars>
 bool containsAnyByteSSE2(const char* data, size_t size) {
   constexpr size_t chunkSize = 16;
   if (size < chunkSize) {
-    return containsAnyByteScalar<SpecialChars...>(
-      std::string_view{data, size});
+    return containsAnyByteScalar<SpecialChars...>(std::string_view{data, size});
   }
   auto chunkContainsSpecial = [](const char* p) {
     __m128i chunk;

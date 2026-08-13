@@ -30,11 +30,11 @@ namespace detail {
 // lists (the individual formats use different sets).
 using LiteralContentSpecialChars =
     ad_utility::simd::detail::CharacterSet<'"', '\\', '\n', '\r'>;
-using CsvSpecialChars = ad_utility::simd::detail::CharacterSet<'\r', '\n', '"', ','>;
+using CsvSpecialChars =
+    ad_utility::simd::detail::CharacterSet<'\r', '\n', '"', ','>;
 using TsvSpecialChars = ad_utility::simd::detail::CharacterSet<'\t', '\n'>;
 using XmlSpecialChars =
     ad_utility::simd::detail::CharacterSet<'&', '"', '<', '>', '\''>;
-
 
 // _____________________________________________________________________________
 std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex) {
