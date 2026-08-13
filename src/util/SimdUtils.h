@@ -70,7 +70,13 @@ bool containsAnyByteSSE2(const char* data, size_t size) {
       return true;
     }
   }
-  return chunkContainsSpecial(data + size - chunkSize);
+  // If `size` is an exact multiple of the chunk size, the loop above already
+  // covered every byte; an overlapping tail load would rescan the last chunk
+  // for no gain. Only load the tail when a partial chunk remains.
+  if (size % chunkSize != 0) {
+    return chunkContainsSpecial(data + size - chunkSize);
+  }
+  return false;
 }
 
 // AVX2: scan 32 bytes at a time, otherwise identical to the SSE2 variant.
@@ -108,7 +114,11 @@ __attribute__((target("avx2"))) bool containsAnyByteAVX2(const char* data,
       return true;
     }
   }
-  return avx2ChunkContainsSpecial<SpecialChars...>(data + size - chunkSize);
+  // See the SSE2 variant: an exact multiple needs no overlapping tail load.
+  if (size % chunkSize != 0) {
+    return avx2ChunkContainsSpecial<SpecialChars...>(data + size - chunkSize);
+  }
+  return false;
 }
 #endif  // QLEVER_SIMD_X86
 }  // namespace detail
