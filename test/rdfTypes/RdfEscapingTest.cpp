@@ -3,6 +3,7 @@
 // Authors: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 //          Hannah bast <bast@cs.uni-freiburg.de>
 
+#include <absl/strings/escaping.h>
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
@@ -240,14 +241,11 @@ std::vector<std::string> trickyInputs() {
 TEST(RdfEscapingTest, escapeFunctionsMatchScalarReferences) {
   for (const auto& input : trickyInputs()) {
     EXPECT_EQ(escapeForCsv(input), refEscapeForCsv(input))
-        << "escapeForCsv input: "
-        << ad_utility::to_string_representation(input);
+        << "escapeForCsv input: " << absl::CEscape(input);
     EXPECT_EQ(escapeForTsv(input), refEscapeForTsv(input))
-        << "escapeForTsv input: "
-        << ad_utility::to_string_representation(input);
+        << "escapeForTsv input: " << absl::CEscape(input);
     EXPECT_EQ(escapeForXml(input), refEscapeForXml(input))
-        << "escapeForXml input: "
-        << ad_utility::to_string_representation(input);
+        << "escapeForXml input: " << absl::CEscape(input);
   }
 }
 
