@@ -18,6 +18,7 @@
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -516,9 +517,20 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction =
       format == tsv ? RdfEscaping::escapeForTsv : RdfEscaping::escapeForCsv;
   uint64_t resultSize = 0;
+  // Buffers that are reused across all rows (and across requests on the same
+  // thread): their capacity is retained, so only rows that are larger than
+  // any previous one trigger a reallocation.
+  thread_local std::string rowBuffer;
+  thread_local std::vector<std::optional<std::string>> cellStrings;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
+      // Resolve all cells of the row first, so that the exact size of the row
+      // is known and the row buffer can be reserved exactly once before
+      // assembling the row.
+      cellStrings.clear();
+      cellStrings.resize(selectedColumnIndices.size());
+      size_t estimatedRowSize = 1;  // the trailing newline
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
@@ -528,14 +540,29 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
                   qet.getQec()->getIndex(), id, pair.localVocab(),
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
-            STREAMABLE_YIELD(optionalStringAndType.value().first);
+            cellStrings[j] = std::move(optionalStringAndType.value().first);
+            estimatedRowSize += cellStrings[j]->size();
           }
         }
         if (j + 1 < selectedColumnIndices.size()) {
-          STREAMABLE_YIELD(separator);
+          ++estimatedRowSize;  // the separator
         }
       }
-      STREAMABLE_YIELD('\n');
+      rowBuffer.clear();
+      // Reserve the exact row size once; this is a no-op unless the current
+      // row is larger than any previous one (the capacity is retained in
+      // `rowBuffer`).
+      rowBuffer.reserve(estimatedRowSize);
+      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+        if (cellStrings[j].has_value()) {
+          rowBuffer.append(*cellStrings[j]);
+        }
+        if (j + 1 < selectedColumnIndices.size()) {
+          rowBuffer.push_back(separator);
+        }
+      }
+      rowBuffer.push_back('\n');
+      STREAMABLE_YIELD(rowBuffer);
       cancellationHandle->throwIfCancelled();
     }
   }
