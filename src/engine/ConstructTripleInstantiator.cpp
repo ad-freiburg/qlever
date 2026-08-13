@@ -235,6 +235,9 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
   // assembled row into the return value (which the caller owns). `scratch`
   // is only used to hold the formatted object term (turtle/ntriples) or the
   // formatted terms (csv/tsv) before they are appended (and possibly escaped).
+  // `thread_local` means one independent buffer per thread: concurrent export
+  // requests on different threads do not share (and thus do not lock) the
+  // buffers, and each thread keeps its capacity across requests.
   thread_local std::string buffer;
   thread_local std::string scratch;
   buffer.clear();
