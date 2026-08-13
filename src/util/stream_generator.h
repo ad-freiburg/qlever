@@ -301,8 +301,8 @@ stream_generator_promise<BUFFER_SIZE>::get_return_object() noexcept {
 }
 }  // namespace detail
 
-// Use 1MiB buffer size by default
-using stream_generator = basic_stream_generator<1u << 20>;
+// Use 8 MiB buffer size by default
+using stream_generator = basic_stream_generator<8u << 20>;
 
 #endif
 
