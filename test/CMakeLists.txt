@@ -196,6 +196,8 @@ addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
 addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
 
+addLinkAndDiscoverTest(KeepPreviousIndexDirsTest qlever)
+
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
 addLinkAndDiscoverTest(UpdateMetadataTest index)
@@ -549,6 +551,8 @@ else ()
 endif ()
 
 addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+
+addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
