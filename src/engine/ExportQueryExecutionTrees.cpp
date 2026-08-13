@@ -16,8 +16,10 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
+#include <future>
 #include <optional>
 #include <string_view>
+#include <thread>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -26,6 +28,7 @@
 #include "index/ExportIds.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
+#include "util/TaskQueue.h"
 #include "util/http/MediaTypes.h"
 #include "util/views/TakeUntilInclusiveView.h"
 
@@ -762,6 +765,47 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 }
 
 // _____________________________________________________________________________
+// Split the exported rows of `blocks` into `numGroups` contiguous groups.  A
+// block whose rows span a group boundary is split into sub-ranges, so that
+// each group holds `TableWithRange`s whose `view_` ranges are pairwise
+// disjoint and appear in the same order as in the original blocks.  This
+// keeps the serialization of each group byte-identical to the serial path
+// (the `view_` ranges carry the original global row indices, which the
+// blank-node base IDs depend on).
+static std::vector<std::vector<TableWithRange>> splitBlocksIntoGroups(
+    const std::vector<TableWithRange>& blocks, size_t numGroups) {
+  AD_CORRECTNESS_CHECK(numGroups > 0);
+  std::vector<std::vector<TableWithRange>> groups(numGroups);
+  uint64_t totalRows = 0;
+  for (const auto& block : blocks) {
+    totalRows += ql::ranges::size(block.view_);
+  }
+  if (totalRows == 0) {
+    return groups;
+  }
+  // The caller guarantees `numGroups <= totalRows`, so every group receives at
+  // least one row.
+  const uint64_t rowsPerGroup = (totalRows + numGroups - 1) / numGroups;
+  size_t groupIndex = 0;
+  uint64_t groupEnd = rowsPerGroup;
+  for (const auto& block : blocks) {
+    uint64_t begin = *ql::ranges::begin(block.view_);
+    uint64_t end = begin + ql::ranges::size(block.view_);
+    while (begin < end) {
+      const uint64_t pieceEnd = std::min(end, groupEnd);
+      groups[groupIndex].push_back(TableWithRange{
+          block.tableWithVocab_, ql::views::iota(begin, pieceEnd)});
+      begin = pieceEnd;
+      if (begin >= groupEnd && groupIndex + 1 < numGroups) {
+        ++groupIndex;
+        groupEnd = std::min(groupEnd + rowsPerGroup, totalRows);
+      }
+    }
+  }
+  return groups;
+}
+
+// _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultToStream(
@@ -790,15 +834,110 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto rowIndices = getRowIndices(limitAndOffset, *result, resultSize,
                                   constructTriples.size());
 
-  auto triples = qlever::constructExport::ConstructTripleGenerator::
-      generateFormattedTriples(
-          constructTriples, qet.getVariableColumns(), std::move(rowIndices),
-          limitAndOffset._offset, format,
-          makeConstructEvaluationConfig(qet, std::move(cancellationHandle)));
-
-  for (const std::string& triple : triples) {
-    STREAMABLE_YIELD(triple);
+  // The number of threads for the parallel serialization of the CONSTRUCT
+  // triples.  0 means: use all logical cores.  The parallel path serializes
+  // disjoint contiguous row ranges concurrently and yields their outputs in
+  // order, so the exported bytes are identical to the serial path.  It is
+  // disabled when triple deduplication is active, because the deduplicator is
+  // shared mutable state that is not thread-safe.
+  size_t numThreads =
+      getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>()
+          .get();
+  const auto& dedupMode =
+      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>().get();
+  bool dedupActive =
+      !std::holds_alternative<ad_utility::DeduplicationMode::None>(
+          dedupMode.value_);
+  if (numThreads == 0) {
+    numThreads = std::max(1u, std::thread::hardware_concurrency());
   }
+  // Copy the cancellation handle (instead of moving it like the serial path),
+  // because the parallel path checks it again while collecting the results.
+  auto config = makeConstructEvaluationConfig(qet, cancellationHandle);
+
+  if (numThreads <= 1 || dedupActive) {
+    auto triples = qlever::constructExport::ConstructTripleGenerator::
+        generateFormattedTriples(constructTriples, qet.getVariableColumns(),
+                                 std::move(rowIndices), limitAndOffset._offset,
+                                 format, std::move(config));
+    for (const std::string& triple : triples) {
+      STREAMABLE_YIELD(triple);
+    }
+    STREAMABLE_RETURN;
+  }
+
+  // ----- Parallel path -----
+  // Materialize the row blocks once (the result of the WHERE clause is
+  // already fully computed at this point, so this is only slicing).
+  std::vector<TableWithRange> blocks;
+  uint64_t totalRows = 0;
+  for (TableWithRange& block : rowIndices) {
+    totalRows += ql::ranges::size(block.view_);
+    blocks.push_back(std::move(block));
+  }
+  if (totalRows == 0) {
+    STREAMABLE_RETURN;
+  }
+
+  // Split the rows into up to `4 * numThreads` contiguous groups, so that the
+  // work is load-balanced across the workers while each group is large enough
+  // to keep the per-group overhead (submitting a task, assembling one output
+  // buffer) negligible.  The group size is additionally bounded by the
+  // per-request buffer-memory budget: at any point in time at most
+  // `numThreads` group buffers are in flight, so bounding the group size by
+  // `bufferMemory / (numThreads * triplesPerRow * 128)` keeps the total
+  // in-flight output within the budget (128 is a conservative average size of
+  // one serialized triple in bytes).
+  const size_t bufferMemory =
+      getRuntimeParameter<&RuntimeParameters::constructExportBufferMemory_>()
+          .get()
+          .getBytes();
+  const size_t triplesPerRow = std::max<size_t>(1, constructTriples.size());
+  size_t maxGroups = std::max<size_t>(1, 4 * numThreads);
+  size_t rowsPerGroup = bufferMemory / (numThreads * triplesPerRow * 128);
+  rowsPerGroup = std::max<size_t>(1, rowsPerGroup);
+  maxGroups =
+      std::min(maxGroups, (totalRows + rowsPerGroup - 1) / rowsPerGroup);
+  maxGroups = std::max<size_t>(1, maxGroups);
+  std::vector<std::vector<TableWithRange>> groups =
+      splitBlocksIntoGroups(blocks, maxGroups);
+  numThreads = std::min(numThreads, groups.size());
+
+  // Submit one task per group; each task serializes its rows into a
+  // `std::string` with the same generator pipeline as the serial path
+  // (including the `rowOffset`, on which the blank-node base IDs depend).
+  ad_utility::TaskQueue<false> queue{numThreads, numThreads,
+                                     "ConstructExportParallel"};
+  std::vector<std::future<std::string>> futures;
+  futures.reserve(groups.size());
+  const auto& templateTriples = constructTriples;
+  const auto& variableColumns = qet.getVariableColumns();
+  const size_t rowOffset = limitAndOffset._offset;
+  for (std::vector<TableWithRange>& group : groups) {
+    if (group.empty()) {
+      continue;
+    }
+    futures.push_back(
+        queue.submit([&, group = std::move(group)]() -> std::string {
+          std::string output;
+          auto triples = qlever::constructExport::ConstructTripleGenerator::
+              generateFormattedTriples(templateTriples, variableColumns,
+                                       InputRangeTypeErased(std::move(group)),
+                                       rowOffset, format, config);
+          for (const std::string& triple : triples) {
+            output += triple;
+          }
+          return output;
+        }));
+  }
+
+  // Yield the group outputs in order, so that the exported bytes are
+  // identical to the serial path.
+  for (std::future<std::string>& future : futures) {
+    cancellationHandle->throwIfCancelled();
+    STREAMABLE_YIELD(std::move(future.get()));
+  }
+  STREAMABLE_RETURN;
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

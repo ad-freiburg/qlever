@@ -1,10 +1,15 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2023 - 2026, The QLever Authors, in particular:
+//
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
+
+#include <limits>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
@@ -2269,3 +2274,119 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
+
+// ____________________________________________________________________________
+// The parallel CONSTRUCT serialization (construct-export-num-threads > 1)
+// must produce byte-identical output to the serial path, regardless of the
+// number of groups the rows are split into.
+
+namespace {
+// A knowledge graph with `numTriples` triples `<s0> <p> <o0>` ...
+std::string makeConstructKg(size_t numTriples) {
+  std::string kg;
+  for (size_t i = 0; i < numTriples; ++i) {
+    absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
+  }
+  return kg;
+}
+
+// Returns the streamed result of the given CONSTRUCT query for the given
+// media type, with `numThreads` threads for the parallel serialization and
+// the given per-request buffer-memory budget (in bytes).
+std::string constructResultWithThreads(const std::string& kg,
+                                       const std::string& query,
+                                       ad_utility::MediaType mediaType,
+                                       size_t numThreads,
+                                       size_t bufferMemoryBytes) {
+  auto cleanupThreads = setRuntimeParameterForTest<
+      &RuntimeParameters::constructExportNumThreads_>(numThreads);
+  auto cleanupBuffer = setRuntimeParameterForTest<
+      &RuntimeParameters::constructExportBufferMemory_>(
+      ad_utility::MemorySize::bytes(bufferMemoryBytes));
+  return runQueryStreamableResult(kg, query, mediaType);
+}
+}  // namespace
+
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationMatchesSerial) {
+  using enum ad_utility::MediaType;
+  const std::string kg = makeConstructKg(200);
+  const std::string query = "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?s";
+  // Reference output from the serial path (default thread count).
+  const std::string expectedTsv = runQueryStreamableResult(kg, query, tsv);
+  const std::string expectedTurtle =
+      runQueryStreamableResult(kg, query, turtle);
+  const std::string expectedNtriples =
+      runQueryStreamableResult(kg, query, ntriples);
+
+  // A small buffer-memory budget forces the rows to be split into many small
+  // groups (with the default 64 MiB budget, 200 rows fit into a single
+  // group and the parallel path degenerates to one task).
+  constexpr size_t smallBuffer = 1024;
+  for (size_t numThreads : {size_t{2}, size_t{4}, size_t{8}}) {
+    EXPECT_EQ(
+        constructResultWithThreads(kg, query, tsv, numThreads, smallBuffer),
+        expectedTsv)
+        << "numThreads = " << numThreads;
+    EXPECT_EQ(
+        constructResultWithThreads(kg, query, turtle, numThreads, smallBuffer),
+        expectedTurtle)
+        << "numThreads = " << numThreads;
+    EXPECT_EQ(constructResultWithThreads(kg, query, ntriples, numThreads,
+                                         smallBuffer),
+              expectedNtriples)
+        << "numThreads = " << numThreads;
+  }
+
+  // numThreads == 0 means "all logical cores" and must also match.
+  EXPECT_EQ(constructResultWithThreads(kg, query, tsv, 0, smallBuffer),
+            expectedTsv);
+  // The default buffer-memory budget (single group) must also match.
+  EXPECT_EQ(constructResultWithThreads(kg, query, tsv, 4,
+                                       std::numeric_limits<size_t>::max()),
+            expectedTsv);
+}
+
+// Blank-node labels in the CONSTRUCT output depend on the global row index
+// (via the row offset).  When the rows are split into groups, every group
+// must keep the original global row indices, so the labels are identical to
+// the serial path — also in combination with an OFFSET.
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationBlankNodes) {
+  using enum ad_utility::MediaType;
+  const std::string kg = makeConstructKg(100);
+  const std::string query =
+      "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s";
+  const std::string queryWithOffset =
+      "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s LIMIT 60 OFFSET 30";
+  constexpr size_t smallBuffer = 1024;
+  for (const auto& q : {query, queryWithOffset}) {
+    const std::string expected = runQueryStreamableResult(kg, q, turtle);
+    EXPECT_EQ(constructResultWithThreads(kg, q, turtle, 4, smallBuffer),
+              expected);
+    // The blank-node labels are unique per row (fresh blank node per row).
+    std::string parallel =
+        constructResultWithThreads(kg, q, turtle, 4, smallBuffer);
+    EXPECT_EQ(parallel, expected);
+    EXPECT_NE(parallel.find("_:b"), std::string::npos);
+  }
+}
+
+// When triple deduplication is active, the parallel path is disabled (the
+// deduplicator is shared mutable state) and the serial path is used instead;
+// the output must still be correct.
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationWithDedup) {
+  using enum ad_utility::MediaType;
+  // Duplicate triples in the result (each ?o appears twice), so deduplication
+  // changes the output.
+  std::string kg;
+  for (size_t i = 0; i < 50; ++i) {
+    absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
+    absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
+  }
+  const std::string query = "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?s";
+  auto cleanupDedup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::full());
+  const std::string expected = runQueryStreamableResult(kg, query, turtle);
+  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 4, 1024), expected);
+  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 0, 1024), expected);
+}
