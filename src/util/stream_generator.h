@@ -241,7 +241,7 @@ class [[nodiscard]] basic_stream_generator {
  public:
   // The size of the internal buffer, which is also the maximum size of a
   // single block that the generator yields.
-  static constexpr size_t bufferSize = BUFFER_SIZE;
+  static constexpr size_t BUFFER_SIZE_BYTES = BUFFER_SIZE;
 
   using promise_type = detail::stream_generator_promise<BUFFER_SIZE>;
   using iterator = detail::stream_generator_iterator<BUFFER_SIZE>;
@@ -305,7 +305,7 @@ stream_generator_promise<BUFFER_SIZE>::get_return_object() noexcept {
 }
 }  // namespace detail
 
-// Use 8 MiB buffer size by default
+// Use 8 MiB buffer size by default.
 using stream_generator = basic_stream_generator<8u << 20>;
 
 #endif
