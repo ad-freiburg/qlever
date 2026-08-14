@@ -52,6 +52,7 @@ RUN if [ "$RUN_TESTS" = "true" ]; then \
     else \
       cmake --build . --target qlever-index qlever-server && echo "Skipping tests"; \
     fi
+RUN strip --strip-all /qlever/build/qlever-*
 
 # Install the packages needed for the final image.
 FROM base AS runtime
@@ -94,6 +95,17 @@ COPY --chmod=755 docker-entrypoint.sh /qlever/
 
 # Our entrypoint script does some clever things; see the comments in there.
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]
+
+FROM base as runtime-slim
+WORKDIR /qlever
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y bzip2 libicu74 libgomp1 lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 && rm -rf /var/lib/apt/lists/*
+
+# Copy the binaries and the entrypoint script.
+# qlever-server, qlever-index
+COPY --from=builder /qlever/build/qlever-* /qlever/
+
+CMD ["/qlever/qlever-server"]
 
 # TODO<qup42>: build and use where needed
 FROM runtime as tests
