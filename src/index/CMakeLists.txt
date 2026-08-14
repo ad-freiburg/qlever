@@ -1,33 +1,31 @@
 add_subdirectory(vocabulary)
 
-# Note: `RdfParser`, `TripleComponent`, and `AsyncFileBlockDriver` live in
-# `src/parser`, but are compiled directly into the `index` library instead of
-# into a library of their own. The reason is that a separate library would be a
-# cyclic dependency:
-# 1. The `index` library needs them, because `IndexImpl` builds an index from
-#    RDF input files.
-# 2. They in turn needed the `index` library. This is resolved by now: the
-#    conversions of a `TripleComponent` that require an index are meanwhile
-#    free functions in `TripleComponentConversions.h/.cpp`.
-# Note: Comparing two `Id`s calls `LocalVocabEntry::compareThreeWay` and
-# `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), so every
-# translation unit that compares `Id`s needs `LocalVocabEntry`. This used to be
-# a dependency on all of `IndexImpl`, but is now abstracted away by the minimal
-# `LocalVocabContext` interface, whose only implementation is
-# `LocalVocabContextImpl`.
-# TODO<joka921> Move these files into a proper library of their own.
+# The local vocabulary, i.e. the words that are not part of the index's
+# vocabulary but are created while a query is evaluated.
+#
+# NOTE: This has to be a separate library, and it must not depend on `index`:
+# comparing two `Id`s calls `LocalVocabEntry::compareThreeWay` and
+# `LocalVocabEntry::positionInVocab` (see `global/ValueId.h`), so EVERY library
+# that compares `Id`s needs the symbols from `LocalVocabEntry.cpp`. That used to
+# require the `index` library, which is why several files that conceptually
+# belong to `src/parser` had to be compiled into `index`. The dependency on the
+# actual index is now abstracted away by the minimal `LocalVocabContext`
+# interface, whose only implementation is `LocalVocabContextImpl`, which is part
+# of the `index` library below.
+add_library(localVocab LocalVocabEntry.cpp LocalVocabContext.cpp LocalVocab.cpp)
+qlever_target_link_libraries(localVocab basicParser)
+
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
         IndexMetaData.cpp MetaDataHandler.cpp
-        ../parser/RdfParser.cpp
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
         CompressedRelation.cpp
-        PatternCreator.cpp ScanSpecification.cpp ../parser/TripleComponent.cpp
-        DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
+        PatternCreator.cpp ScanSpecification.cpp
+        DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
-        IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp LocalVocabContext.cpp LocalVocabContextImpl.cpp
+        IdTableUtils.cpp ExportIds.cpp LocalVocabContextImpl.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
-        InputFileSpecification.cpp ../parser/AsyncFileBlockDriver.cpp
+        InputFileSpecification.cpp
         TripleComponentConversions.cpp)
-qlever_target_link_libraries(index qlever_util basicParser vocabulary global)
+qlever_target_link_libraries(index qlever_util basicParser rdfParser vocabulary localVocab global)
