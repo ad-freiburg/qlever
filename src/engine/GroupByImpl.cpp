@@ -828,10 +828,10 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   // `COUNT(DISTINCT ?v)` from the relation metadata as well, see
   // `computeDistinctCountForTwoVariableScan` below.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
-  if (countIsDistinct && (indexScan->numVariables() < 2 ||
-                          indexScan->numVariables() > 3 ||
-                          !indexScan->additionalVariables().empty() ||
-                          !indexScan->getLimitOffset().isUnconstrained())) {
+  if (countIsDistinct &&
+      (indexScan->numVariables() < 2 || indexScan->numVariables() > 3 ||
+       !indexScan->additionalVariables().empty() ||
+       !indexScan->getLimitOffset().isUnconstrained())) {
     return std::nullopt;
   }
 
@@ -918,8 +918,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 }
 
 // _____________________________________________________________________________
-std::optional<size_t>
-GroupByImpl::computeDistinctCountForTwoVariableScan(
+std::optional<size_t> GroupByImpl::computeDistinctCountForTwoVariableScan(
     const std::shared_ptr<const IndexScan>& indexScan,
     const Variable& countedVariable) const {
   AD_CORRECTNESS_CHECK(indexScan->numVariables() == 2);
@@ -938,9 +937,8 @@ GroupByImpl::computeDistinctCountForTwoVariableScan(
   const auto& locTriples =
       indexScan->permutation().getLocatedTriplesForPermutation(
           locatedTriplesState());
-  if (!locTriples.isEmpty() ||
-      indexScan->permutation().permutationType() ==
-          Permutation::Type::MATERIALIZED_VIEW) {
+  if (!locTriples.isEmpty() || indexScan->permutation().permutationType() ==
+                                   Permutation::Type::MATERIALIZED_VIEW) {
     return std::nullopt;
   }
 
@@ -950,8 +948,7 @@ GroupByImpl::computeDistinctCountForTwoVariableScan(
   // variable is the second entry of the permuted triple; otherwise we need
   // the permutation that swaps the two variable columns.
   bool countedVariableInColumnOne =
-      permutedTriple[1]->isVariable() &&
-      *permutedTriple[1] == countedVariable;
+      permutedTriple[1]->isVariable() && *permutedTriple[1] == countedVariable;
 
   if (countedVariableInColumnOne) {
     // Fast path: the scan's permutation already has the counted variable in
