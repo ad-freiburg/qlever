@@ -141,7 +141,7 @@ class generator_promise {
   }
   SetDetailsAwaiter await_transform(SetDetails<Details> details)
       requires hasDetails {
-    return {*this, details};
+    return {*this, std::move(details)};
   }
 
   Details& details() requires hasDetails {
