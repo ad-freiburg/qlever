@@ -5,6 +5,8 @@
 
 #include "parser/SpatialQuery.h"
 
+#include <absl/strings/str_join.h>
+
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
@@ -31,15 +33,11 @@ constexpr std::array<std::pair<std::string_view, SpatialJoinAlgorithm>, 5>
 // Human-readable, comma-separated list of all valid `<algorithm>` IRIs from
 // `ALGORITHM_NAMES`, for use in error messages.
 std::string supportedAlgorithmNames() {
-  std::string result;
-  for (size_t i = 0; i < ALGORITHM_NAMES.size(); ++i) {
-    absl::StrAppend(&result,
-                    i == 0                            ? ""
-                    : i + 1 == ALGORITHM_NAMES.size() ? ", or "
-                                                      : ", ",
-                    "`<", ALGORITHM_NAMES[i].first, ">`");
-  }
-  return result;
+  return absl::StrJoin(ALGORITHM_NAMES, ", ",
+                       [](std::string* out, const auto& nameAndAlgorithm) {
+                         absl::StrAppend(out, "`<", nameAndAlgorithm.first,
+                                         ">`");
+                       });
 }
 }  // namespace detail
 
