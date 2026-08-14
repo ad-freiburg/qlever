@@ -10,9 +10,6 @@
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
-// `parseDe9imFilterString` and `de9imFilterCanMatchDisjoint` are declared in
-// `rdfTypes/GeoSparqlHelpers.h`.
-
 namespace parsedQuery {
 
 class SpatialSearchException : public std::runtime_error {
