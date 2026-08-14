@@ -1,8 +1,20 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (kalmbach@cs.uni-freiburg.de)
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyInternalExternal.h"
+
+#include <string>
+#include <vector>
+
+#include "backports/algorithm.h"
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
@@ -11,6 +23,43 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
     return std::string{fromInternal.value()};
   }
   return externalVocab_[i];
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+
+  std::vector<std::string> words(indices.size());
+  std::vector<size_t> diskIndices;
+  std::vector<size_t> diskSlots;
+  diskIndices.reserve(indices.size());
+  diskSlots.reserve(indices.size());
+
+  for (size_t i = 0; i < indices.size(); ++i) {
+    auto fromInternal = internalVocab_[indices[i]];
+    if (fromInternal.has_value()) {
+      words[i] = std::string{fromInternal.value()};
+    } else {
+      diskSlots.push_back(i);
+      diskIndices.push_back(indices[i]);
+    }
+  }
+
+  if (!diskIndices.empty()) {
+    auto disk = externalVocab_.lookupBatch(diskIndices);
+    AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
+    for (size_t k = 0; k < diskSlots.size(); ++k) {
+      words[diskSlots[k]] = std::string{(*disk)[k]};
+    }
+  }
+
+  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+  data->buffer() = std::move(words);
+  data->views() = ::ranges::to_vector(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+  return StringVectorVocabBatchLookupData::asResult(std::move(data));
 }
 
 // _____________________________________________________________________________
