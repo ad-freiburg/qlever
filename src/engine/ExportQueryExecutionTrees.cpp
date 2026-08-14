@@ -531,6 +531,30 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
   // IDs share one `lookupBatch` instead of one syscall per cell.
   static constexpr size_t kIdBatchSize = 1000;
   std::vector<Id> idBatch;
+
+  // Format `numRows` rows of `resolved` (one entry per batch column, in
+  // `batchColIndices` order) into `output`, one line per row with the
+  // column separator between the cells. The output of the whole stream is
+  // the same as if each cell had been yielded individually.
+  auto appendResolvedRows = [&](std::string& output, size_t numRows,
+                                const auto& resolved) {
+    size_t resolvedIdx = 0;
+    for (size_t r = 0; r < numRows; ++r) {
+      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+        if (selectedColumnIndices[j].has_value()) {
+          if (resolved[resolvedIdx].has_value()) [[likely]] {
+            absl::StrAppend(&output, resolved[resolvedIdx].value().first);
+          }
+          ++resolvedIdx;
+        }
+        if (j + 1 < selectedColumnIndices.size()) {
+          output.push_back(separator);
+        }
+      }
+      output.push_back('\n');
+      cancellationHandle->throwIfCancelled();
+    }
+  };
   uint64_t resultSize = 0;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
@@ -548,22 +572,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
       }
       auto resolved = ql::exportIds::idsToStringAndType<format == csv>(
           qet.getQec()->getIndex(), idBatch, pair.localVocab(), escapeFunction);
-      size_t resolvedIdx = 0;
-      for (size_t r = 0; r < kIdBatchSize; ++r) {
-        for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-          if (selectedColumnIndices[j].has_value()) {
-            if (resolved[resolvedIdx].has_value()) [[likely]] {
-              STREAMABLE_YIELD(resolved[resolvedIdx].value().first);
-            }
-            ++resolvedIdx;
-          }
-          if (j + 1 < selectedColumnIndices.size()) {
-            STREAMABLE_YIELD(separator);
-          }
-        }
-        STREAMABLE_YIELD('\n');
-        cancellationHandle->throwIfCancelled();
-      }
+      std::string output;
+      appendResolvedRows(output, kIdBatchSize, resolved);
+      STREAMABLE_YIELD(std::move(output));
       idBatch.clear();
       rowsInBatch = 0;
     }
@@ -573,22 +584,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
     }
     auto resolved = ql::exportIds::idsToStringAndType<format == csv>(
         qet.getQec()->getIndex(), idBatch, pair.localVocab(), escapeFunction);
-    size_t resolvedIdx = 0;
-    for (size_t r = 0; r < rowsInBatch; ++r) {
-      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-        if (selectedColumnIndices[j].has_value()) {
-          if (resolved[resolvedIdx].has_value()) [[likely]] {
-            STREAMABLE_YIELD(resolved[resolvedIdx].value().first);
-          }
-          ++resolvedIdx;
-        }
-        if (j + 1 < selectedColumnIndices.size()) {
-          STREAMABLE_YIELD(separator);
-        }
-      }
-      STREAMABLE_YIELD('\n');
-      cancellationHandle->throwIfCancelled();
-    }
+    std::string output;
+    appendResolvedRows(output, rowsInBatch, resolved);
+    STREAMABLE_YIELD(std::move(output));
   }
   AD_LOG_DEBUG << "Done creating readable result.\n";
 }
