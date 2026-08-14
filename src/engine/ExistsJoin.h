@@ -109,6 +109,16 @@ class ExistsJoin : public Operation {
   // `tryLeftIndexNestedLoopJoinIfSuitable`.
   std::optional<Result> tryIndexNestedLoopJoinIfSuitable(bool requestLaziness);
 
+  // Semijoin optimization for the fully materialized case with exactly one
+  // join column and no undef values. Builds a hash set of the right
+  // (subquery) side's join keys once and probes each row of the left side for
+  // existence, so the boolean EXISTS column can be filled without sorting
+  // either input. Mirrors Fluree's semijoin operator for EXISTS/NOT EXISTS.
+  // `localVocab` is the local vocab of the left result, propagated unchanged.
+  std::optional<Result> tryHashSetExistsJoin(
+      const IdTableView<0>& left, const IdTableView<0>& right,
+      Result::SharedLocalVocabWrapper localVocab);
+
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

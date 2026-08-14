@@ -969,3 +969,26 @@ TEST(ExistsJoin, resultSortedOn) {
   // Sort would be added if it's not already sorted enough.
   EXPECT_THAT(getSortOrder(biggerWithUndef, {0, 1, 2}), ElementsAre(0, 1, 2));
 }
+
+// _____________________________________________________________________________
+TEST(ExistsJoin, hashSetExistsJoinSingleColumn) {
+  // Single join column, no UNDEF: exercises the hash-set semijoin path.
+  // Left join keys {3,4,5}; right join keys {3,5}. Expected EXISTS:
+  // row0 (3) -> true, row1 (4) -> false, row2 (5) -> true.
+  testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {5, 37}}, {true, false, true},
+             1);
+
+  // Right side empty -> every EXISTS is false.
+  auto alloc = ad_utility::testing::makeAllocator();
+  testExistsFromIdTable(makeIdTableFromVector({{3, 6}, {4, 7}}),
+                        IdTable{2, alloc}, {false, false}, 1);
+
+  // All left keys match.
+  testExists({{3, 6}, {4, 7}}, {{3, 15}, {4, 37}, {3, 19}}, {true, true}, 1);
+
+  // Duplicates on both sides: EXISTS is set-theoretic, so duplicates on the
+  // right do not change the result, and duplicates on the left each get the
+  // same boolean.
+  testExists({{3, 6}, {3, 7}, {4, 8}}, {{3, 15}, {3, 19}}, {true, true, false},
+             1);
+}

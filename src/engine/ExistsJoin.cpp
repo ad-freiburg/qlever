@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
+#include "util/HashSet.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -182,6 +183,20 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
                                    &Id::isUndefined));
       });
 
+  // If the join is cheap (no UNDEF values) and there is a single join column,
+  // we can answer the EXISTS test with a hash set instead of the sort-merge
+  // zipper join: build a hash set of the right (subquery) side's join keys
+  // once, then probe each row of the left side for existence. This avoids
+  // sorting both inputs and only materializes the (typically smaller) right
+  // side. This mirrors Fluree's semijoin operator for EXISTS/NOT EXISTS.
+  if (isCheap && numJoinColumns == 1) {
+    auto result =
+        tryHashSetExistsJoin(left, right, leftRes->getSharedLocalVocab());
+    if (result.has_value()) {
+      return std::move(result).value();
+    }
+  }
+
   // Nothing to do for the actual matches.
   auto noopRowAdder = ad_utility::noop;
 
@@ -233,6 +248,46 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   // The added column only contains Boolean values, and adds no new words to the
   // local vocabulary, so we can use the local vocab from `leftRes`.
   return {std::move(result), resultSortedOn(), leftRes->getSharedLocalVocab()};
+}
+
+// _____________________________________________________________________________
+std::optional<Result> ExistsJoin::tryHashSetExistsJoin(
+    const IdTableView<0>& left, const IdTableView<0>& right,
+    Result::SharedLocalVocabWrapper localVocab) {
+  AD_CORRECTNESS_CHECK(joinColumns_.size() == 1);
+  AD_CORRECTNESS_CHECK(left.numColumns() > 0 && right.numColumns() > 0);
+
+  // Build a hash set of the right (subquery) side's join keys. This is
+  // correct only because the caller has verified that there are no UNDEF
+  // values in the join columns, so a row "exists" iff its join key is in the
+  // set.
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
+                                               right.numColumns()};
+  ColumnIndex leftJoinCol = joinColumnData.jcsLeft().front();
+  ColumnIndex rightJoinCol = joinColumnData.jcsRight().front();
+
+  checkCancellation();
+  HashSet<Id> rightKeys;
+  rightKeys.reserve(right.size());
+  for (const auto& row : right) {
+    rightKeys.insert(row[rightJoinCol]);
+  }
+  checkCancellation();
+
+  // Fill the EXISTS column: true for every left row whose join key is in the
+  // set, false otherwise. UNDEF is impossible here (verified by the caller).
+  IdTable result = left.clone();
+  result.addEmptyColumn();
+  decltype(auto) existsCol = result.getColumn(getResultWidth() - 1);
+  ql::ranges::fill(existsCol, Id::makeFromBool(true));
+  size_t idx = 0;
+  for (const auto& row : left) {
+    if (!rightKeys.contains(row[leftJoinCol])) {
+      existsCol[idx] = Id::makeFromBool(false);
+    }
+    ++idx;
+  }
+  return {std::move(result), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
