@@ -11,9 +11,10 @@
 
 // The x86 code below uses GCC/clang-only facilities (`__attribute__((target))`,
 // `__builtin_cpu_supports`), which MSVC does not provide, so it is enabled only
-// for those compilers. Everything else uses the scalar fallback.
+// for those compilers. Everything else uses the scalar fallback. The
+// condition is spelled out at each use site instead of behind a macro so that
+// there is no feature-test macro (SonarCloud S5028).
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
-#define QLEVER_SIMD_X86 1
 #include <immintrin.h>
 #endif
 
@@ -35,7 +36,7 @@ bool containsAnyByteScalar(std::string_view data) {
   return data.find_first_of(specialCharsView) != std::string_view::npos;
 }
 
-#ifdef QLEVER_SIMD_X86
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
 // True iff the CPU running this binary supports AVX2. Deliberately a
 // non-template function so that there is a single guarded static for the whole
 // program instead of one per instantiation of `containsAnyByte`.
@@ -120,7 +121,7 @@ __attribute__((target("avx2"))) bool containsAnyByteAVX2(const char* data,
   }
   return false;
 }
-#endif  // QLEVER_SIMD_X86
+#endif  // x86-64 with GCC or clang
 }  // namespace detail
 
 namespace detail {
@@ -150,7 +151,7 @@ template <char... SpecialChars>
 bool containsAnyByteImpl(std::string_view sv, bool useAvx2) {
   const char* data = sv.data();
   const size_t size = sv.size();
-#ifdef QLEVER_SIMD_X86
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
   if (useAvx2) {
     return containsAnyByteAVX2<SpecialChars...>(data, size);
   }
@@ -166,7 +167,7 @@ bool containsAnyByteImpl(std::string_view sv, bool useAvx2) {
 template <char... SpecialChars>
 bool containsAnyByte(std::string_view sv) {
   static_assert(sizeof...(SpecialChars) > 0);
-#ifdef QLEVER_SIMD_X86
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
   return detail::containsAnyByteImpl<SpecialChars...>(sv, detail::hasAvx2());
 #else
   return detail::containsAnyByteImpl<SpecialChars...>(sv, false);

@@ -20,7 +20,7 @@ using namespace ad_utility::simd;
 template <char... SpecialChars>
 bool checkAllImplementationsAgree(std::string_view sv) {
   const bool expected = detail::containsAnyByteScalar<SpecialChars...>(sv);
-#ifdef QLEVER_SIMD_X86
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
   EXPECT_EQ(detail::containsAnyByteSSE2<SpecialChars...>(sv.data(), sv.size()),
             expected);
   // Exercise both branches of the dispatcher explicitly: the AVX2 path (if
