@@ -139,19 +139,37 @@ struct CharacterSet {};
 // the same result, so this function is safe to use as a fast replacement for
 // `std::string_view::find_first_of` (or a regex character-class search) in
 // hot paths. The set must contain at least one byte.
+namespace detail {
+
+// The actual dispatch between the AVX2, the SSE2, and the scalar
+// implementation. The AVX2 vs. SSE2 decision is passed in explicitly so that
+// tests can exercise the SSE2 fallback even on AVX2-capable hardware (see
+// `test/SimdUtilsTest.cpp`); the public `containsAnyByte` below passes the
+// runtime CPU check.
 template <char... SpecialChars>
-bool containsAnyByte(std::string_view sv) {
-  static_assert(sizeof...(SpecialChars) > 0);
+bool containsAnyByteImpl(std::string_view sv, bool useAvx2) {
   const char* data = sv.data();
   const size_t size = sv.size();
 #ifdef QLEVER_SIMD_X86
-  if (detail::hasAvx2()) {
-    return detail::containsAnyByteAVX2<SpecialChars...>(data, size);
+  if (useAvx2) {
+    return containsAnyByteAVX2<SpecialChars...>(data, size);
   }
-  return detail::containsAnyByteSSE2<SpecialChars...>(data, size);
+  return containsAnyByteSSE2<SpecialChars...>(data, size);
 #else
-  return detail::containsAnyByteScalar<SpecialChars...>(
-      std::string_view{data, size});
+  (void)useAvx2;
+  return containsAnyByteScalar<SpecialChars...>(std::string_view{data, size});
+#endif
+}
+
+}  // namespace detail
+
+template <char... SpecialChars>
+bool containsAnyByte(std::string_view sv) {
+  static_assert(sizeof...(SpecialChars) > 0);
+#ifdef QLEVER_SIMD_X86
+  return detail::containsAnyByteImpl<SpecialChars...>(sv, detail::hasAvx2());
+#else
+  return detail::containsAnyByteImpl<SpecialChars...>(sv, false);
 #endif
 }
 

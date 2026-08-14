@@ -23,10 +23,17 @@ bool checkAllImplementationsAgree(std::string_view sv) {
 #ifdef QLEVER_SIMD_X86
   EXPECT_EQ(detail::containsAnyByteSSE2<SpecialChars...>(sv.data(), sv.size()),
             expected);
+  // Exercise both branches of the dispatcher explicitly: the AVX2 path (if
+  // the CPU supports it) and the SSE2 fallback. The public `containsAnyByte`
+  // only ever takes the AVX2 branch on AVX2-capable machines, so without the
+  // explicit `useAvx2 = false` call the fallback would not be covered by the
+  // test suite on such machines.
+  EXPECT_EQ(detail::containsAnyByteImpl<SpecialChars...>(sv, false), expected);
   if (detail::hasAvx2()) {
     EXPECT_EQ(
         detail::containsAnyByteAVX2<SpecialChars...>(sv.data(), sv.size()),
         expected);
+    EXPECT_EQ(detail::containsAnyByteImpl<SpecialChars...>(sv, true), expected);
   }
 #endif
   // The dispatching entry point must of course also agree.
