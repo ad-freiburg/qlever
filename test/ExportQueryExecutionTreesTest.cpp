@@ -2269,3 +2269,38 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
+
+// _____________________________________________________________________________
+// A SELECT result with more rows than the internal batching size (1000 rows
+// per `idsToStringAndType` call) must be exported completely: the rows
+// exercise the mid-stream flush of the batch buffer as well as the tail
+// batch after the loop. Both TSV and CSV must contain every row in order.
+TEST(ExportQueryExecutionTrees, SelectQueryMoreThanOneBatchOfRows) {
+  constexpr size_t numRows = 1000 + 3;  // one full batch plus a tail batch
+  const std::string kg = "";
+  const std::string query = [&]() {
+    std::string values;
+    for (size_t i = 0; i < numRows; ++i) {
+      absl::StrAppend(&values, i == 0 ? "(" : " (", i, ")");
+    }
+    return absl::StrCat("SELECT ?x WHERE { VALUES ?x { ", values, " } }");
+  }();
+  const std::string expectedTsv = [&]() {
+    std::string expected = "?x\n";
+    for (size_t i = 0; i < numRows; ++i) {
+      absl::StrAppend(&expected, i, "\n");
+    }
+    return expected;
+  }();
+  const std::string expectedCsv = [&]() {
+    std::string expected = "x\n";
+    for (size_t i = 0; i < numRows; ++i) {
+      absl::StrAppend(&expected, i, "\n");
+    }
+    return expected;
+  }();
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::tsv),
+            expectedTsv);
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::csv),
+            expectedCsv);
+}
