@@ -239,6 +239,11 @@ class GroupByImpl : public Operation {
   // (implicit) group.
   std::optional<IdTable> computeCountStar() const;
 
+  // `COUNT(?x)` / `COUNT(*)` over `FILTER ISLITERAL(?v)` or `ISBLANK(?v)` on
+  // a full three-variable scan. Walks distinct IDs of `?v` and sums the
+  // multiplicities of matching datatypes (vocab lookup only for VocabIndex).
+  std::optional<IdTable> computeTypedCountFromMetadata() const;
+
   // Stores information required for substitution of an expression in an
   // expression tree.
   struct ParentAndChildIndex {

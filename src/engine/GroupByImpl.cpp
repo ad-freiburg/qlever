@@ -12,8 +12,10 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
@@ -1181,6 +1183,9 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
     if (auto result = computeGroupByForFullIndexScan()) {
       return result;
     }
+    if (auto result = computeTypedCountFromMetadata()) {
+      return result;
+    }
   }
   if (auto result = computeGroupByForJoinWithFullScan()) {
     return result;
@@ -1962,6 +1967,141 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+namespace {
+bool idIsAlwaysLiteral(Id id) {
+  switch (id.getDatatype()) {
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::GeoPoint:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool idIsNeverLiteral(Id id) {
+  switch (id.getDatatype()) {
+    case Datatype::EncodedVal:
+    case Datatype::BlankNodeIndex:
+    case Datatype::Undefined:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<IdTable> GroupByImpl::computeTypedCountFromMetadata() const {
+  if (!_groupByVariables.empty()) {
+    return std::nullopt;
+  }
+  bool countStar = false;
+  if (_aliases.size() == 1) {
+    auto* cs = dynamic_cast<const sparqlExpression::CountStarExpression*>(
+        _aliases[0]._expression.getPimpl());
+    countStar = cs && !cs->isDistinct();
+  }
+  auto counted = getVariableForNonDistinctCountOfSingleAlias();
+  if (!countStar && !counted.has_value()) {
+    return std::nullopt;
+  }
+
+  auto* filter =
+      dynamic_cast<Filter*>(_subtree->getRootOperation().get());
+  if (!filter) {
+    return std::nullopt;
+  }
+  auto prefilters = filter->getExpression().getPrefilterExpressionForMetadata(
+      getIndex().getLocalVocabContext());
+  if (prefilters.size() != 1) {
+    return std::nullopt;
+  }
+  const bool wantLiteral =
+      dynamic_cast<const prefilterExpressions::IsLiteralExpression*>(
+          prefilters[0].first.get()) != nullptr;
+  const bool wantBlank =
+      dynamic_cast<const prefilterExpressions::IsBlankExpression*>(
+          prefilters[0].first.get()) != nullptr;
+  if (!wantLiteral && !wantBlank) {
+    return std::nullopt;
+  }
+  const Variable filterVar = prefilters[0].second;
+
+  auto* scan = dynamic_cast<const IndexScan*>(
+      filter->getSubtree()->getRootOperation().get());
+  if (!scan || scan->numVariables() != 3 ||
+      !scan->graphsToFilter().areAllGraphsAllowed() ||
+      !scan->additionalVariables().empty()) {
+    return std::nullopt;
+  }
+
+  const auto& locTriples = scan->permutation().getLocatedTriplesForPermutation(
+      locatedTriplesState());
+  if (!locTriples.isEmpty() ||
+      scan->permutation().permutationType() ==
+          Permutation::Type::MATERIALIZED_VIEW) {
+    return std::nullopt;
+  }
+
+  // Count triples, so the permutation must store the filtered variable in
+  // column 0 (leading sort key) to get per-value multiplicities.
+  std::optional<Permutation::Enum> leading;
+  if (scan->object().isVariable() &&
+      scan->object().getVariable() == filterVar) {
+    leading = Permutation::OSP;
+  } else if (scan->subject().isVariable() &&
+             scan->subject().getVariable() == filterVar) {
+    leading = Permutation::SPO;
+  } else if (scan->predicate().isVariable() &&
+             scan->predicate().getVariable() == filterVar) {
+    leading = Permutation::POS;
+  }
+  if (!leading.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto& permutation =
+      getIndex().getImpl().getPermutation(leading.value());
+  auto distinctIds = permutation.getDistinctCol0IdsAndCounts(
+      cancellationHandle_, locatedTriplesState(), scan->getLimitOffset());
+
+  const auto& vocab = getIndex().getVocab();
+  size_t total = 0;
+  for (size_t i = 0; i < distinctIds.numRows(); ++i) {
+    const Id id = distinctIds(i, 0);
+    const size_t multiplicity =
+        static_cast<size_t>(distinctIds(i, 1).getInt());
+    bool match = false;
+    if (wantBlank) {
+      match = id.getDatatype() == Datatype::BlankNodeIndex;
+    } else if (idIsAlwaysLiteral(id)) {
+      match = true;
+    } else if (idIsNeverLiteral(id)) {
+      match = false;
+    } else if (id.getDatatype() == Datatype::VocabIndex) {
+      match = vocab.isLiteral(id.getVocabIndex());
+    }
+    if (match) {
+      total += multiplicity;
+    }
+  }
+
+  filter->getSubtree()->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+      {});
+  filter->updateRuntimeInformationWhenOptimizedOut(
+      {filter->getSubtree()->getRootOperation()->getRuntimeInfoPointer()});
+
+  IdTable table{1, getExecutionContext()->getAllocator()};
+  table.push_back({Id::makeFromInt(static_cast<int64_t>(total))});
+  return table;
 }
 
 // _____________________________________________________________________________

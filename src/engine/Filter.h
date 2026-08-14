@@ -45,6 +45,9 @@ class Filter : public Operation {
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
+  const sparqlExpression::SparqlExpressionPimpl& getExpression() const {
+    return _expression;
+  }
   std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }

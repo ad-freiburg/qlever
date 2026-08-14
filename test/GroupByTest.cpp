@@ -10,6 +10,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
@@ -3326,4 +3327,42 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(0, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, countFilterIsLiteral) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("<s> <p> \"lit\" . <s> <p> <iri> . <s> <p> 1 ."))};
+  auto qec = ctx.makeQec();
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::SPO,
+      SparqlTripleSimple{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
+  auto filterExpr = SparqlExpressionPimpl{
+      makeIsLiteralExpression(makeVariableExpression(Variable{"?o"})),
+      "isLiteral(?o)"};
+  auto filter = makeExecutionTree<Filter>(&qec, scan, filterExpr);
+  std::vector<Alias> aliases{
+      Alias{makeCountPimpl(Variable{"?o"}, false), Variable{"?c"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, filter};
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{I(2)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, countFilterIsBlank) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("_:b1 <p> <o> . _:b2 <p> <o> . <s> <p> <o> ."))};
+  auto qec = ctx.makeQec();
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::SPO,
+      SparqlTripleSimple{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}});
+  auto filterExpr = SparqlExpressionPimpl{
+      makeIsBlankExpression(makeVariableExpression(Variable{"?s"})),
+      "isBlank(?s)"};
+  auto filter = makeExecutionTree<Filter>(&qec, scan, filterExpr);
+  std::vector<Alias> aliases{
+      Alias{makeCountPimpl(Variable{"?s"}, false), Variable{"?c"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, filter};
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{I(2)}}));
 }
