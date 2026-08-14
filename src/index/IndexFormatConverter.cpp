@@ -23,6 +23,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "backports/keywords.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
@@ -54,14 +55,20 @@ namespace {
 
 namespace fs = ql::filesystem;
 
-// The `Datatype`s of the previous index format, in the order of the numeric
-// values that they had in that format. In other words, an `Id` whose datatype
-// bits are `i` in the previous format is an `Id` of datatype
-// `datatypesOfPreviousFormat[i]` in the current format. The only difference
+// Return a human-readable representation of the given index format `version`.
+std::string versionAsString(const IndexFormatVersion& version) {
+  return absl::StrCat("PR = ", version.prNumber_,
+                      ", Date = ", version.date_.toStringAndType().first);
+}
+
+// The `Datatype`s of the source format (see `sourceVersion`), in the order of
+// the numeric values that they had in that format. In other words, an `Id`
+// whose datatype bits are `i` in the source format is an `Id` of datatype
+// `datatypesOfSourceFormat[i]` in the target format. The only difference
 // between the two formats is that `Datatype::AuxVocabIndex` was inserted (see
 // the note there), which is why this array is exactly the current enum without
 // that datatype.
-constexpr std::array<Datatype, 12> datatypesOfPreviousFormat{
+constexpr std::array<Datatype, 12> datatypesOfSourceFormat{
     Datatype::Undefined,
     Datatype::Bool,
     Datatype::Int,
@@ -75,8 +82,9 @@ constexpr std::array<Datatype, 12> datatypesOfPreviousFormat{
     Datatype::BlankNodeIndex,
     Datatype::EncodedVal};
 
-// Return true iff `datatypes` is strictly ascending.
-constexpr bool isStrictlyAscending(
+// Return true iff `datatypes` is strictly ascending. NOTE: This is `consteval`,
+// because it is only ever used in the `static_assert` below.
+QL_CONSTEVAL bool isStrictlyAscending(
     const std::array<Datatype, 12>& datatypes) noexcept {
   for (size_t i = 1; i < datatypes.size(); ++i) {
     if (!(datatypes[i - 1] < datatypes[i])) {
@@ -86,17 +94,25 @@ constexpr bool isStrictlyAscending(
   return true;
 }
 
-// The conversion preserves the relative order of all datatypes of the previous
+// The conversion preserves the relative order of all datatypes of the source
 // format. This is what makes it possible to convert a permutation by rewriting
 // its `Id`s one by one: the result is still sorted, so it does not have to be
 // sorted again. If a future change of the format violates this, then this
 // converter is not applicable to it.
-static_assert(isStrictlyAscending(datatypesOfPreviousFormat));
+static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
-// Exactly one datatype was added, so no datatype of the previous format was
+// Exactly one datatype was added, so no datatype of the source format was
 // removed or duplicated above.
-static_assert(datatypesOfPreviousFormat.size() + 1 ==
+static_assert(datatypesOfSourceFormat.size() + 1 ==
               static_cast<size_t>(Datatype::MaxValue) + 1);
+
+// The version of the on-disk format of the materialized views (see
+// `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format
+// have. That version was raised together with the index format, so the views
+// have to be converted as well.
+constexpr size_t materializedViewsVersionOfSourceFormat = 1;
+static_assert(materializedViewsVersionOfSourceFormat + 1 ==
+              MATERIALIZED_VIEWS_VERSION);
 
 // The permutations of an index, as pairs of "twins" (like `PSO` and `POS`),
 // together with the information whether the pair is the pair of internal
@@ -127,8 +143,35 @@ std::string filenameForPermutation(std::string_view basename,
                       PERMUTATION_FILE_INFIX, permutation.fileSuffix());
 }
 
+// The key of the index format version in the configuration of an index. NOTE:
+// This is a `const char*` and not a `std::string_view`, because the latter
+// cannot be used to look up a key in a `nlohmann::json` object.
+constexpr const char* indexFormatVersionKey = "index-format-version";
+
+// Check that the source and the target format of this converter (see
+// `sourceVersion` and `targetVersion`) still are the previous resp. the current
+// index format. If they are not, then the index format has changed again and
+// this converter has to be updated (see the note at
+// `qlever::indexFormatVersion`), so this is a programming error and not
+// something that a user can fix.
+void checkThatTheSupportedFormatsAreUpToDate() {
+  AD_CORRECTNESS_CHECK(
+      targetVersion == indexFormatVersion,
+      "The index converter converts to the index format ",
+      versionAsString(targetVersion), ", but the current index format is ",
+      versionAsString(indexFormatVersion),
+      ". The converter has to be updated to the current index format.");
+  AD_CORRECTNESS_CHECK(
+      sourceVersion == previousIndexFormatVersion,
+      "The index converter converts from the index format ",
+      versionAsString(sourceVersion),
+      ", but the index format that precedes the current one is ",
+      versionAsString(previousIndexFormatVersion),
+      ". The converter has to be updated to that index format.");
+}
+
 // Read the configuration of the index with the base name `basename`, and check
-// that it is in the previous index format (see the documentation of
+// that it is in the source format (see the documentation of
 // `convertIndexToCurrentFormat`).
 nlohmann::json readAndCheckConfiguration(const std::string& basename) {
   std::string filename = absl::StrCat(basename, CONFIGURATION_FILE);
@@ -141,31 +184,26 @@ nlohmann::json readAndCheckConfiguration(const std::string& basename) {
   nlohmann::json configuration;
   ad_utility::makeIfstream(filename) >> configuration;
 
-  auto versionKey = "index-format-version";
-  if (!configuration.contains(versionKey)) {
+  if (!configuration.contains(indexFormatVersionKey)) {
     throw std::runtime_error{absl::StrCat(
         "The index \"", basename,
         "\" was built before versioning was introduced for QLever's index "
         "format, it is much too old to be converted. Please rebuild it.")};
   }
-  auto version = configuration.at(versionKey).get<IndexFormatVersion>();
-  auto versionAsString = [](const IndexFormatVersion& v) {
-    return absl::StrCat("PR = ", v.prNumber_,
-                        ", Date = ", v.date_.toStringAndType().first);
-  };
-  if (version == indexFormatVersion) {
+  auto version =
+      configuration.at(indexFormatVersionKey).get<IndexFormatVersion>();
+  if (version == targetVersion) {
     throw std::runtime_error{absl::StrCat(
         "The index \"", basename, "\" already is in the current index format (",
         versionAsString(version), "), so there is nothing to convert.")};
   }
-  if (version != previousIndexFormatVersion) {
+  if (version != sourceVersion) {
     throw std::runtime_error{absl::StrCat(
         "The index \"", basename, "\" is in the index format (",
         versionAsString(version),
         "), but this converter only converts indexes in the format (",
-        versionAsString(previousIndexFormatVersion),
-        ") to the current format (", versionAsString(indexFormatVersion),
-        "). Please rebuild the index.")};
+        versionAsString(sourceVersion), ") to the format (",
+        versionAsString(targetVersion), "). Please rebuild the index.")};
   }
   return configuration;
 }
@@ -292,7 +330,7 @@ IndexMetaData writePermutation(
         }
       };
   // The blocks already are in the correct order (the conversion does not change
-  // the order of the `Id`s, see `datatypesOfPreviousFormat` above), so the
+  // the order of the `Id`s, see `datatypesOfSourceFormat` above), so the
   // identity is the correct key order here.
   auto [numDistinctCol0, blockMetadata] =
       CompressedRelationWriter::createPermutation({std::move(writer), callback},
@@ -318,14 +356,13 @@ void writeMetaData(IndexMetaData& metaData, const std::string& filename) {
 void verifyConvertedPermutation(const IndexMetaData& oldMetaData,
                                 const IndexMetaData& newMetaData,
                                 const std::string& filename) {
+  // NOTE: This can only fail if the converter itself is broken, hence a
+  // correctness check and not an exception with a user-facing message.
   auto check = [&filename](bool condition) {
-    if (!condition) {
-      throw std::runtime_error{absl::StrCat(
-          "The converted permutation \"", filename,
-          "\" does not have the same content as the permutation it was "
-          "converted from. This is a bug in the index converter, please report "
-          "it. The converted index is incomplete and has to be deleted.")};
-    }
+    AD_CORRECTNESS_CHECK(
+        condition, "The converted permutation \"", filename,
+        "\" does not have the same content as the permutation it was converted "
+        "from. The converted index is incomplete and has to be deleted.");
   };
   check(oldMetaData.totalElements() == newMetaData.totalElements());
   const auto& oldBlocks = oldMetaData.blockData();
@@ -472,10 +509,21 @@ void convertMaterializedView(const std::string& oldBasename,
 
   // Copy the metadata of the view, with the version of the on-disk format of
   // the views raised to the current one (an unconverted view has to be rejected
-  // by the engine, see `MATERIALIZED_VIEWS_VERSION`).
+  // by the engine, see `MATERIALIZED_VIEWS_VERSION`). The view that is read has
+  // to be in the version that belongs to the source format, see
+  // `materializedViewsVersionOfSourceFormat`.
   nlohmann::json viewInfo;
   ad_utility::makeIfstream(absl::StrCat(oldViewBasename, VIEW_INFO_SUFFIX)) >>
       viewInfo;
+  auto viewsVersion = viewInfo.at("version").get<size_t>();
+  if (viewsVersion != materializedViewsVersionOfSourceFormat) {
+    throw std::runtime_error{absl::StrCat(
+        "The materialized view \"", name, "\" of the index \"", oldBasename,
+        "\" is stored in the format version ", viewsVersion,
+        ", but this converter only converts views in the format version ",
+        materializedViewsVersionOfSourceFormat,
+        ". Please delete the view and create it again after the conversion.")};
+  }
   viewInfo["version"] = MATERIALIZED_VIEWS_VERSION;
   ad_utility::makeOfstream(absl::StrCat(newViewBasename, VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
@@ -553,6 +601,10 @@ void copyFilesThatNeedNoConversion(const std::string& oldBasename,
 // Check that every file of the index with the base name `oldBasename` was
 // either converted or copied. This makes sure that a file type that is added to
 // an index in the future is not silently dropped by this converter.
+//
+// NOTE: Such a file can only appear if `IndexImpl::allIndexFiles` was extended
+// without extending this converter, hence a correctness check and not an
+// exception with a user-facing message.
 void checkAllFilesWereHandled(const std::string& oldBasename,
                               const std::vector<fs::path>& handledFiles) {
   std::vector<std::string> missingFiles;
@@ -561,27 +613,41 @@ void checkAllFilesWereHandled(const std::string& oldBasename,
       missingFiles.push_back(file.native());
     }
   }
-  if (!missingFiles.empty()) {
-    throw std::runtime_error{absl::StrCat(
-        "The following files of the index \"", oldBasename,
-        "\" were neither converted nor copied: ",
-        absl::StrJoin(missingFiles, ", "),
-        ". The index converter has to be extended for them. The converted "
-        "index is incomplete and has to be deleted.")};
-  }
+  AD_CORRECTNESS_CHECK(missingFiles.empty(),
+                       "The following files of the index \"", oldBasename,
+                       "\" were neither converted nor copied: ",
+                       absl::StrJoin(missingFiles, ", "),
+                       ". The index converter has to be extended for them. The "
+                       "converted index is incomplete and has to be deleted.");
 }
 
 }  // namespace
 
 // _____________________________________________________________________________
+std::string conversionDescription() {
+  return absl::StrCat(
+      "Convert an index in the index format (", versionAsString(sourceVersion),
+      ") to an index in the index format (", versionAsString(targetVersion),
+      "). The only difference between the two formats is the numbering of the "
+      "datatypes of the IDs: the datatype for the words of an auxiliary "
+      "vocabulary was inserted in the middle, which renumbered the datatypes "
+      "after it. The IDs of the index are therefore rewritten, and nothing "
+      "else "
+      "changes. The index that is converted is not modified.\n\nNote that "
+      "rebuilding the index from its input files is still the recommended way "
+      "to move to a new index format, because only that also profits from the "
+      "improvements that came with it");
+}
+
+// _____________________________________________________________________________
 Id convertId(Id id) {
   auto datatypeBits = id.getBits() >> ValueId::numDataBits;
-  if (datatypeBits >= datatypesOfPreviousFormat.size()) {
+  if (datatypeBits >= datatypesOfSourceFormat.size()) {
     throw std::runtime_error{absl::StrCat(
         "Encountered an `Id` with the invalid datatype ", datatypeBits,
         ", the index that is converted is corrupted")};
   }
-  auto datatype = datatypesOfPreviousFormat.at(datatypeBits);
+  auto datatype = datatypesOfSourceFormat.at(datatypeBits);
   if (datatype == Datatype::LocalVocabIndex) {
     throw std::runtime_error{
         "Encountered an `Id` of type `LocalVocabIndex`, which must never be "
@@ -604,6 +670,7 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
           fs::path{newBasename}.lexically_normal(),
       "The base name of the converted index has to differ from the base name "
       "of the index that is converted");
+  checkThatTheSupportedFormatsAreUpToDate();
 
   auto configuration = readAndCheckConfiguration(oldBasename);
   throwIfPersistedUpdatesExist(oldBasename);
@@ -635,11 +702,11 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   checkAllFilesWereHandled(oldBasename, handledFiles);
   convertMaterializedViews(oldBasename, newBasename);
 
-  // Write the configuration last, with the version of the current format. An
+  // Write the configuration last, with the version of the target format. An
   // index without its configuration file cannot be loaded at all, so if the
   // conversion is interrupted, the incomplete index is not mistaken for a
   // complete one.
-  configuration["index-format-version"] = indexFormatVersion;
+  configuration[indexFormatVersionKey] = targetVersion;
   ad_utility::makeOfstream(absl::StrCat(newBasename, CONFIGURATION_FILE))
       << configuration.dump(4) << std::endl;
 

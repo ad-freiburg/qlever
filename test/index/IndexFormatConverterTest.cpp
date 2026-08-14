@@ -448,4 +448,51 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableIndexes) {
       HasSubstr("has only one of the permutations"));
 }
 
+// _____________________________________________________________________________
+TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableMaterializedViews) {
+  std::string viewBasename =
+      materializedViewFilenameBase(oldBasename_, "testview");
+
+  // A view that is not in the format version that belongs to the source format
+  // of the converter.
+  std::string viewInfoFilename = absl::StrCat(viewBasename, VIEW_INFO_SUFFIX);
+  nlohmann::json viewInfo;
+  ad_utility::makeIfstream(viewInfoFilename) >> viewInfo;
+  auto originalViewInfo = viewInfo;
+  viewInfo["version"] = MATERIALIZED_VIEWS_VERSION;
+  ad_utility::makeOfstream(viewInfoFilename) << viewInfo.dump();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      convertIndexToCurrentFormat(oldBasename_, newBasename_),
+      HasSubstr("only converts views in the format version 1"));
+  ad_utility::makeOfstream(viewInfoFilename) << originalViewInfo.dump();
+
+  // A view of which only some of its files exist. Note that the file that is
+  // deleted here must not be the info file, because the views are enumerated by
+  // exactly those files.
+  ad_utility::deleteFile(absl::StrCat(viewBasename, VIEW_SPO_SUFFIX));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      convertIndexToCurrentFormat(oldBasename_,
+                                  (directory_ / "incompleteView").string()),
+      HasSubstr("files that belong to a materialized view"));
+}
+
+// _____________________________________________________________________________
+TEST_F(IndexFormatConverterTest, emptyBasenamesAreARequirementViolation) {
+  AD_EXPECT_THROW_WITH_MESSAGE(convertIndexToCurrentFormat("", newBasename_),
+                               HasSubstr("must not be empty"));
+  AD_EXPECT_THROW_WITH_MESSAGE(convertIndexToCurrentFormat(oldBasename_, ""),
+                               HasSubstr("must not be empty"));
+}
+
+// _____________________________________________________________________________
+TEST(IndexFormatConverter, supportedFormatsAreUpToDate) {
+  // The converter hardcodes the two index formats that it converts between, so
+  // that it cannot silently be applied to a different change of the index
+  // format. Those two formats have to be the current index format and the one
+  // that directly precedes it (see the note at `qlever::indexFormatVersion`).
+  EXPECT_EQ(targetVersion, qlever::indexFormatVersion);
+  EXPECT_EQ(sourceVersion, qlever::previousIndexFormatVersion);
+  EXPECT_NE(sourceVersion, targetVersion);
+}
+
 }  // namespace

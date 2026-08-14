@@ -7,10 +7,13 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Convert an index that was built by an older version of QLever to the current
-// index format, so that it does not have to be rebuilt from its input files.
-// See `index/IndexFormatConverter.h` for the details of the conversion, in
-// particular for the index formats that it supports.
+// Convert an index in the index format `{PR = 1572, Date = 2024-10-22}` to the
+// index format `{PR = 3159, Date = 2026-08-14}`, so that it does not have to be
+// rebuilt from its input files. See `index/IndexFormatConverter.h` for the
+// details of the conversion, in particular for the difference between the two
+// formats.
+
+#include <absl/strings/str_cat.h>
 
 #include <boost/program_options.hpp>
 #include <iostream>
@@ -32,7 +35,12 @@ int main(int argc, char** argv) {
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
 
-  po::options_description boostOptions("Options for qlever-convert-index");
+  // The overview message of the help states which index formats this converter
+  // converts between, and what the difference between them is.
+  po::options_description boostOptions{
+      absl::StrCat("qlever-convert-index\n\n",
+                   qlever::indexFormatConverter::conversionDescription(),
+                   "\n\nOptions for qlever-convert-index")};
   auto add = [&boostOptions](auto&&... args) {
     boostOptions.add_options()(AD_FWD(args)...);
   };

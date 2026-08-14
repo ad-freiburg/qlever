@@ -39,6 +39,13 @@ struct IndexFormatVersion {
 
 // The actual index version. Change it once the binary format of the index
 // changes.
+//
+// NOTE: When you change it, then also assess the `previousIndexFormatVersion`
+// below and the index converter that uses it (see
+// `index/IndexFormatConverter.h`). That converter handles exactly one change of
+// the index format, so it has to be either extended by your change or updated
+// to the new pair of versions; else an index of the previous version can no
+// longer be converted, but only be rebuilt.
 inline const IndexFormatVersion& indexFormatVersion{
     3159, DateYearOrDuration{Date{2026, 8, 14}}};
 

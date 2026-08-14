@@ -1,8 +1,13 @@
 # An index in the previous index format
 
-This directory contains a (very small) QLever index in the index format that
-directly precedes the current one (see `qlever::previousIndexFormatVersion` in
-`src/index/IndexFormatVersion.h`). It is used by
+This directory contains a (very small) QLever index in the index format
+`{PR = 1572, Date = 2024-10-22}`, which is the format that directly precedes the
+current one `{PR = 3159, Date = 2026-08-14}` (see
+`qlever::previousIndexFormatVersion` resp. `qlever::indexFormatVersion` in
+`src/index/IndexFormatVersion.h`, and `sourceVersion` resp. `targetVersion` in
+`src/index/IndexFormatConverter.h`). Its materialized view is in the
+corresponding format version `1` of the materialized views (see
+`MATERIALIZED_VIEWS_VERSION`). The index is used by
 `test/index/IndexFormatConverterTest.cpp` to test the conversion of an index to
 the current format (see `src/index/IndexFormatConverter.h`).
 
