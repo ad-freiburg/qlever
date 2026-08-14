@@ -114,10 +114,10 @@ class ExistsJoin : public Operation {
   // (subquery) side's join keys once and probes each row of the left side for
   // existence, so the boolean EXISTS column can be filled without sorting
   // either input. Mirrors Fluree's semijoin operator for EXISTS/NOT EXISTS.
-  // `localVocab` is the local vocab of the left result, propagated unchanged.
-  std::optional<Result> tryHashSetExistsJoin(
-      const IdTableView<0>& left, const IdTableView<0>& right,
-      Result::SharedLocalVocabWrapper localVocab);
+  // Returns the left table with the added boolean column; the caller wraps it
+  // in a `Result` with the correct local vocab.
+  std::optional<IdTable> tryHashSetExistsJoin(const IdTableView<0>& left,
+                                              const IdTableView<0>& right);
 
   Result computeResult(bool requestLaziness) override;
 

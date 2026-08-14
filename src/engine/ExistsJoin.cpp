@@ -190,10 +190,9 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   // sorting both inputs and only materializes the (typically smaller) right
   // side. This mirrors Fluree's semijoin operator for EXISTS/NOT EXISTS.
   if (isCheap && numJoinColumns == 1) {
-    auto result =
-        tryHashSetExistsJoin(left, right, leftRes->getSharedLocalVocab());
-    if (result.has_value()) {
-      return std::move(result).value();
+    if (auto result = tryHashSetExistsJoin(left, right)) {
+      return Result{std::move(result).value(), resultSortedOn(),
+                    leftRes->getSharedLocalVocab()};
     }
   }
 
@@ -251,9 +250,8 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-std::optional<Result> ExistsJoin::tryHashSetExistsJoin(
-    const IdTableView<0>& left, const IdTableView<0>& right,
-    Result::SharedLocalVocabWrapper localVocab) {
+std::optional<IdTable> ExistsJoin::tryHashSetExistsJoin(
+    const IdTableView<0>& left, const IdTableView<0>& right) {
   AD_CORRECTNESS_CHECK(joinColumns_.size() == 1);
   AD_CORRECTNESS_CHECK(left.numColumns() > 0 && right.numColumns() > 0);
 
@@ -287,7 +285,7 @@ std::optional<Result> ExistsJoin::tryHashSetExistsJoin(
     }
     ++idx;
   }
-  return {std::move(result), resultSortedOn(), std::move(localVocab)};
+  return result;
 }
 
 // _____________________________________________________________________________
