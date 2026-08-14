@@ -27,6 +27,37 @@
 #include "rdfTypes/Literal.h"
 #include "util/UnitOfMeasurement.h"
 
+// If `filter` is a syntactically valid DE-9IM filter pattern (i.e. exactly 9
+// characters, each one of `0`-`2`, `T`/`t`, `F`/`f`, or `*`, see
+// `De9imFilterString`), return it as a `De9imFilterString`, else
+// `std::nullopt`. Note: this does not check whether the pattern can match
+// disjoint geometries, see `de9imFilterCanMatchDisjoint` below for that.
+//
+// Defined here (rather than in `parser/SpatialQuery.{h,cpp}`, its original
+// home) because it is called both from `SpatialQuery.cpp` (part of the
+// `sparqlParser` library) and from `GeoExpression.cpp` (part of the
+// `sparqlExpressions` library); `sparqlParser` depends on `sparqlExpressions`,
+// not the other way around, so no single one of those libraries can hold the
+// only definition. `rdfTypes`, which this header belongs to, is a dependency
+// of both.
+std::optional<De9imFilterString> parseDe9imFilterString(
+    std::string_view filter);
+
+// Whether the given (syntactically valid) DE-9IM `filter` could match a
+// disjoint pair of geometries. Patterns for which this holds (e.g.
+// `*********` or the literal disjoint pattern `FF*FF****`) are unsupported:
+// the pinned `libspatialjoin` never enumerates disjoint candidate pairs to
+// its callback (see `Sweeper::doDE9IMCheck`), regardless of the configured
+// filter, so accepting such a pattern would silently omit matching disjoint
+// pairs from the result.
+//
+// The DE-9IM matrix entries are ordered II, IB, IE, BI, BB, BE, EI, EB, EE. A
+// pair of geometries is disjoint iff II, IB, BI, and BB (indices 0, 1, 3, 4)
+// are all `F`. A filter character only excludes `F` if it is a digit, `T`, or
+// `t`; `*` and `F`/`f` both admit it. If all four of these positions admit
+// `F`, the pattern could match a disjoint pair.
+bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter);
+
 namespace ad_utility {
 
 namespace detail {

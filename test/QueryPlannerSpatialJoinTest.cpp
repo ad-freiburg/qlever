@@ -14,6 +14,7 @@
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;

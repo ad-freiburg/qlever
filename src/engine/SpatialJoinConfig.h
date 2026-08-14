@@ -28,7 +28,8 @@
 // https://en.wikipedia.org/wiki/DE-9IM). Stored without a null terminator.
 using De9imFilterString = std::array<char, 9>;
 
-// Parsing and validation of `De9imFilterString`s, see `parser/SpatialQuery.h`.
+// Parsing and validation of `De9imFilterString`s, see
+// `rdfTypes/GeoSparqlHelpers.h`.
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {

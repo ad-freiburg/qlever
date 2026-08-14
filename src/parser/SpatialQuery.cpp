@@ -5,36 +5,12 @@
 
 #include "parser/SpatialQuery.h"
 
-#include "backports/algorithm.h"
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
-
-namespace {
-constexpr ctll::fixed_string de9imFilterRegex = "[0-2TtFf*]{9}";
-}  // namespace
-
-// ____________________________________________________________________________
-std::optional<De9imFilterString> parseDe9imFilterString(
-    std::string_view filter) {
-  if (!ctre::match<de9imFilterRegex>(filter)) {
-    return std::nullopt;
-  }
-  // The regex above already enforces that `filter` has exactly 9 characters.
-  AD_CORRECTNESS_CHECK(filter.size() == De9imFilterString{}.size());
-  De9imFilterString result{};
-  ql::ranges::copy(filter, result.begin());
-  return result;
-}
-
-// ____________________________________________________________________________
-bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
-  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
-  return admitsF(filter[0]) && admitsF(filter[1]) && admitsF(filter[3]) &&
-         admitsF(filter[4]);
-}
+#include "rdfTypes/GeoSparqlHelpers.h"
 
 namespace parsedQuery {
 
