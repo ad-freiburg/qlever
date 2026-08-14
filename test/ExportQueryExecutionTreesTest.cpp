@@ -2390,3 +2390,94 @@ TEST(ExportQueryExecutionTrees, ParallelConstructSerializationWithDedup) {
   EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 4, 1024), expected);
   EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 0, 1024), expected);
 }
+
+// The parallel path must also handle an empty result (no rows to serialize):
+// the output is empty and no worker tasks are submitted.
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationEmptyResult) {
+  using enum ad_utility::MediaType;
+  const std::string kg = makeConstructKg(5);
+  const std::string query =
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o FILTER(?s = <s999>)}";
+  for (size_t numThreads : {size_t{1}, size_t{4}}) {
+    EXPECT_EQ(constructResultWithThreads(kg, query, tsv, numThreads, 1024), "");
+    EXPECT_EQ(constructResultWithThreads(kg, query, turtle, numThreads, 1024),
+              "");
+  }
+}
+
+// White-box test for `splitBlocksIntoGroups`, the row-group splitting of the
+// parallel CONSTRUCT export serialization.  The defensive branches (all
+// blocks empty, leading empty block, gap between non-contiguous blocks)
+// cannot be reached through the query interface (`getRowIndices` never
+// yields empty views and yields the views of the blocks in ascending order),
+// so the function is exercised directly.
+TEST(ExportQueryExecutionTrees, SplitBlocksIntoGroups) {
+  // `splitBlocksIntoGroups` only reads `view_` and copies `tableWithVocab_`
+  // (it never dereferences the table or the vocab), but the backing objects
+  // are kept alive and pinned anyway, so that the test would stay valid if
+  // the function ever started to dereference them.
+  std::vector<IdTable> tables;
+  std::vector<LocalVocab> vocabs;
+  tables.reserve(8);
+  vocabs.reserve(8);
+  auto makeBlock = [&tables, &vocabs](uint64_t begin, uint64_t end) {
+    tables.push_back(makeIdTableFromVector({{0}}));
+    vocabs.emplace_back();
+    return TableWithRange{
+        TableConstRefWithVocab{tables.back().asStaticView<0>(), vocabs.back()},
+        ql::views::iota(begin, end)};
+  };
+  // Extract the (begin, end) pairs of all ranges of all groups, so that the
+  // groups can be compared with GMock.
+  auto rangesOf = [](const std::vector<std::vector<TableWithRange>>& groups) {
+    std::vector<std::vector<std::pair<uint64_t, uint64_t>>> result;
+    for (const auto& group : groups) {
+      std::vector<std::pair<uint64_t, uint64_t>> ranges;
+      for (const auto& block : group) {
+        const uint64_t begin = *ql::ranges::begin(block.view_);
+        ranges.emplace_back(begin, begin + ql::ranges::size(block.view_));
+      }
+      result.push_back(std::move(ranges));
+    }
+    return result;
+  };
+
+  // Contiguous blocks: a block whose rows span a group boundary is split.
+  {
+    std::vector<TableWithRange> blocks{makeBlock(0, 4), makeBlock(4, 8),
+                                       makeBlock(8, 12)};
+    auto groups = ExportQueryExecutionTrees::splitBlocksIntoGroups(blocks, 2);
+    EXPECT_THAT(rangesOf(groups),
+                ElementsAre(ElementsAre(std::pair<uint64_t, uint64_t>{0, 4},
+                                        std::pair<uint64_t, uint64_t>{4, 6}),
+                            ElementsAre(std::pair<uint64_t, uint64_t>{6, 8},
+                                        std::pair<uint64_t, uint64_t>{8, 12})));
+  }
+  // All blocks empty: all groups stay empty.
+  {
+    std::vector<TableWithRange> blocks{makeBlock(0, 0), makeBlock(0, 0)};
+    auto groups = ExportQueryExecutionTrees::splitBlocksIntoGroups(blocks, 3);
+    EXPECT_THAT(rangesOf(groups),
+                ElementsAre(ElementsAre(), ElementsAre(), ElementsAre()));
+  }
+  // Leading empty block: it is skipped before the first row is read.
+  {
+    std::vector<TableWithRange> blocks{makeBlock(0, 0), makeBlock(0, 10)};
+    auto groups = ExportQueryExecutionTrees::splitBlocksIntoGroups(blocks, 2);
+    EXPECT_THAT(rangesOf(groups),
+                ElementsAre(ElementsAre(std::pair<uint64_t, uint64_t>{0, 5}),
+                            ElementsAre(std::pair<uint64_t, uint64_t>{5, 10})));
+  }
+  // Non-contiguous blocks with a gap: the group boundaries that fall into
+  // the gap stay empty and the last group receives all remaining rows.
+  {
+    std::vector<TableWithRange> blocks{makeBlock(0, 10), makeBlock(1000, 1010)};
+    auto groups = ExportQueryExecutionTrees::splitBlocksIntoGroups(blocks, 4);
+    EXPECT_THAT(
+        rangesOf(groups),
+        ElementsAre(ElementsAre(std::pair<uint64_t, uint64_t>{0, 5}),
+                    ElementsAre(std::pair<uint64_t, uint64_t>{5, 10}),
+                    ElementsAre(),
+                    ElementsAre(std::pair<uint64_t, uint64_t>{1000, 1010})));
+  }
+}

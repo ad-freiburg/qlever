@@ -765,14 +765,8 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 }
 
 // _____________________________________________________________________________
-// Split the exported rows of `blocks` into `numGroups` contiguous groups.  A
-// block whose rows span a group boundary is split into sub-ranges, so that
-// each group holds `TableWithRange`s whose `view_` ranges are pairwise
-// disjoint and appear in the same order as in the original blocks.  This
-// keeps the serialization of each group byte-identical to the serial path
-// (the `view_` ranges carry the original global row indices, which the
-// blank-node base IDs depend on).
-static std::vector<std::vector<TableWithRange>> splitBlocksIntoGroups(
+std::vector<std::vector<TableWithRange>>
+ExportQueryExecutionTrees::splitBlocksIntoGroups(
     const std::vector<TableWithRange>& blocks, size_t numGroups) {
   AD_CORRECTNESS_CHECK(numGroups > 0);
   std::vector<std::vector<TableWithRange>> groups(numGroups);

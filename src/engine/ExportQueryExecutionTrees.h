@@ -211,6 +211,17 @@ class ExportQueryExecutionTrees {
               ensureGeneratorIsNotConsumedWhenNotRequired);
   FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
   FRIEND_TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause);
+  FRIEND_TEST(ExportQueryExecutionTrees, SplitBlocksIntoGroups);
+
+  // Split the exported rows of `blocks` into `numGroups` contiguous groups.  A
+  // block whose rows span a group boundary is split into sub-ranges, so that
+  // each group holds `TableWithRange`s whose `view_` ranges are pairwise
+  // disjoint and appear in the same order as in the original blocks.  This
+  // keeps the serialization of each group byte-identical to the serial path
+  // (the `view_` ranges carry the original global row indices, which the
+  // blank-node base IDs depend on).
+  static std::vector<std::vector<TableWithRange>> splitBlocksIntoGroups(
+      const std::vector<TableWithRange>& blocks, size_t numGroups);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
