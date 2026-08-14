@@ -101,8 +101,7 @@ WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y bzip2 libicu74 libgomp1 lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 && rm -rf /var/lib/apt/lists/*
 
-# Copy the binaries and the entrypoint script.
-# qlever-server, qlever-index
+# Copy the binaries qlever-server, qlever-index
 COPY --from=builder /qlever/build/qlever-* /qlever/
 
 CMD ["/qlever/qlever-server"]
