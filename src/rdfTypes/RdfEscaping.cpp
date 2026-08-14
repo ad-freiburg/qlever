@@ -229,10 +229,10 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   AD_CONTRACT_CHECK(posLastQuote != 0);
   // Fast path: a normalized literal only needs escaping if its content (the
   // part between the first and the last quote) contains a quote, backslash,
-  // newline, or carriage return. The equivalence with the previous
-  // `find`/`find_first_of` check and the window semantics are covered by the
-  // boundary tests in `RdfEscapingTest.cpp`; the scan itself is a vectorized
-  // sweep (see `util/SimdUtils.h`).
+  // newline, or carriage return. The scan is a vectorized sweep (see
+  // `util/SimdUtils.h`); its equivalence with the previous `find_first_of`
+  // check and the window semantics are verified by explicit tests (see
+  // `test/rdfTypes/RdfEscapingTest.cpp`).
   std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
   if (!ad_utility::simd::containsAnyByte(detail::LiteralContentSpecialChars{},
                                          normalizedContent)) [[likely]] {

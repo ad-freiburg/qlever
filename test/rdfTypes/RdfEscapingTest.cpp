@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/SimdUtils.h"
 #include "rdfTypes/RdfEscaping.h"
 using namespace RdfEscaping;
 
@@ -136,6 +137,39 @@ TEST(RdfEscapingTest, validRDFLiteralFromNormalizedBoundaries) {
   ASSERT_EQ(
       validRDFLiteralFromNormalized("\"\\n" + std::string(40, 'a') + "\""),
       "\"\\\\n" + std::string(40, 'a') + "\"");
+}
+
+// ___________________________________________________________________________
+// Equivalence check for the fast-path scan in `validRDFLiteralFromNormalized`
+// (see the call site in `RdfEscaping.cpp`): the SIMD scan `containsAnyByte`
+// replaced the previous `find_first_of` check, so it must flag exactly the
+// same bytes, namely quote, backslash, newline, and carriage return. Every
+// byte value is placed at every position of windows of every length around
+// the SSE2 (16 bytes) and AVX2 (32 bytes) chunk boundaries, and the result
+// of the vectorized scan is compared with the scalar reference
+// implementation (which delegates to `find_first_of`). The window semantics,
+// i.e. that the scan only ever sees the content between the first and the
+// last quote (also for suffixed literals), are covered by the boundary tests
+// above.
+TEST(RdfEscapingTest, literalFastPathScanMatchesFindFirstOf) {
+  using ad_utility::simd::containsAnyByte;
+  using ad_utility::simd::detail::containsAnyByteScalar;
+  using LiteralContentSpecialChars =
+      ad_utility::simd::detail::CharacterSet<'\"', '\\', '\n', '\r'>;
+  constexpr size_t lengths[] = {0, 1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 65};
+  for (size_t len : lengths) {
+    for (size_t pos = 0; pos < len + 1; ++pos) {
+      for (int b = 0; b < 256; ++b) {
+        std::string content(len, 'a');
+        if (pos < len) {
+          content[pos] = static_cast<char>(b);
+        }
+        EXPECT_EQ(containsAnyByte(LiteralContentSpecialChars{}, content),
+                  containsAnyByteScalar<'\"', '\\', '\n', '\r'>(content))
+            << "len=" << len << " pos=" << pos << " byte=" << b;
+      }
+    }
+  }
 }
 
 // ___________________________________________________________________________
