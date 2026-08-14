@@ -59,7 +59,8 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             # Note: this is `pr-` in this step, but the tags are also not used in this step.
             type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable={{is_default_branch}}
-            type=sha,prefix=commit-,enable={{is_default_branch}}
+            # Set `priority` higher than `pr-{number}` and `latest` (both 200) to have `commit-{sha}` as the version.
+            type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
             # For pull requests, derive a version from the PR number.
             type=ref,event=pr
       - name: Set up Docker Buildx
