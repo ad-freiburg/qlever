@@ -64,7 +64,7 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 
 // _____________________________________________________________________________
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
-  auto [parsed, wktType, crsType] = parseGeoPointOrWkt(wkt);
+  auto [parsed, wktType, crsType, sourceCrs] = parseGeoPointOrWkt(wkt);
   return utilGeomToWkt(simplifyGeometry(parsed, tolerance));
 }
 

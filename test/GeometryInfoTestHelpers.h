@@ -206,7 +206,7 @@ inline T getGeometryOfTypeOrThrow(
   using namespace ad_utility::detail;
   auto l = generateLocationTrace(sourceLocation);
   auto parseRes = parseWkt(wkt);
-  if (!parseRes.parsedWkt.has_value()) {
+  if (!parseRes.parsedWkt_.has_value()) {
     throw std::runtime_error("Could not parse wkt literal");
   }
   return std::visit(
@@ -218,7 +218,7 @@ inline T getGeometryOfTypeOrThrow(
           throw std::runtime_error("Wrong geometry type of parse result");
         }
       },
-      parseRes.parsedWkt.value());
+      parseRes.parsedWkt_.value());
 }
 
 // ____________________________________________________________________________
@@ -354,9 +354,10 @@ inline Matcher<std::optional<ParsedWkt>> ParsedWktNearForwardDecl::operator()(
 inline auto parseResultNear = liftOptionalMatcher<ParseResult>(
     [](ParseResult expected) -> Matcher<ParseResult> {
       return AllOf(
-          AD_FIELD(ParseResult, parsedWkt, parsedWktNear(expected.parsedWkt)),
-          AD_FIELD(ParseResult, wktType, Eq(expected.wktType)),
-          AD_FIELD(ParseResult, crsType, Eq(expected.crsType)));
+          AD_FIELD(ParseResult, parsedWkt_, parsedWktNear(expected.parsedWkt_)),
+          AD_FIELD(ParseResult, wktType_, Eq(expected.wktType_)),
+          AD_FIELD(ParseResult, actualCrs_, Eq(expected.actualCrs_)),
+          AD_FIELD(ParseResult, sourceCrs_, Eq(expected.sourceCrs_)));
     });
 
 // ____________________________________________________________________________

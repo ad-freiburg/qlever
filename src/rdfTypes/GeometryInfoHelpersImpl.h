@@ -49,9 +49,13 @@ using ParsedWkt =
 using DAnyGeometry = AnyGeometry<CoordType>;
 
 struct ParseResult {
-  std::optional<ParsedWkt> parsedWkt;
-  WKTType wktType;
-  CRSType crsType = CRSType::CRS84;
+  std::optional<ParsedWkt> parsedWkt_;
+  WKTType wktType_;
+  // The coordinate reference system in which 'parsedWkt_' is expressed.
+  CRSType actualCrs_ = CRSType::CRS84;
+  // The CRS that was specified in the original WKT literal's IRI (before
+  // projection).
+  CRSType sourceCrs_ = CRSType::CRS84;
 };
 
 template <typename T>
@@ -166,7 +170,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
                  << std::endl;
   }
 
-  return ParseResult{std::move(parsed), type, crsType};
+  return ParseResult{std::move(parsed), type, projCrs, crsType};
 }
 
 // Convert a point from `pb_util` to a `GeoPoint`
@@ -209,11 +213,8 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
 // Optionally this can directly project the point into a different goal CRS.
 inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
                                             CRSType projCrs = CRS84) {
-  if (projCrs == CRS84)
-    return {point.getLng(), point.getLat()};
-  else
-    return projectToCRS(Point<CoordType>{point.getLng(), point.getLat()}, CRS84,
-                        projCrs);
+  return projectToCRS(Point<CoordType>{point.getLng(), point.getLat()}, CRS84,
+                      projCrs);
 }
 
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
@@ -489,7 +490,8 @@ struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const std::optional<T>& geoPointOrWkt,
                          CRSType projCrs = CRSType::CRS84) const {
     if (!geoPointOrWkt.has_value()) {
-      return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED};
+      return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
+                         CRSType::UNSUPPORTED};
     }
     return ParseGeoPointOrWktVisitor{}(geoPointOrWkt.value(), projCrs);
   }
@@ -584,7 +586,7 @@ struct GeometryNVisitor {
   // Visitor for `GeoPointOrWkt`.
   std::optional<ParsedWkt> operator()(const GeoPointOrWkt& geom,
                                       int64_t n) const {
-    auto [parsed, wktType, crsType] = parseGeoPointOrWkt(geom);
+    auto [parsed, wktType, crsType, sourceCrs] = parseGeoPointOrWkt(geom);
     return GeometryNVisitor{}(parsed, n);
   }
 };
@@ -683,9 +685,9 @@ CPP_template(typename Projection)(
 
   // Handle `GeoPointOrWkt` (raw unparsed geometry).
   ParseResult operator()(std::optional<GeoPointOrWkt> geoPointOrWkt) const {
-    auto [parsed, wktType, crsType] =
+    auto [parsed, wktType, crsType, sourceCrs] =
         ParseGeoPointOrWktVisitor{}(geoPointOrWkt);
-    return ParseResult{(*this)(std::move(parsed)), wktType, crsType};
+    return ParseResult{(*this)(std::move(parsed)), wktType, crsType, sourceCrs};
   }
 };
 
@@ -716,15 +718,18 @@ struct MetricDistanceVisitor {
   // Handle optional geometries that may be contained in a `ParseResult`.
   std::optional<double> operator()(const ParseResult& a,
                                    const ParseResult& b) const {
-    if (!a.parsedWkt.has_value() || !b.parsedWkt.has_value()) {
+    if (!a.parsedWkt_.has_value() || !b.parsedWkt_.has_value()) {
       return std::nullopt;
     }
-    return MetricDistanceVisitor{}(a.parsedWkt.value(), b.parsedWkt.value());
+    AD_CORRECTNESS_CHECK(a.actualCrs_ == WEB_MERCATOR);
+    AD_CORRECTNESS_CHECK(b.actualCrs_ == WEB_MERCATOR);
+    return MetricDistanceVisitor{}(a.parsedWkt_.value(), b.parsedWkt_.value());
   }
 
   // Handle `GeoPointOrWkt` (raw unparsed geometries).
-  std::optional<double> operator()(std::optional<GeoPointOrWkt> a,
-                                   std::optional<GeoPointOrWkt> b) const {
+  std::optional<double> operator()(
+      const std::optional<GeoPointOrWkt>& a,
+      const std::optional<GeoPointOrWkt>& b) const {
     // Projection to WebMerc is handled by 'ParseGeoPointOrWktVisitor'.
     return MetricDistanceVisitor{}(
         ParseGeoPointOrWktVisitor{}(a, CRSType::WEB_MERCATOR),
