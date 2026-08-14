@@ -13,9 +13,9 @@
 #include <array>
 #include <cstddef>
 #include <optional>
-#include <string_view>
 #include <variant>
 
+#include "engine/SpatialJoinType.h"
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
@@ -23,74 +23,12 @@
 // operation. It allows including these types without also including the whole
 // class declaration of the spatial join operation.
 
-// The supported spatial join types (geometry predicates). When updating this
-// enum with a new two-argument boolean relation, also add a case in
-// `getGeoFunctionExpressionParameters` in `GeoExpression.cpp`. This does not
-// apply to `WITHIN_DIST` and `DE9IM`, which take an additional parameter
-// (the distance resp. the filter pattern) and are therefore not exposed as
-// `geof:sf...`-style two-argument relations.
-enum class SpatialJoinType {
-  INTERSECTS,
-  CONTAINS,
-  COVERS,
-  CROSSES,
-  TOUCHES,
-  EQUALS,
-  OVERLAPS,
-  WITHIN,
-  WITHIN_DIST,
-  DE9IM
-};
-
-// String representation of the `SpatialJoinType` values.
-inline constexpr std::array<std::string_view, 10> SpatialJoinTypeString{
-    "intersects", "contains", "covers", "crosses",     "touches",
-    "equals",     "overlaps", "within", "within-dist", "de9im"};
-
 // A DE-9IM filter pattern: a fixed-size string of exactly 9 characters, each
 // one of `0`-`2`, `T`/`t`, `F`/`f`, or `*` (see
 // https://en.wikipedia.org/wiki/DE-9IM). Stored without a null terminator.
 using De9imFilterString = std::array<char, 9>;
 
-// If `filter` is a syntactically valid DE-9IM filter pattern (as described for
-// `De9imFilterString` above) that cannot match a disjoint pair of geometries,
-// return it as a `De9imFilterString`, else `std::nullopt`. Implemented as a
-// simple character-class check instead of a regex library to keep this
-// frequently-included header cheap to compile.
-//
-// Patterns that could match disjoint geometries (e.g. `*********` or the
-// literal disjoint pattern `FF*FF****`) are rejected: the pinned
-// `libspatialjoin` never enumerates disjoint candidate pairs to its callback
-// (see `Sweeper::doDE9IMCheck`), regardless of the configured filter, so
-// accepting such a pattern would silently omit matching disjoint pairs from
-// the result.
-constexpr std::optional<De9imFilterString> validateDe9imFilterString(
-    std::string_view filter) {
-  if (filter.size() != 9) {
-    return std::nullopt;
-  }
-  De9imFilterString result{};
-  for (size_t i = 0; i < result.size(); ++i) {
-    char c = filter[i];
-    bool isValidChar = (c >= '0' && c <= '2') || c == 'T' || c == 't' ||
-                       c == 'F' || c == 'f' || c == '*';
-    if (!isValidChar) {
-      return std::nullopt;
-    }
-    result[i] = c;
-  }
-  // The DE-9IM matrix entries are ordered II, IB, IE, BI, BB, BE, EI, EB, EE.
-  // A pair of geometries is disjoint iff II, IB, BI, and BB (indices 0, 1, 3,
-  // 4) are all `F`. A filter character only excludes `F` if it is a digit,
-  // `T`, or `t`; `*` and `F`/`f` both admit it. If all four of these
-  // positions admit `F`, the pattern could match a disjoint pair.
-  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
-  if (admitsF(result[0]) && admitsF(result[1]) && admitsF(result[3]) &&
-      admitsF(result[4])) {
-    return std::nullopt;
-  }
-  return result;
-}
+// Parsing and validation of `De9imFilterString`s, see `parser/SpatialQuery.h`.
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {

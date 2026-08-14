@@ -5,11 +5,36 @@
 
 #include "parser/SpatialQuery.h"
 
+#include "backports/algorithm.h"
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
+
+namespace {
+constexpr ctll::fixed_string de9imFilterRegex = "[0-2TtFf*]{9}";
+}  // namespace
+
+// ____________________________________________________________________________
+std::optional<De9imFilterString> parseDe9imFilterString(
+    std::string_view filter) {
+  if (!ctre::match<de9imFilterRegex>(filter)) {
+    return std::nullopt;
+  }
+  // The regex above already enforces that `filter` has exactly 9 characters.
+  AD_CORRECTNESS_CHECK(filter.size() == De9imFilterString{}.size());
+  De9imFilterString result{};
+  ql::ranges::copy(filter, result.begin());
+  return result;
+}
+
+// ____________________________________________________________________________
+bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
+  auto admitsF = [](char c) { return c == '*' || c == 'F' || c == 'f'; };
+  return admitsF(filter[0]) && admitsF(filter[1]) && admitsF(filter[3]) &&
+         admitsF(filter[4]);
+}
 
 namespace parsedQuery {
 
@@ -50,57 +75,41 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "joinType") {
-    // This case is already covered in `extractParameterName` below, but we
-    // want to throw a more precise error description
-    throwIf(
-        !object.isIri(),
-        "The parameter `<joinType>` needs an IRI that selects the algorithm "
-        "to employ. Currently supported are `<intersects>`, `<covers>`, "
-        "`<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, `<equals>`, "
-        "`<within-dist>`, `<de9im>`");
+    // This case is already covered by `SpatialJoinType::fromString` below,
+    // but we want to throw a more precise error if the object isn't even an
+    // IRI.
+    throwIf(!object.isIri(),
+            absl::StrCat("The parameter `<joinType>` needs an IRI that "
+                         "selects the join type to use. Currently supported "
+                         "are: ",
+                         SpatialJoinType::getListOfSupportedValues()));
     auto type = extractParameterName(object, SPATIAL_SEARCH_IRI);
-    if (type == "intersects") {
-      joinType_ = SpatialJoinType::INTERSECTS;
-    } else if (type == "covers") {
-      joinType_ = SpatialJoinType::COVERS;
-    } else if (type == "contains") {
-      joinType_ = SpatialJoinType::CONTAINS;
-    } else if (type == "touches") {
-      joinType_ = SpatialJoinType::TOUCHES;
-    } else if (type == "crosses") {
-      joinType_ = SpatialJoinType::CROSSES;
-    } else if (type == "overlaps") {
-      joinType_ = SpatialJoinType::OVERLAPS;
-    } else if (type == "equals") {
-      joinType_ = SpatialJoinType::EQUALS;
-    } else if (type == "within") {
-      joinType_ = SpatialJoinType::WITHIN;
-    } else if (type == "within-dist") {
-      joinType_ = SpatialJoinType::WITHIN_DIST;
-    } else if (type == "de9im") {
-      joinType_ = SpatialJoinType::DE9IM;
-    } else {
-      throw SpatialSearchException{
+    try {
+      joinType_ = SpatialJoinType::fromString(type);
+    } catch (const std::runtime_error&) {
+      throw SpatialSearchException{absl::StrCat(
           "The IRI given for the parameter `<joinType>` does not refer to a "
-          "supported join type. Currently supported are `<intersects>`, "
-          "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within>`, `<within-dist>`, `<de9im>`"};
+          "supported join type. Currently supported are: ",
+          SpatialJoinType::getListOfSupportedValues())};
     }
   } else if (predString == "de9imFilter") {
     throwIf(!object.isLiteral(),
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
             "`T`/`F` (or lowercase), or `*`.");
-    de9imFilter_ = validateDe9imFilterString(
+    auto parsed = parseDe9imFilterString(
         asStringViewUnsafe(object.getLiteral().getContent()));
-    throwIf(!de9imFilter_.has_value(),
+    throwIf(!parsed.has_value(),
             "The parameter `<de9imFilter>` expects a string literal with "
             "exactly 9 characters, each of which must be one of `0`-`2`, "
-            "`T`/`F` (or lowercase), or `*`, and that cannot match disjoint "
+            "`T`/`F` (or lowercase), or `*`.");
+    throwIf(de9imFilterCanMatchDisjoint(parsed.value()),
+            "The parameter `<de9imFilter>` must not match disjoint "
             "geometries (i.e. not all of the `II`, `IB`, `BI`, and `BB` "
             "positions, at indices 0, 1, 3, and 4, may be `F`/`f`/`*`), "
             "since disjoint pairs are never reported by the underlying "
             "spatial join algorithm.");
+    de9imFilter_ = parsed;
   } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description

@@ -20,7 +20,7 @@ namespace queryRewriteUtilTestHelpers {
 using namespace makeSparqlExpression;
 using Loc = ad_utility::source_location;
 using V = Variable;
-using enum SpatialJoinType;
+using enum SpatialJoinType::Enum;
 using enum UnitOfMeasurement;
 using ad_utility::triple_component::Iri;
 using ad_utility::triple_component::Literal;

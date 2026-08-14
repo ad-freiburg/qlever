@@ -104,6 +104,14 @@ CPP_template(typename Derived,
     return stream << d.toString();
   }
 
+  // Enable `absl::StrCat`, `absl::StrAppend`, and `absl::StrFormat` to format
+  // this type directly (as its string representation), without an explicit
+  // call to `toString()`.
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, const Derived& d) {
+    sink.Append(d.toString());
+  }
+
   // Create from a string. Throws if the string doesn't match any description.
   static Derived fromString(std::string_view description) {
     auto descs = descriptions();

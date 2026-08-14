@@ -244,7 +244,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
   };
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       {"length", &makeLengthExpression},

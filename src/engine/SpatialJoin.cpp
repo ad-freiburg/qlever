@@ -214,7 +214,7 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
       auto joinType = getJoinType();
       os << "libspatialjoin on: "
-         << (int)joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
+         << joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
       auto de9imFilter = getDe9imFilter();
       if (de9imFilter.has_value()) {
         os << "de9imFilter: "
@@ -265,9 +265,8 @@ std::string SpatialJoin::getDescriptor() const {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      auto descriptor = absl::StrCat(
-          "Spatial Join of ", left, " and ", right, " using ",
-          SpatialJoinTypeString.at(static_cast<int>(config.joinType_)));
+      auto descriptor = absl::StrCat("Spatial Join of ", left, " and ", right,
+                                     " using ", config.joinType_);
       if (config.de9imFilter_.has_value()) {
         absl::StrAppend(&descriptor, " (",
                         std::string_view{config.de9imFilter_->data(),
