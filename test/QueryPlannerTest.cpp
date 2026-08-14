@@ -4097,7 +4097,8 @@ SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
   SERVICE qlss: {
     _:config qlss:left ?e ;
              qlss:right ?z ;
-             qlss:maxDistance 500 .
+             qlss:maxDistance 500 ;
+             qlss:algorithm qlss:s2 .
   }
 }
 GROUP BY ?p
