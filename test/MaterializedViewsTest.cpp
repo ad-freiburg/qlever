@@ -177,6 +177,54 @@ TEST_F(MaterializedViewsTest, Basic) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ViewReferencingAnotherViewDoesNotDeadlock) {
+  // A materialized view's defining query may itself scan another materialized
+  // view. Analyzing such a view for the (cache-key based) query pattern cache
+  // would deadlock on the write lock for `loadedViews_`, so this case must be
+  // detected and skipped instead (see `MaterializedView::computeCacheKey`).
+  // The view must still load successfully and remain usable.
+  qlv().writeMaterializedView("baseView", simpleWriteQuery_);
+  qlv().loadMaterializedView("baseView");
+  qlv().writeMaterializedView("outerView", R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * { ?s view:baseView-g ?x }
+    )");
+  qlv().loadMaterializedView("outerView");
+  EXPECT_TRUE(qlv().isMaterializedViewLoaded("outerView"));
+
+  auto plannedQuery = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * { ?s view:outerView-x ?y }
+    )");
+  auto expectedResult =
+      getQueryResultAsIdTable("SELECT ?s ?y { ?s ?p ?o . BIND(1 AS ?y) }");
+  auto res = plannedQuery.queryExecutionTree().getResult(false);
+  ASSERT_TRUE(res->isFullyMaterialized());
+  EXPECT_THAT(res->idTableView(), matchesIdTable(expectedResult));
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ExplicitReferenceWorksWhenAutoRewriteDisabled) {
+  // The `enable-materialized-view-query-rewrite` runtime parameter only
+  // disables the *automatic* substitution of joins/subtrees by materialized
+  // views. It must not affect an *explicit* reference to a view (via the
+  // `view:<name>-<column>` predicate or the `SERVICE` syntax).
+  qlv().writeMaterializedView("testView1", simpleWriteQuery_);
+  qlv().loadMaterializedView("testView1");
+
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+
+  auto plannedQuery = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * { ?s view:testView1-g ?x }
+    )");
+  EXPECT_EQ(
+      plannedQuery.queryExecutionTree().getRootOperation()->getDescriptor(),
+      "IndexScan testView1 ?s ?x");
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ParserConfigChecks) {
   // Helper that checks that parsing the given query produces the expected error
   // message.
@@ -247,9 +295,9 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
         });
 
     // Run `makeIndexScan` and check the error message.
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        manager.makeIndexScan(&plan.queryExecutionContext(), viewQuery),
-        ::testing::HasSubstr(expectedError));
+    auto qec = getQec();
+    AD_EXPECT_THROW_WITH_MESSAGE(manager.makeIndexScan(qec.get(), viewQuery),
+                                 ::testing::HasSubstr(expectedError));
   };
 
   expectMakeIndexScanError(
@@ -443,7 +491,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
         }
       }
     )"));
-    auto view = manager.getView("testView6");
+    auto view = manager.getView("testView6", nullptr);
 
     // `UndefStatus` in `VariableToColumnMap`.
     auto map = view->variableToColumnMap();
@@ -510,7 +558,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   MaterializedViewsManager manager{testIndexBase_};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
   manager.writeViewToDisk("testView1", plan);
-  auto view = manager.getView("testView1");
+  auto view = manager.getView("testView1", nullptr);
   ASSERT_TRUE(view != nullptr);
   EXPECT_EQ(view->name(), "testView1");
   EXPECT_EQ(view->permutation()->permutation(), Permutation::Enum::SPO);
@@ -529,10 +577,10 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
 
   MaterializedViewsManager managerNoBaseName;
   AD_EXPECT_THROW_WITH_MESSAGE(
-      managerNoBaseName.getView("testView1"),
+      managerNoBaseName.getView("testView1", nullptr),
       ::testing::HasSubstr("index base filename was not set"));
   managerNoBaseName.setOnDiskBase(testIndexBase_);
-  EXPECT_NE(managerNoBaseName.getView("testView1"), nullptr);
+  EXPECT_NE(managerNoBaseName.getView("testView1", nullptr), nullptr);
 
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
@@ -719,7 +767,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     }
     // Load the view: It can be loaded correctly, but does not have an original
     // query set.
-    auto view = manager.getView("testView6");
+    auto view = manager.getView("testView6", nullptr);
     EXPECT_FALSE(view->originalQuery().has_value());
     EXPECT_FALSE(view->parsedQuery().has_value());
   }
@@ -742,7 +790,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     }
     // Load the view: The view can be loaded correctly, but all columns are
     // possibly undefined because the information is missing.
-    auto view = manager.getView("testView7");
+    auto view = manager.getView("testView7", nullptr);
     for (size_t i = 0; i < 4; ++i) {
       EXPECT_EQ(view->permutation()->getColumnUndefStatus(i),
                 ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined);
@@ -755,7 +803,7 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
     auto view = std::make_shared<MaterializedView>(testIndexBase_, "testView7");
     view->parsedQuery_ = std::nullopt;
     materializedViewsQueryAnalysis::QueryPatternCache c;
-    EXPECT_FALSE(c.analyzeView(view));
+    EXPECT_FALSE(c.analyzeView(view, nullptr));
   }
 
   // Test assertions on `Permutation::Type`.
@@ -989,7 +1037,7 @@ TEST_F(MaterializedViewsTest, Deletion) {
 
   // Write and load a view, then delete it.
   manager.writeViewToDisk("testView1", plan);
-  EXPECT_NE(manager.getView("testView1"), nullptr);
+  EXPECT_NE(manager.getView("testView1", nullptr), nullptr);
   EXPECT_TRUE(manager.isViewLoaded("testView1"));
 
   manager.deleteView("testView1");
@@ -1003,7 +1051,7 @@ TEST_F(MaterializedViewsTest, Deletion) {
 
   // A view with the same name can be written again afterwards.
   manager.writeViewToDisk("testView1", plan);
-  EXPECT_NE(manager.getView("testView1"), nullptr);
+  EXPECT_NE(manager.getView("testView1", nullptr), nullptr);
 
   // Deleting a non-existent view throws.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1043,7 +1091,7 @@ TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
   }};
 
   manager.writeViewToDisk("testViewRetired", plan);
-  EXPECT_NE(manager.getView("testViewRetired"), nullptr);
+  EXPECT_NE(manager.getView("testViewRetired", nullptr), nullptr);
 
   manager.retireOnDiskFiles();
   // Retiring twice is a no-op.
@@ -1067,7 +1115,7 @@ TEST_F(MaterializedViewsTest, RetireOnDiskFiles) {
   EXPECT_TRUE(ql::filesystem::exists(
       absl::StrCat(testIndexBase_, ".view.testViewRetired", VIEW_INFO_SUFFIX)));
   EXPECT_TRUE(manager.isViewLoaded("testViewRetired"));
-  EXPECT_NE(manager.getView("testViewRetired"), nullptr);
+  EXPECT_NE(manager.getView("testViewRetired", nullptr), nullptr);
 }
 
 // _____________________________________________________________________________
@@ -1116,7 +1164,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
       " VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }");
   MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("testView1", writePlan);
-  auto view = manager.getView("testView1");
+  auto view = manager.getView("testView1", nullptr);
   using ViewQuery = parsedQuery::MaterializedViewQuery;
 
   // Run a simple query and consume its result lazily.
@@ -1126,8 +1174,8 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
                                      "<https://qlever.cs.uni-freiburg.de/"
                                      "materializedView/testView1-o>"),
                                  Variable{"?o"}}};
-    auto scan =
-        manager.makeIndexScan(&writePlan.queryExecutionContext(), query);
+    auto qec = getQec();
+    auto scan = manager.makeIndexScan(qec.get(), query);
     auto res = scan->getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     size_t numRows = 0;
     size_t numBlocks = 0;
@@ -1169,7 +1217,7 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 TEST_F(MaterializedViewsTest, BindToColumnMap) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   MaterializedViewsManager manager{testIndexBase_};
-  auto view = manager.getView("testView1");
+  auto view = manager.getView("testView1", nullptr);
   EXPECT_TRUE(view->parsedQuery().has_value());
 
   // `BIND` is contained.
@@ -1200,7 +1248,7 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
       BIND(?o AS ?g)
     }
   )");
-  auto view2 = manager.getView("testView2");
+  auto view2 = manager.getView("testView2", nullptr);
   {
     auto expr = sparqlExpression::SparqlExpressionPimpl{
         std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
@@ -1445,7 +1493,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   // A `BIND` cannot be pushed into a regular `IndexScan` (not a materialized
   // view) or a `StripColumns` operation containing a regular `IndexScan`.
   {
-    auto plannedQuery = qlv().parseAndPlanQuery("SELECT * { ?s <p2> ?o }");
+    auto plannedQuery = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     EXPECT_FALSE(plannedQuery.queryExecutionTree()
                      .getRootOperation()
                      ->makeTreeWithBindColumn(bind)
@@ -2017,7 +2065,7 @@ TEST_F(MaterializedViewsTest,
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
   MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("threeVarPermTestView", plan);
-  manager.loadView("threeVarPermTestView");
+  manager.loadView("threeVarPermTestView", nullptr);
 
   // Create a three-variable scan on the view binding all three columns.
   using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;
@@ -2025,12 +2073,12 @@ TEST_F(MaterializedViewsTest,
       "threeVarPermTestView", RCols{{V{"?s"}, TripleComponent{V{"?s"}}},
                                     {V{"?p"}, TripleComponent{V{"?p"}}},
                                     {V{"?o"}, TripleComponent{V{"?o"}}}}};
-  auto* qec = &plan.queryExecutionContext();
-  auto indexScanPtr = manager.makeIndexScan(qec, viewQuery);
-  auto scanTree = std::make_shared<QueryExecutionTree>(qec, indexScanPtr);
+  auto qec = getQec();
+  auto indexScanPtr = manager.makeIndexScan(qec.get(), viewQuery);
+  auto scanTree = std::make_shared<QueryExecutionTree>(qec.get(), indexScanPtr);
 
   // Use a GroupByImpl as the holder for getPermutationForThreeVariableTriple.
-  GroupByImpl groupBy{qec, {V{"?s"}}, {}, scanTree};
+  GroupByImpl groupBy{qec.get(), {V{"?s"}}, {}, scanTree};
 
   // Sort by subject: the materialized view case succeeds.
   EXPECT_TRUE(

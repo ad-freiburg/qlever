@@ -552,6 +552,8 @@ endif ()
 
 addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
 
+addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
+
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
