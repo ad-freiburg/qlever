@@ -730,13 +730,13 @@ TEST(ServerTest, handleHttpRequest) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, webSocketSessionSupplier) {
+TEST(ServerTest, makeWebSocketSessionSupplier) {
   Server server{4511, 1, "accessToken", getDefaultConfig()};
   boost::asio::any_io_executor ioExecutor;
 
-  EXPECT_TRUE(server.queryHub_.expired());
+  ASSERT_TRUE(server.queryHub_.expired());
   {
-    auto handler = server.webSocketSessionSupplier(ioExecutor);
+    auto handler = server.makeWebSocketSessionSupplier(ioExecutor);
     // `handler` owns the `QueryHub` via its captured `shared_ptr`, so the
     // `weak_ptr` member is alive as long as `handler` is.
     EXPECT_FALSE(server.queryHub_.expired());
@@ -744,10 +744,10 @@ TEST(ServerTest, webSocketSessionSupplier) {
     // Calling it again while the first handler is still alive violates the
     // "only once" contract.
     AD_EXPECT_THROW_WITH_MESSAGE(
-        server.webSocketSessionSupplier(ioExecutor),
+        server.makeWebSocketSessionSupplier(ioExecutor),
         testing::HasSubstr(
             "`queryHub_` has already been initialized; "
-            "`webSocketSessionSupplier` must only be called once."));
+            "`makeWebSocketSessionSupplier` must only be called once."));
   }  // Here is the local variable `handler` out of scope and destroyed.
   EXPECT_TRUE(server.queryHub_.expired());
 }

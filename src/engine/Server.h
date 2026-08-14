@@ -147,7 +147,7 @@ class Server {
   using SharedTimeTracer = std::shared_ptr<ad_utility::timer::TimeTracer>;
   using PlannedQuery = qlever::PlannedQuery;
   using HttpErrorResponse = ad_utility::httpUtils::ResponseT;
-  using SimpleRequest =
+  using StringBodyRequest =
       boost::beast::http::request<boost::beast::http::string_body>;
 
   CPP_template(typename CancelTimeout)(
@@ -171,7 +171,7 @@ class Server {
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
-  // Initialize and register server metrics.
+  // Initialize and register server metrics which are stored in `metrics_`.
   void initializeServerMetrics(
       std::optional<ad_utility::MemorySize> memoryLimit);
 
@@ -202,18 +202,18 @@ class Server {
   // need the "allow headers" header, while GET and POST only need "allow
   // origin"; the same headers are sent for all three to avoid two similar
   // code paths.
-  CPP_template(typename RequestT, typename ResponseT)(
+  CPP_template(typename RequestT, typename sendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> handleHttpRequest(RequestT request, ResponseT& send);
+      Awaitable<void> handleHttpRequest(RequestT request, sendT& send);
 
   // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
   // at server startup with the server's `io_context` executor; set up the
   // `QueryHub` for that executor and return the handler that dispatches
   // individual WebSocket sessions to it.
-  std::function<Awaitable<void>(const SimpleRequest&,
+  std::function<Awaitable<void>(const StringBodyRequest&,
                                 boost::asio::ip::tcp::socket)>
-  webSocketSessionSupplier(boost::asio::any_io_executor& ioExecutor);
-  FRIEND_TEST(ServerTest, webSocketSessionSupplier);
+  makeWebSocketSessionSupplier(boost::asio::any_io_executor& ioExecutor);
+  FRIEND_TEST(ServerTest, makeWebSocketSessionSupplier);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
