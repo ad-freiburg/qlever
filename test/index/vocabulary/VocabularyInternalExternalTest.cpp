@@ -142,8 +142,10 @@ TEST(VocabularyInternalExternal, BeginFinishLookupMatchesLookupBatch) {
   auto eager = vocab.lookupBatch(indices);
   auto split = vocab.finishLookup(vocab.beginLookup(indices));
   ASSERT_EQ(eager->size(), split->size());
-  for (size_t i = 0; i < eager->size(); ++i) {
-    EXPECT_EQ((*eager)[i], (*split)[i]) << " at requested slot " << i;
+  for (auto [i, expectedAndActual] :
+       ::ranges::views::enumerate(::ranges::views::zip(*eager, *split))) {
+    const auto& [expected, actual] = expectedAndActual;
+    EXPECT_EQ(expected, actual) << " at requested slot " << i;
   }
 }
 
