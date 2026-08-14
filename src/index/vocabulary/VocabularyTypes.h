@@ -234,16 +234,19 @@ VocabLookupOutput lookupBatchesStreamed(const Vocab& vocab,
                            })};
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // A depth-2 pipeline over a stream of batches, built from the split-phase
 // lookup interface (`beginLookup`/`finishLookup`): while the caller consumes
 // the result of batch `i`, the reads of batch `i + 1` are already in flight.
 //
 // Iteration protocol: pulling the next element from the returned generator
-// (i) submits the lookup of the batch after the one whose result is about to
-// be produced, and (ii) blocks on the current batch, whose reads were
-// submitted one iteration earlier and have therefore been in flight during the
-// caller's consumption of the previous result. When the caller consumes the
-// yielded result, the device serves the next batch's reads.
+// 1. submits the lookup of the batch after the one whose result is about to
+//    be produced, and
+// 2. blocks on the current batch, whose reads were submitted one iteration
+//    earlier and have therefore been in flight during the caller's
+//    consumption of the previous result. When the caller consumes the
+//    yielded result, the device serves the next batch's reads.
 //
 // The generator's `details()` (see `cppcoro::SetDetails`) exposes the
 // `unique_ptr<VocabLookupHandleBase>` of the batch whose reads are currently
@@ -293,6 +296,8 @@ lookupBatchesStreamedDepth2(const Vocab& vocab, VocabLookupInput input) {
     currentHandle = std::move(co_await cppcoro::getDetails);
   }
 }
+
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 }  // namespace ad_utility::vocabulary
 

@@ -283,6 +283,30 @@ TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
+// The depth-2 streamed lookup (`lookupBatchesStreamedDepth2`) must yield, for
+// each batch and in input order, exactly the same results as the eager
+// `lookupBatch` for that batch's indices. The generator additionally exposes
+// the in-flight handle via `details()`, which is exercised by the caller in
+// `idsToStringAndTypeDepth2`; the plain range-for loop used here completes
+// every lookup inside the generator itself.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+TEST(VocabularyTest, LookupBatchesStreamedDepth2) {
+  auto v = createExampleVocabulary();
+  std::vector<std::vector<size_t>> batches{{2, 0}, {3}, {1}};
+  // `VocabLookupInput` takes ownership, so keep a copy to compare against.
+  const auto expectedBatches = batches;
+  auto streamed = ad_utility::vocabulary::lookupBatchesStreamedDepth2(
+      *v, VocabLookupInput{std::move(batches)});
+  auto results = ::ranges::to_vector(streamed);
+  ASSERT_EQ(results.size(), expectedBatches.size());
+  for (const auto& [result, indices] :
+       ::ranges::views::zip(results, expectedBatches)) {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
+                                                                  indices);
+  }
+}
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 namespace {
 // Write an `RdfsVocabulary` of the given `type` to an aligned buffer via
 // `writeAsZeroCopyBlob`, read it back via `loadFromZeroCopyDeserializer`, and
