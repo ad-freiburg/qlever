@@ -5,8 +5,7 @@
 
 #include "parser/SpatialQuery.h"
 
-#include <algorithm>
-
+#include "backports/algorithm.h"
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/NormalizedString.h"
@@ -24,7 +23,7 @@ std::optional<De9imFilterString> parseDe9imFilterString(
     return std::nullopt;
   }
   De9imFilterString result{};
-  std::ranges::copy(filter, result.begin());
+  ql::ranges::copy(filter, result.begin());
   return result;
 }
 
