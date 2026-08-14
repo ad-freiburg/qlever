@@ -36,21 +36,22 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   diskIndices.reserve(indices.size());
   diskSlots.reserve(indices.size());
 
-  for (size_t i = 0; i < indices.size(); ++i) {
-    auto fromInternal = internalVocab_[indices[i]];
+  for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
+    auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
       words[i] = std::string{fromInternal.value()};
     } else {
       diskSlots.push_back(i);
-      diskIndices.push_back(indices[i]);
+      diskIndices.push_back(idx);
     }
   }
 
   if (!diskIndices.empty()) {
     auto disk = externalVocab_.lookupBatch(diskIndices);
     AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
-    for (size_t k = 0; k < diskSlots.size(); ++k) {
-      words[diskSlots[k]] = std::string{(*disk)[k]};
+    for (auto [slot, word] :
+         ::ranges::views::zip(diskSlots, *disk)) {
+      words[slot] = std::string{word};
     }
   }
 

@@ -115,12 +115,12 @@ CPP_template(typename UnderlyingVocabulary,
     auto compressed = underlyingVocabulary_.lookupBatch(indices);
     AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
 
-    std::vector<std::string> words;
-    words.reserve(indices.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-      words.push_back(compressionWrapper_.decompress(
-          (*compressed)[i], getDecoderIdx(indices[i])));
-    }
+    auto words = ::ranges::to_vector(
+        ::ranges::views::zip(indices, *compressed) |
+        ql::views::transform([this](const auto& idxAndWord) {
+          const auto& [idx, word] = idxAndWord;
+          return compressionWrapper_.decompress(word, getDecoderIdx(idx));
+        }));
 
     auto data = std::make_shared<StringVectorVocabBatchLookupData>();
     data->buffer() = std::move(words);
