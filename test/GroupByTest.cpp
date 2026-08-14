@@ -3327,3 +3327,45 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
 }
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, minMaxTwoVariableScan) {
+  // MIN/MAX of the object of `?s <label3> ?o` from the sorted distinct
+  // object IDs (POS). Vocab order is lexicographic: <a> < <b> < <c>.
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(
+      "<x> <label3> <b> . <x> <label3> <c> . <y> <label3> <a> ."))};
+  auto qec = ctx.makeQec();
+  auto getId = makeGetId(*ctx.index_);
+  auto idA = getId("<a>");
+  auto idC = getId("<c>");
+
+  auto makeGroupBy = [&](SparqlExpressionPimpl expr) {
+    auto scan = makeExecutionTree<IndexScan>(
+        &qec, Permutation::Enum::PSO,
+        SparqlTripleSimple{Variable{"?s"}, iri("<label3>"), Variable{"?o"}});
+    std::vector<Alias> aliases{Alias{std::move(expr), Variable{"?out"}}};
+    return GroupByImpl{&qec, {}, std::move(aliases), std::move(scan)};
+  };
+
+  EXPECT_THAT(makeGroupBy(makeMinPimpl(Variable{"?o"}))
+                  .computeResultOnlyForTesting(false),
+              optionalHasTable({{idA}}));
+  EXPECT_THAT(makeGroupBy(makeMaxPimpl(Variable{"?o"}))
+                  .computeResultOnlyForTesting(false),
+              optionalHasTable({{idC}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, minMaxEmptyRelation) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("<x> <other> <a> ."))};
+  auto qec = ctx.makeQec();
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{Variable{"?s"}, iri("<missing>"), Variable{"?o"}});
+  std::vector<Alias> aliases{
+      Alias{makeMinPimpl(Variable{"?o"}), Variable{"?out"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{Id::makeUndefined()}}));
+}

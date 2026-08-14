@@ -239,6 +239,11 @@ class GroupByImpl : public Operation {
   // (implicit) group.
   std::optional<IdTable> computeCountStar() const;
 
+  // `SELECT (MIN(?v) AS ?m)` or `SELECT (MAX(?v) AS ?m)` over a two-variable
+  // index scan with one bound column. Uses the sorted distinct col1 IDs of
+  // the permutation that stores `?v` in column 1. Empty input yields UNDEF.
+  std::optional<IdTable> computeMinMaxForSingleIndexScan() const;
+
   // Stores information required for substitution of an expression in an
   // expression tree.
   struct ParentAndChildIndex {

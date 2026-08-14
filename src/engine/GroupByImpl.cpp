@@ -1181,6 +1181,9 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
     if (auto result = computeGroupByForFullIndexScan()) {
       return result;
     }
+    if (auto result = computeMinMaxForSingleIndexScan()) {
+      return result;
+    }
   }
   if (auto result = computeGroupByForJoinWithFullScan()) {
     return result;
@@ -1962,6 +1965,113 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+namespace {
+// Return the permutation in which `col0` stays bound and `wantedCol1` is
+// stored in column 1, or nullopt if no such permutation exists.
+std::optional<Permutation::Enum> permutationWithWantedCol1(
+    const IndexScan& scan, const Variable& wantedCol1) {
+  const bool predBound = !scan.predicate().isVariable();
+  const bool subjBound = !scan.subject().isVariable();
+  const bool objBound = !scan.object().isVariable();
+  if (scan.subject().isVariable() &&
+      scan.subject().getVariable() == wantedCol1) {
+    if (predBound) {
+      return Permutation::PSO;
+    }
+    if (objBound) {
+      return Permutation::OSP;
+    }
+  } else if (scan.object().isVariable() &&
+             scan.object().getVariable() == wantedCol1) {
+    if (predBound) {
+      return Permutation::POS;
+    }
+    if (subjBound) {
+      return Permutation::SOP;
+    }
+  } else if (scan.predicate().isVariable() &&
+             scan.predicate().getVariable() == wantedCol1) {
+    if (subjBound) {
+      return Permutation::SPO;
+    }
+    if (objBound) {
+      return Permutation::OPS;
+    }
+  }
+  return std::nullopt;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<IdTable> GroupByImpl::computeMinMaxForSingleIndexScan() const {
+  if (!_groupByVariables.empty() || _aliases.size() != 1) {
+    return std::nullopt;
+  }
+  const auto* expr = _aliases.front()._expression.getPimpl();
+  const bool isMin =
+      dynamic_cast<const sparqlExpression::MinExpression*>(expr) != nullptr;
+  const bool isMax =
+      dynamic_cast<const sparqlExpression::MaxExpression*>(expr) != nullptr;
+  if (!isMin && !isMax) {
+    return std::nullopt;
+  }
+  auto children = expr->children();
+  if (children.size() != 1) {
+    return std::nullopt;
+  }
+  auto wantedVar = children[0]->getVariableOrNullopt();
+  if (!wantedVar.has_value()) {
+    return std::nullopt;
+  }
+
+  auto indexScan =
+      std::dynamic_pointer_cast<const IndexScan>(_subtree->getRootOperation());
+  if (!indexScan || indexScan->numVariables() != 2 ||
+      !indexScan->graphsToFilter().areAllGraphsAllowed() ||
+      !indexScan->additionalVariables().empty()) {
+    return std::nullopt;
+  }
+
+  const auto& locTriples =
+      indexScan->permutation().getLocatedTriplesForPermutation(
+          locatedTriplesState());
+  if (!locTriples.isEmpty() || indexScan->permutation().permutationType() ==
+                                   Permutation::Type::MATERIALIZED_VIEW) {
+    return std::nullopt;
+  }
+
+  const auto& permutedTriple = indexScan->getPermutedTriple();
+  std::optional<Id> col0Id = toValueId(*permutedTriple[0], getIndex());
+  if (!col0Id.has_value()) {
+    return std::nullopt;
+  }
+
+  auto targetPermutation =
+      permutationWithWantedCol1(*indexScan, wantedVar.value());
+  if (!targetPermutation.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto& permutation =
+      getIndex().getImpl().getPermutation(targetPermutation.value());
+  auto distinctIds = permutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      indexScan->getLimitOffset());
+
+  indexScan->updateRuntimeInformationWhenOptimizedOut({});
+
+  IdTable table{1, getExecutionContext()->getAllocator()};
+  if (distinctIds.empty()) {
+    table.push_back({Id::makeUndefined()});
+  } else {
+    const Id value = isMin ? distinctIds(0, 0)
+                           : distinctIds(distinctIds.numRows() - 1, 0);
+    table.push_back({value});
+  }
+  return table;
 }
 
 // _____________________________________________________________________________
