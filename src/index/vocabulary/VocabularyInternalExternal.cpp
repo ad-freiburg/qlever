@@ -28,38 +28,61 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
+  return finishLookup(beginLookup(indices));
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<VocabLookupHandleBase> VocabularyInternalExternal::beginLookup(
+    ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
-
-  std::vector<std::string> words(indices.size());
-  std::vector<size_t> diskIndices;
-  std::vector<size_t> diskSlots;
-  diskIndices.reserve(indices.size());
-  diskSlots.reserve(indices.size());
-
-  for (size_t i = 0; i < indices.size(); ++i) {
-    auto fromInternal = internalVocab_[indices[i]];
+  auto handle = std::make_unique<MixedLookupHandle>();
+  handle->vocab_ = this;
+  handle->numIndices_ = indices.size();
+  std::vector<size_t> externalIndices;
+  externalIndices.reserve(indices.size());
+  handle->internalWords_.reserve(indices.size());
+  handle->internalPositions_.reserve(indices.size());
+  handle->externalPositions_.reserve(indices.size());
+  for (size_t pos = 0; pos < indices.size(); ++pos) {
+    auto fromInternal = internalVocab_[indices[pos]];
     if (fromInternal.has_value()) {
-      words[i] = std::string{fromInternal.value()};
+      handle->internalWords_.emplace_back(*fromInternal);
+      handle->internalPositions_.push_back(pos);
     } else {
-      diskSlots.push_back(i);
-      diskIndices.push_back(indices[i]);
+      externalIndices.push_back(indices[pos]);
+      handle->externalPositions_.push_back(pos);
     }
   }
-
-  if (!diskIndices.empty()) {
-    auto disk = externalVocab_.lookupBatch(diskIndices);
-    AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
-    for (size_t k = 0; k < diskSlots.size(); ++k) {
-      words[diskSlots[k]] = std::string{(*disk)[k]};
-    }
+  if (!externalIndices.empty()) {
+    handle->externalHandle_ = externalVocab_.beginLookup(externalIndices);
   }
+  return handle;
+}
 
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handleBase) const {
+  auto* handle = static_cast<MixedLookupHandle*>(handleBase.get());
+  AD_CONTRACT_CHECK(handle != nullptr && handle->vocab_ == this);
+  return handle->finish();
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::MixedLookupHandle::finish() {
+  auto data = std::make_shared<MixedVocabBatchLookupData>();
+  data->internalWords_ = std::move(internalWords_);
+  data->views_.resize(numIndices_);
+  if (externalHandle_) {
+    data->diskResult_ =
+        vocab_->externalVocab_.finishLookup(std::move(externalHandle_));
+  }
+  for (size_t k = 0; k < internalPositions_.size(); ++k) {
+    data->views_[internalPositions_[k]] = data->internalWords_[k];
+  }
+  for (size_t k = 0; k < externalPositions_.size(); ++k) {
+    data->views_[externalPositions_[k]] = (*data->diskResult_)[k];
+  }
+  return MixedVocabBatchLookupData::asResult(std::move(data));
 }
 
 // _____________________________________________________________________________

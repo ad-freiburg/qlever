@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
 
 #include <cassert>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -129,6 +130,11 @@ class Vocabulary {
 
   // Batch lookup: look up multiple indices at once and return their words.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const;
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const;
 
   // Streaming variant of batch lookup.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;

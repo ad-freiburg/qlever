@@ -308,6 +308,28 @@ VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
+std::unique_ptr<VocabLookupHandleBase> Vocabulary<S, C, I>::beginLookup(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  if constexpr (requires { vocabulary_.beginLookup(indices); }) {
+    return vocabulary_.beginLookup(indices);
+  } else {
+    auto handle = std::make_unique<EagerVocabLookupHandle>();
+    handle->result_ = vocabulary_.lookupBatch(indices);
+    return handle;
+  }
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabBatchLookupResult Vocabulary<S, C, I>::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handle) const {
+  AD_CONTRACT_CHECK(handle != nullptr);
+  return handle->finish();
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
 VocabLookupOutput Vocabulary<S, C, I>::lookupBatchesStreamed(
     VocabLookupInput input) const {
   return vocabulary_.lookupBatchesStreamed(std::move(input));

@@ -54,6 +54,29 @@ VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
 }
 
 // _____________________________________________________________________________
+std::unique_ptr<VocabLookupHandleBase> PolymorphicVocabulary::beginLookup(
+    ql::span<const size_t> indices) const {
+  return std::visit(
+      [&indices](const auto& vocab) -> std::unique_ptr<VocabLookupHandleBase> {
+        if constexpr (requires { vocab.beginLookup(indices); }) {
+          return vocab.beginLookup(indices);
+        } else {
+          auto handle = std::make_unique<EagerVocabLookupHandle>();
+          handle->result_ = vocab.lookupBatch(indices);
+          return handle;
+        }
+      },
+      vocab_);
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult PolymorphicVocabulary::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handle) const {
+  AD_CONTRACT_CHECK(handle != nullptr);
+  return handle->finish();
+}
+
+// _____________________________________________________________________________
 VocabLookupOutput PolymorphicVocabulary::lookupBatchesStreamed(
     VocabLookupInput input) const {
   return std::visit(

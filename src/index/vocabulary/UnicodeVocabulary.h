@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 
+#include <memory>
+
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
@@ -37,6 +39,23 @@ class UnicodeVocabulary {
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return _underlyingVocabulary.lookupBatch(indices);
+  }
+
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const {
+    if constexpr (requires { _underlyingVocabulary.beginLookup(indices); }) {
+      return _underlyingVocabulary.beginLookup(indices);
+    } else {
+      auto handle = std::make_unique<EagerVocabLookupHandle>();
+      handle->result_ = _underlyingVocabulary.lookupBatch(indices);
+      return handle;
+    }
+  }
+
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const {
+    AD_CONTRACT_CHECK(handle != nullptr);
+    return handle->finish();
   }
 
   //____________________________________________________________________________

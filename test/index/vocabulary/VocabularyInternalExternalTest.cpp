@@ -128,6 +128,19 @@ TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
   EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
 
+TEST(VocabularyInternalExternal, BeginFinishLookupMatchesLookupBatch) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = createVocabulary("BeginFinishLookup")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  auto eager = vocab.lookupBatch(indices);
+  auto split = vocab.finishLookup(vocab.beginLookup(indices));
+  ASSERT_EQ(eager->size(), split->size());
+  for (size_t i = 0; i < eager->size(); ++i) {
+    EXPECT_EQ((*eager)[i], (*split)[i]) << " at requested slot " << i;
+  }
+}
+
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }
