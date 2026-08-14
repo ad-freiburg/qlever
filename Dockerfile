@@ -57,7 +57,7 @@ RUN if [ "$RUN_TESTS" = "true" ]; then \
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget unzip curl bzip2 pkg-config libicu74 libgomp1 uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see there).
@@ -90,8 +90,12 @@ ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 COPY --from=builder /qlever/build/qlever-* /qlever/
 # PrintIndexVersionMain, VocabularyMergerMain
 COPY --from=builder /qlever/build/*Main /qlever/
-COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY --chmod=755 docker-entrypoint.sh /qlever/
 
 # Our entrypoint script does some clever things; see the comments in there.
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]
+
+# TODO<qup42>: build and use where needed
+FROM runtime as tests
+RUN apt-get update && apt-get install -y wget python3-yaml python3-icu && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /qlever/e2e/* /qlever/e2e/
