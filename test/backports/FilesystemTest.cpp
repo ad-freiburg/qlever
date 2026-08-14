@@ -81,6 +81,34 @@ TEST(BackportsFilesystem, isRegularFileAndIsDirectory) {
 }
 
 // _____________________________________________________________________________
+// Querying an entry that has been deleted since the directory was iterated must
+// not throw. This happens in practice whenever another process writes to the
+// directory that is being iterated, and `boost::filesystem` runs into it
+// because it stats an entry lazily when its status is queried and not while
+// iterating. Note that we deliberately don't require a particular result: with
+// `std::filesystem` the implementation may answer from the status that it
+// cached while iterating, and then still report the deleted entry as a regular
+// file.
+TEST(BackportsFilesystem, statusOfDeletedEntryDoesNotThrow) {
+  auto [directory, cleanup] = makeUniqueDirectory();
+  touch(directory / "file");
+  fs::create_directory(directory / "subdirectory");
+
+  std::vector<fs::directory_entry> entries;
+  for (const auto& entry : ql::directoryRange(directory)) {
+    entries.push_back(entry);
+  }
+  ASSERT_EQ(entries.size(), 2u);
+  fs::remove_all(directory / "file");
+  fs::remove_all(directory / "subdirectory");
+
+  for (const auto& entry : entries) {
+    EXPECT_NO_THROW(ql::isRegularFile(entry));
+    EXPECT_NO_THROW(ql::isDirectory(entry));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(BackportsFilesystem, pathFilename) {
   EXPECT_EQ(ql::pathFilename(fs::path{"some/directory/file.txt"}).string(),
             "file.txt");

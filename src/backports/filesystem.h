@@ -113,17 +113,26 @@ inline DirectoryRange directoryRange(filesystem::path directory) {
   return DirectoryRange{std::move(directory)};
 }
 
-// Return true if `entry` is a regular file resp. a directory. The member
-// functions `directory_entry::is_regular_file()` and
-// `directory_entry::is_directory()` only exist in `std::filesystem` and in
-// recent versions of `boost::filesystem`, but the (cached) `status()` of an
-// entry together with the corresponding free functions works with all backends
-// and versions.
+// Return true if `entry` is a regular file resp. a directory, and false if the
+// status of `entry` cannot be determined, in particular if it has been deleted
+// since the directory was iterated. The member functions
+// `directory_entry::is_regular_file()` and `directory_entry::is_directory()`
+// only exist in `std::filesystem` and in recent versions of
+// `boost::filesystem`, so the `status()` of the entry is used instead.
+//
+// NOTE: The `error_code` overload of `status()` is essential. Its throwing
+// counterpart throws (instead of reporting a "not found" status) when the entry
+// no longer exists, and `boost::filesystem` actually hits that case, because it
+// stats the entry lazily when `status()` is called and not while iterating the
+// directory. Callers typically iterate a directory that other processes write
+// to, where an entry disappearing is normal and must not throw.
 inline bool isRegularFile(const filesystem::directory_entry& entry) {
-  return filesystem::is_regular_file(entry.status());
+  error_code ignoredError;
+  return filesystem::is_regular_file(entry.status(ignoredError));
 }
 inline bool isDirectory(const filesystem::directory_entry& entry) {
-  return filesystem::is_directory(entry.status());
+  error_code ignoredError;
+  return filesystem::is_directory(entry.status(ignoredError));
 }
 
 // Return the filename component of `path`, with `std::filesystem` semantics
