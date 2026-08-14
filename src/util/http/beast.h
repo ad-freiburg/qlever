@@ -14,15 +14,26 @@
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
+#include <boost/version.hpp>
 #include <coroutine>
 #include <utility>
 
+// `boost::asio` only supports the standard `<coroutine>` header since Boost
+// 1.75. Before that, `boost/asio/awaitable.hpp` includes the Coroutines TS
+// header `<experimental/coroutine>` whenever `BOOST_ASIO_HAS_CO_AWAIT` is
+// defined, and that header is provided by neither libstdc++ nor recent
+// libc++. QLever only uses the coroutine support of `boost::asio` in the
+// `http` and `server` libraries, which are excluded from the reduced feature
+// set (the only configuration in which such old Boost versions are supported),
+// so simply don't enable it for them.
+#if BOOST_VERSION >= 107500
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
 #ifndef BOOST_ASIO_HAS_CO_AWAIT
 #define BOOST_ASIO_HAS_CO_AWAIT
 #endif
 #ifndef BOOST_ASIO_HAS_STD_COROUTINE
 #define BOOST_ASIO_HAS_STD_COROUTINE
+#endif
 #endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.

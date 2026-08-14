@@ -24,7 +24,7 @@
 // `perms::none` while `boost::filesystem` uses the (unscoped)
 // `perms::no_perms`. Use `ql::filesystem_perms_none` (defined below) instead of
 // either. The other differences are bridged by the helpers below; note that
-// these also have to work with Boost 1.74, the oldest version that QLever is
+// these also have to work with Boost 1.71, the oldest version that QLever is
 // tested with (see the `CPP17 libQLever` CI workflow).
 
 #ifdef QLEVER_CPP_17

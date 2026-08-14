@@ -52,11 +52,11 @@ jobs:
       - name: Install dependencies
         uses: ./.github/workflows/install-dependencies-ubuntu
         with:
-          # The reduced feature set has to stay compatible with Boost 1.74, the
+          # The reduced feature set has to stay compatible with Boost 1.71, the
           # oldest version that QLever is tested with, so build against that
           # version here. In particular, `Boost::url` is not available in that
           # version.
-          boost-version: "1.74"
+          boost-version: "1.71"
       - name: Install compiler
         uses: ./.github/workflows/install-compiler-ubuntu
         with:
