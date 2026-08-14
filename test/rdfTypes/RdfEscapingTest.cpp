@@ -139,6 +139,15 @@ TEST(RdfEscapingTest, validRDFLiteralFromNormalizedBoundaries) {
       "\"\\\\n" + std::string(40, 'a') + "\"");
 }
 
+// A normalized literal must always contain a closing quote (at a position
+// > 0); otherwise the contract check in `validRDFLiteralFromNormalized`
+// fires.
+TEST(RdfEscapingTest, validRDFLiteralFromNormalizedWithoutClosingQuoteThrows) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      validRDFLiteralFromNormalized("\"abc"),
+      ::testing::HasSubstr("Assertion `posLastQuote != 0` failed"));
+}
+
 // ___________________________________________________________________________
 // Equivalence check for the fast-path scan in `validRDFLiteralFromNormalized`
 // (see the call site in `RdfEscaping.cpp`): the SIMD scan `containsAnyByte`
