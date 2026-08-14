@@ -1590,6 +1590,18 @@ auto Visitor::visitInFreshQueryContext(const VisitCall& visitCall)
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::NamedSubqueryDefinitionContext* ctx) {
   auto name = ctx->NAMED_SUBQUERY_NAME()->getText();
+  // The second alternative of the grammar rule matches Blazegraph's syntax
+  // for named subqueries, where the name comes after the body. It exists only
+  // so that we can report the following informative error for it.
+  if (ctx->NAMED_SUBQUERY_NAME()->getSymbol()->getTokenIndex() >
+      ctx->AS()->getSymbol()->getTokenIndex()) {
+    reportError(
+        ctx,
+        absl::StrCat("QLever expects the name of a named subquery before its "
+                     "body, that is, `WITH ",
+                     name, " AS { ... }`. The reverse order `WITH { ... } AS ",
+                     name, "`, as used by Blazegraph, is not supported"));
+  }
   if (namedSubqueries_.contains(name)) {
     reportError(ctx, absl::StrCat("The named subquery \"", name,
                                   "\" is defined more than once"));

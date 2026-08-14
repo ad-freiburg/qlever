@@ -49,8 +49,13 @@ prologue
 // A named subquery (QLever-specific language extension): `WITH %name AS {
 // <subquery> }` defines a named subquery that can be referenced via `INCLUDE
 // %name` anywhere a graph pattern is allowed.
+//
+// NOTE: The second alternative matches Blazegraph's syntax for named
+// subqueries, where the name comes after the body. It exists only so that the
+// visitor can report an informative error for it.
 namedSubqueryDefinition
     : WITH NAMED_SUBQUERY_NAME AS '{' subSelect '}'
+    | WITH '{' subSelect '}' AS NAMED_SUBQUERY_NAME
     ;
 
 baseDecl

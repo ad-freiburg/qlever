@@ -271,6 +271,13 @@ TEST(NamedSubquery, invalidQueries) {
       parse("WITH %a AS { SELECT ?s ?o WHERE { ?s ?p ?o } }"
             "SELECT * WHERE { INCLUDE %a (?s AS ?o) }"),
       ::testing::HasSubstr("not distinct anymore after the renaming"));
+  // Blazegraph's syntax for named subqueries, where the name comes after the
+  // body, gets an informative error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("WITH { SELECT ?s WHERE { ?s ?p ?o } } AS %a "
+            "SELECT * WHERE { INCLUDE %a }"),
+      ::testing::HasSubstr(
+          "The reverse order `WITH { ... } AS %a`, as used by Blazegraph"));
   // A VALUES clause at the end of a definition is currently not supported.
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse("WITH %a AS { SELECT ?s WHERE { ?s ?p ?o } VALUES ?s { <x> } }"
