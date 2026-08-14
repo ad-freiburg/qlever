@@ -239,6 +239,11 @@ class GroupByImpl : public Operation {
   // (implicit) group.
   std::optional<IdTable> computeCountStar() const;
 
+  // `SELECT (SUM(STRLEN(?cat)) AS ?s) { { SELECT (GROUP_CONCAT(?o; SEP) AS
+  // ?cat) { ?s <p> ?o } GROUP BY ?s } }`. Algebra:
+  // Σ STRLEN(o) + (N_rows − N_groups) · STRLEN(sep).
+  std::optional<IdTable> computeSumStrlenOfGroupConcat() const;
+
   // Stores information required for substitution of an expression in an
   // expression tree.
   struct ParentAndChildIndex {

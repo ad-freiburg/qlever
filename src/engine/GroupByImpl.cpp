@@ -7,13 +7,17 @@
 
 #include "engine/GroupByImpl.h"
 
+#include <limits>
+
 #include <absl/strings/str_join.h>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
@@ -35,6 +39,7 @@
 #include "parser/Alias.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
+#include "util/StringUtils.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
@@ -1181,6 +1186,9 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
     if (auto result = computeGroupByForFullIndexScan()) {
       return result;
     }
+    if (auto result = computeSumStrlenOfGroupConcat()) {
+      return result;
+    }
   }
   if (auto result = computeGroupByForJoinWithFullScan()) {
     return result;
@@ -1962,6 +1970,200 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
   return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
                                        _aliases, _subtree->clone());
+}
+
+// _____________________________________________________________________________
+namespace {
+std::optional<Permutation::Enum> permutationWithWantedCol1(
+    const IndexScan& scan, const Variable& wantedCol1) {
+  const bool predBound = !scan.predicate().isVariable();
+  const bool subjBound = !scan.subject().isVariable();
+  const bool objBound = !scan.object().isVariable();
+  if (scan.subject().isVariable() &&
+      scan.subject().getVariable() == wantedCol1) {
+    if (predBound) {
+      return Permutation::PSO;
+    }
+    if (objBound) {
+      return Permutation::OSP;
+    }
+  } else if (scan.object().isVariable() &&
+             scan.object().getVariable() == wantedCol1) {
+    if (predBound) {
+      return Permutation::POS;
+    }
+    if (subjBound) {
+      return Permutation::SOP;
+    }
+  } else if (scan.predicate().isVariable() &&
+             scan.predicate().getVariable() == wantedCol1) {
+    if (subjBound) {
+      return Permutation::SPO;
+    }
+    if (objBound) {
+      return Permutation::OPS;
+    }
+  }
+  return std::nullopt;
+}
+
+size_t utf8Length(std::string_view s) {
+  return ad_utility::getUTF8Prefix(s, std::numeric_limits<size_t>::max())
+      .first;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<IdTable> GroupByImpl::computeSumStrlenOfGroupConcat() const {
+  if (!_groupByVariables.empty() || _aliases.size() != 1) {
+    return std::nullopt;
+  }
+  auto* sum = dynamic_cast<sparqlExpression::SumExpression*>(
+      _aliases.front()._expression.getPimpl());
+  if (!sum) {
+    return std::nullopt;
+  }
+  auto sumChildren = sum->children();
+  if (sumChildren.size() != 1) {
+    return std::nullopt;
+  }
+  // STRLEN(?cat)
+  auto strlenVars = sumChildren[0]->getUnaggregatedVariables();
+  if (strlenVars.size() != 1) {
+    return std::nullopt;
+  }
+  const Variable catVar = strlenVars.front();
+
+  auto* innerGroup = dynamic_cast<GroupBy*>(_subtree->getRootOperation().get());
+  if (!innerGroup || innerGroup->groupByVariables().size() != 1 ||
+      innerGroup->aliases().size() != 1) {
+    return std::nullopt;
+  }
+  if (innerGroup->aliases().front()._target != catVar) {
+    return std::nullopt;
+  }
+  auto* groupConcat = dynamic_cast<sparqlExpression::GroupConcatExpression*>(
+      innerGroup->aliases().front()._expression.getPimpl());
+  if (!groupConcat ||
+      groupConcat->isAggregate() ==
+          sparqlExpression::SparqlExpression::AggregateStatus::
+              DistinctAggregate) {
+    return std::nullopt;
+  }
+  auto gcChildren = groupConcat->children();
+  if (gcChildren.size() != 1) {
+    return std::nullopt;
+  }
+  auto concatVar = gcChildren[0]->getVariableOrNullopt();
+  if (!concatVar.has_value()) {
+    return std::nullopt;
+  }
+  const Variable groupVar = innerGroup->groupByVariables().front();
+  auto innerChildren = innerGroup->getChildren();
+  if (innerChildren.size() != 1) {
+    return std::nullopt;
+  }
+  auto* scan = dynamic_cast<const IndexScan*>(
+      innerChildren[0]->getRootOperation().get());
+  if (!scan || scan->numVariables() != 2 ||
+      !scan->graphsToFilter().areAllGraphsAllowed() ||
+      !scan->additionalVariables().empty()) {
+    return std::nullopt;
+  }
+
+  const auto& locTriples = scan->permutation().getLocatedTriplesForPermutation(
+      locatedTriplesState());
+  if (!locTriples.isEmpty() ||
+      scan->permutation().permutationType() ==
+          Permutation::Type::MATERIALIZED_VIEW) {
+    return std::nullopt;
+  }
+  const auto& permutedTriple = scan->getPermutedTriple();
+  std::optional<Id> col0Id = toValueId(*permutedTriple[0], getIndex());
+  if (!col0Id.has_value()) {
+    return std::nullopt;
+  }
+
+  auto objectPerm = permutationWithWantedCol1(*scan, concatVar.value());
+  auto groupPerm = permutationWithWantedCol1(*scan, groupVar);
+  if (!objectPerm.has_value() || !groupPerm.has_value()) {
+    return std::nullopt;
+  }
+
+  const size_t numRows =
+      scan->getLimitOffset().actualSize(scan->getExactSize());
+  const auto& groupPermutation =
+      getIndex().getImpl().getPermutation(groupPerm.value());
+  auto groups = groupPermutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      scan->getLimitOffset());
+  const size_t numGroups = groups.numRows();
+  if (numRows < numGroups) {
+    return std::nullopt;
+  }
+
+  const auto& objectPermutation =
+      getIndex().getImpl().getPermutation(objectPerm.value());
+  auto objects = objectPermutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      scan->getLimitOffset());
+
+  IdTable row{scan->getResultWidth(), getExecutionContext()->getAllocator()};
+  row.emplace_back();
+  for (ColumnIndex c = 0; c < row.numColumns(); ++c) {
+    row(0, c) = Id::makeUndefined();
+  }
+  auto colOpt = innerChildren[0]->getVariableColumnOrNullopt(concatVar.value());
+  if (!colOpt.has_value()) {
+    return std::nullopt;
+  }
+  LocalVocab localVocab;
+  auto strlenExpr = sparqlExpression::makeStrlenExpression(
+      std::make_unique<sparqlExpression::VariableExpression>(
+          concatVar.value()));
+  int64_t sumStrlen = 0;
+  for (size_t i = 0; i < objects.numRows(); ++i) {
+    row(0, colOpt.value()) = objects(i, 0);
+    sparqlExpression::EvaluationContext scanCtx{
+        *getExecutionContext(),
+        innerChildren[0]->getVariableColumns(),
+        row.asStaticView<0>(),
+        getExecutionContext()->getAllocator(),
+        localVocab,
+        cancellationHandle_,
+        deadline_};
+    auto evaluated = strlenExpr->evaluate(&scanCtx);
+    bool ok = false;
+    std::visit(
+        [&](auto&& value) {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_same_v<T, Id>) {
+            if (value.getDatatype() == Datatype::Int) {
+              sumStrlen += value.getInt() * objects(i, 1).getInt();
+              ok = true;
+            }
+          }
+        },
+        evaluated);
+    if (!ok) {
+      return std::nullopt;
+    }
+  }
+
+  const int64_t sepLen =
+      static_cast<int64_t>(utf8Length(groupConcat->getSeparator()));
+  const int64_t total =
+      sumStrlen +
+      static_cast<int64_t>(numRows - numGroups) * sepLen;
+
+  innerChildren[0]->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+      {});
+  innerGroup->updateRuntimeInformationWhenOptimizedOut(
+      {innerChildren[0]->getRootOperation()->getRuntimeInfoPointer()});
+
+  IdTable table{1, getExecutionContext()->getAllocator()};
+  table.push_back({Id::makeFromInt(total)});
+  return table;
 }
 
 // _____________________________________________________________________________
