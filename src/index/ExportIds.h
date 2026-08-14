@@ -350,13 +350,13 @@ idsToStringAndTypeDepth2(
         index, ids, vocabPositions.subspan(subBatchSize));
   }
   finishResolveVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-      index, ids, vocabPositions.subspan(0, subBatchSize),
-      std::move(handleFirst), results, escapeFunction);
+      index, vocabPositions.subspan(0, subBatchSize), std::move(handleFirst),
+      results, escapeFunction);
   if (handleSecond) {
     finishResolveVocabIndexIds<removeQuotesAndAngleBrackets,
                                returnOnlyLiterals>(
-        index, ids, vocabPositions.subspan(subBatchSize),
-        std::move(handleSecond), results, escapeFunction);
+        index, vocabPositions.subspan(subBatchSize), std::move(handleSecond),
+        results, escapeFunction);
   }
   return results;
 }
