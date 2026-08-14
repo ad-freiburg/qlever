@@ -77,6 +77,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           tags: ${{ env.IMAGE }}
+          target: runtime
           # push-by-digest means that the built image is not associated with a tag. Instead, the only way to refer to it
           # is by using its digest (which is basically a unique hash).
           outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
@@ -112,6 +113,8 @@ jobs:
           load: true
           push: false
           tags: ${{ env.IMAGE }}:tmp-${{ github.sha }}
+          # The `runtime` target we already built before plus the e2e test data.
+          target: tests
       - name: E2E in Docker
         if: matrix.platform == 'linux/amd64'
         run: |

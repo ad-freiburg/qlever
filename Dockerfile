@@ -107,7 +107,6 @@ COPY --from=builder /qlever/build/qlever-* /qlever/
 
 CMD ["/qlever/qlever-server"]
 
-# TODO<qup42>: build and use where needed
 FROM runtime as tests
 RUN apt-get update && apt-get install -y wget python3-yaml python3-icu && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
