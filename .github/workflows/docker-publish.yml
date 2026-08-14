@@ -48,6 +48,8 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          flavor: &metadata_flavor |
+            latest=false
           # The tag rules are shared with the `docker-merge` job via this YAML
           # anchor, so both jobs derive the same `org.opencontainers.image.version`
           # for the per-arch labels and the multi-arch index annotations.
@@ -139,6 +141,7 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
         with:
           images: ${{ env.IMAGE }}
+          flavor: *metadata_flavor
           # Reuse the tag rules defined in the `build` job (the `image_tags`
           # anchor) so the version is identical in the labels and annotations.
           tags: *image_tags
