@@ -1634,7 +1634,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
 
   std::string query =
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
@@ -1645,7 +1645,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
   h::expect(query,
             h::spatialJoinFilterSubstitute(
                 -1, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-                algo, DE9IM, validateDe9imFilterString("T*T***T**"),
+                algo, DE9IM, parseDe9imFilterString("T*T***T**"),
                 scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Geo relate filter with the same variable twice is not allowed

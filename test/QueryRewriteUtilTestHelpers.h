@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/Constants.h"
+#include "parser/SpatialQuery.h"
 #include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
@@ -115,7 +116,7 @@ inline DistancePtrAndExpected makeUnrelated() {
 inline De9imPtrAndExpected makeDe9imRelation(
     std::string pattern = "T*T***T**") {
   De9imRelationCall exp{{DE9IM, V{"?a"}, V{"?b"}},
-                        validateDe9imFilterString(pattern).value()};
+                        parseDe9imFilterString(pattern).value()};
   auto ptr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(V{"?b"}),
       getExpr(Literal::literalWithoutQuotes(pattern)));

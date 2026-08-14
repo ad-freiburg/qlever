@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 
@@ -315,9 +316,10 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
   if (!patternLiteral.has_value()) {
     return std::nullopt;
   }
-  auto pattern = validateDe9imFilterString(
+  auto pattern = parseDe9imFilterString(
       asStringViewUnsafe(patternLiteral.value().getContent()));
-  if (!pattern.has_value()) {
+  if (!pattern.has_value() ||
+      de9imFilterCanMatchDisjoint(pattern.value())) {
     return std::nullopt;
   }
 
