@@ -18,6 +18,7 @@
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -515,21 +516,71 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
 
   constexpr auto& escapeFunction =
       format == tsv ? RdfEscaping::escapeForTsv : RdfEscaping::escapeForCsv;
+
+  // Columns that actually contribute an ID. Unbound selected variables stay
+  // empty cells and are not included in the batch.
+  std::vector<size_t> batchColIndices;
+  for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+    if (selectedColumnIndices[j].has_value()) {
+      batchColIndices.push_back(j);
+    }
+  }
+  const size_t numBatchCols = batchColIndices.size();
+
+  // Resolve this many result rows per `idsToStringAndType` call so vocabulary
+  // IDs share one `lookupBatch` instead of one syscall per cell.
+  static constexpr size_t kIdBatchSize = 1000;
+  std::vector<Id> idBatch;
   uint64_t resultSize = 0;
   for (const auto& [pair, range] :
        getRowIndices(limitAndOffset, *result, resultSize)) {
+    idBatch.clear();
+    idBatch.reserve(kIdBatchSize * numBatchCols);
+    size_t rowsInBatch = 0;
+
     for (uint64_t i : range) {
+      for (size_t colIdx : batchColIndices) {
+        const auto& col = selectedColumnIndices[colIdx].value();
+        idBatch.push_back(pair.idTable()(i, col.columnIndex_));
+      }
+      if (++rowsInBatch != kIdBatchSize) {
+        continue;
+      }
+      auto resolved = ql::exportIds::idsToStringAndType<format == csv>(
+          qet.getQec()->getIndex(), idBatch, pair.localVocab(), escapeFunction);
+      size_t resolvedIdx = 0;
+      for (size_t r = 0; r < kIdBatchSize; ++r) {
+        for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+          if (selectedColumnIndices[j].has_value()) {
+            if (resolved[resolvedIdx].has_value()) [[likely]] {
+              STREAMABLE_YIELD(resolved[resolvedIdx].value().first);
+            }
+            ++resolvedIdx;
+          }
+          if (j + 1 < selectedColumnIndices.size()) {
+            STREAMABLE_YIELD(separator);
+          }
+        }
+        STREAMABLE_YIELD('\n');
+        cancellationHandle->throwIfCancelled();
+      }
+      idBatch.clear();
+      rowsInBatch = 0;
+    }
+
+    if (rowsInBatch == 0) {
+      continue;
+    }
+    auto resolved = ql::exportIds::idsToStringAndType<format == csv>(
+        qet.getQec()->getIndex(), idBatch, pair.localVocab(), escapeFunction);
+    size_t resolvedIdx = 0;
+    for (size_t r = 0; r < rowsInBatch; ++r) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
-          const auto& val = selectedColumnIndices[j].value();
-          Id id = pair.idTable()(i, val.columnIndex_);
-          auto optionalStringAndType =
-              ql::exportIds::idToStringAndType<format == csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab(),
-                  escapeFunction);
-          if (optionalStringAndType.has_value()) [[likely]] {
-            STREAMABLE_YIELD(optionalStringAndType.value().first);
+          if (resolved[resolvedIdx].has_value()) [[likely]] {
+            STREAMABLE_YIELD(resolved[resolvedIdx].value().first);
           }
+          ++resolvedIdx;
         }
         if (j + 1 < selectedColumnIndices.size()) {
           STREAMABLE_YIELD(separator);
