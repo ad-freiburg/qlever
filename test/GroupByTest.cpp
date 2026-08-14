@@ -3335,7 +3335,6 @@ TEST(GroupByOptimizations, distinctCountTwoVariableScanColumnOne) {
   // (POS), so the new metadata fast path answers it directly.
   QecWrapper ctx{std::make_shared<Index>(makeTestIndex(
       "<x> <label3> <a> . <x> <label3> <b> . <y> <label3> <a> ."))};
-  auto getId = makeGetId(*ctx.index_);
   auto qec = ctx.makeQec();
 
   // SELECT (COUNT(DISTINCT ?o) AS ?count) WHERE { ?s <label3> ?o }
@@ -3352,8 +3351,8 @@ TEST(GroupByOptimizations, distinctCountTwoVariableScanColumnOne) {
   GroupByImpl groupBy{&qec, {}, aliases, scan};
 
   // The relation contains the distinct objects <a> and <b> -> count = 2.
-  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
-              optionalHasTable({{I(2)}}));
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{I(2)}}));
 }
 
 // _____________________________________________________________________________
@@ -3363,7 +3362,6 @@ TEST(GroupByOptimizations, distinctCountTwoVariableScanColumnTwo) {
   // permutation (where ?s is column 1) to answer from the relation metadata.
   QecWrapper ctx{std::make_shared<Index>(makeTestIndex(
       "<x> <label3> <a> . <x> <label3> <b> . <y> <label3> <a> ."))};
-  auto getId = makeGetId(*ctx.index_);
   auto qec = ctx.makeQec();
 
   // SELECT (COUNT(DISTINCT ?s) AS ?count) WHERE { ?s <label3> ?o }
@@ -3380,6 +3378,6 @@ TEST(GroupByOptimizations, distinctCountTwoVariableScanColumnTwo) {
   GroupByImpl groupBy{&qec, {}, aliases, scan};
 
   // The relation contains the distinct subjects <x> and <y> -> count = 2.
-  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
-              optionalHasTable({{I(2)}}));
+  auto result = groupBy.computeResultOnlyForTesting(false);
+  EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{I(2)}}));
 }
