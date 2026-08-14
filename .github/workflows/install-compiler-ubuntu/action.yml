@@ -7,6 +7,10 @@ inputs:
   compiler-version:
     description: "the version of the compiler (must be major version)"
     required: true
+  install-mold:
+    description: "Whether to install the `mold` linker. Must be set to false for jobs that run in a `container` of an older distribution (e.g. Ubuntu 20.04), which has no `mold` package"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
@@ -49,6 +53,7 @@ runs:
         sudo apt install -y ./libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb ./g++-8_8.4.0-3ubuntu2_amd64.deb
       shell: bash
     - name: Install mold linker
+      if: inputs.install-mold == 'true'
       shell: bash
       run: |
         sudo apt update

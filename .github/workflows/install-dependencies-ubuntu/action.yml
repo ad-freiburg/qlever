@@ -15,14 +15,19 @@ inputs:
     required: false
     default: "0"
   boost-version:
-    description: "The Boost version to install. `latest` installs the most recent version from a PPA, any other value (e.g. `1.71`, the oldest version that QLever is tested with) builds that version from source, as those are not packaged for Ubuntu 24.04. Such old versions have no `Boost::url` and can therefore only be used together with `REDUCED_FEATURE_SET_FOR_CPP17`"
+    description: "The Boost version to install. `latest` installs the most recent version from a PPA, any other value (e.g. `1.71`) installs `libboost<version>-all-dev` from the standard repositories of the distribution that the job runs in. Such old versions have no `Boost::url` and can therefore only be used together with `REDUCED_FEATURE_SET_FOR_CPP17`"
     required: false
     default: "latest"
+  free-disk-space:
+    description: "Whether to free disk space on the runner. Must be set to false for jobs that run in a `container`, because the directories that are cleaned up (and the Docker daemon) belong to the host and are not visible from inside the container"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
   steps:
     - name: Free Disk Space (Ubuntu)
+      if: inputs.free-disk-space == 'true'
       uses: jlumbroso/free-disk-space@main
       with:
           # this might remove tools that are actually needed,
@@ -74,33 +79,17 @@ runs:
       run: sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.83-all-dev libboost-url1.83-dev libboost-container1.83-dev libboost-filesystem1.83-dev
       shell: bash
 
-    - name: Install Boost ${{inputs.boost-version}} from source
-      # Old Boost versions (in particular 1.71) are not packaged for Ubuntu
-      # 24.04, so build them from source. Only the components that QLever
-      # actually links against are built; `Boost::url` in particular doesn't
-      # exist in those versions at all, which is why they can only be used
-      # together with `REDUCED_FEATURE_SET_FOR_CPP17=ON`.
+    - name: Install Boost ${{inputs.boost-version}}
+      # An explicitly requested (and therefore old) Boost version is taken from
+      # the standard repositories of the distribution that the job runs in, so
+      # the job has to select a matching `container` (Ubuntu 20.04 ships Boost
+      # 1.71, Ubuntu 22.04 ships Boost 1.74). Such old versions don't contain
+      # `Boost::url`, so they can only be used together with
+      # `REDUCED_FEATURE_SET_FOR_CPP17=ON`.
       if: inputs.install-third-party-libraries == 'true' && inputs.boost-version != 'latest'
       run: |
-        # The development packages of different Boost versions conflict with
-        # each other, so remove all preinstalled ones first. Removing a package
-        # that isn't installed is not an error, so no `|| true` is needed.
-        sudo apt-get remove -y -qq '^libboost.*'
         sudo apt-get update
-        # `Boost::iostreams` needs the zlib and bzip2 headers.
-        sudo apt-get install -y libbz2-dev zlib1g-dev
-        # Boost archives are named like `boost_1_71_0` for version `1.71`.
-        BOOST_NAME="boost_$(echo "${{inputs.boost-version}}" | tr . _)_0"
-        wget -q "https://archives.boost.io/release/${{inputs.boost-version}}.0/source/${BOOST_NAME}.tar.bz2"
-        tar xf "${BOOST_NAME}.tar.bz2"
-        cd "${BOOST_NAME}"
-        ./bootstrap.sh --prefix=/usr/local --with-libraries=container,filesystem,iostreams,program_options
-        # `b2 install` also builds. It has to run as root because it installs
-        # into `/usr/local`, which is where CMake then finds Boost without any
-        # further hints. The shared libraries are built in addition to the
-        # static ones, because CMake looks for the shared ones by default.
-        sudo ./b2 -j$(nproc) --prefix=/usr/local variant=release link=static,shared cxxstd=17 install
-        sudo ldconfig
+        sudo apt-get install -y libboost${{inputs.boost-version}}-all-dev
       shell: bash
 
     - name: Install Python packages for E2E tests
