@@ -15,7 +15,6 @@
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
 #include <boost/version.hpp>
-#include <coroutine>
 #include <utility>
 
 // `boost::asio` only supports the standard `<coroutine>` header since Boost
@@ -25,9 +24,11 @@
 // libc++. QLever only uses the coroutine support of `boost::asio` in the
 // `http` and `server` libraries, which are excluded from the reduced feature
 // set (the only configuration in which such old Boost versions are supported),
-// so simply don't enable it for them.
+// so simply don't enable it for them. `<coroutine>` is then not needed either,
+// which is important because it also doesn't exist in C++17 mode.
 #if BOOST_VERSION >= 107500
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
+#include <coroutine>
 #ifndef BOOST_ASIO_HAS_CO_AWAIT
 #define BOOST_ASIO_HAS_CO_AWAIT
 #endif

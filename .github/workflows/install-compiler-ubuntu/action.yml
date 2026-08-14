@@ -41,6 +41,13 @@ runs:
     - name: Install gcc8
       if :  inputs.compiler == 'gcc' && inputs.compiler-version == 8
       run:  |
+        # Ubuntu 20.04 (which jobs with a matching `container` run in) has gcc 8
+        # in its standard repositories. On newer releases (like the runner image
+        # itself) the packages have to be downloaded from the Ubuntu 20.04
+        # archive by hand.
+        if sudo apt-get install -y gcc-8 g++-8; then
+          exit 0
+        fi
         wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8_8.4.0-3ubuntu2_amd64.deb
         wget http://mirrors.edge.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8-base_8.4.0-3ubuntu2_amd64.deb
         wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libgcc-8-dev_8.4.0-3ubuntu2_amd64.deb
