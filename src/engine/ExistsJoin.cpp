@@ -265,7 +265,7 @@ std::optional<IdTable> ExistsJoin::tryHashSetExistsJoin(
   ColumnIndex rightJoinCol = joinColumnData.jcsRight().front();
 
   checkCancellation();
-  HashSet<Id> rightKeys;
+  ad_utility::HashSet<Id> rightKeys;
   rightKeys.reserve(right.size());
   for (const auto& row : right) {
     rightKeys.insert(row[rightJoinCol]);
