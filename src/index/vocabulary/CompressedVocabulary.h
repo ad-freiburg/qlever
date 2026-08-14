@@ -74,10 +74,8 @@ CPP_template(typename UnderlyingVocabulary,
     auto& compressedViews = *compressedResult;
 
     // Compute total compressed size for the buffer estimate.
-    size_t totalCompressedSize = 0;
-    for (size_t i = 0; i < compressedViews.size(); ++i) {
-      totalCompressedSize += compressedViews[i].size();
-    }
+    size_t totalCompressedSize = ::ranges::accumulate(
+        compressedViews | ql::views::transform(&std::string_view::size), 0);
 
     // Create the result object and give it PMR-backed storage. The
     // monotonic_buffer_resource pre-allocates a buffer sized for the estimated
@@ -95,12 +93,8 @@ CPP_template(typename UnderlyingVocabulary,
     // word (FSST expands by at most a factor of 8 per pass; for FSST^2 the
     // intermediate pass expands by at most 8x and the final pass by at most
     // 64x), then reuse it across all words without ever resizing.
-    size_t maxCompressedSize = 0;
-    for (size_t i = 0; i < compressedViews.size(); ++i) {
-      if (compressedViews[i].size() > maxCompressedSize) {
-        maxCompressedSize = compressedViews[i].size();
-      }
-    }
+    size_t maxCompressedSize = ::ranges::max(
+        compressedViews | ql::views::transform(&std::string_view::size));
     auto scratchBuf = std::make_unique<char[]>(maxCompressedSize * 64 + 64);
 
     for (size_t i = 0; i < indices.size(); ++i) {
