@@ -786,19 +786,42 @@ static std::vector<std::vector<TableWithRange>> splitBlocksIntoGroups(
   // The caller guarantees `numGroups <= totalRows`, so every group receives at
   // least one row.
   const uint64_t rowsPerGroup = (totalRows + numGroups - 1) / numGroups;
+  // The `view_` ranges carry the original global row indices (the blank-node
+  // base IDs depend on them), so the group boundaries are expressed in the
+  // same absolute index space: the first group starts at the first row of the
+  // first non-empty block, and the last group receives all remaining rows.
+  size_t firstNonEmptyBlock = 0;
+  while (ql::ranges::empty(blocks[firstNonEmptyBlock].view_)) {
+    ++firstNonEmptyBlock;
+  }
+  const uint64_t firstRow =
+      *ql::ranges::begin(blocks[firstNonEmptyBlock].view_);
+  const uint64_t lastRowExclusive = firstRow + totalRows;
   size_t groupIndex = 0;
-  uint64_t groupEnd = rowsPerGroup;
+  uint64_t groupEnd = firstRow + rowsPerGroup;
   for (const auto& block : blocks) {
     uint64_t begin = *ql::ranges::begin(block.view_);
     uint64_t end = begin + ql::ranges::size(block.view_);
     while (begin < end) {
+      // The last group receives all rows that are left.
+      if (groupIndex == numGroups - 1) {
+        groupEnd = end;
+      }
       const uint64_t pieceEnd = std::min(end, groupEnd);
+      // A group boundary can lie before this block's first row only when the
+      // blocks are not contiguous; then the rows of the intermediate groups
+      // do not exist and those groups stay empty.
+      if (pieceEnd <= begin) {
+        ++groupIndex;
+        groupEnd = std::min(groupEnd + rowsPerGroup, lastRowExclusive);
+        continue;
+      }
       groups[groupIndex].push_back(TableWithRange{
           block.tableWithVocab_, ql::views::iota(begin, pieceEnd)});
       begin = pieceEnd;
       if (begin >= groupEnd && groupIndex + 1 < numGroups) {
         ++groupIndex;
-        groupEnd = std::min(groupEnd + rowsPerGroup, totalRows);
+        groupEnd = std::min(groupEnd + rowsPerGroup, lastRowExclusive);
       }
     }
   }
