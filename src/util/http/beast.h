@@ -5,37 +5,20 @@
 #ifndef QLEVER_SRC_UTIL_HTTP_BEAST_H
 #define QLEVER_SRC_UTIL_HTTP_BEAST_H
 
-// A convenience header that includes Boost::Asio and Boost::Beast,
-// and defines several constants to make Boost::Asio compile
-// with coroutine support on G++/libstdc++ and clang++/libc++
-// (TODO<joka921> Figure out, why Boost currently is not able, to deduce
-// these automatically.
+// A convenience header that includes Boost::Asio and Boost::Beast, and defines
+// the few constants that Boost::Asio doesn't deduce automatically (see below).
+// In particular the constants for the coroutine support are NOT needed:
+// sufficiently recent Boost versions define them themselves, and the old
+// versions that we still support (down to Boost 1.71, see the `CPP17 libQLever`
+// CI workflow) don't have coroutine support at all. Note that we must not force
+// them for those old versions, because their `boost/asio/awaitable.hpp` then
+// includes the Coroutines TS header `<experimental/coroutine>`, which is
+// provided by neither libstdc++ nor recent libc++.
 
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
-#include <boost/version.hpp>
 #include <utility>
-
-// `boost::asio` only supports the standard `<coroutine>` header since Boost
-// 1.75. Before that, `boost/asio/awaitable.hpp` includes the Coroutines TS
-// header `<experimental/coroutine>` whenever `BOOST_ASIO_HAS_CO_AWAIT` is
-// defined, and that header is provided by neither libstdc++ nor recent
-// libc++. QLever only uses the coroutine support of `boost::asio` in the
-// `http` and `server` libraries, which are excluded from the reduced feature
-// set (the only configuration in which such old Boost versions are supported),
-// so simply don't enable it for them. `<coroutine>` is then not needed either,
-// which is important because it also doesn't exist in C++17 mode.
-#if BOOST_VERSION >= 107500
-// libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
-#include <coroutine>
-#ifndef BOOST_ASIO_HAS_CO_AWAIT
-#define BOOST_ASIO_HAS_CO_AWAIT
-#endif
-#ifndef BOOST_ASIO_HAS_STD_COROUTINE
-#define BOOST_ASIO_HAS_STD_COROUTINE
-#endif
-#endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
 #ifndef BOOST_ASIO_HAS_STD_INVOKE_RESULT

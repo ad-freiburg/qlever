@@ -13,6 +13,7 @@
 #include <fstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../util/GTestHelpers.h"
@@ -27,13 +28,15 @@ namespace {
 void touch(const fs::path& path) { std::ofstream{path.string()}; }
 
 // Create an empty directory (with all its parents) that is unique to the
-// current test, and remove it again at the end of the test.
-fs::path makeUniqueDirectory() {
-  fs::path directory = fs::temp_directory_path() / gtestCurrentTestName();
+// current test, and return it together with an `absl::Cleanup` that removes the
+// directory and all its contents again.
+auto makeUniqueDirectory() {
+  fs::path directory = fs::current_path() / gtestCurrentTestName();
   // Remove leftovers from a previous crashed run.
   fs::remove_all(directory);
   fs::create_directories(directory);
-  return directory;
+  return std::pair{directory,
+                   absl::Cleanup{[directory] { fs::remove_all(directory); }}};
 }
 }  // namespace
 
@@ -59,8 +62,7 @@ TEST(BackportsFilesystem, pathFromStringView) {
 
 // _____________________________________________________________________________
 TEST(BackportsFilesystem, isRegularFileAndIsDirectory) {
-  fs::path directory = makeUniqueDirectory();
-  absl::Cleanup cleanup = [&directory] { fs::remove_all(directory); };
+  auto [directory, cleanup] = makeUniqueDirectory();
   touch(directory / "file");
   fs::create_directory(directory / "subdirectory");
 
