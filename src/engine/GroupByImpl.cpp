@@ -15,6 +15,8 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
+#include "engine/OptionalJoin.h"
+#include "engine/Union.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -1965,6 +1967,200 @@ std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+namespace {
+std::optional<Permutation::Enum> permutationWithWantedCol1(
+    const IndexScan& scan, const Variable& wantedCol1) {
+  const bool predBound = !scan.predicate().isVariable();
+  const bool subjBound = !scan.subject().isVariable();
+  const bool objBound = !scan.object().isVariable();
+  if (scan.subject().isVariable() &&
+      scan.subject().getVariable() == wantedCol1) {
+    if (predBound) {
+      return Permutation::PSO;
+    }
+    if (objBound) {
+      return Permutation::OSP;
+    }
+  } else if (scan.object().isVariable() &&
+             scan.object().getVariable() == wantedCol1) {
+    if (predBound) {
+      return Permutation::POS;
+    }
+    if (subjBound) {
+      return Permutation::SOP;
+    }
+  } else if (scan.predicate().isVariable() &&
+             scan.predicate().getVariable() == wantedCol1) {
+    if (subjBound) {
+      return Permutation::SPO;
+    }
+    if (objBound) {
+      return Permutation::OPS;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<size_t> exactSizeIfIndexScan(const QueryExecutionTree& tree) {
+  auto scan =
+      std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
+  if (!scan || !scan->graphsToFilter().areAllGraphsAllowed()) {
+    return std::nullopt;
+  }
+  return scan->getLimitOffset().actualSize(scan->getExactSize());
+}
+
+const IndexScan* unwrapIndexScan(const QueryExecutionTree& tree) {
+  const Operation* op = tree.getRootOperation().get();
+  if (const auto* sort = dynamic_cast<const Sort*>(op)) {
+    const auto children = sort->getChildren();
+    if (children.size() != 1) {
+      return nullptr;
+    }
+    op = children[0]->getRootOperation().get();
+  }
+  return dynamic_cast<const IndexScan*>(op);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::optional<IdTable> GroupByImpl::computeCountStarFromMetadata() const {
+  auto idTableFromInt = [this](size_t count) {
+    IdTable table{1, getExecutionContext()->getAllocator()};
+    table.push_back({Id::makeFromInt(count)});
+    return table;
+  };
+
+  if (auto* unionOp =
+          dynamic_cast<Union*>(_subtree->getRootOperation().get())) {
+    auto leftSize = exactSizeIfIndexScan(*unionOp->leftChild());
+    auto rightSize = exactSizeIfIndexScan(*unionOp->rightChild());
+    if (!leftSize.has_value() || !rightSize.has_value()) {
+      return std::nullopt;
+    }
+    unionOp->leftChild()->getRootOperation()
+        ->updateRuntimeInformationWhenOptimizedOut({});
+    unionOp->rightChild()->getRootOperation()
+        ->updateRuntimeInformationWhenOptimizedOut({});
+    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {unionOp->leftChild()->getRootOperation()->getRuntimeInfoPointer(),
+         unionOp->rightChild()->getRootOperation()->getRuntimeInfoPointer()});
+    return idTableFromInt(leftSize.value() + rightSize.value());
+  }
+
+  if (auto* optional =
+          dynamic_cast<OptionalJoin*>(_subtree->getRootOperation().get())) {
+    auto children = optional->getChildren();
+    if (children.size() != 2) {
+      return std::nullopt;
+    }
+    if (!children[1]->knownEmptyResult()) {
+      return std::nullopt;
+    }
+    auto leftSize = exactSizeIfIndexScan(*children[0]);
+    if (!leftSize.has_value()) {
+      return std::nullopt;
+    }
+    children[0]->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {});
+    children[1]->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {});
+    _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {children[0]->getRootOperation()->getRuntimeInfoPointer(),
+         children[1]->getRootOperation()->getRuntimeInfoPointer()});
+    return idTableFromInt(leftSize.value());
+  }
+
+  if (auto* join = dynamic_cast<Join*>(_subtree->getRootOperation().get())) {
+    auto children = join->getChildren();
+    if (children.size() != 2) {
+      return std::nullopt;
+    }
+    const auto* leftScan = unwrapIndexScan(*children[0]);
+    const auto* rightScan = unwrapIndexScan(*children[1]);
+    if (!leftScan || !rightScan) {
+      return std::nullopt;
+    }
+    if (leftScan->numVariables() != 2 || rightScan->numVariables() != 2 ||
+        !leftScan->graphsToFilter().areAllGraphsAllowed() ||
+        !rightScan->graphsToFilter().areAllGraphsAllowed() ||
+        !leftScan->additionalVariables().empty() ||
+        !rightScan->additionalVariables().empty()) {
+      return std::nullopt;
+    }
+    auto joinColumns =
+        QueryExecutionTree::getJoinColumns(*children[0], *children[1]);
+    if (joinColumns.size() != 1) {
+      return std::nullopt;
+    }
+    auto joinVar =
+        children[0]->getVariableAndInfoByColumnIndex(joinColumns[0][0]).first;
+
+    auto distinctCounts = [&](const IndexScan& scan)
+        -> std::optional<IdTable> {
+      const auto& locTriples =
+          scan.permutation().getLocatedTriplesForPermutation(
+              locatedTriplesState());
+      if (!locTriples.isEmpty() || scan.permutation().permutationType() ==
+                                       Permutation::Type::MATERIALIZED_VIEW) {
+        return std::nullopt;
+      }
+      const auto& permutedTriple = scan.getPermutedTriple();
+      std::optional<Id> col0Id = toValueId(*permutedTriple[0], getIndex());
+      if (!col0Id.has_value()) {
+        return std::nullopt;
+      }
+      auto target = permutationWithWantedCol1(scan, joinVar);
+      if (!target.has_value()) {
+        return std::nullopt;
+      }
+      const auto& permutation =
+          getIndex().getImpl().getPermutation(target.value());
+      return permutation.getDistinctCol1IdsAndCounts(
+          col0Id.value(), cancellationHandle_, locatedTriplesState(),
+          scan.getLimitOffset());
+    };
+
+    auto leftCounts = distinctCounts(*leftScan);
+    auto rightCounts = distinctCounts(*rightScan);
+    if (!leftCounts.has_value() || !rightCounts.has_value()) {
+      return std::nullopt;
+    }
+
+    children[0]->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {});
+    children[1]->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+        {});
+    join->updateRuntimeInformationWhenOptimizedOut(
+        {children[0]->getRootOperation()->getRuntimeInfoPointer(),
+         children[1]->getRootOperation()->getRuntimeInfoPointer()});
+
+    const auto& left = leftCounts.value();
+    const auto& right = rightCounts.value();
+    size_t i = 0;
+    size_t j = 0;
+    size_t total = 0;
+    while (i < left.numRows() && j < right.numRows()) {
+      const Id leftId = left(i, 0);
+      const Id rightId = right(j, 0);
+      if (leftId == rightId) {
+        total += static_cast<size_t>(left(i, 1).getInt()) *
+                 static_cast<size_t>(right(j, 1).getInt());
+        ++i;
+        ++j;
+      } else if (leftId < rightId) {
+        ++i;
+      } else {
+        ++j;
+      }
+    }
+    return idTableFromInt(total);
+  }
+
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeCountStar() const {
   bool isSingleGlobalAggregateFunction =
       _groupByVariables.empty() && _aliases.size() == 1;
@@ -1980,6 +2176,13 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   }();
   if (!singleAggregateIsNonDistinctCountStar) {
     return std::nullopt;
+  }
+
+  if (!getRuntimeParameter<
+          &RuntimeParameters::groupByDisableIndexScanOptimizations_>()) {
+    if (auto result = computeCountStarFromMetadata()) {
+      return result;
+    }
   }
 
   auto childRes = _subtree->getResult(true);
