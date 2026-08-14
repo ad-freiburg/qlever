@@ -252,8 +252,7 @@ inline std::unique_ptr<VocabLookupHandleBase> beginResolveVocabIndexIds(
 template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
           typename EscapeFunction>
 void finishResolveVocabIndexIds(
-    const Index& index, ql::span<const Id> ids,
-    ql::span<const size_t> positions,
+    const Index& index, ql::span<const size_t> positions,
     std::unique_ptr<VocabLookupHandleBase> handle,
     ql::span<std::optional<std::pair<std::string, const char*>>> results,
     const EscapeFunction& escapeFunction) {
@@ -284,7 +283,7 @@ void resolveVocabIndexIds(
   }));
 
   finishResolveVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-      index, ids, positions, beginResolveVocabIndexIds(index, ids, positions),
+      index, positions, beginResolveVocabIndexIds(index, ids, positions),
       results, escapeFunction);
 }
 
