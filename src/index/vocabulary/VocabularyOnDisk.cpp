@@ -225,7 +225,7 @@ std::unique_ptr<VocabLookupHandleBase> VocabularyOnDisk::beginLookup(
   handle->offsetBatch_ = handle->manager_->addBatch(offsetsFile_.fd(), sizes,
                                                     fileOffsets, targets);
 
-  returnManagerOnThrow.release();
+  std::move(returnManagerOnThrow).Cancel();
   return handle;
 }
 
