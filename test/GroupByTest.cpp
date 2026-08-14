@@ -3327,3 +3327,44 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
 }
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, sumYearOverDistinctValues) {
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(
+      "<x> <published> \"1999\"^^<http://www.w3.org/2001/XMLSchema#gYear> . "
+      "<y> <published> \"2001\"^^<http://www.w3.org/2001/XMLSchema#gYear> . "
+      "<z> <published> \"1999\"^^<http://www.w3.org/2001/XMLSchema#gYear> ."))};
+  auto qec = ctx.makeQec();
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{Variable{"?s"}, iri("<published>"), Variable{"?o"}});
+  Variable varO{"?o"};
+  auto sumYear = SparqlExpressionPimpl{
+      std::make_unique<SumExpression>(
+          false, makeYearExpression(makeVariableExpression(varO))),
+      "SUM(YEAR(?o))"};
+  std::vector<Alias> aliases{Alias{std::move(sumYear), Variable{"?sum"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{I(5999)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, sumStrlenOverDistinctValues) {
+  QecWrapper ctx{std::make_shared<Index>(
+      makeTestIndex("<x> <label> \"ab\" . <y> <label> \"abc\" . "
+                    "<z> <label> \"ab\" ."))};
+  auto qec = ctx.makeQec();
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{Variable{"?s"}, iri("<label>"), Variable{"?o"}});
+  Variable varO{"?o"};
+  auto sumStrlen = SparqlExpressionPimpl{
+      std::make_unique<SumExpression>(
+          false, makeStrlenExpression(makeVariableExpression(varO))),
+      "SUM(STRLEN(?o))"};
+  std::vector<Alias> aliases{Alias{std::move(sumStrlen), Variable{"?sum"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{I(7)}}));
+}

@@ -239,6 +239,12 @@ class GroupByImpl : public Operation {
   // (implicit) group.
   std::optional<IdTable> computeCountStar() const;
 
+  // `SELECT (SUM(f(?v)) AS ?s)` over a two-variable index scan. Evaluates
+  // `f` once per distinct `?v` and multiplies by that value's multiplicity.
+  // Covers YEAR/MONTH/DAY/STRLEN/STRSTARTS and any other deterministic
+  // single-variable numeric function.
+  std::optional<IdTable> computeSumOverDistinctValues() const;
+
   // Stores information required for substitution of an expression in an
   // expression tree.
   struct ParentAndChildIndex {
