@@ -823,9 +823,13 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   }
 
   // Distinct counts are only supported for triples with three variables without
-  // a GRAPH variable and if no `LIMIT`/`OFFSET` clauses are present.
+  // a GRAPH variable and if no `LIMIT`/`OFFSET` clauses are present. For
+  // two-variable scans (one bound column, two variables) we can answer
+  // `COUNT(DISTINCT ?v)` from the relation metadata as well, see
+  // `computeDistinctCountForTwoVariableScan` below.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
-  if (countIsDistinct && (indexScan->numVariables() != 3 ||
+  if (countIsDistinct && (indexScan->numVariables() < 2 ||
+                          indexScan->numVariables() > 3 ||
                           !indexScan->additionalVariables().empty() ||
                           !indexScan->getLimitOffset().isUnconstrained())) {
     return std::nullopt;
@@ -847,6 +851,18 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
   if (!isVariableBoundInSubtree(var)) {
     // The variable is never bound, so its count is zero.
     return idTableFromInt(0);
+  }
+
+  // For a two-variable scan with a bound first column, `COUNT(DISTINCT ?v)`
+  // is the number of distinct values of `?v` in that relation. The index
+  // stores this information in the relation metadata (and, for blocks that
+  // contain more than one distinct value, computes it by only decompressing
+  // those blocks), so we can answer without a full scan.
+  if (countIsDistinct && indexScan->numVariables() == 2) {
+    if (auto result = computeDistinctCountForTwoVariableScan(indexScan, var)) {
+      return idTableFromInt(result.value());
+    }
+    return std::nullopt;
   }
 
   if (indexScan->numVariables() != 3) {
@@ -901,7 +917,97 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
       indexScan->permutation().numTriples()));
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+std::optional<size_t>
+GroupByImpl::computeDistinctCountForTwoVariableScan(
+    const std::shared_ptr<const IndexScan>& indexScan,
+    const Variable& countedVariable) const {
+  AD_CORRECTNESS_CHECK(indexScan->numVariables() == 2);
+
+  // The scan is `?a <bound> ?b` (in permutation order), so the first entry of
+  // the permuted triple is the bound column and the other two are variables.
+  const auto& permutedTriple = indexScan->getPermutedTriple();
+  std::optional<Id> col0Id = toValueId(*permutedTriple[0], getIndex());
+  if (!col0Id.has_value()) {
+    return std::nullopt;
+  }
+
+  // The statistics are precomputed at index build time and do not reflect
+  // delta triples from SPARQL updates, so fall back to the general
+  // computation when there are any delta triples or a materialized view.
+  const auto& locTriples =
+      indexScan->permutation().getLocatedTriplesForPermutation(
+          locatedTriplesState());
+  if (!locTriples.isEmpty() ||
+      indexScan->permutation().permutationType() ==
+          Permutation::Type::MATERIALIZED_VIEW) {
+    return std::nullopt;
+  }
+
+  // Determine the permutation in which `countedVariable` is stored in column
+  // 1 (the column whose distinct values `getDistinctCol1IdsAndCounts`
+  // counts). The scan's own permutation already has it there when the counted
+  // variable is the second entry of the permuted triple; otherwise we need
+  // the permutation that swaps the two variable columns.
+  bool countedVariableInColumnOne =
+      permutedTriple[1]->isVariable() &&
+      *permutedTriple[1] == countedVariable;
+
+  if (countedVariableInColumnOne) {
+    // Fast path: the scan's permutation already has the counted variable in
+    // column 1, so we can use it directly.
+    const auto& permutation = indexScan->permutation();
+    auto result = permutation.getDistinctCol1IdsAndCounts(
+        col0Id.value(), cancellationHandle_, locatedTriplesState(),
+        indexScan->getLimitOffset());
+    return result.numRows();
+  }
+
+  // The counted variable is in column 2 of the scan's permutation. We need
+  // the permutation whose column 1 is the counted variable. With exactly one
+  // bound column (col0), the counted variable is one of the other two
+  // positions of the triple, so we select the permutation that puts it into
+  // column 1 while keeping the bound column in column 0.
+  std::optional<Permutation::Enum> targetPermutation = std::nullopt;
+  if (indexScan->predicate().isVariable() &&
+      indexScan->predicate().getVariable() == countedVariable) {
+    // Counted variable is the predicate. The bound column is the subject
+    // (`?s p <o>`, SPO has p in column 1) or the object (`<s> p ?o`, OSP has
+    // p in column 1).
+    if (!indexScan->subject().isVariable()) {
+      targetPermutation = Permutation::SPO;
+    } else if (!indexScan->object().isVariable()) {
+      targetPermutation = Permutation::OSP;
+    }
+  } else if (indexScan->subject().isVariable() &&
+             indexScan->subject().getVariable() == countedVariable) {
+    // Counted variable is the subject. The bound column must be the
+    // predicate (`?s <p> ?o`, PSO has s in column 1).
+    if (!indexScan->predicate().isVariable()) {
+      targetPermutation = Permutation::PSO;
+    }
+  } else if (indexScan->object().isVariable() &&
+             indexScan->object().getVariable() == countedVariable) {
+    // Counted variable is the object. The bound column must be the
+    // predicate (`?s <p> ?o`, POS has o in column 1).
+    if (!indexScan->predicate().isVariable()) {
+      targetPermutation = Permutation::POS;
+    }
+  }
+
+  if (!targetPermutation.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto& permutation =
+      getIndex().getImpl().getPermutation(targetPermutation.value());
+  auto result = permutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, locatedTriplesState(),
+      indexScan->getLimitOffset());
+  return result.numRows();
+}
+
+// _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =

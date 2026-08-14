@@ -3327,3 +3327,59 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
 }
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, distinctCountTwoVariableScanColumnOne) {
+  // `?s <label3> ?o` with `COUNT(DISTINCT ?o)`: two-variable scan with bound
+  // predicate. The counted variable ?o is column 1 of the scan's permutation
+  // (POS), so the new metadata fast path answers it directly.
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(
+      "<x> <label3> <a> . <x> <label3> <b> . <y> <label3> <a> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto qec = ctx.makeQec();
+
+  // SELECT (COUNT(DISTINCT ?o) AS ?count) WHERE { ?s <label3> ?o }
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::POS,
+      SparqlTripleSimple{Variable{"?s"}, iri("<label3>"), Variable{"?o"}});
+  Variable varO{"?o"};
+  auto countDistinctOPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          true, std::make_unique<VariableExpression>(varO)),
+      "COUNT(DISTINCT ?o)"};
+  std::vector<Alias> aliases{
+      Alias{std::move(countDistinctOPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+
+  // The relation contains the distinct objects <a> and <b> -> count = 2.
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{I(2)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupByOptimizations, distinctCountTwoVariableScanColumnTwo) {
+  // `?s <label3> ?o` with `COUNT(DISTINCT ?s)`: the counted variable ?s is
+  // column 2 of the POS permutation, so the helper must select the PSO
+  // permutation (where ?s is column 1) to answer from the relation metadata.
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(
+      "<x> <label3> <a> . <x> <label3> <b> . <y> <label3> <a> ."))};
+  auto getId = makeGetId(*ctx.index_);
+  auto qec = ctx.makeQec();
+
+  // SELECT (COUNT(DISTINCT ?s) AS ?count) WHERE { ?s <label3> ?o }
+  auto scan = makeExecutionTree<IndexScan>(
+      &qec, Permutation::Enum::POS,
+      SparqlTripleSimple{Variable{"?s"}, iri("<label3>"), Variable{"?o"}});
+  Variable varS{"?s"};
+  auto countDistinctSPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(
+          true, std::make_unique<VariableExpression>(varS)),
+      "COUNT(DISTINCT ?s)"};
+  std::vector<Alias> aliases{
+      Alias{std::move(countDistinctSPimpl), Variable{"?count"}}};
+  GroupByImpl groupBy{&qec, {}, aliases, scan};
+
+  // The relation contains the distinct subjects <x> and <y> -> count = 2.
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
+              optionalHasTable({{I(2)}}));
+}
