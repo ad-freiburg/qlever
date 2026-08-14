@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -431,27 +432,6 @@ RebuildSetup setUpRebuild(const std::string& baseFolder) {
       std::move(rebuilt), MaterializedViewsManager{rebuiltBase});
   return {std::move(oldBase), std::move(rebuiltBase), std::move(indexAndViews)};
 }
-
-// Create a fresh (empty) directory named after the currently running test and
-// make it the working directory. The returned cleanup first restores the
-// previous working directory and then removes that directory again, so both
-// steps live in a single cleanup to fix their order. Needed by the tests that
-// deal with base names without a directory component, as those are resolved
-// against the working directory.
-[[nodiscard]] auto useFreshWorkingDirectory() {
-  auto oldCwd = ql::filesystem::current_path();
-  std::string folder = gtestCurrentTestName();
-  // Leftovers from a previous run would break the checks for directories that
-  // must not exist yet.
-  ql::filesystem::remove_all(folder);
-  ql::filesystem::create_directory(folder);
-  ql::filesystem::current_path(folder);
-  return absl::Cleanup{
-      [oldCwd = std::move(oldCwd), folder = std::move(folder)] {
-        ql::filesystem::current_path(oldCwd);
-        ql::filesystem::remove_all(folder);
-      }};
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -557,7 +537,7 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithDirectoryBasename) {
 // bare file names as well, otherwise the base-name prefix substitution of the
 // move fails on the globbed files (vocabulary, views).
 TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
-  auto cleanup = useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
   ql::filesystem::create_directory("rebuild.tmp");
   Index rebuilt = ad_utility::testing::makeTestIndex(
@@ -595,7 +575,7 @@ TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareBasename) {
 // of that directory has to be skipped (in particular, the working directory
 // itself must not be removed).
 TEST(Qlever, moveRebuiltIndexIntoPlaceWithBareNewIndexSource) {
-  auto cleanup = useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
   Index rebuilt = ad_utility::testing::makeTestIndex(
       "rebuilt", "<a> <b> <c> . <d> <e> <f> .");
@@ -943,7 +923,7 @@ TEST(LibQlever, clearCache) {
 // to lie inside the directory of the current index (which is the working
 // directory here as the index is served from the bare base name `index`).
 TEST(Qlever, makeIndexRebuildConfig) {
-  auto cleanup = useFreshWorkingDirectory();
+  auto cleanup = ad_utility::testing::useFreshWorkingDirectory();
   Index index = ad_utility::testing::makeTestIndex("index", "<a> <b> <c> .");
   auto makeConfig = [&index](
                         std::optional<std::string> rebuildTmpDir,
@@ -1015,4 +995,36 @@ TEST(Qlever, makeIndexRebuildConfig) {
   // ... and must lie inside the directory of the current index.
   AD_EXPECT_THROW_WITH_MESSAGE(makeConfig("../outside", std::nullopt),
                                HasSubstr("not a subdirectory"));
+
+  // The default directory for the old index is `previous.<datetime of the
+  // build of the current index>`, which has a granularity of one second. When
+  // that directory is already taken by a previous rebuild (e.g. rebuilds in
+  // quick succession with `--rebuild-index-strategy`), `.1`, `.2`, ... is
+  // appended; an occupied directory must not fail the rebuild, because the
+  // datetime of the served index only changes on a successful swap, so all
+  // subsequent rebuilds would fail with the same name.
+  {
+    std::string defaultPreviousDir =
+        absl::StrCat("previous.", index.getImpl().dateOfIndexBuild());
+    ql::filesystem::create_directory(defaultPreviousDir);
+    ad_utility::makeOfstream(defaultPreviousDir + "/index.meta-data.json")
+        << "occupied";
+    EXPECT_EQ(makeConfig(std::nullopt, std::nullopt).oldIndexTarget(),
+              absl::StrCat(defaultPreviousDir, ".1/index"));
+    ql::filesystem::create_directory(defaultPreviousDir + ".1");
+    ad_utility::makeOfstream(defaultPreviousDir + ".1/index.meta-data.json")
+        << "occupied";
+    EXPECT_EQ(makeConfig(std::nullopt, std::nullopt).oldIndexTarget(),
+              absl::StrCat(defaultPreviousDir, ".2/index"));
+
+    // After `.99`, the rebuild fails with a readable message.
+    for (size_t i = 2; i <= 99; ++i) {
+      ql::filesystem::create_directory(
+          absl::StrCat(defaultPreviousDir, ".", i));
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        makeConfig(std::nullopt, std::nullopt),
+        AllOf(HasSubstr("all already exist"),
+              HasSubstr("rebuild-previous-index-dir")));
+  }
 }

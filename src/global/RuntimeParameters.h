@@ -6,6 +6,7 @@
 #define QLEVER_RUNTIMEPARAMETERS_H
 
 #include <algorithm>
+#include <optional>
 
 #include "util/Log.h"
 #include "util/Parameters.h"
@@ -55,18 +56,44 @@ struct RuntimeParameters {
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of threads that read and decompress the blocks of a lazy index
+  // scan. Each lazy scan of a query has its own pool of this many threads.
+  // The value must be at least `1` (enforced by a parameter constraint).
+  // The default of `2` is enough for typical queries, where the operation
+  // that consumes the blocks processes them on a single thread and can barely
+  // keep up with the decompression even for `1` thread.
+  SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
   // The number of threads used to read and decompress blocks when scanning
   // permutations during a runtime index rebuild (see `IndexRebuilder`), both
   // for the main scan of the old permutations and for the statistics
-  // recomputation. This read/decompress work dominates the rebuild's CPU
-  // usage, so lowering it reduces the rebuild's peak CPU without affecting
-  // query scans. The default of 2 keeps a rebuild on a live server from
-  // starving concurrent queries of CPU (measured on Wikidata on a 16-core
-  // server: peak CPU drops from ~26 to ~16 cores for ~18% more wall time).
-  // A value of 0 falls back to `lazy-index-scan-num-threads`, the same value
-  // as for query scans, which gives the fastest rebuild.
-  SizeT rebuildIndexScanNumThreads_{2, "rebuild-index-scan-num-threads"};
+  // recomputation. Lowering it reduces the rebuild's CPU usage without
+  // affecting query scans. The default of 1 keeps a rebuild on a live server
+  // from starving concurrent queries of CPU, at nearly no cost in wall time:
+  // the bottleneck of each permutation pipeline is its single sequential
+  // remap thread, so additional scan threads mostly add contention (measured
+  // on Wikidata on an otherwise idle 16-core server, where the wall time was
+  // the same for 1, 2, and 4 threads). A value of 0 falls back to
+  // `lazy-index-scan-num-threads`, the same value as for query scans.
+  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
+  // The number of threads per permutation that compress and write blocks
+  // during a runtime index rebuild. Like the scan parameter above, this
+  // exists so that a rebuild on a live server leaves as much CPU as possible
+  // to concurrent queries: the default of 1 reduces the CPU work of the
+  // permutation phase by ~20% at nearly no cost in wall time (same
+  // measurement setup as above). A value of 0 falls back to
+  // `permutation-writer-num-threads`, which is also used when building an
+  // index from scratch and when writing materialized views, and which this
+  // parameter deliberately leaves untouched.
+  SizeT rebuildPermutationWriterNumThreads_{
+      1, "rebuild-permutation-writer-num-threads"};
+  // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
+  // the internal PSO+POS) that a runtime index rebuild processes in
+  // parallel. Each pair costs several CPU cores, several GB/s of memory
+  // bandwidth, and L3 cache, so lowering this value is THE knob for trading
+  // rebuild duration against interference with concurrent queries and
+  // updates. A value of 0 means "no limit" (all pairs in parallel).
+  SizeT rebuildMaxConcurrentPermutationPairs_{
+      0, "rebuild-max-concurrent-permutation-pairs"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
@@ -132,6 +159,18 @@ struct RuntimeParameters {
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
   // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
+  // The maximum number of threads for the parallel counting loops of the
+  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
+  // number of logical cores of the machine. The default of `3` captures most
+  // of the speedup, with quickly diminishing returns for more threads.
+  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
+  // The number of threads for the parallel sort of intermediate results
+  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
+  // as `1`. Only effective when QLever was built with the CMake option
+  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
+  // default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more threads.
+  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
   // `SpatialJoinAlgorithms::libspatialjoinParse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
@@ -259,6 +298,16 @@ auto getRuntimeParameter() {
   // destroyed. This is achieved by directly returning a copy of the parameter
   // value (the function returns `auto`, see above).
   return std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+}
+
+// Get the current value of the numeric runtime parameter specified by the
+// `ParameterPtr`, translated to an optional override: the value 0, which for
+// such parameters means "fall back to the corresponding general parameter",
+// becomes `std::nullopt`.
+template <auto ParameterPtr>
+std::optional<size_t> getRuntimeParameterAsOptional() {
+  size_t value = getRuntimeParameter<ParameterPtr>();
+  return value == 0 ? std::nullopt : std::optional<size_t>{value};
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H
