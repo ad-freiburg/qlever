@@ -65,7 +65,8 @@ struct LibSpatialJoinConfig {
 using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig,
                                      LibSpatialJoinConfig>;
 
-// Selection of a SpatialJoin algorithm
+// Selection of a SpatialJoin algorithm. When adding an algorithm here, also
+// update the string mapping in `parser/SpatialQuery.cpp`.
 enum class SpatialJoinAlgorithm {
   BASELINE,
   S2_GEOMETRY,
