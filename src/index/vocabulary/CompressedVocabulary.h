@@ -1,9 +1,18 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
+
+#include <string>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -18,6 +27,7 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
+#include "util/TransparentFunctors.h"
 
 namespace detail {
 
@@ -97,9 +107,27 @@ CPP_template(typename UnderlyingVocabulary,
         });
   }
 
-  //____________________________________________________________________________
+  // Batch-read the compressed words from the underlying vocabulary (which may
+  // itself be on-disk / io_uring), then decompress each word with the decoder
+  // of its block. The result order matches `indices`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+    auto compressed = underlyingVocabulary_.lookupBatch(indices);
+    AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
+
+    std::vector<std::string> words;
+    words.reserve(indices.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+      words.push_back(compressionWrapper_.decompress(
+          (*compressed)[i], getDecoderIdx(indices[i])));
+    }
+
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views() = ::ranges::to_vector(
+        data->buffer() |
+        ql::views::transform(ad_utility::staticCast<std::string_view>));
+    return StringVectorVocabBatchLookupData::asResult(std::move(data));
   }
 
   //____________________________________________________________________________
