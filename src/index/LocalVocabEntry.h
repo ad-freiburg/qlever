@@ -157,10 +157,11 @@ class alignas(16) LocalVocabEntry
   // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or `AuxVocabIndex`
   // (the latter only if the index has an auxiliary vocabulary that contains
   // this word, see the warning in the class comment above), and this entry
-  // compares exactly like an `Id` at that position. In particular this also
-  // holds when it is compared to an `Id` of an unrelated datatype like `Int` or
-  // `Date`, which is what makes the comparison of `Id`s a valid strict weak
-  // ordering, see `ValueId::compareThreeWay`.
+  // compares exactly like an `Id` at that position. NOTE: An `Id` of an
+  // unrelated datatype (like `Int` or `Date`) is deliberately *not* compared to
+  // this position, but to the datatype bits of the `LocalVocabIndex`, which
+  // yields the same result unless the bounds are of type `EncodedVal`, see the
+  // note at `ValueId::compareThreeWay`.
   struct PositionInVocab {
     IdProxy lowerBound_;
     IdProxy upperBound_;

@@ -143,7 +143,7 @@ TEST(AuxVocabIndex, valueIdBasics) {
 }
 
 // _____________________________________________________________________________
-TEST(AuxVocabIndex, sortsAfterAllOtherDatatypes) {
+TEST(AuxVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
   // One `Id` per datatype, except for `LocalVocabIndex`, which is not ordered
   // by its bits and is covered by the test below. If a datatype is added to the
   // `Datatype` enum, it has to be added here as well, which the check below
@@ -168,10 +168,15 @@ TEST(AuxVocabIndex, sortsAfterAllOtherDatatypes) {
         << toString(datatype);
   }
   ql::ranges::sort(ids);
-  // The two `Id`s of the auxiliary vocabulary are the largest ones, in
+  // The `Id`s of the auxiliary vocabulary are greater than the `Id`s of the
+  // main vocabulary (which is what makes the words of an auxiliary vocabulary
+  // mergeable into a scan of the main index), and they directly follow them, in
   // ascending order of their indices.
-  EXPECT_EQ(ids[ids.size() - 2], auxId(0));
-  EXPECT_EQ(ids[ids.size() - 1], auxId(1));
+  auto positionOfVocabIndex =
+      ql::ranges::find(ids, Datatype::VocabIndex, &Id::getDatatype);
+  ASSERT_GE(ids.end() - positionOfVocabIndex, 3);
+  EXPECT_EQ(*(positionOfVocabIndex + 1), auxId(0));
+  EXPECT_EQ(*(positionOfVocabIndex + 2), auxId(1));
 }
 
 // _____________________________________________________________________________
@@ -198,13 +203,39 @@ TEST_F(AuxVocabIndexTest, localVocabEntryInAuxVocabulary) {
   EXPECT_LT(auxId(0), idB);
   EXPECT_LT(idB, auxId(2));
 
-  // It is greater than all `Id`s of the main vocabulary, and also greater than
-  // all `Id`s of the unrelated datatypes, because those all have smaller
-  // datatype bits than `Datatype::AuxVocabIndex`.
+  // It is greater than all `Id`s of the main vocabulary, and it is ordered with
+  // respect to the unrelated datatypes exactly like its position, that is, by
+  // the datatype bits of `Datatype::AuxVocabIndex`.
   EXPECT_LT(getId_("<a>"), idB);
   EXPECT_LT(getId_("<s>"), idB);
   EXPECT_LT(Id::makeFromInt(42), idB);
-  EXPECT_LT(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3)), idB);
+  EXPECT_LT(idB, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3)));
+
+  // More precisely: comparing either of the two entries to an `Id` of an
+  // unrelated datatype yields exactly the same result as comparing the position
+  // of that entry (`auxId(1)` resp. the `VocabIndex` where `<e>` would be
+  // sorted) to that `Id`. This is what makes the comparison of `Id`s a valid
+  // strict weak ordering, and it is guaranteed by `Datatype::AuxVocabIndex`
+  // being directly adjacent to `Datatype::VocabIndex` and
+  // `Datatype::LocalVocabIndex`, which is also why the comparison can be done
+  // on the bits alone for these datatypes (see `ValueId::compareThreeWay`).
+  for (Id other : {Id::makeUndefined(), Id::makeFromBool(true),
+                   Id::makeFromInt(42), Id::makeFromDouble(3.14),
+                   Id::makeFromTextRecordIndex(TextRecordIndex::make(3)),
+                   Id::makeFromDate(DateYearOrDuration{Date{2013, 5, 16}}),
+                   Id::makeFromGeoPoint(GeoPoint{3, 4}),
+                   Id::makeFromWordVocabIndex(WordVocabIndex::make(3)),
+                   Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3))}) {
+    SCOPED_TRACE(toString(other.getDatatype()));
+    for (const auto& [id, position] :
+         {std::pair{idB, auxId(1)},
+          std::pair{
+              idE, Id::fromBits(entryE.positionInVocab().lowerBound_.get())}}) {
+      SCOPED_TRACE(position);
+      EXPECT_EQ(id < other, position < other);
+      EXPECT_EQ(other < id, other < position);
+    }
+  }
 
   // In particular, it is greater than a local vocab entry that is in neither
   // vocabulary, even though `<e>` is lexicographically greater than `<b>`. This

@@ -36,15 +36,21 @@ enum struct Datatype {
   Double,
   VocabIndex,
   LocalVocabIndex,
+  // See `index/vocabulary/AuxVocabulary.h`. NOTE: The position of this datatype
+  // is not arbitrary. It has to be greater than `VocabIndex` (the words of an
+  // auxiliary vocabulary are all sorted after the words of the main
+  // vocabulary), and it has to be directly adjacent to `VocabIndex` and
+  // `LocalVocabIndex`, which makes the comparison of an `Id` of type
+  // `LocalVocabIndex` with an `Id` of an unrelated datatype cheap, see
+  // `ValueId::compareThreeWay`.
+  AuxVocabIndex,
   TextRecordIndex,
   Date,
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
-  // See `index/vocabulary/AuxVocabulary.h`.
-  AuxVocabIndex,
-  MaxValue = AuxVocabIndex
+  MaxValue = EncodedVal
   // Note: Unfortunately, we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -131,13 +137,22 @@ class ValueId {
   // IDs are ordered by their string values, not by their IDs (and hence also
   // not by their types).
   // TODO<joka921> `AuxVocabIndex` also stores strings, but it is deliberately
-  // not listed here (yet): the IDs of that type are *not* adjacent to the ones
-  // listed here, which would violate the `static_assert` below, on which the
-  // semantic (that is, by string value) comparison of IDs in
-  // `ValueIdComparators.h` relies. Teaching that comparison about the auxiliary
-  // vocabulary is a separate step.
+  // not listed here (yet): the IDs of that type are directly adjacent to the
+  // ones listed here, but they are *not* ordered by their string value, so
+  // listing them here would break the semantic (that is, by string value)
+  // comparison of IDs in `ValueIdComparators.h`. Teaching that comparison about
+  // the auxiliary vocabulary is a separate step.
   static constexpr std::array<Datatype, 2> stringTypes_{
       Datatype::VocabIndex, Datatype::LocalVocabIndex};
+
+  // The datatypes that the position of a word in the vocabularies of an index
+  // can have, see `LocalVocabEntry::positionInVocab()`. The comparison of an
+  // `Id` of type `LocalVocabIndex` with an `Id` of one of these types requires
+  // that position (which may be expensive to compute); for all other datatypes
+  // the comparison of the bits already yields the correct result, see
+  // `compareThreeWay` below.
+  static constexpr std::array<Datatype, 3> datatypesOfPositionInVocab_{
+      Datatype::VocabIndex, Datatype::AuxVocabIndex, Datatype::EncodedVal};
 
   // A mapping that decides if a Datatype is bitwise comparable or not. See
   // `canBeComparedBitwise()` below.
@@ -152,6 +167,15 @@ class ValueId {
   static_assert(static_cast<size_t>(maxStringType_) -
                     static_cast<size_t>(minStringType_) + 1 ==
                 stringTypes_.size());
+
+  // Assert that `VocabIndex`, `LocalVocabIndex`, and `AuxVocabIndex` are
+  // directly adjacent, in this order. The comparison of an `Id` of type
+  // `LocalVocabIndex` with an `Id` of an unrelated datatype relies on this, see
+  // `compareThreeWay` below.
+  static_assert(static_cast<size_t>(Datatype::LocalVocabIndex) ==
+                static_cast<size_t>(Datatype::VocabIndex) + 1);
+  static_assert(static_cast<size_t>(Datatype::AuxVocabIndex) ==
+                static_cast<size_t>(Datatype::LocalVocabIndex) + 1);
 
   // Assert that the size of an encoded GeoPoint equals the available bits in a
   // ValueId.
@@ -199,11 +223,24 @@ class ValueId {
   // NOTE: An `Id` of type `LocalVocabIndex` does not carry its value in its
   // bits (they are a pointer), so it is ordered by the position that its word
   // has in the vocabularies of the index (see
-  // `LocalVocabEntry::positionInVocab`).
+  // `LocalVocabEntry::positionInVocab`). That position only has to be looked up
+  // if the other `Id` is of one of the datatypes that such a position can have
+  // (`datatypesOfPositionInVocab_`, see there). For all other datatypes the
+  // comparison of the bits already yields the same result, because
+  // `LocalVocabIndex` is directly adjacent to `VocabIndex` and `AuxVocabIndex`
+  // (see the `static_assert`s above), so an `Id` of any other datatype compares
+  // to the datatype bits of a `LocalVocabIndex` exactly like it compares to the
+  // datatype bits of the position.
+  // NOTE: The single exception is a word that is stored as an encoded IRI (see
+  // `LocalVocabContext::encodeAsId`), whose position is of type `EncodedVal`,
+  // which is *not* adjacent to `LocalVocabIndex`. Comparing such a word to an
+  // `Id` of an unrelated datatype hence deviates from comparing the positions.
+  // This is a pre-existing inconsistency of the encoded IRIs that is tracked
+  // separately, see the note at `valueIdComparators::detail::compareIdsImpl`.
   // NOTE: This is only `constexpr` in C++20 mode. GCC 8, which the C++17 CI job
-  // uses, rejects the trailing `if` statement below in a relaxed-constexpr
-  // function ("expression `<statement>` is not a constant expression"), and
-  // nothing compares `Id`s at compile time anyway.
+  // uses, rejects the branches below in a relaxed-constexpr function
+  // ("expression `<statement>` is not a constant expression"), and nothing
+  // compares `Id`s at compile time anyway.
   QL_CONSTEXPR auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
@@ -216,20 +253,25 @@ class ValueId {
                                  *other.getLocalVocabIndex());
     }
 
-    // Exactly one of the types is `LocalVocabIndex`, so the other one is
-    // compared to the position of the local vocab entry in the vocabularies,
-    // see the note above.
-    if (otherType == LocalVocabIndex) {
-      return compareOtherTypeToLocalVocab(
+    // Exactly one of the types is `LocalVocabIndex`. If the other one is a type
+    // that a position in the vocabularies can have, then compare that position,
+    // else fall through to the comparison of the bits, see the note above.
+    // NOTE: GCC 11 issues a false positive warning here, so we try to avoid it
+    // by being over-explicit about the branches here.
+    if (isDatatypeOfPositionInVocab(type) && otherType == LocalVocabIndex) {
+      return comparePositionInVocabToLocalVocab(
           LocalVocabEntry::IdProxy::make(getBits()),
           other.getLocalVocabIndex());
-    } else {
-      auto inverseOrder = compareOtherTypeToLocalVocab(
+    } else if (type == LocalVocabIndex &&
+               isDatatypeOfPositionInVocab(otherType)) {
+      auto inverseOrder = comparePositionInVocabToLocalVocab(
           LocalVocabEntry::IdProxy::make(other.getBits()),
           getLocalVocabIndex());
 
       return ql::compareThreeWay(0, inverseOrder);
     }
+
+    return ql::compareThreeWay(_bits, other._bits);
   }
   // NOTE: All the comparison operators are `QL_CONSTEXPR` and not `constexpr`,
   // because they call `compareThreeWay` above, see the note there.
@@ -426,6 +468,12 @@ class ValueId {
   // `isDatatypeTrivial` above).
   constexpr bool isTrivial() const { return isDatatypeTrivial(getDatatype()); }
 
+  // Return true iff `datatype` is one of the datatypes that the position of a
+  // word in the vocabularies can have, see `datatypesOfPositionInVocab_`.
+  constexpr static bool isDatatypeOfPositionInVocab(Datatype datatype) {
+    return ad_utility::contains(datatypesOfPositionInVocab_, datatype);
+  }
+
   // An `Id` is considered bitwise comparable if the mapping at
   // `isTypeBitwiseComparable_` says so. This is currently the case for all
   // datatypes except for the local vocab index.
@@ -555,10 +603,10 @@ class ValueId {
   }
 
  private:
-  // Compare the bits of an `Id` of an arbitrary type other than
-  // `LocalVocabIndex` with a `LocalVocabIndex`. For details see
+  // Compare the bits of an `Id` whose datatype is one of
+  // `datatypesOfPositionInVocab_` with a `LocalVocabIndex`. For details see
   // `LocalVocabEntry::positionInVocab()`.
-  static ql::strong_ordering compareOtherTypeToLocalVocab(
+  static ql::strong_ordering comparePositionInVocabToLocalVocab(
       LocalVocabEntry::IdProxy otherId, ::LocalVocabIndex localVocabIndex) {
     auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
     if (otherId < lowerBound) {

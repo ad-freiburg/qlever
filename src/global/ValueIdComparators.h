@@ -547,7 +547,9 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // 1. Comparing an `Id` of type `EncodedVal` to a word of one of the
 //    vocabularies is not correct either, not even for equality, because an
 //    encoded IRI is ordered by its encoding and not by its string value, see
-//    issue #2448.
+//    issue #2448. The same holds for an `Id` of type `LocalVocabIndex` whose
+//    word is an encoded IRI: it is not even consistently ordered with respect
+//    to the *internal* order, see the note at `ValueId::compareThreeWay`.
 // 2. Comparing literals with different datatypes blurs the distinction between
 //    `sameTerm` and `=`, which is also why `!(A = B)` and `A != B` currently
 //    behave differently, see issue #2405.
