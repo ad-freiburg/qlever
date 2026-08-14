@@ -167,4 +167,22 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       qlv, manager, "aggregatingChainView",
       "SELECT ?s (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
       "GROUP BY ?s");
+
+  // Same as above, but the star's subject (rather than one of its arms) is
+  // aggregated away.
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingStarSubjectView",
+      "SELECT ?o1 ?o2 (COUNT(?s) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
+      "GROUP BY ?o1 ?o2");
+
+  // Same as `aggregatingChainView` above, but the chain's first (subject) or
+  // last (object) variable is aggregated away instead of the middle one.
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingChainSubjectView",
+      "SELECT ?m ?o (COUNT(?s) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
+      "GROUP BY ?m ?o");
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingChainObjectView",
+      "SELECT ?s ?m (COUNT(?o) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
+      "GROUP BY ?s ?m");
 }
