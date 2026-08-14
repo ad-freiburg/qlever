@@ -38,24 +38,31 @@ std::unique_ptr<VocabLookupHandleBase> VocabularyInternalExternal::beginLookup(
   auto handle = std::make_unique<MixedLookupHandle>();
   handle->vocab_ = this;
   handle->numIndices_ = indices.size();
+
   std::vector<size_t> externalIndices;
   externalIndices.reserve(indices.size());
   handle->internalWords_.reserve(indices.size());
   handle->internalPositions_.reserve(indices.size());
   handle->externalPositions_.reserve(indices.size());
-  for (size_t pos = 0; pos < indices.size(); ++pos) {
-    auto fromInternal = internalVocab_[indices[pos]];
+
+  // Classify each index: RAM hits are resolved immediately, disk misses are
+  // collected into `externalIndices` for one batched on-disk lookup.
+  for (auto [pos, idx] : ::ranges::views::enumerate(indices)) {
+    auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
       handle->internalWords_.emplace_back(*fromInternal);
       handle->internalPositions_.push_back(pos);
     } else {
-      externalIndices.push_back(indices[pos]);
+      externalIndices.push_back(idx);
       handle->externalPositions_.push_back(pos);
     }
   }
+
+  // Submit the reads for all disk misses in one non-blocking `beginLookup`.
   if (!externalIndices.empty()) {
     handle->externalHandle_ = externalVocab_.beginLookup(externalIndices);
   }
+
   return handle;
 }
 
@@ -75,12 +82,14 @@ VocabBatchLookupResult VocabularyInternalExternal::MixedLookupHandle::finish() {
   if (externalHandle_) {
     data->diskResult_ =
         vocab_->externalVocab_.finishLookup(std::move(externalHandle_));
+    for (auto [position, word] :
+         ::ranges::views::zip(externalPositions_, *data->diskResult_)) {
+      data->views_[position] = word;
+    }
   }
-  for (size_t k = 0; k < internalPositions_.size(); ++k) {
-    data->views_[internalPositions_[k]] = data->internalWords_[k];
-  }
-  for (size_t k = 0; k < externalPositions_.size(); ++k) {
-    data->views_[externalPositions_[k]] = (*data->diskResult_)[k];
+  for (auto [position, word] :
+       ::ranges::views::zip(internalPositions_, data->internalWords_)) {
+    data->views_[position] = word;
   }
   return MixedVocabBatchLookupData::asResult(std::move(data));
 }

@@ -1,11 +1,15 @@
-// Copyright 2011 - 2025
-// University of Freiburg
-// Chair of Algorithms and Data Structures
+// Copyright 2011 - 2026, The QLever Authors, in particular:
 //
-// Authors: Björn Buchhold <buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// 2011 - 2026 Björn Buchhold <buchhold@gmail.com>, UFR
+// 2011 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2011 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2011 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H
@@ -131,6 +135,10 @@ class Vocabulary {
   // Batch lookup: look up multiple indices at once and return their words.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
+  // Split-phase variant of `lookupBatch`. `beginLookup` submits the reads for
+  // `indices` without blocking and returns a handle; `finishLookup` blocks
+  // until those reads have completed and returns the resolved words. This lets
+  // callers overlap vocabulary I/O with their own CPU work.
   std::unique_ptr<VocabLookupHandleBase> beginLookup(
       ql::span<const size_t> indices) const;
   VocabBatchLookupResult finishLookup(

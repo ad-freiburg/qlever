@@ -109,8 +109,8 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   // Batch-read the compressed words from the underlying vocabulary (which may
-  // itself be on-disk / io_uring), then decompress each word with the decoder
-  // of its block. The result order matches `indices`.
+  // itself be on-disk), then decompress each word with the decoder of its
+  // block. The result order matches `indices`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return finishLookup(beginLookup(indices));
   }
@@ -120,6 +120,9 @@ CPP_template(typename UnderlyingVocabulary,
     auto handle = std::make_unique<CompressedLookupHandle>();
     handle->vocab_ = this;
     handle->indices_.assign(indices.begin(), indices.end());
+    // `requires` is a compile-time check: if the underlying vocabulary
+    // supports the split-phase interface itself, delegate the reads to it;
+    // otherwise fall back to an eager in-memory lookup.
     if constexpr (requires { underlyingVocabulary_.beginLookup(indices); }) {
       handle->underlyingHandle_ = underlyingVocabulary_.beginLookup(indices);
     } else {
@@ -379,23 +382,25 @@ CPP_template(typename UnderlyingVocabulary,
  private:
   class CompressedLookupHandle : public VocabLookupHandleBase {
    public:
+    const CompressedVocabulary* vocab_ = nullptr;
+    std::vector<size_t> indices_;
+    std::unique_ptr<VocabLookupHandleBase> underlyingHandle_;
+
     VocabBatchLookupResult finish() override {
       auto compressed = underlyingHandle_->finish();
       auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-      data->buffer().reserve(indices_.size());
-      for (size_t i = 0; i < indices_.size(); ++i) {
-        data->buffer().push_back(vocab_->compressionWrapper_.decompress(
-            (*compressed)[i], vocab_->getDecoderIdx(indices_[i])));
-      }
+      data->buffer() = ::ranges::to_vector(
+          ::ranges::views::zip(indices_, *compressed) |
+          ql::views::transform([this](const auto& idxAndWord) {
+            const auto& [idx, word] = idxAndWord;
+            return vocab_->compressionWrapper_.decompress(
+                word, vocab_->getDecoderIdx(idx));
+          }));
       data->views() = ::ranges::to_vector(
           data->buffer() |
           ql::views::transform(ad_utility::staticCast<std::string_view>));
       return StringVectorVocabBatchLookupData::asResult(std::move(data));
     }
-
-    const CompressedVocabulary* vocab_ = nullptr;
-    std::vector<size_t> indices_;
-    std::unique_ptr<VocabLookupHandleBase> underlyingHandle_;
   };
 
   // Get the correct decoder for the given `idx`.

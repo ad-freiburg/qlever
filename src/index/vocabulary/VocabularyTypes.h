@@ -1,6 +1,12 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
@@ -185,7 +191,7 @@ struct EagerVocabLookupHandle : VocabLookupHandleBase {
 };
 
 // Generic sequential fallback implementations of the batch-lookup interface,
-// used by all vocabularies that do not provide a specialized (e.g. io_uring)
+// used by all vocabularies that do not provide a specialized
 // implementation. They simply loop over the indices and issue the ordinary
 // single-word `operator[]` lookups one after another.
 namespace ad_utility::vocabulary {
@@ -270,10 +276,10 @@ lookupBatchesStreamedDepth2(const Vocab& vocab, VocabLookupInput input) {
     // The handle is exposed via the generator's `details()` for callers that
     // want to complete it themselves.
     if (it != end) {
-      co_await cppcoro::SetDetails{vocab.beginLookup(*it)};
+      co_await cppcoro::SetDetails<std::unique_ptr<VocabLookupHandleBase>>{vocab.beginLookup(*it)};
       ++it;
     } else {
-      co_await cppcoro::SetDetails{std::unique_ptr<VocabLookupHandleBase>{}};
+      co_await cppcoro::SetDetails<std::unique_ptr<VocabLookupHandleBase>>{std::unique_ptr<VocabLookupHandleBase>{}};
     }
     // Block until the current batch's reads have completed (they were
     // submitted one iteration earlier). The next batch's reads are already in
