@@ -76,6 +76,12 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
         EXPECT_GEOMETRYINFO(geoVocab.getGeoInfo(i),
                             GeometryInfo::fromWktLiteral(testLiterals[i]));
+        // `parsedGeometryOffset_` is not yet actually computed: the writer
+        // only writes the placeholder value `0` for valid geometries.
+        auto geoInfo = geoVocab.getGeoInfo(i);
+        if (geoInfo.has_value()) {
+          EXPECT_EQ(geoInfo.value().getParsedGeometry().offset(), 0);
+        }
       }
     };
 
@@ -202,6 +208,8 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
   EXPECT_GEOMETRYINFO(gi.value(), exp);
+  // Placeholder value written by `GeoVocabulary::WordWriter`.
+  EXPECT_EQ(gi.value().getParsedGeometry().offset(), 0);
 
   // Cannot get `GeometryInfo` from `PolymorphicVocabulary` with no underlying
   // `GeoVocabulary`

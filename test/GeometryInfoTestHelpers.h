@@ -115,6 +115,7 @@ inline void checkRequestedInfoForInstance(
   EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
                            gi.getRequestedInfo<MetricLength>());
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
+  EXPECT_EQ(gi.getParsedGeometry(), gi.getRequestedInfo<ParsedGeometry>());
 }
 
 // ____________________________________________________________________________
@@ -137,6 +138,8 @@ inline void checkRequestedInfoForWktLiteral(
                            GeometryInfo::getRequestedInfo<MetricLength>(wkt));
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
                          GeometryInfo::getRequestedInfo<MetricArea>(wkt));
+  EXPECT_EQ(gi.getParsedGeometry(),
+            GeometryInfo::getRequestedInfo<ParsedGeometry>(wkt));
 }
 
 // ____________________________________________________________________________
@@ -157,6 +160,8 @@ inline void checkInvalidLiteral(std::string_view wkt,
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<Centroid>(wkt).has_value());
   EXPECT_FALSE(GeometryInfo::getRequestedInfo<BoundingBox>(wkt).has_value());
   EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(wkt).has_value(),
+            expectNumGeom);
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<ParsedGeometry>(wkt).has_value(),
             expectNumGeom);
 }
 

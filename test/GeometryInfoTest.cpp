@@ -215,6 +215,19 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
   ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
   ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
+  // Not given explicitly: defaults to `-1`.
+  ASSERT_EQ(g.getParsedGeometry().offset(), -1);
+
+  GeometryInfo g2{5,
+                  {{1, 1}, {2, 2}},
+                  {1.5, 1.5},
+                  {2},
+                  MetricLength{900},
+                  MetricArea{5},
+                  ParsedGeometry{42}};
+  ASSERT_EQ(g2.getParsedGeometry().offset(), 42);
+  g2.setParsedGeometryOffset(0);
+  ASSERT_EQ(g2.getParsedGeometry().offset(), 0);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -528,6 +541,30 @@ TEST(GeometryInfoTest, MetricArea) {
 }
 
 // ____________________________________________________________________________
+TEST(GeometryInfoTest, ParsedGeometry) {
+  ParsedGeometry p1{42};
+  EXPECT_EQ(p1.offset(), 42);
+  ParsedGeometry p2{-1};
+  EXPECT_EQ(p2.offset(), -1);
+  EXPECT_NE(p1, p2);
+
+  // Ad hoc computation is not yet implemented and always yields the "not
+  // available" placeholder `-1`.
+  EXPECT_EQ(GeometryInfo::getParsedGeometry(litPoint), ParsedGeometry{-1});
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<ParsedGeometry>(litPoint),
+            ParsedGeometry{-1});
+
+  auto g = GeometryInfo::fromWktLiteral(litPoint);
+  ASSERT_TRUE(g.has_value());
+  EXPECT_EQ(g.value().getParsedGeometry(), ParsedGeometry{-1});
+
+  // `GeoVocabulary::WordWriter` writes the placeholder offset `0`.
+  g.value().setParsedGeometryOffset(0);
+  EXPECT_EQ(g.value().getParsedGeometry(), ParsedGeometry{0});
+  EXPECT_EQ(g.value().getRequestedInfo<ParsedGeometry>(), ParsedGeometry{0});
+}
+
+// ____________________________________________________________________________
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
   checkInvalidLiteral(litInvalidType);
   checkInvalidLiteral(litInvalidBrackets, true);
@@ -623,11 +660,13 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(MetricArea) == sizeof(double));
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
+  using EncodedParsedGeometryOffset = int64_t;
   static_assert(sizeof(GeometryInfo) ==
                 4 +  // Currently we need 4 B alignment
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(MetricLength) + sizeof(MetricArea));
+                    sizeof(MetricLength) + sizeof(MetricArea) +
+                    sizeof(EncodedParsedGeometryOffset));
 }
 
 // _____________________________________________________________________________

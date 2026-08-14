@@ -71,6 +71,10 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
     if (!info.value().getMetricArea().isValid()) {
       ++numInvalidPolygonArea_;
     }
+    // TODO<ullingerc>: Once `GeoVocabulary` actually parses and stores
+    // geometries in a supplementary file, write the real offset here instead
+    // of this placeholder.
+    info.value().setParsedGeometryOffset(0);
     ptr = &info.value();
   } else {
     ++numInvalidGeometries_;
