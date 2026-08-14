@@ -26,6 +26,7 @@ add_library(index
         PatternCreator.cpp ScanSpecification.cpp ../parser/TripleComponent.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
+        IndexFormatConverter.cpp
         IdTableUtils.cpp ExportIds.cpp LocalVocab.cpp LocalVocabContext.cpp LocalVocabContextImpl.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
         InputFileSpecification.cpp ../parser/AsyncFileBlockDriver.cpp
