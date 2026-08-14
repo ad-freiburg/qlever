@@ -49,8 +49,7 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   if (!diskIndices.empty()) {
     auto disk = externalVocab_.lookupBatch(diskIndices);
     AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
-    for (auto [slot, word] :
-         ::ranges::views::zip(diskSlots, *disk)) {
+    for (auto [slot, word] : ::ranges::views::zip(diskSlots, *disk)) {
       words[slot] = std::string{word};
     }
   }
