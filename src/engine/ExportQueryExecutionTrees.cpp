@@ -778,7 +778,8 @@ ExportQueryExecutionTrees::splitBlocksIntoGroups(
     return groups;
   }
   // The caller guarantees `numGroups <= totalRows`, so every group receives at
-  // least one row.
+  // least one row; verify the guarantee instead of trusting it.
+  AD_CONTRACT_CHECK(numGroups <= totalRows);
   const uint64_t rowsPerGroup = (totalRows + numGroups - 1) / numGroups;
   // The `view_` ranges carry the original global row indices (the blank-node
   // base IDs depend on them), so the group boundaries are expressed in the
@@ -810,8 +811,8 @@ ExportQueryExecutionTrees::splitBlocksIntoGroups(
         groupEnd = std::min(groupEnd + rowsPerGroup, lastRowExclusive);
         continue;
       }
-      groups[groupIndex].push_back(TableWithRange{
-          block.tableWithVocab_, ql::views::iota(begin, pieceEnd)});
+      groups[groupIndex].emplace_back(block.tableWithVocab_,
+                                      ql::views::iota(begin, pieceEnd));
       begin = pieceEnd;
       if (begin >= groupEnd && groupIndex + 1 < numGroups) {
         ++groupIndex;
@@ -875,7 +876,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     auto triples = qlever::constructExport::ConstructTripleGenerator::
         generateFormattedTriples(constructTriples, qet.getVariableColumns(),
                                  std::move(rowIndices), limitAndOffset._offset,
-                                 format, std::move(config));
+                                 format, config);
     for (const std::string& triple : triples) {
       STREAMABLE_YIELD(triple);
     }
@@ -934,7 +935,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
       continue;
     }
     futures.push_back(
-        queue.submit([&, group = std::move(group)]() -> std::string {
+        queue.submit([&templateTriples, &variableColumns, rowOffset, &config,
+                      group = std::move(group)]() mutable {
           std::string output;
           auto triples = qlever::constructExport::ConstructTripleGenerator::
               generateFormattedTriples(templateTriples, variableColumns,

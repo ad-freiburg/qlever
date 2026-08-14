@@ -57,8 +57,8 @@ struct RuntimeParameters {
   // The number of threads used for the parallel serialization of CONSTRUCT
   // export results (row-to-string formatting). 0 means: use all logical
   // cores, consistent with `computeInParallelChunks`. Defaults to 1 (serial
-  // path). TODO<marvin7122>: flip the default to 0 (all logical cores) once
-  // the parallel serialization layer is enabled (tracking issue 82).
+  // path); flip it to 0 (all logical cores) when the parallel serialization
+  // layer is enabled (tracking issue 82).
   SizeT constructExportNumThreads_{1, "construct-export-num-threads"};
   // The total memory budget for the per-worker output buffers of the parallel
   // CONSTRUCT export serialization, split evenly across the workers. Only
