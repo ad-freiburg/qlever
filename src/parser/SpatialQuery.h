@@ -33,15 +33,6 @@ std::optional<De9imFilterString> parseDe9imFilterString(
 // `F`, the pattern could match a disjoint pair.
 bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter);
 
-// If `filter` is a syntactically valid DE-9IM filter pattern that cannot
-// match a disjoint pair of geometries, return it as a `De9imFilterString`,
-// else `std::nullopt`. See `parseDe9imFilterString` and
-// `de9imFilterCanMatchDisjoint` above, which this combines and which should
-// be used directly if the two failure cases need to be reported separately
-// (as in `SpatialQuery.cpp`).
-std::optional<De9imFilterString> validateDe9imFilterString(
-    std::string_view filter);
-
 namespace parsedQuery {
 
 class SpatialSearchException : public std::runtime_error {

@@ -36,16 +36,6 @@ bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter) {
          admitsF(filter[4]);
 }
 
-// ____________________________________________________________________________
-std::optional<De9imFilterString> validateDe9imFilterString(
-    std::string_view filter) {
-  auto result = parseDe9imFilterString(filter);
-  if (!result.has_value() || de9imFilterCanMatchDisjoint(result.value())) {
-    return std::nullopt;
-  }
-  return result;
-}
-
 namespace parsedQuery {
 
 namespace detail {
