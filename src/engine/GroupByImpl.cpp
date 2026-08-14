@@ -16,9 +16,9 @@
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/OptionalJoin.h"
-#include "engine/Union.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
+#include "engine/Union.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -2011,15 +2011,15 @@ std::optional<size_t> exactSizeIfIndexScan(const QueryExecutionTree& tree) {
 }
 
 const IndexScan* unwrapIndexScan(const QueryExecutionTree& tree) {
-  const Operation* op = tree.getRootOperation().get();
-  if (const auto* sort = dynamic_cast<const Sort*>(op)) {
+  std::shared_ptr<Operation> op = tree.getRootOperation();
+  if (auto* sort = dynamic_cast<Sort*>(op.get())) {
     const auto children = sort->getChildren();
     if (children.size() != 1) {
       return nullptr;
     }
-    op = children[0]->getRootOperation().get();
+    op = children[0]->getRootOperation();
   }
-  return dynamic_cast<const IndexScan*>(op);
+  return dynamic_cast<const IndexScan*>(op.get());
 }
 }  // namespace
 
@@ -2038,9 +2038,11 @@ std::optional<IdTable> GroupByImpl::computeCountStarFromMetadata() const {
     if (!leftSize.has_value() || !rightSize.has_value()) {
       return std::nullopt;
     }
-    unionOp->leftChild()->getRootOperation()
+    unionOp->leftChild()
+        ->getRootOperation()
         ->updateRuntimeInformationWhenOptimizedOut({});
-    unionOp->rightChild()->getRootOperation()
+    unionOp->rightChild()
+        ->getRootOperation()
         ->updateRuntimeInformationWhenOptimizedOut({});
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
         {unionOp->leftChild()->getRootOperation()->getRuntimeInfoPointer(),
@@ -2096,8 +2098,7 @@ std::optional<IdTable> GroupByImpl::computeCountStarFromMetadata() const {
     auto joinVar =
         children[0]->getVariableAndInfoByColumnIndex(joinColumns[0][0]).first;
 
-    auto distinctCounts = [&](const IndexScan& scan)
-        -> std::optional<IdTable> {
+    auto distinctCounts = [&](const IndexScan& scan) -> std::optional<IdTable> {
       const auto& locTriples =
           scan.permutation().getLocatedTriplesForPermutation(
               locatedTriplesState());
