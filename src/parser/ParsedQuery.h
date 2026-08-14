@@ -253,6 +253,18 @@ class ParsedQuery {
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
+
+  // Return a query of the form `SELECT <projection> WHERE { <subquery> }`,
+  // that is, a query that wraps the given `subquery` and projects the given
+  // variables and aliases. All variables of the `projection` must be selected
+  // by the `subquery`. This is used for the variable renaming of `INCLUDE`
+  // (a QLever extension), where it is important that the wrapped subquery
+  // itself remains unmodified, so that all occurrences of the same named
+  // subquery have identical cache keys.
+  static ParsedQuery wrapSubqueryWithProjection(
+      ParsedQuery subquery,
+      std::vector<parsedQuery::SelectClause::VarOrAlias> projection,
+      InternalVariableGenerator internalVariableGenerator);
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

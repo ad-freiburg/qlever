@@ -603,6 +603,26 @@ class SparqlQleverVisitor {
   // internal variable by calling `getNewInternalVariable()` above.
   auto makeInternalVariableGenerator();
 
+  // The result of `visitInFreshQueryContext` below: the result of the visit
+  // call, together with the final state of the fresh `parsedQuery_` and
+  // `visibleVariables_`.
+  template <typename Result>
+  struct FreshQueryContextResult {
+    Result result_;
+    ParsedQuery parsedQuery_;
+    std::vector<Variable> visibleVariables_;
+  };
+
+  // Call `visitCall` with a fresh (initially empty) `parsedQuery_` and
+  // `visibleVariables_` and restore the previous state afterwards, also when
+  // an exception is thrown. This is used for the parts of a query that are
+  // parsed in a clean environment, without access to the variables of the
+  // outer query, namely the argument of `EXISTS` and the definition of a
+  // named subquery.
+  template <typename VisitCall>
+  auto visitInFreshQueryContext(const VisitCall& visitCall)
+      -> FreshQueryContextResult<decltype(visitCall())>;
+
   // Create a new generated blank node.
   BlankNode newBlankNode();
 

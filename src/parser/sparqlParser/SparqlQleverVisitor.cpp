@@ -1569,6 +1569,25 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+template <typename VisitCall>
+auto Visitor::visitInFreshQueryContext(const VisitCall& visitCall)
+    -> FreshQueryContextResult<decltype(visitCall())> {
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
+  auto variablesBackup = std::exchange(visibleVariables_, {});
+  auto restoreBackups =
+      ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+          [this, &queryBackup, &variablesBackup]() {
+            parsedQuery_ = std::move(queryBackup);
+            visibleVariables_ = std::move(variablesBackup);
+          });
+  auto result = visitCall();
+  // NOTE: The following moves happen before `restoreBackups` runs, which then
+  // assigns the backups over the moved-from members.
+  return {std::move(result), std::move(parsedQuery_),
+          std::move(visibleVariables_)};
+}
+
+// ____________________________________________________________________________________
 void Visitor::visit(Parser::NamedSubqueryDefinitionContext* ctx) {
   auto name = ctx->NAMED_SUBQUERY_NAME()->getText();
   if (namedSubqueries_.contains(name)) {
@@ -1578,17 +1597,15 @@ void Visitor::visit(Parser::NamedSubqueryDefinitionContext* ctx) {
   // The body of a named subquery definition is parsed like any other
   // subquery, but in a clean environment: it sees no variables from the
   // outside, and its variables only become visible via `INCLUDE`.
-  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
-  auto visibleVariablesBackup = std::exchange(visibleVariables_, {});
-  auto [subquery, values] = visit(ctx->subSelect());
+  auto freshContextResult = visitInFreshQueryContext(
+      [this, ctx]() { return visit(ctx->subSelect()); });
+  auto& [subquery, values] = freshContextResult.result_;
   if (values.has_value()) {
     reportError(ctx,
                 absl::StrCat("A VALUES clause at the end of the named subquery "
                              "\"",
                              name, "\" is currently not supported"));
   }
-  parsedQuery_ = std::move(queryBackup);
-  visibleVariables_ = std::move(visibleVariablesBackup);
   namedSubqueries_.emplace(std::move(name), std::move(subquery.get()));
 }
 
@@ -1611,8 +1628,6 @@ GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
   }
   // Deliberately copy the stored subquery, it can be included multiple times.
   ParsedQuery subquery = it->second;
-  // NOTE: This must be a copy, because the subquery is moved into the
-  // expansion below, while the variables are still needed after that.
   const std::vector<Variable> selectedVariables =
       subquery.selectClause().getSelectedVariables();
   auto renamings = visitVector(ctx->includeRenaming());
@@ -1662,16 +1677,9 @@ GraphPatternOperation Visitor::visit(Parser::IncludeClauseContext* ctx) {
                              "\" are not distinct anymore after the renaming"));
   }
 
-  ParsedQuery wrapper;
-  wrapper._rootGraphPattern._graphPatterns.emplace_back(
-      parsedQuery::Subquery{std::move(subquery)});
-  parsedQuery::SelectClause selectClause;
-  selectClause.setSelected(std::move(newSelection));
-  wrapper._clause = std::move(selectClause);
-  // NOTE: The variables have to be registered after the select clause has
-  // been set, because the registration writes into the current clause.
-  wrapper.registerVariablesVisibleInQueryBody(selectedVariables);
-  wrapper.addSolutionModifiers({}, makeInternalVariableGenerator());
+  ParsedQuery wrapper = ParsedQuery::wrapSubqueryWithProjection(
+      std::move(subquery), std::move(newSelection),
+      makeInternalVariableGenerator());
   ql::ranges::for_each(outputVariables, [this](const Variable& variable) {
     addVisibleVariable(variable);
   });
@@ -2979,16 +2987,11 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
                                    bool negate) {
   // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent from
   // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
-  // which also apply to the argument of `EXISTS`). We therefore have to back up
-  // and restore all global state when parsing `EXISTS`.
-  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
-  auto visibleVariablesBackup = std::move(visibleVariables_);
-  visibleVariables_.clear();
-
-  // Parse the argument of `EXISTS`.
-  auto group = visit(pattern);
-  ParsedQuery argumentOfExists =
-      std::exchange(parsedQuery_, std::move(queryBackup));
+  // which also apply to the argument of `EXISTS`). It is therefore parsed in a
+  // fresh query context.
+  auto freshContextResult =
+      visitInFreshQueryContext([this, pattern]() { return visit(pattern); });
+  ParsedQuery argumentOfExists = std::move(freshContextResult.parsedQuery_);
   SelectClause& selectClause = argumentOfExists.selectClause();
   // Even though we set the `SELECT` clause to `*`, we will limit the visible
   // variables to a potentially smaller subset when finishing the parsing of the
@@ -2998,15 +3001,14 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   // they don't have a proper hierarchy of dependent variables. Because of that,
   // we need to manually add all variables that are visible after parsing the
   // body of `EXISTS`.
-  for (const Variable& variable : visibleVariables_) {
+  for (const Variable& variable : freshContextResult.visibleVariables_) {
     selectClause.addVisibleVariable(variable);
   }
-  argumentOfExists._rootGraphPattern = std::move(group);
+  argumentOfExists._rootGraphPattern = std::move(freshContextResult.result_);
 
   // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
   // the outer query.
   argumentOfExists.datasetClauses_ = activeDatasetClauses_;
-  visibleVariables_ = std::move(visibleVariablesBackup);
   auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
       std::move(argumentOfExists));
 

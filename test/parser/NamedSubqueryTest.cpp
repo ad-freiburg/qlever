@@ -8,6 +8,7 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "engine/GroupBy.h"
 #include "parser/SparqlParser.h"
 
 namespace {
@@ -143,6 +144,71 @@ TEST(NamedSubquery, aggregationInsideDefinition) {
       "SELECT * WHERE { { SELECT ?s (?cnt AS ?numObjects) WHERE {"
       " { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { ?s ?p ?o } GROUP BY ?s }"
       " } } }");
+}
+
+namespace {
+// The named subquery used for the cache-key tests below. The GROUP BY makes
+// sure that the subquery is planned as a nontrivial subtree (a `GroupBy`
+// operation), so that equal cache keys are meaningful.
+constexpr std::string_view groupByDefinition =
+    "WITH %sub AS { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { ?s ?p ?o }"
+    " GROUP BY ?s }";
+
+// Return all subtrees of the given query execution tree, including the tree
+// itself.
+std::vector<const QueryExecutionTree*> allSubtrees(
+    const QueryExecutionTree& tree) {
+  std::vector<const QueryExecutionTree*> result{&tree};
+  for (const auto* child : tree.getRootOperation()->getChildren()) {
+    ql::ranges::copy(allSubtrees(*child), std::back_inserter(result));
+  }
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(NamedSubquery, repeatedIncludeHasIdenticalCacheKey) {
+  // The two occurrences of the named subquery must be planned into subtrees
+  // with identical cache keys, so that the subquery is computed only once and
+  // the second occurrence is answered from the subtree cache.
+  auto* qec = ad_utility::testing::getQec(std::string{testTurtle});
+  auto tree = queryPlannerTestHelpers::parseAndPlan(
+      absl::StrCat(
+          groupByDefinition,
+          "SELECT * WHERE { { INCLUDE %sub } UNION { INCLUDE %sub } }"),
+      qec);
+  // Descend to the `UNION` and compare the cache keys of its two children.
+  const QueryExecutionTree* unionTree = &tree;
+  while (unionTree->getRootOperation()->getChildren().size() == 1) {
+    unionTree = unionTree->getRootOperation()->getChildren().at(0);
+  }
+  const auto& children = unionTree->getRootOperation()->getChildren();
+  ASSERT_EQ(children.size(), 2u);
+  EXPECT_EQ(children.at(0)->getCacheKey(), children.at(1)->getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST(NamedSubquery, renamedIncludeHasIdenticalCacheKeyForInnerSubquery) {
+  // With renaming, the wrapper subqueries differ between the occurrences, but
+  // the subtrees for the named subquery itself must still have identical
+  // cache keys. This is the reason why the renaming is implemented via a
+  // wrapper subquery and does not modify the included subquery itself.
+  auto* qec = ad_utility::testing::getQec(std::string{testTurtle});
+  auto tree = queryPlannerTestHelpers::parseAndPlan(
+      absl::StrCat(groupByDefinition,
+                   "SELECT * WHERE { INCLUDE %sub ."
+                   " INCLUDE %sub (?s AS ?s2) (?cnt AS ?cnt2) }"),
+      qec);
+  // The plan must contain exactly two `GroupBy` subtrees (one per occurrence
+  // of the named subquery), and their cache keys must be identical.
+  std::vector<std::string> groupByCacheKeys;
+  for (const auto* subtree : allSubtrees(tree)) {
+    if (dynamic_cast<const GroupBy*>(subtree->getRootOperation().get())) {
+      groupByCacheKeys.push_back(subtree->getCacheKey());
+    }
+  }
+  ASSERT_EQ(groupByCacheKeys.size(), 2u);
+  EXPECT_EQ(groupByCacheKeys.at(0), groupByCacheKeys.at(1));
 }
 
 namespace {
