@@ -3349,8 +3349,8 @@ TEST(GroupByOptimizations, countStarTwoPredicateJoin) {
       Alias{SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
             Variable{"?c"}}};
   GroupByImpl groupBy{&qec, {}, aliases, join};
-  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
-              optionalHasTable({{I(3)}}));
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false).idTableView(),
+              matchesIdTableFromVector({{I(3)}}));
 }
 
 // _____________________________________________________________________________
@@ -3369,8 +3369,8 @@ TEST(GroupByOptimizations, countStarBagUnionOfTwoScans) {
       Alias{SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
             Variable{"?c"}}};
   GroupByImpl groupBy{&qec, {}, aliases, unionOp};
-  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
-              optionalHasTable({{I(3)}}));
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false).idTableView(),
+              matchesIdTableFromVector({{I(3)}}));
 }
 
 // _____________________________________________________________________________
@@ -3389,6 +3389,6 @@ TEST(GroupByOptimizations, countStarOptionalEmptyRight) {
       Alias{SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
             Variable{"?c"}}};
   GroupByImpl groupBy{&qec, {}, aliases, optional};
-  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false),
-              optionalHasTable({{I(2)}}));
+  EXPECT_THAT(groupBy.computeResultOnlyForTesting(false).idTableView(),
+              matchesIdTableFromVector({{I(2)}}));
 }
