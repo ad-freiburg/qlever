@@ -276,10 +276,12 @@ lookupBatchesStreamedDepth2(const Vocab& vocab, VocabLookupInput input) {
     // The handle is exposed via the generator's `details()` for callers that
     // want to complete it themselves.
     if (it != end) {
-      co_await cppcoro::SetDetails<std::unique_ptr<VocabLookupHandleBase>>{vocab.beginLookup(*it)};
+      co_await cppcoro::SetDetails<std::unique_ptr<VocabLookupHandleBase>>{
+          vocab.beginLookup(*it)};
       ++it;
     } else {
-      co_await cppcoro::SetDetails<std::unique_ptr<VocabLookupHandleBase>>{std::unique_ptr<VocabLookupHandleBase>{}};
+      co_await cppcoro::SetDetails<std::unique_ptr<VocabLookupHandleBase>>{
+          std::unique_ptr<VocabLookupHandleBase>{}};
     }
     // Block until the current batch's reads have completed (they were
     // submitted one iteration earlier). The next batch's reads are already in
