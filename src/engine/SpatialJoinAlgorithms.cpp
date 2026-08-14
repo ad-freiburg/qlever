@@ -432,6 +432,12 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
   using enum SpatialJoinType::Enum;
+  // `libspatialjoin` reports a match for one of these relations by invoking
+  // `writeRelCb` (see below) with a `pred` argument equal to the
+  // corresponding `sep...` string set below. These strings are otherwise
+  // opaque to `libspatialjoin`, so any distinct single byte per relation
+  // works; we simply (ab)use the (small) numeric value of the enum, which is
+  // not meant to be human-readable.
   auto sep = [](SpatialJoinType type) {
     return std::string{static_cast<char>(type.value())};
   };

@@ -52,6 +52,9 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
   }
 
   EXPECT_THROW(V::fromString("not-a-valid-type"), std::runtime_error);
+
+  EXPECT_EQ(absl::StrCat("type: ", V::InMemoryUncompressed),
+            "type: in-memory-uncompressed");
 }
 
 // The WebAssembly/Emscripten build currently doesn't properly link

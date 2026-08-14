@@ -266,7 +266,7 @@ std::string SpatialJoin::getDescriptor() const {
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
       auto descriptor = absl::StrCat("Spatial Join of ", left, " and ", right,
-                                     " using ", config.joinType_.toString());
+                                     " using ", config.joinType_);
       if (config.de9imFilter_.has_value()) {
         absl::StrAppend(&descriptor, " (",
                         std::string_view{config.de9imFilter_->data(),

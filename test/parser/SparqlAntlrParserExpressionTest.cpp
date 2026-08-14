@@ -433,34 +433,22 @@ TEST(SparqlParser, FunctionCall) {
                                Variable{"?b"}));
 
   // Geometric relation functions
-  expectFunctionCall(
-      absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::INTERSECTS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfContains>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::CONTAINS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::CROSSES>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfTouches>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::TOUCHES>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfEquals>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::EQUALS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::OVERLAPS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfWithin>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::Enum::WITHIN>,
-                Variable{"?a"}, Variable{"?b"}));
+  using enum SpatialJoinType::Enum;
+  using GeoRelationFn =
+      SparqlExpression::Ptr (*)(SparqlExpression::Ptr, SparqlExpression::Ptr);
+  std::vector<std::pair<std::string_view, GeoRelationFn>> geoRelations{
+      {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
+      {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
+      {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
+      {"sfEquals", &makeGeoRelationExpression<EQUALS>},
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>},
+  };
+  for (const auto& [sparqlName, makeExpr] : geoRelations) {
+    expectFunctionCall(absl::StrCat(geof, sparqlName, ">(?a, ?b)"),
+                       matchNary(makeExpr, Variable{"?a"}, Variable{"?b"}));
+  }
 
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),

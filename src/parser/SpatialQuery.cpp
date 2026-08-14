@@ -22,6 +22,8 @@ std::optional<De9imFilterString> parseDe9imFilterString(
   if (!ctre::match<de9imFilterRegex>(filter)) {
     return std::nullopt;
   }
+  // The regex above already enforces that `filter` has exactly 9 characters.
+  AD_CORRECTNESS_CHECK(filter.size() == De9imFilterString{}.size());
   De9imFilterString result{};
   ql::ranges::copy(filter, result.begin());
   return result;
