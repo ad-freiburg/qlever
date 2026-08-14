@@ -34,6 +34,8 @@ template <size_t IN_WIDTH, size_t OUT_WIDTH>
 class LazyGroupByRange;
 }
 
+class IndexScan;
+
 class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
