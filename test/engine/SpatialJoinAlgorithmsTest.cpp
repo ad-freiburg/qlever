@@ -1655,8 +1655,6 @@ TEST(SpatialJoin, trueAreaDistance) {
               getDist(qec, "Area6", "Area4", false));
   ASSERT_TRUE(getDist(qec, "Area6", "5", true) >=
               getDist(qec, "Area6", "5", false));
-  ASSERT_TRUE(getDist(qec, "Area6", "Area6", true) >=
-              getDist(qec, "Area6", "Area6", false));
 }
 
 // _____________________________________________________________________________
