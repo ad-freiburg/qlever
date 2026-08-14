@@ -10,8 +10,8 @@
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
-#include "../util/SimdUtils.h"
 #include "rdfTypes/RdfEscaping.h"
+#include "util/SimdUtils.h"
 using namespace RdfEscaping;
 
 // ___________________________________________________________________________
@@ -156,6 +156,9 @@ TEST(RdfEscapingTest, literalFastPathScanMatchesFindFirstOf) {
   using ad_utility::simd::detail::containsAnyByteScalar;
   using LiteralContentSpecialChars =
       ad_utility::simd::detail::CharacterSet<'\"', '\\', '\n', '\r'>;
+  // The scalar reference is bound to a variable first so that the commas in
+  // its template argument list do not split the EXPECT_EQ macro arguments.
+  auto scalarScan = containsAnyByteScalar<'\"', '\\', '\n', '\r'>;
   constexpr size_t lengths[] = {0, 1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 65};
   for (size_t len : lengths) {
     for (size_t pos = 0; pos < len + 1; ++pos) {
@@ -165,7 +168,7 @@ TEST(RdfEscapingTest, literalFastPathScanMatchesFindFirstOf) {
           content[pos] = static_cast<char>(b);
         }
         EXPECT_EQ(containsAnyByte(LiteralContentSpecialChars{}, content),
-                  containsAnyByteScalar<'\"', '\\', '\n', '\r'>(content))
+                  scalarScan(content))
             << "len=" << len << " pos=" << pos << " byte=" << b;
       }
     }
