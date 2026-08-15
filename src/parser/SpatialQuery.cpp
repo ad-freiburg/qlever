@@ -5,6 +5,8 @@
 
 #include "parser/SpatialQuery.h"
 
+#include <absl/strings/str_join.h>
+
 #include "backports/algorithm.h"
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -113,13 +115,20 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description
-    throwIf(
-        !object.isIri(),
-        "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-        "to employ. Currently supported are `<baseline>`, `<s2>`, "
-        "`<libspatialjoin>`, or `<boundingBox>`");
-    algo_ = detail::spatialJoinAlgorithmFromString(
-        extractParameterName(object, SPATIAL_SEARCH_IRI));
+    throwIf(!object.isIri(),
+            absl::StrCat("The parameter `<algorithm>` needs an IRI that "
+                         "selects the algorithm to employ. Currently "
+                         "supported are: ",
+                         SpatialJoinAlgorithm::getListOfSupportedValues()));
+    try {
+      algo_ = SpatialJoinAlgorithm::fromString(
+          extractParameterName(object, SPATIAL_SEARCH_IRI));
+    } catch (const std::runtime_error&) {
+      throw SpatialSearchException{absl::StrCat(
+          "The IRI given for the parameter `<algorithm>` does not refer to a "
+          "supported spatial search algorithm. Currently supported are: ",
+          SpatialJoinAlgorithm::getListOfSupportedValues())};
+    }
   } else if (predString == "payload") {
     if (object.isVariable()) {
       // Single selected variable
@@ -153,11 +162,13 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
-  // Default algorithm
-  SpatialJoinAlgorithm algo = SPATIAL_JOIN_DEFAULT_ALGORITHM;
-  if (algo_.has_value()) {
-    algo = algo_.value();
-  }
+  throwIf(!algo_.has_value(),
+          absl::StrCat("Missing parameter `<algorithm>` in spatial search. "
+                       "Please explicitly select an algorithm: ",
+                       SpatialJoinAlgorithm::getListOfSupportedValues(),
+                       ". See the QLever Docs "
+                       "(https://docs.qlever.dev/geosparql/) for details."));
+  SpatialJoinAlgorithm algo = algo_.value();
 
   throwIf(!left_.has_value(), "Missing parameter `<left>` in spatial search.");
 
@@ -278,6 +289,10 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
   setVariable("left", triple.s_, left_);
   setVariable("right", triple.o_, right_);
 
+  // This legacy predicate syntax has no way to specify an algorithm, so we
+  // pick the same algorithm that used to be the implicit default.
+  algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
+
   // Helper to convert a ctre match to an integer
   auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
     if (match.size() == 0) {
@@ -322,31 +337,5 @@ void SpatialQuery::validate() const {
   // highlighting. It's only a small struct so not much is wasted.
   [[maybe_unused]] auto&& _ = toSpatialJoinConfiguration();
 }
-
-namespace detail {
-
-// _____________________________________________________________________________
-SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
-    std::string_view identifier) {
-  using enum SpatialJoinAlgorithm;
-  static const ad_utility::HashMap<std::string, SpatialJoinAlgorithm>
-      nameToAlgorithmMap{
-          {"baseline", BASELINE},
-          {"s2", S2_GEOMETRY},
-          {"boundingBox", BOUNDING_BOX},
-          {"libspatialjoin", LIBSPATIALJOIN},
-          {"experimentalPointPolyline", S2_POINT_POLYLINE},
-      };
-  if (nameToAlgorithmMap.contains(identifier)) {
-    return nameToAlgorithmMap.at(identifier);
-  } else {
-    throw SpatialSearchException(
-        "The IRI given for the parameter `<algorithm>` does not refer to a "
-        "supported spatial search algorithm. Please select either "
-        "`<baseline>`, `<s2>`, `<libspatialjoin>`, "
-        "`<experimentalPointPolyline>` or `<boundingBox>`");
-  }
-}
-}  // namespace detail
 
 }  // namespace parsedQuery
