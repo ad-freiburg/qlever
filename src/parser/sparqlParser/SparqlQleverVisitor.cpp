@@ -591,10 +591,10 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
 // ____________________________________________________________________________________
 DatasetClause Visitor::visit(Parser::DatasetClauseContext* ctx) {
   if (ctx->defaultGraphClause()) {
-    return {.dataset_ = visit(ctx->defaultGraphClause()), .isNamed_ = false};
+    return {visit(ctx->defaultGraphClause()), false};
   } else {
     AD_CORRECTNESS_CHECK(ctx->namedGraphClause());
-    return {.dataset_ = visit(ctx->namedGraphClause()), .isNamed_ = true};
+    return {visit(ctx->namedGraphClause()), true};
   }
 }
 
@@ -1502,9 +1502,9 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
                 "`using-named-graph-uri` http parameters are used");
   }
   if (ctx->NAMED()) {
-    return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
+    return {visit(ctx->iri()), true};
   } else {
-    return {.dataset_ = visit(ctx->iri()), .isNamed_ = false};
+    return {visit(ctx->iri()), false};
   }
 }
 
