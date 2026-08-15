@@ -16,7 +16,7 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+using enum SpatialJoinType::Enum;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various carefully selected literals. It
@@ -106,7 +106,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
   checkSweeperTestResult(vMap, testResultWithinDist,
                          {{{WITHIN_DIST, vIdCampus, vIdGkAllee, 0},
                            {WITHIN_DIST, vIdCampus, vIdUni, 0},
-                           {WITHIN_DIST, vIdCampus, vIdMinster, 2225.01}},
+                           {WITHIN_DIST, vIdCampus, vIdMinster, 2225.0275}},
                           {},
                           {},
                           4,

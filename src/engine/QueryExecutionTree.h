@@ -34,7 +34,9 @@ class QueryExecutionTree {
     rootOperation_ = std::move(operation);
     resultWidth_ = rootOperation_->getResultWidth();
     cacheKey_ = rootOperation_->getCacheKey();
-    readFromCache();
+    if (!readFromCache()) {
+      readFromMaterializedView();
+    }
   }
 
   std::string getCacheKey() const;
@@ -128,7 +130,12 @@ class QueryExecutionTree {
   // of our qec. If found, we store a shared ptr to pin it
   // and set the size estimate correctly and the cost estimate
   // to zero. Currently multiplicities are not affected
-  void readFromCache();
+  bool readFromCache();
+
+  // Check whether the cache key of this `QueryExecutionTree` matches a loaded
+  // materialized view. If yes, replace the `rootOperation_` with an `IndexScan`
+  // on that view with a result equivalent to the current `rootOperation_`.
+  void readFromMaterializedView();
 
   // recursively get all warnings from descendant operations
   std::vector<std::string> collectWarnings() const {
