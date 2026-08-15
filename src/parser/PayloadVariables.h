@@ -14,7 +14,7 @@ namespace detail {
 struct PayloadAllVariables : std::monostate {
   bool operator==([[maybe_unused]] const std::vector<Variable>& other) const {
     return false;
-  };
+  }
 };
 }  // namespace detail
 
@@ -50,7 +50,7 @@ class PayloadVariables {
   // For testing: equality operator
   bool operator==(const PayloadVariables& other) const {
     return variables_ == other.variables_;
-  };
+  }
 
  private:
   std::variant<detail::PayloadAllVariables, std::vector<Variable>> variables_ =

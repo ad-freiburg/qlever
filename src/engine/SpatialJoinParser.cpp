@@ -30,12 +30,12 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
 // _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
   return ::ranges::accumulate(_numSkipped, 0);
-};
+}
 
 // _____________________________________________________________________________
 size_t WKTParser::getParseCounter() {
   return ::ranges::accumulate(_numParsed, 0);
-};
+}
 
 // _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {

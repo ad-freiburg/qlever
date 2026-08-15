@@ -172,10 +172,10 @@ class Date {
 
  public:
   struct NoTimeZone {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone, )
   };
   struct TimeZoneZ {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ, )
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

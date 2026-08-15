@@ -112,7 +112,7 @@ struct SpatialQuery : MagicServiceQuery {
   // Throw if the current configuration is invalid.
   void validate() const override;
 
-  constexpr std::string_view name() const override { return "spatial join"; };
+  constexpr std::string_view name() const override { return "spatial join"; }
 
  private:
   // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.

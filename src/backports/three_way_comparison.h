@@ -39,6 +39,15 @@
  * - QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(Class):
  * Constexpr member version
  *
+ * Note: For a class without any data members, the `members...` argument of the
+ * defaulted macros is empty, and the macro has to be invoked with a trailing
+ * comma, for example `QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Empty, )`.
+ * Reason: before C++20, a variadic macro requires at least one argument for its
+ * `...` parameter (GCC and Clang accept zero arguments as an extension, but
+ * warn about it with `-Wpedantic` and reject it with `-pedantic-errors`). The
+ * trailing comma supplies a single empty argument and thus makes the invocation
+ * valid C++17. It has no effect on the generated code in either standard mode.
+ *
  * Note: Custom three-way comparison macros assume the presence of a
  * compareThreeWay function (either as a member or free function) that returns
  * a comparison ordering (e.g., ql::strong_ordering, ql::weak_ordering, or

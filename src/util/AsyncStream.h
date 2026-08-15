@@ -72,7 +72,7 @@ struct AsyncStreamGenerator
     if constexpr (logTime) {
       std::invoke(function);
     }
-  };
+  }
 };
 
 }  // namespace detail
