@@ -72,23 +72,22 @@ class DistinctGraphs : public Operation {
     return "DistinctGraphs";
   }
 
-  // return last saved #distinctgraphs if valid, otherwise return an optimistic
-  // average (MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20)
+  // Return the last saved number of distinct graphs.
   uint64_t getSizeEstimateBeforeLimit() override {
     return numOfDistinctGraphs_;
   }
-  
-  [[nodiscard]] bool isDeterministicImpl() const override {return true;}
+
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // The graph variable of queries of the form: `SELECT * { GRAPH ?g { ... }}`
+  // The graph variable of queries of the form: `SELECT * { GRAPH ?g { ... }}`.
   Variable graphVariable_;
 
   // Last saved number of distinct graphs, default to
-  // `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`
+  // `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA`.
   inline static std::atomic<uint64_t> numOfDistinctGraphs_{
       MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA};
 };
