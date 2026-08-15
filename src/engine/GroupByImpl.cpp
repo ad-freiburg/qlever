@@ -1051,7 +1051,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
     return indexScan->permutation();
   }
   return {};
-};
+}
 
 // ____________________________________________________________________________
 std::optional<GroupByImpl::OptimizedGroupByData>

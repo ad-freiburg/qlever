@@ -603,7 +603,7 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
   return result;
-};
+}
 
 // Helper function for `handleRepeatedVariables` below. Replace a single
 // position of the `scanTriple`, denoted by the `rewritePosition` by a new
@@ -1773,7 +1773,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     }
   }
   return plans;
-};
+}
 
 // _____________________________________________________________________________
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
@@ -2206,7 +2206,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
     }
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
-};
+}
 
 // _________________________________________________________________________________
 size_t QueryPlanner::findSmallestExecutionTree(
@@ -3158,7 +3158,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
   }
-};
+}
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(

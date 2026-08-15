@@ -239,7 +239,7 @@ class LocatedTriplesPerBlock {
     }
     AD_CONTRACT_CHECK(originalMetadata_.has_value());
     return *originalMetadata_.value();
-  };
+  }
 
   // Remove all located triples.
   void clear() {
@@ -283,7 +283,7 @@ class LocatedTriplesPerBlock {
          << std::endl;
     }
     return os;
-  };
+  }
 };
 
 // Human-readable representation , which are very useful for debugging.

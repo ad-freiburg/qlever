@@ -135,7 +135,7 @@ std::vector<QueryExecutionTree*> PathSearch::getChildren() {
   }
 
   return res;
-};
+}
 
 // _____________________________________________________________________________
 std::string PathSearch::getCacheKeyImpl() const {
@@ -162,35 +162,35 @@ std::string PathSearch::getCacheKeyImpl() const {
   }
 
   return std::move(os).str();
-};
+}
 
 // _____________________________________________________________________________
 std::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
   return std::move(os).str();
-};
+}
 
 // _____________________________________________________________________________
-size_t PathSearch::getResultWidth() const { return resultWidth_; };
+size_t PathSearch::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
 size_t PathSearch::getCostEstimate() {
   // TODO: Figure out a smart way to estimate cost
   return 1000;
-};
+}
 
 // _____________________________________________________________________________
 uint64_t PathSearch::getSizeEstimateBeforeLimit() {
   // TODO: Figure out a smart way to estimate size
   return 1000;
-};
+}
 
 // _____________________________________________________________________________
 float PathSearch::getMultiplicity(size_t col) {
   (void)col;
   return 1;
-};
+}
 
 // _____________________________________________________________________________
 bool PathSearch::knownEmptyResult() {
@@ -200,10 +200,10 @@ bool PathSearch::knownEmptyResult() {
     }
   }
   return false;
-};
+}
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
+std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
@@ -287,12 +287,12 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   }
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
-};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
   return variableColumns_;
-};
+}
 
 // _____________________________________________________________________________
 std::pair<ql::span<const Id>, ql::span<const Id>>

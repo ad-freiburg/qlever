@@ -13,9 +13,9 @@
 #include <array>
 #include <cstddef>
 #include <optional>
-#include <string_view>
 #include <variant>
 
+#include "engine/SpatialJoinType.h"
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 
@@ -23,25 +23,12 @@
 // operation. It allows including these types without also including the whole
 // class declaration of the spatial join operation.
 
-// The supported spatial join types (geometry predicates). When updating this
-// enum, also add a case in `getGeoFunctionExpressionParameters` in
-// `GeoExpression.cpp`.
-enum class SpatialJoinType {
-  INTERSECTS,
-  CONTAINS,
-  COVERS,
-  CROSSES,
-  TOUCHES,
-  EQUALS,
-  OVERLAPS,
-  WITHIN,
-  WITHIN_DIST
-};
+// A DE-9IM filter pattern: a fixed-size string of exactly 9 characters, each
+// one of `0`-`2`, `T`/`t`, `F`/`f`, or `*` (see
+// https://en.wikipedia.org/wiki/DE-9IM). Stored without a null terminator.
+using De9imFilterString = std::array<char, 9>;
 
-// String representation of the `SpatialJoinType` values.
-inline constexpr std::array<std::string_view, 9> SpatialJoinTypeString{
-    "intersects", "contains", "covers", "crosses",    "touches",
-    "equals",     "overlaps", "within", "within-dist"};
+// Parsing and validation of `De9imFilterString`s, see `parser/SpatialQuery.h`.
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -55,10 +42,12 @@ struct MaxDistanceConfig {
 };
 
 // Spatial join with libspatialjoin using one of the join types above. The
-// maximal distance is relevant only for the `WITHIN_DIST` join type.
+// maximal distance is relevant only for the `WITHIN_DIST` join type, and the
+// DE-9IM filter pattern only for the `DE9IM` join type.
 struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<double> maxDist_ = std::nullopt;
+  std::optional<De9imFilterString> de9imFilter_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin

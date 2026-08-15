@@ -916,6 +916,53 @@ TEST(LibQlever, clearCache) {
 }
 
 // _____________________________________________________________________________
+// The non-`const` getter for the allocator yields a mutable reference to the
+// allocator of the engine, so that memory allocated through it counts towards
+// the engine's memory limit, which the `const` getter observes.
+TEST(LibQlever, allocatorGetter) {
+  Qlever engine{buildTestIndex("<s> <p> <o> .")};
+  const Qlever& constEngine = engine;
+  ASSERT_EQ(&engine.allocator(), &constEngine.allocator());
+
+  auto& allocator = engine.allocator();
+  const auto memoryLeftBefore = constEngine.allocator().amountMemoryLeft();
+  constexpr size_t numIds = 16;
+  Id* ptr = allocator.allocate(numIds);
+  EXPECT_EQ(
+      constEngine.allocator().amountMemoryLeft(),
+      memoryLeftBefore - ad_utility::MemorySize::bytes(numIds * sizeof(Id)));
+  allocator.deallocate(ptr, numIds);
+  EXPECT_EQ(constEngine.allocator().amountMemoryLeft(), memoryLeftBefore);
+}
+
+// _____________________________________________________________________________
+// The `clearOnAllocation` hook that `Qlever` installs in its allocator (see the
+// constructor in `Qlever.cpp`) evicts entries from the query result cache when
+// an allocation would otherwise exceed the memory limit.
+TEST(LibQlever, allocatorMakesRoomByClearingTheCache) {
+  EngineConfig config = buildTestIndex("<s> <p> <o> . <s2> <p> <o2> .");
+  config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  Qlever engine{config};
+
+  // Run a query, the result of which is then stored in the cache as an unpinned
+  // entry. The memory of that result is held by the engine's allocator.
+  EXPECT_EQ(
+      engine.query("SELECT ?s WHERE { ?s <p> ?o }", ad_utility::MediaType::tsv),
+      "?s\n<s>\n<s2>\n");
+  ASSERT_GT(engine.cache().numNonPinnedEntries(), 0U);
+
+  // Request slightly more memory than is left. This exceeds the limit, so the
+  // hook is called, which makes room by evicting the cache entry, after which
+  // the allocation succeeds.
+  auto& allocator = engine.allocator();
+  const size_t numIds =
+      allocator.amountMemoryLeft().getBytes() / sizeof(Id) + 1;
+  Id* ptr = allocator.allocate(numIds);
+  EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
+  allocator.deallocate(ptr, numIds);
+}
+
+// _____________________________________________________________________________
 // `Qlever::makeIndexRebuildConfig` turns the two directories that a rebuild can
 // be configured with into base names (by appending the file name of the current
 // index) and validates them. The test runs in a fresh working directory,
