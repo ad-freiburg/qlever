@@ -69,7 +69,6 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
-#include "parser/VariableCounter.h"
 #include "rdfTypes/Variable.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
@@ -3169,18 +3168,6 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       }
     }
 
-    // If the graph variable is already in the inner pattern.
-    bool graphVarInInnerPattern = false;
-    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphPair = std::get_if<std::pair<
-              Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
-              &arg.graphSpec_)) {
-        p::VariableCounter vc;
-        vc(arg._child);
-        graphVarInInnerPattern = vc.counts().contains(graphPair->first);
-      }
-    }
-
     auto candidates = planner_.optimize(&arg._child);
 
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
@@ -3193,7 +3180,6 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         for (auto& innerCand : candidates) {
           bool isGraphVarBound =
               planner_.activeDatasetClauses_.namedGraphs().has_value() ||
-              graphVarInInnerPattern ||
               innerCand._qet->getVariableColumns().contains(graphVar);
           if (!isGraphVarBound) {
             innerCand = makeSubtreePlan<CartesianProductJoin>(
@@ -3510,6 +3496,7 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitSubquery(
     parsedQuery::Subquery& arg) {
+  std::optional<Variable> outerGraphVariable = planner_.activeGraphVariable_;
   absl::Cleanup resetActiveGraphs{
       [this, originalVar = planner_.activeGraphVariable_]() mutable {
         // Reset back to original
@@ -3518,11 +3505,16 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
   ParsedQuery& subquery = arg.get();
   const auto& select = subquery.selectClause();
+  std::optional<Variable> internalGraphVariable;
   // Disable for subqueries that do not select the graph variable
-  if (planner_.activeGraphVariable_.has_value() && !select.isAsterisk() &&
+  if (outerGraphVariable.has_value() && !select.isAsterisk() &&
       !ad_utility::contains(select.getSelectedVariables(),
-                            planner_.activeGraphVariable_.value())) {
+                            outerGraphVariable.value())) {
     planner_.activeGraphVariable_ = std::nullopt;
+    if (!planner_.activeDatasetClauses_.namedGraphs().has_value()) {
+      internalGraphVariable = planner_.generateUniqueVarName();
+      planner_.activeGraphVariable_ = internalGraphVariable;
+    }
   }
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
@@ -3534,15 +3526,30 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
   // Make sure that variables that are not selected by the subquery are not
   // visible.
-  auto setSelectedVariables = [&select](SubtreePlan& plan) {
+  auto setSelectedVariables = [&select, &internalGraphVariable,
+                               &outerGraphVariable, this](SubtreePlan& plan) {
     const auto& selected = select.getSelectedVariables();
     std::set<Variable> selectedVariables{selected.begin(), selected.end()};
+    if (internalGraphVariable.has_value()) {
+      selectedVariables.insert(internalGraphVariable.value());
+    }
     if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
       plan._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
           std::move(plan._qet), selectedVariables, HideStrippedColumns::True);
     } else {
       plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-          select.getSelectedVariables());
+          {selectedVariables.begin(), selectedVariables.end()});
+    }
+    if (internalGraphVariable.has_value() &&
+        plan._qet->getVariableColumns().contains(
+            internalGraphVariable.value())) {
+      using namespace sparqlExpression;
+      parsedQuery::Bind bindGraphVar{
+          SparqlExpressionPimpl{std::make_unique<VariableExpression>(
+                                    internalGraphVariable.value()),
+                                internalGraphVariable.value().name()},
+          outerGraphVariable.value()};
+      plan._qet = makeExecutionTree<Bind>(qec_, plan._qet, bindGraphVar);
     }
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
