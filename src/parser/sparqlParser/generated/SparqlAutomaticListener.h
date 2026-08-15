@@ -282,11 +282,6 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitIncludeClause(
       SparqlAutomaticParser::IncludeClauseContext* ctx) = 0;
 
-  virtual void enterIncludeRenaming(
-      SparqlAutomaticParser::IncludeRenamingContext* ctx) = 0;
-  virtual void exitIncludeRenaming(
-      SparqlAutomaticParser::IncludeRenamingContext* ctx) = 0;
-
   virtual void enterOptionalGraphPattern(
       SparqlAutomaticParser::OptionalGraphPatternContext* ctx) = 0;
   virtual void exitOptionalGraphPattern(

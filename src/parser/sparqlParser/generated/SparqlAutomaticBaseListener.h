@@ -317,11 +317,6 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitIncludeClause(
       SparqlAutomaticParser::IncludeClauseContext* /*ctx*/) override {}
 
-  virtual void enterIncludeRenaming(
-      SparqlAutomaticParser::IncludeRenamingContext* /*ctx*/) override {}
-  virtual void exitIncludeRenaming(
-      SparqlAutomaticParser::IncludeRenamingContext* /*ctx*/) override {}
-
   virtual void enterOptionalGraphPattern(
       SparqlAutomaticParser::OptionalGraphPatternContext* /*ctx*/) override {}
   virtual void exitOptionalGraphPattern(

@@ -566,25 +566,3 @@ void ParsedQuery::addWarningOrThrow(std::string warning) {
     addWarning(std::move(warning));
   }
 }
-
-// _____________________________________________________________________________
-ParsedQuery ParsedQuery::wrapSubqueryWithProjection(
-    ParsedQuery subquery,
-    std::vector<parsedQuery::SelectClause::VarOrAlias> projection,
-    InternalVariableGenerator internalVariableGenerator) {
-  // NOTE: The selected variables of the subquery have to be obtained before
-  // the subquery is moved into the wrapper.
-  std::vector<Variable> subqueryVariables =
-      subquery.selectClause().getSelectedVariables();
-  ParsedQuery wrapper;
-  wrapper._rootGraphPattern._graphPatterns.emplace_back(
-      parsedQuery::Subquery{std::move(subquery)});
-  parsedQuery::SelectClause selectClause;
-  selectClause.setSelected(std::move(projection));
-  wrapper._clause = std::move(selectClause);
-  // NOTE: The variables have to be registered after the select clause has
-  // been set, because the registration writes into the current clause.
-  wrapper.registerVariablesVisibleInQueryBody(subqueryVariables);
-  wrapper.addSolutionModifiers({}, internalVariableGenerator);
-  return wrapper;
-}

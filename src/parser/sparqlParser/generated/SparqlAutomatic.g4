@@ -47,15 +47,17 @@ prologue
     ;
 
 // A named subquery (QLever-specific language extension): `WITH %name AS {
-// <subquery> }` defines a named subquery that can be referenced via `INCLUDE
-// %name` anywhere a graph pattern is allowed.
+// <graph pattern> }` gives a name to a group graph pattern. The pattern can
+// then be used in the query via `INCLUDE %name`, but only as the entire body
+// of a subquery, whose SELECT clause makes explicit which variables of the
+// pattern become visible; see `includeClause` below.
 //
 // NOTE: The second alternative matches Blazegraph's syntax for named
 // subqueries, where the name comes after the body. It exists only so that the
 // visitor can report an informative error for it.
 namedSubqueryDefinition
-    : WITH NAMED_SUBQUERY_NAME AS '{' subSelect '}'
-    | WITH '{' subSelect '}' AS NAMED_SUBQUERY_NAME
+    : WITH NAMED_SUBQUERY_NAME AS groupGraphPattern
+    | WITH groupGraphPattern AS NAMED_SUBQUERY_NAME
     ;
 
 baseDecl
@@ -234,15 +236,13 @@ graphPatternNotTriples
     : groupOrUnionGraphPattern | optionalGraphPattern | minusGraphPattern | graphGraphPattern | serviceGraphPattern | filterR | bind | inlineData | includeClause
     ;
 
-// A reference to a named subquery (QLever-specific language extension), with
-// optional renaming of some of its projected variables, for example `INCLUDE
-// %cities (?city AS ?otherCity)`.
+// A reference to a named subquery (QLever-specific language extension). It is
+// only allowed as the entire body of a subquery, whose SELECT clause lists
+// (and possibly renames) the variables of the pattern that become visible,
+// for example `{ SELECT ?city (?name AS ?cityName) WHERE { INCLUDE %cities }
+// }`.
 includeClause
-    : INCLUDE NAMED_SUBQUERY_NAME includeRenaming*
-    ;
-
-includeRenaming
-    : '(' var AS var ')'
+    : INCLUDE NAMED_SUBQUERY_NAME
     ;
 
 optionalGraphPattern

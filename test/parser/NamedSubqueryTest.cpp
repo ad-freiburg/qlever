@@ -8,7 +8,6 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "engine/GroupBy.h"
 #include "parser/SparqlParser.h"
 
 namespace {
@@ -70,112 +69,102 @@ void expectEquivalent(std::string queryWithNamedSubqueries,
 // _____________________________________________________________________________
 TEST(NamedSubquery, simpleInclude) {
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s WHERE { ?s ?p ?o } }"
-      "SELECT * WHERE { INCLUDE %sub }",
+      "WITH %sub AS { ?s ?p ?o }"
+      "SELECT * WHERE { { SELECT ?s WHERE { INCLUDE %sub } } }",
       "SELECT * WHERE { { SELECT ?s WHERE { ?s ?p ?o } } }");
 }
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, includeIsJoinedWithSiblingPatterns) {
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s WHERE { ?s <p> ?o } }"
-      "SELECT * WHERE { INCLUDE %sub . ?s <q> ?t }",
+      "WITH %sub AS { ?s <p> ?o }"
+      "SELECT * WHERE { { SELECT ?s WHERE { INCLUDE %sub } } ?s <q> ?t }",
       "SELECT * WHERE { { SELECT ?s WHERE { ?s <p> ?o } } ?s <q> ?t }");
 }
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, multipleIncludesAndRenaming) {
   // The classical self-join: the same named subquery is included twice, the
-  // second time with all variables renamed.
+  // second time with all variables renamed via the SELECT clause of the
+  // subquery around the `INCLUDE`.
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s ?o WHERE { ?s ?p ?o } }"
-      "SELECT * WHERE { INCLUDE %sub . INCLUDE %sub (?s AS ?s2) (?o AS ?o2) ."
+      "WITH %sub AS { ?s ?p ?o }"
+      "SELECT * WHERE {"
+      " { SELECT ?s ?o WHERE { INCLUDE %sub } }"
+      " { SELECT (?s AS ?s2) (?o AS ?o2) WHERE { INCLUDE %sub } }"
       " FILTER (?o2 > ?o) }",
-      "SELECT * WHERE { { SELECT ?s ?o WHERE { ?s ?p ?o } }"
-      " { SELECT (?s AS ?s2) (?o AS ?o2) WHERE {"
-      " { SELECT ?s ?o WHERE { ?s ?p ?o } } } } FILTER (?o2 > ?o) }");
+      "SELECT * WHERE {"
+      " { SELECT ?s ?o WHERE { ?s ?p ?o } }"
+      " { SELECT (?s AS ?s2) (?o AS ?o2) WHERE { ?s ?p ?o } }"
+      " FILTER (?o2 > ?o) }");
 }
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, partialRenaming) {
-  // Variables that are not renamed keep their name and hence join with the
-  // other occurrence of the named subquery.
+  // Variables that are selected without renaming keep their name and hence
+  // join with the other occurrence of the named subquery.
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s ?o WHERE { ?s ?p ?o } }"
-      "SELECT * WHERE { INCLUDE %sub . INCLUDE %sub (?o AS ?o2) }",
-      "SELECT * WHERE { { SELECT ?s ?o WHERE { ?s ?p ?o } }"
-      " { SELECT ?s (?o AS ?o2) WHERE {"
-      " { SELECT ?s ?o WHERE { ?s ?p ?o } } } } }");
+      "WITH %sub AS { ?s ?p ?o }"
+      "SELECT * WHERE {"
+      " { SELECT ?s ?o WHERE { INCLUDE %sub } }"
+      " { SELECT ?s (?o AS ?o2) WHERE { INCLUDE %sub } } }",
+      "SELECT * WHERE {"
+      " { SELECT ?s ?o WHERE { ?s ?p ?o } }"
+      " { SELECT ?s (?o AS ?o2) WHERE { ?s ?p ?o } } }");
 }
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, includeInLaterDefinition) {
   // A named subquery can include previously defined named subqueries.
   expectEquivalent(
-      "WITH %a AS { SELECT ?s WHERE { ?s <p> ?o } }"
-      "WITH %b AS { SELECT ?s WHERE { INCLUDE %a . ?s <q> ?t } }"
-      "SELECT * WHERE { INCLUDE %b }",
-      "SELECT * WHERE { { SELECT ?s WHERE {"
+      "WITH %a AS { ?s <p> ?o }"
+      "WITH %b AS { { SELECT ?s WHERE { INCLUDE %a } } ?s <q> ?t }"
+      "SELECT * WHERE { { SELECT ?s ?t WHERE { INCLUDE %b } } }",
+      "SELECT * WHERE { { SELECT ?s ?t WHERE {"
       " { SELECT ?s WHERE { ?s <p> ?o } } ?s <q> ?t } } }");
 }
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, includeInUnionAndOptional) {
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s WHERE { ?s <p> ?o } }"
-      "SELECT * WHERE { { INCLUDE %sub } UNION { ?s <q> ?t } }",
-      "SELECT * WHERE { { { SELECT ?s WHERE { ?s <p> ?o } } }"
-      " UNION { ?s <q> ?t } }");
+      "WITH %sub AS { ?s <p> ?o }"
+      "SELECT * WHERE {"
+      " { SELECT ?s WHERE { INCLUDE %sub } } UNION { ?s <q> ?t } }",
+      "SELECT * WHERE {"
+      " { SELECT ?s WHERE { ?s <p> ?o } } UNION { ?s <q> ?t } }");
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s WHERE { ?s <p> ?o } }"
-      "SELECT * WHERE { ?s <q> ?t OPTIONAL { INCLUDE %sub } }",
+      "WITH %sub AS { ?s <p> ?o }"
       "SELECT * WHERE { ?s <q> ?t"
-      " OPTIONAL { { SELECT ?s WHERE { ?s <p> ?o } } } }");
+      " OPTIONAL { { SELECT ?s ?o WHERE { INCLUDE %sub } } } }",
+      "SELECT * WHERE { ?s <q> ?t"
+      " OPTIONAL { { SELECT ?s ?o WHERE { ?s <p> ?o } } } }");
 }
 
 // _____________________________________________________________________________
-TEST(NamedSubquery, aggregationInsideDefinition) {
-  // A named subquery with GROUP BY and an alias, where the alias target is
-  // renamed at the use site.
+TEST(NamedSubquery, aggregationInWrappingSubquery) {
+  // The subquery around an `INCLUDE` can aggregate directly, no additional
+  // nesting is needed.
   expectEquivalent(
-      "WITH %sub AS { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { ?s ?p ?o }"
-      " GROUP BY ?s }"
-      "SELECT * WHERE { INCLUDE %sub (?cnt AS ?numObjects) }",
-      "SELECT * WHERE { { SELECT ?s (?cnt AS ?numObjects) WHERE {"
-      " { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { ?s ?p ?o } GROUP BY ?s }"
-      " } } }");
+      "WITH %sub AS { ?s ?p ?o }"
+      "SELECT * WHERE { { SELECT ?s (COUNT(?o) AS ?cnt) WHERE {"
+      " INCLUDE %sub } GROUP BY ?s } }",
+      "SELECT * WHERE { { SELECT ?s (COUNT(?o) AS ?cnt) WHERE {"
+      " ?s ?p ?o } GROUP BY ?s } }");
 }
-
-namespace {
-// The named subquery used for the cache-key tests below. The GROUP BY makes
-// sure that the subquery is planned as a nontrivial subtree (a `GroupBy`
-// operation), so that equal cache keys are meaningful.
-constexpr std::string_view groupByDefinition =
-    "WITH %sub AS { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { ?s ?p ?o }"
-    " GROUP BY ?s }";
-
-// Return all subtrees of the given query execution tree, including the tree
-// itself.
-std::vector<const QueryExecutionTree*> allSubtrees(
-    const QueryExecutionTree& tree) {
-  std::vector<const QueryExecutionTree*> result{&tree};
-  for (const auto* child : tree.getRootOperation()->getChildren()) {
-    ql::ranges::copy(allSubtrees(*child), std::back_inserter(result));
-  }
-  return result;
-}
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, repeatedIncludeHasIdenticalCacheKey) {
-  // The two occurrences of the named subquery must be planned into subtrees
-  // with identical cache keys, so that the subquery is computed only once and
-  // the second occurrence is answered from the subtree cache.
+  // Two identical subqueries around the same `INCLUDE` must be planned into
+  // subtrees with identical cache keys, so that the result is computed only
+  // once and the second occurrence is answered from the subtree cache.
   auto* qec = ad_utility::testing::getQec(std::string{testTurtle});
   auto tree = queryPlannerTestHelpers::parseAndPlan(
-      absl::StrCat(
-          groupByDefinition,
-          "SELECT * WHERE { { INCLUDE %sub } UNION { INCLUDE %sub } }"),
+      "WITH %sub AS { ?s ?p ?o }"
+      "SELECT * WHERE {"
+      " { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { INCLUDE %sub } GROUP BY ?s }"
+      " UNION"
+      " { SELECT ?s (COUNT(?o) AS ?cnt) WHERE { INCLUDE %sub } GROUP BY ?s }"
+      " }",
       qec);
   // Descend to the `UNION` and compare the cache keys of its two children.
   const QueryExecutionTree* unionTree = &tree;
@@ -185,30 +174,6 @@ TEST(NamedSubquery, repeatedIncludeHasIdenticalCacheKey) {
   const auto& children = unionTree->getRootOperation()->getChildren();
   ASSERT_EQ(children.size(), 2u);
   EXPECT_EQ(children.at(0)->getCacheKey(), children.at(1)->getCacheKey());
-}
-
-// _____________________________________________________________________________
-TEST(NamedSubquery, renamedIncludeHasIdenticalCacheKeyForInnerSubquery) {
-  // With renaming, the wrapper subqueries differ between the occurrences, but
-  // the subtrees for the named subquery itself must still have identical
-  // cache keys. This is the reason why the renaming is implemented via a
-  // wrapper subquery and does not modify the included subquery itself.
-  auto* qec = ad_utility::testing::getQec(std::string{testTurtle});
-  auto tree = queryPlannerTestHelpers::parseAndPlan(
-      absl::StrCat(groupByDefinition,
-                   "SELECT * WHERE { INCLUDE %sub ."
-                   " INCLUDE %sub (?s AS ?s2) (?cnt AS ?cnt2) }"),
-      qec);
-  // The plan must contain exactly two `GroupBy` subtrees (one per occurrence
-  // of the named subquery), and their cache keys must be identical.
-  std::vector<std::string> groupByCacheKeys;
-  for (const auto* subtree : allSubtrees(tree)) {
-    if (dynamic_cast<const GroupBy*>(subtree->getRootOperation().get())) {
-      groupByCacheKeys.push_back(subtree->getCacheKey());
-    }
-  }
-  ASSERT_EQ(groupByCacheKeys.size(), 2u);
-  EXPECT_EQ(groupByCacheKeys.at(0), groupByCacheKeys.at(1));
 }
 
 namespace {
@@ -228,12 +193,13 @@ std::vector<std::string> allWarnings(const ParsedQuery& query) {
 
 // _____________________________________________________________________________
 TEST(NamedSubquery, noWarningsForRenaming) {
-  // The renaming wrapper must register the variables of the included subquery
-  // as visible, otherwise QLever warns that the aliased variables are not
+  // The `INCLUDE` must register the variables of the named subquery as
+  // visible, otherwise QLever warns that the aliased variables are not
   // defined in the query body.
   auto query = parse(
-      "WITH %sub AS { SELECT ?s ?o WHERE { ?s ?p ?o } }"
-      "SELECT * WHERE { INCLUDE %sub (?s AS ?s2) (?o AS ?o2) }");
+      "WITH %sub AS { ?s ?p ?o }"
+      "SELECT * WHERE {"
+      " { SELECT (?s AS ?s2) (?o AS ?o2) WHERE { INCLUDE %sub } } }");
   EXPECT_THAT(allWarnings(query), ::testing::IsEmpty());
 }
 
@@ -241,46 +207,45 @@ TEST(NamedSubquery, noWarningsForRenaming) {
 TEST(NamedSubquery, invalidQueries) {
   // Reference to an undefined named subquery.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("SELECT * WHERE { INCLUDE %nope }"),
+      parse("SELECT * WHERE { { SELECT ?s WHERE { INCLUDE %nope } } }"),
       ::testing::HasSubstr("\"%nope\" is not defined"));
   // Named subqueries must be defined before their use, so a definition cannot
   // include a named subquery that is defined later.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH %a AS { SELECT ?s WHERE { INCLUDE %b } }"
-            "WITH %b AS { SELECT ?s WHERE { ?s ?p ?o } }"
-            "SELECT * WHERE { INCLUDE %a }"),
+      parse("WITH %a AS { { SELECT ?s WHERE { INCLUDE %b } } }"
+            "WITH %b AS { ?s ?p ?o }"
+            "SELECT * WHERE { { SELECT ?s WHERE { INCLUDE %a } } }"),
       ::testing::HasSubstr("\"%b\" is not defined"));
   // Duplicate definition.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH %a AS { SELECT ?s WHERE { ?s ?p ?o } }"
-            "WITH %a AS { SELECT ?s WHERE { ?s ?p ?o } }"
-            "SELECT * WHERE { INCLUDE %a }"),
+      parse("WITH %a AS { ?s ?p ?o }"
+            "WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { { SELECT ?s WHERE { INCLUDE %a } } }"),
       ::testing::HasSubstr("\"%a\" is defined more than once"));
-  // Renaming of a variable that the named subquery does not select.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH %a AS { SELECT ?s WHERE { ?s ?p ?o } }"
-            "SELECT * WHERE { INCLUDE %a (?x AS ?y) }"),
-      ::testing::HasSubstr("?x cannot be renamed"));
-  // Renaming the same variable twice.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH %a AS { SELECT ?s WHERE { ?s ?p ?o } }"
-            "SELECT * WHERE { INCLUDE %a (?s AS ?x) (?s AS ?y) }"),
-      ::testing::HasSubstr("?s is renamed more than once"));
-  // Renaming that makes two variables collide.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH %a AS { SELECT ?s ?o WHERE { ?s ?p ?o } }"
-            "SELECT * WHERE { INCLUDE %a (?s AS ?o) }"),
-      ::testing::HasSubstr("not distinct anymore after the renaming"));
   // Blazegraph's syntax for named subqueries, where the name comes after the
   // body, gets an informative error.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH { SELECT ?s WHERE { ?s ?p ?o } } AS %a "
-            "SELECT * WHERE { INCLUDE %a }"),
+      parse("WITH { ?s ?p ?o } AS %a "
+            "SELECT * WHERE { { SELECT ?s WHERE { INCLUDE %a } } }"),
       ::testing::HasSubstr(
           "The reverse order `WITH { ... } AS %a`, as used by Blazegraph"));
-  // A VALUES clause at the end of a definition is currently not supported.
+  // An `INCLUDE` is only allowed as the entire body of a subquery.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse("WITH %a AS { SELECT ?s WHERE { ?s ?p ?o } VALUES ?s { <x> } }"
+      parse("WITH %a AS { ?s ?p ?o }"
             "SELECT * WHERE { INCLUDE %a }"),
-      ::testing::HasSubstr("VALUES clause at the end of the named subquery"));
+      ::testing::HasSubstr("must be the entire body of a subquery"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("WITH %a AS { ?s <p> ?o }"
+            "SELECT * WHERE {"
+            " { SELECT ?s WHERE { INCLUDE %a . ?s <q> ?t } } }"),
+      ::testing::HasSubstr("must be the entire body of a subquery"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { OPTIONAL { INCLUDE %a } }"),
+      ::testing::HasSubstr("must be the entire body of a subquery"));
+  // The subquery around an `INCLUDE` must select its variables explicitly.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { { SELECT * WHERE { INCLUDE %a } } }"),
+      ::testing::HasSubstr("`SELECT *` is not allowed here"));
 }

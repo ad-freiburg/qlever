@@ -104,10 +104,17 @@ class SparqlQleverVisitor {
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
 
-  // The named subqueries that have been defined so far via `WITH %name AS
-  // { ... }`, by name (including the leading `%`). Each `INCLUDE %name` is
-  // expanded to a copy of the corresponding subquery.
-  ad_utility::HashMap<std::string, ParsedQuery> namedSubqueries_{};
+  // A named subquery (defined via `WITH %name AS { ... }`): the parsed group
+  // graph pattern together with the variables that are visible in it.
+  struct NamedSubquery {
+    ParsedQuery::GraphPattern pattern_;
+    std::vector<Variable> visibleVariables_;
+  };
+
+  // The named subqueries that have been defined so far, by name (including
+  // the leading `%`). Each `INCLUDE %name` is expanded to a copy of the
+  // corresponding pattern.
+  ad_utility::HashMap<std::string, NamedSubquery> namedSubqueries_{};
 
   // The `BASE` IRI of the query if any.
   std::optional<qlever::util::ParsedUri> baseIri_{};
@@ -207,17 +214,26 @@ class SparqlQleverVisitor {
   ParsedQuery visit(Parser::SelectQueryContext* ctx);
 
   // Visit the definition of a named subquery (`WITH %name AS { ... }`) and
-  // store the parsed subquery in the `namedSubqueries_` map.
+  // store the parsed pattern in the `namedSubqueries_` map.
   void visit(Parser::NamedSubqueryDefinitionContext* ctx);
 
-  // Visit a reference to a named subquery (`INCLUDE %name`, optionally with
-  // renamings like `(?a AS ?b)`) and expand it to a copy of the stored
-  // subquery, wrapped in a renaming subquery if renamings are given.
-  GraphPatternOperation visit(Parser::IncludeClauseContext* ctx);
+  // A valid `INCLUDE %name` (as the entire body of a subquery) is expanded in
+  // `visit(GroupGraphPatternContext*)` and never reaches this function, so
+  // this function always reports an error for a misplaced `INCLUDE`.
+  [[noreturn]] GraphPatternOperation visit(Parser::IncludeClauseContext* ctx);
 
-  // Visit a single renaming `(?a AS ?b)` of an `INCLUDE`.
-  static std::pair<Variable, Variable> visit(
-      Parser::IncludeRenamingContext* ctx);
+  // If the body of the given group graph pattern is exactly one `INCLUDE`
+  // clause, return that clause, otherwise `nullptr`.
+  static Parser::IncludeClauseContext* getSoleIncludeClause(
+      Parser::GroupGraphPatternSubContext* ctx);
+
+  // Expand the sole `INCLUDE %name` body of the group graph pattern `ctx`
+  // into a copy of the pattern of the corresponding named subquery. Report an
+  // error if the group is not the body of a subquery or that subquery uses
+  // `SELECT *`.
+  ParsedQuery::GraphPattern visitSoleInclude(
+      Parser::IncludeClauseContext* includeCtx,
+      Parser::GroupGraphPatternContext* ctx);
 
   SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
 
