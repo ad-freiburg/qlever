@@ -16,6 +16,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -28,11 +29,7 @@
 
 namespace {
 using namespace deltaTriplesTestHelpers;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
+using ad_utility::testing::encodedIriManager;
 
 constexpr auto iri = [](std::string_view s) -> TripleComponent {
   return TripleComponent{TripleComponent::Iri::fromIriref(s)};
