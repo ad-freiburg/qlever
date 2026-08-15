@@ -352,10 +352,10 @@ size_t SpatialJoin::getCostEstimate() {
       return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
-          ad_utility::contains(std::array{SpatialJoinAlgorithm{S2_GEOMETRY},
-                                          SpatialJoinAlgorithm{BOUNDING_BOX},
-                                          SpatialJoinAlgorithm{
-                                              S2_POINT_POLYLINE}},
+          ad_utility::contains(
+              std::array{SpatialJoinAlgorithm{S2_GEOMETRY},
+                         SpatialJoinAlgorithm{BOUNDING_BOX},
+                         SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
               config_.algo_),
           "Unknown SpatialJoin Algorithm.");
 
