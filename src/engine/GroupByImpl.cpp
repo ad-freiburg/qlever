@@ -1128,7 +1128,9 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       threeVarSubtree.getRootOperation());
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
 
-  auto getExactCardinality = [&indexScan, &permutation](Id id) {
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto getExactCardinality = [&indexScan, &permutation = permutation](Id id) {
     return permutation.getResultSizeOfScan(
         permutation.getScanSpecAndBlocks(
             ScanSpecification{id, std::nullopt, std::nullopt},

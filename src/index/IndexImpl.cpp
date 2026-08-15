@@ -217,7 +217,11 @@ IndexImpl::buildOspWithPatterns(
   // That is, when we are done with the join (which we now explicitly wait
   // for before starting the second generator, see below), the generator is
   // destroyed.
-  auto getLazyPatternScan = [&]() {
+  //
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto getLazyPatternScan = [&, &hasPatternPredicateSortedByPSO =
+                                    hasPatternPredicateSortedByPSO]() {
     return lazyScanWithPermutedColumns(hasPatternPredicateSortedByPSO,
                                        std::array<ColumnIndex, 2>{0, 2});
   };

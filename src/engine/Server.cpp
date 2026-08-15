@@ -361,9 +361,14 @@ auto Server::prepareOperation(
   // Return a factory rather than a ready-made context, so the caller can bind
   // it to whichever snapshot is current when the operation runs (see
   // `processUpdate`).
+  //
+  // NOTE: The init-captures of `pinSubtrees` and `pinResult` are needed
+  // because Clang with `-fopenmp` does not support capturing a structured
+  // binding directly.
   MakeQueryExecutionContext makeQec =
-      [this, sharedMessageSender = std::move(sharedMessageSender), pinSubtrees,
-       pinResult, pinResultWithName = std::move(pinResultWithName),
+      [this, sharedMessageSender = std::move(sharedMessageSender),
+       pinSubtrees = pinSubtrees, pinResult = pinResult,
+       pinResultWithName = std::move(pinResultWithName),
        pinNamedGeoIndex = std::move(pinNamedGeoIndex),
        geoIndexSimplificationInMeters,
        accessTokenOk](SharedIndexAndView indexAndViews) {
@@ -1676,9 +1681,13 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   //
   // We don't directly `co_await` because of lifetime issues (bugs) in the
   // Conan setup.
+  //
+  // NOTE: The init-captures of `index` (and of `oldManager` below) are needed
+  // because Clang with `-fopenmp` does not support capturing a structured
+  // binding directly.
   auto coroutine = ad_utility::runFunctionOnExecutor(
       queryThreadPool_.get_executor(),
-      [this, &index, &handle, &config] {
+      [this, &index = index, &handle, &config] {
         return qlever().rebuildIndexToDisk(index, config, handle);
       },
       net::use_awaitable);
@@ -1689,8 +1698,8 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
   // current index.
   auto swapRoutine = ad_utility::runFunctionOnExecutor(
       updateThreadPool_.get_executor(),
-      [this, &index, &oldManager, rebuildResult = std::move(rebuildResult),
-       &handle, &config]() mutable {
+      [this, &index = index, &oldManager = oldManager,
+       rebuildResult = std::move(rebuildResult), &handle, &config]() mutable {
         // The swap below moves all files of the old index to a different base
         // name and installs the new index at the base name of the old one. Any
         // view file that `oldManager` created after that point would silently

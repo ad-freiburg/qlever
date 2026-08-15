@@ -100,9 +100,11 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // so there is no disk I/O to amortize across batches.
   auto missResolved =
       ql::exportIds::idsToStringAndType(index, missIds, localVocab);
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
   for (auto&& [id, resolved, rows] :
        ::ranges::views::zip(missIds, missResolved, missRows)) {
-    auto evaluate = [&resolved](const Id&) {
+    auto evaluate = [&resolved = resolved](const Id&) {
       return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
           std::move(resolved));
     };

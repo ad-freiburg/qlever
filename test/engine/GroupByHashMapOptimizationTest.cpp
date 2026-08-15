@@ -197,11 +197,13 @@ TEST_F(GroupByHashMapOptimizationTest,
   GroupConcatAggregationData data{";"};
   auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  auto getResultString = [&](bool stripQuotes = true) {
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto getResultString = [&, &calc = calc](bool stripQuotes = true) {
     return idToString(calc(), stripQuotes);
   };
 
-  auto addString = [&](std::string_view string) {
+  auto addString = [&, &addValue = addValue](std::string_view string) {
     addValue(idFromString(string));
   };
 
@@ -228,8 +230,8 @@ TEST_F(GroupByHashMapOptimizationTest,
   addString("a");
   EXPECT_EQ(calc(), Id::makeUndefined());
 
-  auto addStringWithLangTag = [&](std::string_view string,
-                                  std::string langTag) {
+  auto addStringWithLangTag = [&, &addValue = addValue](std::string_view string,
+                                                        std::string langTag) {
     using ad_utility::triple_component::Literal;
     auto literal = Literal::literalWithoutQuotes(string, std::move(langTag));
     addValue(Id::makeFromLocalVocabIndex(

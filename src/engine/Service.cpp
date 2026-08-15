@@ -403,7 +403,11 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   checkCancellation();
 
   // Creates a single row of the values clause or an empty string on error.
-  auto createValueRow = [&](size_t rowIndex) -> std::string {
+  //
+  // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto createValueRow = [&, &siblingResult =
+                                siblingResult](size_t rowIndex) -> std::string {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
       const auto& optStr = idToValueForValuesClause(
@@ -630,7 +634,10 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     return;
   }
 
-  auto addRuntimeInfo = [&](bool siblingUsed) {
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto addRuntimeInfo = [&, &service = service,
+                         &sibling = sibling](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
     sibling->runtimeInfo().addDetail("used-to-optimize-service-sibling", v);

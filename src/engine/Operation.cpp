@@ -462,7 +462,13 @@ void Operation::storeToNamedResultCache(const Result& result) {
 
   // If a geo index is to be cached, get the respective column using the
   // given variable and compute the index.
-  auto geoIndex = [&]() -> std::optional<SpatialJoinCachedIndex> {
+  //
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  auto geoIndex =
+      [&, &geoIndexVar = geoIndexVar,
+       &simplificationInMeters =
+           simplificationInMeters]() -> std::optional<SpatialJoinCachedIndex> {
     if (!geoIndexVar.has_value()) {
       return std::nullopt;
     }

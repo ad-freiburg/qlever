@@ -458,15 +458,20 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
                      triples.end());
   tracer.beginTrace("removeExistingTriples");
-  ql::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
+  // NOTE: The init-captures of `targetMap` and `inverseMap` are needed
+  // because Clang with `-fopenmp` does not support capturing a structured
+  // binding directly.
+  ql::erase_if(triples, [&targetMap = targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
   tracer.endTrace("removeExistingTriples");
   tracer.beginTrace("removeInverseTriples");
-  ql::ranges::for_each(triples, [&inverseMap](const IdTriple<0>& triple) {
-    // Note: if a triple does not exist, `erase` does nothing.
-    inverseMap.erase(triple);
-  });
+  ql::ranges::for_each(triples,
+                       [&inverseMap = inverseMap](const IdTriple<0>& triple) {
+                         // Note: if a triple does not exist, `erase` does
+                         // nothing.
+                         inverseMap.erase(triple);
+                       });
   tracer.endTrace("removeInverseTriples");
   tracer.beginTrace("locatedAndAdd");
 

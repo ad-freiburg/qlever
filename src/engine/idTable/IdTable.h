@@ -837,10 +837,14 @@ class IdTable {
     const size_t oldSize = size();
     resize(numRows() + numInserted);
     // For each column, copy the requested rows into the reserved tail.
+    //
+    // NOTE: The init-capture is needed because Clang with `-fopenmp` does not
+    // support capturing a structured binding directly.
     for (auto&& [destination, source] :
          ::ranges::views::zip(getColumns(), table.getColumns())) {
-      ql::ranges::transform(indices, destination.begin() + oldSize,
-                            [&source](size_t idx) { return source[idx]; });
+      ql::ranges::transform(
+          indices, destination.begin() + oldSize,
+          [&source = source](size_t idx) { return source[idx]; });
     }
   }
 

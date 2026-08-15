@@ -2503,10 +2503,12 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
         // Simply insert all the entries.
         ql::ranges::for_each(pairVector, [&assignment](const auto& pair) {
           const auto& [key, validatorVector] = pair;
+          // NOTE: The init-capture is needed because Clang with `-fopenmp`
+          // does not support capturing a structured binding directly.
           ql::ranges::for_each(
               validatorVector,
               [&assignment,
-               &key](const ConfigOptionValidatorManager& validator) {
+               &key = key](const ConfigOptionValidatorManager& validator) {
                 assignment->addEntryUnderKey(key, validator);
               });
         });

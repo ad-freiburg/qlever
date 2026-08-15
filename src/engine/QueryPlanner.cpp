@@ -2600,7 +2600,10 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
   // The left or right side is a transitive path and its join column corresponds
   // to the left side of its input.
-  SubtreePlan plan = [&]() {
+  //
+  // NOTE: The init-captures are needed because Clang with `-fopenmp` does not
+  // support capturing a structured binding directly.
+  SubtreePlan plan = [&, &thisCol = thisCol, &otherCol = otherCol]() {
     if (thisCol == 0) {
       return makeSubtreePlan(
           transPathOperation->bindLeftSide(otherTree, otherCol));
