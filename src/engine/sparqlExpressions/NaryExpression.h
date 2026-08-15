@@ -62,7 +62,7 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
 
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2);
 
