@@ -107,5 +107,7 @@ COPY --from=builder /qlever/build/qlever-* /qlever/
 CMD ["/qlever/qlever-server"]
 
 FROM runtime as tests
+USER root
 RUN apt-get update && apt-get install -y wget python3-yaml python3-icu && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
+USER qlever
