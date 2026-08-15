@@ -2640,7 +2640,9 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
                      {Variable{internalVar(0)}}, {3})));
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
-      scan("?x", "?p", "?g", {}, NamedTag{}));
+      h::Bind(scan("?x", "?p", "?g", {}, NamedTag{}, {Variable{internalVar(0)}},
+                   {3}),
+              internalVar(0), Variable{"?g"}));
 }
 
 // _____________________________________________________________________________
