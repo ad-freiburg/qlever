@@ -44,26 +44,6 @@ namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
 constexpr ctll::fixed_string distCaptureGroup = "dist";
 constexpr ctll::fixed_string resultsCaptureGroup = "results";
-
-// String mapping for the `SpatialJoinAlgorithm` enum.
-constexpr std::array<std::pair<std::string_view, SpatialJoinAlgorithm>, 5>
-    ALGORITHM_NAMES{{
-        {"baseline", SpatialJoinAlgorithm::BASELINE},
-        {"s2", SpatialJoinAlgorithm::S2_GEOMETRY},
-        {"boundingBox", SpatialJoinAlgorithm::BOUNDING_BOX},
-        {"libspatialjoin", SpatialJoinAlgorithm::LIBSPATIALJOIN},
-        {"experimentalPointPolyline", SpatialJoinAlgorithm::S2_POINT_POLYLINE},
-    }};
-
-// Human-readable, comma-separated list of all valid `<algorithm>` IRIs from
-// `ALGORITHM_NAMES`, for use in error messages.
-std::string supportedAlgorithmNames() {
-  return absl::StrJoin(ALGORITHM_NAMES, ", ",
-                       [](std::string* out, const auto& nameAndAlgorithm) {
-                         absl::StrAppend(out, "`<", nameAndAlgorithm.first,
-                                         ">`");
-                       });
-}
 }  // namespace detail
 
 // ____________________________________________________________________________
@@ -138,10 +118,17 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throwIf(!object.isIri(),
             absl::StrCat("The parameter `<algorithm>` needs an IRI that "
                          "selects the algorithm to employ. Currently "
-                         "supported are ",
-                         detail::supportedAlgorithmNames()));
-    algo_ = detail::spatialJoinAlgorithmFromString(
-        extractParameterName(object, SPATIAL_SEARCH_IRI));
+                         "supported are: ",
+                         SpatialJoinAlgorithm::getListOfSupportedValues()));
+    try {
+      algo_ = SpatialJoinAlgorithm::fromString(
+          extractParameterName(object, SPATIAL_SEARCH_IRI));
+    } catch (const std::runtime_error&) {
+      throw SpatialSearchException{absl::StrCat(
+          "The IRI given for the parameter `<algorithm>` does not refer to a "
+          "supported spatial search algorithm. Currently supported are: ",
+          SpatialJoinAlgorithm::getListOfSupportedValues())};
+    }
   } else if (predString == "payload") {
     if (object.isVariable()) {
       // Single selected variable
@@ -178,7 +165,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   throwIf(!algo_.has_value(),
           absl::StrCat("Missing parameter `<algorithm>` in spatial search. "
                        "Please explicitly select an algorithm: ",
-                       detail::supportedAlgorithmNames(),
+                       SpatialJoinAlgorithm::getListOfSupportedValues(),
                        ". See the QLever Docs "
                        "(https://docs.qlever.dev/geosparql/) for details."));
   SpatialJoinAlgorithm algo = algo_.value();
@@ -350,22 +337,5 @@ void SpatialQuery::validate() const {
   // highlighting. It's only a small struct so not much is wasted.
   [[maybe_unused]] auto&& _ = toSpatialJoinConfiguration();
 }
-
-namespace detail {
-
-// _____________________________________________________________________________
-SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
-    std::string_view identifier) {
-  for (const auto& [name, algorithm] : ALGORITHM_NAMES) {
-    if (name == identifier) {
-      return algorithm;
-    }
-  }
-  throw SpatialSearchException(absl::StrCat(
-      "The IRI given for the parameter `<algorithm>` does not refer to a "
-      "supported spatial search algorithm. Please select either ",
-      supportedAlgorithmNames()));
-}
-}  // namespace detail
 
 }  // namespace parsedQuery

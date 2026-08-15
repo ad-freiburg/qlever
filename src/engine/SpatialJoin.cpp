@@ -323,7 +323,7 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
-  using enum SpatialJoinAlgorithm;
+  using enum SpatialJoinAlgorithm::Enum;
   if (!childLeft_ || !childRight_) {
     return 1;  // dummy return, as the class does not have its children yet
   }
@@ -352,8 +352,10 @@ size_t SpatialJoin::getCostEstimate() {
       return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
-          ad_utility::contains(
-              std::array{S2_GEOMETRY, BOUNDING_BOX, S2_POINT_POLYLINE},
+          ad_utility::contains(std::array{SpatialJoinAlgorithm{S2_GEOMETRY},
+                                          SpatialJoinAlgorithm{BOUNDING_BOX},
+                                          SpatialJoinAlgorithm{
+                                              S2_POINT_POLYLINE}},
               config_.algo_),
           "Unknown SpatialJoin Algorithm.");
 

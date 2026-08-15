@@ -1072,7 +1072,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   using V = Variable;
   using PV = PayloadVariables;
   auto scan = h::IndexScanFromStrings;
-  using enum SpatialJoinAlgorithm;
+  using enum SpatialJoinAlgorithm::Enum;
 
   std::string kb =
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
