@@ -869,7 +869,7 @@ std::pair<GraphOrDefault, GraphOrDefault> Visitor::visitFromTo(
     std::vector<Parser::GraphOrDefaultContext*> ctxs) {
   AD_CORRECTNESS_CHECK(ctxs.size() == 2);
   return {visit(ctxs[0]), visit(ctxs[1])};
-};
+}
 
 // ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {

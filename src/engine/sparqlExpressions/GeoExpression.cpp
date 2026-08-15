@@ -203,7 +203,7 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
       std::move(child));
-};
+}
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
@@ -368,8 +368,8 @@ using Ptr = sparqlExpression::SparqlExpression::Ptr;
 #endif
 #define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
   template Ptr                                                                \
-      sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
-          Ptr, Ptr);
+  sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>(Ptr, \
+                                                                         Ptr)
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
@@ -386,7 +386,7 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
 #endif
 #define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
   template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
-      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr);
+      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr)
 
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_Y);

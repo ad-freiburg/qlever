@@ -186,7 +186,7 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
              : std::nullopt;
-};
+}
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
@@ -268,13 +268,13 @@ double SpatialJoinAlgorithms::computeDist(const size_t geometryIndex1,
   return boost::apply_visitor(ClosestPointVisitor(),
                               geometries_.at(geometryIndex1),
                               geometries_.at(geometryIndex2));
-};
+}
 
 // ____________________________________________________________________________
 size_t SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
   geometries_.emplace_back(Point(point.getLng(), point.getLat()));
   return geometries_.size() - 1;  // index of the last element
-};
+}
 
 // ____________________________________________________________________________
 Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
