@@ -10,8 +10,8 @@
 #include <gmock/gmock.h>
 
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "parser/VariableCounter.h"
 
@@ -19,13 +19,13 @@
 namespace {
 
 using namespace ::testing;
+using ad_utility::testing::parseQuery;
 using parsedQuery::VariableCounter;
 using V = Variable;
 
 // Apply `VariableCounter` to the root graph pattern of the given SPARQL query.
 VariableCounter parseAndCount(std::string sparql) {
-  static EncodedIriManager encodedIriManager;
-  auto pq = SparqlParser::parseQuery(&encodedIriManager, std::move(sparql));
+  auto pq = parseQuery(std::move(sparql));
   VariableCounter counter;
   counter(pq._rootGraphPattern);
   return counter;

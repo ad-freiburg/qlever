@@ -89,7 +89,7 @@ namespace {
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
-};
+}
 }  // namespace
 
 // Return a `std::tie` of the relevant entries of a row, according to

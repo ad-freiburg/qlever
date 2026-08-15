@@ -82,7 +82,7 @@ NARY_EXPRESSION(
     SimplifyGeometryExpression, 2,
     FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
 
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
@@ -190,7 +190,7 @@ SparqlExpression::Ptr makeSimplifyGeometryExpression(
 }
 
 // _____________________________________________________________________________
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
   return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
@@ -203,7 +203,7 @@ SparqlExpression::Ptr makeBoundingCoordinateExpression(
     SparqlExpression::Ptr child) {
   return std::make_unique<BoundingCoordinateExpression<RequestedCoordinate>>(
       std::move(child));
-};
+}
 
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child) {
@@ -226,7 +226,7 @@ namespace {
 
 // Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
 // function, given the templated `Relation`.
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     const SparqlExpression& expr) {
   // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
@@ -255,7 +255,7 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
   // Check against all possible geo relation types
   std::optional<GeoFunctionCall> res;
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
 
   // TODO<C++26 reflection> get all values of `SpatialJoinType` enum
   if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
@@ -366,10 +366,9 @@ using Ptr = sparqlExpression::SparqlExpression::Ptr;
 #ifdef QL_INSTANTIATE_GEO_RELATION_EXPR
 #error "Macro QL_INSTANTIATE_GEO_RELATION_EXPR already defined"
 #endif
-#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
-  template Ptr                                                                \
-      sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
-          Ptr, Ptr);
+#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)          \
+  template Ptr sparqlExpression::makeGeoRelationExpression< \
+      SpatialJoinType::Enum::joinType>(Ptr, Ptr)
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
@@ -386,7 +385,7 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
 #endif
 #define QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(RequestedCoordinate) \
   template Ptr sparqlExpression::makeBoundingCoordinateExpression<   \
-      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr);
+      ad_utility::BoundingCoordinate::RequestedCoordinate>(Ptr)
 
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_X);
 QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR(MIN_Y);
