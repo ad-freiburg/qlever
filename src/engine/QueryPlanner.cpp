@@ -1560,7 +1560,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
   for (size_t k = 2; k <= numSeeds; ++k) {
-    AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
+    AD_LOG_TRACE << "Producing plans that unite " << k << " triples"
                  << std::endl;
     applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
     applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
@@ -2166,7 +2166,7 @@ bool QueryPlanner::TripleGraph::isSimilar(
         AD_LOG_INFO << other.asString() << std::endl;
         AD_LOG_INFO << "The node with id " << id << " is connected to " << a
                     << " in this graph graph but not to the equivalent "
-                       "node in the other graph."
+                       "node in the other graph"
                     << std::endl;
         return false;
       }
@@ -2177,7 +2177,7 @@ bool QueryPlanner::TripleGraph::isSimilar(
         AD_LOG_INFO << other.asString() << std::endl;
         AD_LOG_INFO << "The node with id " << id << " is connected to " << a
                     << " in the other graph graph but not to the equivalent "
-                       "node in this graph."
+                       "node in this graph"
                     << std::endl;
         return false;
       }

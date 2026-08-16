@@ -714,7 +714,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
             subresult->idTableView(), groupByCols, aggregates, &localVocab);
       });
 
-  AD_LOG_DEBUG << "GroupBy result computation done." << std::endl;
+  AD_LOG_DEBUG << "GroupBy result computation done" << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 

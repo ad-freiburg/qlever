@@ -442,7 +442,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      ad_utility::timer::TimeTracer& tracer) {
   AD_LOG_DEBUG << (insertOrDelete ? "Inserting" : "Deleting") << " "
                << triples.size() << (isInternal ? " internal" : "")
-               << " triples (including idempotent triples)." << std::endl;
+               << " triples (including idempotent triples)" << std::endl;
   auto [targetMap, inverseMap] = [this]() {
     auto& state = getState<isInternal>();
     if constexpr (insertOrDelete) {

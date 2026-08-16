@@ -46,6 +46,6 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
   idTableResult.resize(nofResultElements);
 
   AD_LOG_DEBUG << "Filtering by ID range done. Result has "
-               << idTableResult.numRows() << " elements.\n";
+               << idTableResult.numRows() << " elements\n";
   return idTableResult;
 }

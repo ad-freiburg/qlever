@@ -106,7 +106,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
       materializedViewsManager.loadView(viewName, qec.get());
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
-                   << "' failed: " << ex.what() << "." << std::endl;
+                   << "' failed: " << ex.what() << std::endl;
     }
   }
 }

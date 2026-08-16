@@ -345,7 +345,7 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
                                        classic, entity));
   classicPostings.clear();
   entityPostings.clear();
-  AD_LOG_DEBUG << "Done creating text index." << std::endl;
+  AD_LOG_DEBUG << "Done creating text index" << std::endl;
   AD_LOG_INFO << "Statistics for text index: " << textMeta_.statistics()
               << std::endl;
 
@@ -548,7 +548,7 @@ void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   std::ifstream offsetsIn =
       ad_utility::makeIfstream(offsetsFilename, std::ios::binary);
   ofs << offsetsIn.rdbuf();
-  AD_LOG_INFO << "DocsDB done.\n";
+  AD_LOG_INFO << "DocsDB done\n";
 }
 
 #endif

@@ -172,7 +172,7 @@ class ParallelParseBuffer {
         return {false, std::move(buf)};
       }
       if (buf.size() % 10000000 == 0) {
-        AD_LOG_INFO << "Parsed " << buf.size() << " triples." << std::endl;
+        AD_LOG_INFO << "Parsed " << buf.size() << " triples" << std::endl;
       }
     }
     return {true, std::move(buf)};

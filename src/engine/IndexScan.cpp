@@ -322,7 +322,7 @@ IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
                                        cancellationHandle_,
                                        locatedTriplesState(), getLimitOffset());
-  AD_LOG_DEBUG << "IndexScan result computation done.\n";
+  AD_LOG_DEBUG << "IndexScan result computation done\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
