@@ -63,7 +63,6 @@ class Server {
       absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
           SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
-  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
@@ -88,10 +87,6 @@ class Server {
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
   void configureQueryEventLog(const ql::filesystem::path& path);
-
-  // Get server statistics.
-  static json composeStatsJson(const Index& index);
-  json composeCacheStatsJson() const;
 
  private:
   qlever::Qlever qlever_;
@@ -263,11 +258,6 @@ class Server {
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  static json composeErrorResponseJson(
-      const std::string& query, const std::string& errorMsg,
-      const ad_utility::Timer& requestTimer,
-      const std::optional<ExceptionMetadata>& metadata = std::nullopt);
-
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
   CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
@@ -340,8 +330,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, ResponseT& send,
-          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-          const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
+          ad_utility::MediaType mediaType, const PlannedQuery plannedQuery,
+          const ad_utility::Timer requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);

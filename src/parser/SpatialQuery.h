@@ -67,8 +67,10 @@ struct SpatialQuery : MagicServiceQuery {
   // `PayloadAllVariables` to ensure appropriate semantics.
   PayloadVariables payloadVariables_;
 
-  // Optional further argument: the join algorithm. If it is not given, the
-  // default algorithm is used implicitly.
+  // The join algorithm. Mandatory for the `SERVICE spatialSearch:` syntax
+  // (checked in `toSpatialJoinConfiguration`); implicitly set to a fixed
+  // value for the deprecated magic predicate syntax, which has no way to
+  // specify it.
   std::optional<SpatialJoinAlgorithm> algo_;
 
   // Optional join type for libspatialjoin. If it is not given, INTERSECT
@@ -118,15 +120,6 @@ struct SpatialQuery : MagicServiceQuery {
   // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.
   void throwIf(bool throwCondition, std::string_view message) const;
 };
-
-namespace detail {
-
-// Convert a string like `libspatialjoin` to the corresponding enum element.
-// Throws a `SpatialSearchException` for invalid inputs.
-SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
-    std::string_view identifier);
-
-}  // namespace detail
 
 }  // namespace parsedQuery
 
