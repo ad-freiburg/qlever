@@ -5,12 +5,15 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -192,9 +195,45 @@ class SplitVocabulary {
     return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
-  //____________________________________________________________________________
+  // Partition `indices` by marker and forward each group to the matching
+  // underlying `lookupBatch`. Result order matches `indices`, including
+  // duplicates and mixed markers. `OnDiskCompressedGeoSplit` therefore
+  // reaches the on-disk batch path instead of walking `operator[]`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+
+    std::array<std::vector<size_t>, numberOfVocabs> slotsPerMarker;
+    std::array<std::vector<size_t>, numberOfVocabs> unmarkedPerMarker;
+    for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
+      const uint8_t marker = getMarker(idx);
+      slotsPerMarker[marker].push_back(static_cast<size_t>(i));
+      unmarkedPerMarker[marker].push_back(getVocabIndex(idx));
+    }
+
+    std::vector<std::string> words(indices.size());
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (unmarkedPerMarker[marker].empty()) {
+        continue;
+      }
+      auto batch = std::visit(
+          [&](const auto& vocab) {
+            return vocab.lookupBatch(unmarkedPerMarker[marker]);
+          },
+          underlying_[marker]);
+      AD_CORRECTNESS_CHECK(batch->size() == unmarkedPerMarker[marker].size());
+      for (auto [slot, word] :
+           ::ranges::views::zip(slotsPerMarker[marker], *batch)) {
+        words[slot] = std::string{word};
+      }
+    }
+
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+    data->buffer() = std::move(words);
+    data->views().reserve(data->buffer().size());
+    for (const auto& word : data->buffer()) {
+      data->views().push_back(word);
+    }
+    return StringVectorVocabBatchLookupData::asResult(std::move(data));
   }
 
   //____________________________________________________________________________
