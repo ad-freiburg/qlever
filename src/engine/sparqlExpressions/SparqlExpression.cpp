@@ -130,7 +130,7 @@ SparqlExpression::getPrefilterExpressionForMetadata(
     [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   return {};
-};
+}
 
 // _____________________________________________________________________________
 bool SparqlExpression::isConstantExpression() const { return false; }

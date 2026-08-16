@@ -43,6 +43,7 @@
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -602,7 +603,7 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
   return result;
-};
+}
 
 // Helper function for `handleRepeatedVariables` below. Replace a single
 // position of the `scanTriple`, denoted by the `rewritePosition` by a new
@@ -876,7 +877,8 @@ auto QueryPlanner::seedWithScansAndText(
             "to confusing semantics. Please upgrade your query to the new "
             "syntax 'SERVICE ",
             SPATIAL_SEARCH_IRI,
-            " { ... }'. For more information, please see the QLever Wiki."));
+            " { ... }'. For more information, please see the QLever Docs "
+            "(https://docs.qlever.dev/geosparql/)."));
       }
       pushPlan(plan);
       continue;
@@ -1771,7 +1773,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     }
   }
   return plans;
-};
+}
 
 // _____________________________________________________________________________
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
@@ -2204,7 +2206,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
     }
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
-};
+}
 
 // _________________________________________________________________________________
 size_t QueryPlanner::findSmallestExecutionTree(
@@ -2621,8 +2623,7 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   // Check if the user allows query rewriting.
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
-  if (!getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+  if (_qec->disableMaterializedViewRewriting()) {
     return plans;
   }
 
@@ -3157,7 +3158,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
   }
-};
+}
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(

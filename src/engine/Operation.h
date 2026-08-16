@@ -175,7 +175,7 @@ class Operation {
       [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
     return std::nullopt;
-  };
+  }
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
@@ -488,7 +488,7 @@ class Operation {
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
-  };
+  }
 
  protected:
   // The QueryExecutionContext for this particular element.

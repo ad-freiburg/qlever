@@ -12,6 +12,7 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/GraphStoreProtocol.h"
 #include "parser/SparqlParserHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 namespace m = matchers;
 using namespace ad_utility::testing;
@@ -46,11 +47,6 @@ auto GetGraph = [](ad_utility::triple_component::Iri graph) {
 };
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
-
-const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-}
 }  // namespace
 
 // _____________________________________________________________________________________________

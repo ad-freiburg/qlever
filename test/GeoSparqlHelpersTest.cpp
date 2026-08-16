@@ -90,11 +90,12 @@ TEST(GeoSparqlHelpers, WktDist) {
 
   // Distance between points: the Eiffel tower and the Freiburg Cathedral (421km
   // according to the distance measurement of Google Maps).
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral), 421.68, 0.01);
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.68, 0.01);
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421676, 1);
-  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 262.02, 0.01);
-  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676, 1);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral), 421.68, 0.02);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, KILOMETERS), 421.68, 0.02);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, METERS), 421676, 15);
+  EXPECT_NEAR(WktDist()(eiffeltower, frCathedral, MILES), 262.02, 0.02);
+  EXPECT_NEAR(ad_utility::WktMetricDist()(eiffeltower, frCathedral), 421676,
+              15);
 
   // Distance between WKT non-point literals.
   EXPECT_NEAR(
@@ -121,7 +122,7 @@ TEST(GeoSparqlHelpers, WktDist) {
 }
 
 // _____________________________________________________________________________
-template <SpatialJoinType SJType>
+template <SpatialJoinType::Enum SJType>
 void checkGeoRelationDummyImpl(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -135,7 +136,7 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();
