@@ -172,9 +172,10 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // blocks is being used.
   size_t blockIndex_;
 
-  // Two of these are equal if all members are equal.
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(CompressedBlockMetadata,
-                                              blockIndex_)
+  // Two of these are equal if all members are equal (including the members of
+  // the base class).
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(
+      CompressedBlockMetadata, CompressedBlockMetadataNoBlockIndex, blockIndex_)
 
   // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(

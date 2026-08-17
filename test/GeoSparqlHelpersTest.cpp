@@ -122,7 +122,7 @@ TEST(GeoSparqlHelpers, WktDist) {
 }
 
 // _____________________________________________________________________________
-template <SpatialJoinType SJType>
+template <SpatialJoinType::Enum SJType>
 void checkGeoRelationDummyImpl(
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -136,7 +136,7 @@ void checkGeoRelationDummyImpl(
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   checkGeoRelationDummyImpl<INTERSECTS>();
   checkGeoRelationDummyImpl<CONTAINS>();
   checkGeoRelationDummyImpl<COVERS>();
