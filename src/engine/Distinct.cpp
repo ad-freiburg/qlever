@@ -230,3 +230,34 @@ IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
     return self->outOfPlaceDistinct<width>(input.asStaticView<0>());
   });
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Distinct::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  std::set<Variable> newVariables;
+  std::vector<Variable> distinctVars;
+  const auto* vars = &variables;
+  for (const auto& jcl : keepIndices_) {
+    const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
+    distinctVars.push_back(var);
+    if (!ad_utility::contains(variables, var)) {
+      if (vars == &variables) {
+        newVariables = variables;
+      }
+      newVariables.insert(var);
+      vars = &newVariables;
+    }
+  }
+
+  // TODO<joka921> Code duplication including a former copy-paste bug.
+  auto subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *vars);
+  std::vector<ColumnIndex> distinctColumnIndices;
+  for (const auto& var : distinctVars) {
+    distinctColumnIndices.push_back(subtree->getVariableColumn(var));
+  }
+
+  return ad_utility::makeExecutionTree<Distinct>(getExecutionContext(),
+                                             std::move(subtree),
+                                             distinctColumnIndices);
+}

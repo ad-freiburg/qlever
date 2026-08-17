@@ -61,6 +61,10 @@ class Distinct : public Operation {
     return {subtree_.get()};
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
 
