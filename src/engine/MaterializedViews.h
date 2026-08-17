@@ -102,6 +102,13 @@ class MaterializedViewWriter {
                          ad_utility::MemorySize memoryLimit,
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
+  // Called from the constructor. A view is always stored sorted by its first
+  // (up to three) columns (SPO order), so an `ORDER BY`/`INTERNAL SORT BY` in
+  // the defining query that does not request exactly that ascending prefix of
+  // the view's columns would have its requested order silently discarded when
+  // writing the view. Throws in that case instead.
+  void throwIfOrderByInconsistentWithViewOrder() const;
+
   // Get the base filename for the view's permutation and metadata files. This
   // name is the result of concatenating `onDiskBase` and `name`.
   std::string getFilenameBase() const;

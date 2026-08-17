@@ -71,6 +71,44 @@ MaterializedViewWriter::MaterializedViewWriter(
   columnPermutation_ = ::ranges::to<std::vector<ColumnIndex>>(
       columnNamesAndPermutation | ql::views::values);
   numAddEmptyColumns_ = numAddEmptyColumns;
+
+  throwIfOrderByInconsistentWithViewOrder();
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
+  // A view is always stored sorted by its first (up to three) columns (SPO
+  // order). An `ORDER BY`/`INTERNAL SORT BY` in the defining query has no
+  // effect on this on-disk order (writing bypasses the exporter that would
+  // otherwise honor it), so unless it requests exactly that prefix of the
+  // view's columns in ascending order, reject the query instead of silently
+  // discarding the requested order.
+  const auto& orderBy = parsedQuery_._orderBy;
+  if (orderBy.empty()) {
+    return;
+  }
+  auto isConsistentWithViewOrder = [&]() {
+    if (orderBy.size() > columnPermutation_.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < orderBy.size(); ++i) {
+      const auto& key = orderBy[i];
+      auto col = qet_->getVariableColumnOrNullopt(key.variable_);
+      if (key.isDescending_ || !col.has_value() ||
+          col.value() != columnPermutation_[i]) {
+        return false;
+      }
+    }
+    return true;
+  };
+  if (!isConsistentWithViewOrder()) {
+    throw MaterializedViewConfigException(
+        "The ORDER BY or INTERNAL SORT BY clause of the query to write a "
+        "materialized view must be an ascending prefix of the view's "
+        "columns in their SELECTed order, because a view is always stored "
+        "sorted by these columns; any other order would be silently "
+        "discarded.");
+  }
 }
 
 // _____________________________________________________________________________
