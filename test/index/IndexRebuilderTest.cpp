@@ -869,11 +869,14 @@ TEST(IndexRebuilder, serverIntegration) {
         withAccessToken ? absl::StrCat("&access-token=", accessToken) : ""));
   };
 
-  // Create the coroutine that lets the `server` process the given `request`.
-  auto makeTask = [&server](auto& request) {
-    return server.template onlyForTestingProcess<
-        std::decay_t<decltype(request)>, ad_utility::httpUtils::ResponseT>(
-        request);
+  // Create the coroutine that lets the `server` process the given `request`
+  // and returns the response that would have been sent.
+  auto makeTask = [&server](auto& request)
+      -> boost::asio::awaitable<ad_utility::httpUtils::ResponseT> {
+    ad_utility::httpUtils::ResponseT res;
+    Server::MockSend<ad_utility::httpUtils::ResponseT> mockSend{res};
+    co_await server.process(request, mockSend);
+    co_return res;
   };
 
   // Perform the given `request` on the `threadPool` and return a future for the
@@ -992,13 +995,16 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
       "&rebuild-tmp-dir=droppedState.tmp"
       "&rebuild-previous-index-dir=droppedState.old");
   using ResT = ad_utility::httpUtils::ResponseT;
-  auto response =
-      net::co_spawn(
-          threadPool,
-          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
-              request),
-          net::use_future)
-          .get();
+  auto response = net::co_spawn(
+                      threadPool,
+                      [&server, &request]() -> boost::asio::awaitable<ResT> {
+                        ResT res;
+                        Server::MockSend<ResT> mockSend{res};
+                        co_await server.process(request, mockSend);
+                        co_return res;
+                      }(),
+                      net::use_future)
+                      .get();
   EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
 
   EXPECT_THAT(logStream.str(),
@@ -1148,9 +1154,14 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   auto performRequest = [&server, &threadPool](auto& request) {
     return net::co_spawn(
                threadPool,
-               server.onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                            ad_utility::httpUtils::ResponseT>(
-                   request),
+               [&server, &request]()
+                   -> boost::asio::awaitable<ad_utility::httpUtils::ResponseT> {
+                 ad_utility::httpUtils::ResponseT res;
+                 Server::MockSend<ad_utility::httpUtils::ResponseT> mockSend{
+                     res};
+                 co_await server.process(request, mockSend);
+                 co_return res;
+               }(),
                net::use_future)
         .get();
   };

@@ -77,9 +77,14 @@ class ServerForTesting {
   // `http::response`. A fresh `io_context` and `QueryHub` are created per
   // request, but the `Server` itself is reused across calls.
   ResT process(const ReqT& request) {
-    return runOnFreshIoContext(request, [](Server* server, ReqT& request) {
-      return server->template onlyForTestingProcess<ReqT, ResT>(request);
-    });
+    return runOnFreshIoContext(
+        request,
+        [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
+          ResT res;
+          Server::MockSend<ResT> mockSend{res};
+          co_await server->process(request, mockSend);
+          co_return res;
+        });
   }
 
   // Apply `Server::handleHttpRequest` on the given request and return the
@@ -89,17 +94,21 @@ class ServerForTesting {
   // fresh `io_context` and `QueryHub` are created per request, but the
   // `Server` itself is reused across calls.
   ResT handleHttpRequest(const ReqT& request) {
-    return runOnFreshIoContext(request, [](Server* server, ReqT& request) {
-      return server->template onlyForTestingHandleHttpRequest<ReqT, ResT>(
-          request);
-    });
+    return runOnFreshIoContext(
+        request,
+        [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
+          ResT res;
+          Server::MockSend<ResT> mockSend{res};
+          co_await server->handleHttpRequest(std::move(request), mockSend);
+          co_return res;
+        });
   }
 
  private:
-  // Run `fn(server, request)` (which must return an `Awaitable<ResT>`) to
+  // Run `fn(server, request)` (which must return an `awaitable<ResT>`) to
   // completion on a fresh `io_context`, with `queryHub_` set up beforehand,
   // and return the result. Shared by `process()` and `handleHttpRequest()`,
-  // which only differ in which `Server::onlyForTesting...` method `fn` calls.
+  // which only differ in which `Server` method `fn` calls.
   template <typename Fn>
   ResT runOnFreshIoContext(const ReqT& request, Fn fn) {
     boost::asio::io_context io;

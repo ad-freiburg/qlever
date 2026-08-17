@@ -150,6 +150,28 @@ class Server {
   using StringBodyRequest =
       boost::beast::http::request<boost::beast::http::string_body>;
 
+  // A `send` callable for `process`/`handleHttpRequest` that captures
+  // whatever response it is invoked with into `response_` instead of
+  // actually sending it. Used by friend test code (`ServerForTesting` and the
+  // `FRIEND_TEST`s above) to call `process`/`handleHttpRequest` directly and
+  // inspect the response that would have been sent. A named type is required
+  // here (rather than an ad-hoc lambda) because `process`/`handleHttpRequest`
+  // are only defined in `Server.cpp`, so callers in other translation units
+  // can only invoke them through an explicit template instantiation, which in
+  // turn requires a type with linkage.
+  template <typename ResponseT>
+  class MockSend {
+   public:
+    explicit MockSend(ResponseT& response) : response_{response} {}
+    Awaitable<void> operator()(auto response) const {
+      response_ = std::move(response);
+      co_return;
+    }
+
+   private:
+    ResponseT& response_;
+  };
+
   CPP_template(typename CancelTimeout)(
       requires ad_utility::isInstantiation<
           CancelTimeout,
@@ -224,18 +246,6 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, ResponseT&& send);
-
-  // Helper function for unit tests, calls `process` with the given request and
-  // returns the response that would have been sent.
-  CPP_template(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<ResponseT> onlyForTestingProcess(RequestT& request);
-
-  // Helper function for unit tests, calls `handleHttpRequest` with the given
-  // request and returns the response that would have been sent.
-  CPP_template(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<ResponseT> onlyForTestingHandleHttpRequest(RequestT request);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.

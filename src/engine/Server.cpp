@@ -174,6 +174,15 @@ CPP_template_def(typename RequestT, typename sendT)(
   }
 }
 
+// Explicit instantiation so that friend test code (`ServerForTesting`, the
+// `IndexRebuilder` `FRIEND_TEST`s), which cannot see this template's
+// definition, can call `handleHttpRequest` directly with a `MockSend` to
+// capture the response instead of sending it.
+template Server::Awaitable<void>
+Server::handleHttpRequest<Server::StringBodyRequest,
+                          Server::MockSend<ad_utility::httpUtils::ResponseT>>(
+    StringBodyRequest, MockSend<ad_utility::httpUtils::ResponseT>&);
+
 // _____________________________________________________________________________
 std::function<Server::Awaitable<void>(const Server::StringBodyRequest&,
                                       tcp::socket)>
@@ -897,6 +906,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                                        visitNone},
       requestTimer, request, send, plannedQuery);
 }
+
+// Explicit instantiation so that friend test code (`ServerForTesting`, the
+// `IndexRebuilder` `FRIEND_TEST`s), which cannot see this template's
+// definition, can call `process` directly with a `MockSend` to capture the
+// response instead of sending it.
+template Server::Awaitable<void>
+Server::process<Server::StringBodyRequest,
+                Server::MockSend<ad_utility::httpUtils::ResponseT>&>(
+    StringBodyRequest&, MockSend<ad_utility::httpUtils::ResponseT>&);
 
 // ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
@@ -1809,39 +1827,3 @@ void Server::logAutomaticRebuildFailure(std::exception_ptr exception) {
     AD_LOG_ERROR << "Automatic index rebuild failed: " << e.what() << std::endl;
   }
 }
-
-// For helper function `Server::onlyForTestingProcess`
-using StreamedResponse = http::response<ad_utility::httpUtils::streamable_body>;
-
-// _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<ResponseT> Server::onlyForTestingProcess(RequestT& request) {
-  ResponseT res;
-  auto mockSend = [&res](auto response) -> Awaitable<void> {
-    res = std::move(response);
-    co_return;
-  };
-  co_await process(request, mockSend);
-  co_return res;
-}
-
-// _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename ResponseT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<ResponseT> Server::onlyForTestingHandleHttpRequest(
-        RequestT request) {
-  ResponseT res;
-  auto mockSend = [&res](auto response) -> Awaitable<void> {
-    res = std::move(response);
-    co_return;
-  };
-  co_await handleHttpRequest(std::move(request), mockSend);
-  co_return res;
-}
-
-// Explicit template instantiations for unit test helper functions
-template Awaitable<StreamedResponse> Server::onlyForTestingProcess(
-    StringBodyRequest&);
-template Awaitable<StreamedResponse> Server::onlyForTestingHandleHttpRequest(
-    StringBodyRequest);
