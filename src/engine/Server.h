@@ -52,6 +52,10 @@ class ServerForTesting;
 }
 
 //! The HTTP Server used.
+namespace ad_utility {
+class CgroupCpuQuota;
+}
+
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
@@ -204,7 +208,8 @@ class Server {
           ParsedQuery&& query, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
+          TimeLimit timeLimit, bool accessTokenOk,
+          std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
@@ -332,7 +337,8 @@ class Server {
           const RequestT& request, ResponseT& send,
           ad_utility::MediaType mediaType, const PlannedQuery plannedQuery,
           const ad_utility::Timer requestTimer,
-          SharedCancellationHandle cancellationHandle) const;
+          SharedCancellationHandle cancellationHandle,
+          std::shared_ptr<ad_utility::CgroupCpuQuota> cpuQuota) const;
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
