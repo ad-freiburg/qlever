@@ -142,7 +142,8 @@ INSTANTIATE_TEST_SUITE_P(MaterializedViewsTest,
 // Regression test for #3193: an aggregate in the view's query removes one of
 // the pattern's variables from the view's columns (`?o1`/`?m` only occur inside
 // `COUNT(...)`), so neither the star nor the chain must be registered for
-// pattern-based rewriting.
+// pattern-based rewriting. Covers both explicit (`GROUP BY`) and implicit
+// (aggregate in `SELECT` without a `GROUP BY` clause) aggregation.
 TEST(MaterializedViewsStarRewriteAggregationTest,
      aggregatingPatternsNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
@@ -185,4 +186,10 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       qlv, manager, "aggregatingChainObjectView",
       "SELECT ?s ?m (COUNT(?o) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
       "GROUP BY ?s ?m");
+
+  // Same as `aggregatingChainView` above, but the `GROUP BY` is implicit (no
+  // explicit `GROUP BY` clause, just an aggregate in the `SELECT` clause).
+  expectNotSuitableForRewrite(
+      qlv, manager, "implicitlyAggregatingChainView",
+      "SELECT (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o }");
 }

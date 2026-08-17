@@ -253,6 +253,11 @@ class ParsedQuery {
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
+
+  // Return true if this query performs a GROUP BY, either explicitly (a
+  // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
+  // aggregating expression is used in the `SELECT` clause).
+  [[nodiscard]] bool isAggregatingQuery() const;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

@@ -384,6 +384,14 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
 }
 
 // ____________________________________________________________________________
+bool ParsedQuery::isAggregatingQuery() const {
+  return !_groupByVariables.empty() ||
+         ql::ranges::any_of(getAliases(), [](const Alias& alias) {
+           return alias._expression.containsAggregate();
+         });
+}
+
+// ____________________________________________________________________________
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,

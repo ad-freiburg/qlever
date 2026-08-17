@@ -1027,6 +1027,20 @@ TEST(ParserTest, testGroupByAndAlias) {
 }
 
 // _____________________________________________________________________________
+TEST(ParserTest, isAggregatingQuery) {
+  // Explicit `GROUP BY`.
+  EXPECT_TRUE(parseQuery("SELECT ?a (COUNT(?b) as ?c) WHERE { ?a <rel> ?b } "
+                         "GROUP BY ?a")
+                  .isAggregatingQuery());
+  // Implicit `GROUP BY` (aggregate in `SELECT`, no explicit `GROUP BY`).
+  EXPECT_TRUE(parseQuery("SELECT (COUNT(?b) as ?c) WHERE { ?a <rel> ?b }")
+                  .isAggregatingQuery());
+  // Neither.
+  EXPECT_FALSE(
+      parseQuery("SELECT ?a ?b WHERE { ?a <rel> ?b }").isAggregatingQuery());
+}
+
+// _____________________________________________________________________________
 TEST(ParserTest, Bind) {
   ParsedQuery pq = parseQuery("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }");
   ASSERT_TRUE(pq.hasSelectClause());

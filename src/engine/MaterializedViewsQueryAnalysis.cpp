@@ -403,6 +403,13 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   bool cacheKeyAdded = insert(full);
   cacheKeyAdded = insert(withoutInvariant) || cacheKeyAdded;
 
+  if (parsed.value().isAggregatingQuery()) {
+    explainIgnore(
+        "The view's query aggregates (GROUP BY, either explicit or implicit "
+        "via an aggregate expression in the SELECT clause)");
+    return cacheKeyAdded;
+  }
+
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(
