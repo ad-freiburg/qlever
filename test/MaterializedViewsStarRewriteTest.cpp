@@ -193,3 +193,43 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
       qlv, manager, "implicitlyAggregatingChainView",
       "SELECT (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o }");
 }
+
+// _____________________________________________________________________________
+// The "variable must be a column of the view" checks in `analyzeSimpleChain`/
+// `analyzeJoinStar` are also reachable without aggregation: a variable is
+// simply not a column of the view if it is not `SELECT`ed. This exercises
+// those checks directly, since `isAggregatingQuery()` above already shields
+// `analyzeView` from ever reaching them for aggregating queries.
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     unprojectedVariablePatternsNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  // Star: the subject is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedStarSubjectView",
+                              "SELECT ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+  // Star: one arm's object is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedStarArmView",
+                              "SELECT ?s ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+
+  // Chain: the subject is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainSubjectView",
+                              "SELECT ?m ?o { ?s <p1> ?m . ?m <p2> ?o }");
+  // Chain: the middle (chain) variable is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainMiddleView",
+                              "SELECT ?s ?o { ?s <p1> ?m . ?m <p2> ?o }");
+  // Chain: the object is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainObjectView",
+                              "SELECT ?s ?m { ?s <p1> ?m . ?m <p2> ?o }");
+}
