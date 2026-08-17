@@ -89,6 +89,29 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
       getExpr(V{"?a"}), getExpr(V{"?b"}), getExpr(V{"?pattern"}));
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*variablePatternPtr), std::nullopt);
+
+  // The left argument must be a variable; a constant is rejected.
+  auto nonVarLeftPtr = makeDe9imRelationExpression(
+      getExpr(ValueId::makeFromInt(42)), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarLeftPtr),
+                         std::nullopt);
+
+  // The right argument must be a variable; a constant is rejected.
+  auto nonVarRightPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(ValueId::makeFromInt(42)),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarRightPtr),
+                         std::nullopt);
+
+  // A syntactically valid pattern that could still match disjoint geometries
+  // is rejected, because `geof:relate` currently only supports patterns that
+  // already imply an intersection.
+  auto disjointPatternPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes("FF*FF****")));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*disjointPatternPtr), std::nullopt);
 }
 
 // _____________________________________________________________________________

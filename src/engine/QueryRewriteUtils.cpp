@@ -36,7 +36,7 @@ getSpatialJoinConfigForFilter(
   // filter is a comparison).
   if (auto call = getGeoDistanceFilter(filterBody)) {
     LibSpatialJoinConfig config{call.value().first.function_,
-                                call.value().second};
+                                call.value().second, std::nullopt};
     return std::pair{std::move(config), std::move(call).value().first};
   }
   return std::nullopt;

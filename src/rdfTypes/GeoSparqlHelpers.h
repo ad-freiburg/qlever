@@ -328,7 +328,7 @@ class WktGeometricRelation {
 // `SpatialJoin`.
 class WktDe9imRelation {
  public:
-  ValueId operator()(
+  [[noreturn]] ValueId operator()(
       [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
       [[maybe_unused]] const std::optional<GeoPoint>& geoRight,
       [[maybe_unused]] const std::optional<std::string>& pattern) const {
