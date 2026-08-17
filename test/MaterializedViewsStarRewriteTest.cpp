@@ -195,11 +195,6 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
 }
 
 // _____________________________________________________________________________
-// The "variable must be a column of the view" checks in `analyzeSimpleChain`/
-// `analyzeJoinStar` are also reachable without aggregation: a variable is
-// simply not a column of the view if it is not `SELECT`ed. This exercises
-// those checks directly, since `isAggregatingQuery()` above already shields
-// `analyzeView` from ever reaching them for aggregating queries.
 TEST(MaterializedViewsStarRewriteAggregationTest,
      unprojectedVariablePatternsNotRewritten) {
   const std::string onDiskBase = gtestCurrentTestName();
