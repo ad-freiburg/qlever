@@ -275,4 +275,12 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
   expectNotSuitableForRewrite(
       qlv, manager, "reducedChainView",
       "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }");
+
+  // Star with LIMIT, chain with OFFSET.
+  expectNotSuitableForRewrite(
+      qlv, manager, "limitStarView",
+      "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } LIMIT 1");
+  expectNotSuitableForRewrite(
+      qlv, manager, "offsetChainView",
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } OFFSET 1");
 }

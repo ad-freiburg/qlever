@@ -433,6 +433,14 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     return cacheKeyAdded;
   }
 
+  // A `LIMIT`/`OFFSET` restricts the view to an (order-dependent, arbitrary)
+  // subset of the join's rows, which must not be treated as a complete source
+  // for pattern-based rewriting of unrelated queries.
+  if (!parsed.value()._limitOffset.isUnconstrained()) {
+    explainIgnore("The view's query has a LIMIT or OFFSET clause");
+    return cacheKeyAdded;
+  }
+
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(
