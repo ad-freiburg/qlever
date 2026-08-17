@@ -17,9 +17,13 @@
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
+#include "engine/UpdateMetadata.h"
 #include "global/FileSuffixConstants.h"
+#include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
+#include "parser/SparqlParser.h"
+#include "util/BlankNodeManager.h"
 #include "util/FilesystemHelpers.h"
 
 using namespace qlever;
@@ -913,6 +917,55 @@ TEST(LibQlever, clearCache) {
   // the same cache as the non-`const` one.
   const Qlever& constEngine = engine;
   EXPECT_EQ(&constEngine.namedResultCache(), &engine.namedResultCache());
+}
+
+// _____________________________________________________________________________
+// Test that `Qlever::applyUpdate` is directly usable through `Qlever`,
+// independent of the HTTP `Server` layer (which only wraps this in
+// thread/timer/response-formatting concerns, see `Server::processUpdate`).
+TEST(LibQlever, applyUpdate) {
+  // Never persist updates to disk in this test (would leave files behind
+  // after the test, and pollute a re-run of the same test that reuses the
+  // same on-disk base name).
+  auto config = buildTestIndex("<s> <p> <o> .");
+  config.persistUpdates_ = false;
+  Qlever engine{config};
+
+  // Populate the cache with a pinned query result, so that clearing the
+  // cache as a side effect of `applyUpdate` is actually observable below.
+  PlannedQuery plan = engine.planQuery(engine.parseQuery(
+      "SELECT ?s WHERE { ?s <p> ?o }", {}, ad_utility::noop, false, true));
+  engine.query(plan, ad_utility::MediaType::tsv);
+  ASSERT_GT(engine.cache().numPinnedEntries(), 0U);
+
+  // `Qlever::parseQuery`/`parseAndPlanQuery` only accept SPARQL queries, not
+  // updates (see `SparqlParser::parseQuery` vs. `parseUpdate`), so an update
+  // has to be parsed separately and then planned via `bindParsedQuery`.
+  ad_utility::BlankNodeManager bnm;
+  auto parsedUpdates =
+      SparqlParser::parseUpdate(&bnm, ad_utility::testing::encodedIriManager(),
+                                "INSERT DATA { <a> <b> <c> }");
+  ASSERT_THAT(parsedUpdates, SizeIs(1));
+  auto plannedUpdate =
+      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
+  ASSERT_TRUE(plannedUpdate.parsedQuery().hasUpdateClause());
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto snapshot = engine.indexAndViewsSnapshot();
+  UpdateMetadata updateMetadata =
+      snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+          [&](DeltaTriples& deltaTriples) {
+            return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+          });
+
+  EXPECT_THAT(updateMetadata.countBefore_,
+              Optional(Eq(DeltaTriplesCount{0, 0})));
+  EXPECT_THAT(updateMetadata.countAfter_,
+              Optional(Eq(DeltaTriplesCount{1, 0})));
+
+  // The query result cache is invalidated as a side effect of `applyUpdate`.
+  EXPECT_EQ(engine.cache().numPinnedEntries(), 0U);
+  EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
 }
 
 // _____________________________________________________________________________

@@ -20,7 +20,6 @@
 #include "backports/filesystem.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
-#include "engine/ExecuteUpdate.h"
 #include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -28,6 +27,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/RebuildIndexStrategy.h"
+#include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -38,6 +38,7 @@
 #include "util/Allocator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
@@ -513,7 +514,7 @@ class Qlever {
   // `ParsedQuery::hasUpdateClause()` holds) against `deltaTriples`, and
   // return metadata about the update (timing, number of triples changed,
   // etc.). The caller must have exclusive access to `deltaTriples`. Also
-  // clears the query and named-result caches, because all cache entries have
+  // clear the query and named-result caches, because all cache entries have
   // been invalidated by the update anyway (the located-triples snapshot is
   // part of the cache key).
   UpdateMetadata applyUpdate(
