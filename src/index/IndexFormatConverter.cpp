@@ -231,6 +231,10 @@ std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
   LocatedTriplesPerBlockAllPermutations<false> emptyLocatedTriples;
   emptyLocatedTriples.at(static_cast<size_t>(permutation.permutation()))
       .setOriginalMetadata(permutation.metaData().blockDataShared());
+  // NOTE: The located triples of the internal permutations deliberately stay
+  // untouched. `loadPermutation` below loads every permutation with
+  // `Permutation::Type::NORMAL`, including the internal ones, so a scan always
+  // looks up its located triples in the array above.
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
   LocalVocab emptyVocab;
   return std::make_shared<LocatedTriplesState>(
@@ -280,12 +284,24 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       *locatedTriplesState);
   auto additionalColumns = getAdditionalColumns(getNumColumns(permutation));
+  // The cancellation handle of the scan, which never cancels anything.
+  //
+  // NOTE: The scan stores a *reference* to this `SharedCancellationHandle` (see
+  // the `Generator` in `CompressedRelationReader::lazyScan`), not a copy of it.
+  // It is therefore not enough that the `CancellationHandle` stays alive, the
+  // `shared_ptr` that holds it has to stay alive as well, and at an address
+  // that does not change. That is what this extra indirection is for: the
+  // `unique_ptr` is moved into the lambda below (which keeps everything alive
+  // that the scan borrows), and moving it does not move its pointee. Note that
+  // a scan only touches the handle if the permutation has more than one block,
+  // so getting this wrong is not caught by a test with a tiny permutation.
   auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
+      std::make_unique<ad_utility::SharedCancellationHandle>(
+          std::make_shared<ad_utility::CancellationHandle<>>());
   // NOTE: Deliberately no structured binding, because the members are captured
   // by the lambda below, which is only valid in C++20.
   auto scanWithReader = permutation.lazyScanWithUnlimitedReader(
-      scanSpecAndBlocks, additionalColumns, cancellationHandle,
+      scanSpecAndBlocks, additionalColumns, *cancellationHandle,
       *locatedTriplesState);
 
   // NOTE: The scan borrows the `reader`, the `locatedTriplesState` and the
@@ -315,7 +331,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 // (`IndexImpl::blocksizePermutationPerColumn_`, which nothing but a unit test
 // ever changes). The blocks of the converted permutation may therefore differ
 // from the blocks of the permutation that it was converted from, which is
-// irrelevant for its content.
+// irrelevant for its content, but not for its metadata: a relation that is
+// large enough to occupy blocks of its own in the permutation that is converted
+// can be small enough to share a block with other relations in the converted
+// permutation. Such a relation has no `CompressedRelationMetadata` of its own
+// anymore, that metadata is derived from its block instead (see
+// `CompressedRelationReader::getMetadataForSmallRelation`). The number of
+// blocks, the `numRows_` and the multiplicities of the converted permutation
+// can therefore differ from those of the permutation that it was converted
+// from; they are exactly those that a freshly built index would have.
 IndexMetaData writePermutation(
     const std::string& filename, size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks) {

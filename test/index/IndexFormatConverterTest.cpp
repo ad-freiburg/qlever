@@ -14,11 +14,13 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "global/Id.h"
 #include "global/MaterializedViewConstants.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexFormatConverter.h"
@@ -482,6 +484,186 @@ TEST_F(IndexFormatConverterTest, emptyBasenamesAreARequirementViolation) {
                                HasSubstr("must not be empty"));
   AD_EXPECT_THROW_WITH_MESSAGE(convertIndexToCurrentFormat(oldBasename_, ""),
                                HasSubstr("must not be empty"));
+}
+
+// A fixture for the conversion of an index whose permutations have more than
+// one block. The checked-in index in the previous format (see
+// `oldIndexDirectory` above) has exactly one block per permutation, and it
+// cannot be enlarged, because the current code can no longer create an index in
+// that format. The tests below therefore build an index with the *current*
+// index builder and pretend that it is in the previous format, which works
+// because the two formats differ only in the numbering of the datatypes:
+//
+// The conversion of an `Id` is the identity for every datatype that precedes
+// `Datatype::AuxVocabIndex` (which is the datatype that was inserted, see
+// `datatypesOfSourceFormat`). This includes `Datatype::Undefined`,
+// `Datatype::Int`, and `Datatype::VocabIndex`, so an index whose input consists
+// only of IRIs contains only `Id`s that are converted to themselves (the
+// pattern columns hold integers, the graph column holds an IRI). Converting
+// such an index has to yield an index with exactly the same content, and
+// `convertAndExpectTheSameContent` below checks both that premise and that
+// result.
+class MultiBlockIndexFormatConverterTest : public ::testing::Test {
+ protected:
+  // The directory of this test, which contains both the index that is converted
+  // and the converted index.
+  fs::path directory_;
+  // The base names of the index that is converted and of the converted index.
+  std::string oldBasename_;
+  std::string newBasename_;
+
+  void SetUp() override {
+    directory_ = fs::path{gtestCurrentTestName()};
+    fs::remove_all(directory_);
+    fs::create_directories(directory_);
+    oldBasename_ = (directory_ / "old").string();
+    newBasename_ = (directory_ / "converted").string();
+  }
+
+  void TearDown() override { fs::remove_all(directory_); }
+
+  // Return the number of columns that the given `permutation` has on disk (see
+  // `getNumColumns` in `IndexFormatConverter.cpp`).
+  static size_t numColumnsOnDisk(const Permutation& permutation) {
+    const auto& blocks = permutation.metaData().blockData();
+    AD_CORRECTNESS_CHECK(!blocks.empty());
+    return blocks.front().offsetsAndCompressedSize_.value().size();
+  }
+
+  // Return the complete content of the given `permutation`: the three columns
+  // of the (permuted) triple, the graph column, and, for the permutations that
+  // store the patterns, the two pattern columns.
+  static IdTable scanAllColumns(
+      const Permutation& permutation,
+      const LocatedTriplesSharedState& locatedTriples) {
+    std::vector<ColumnIndex> additionalColumns;
+    for (size_t column = NumColumnsIndexBuilding - 1;
+         column < numColumnsOnDisk(permutation); ++column) {
+      additionalColumns.push_back(static_cast<ColumnIndex>(column));
+    }
+    return permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+            *locatedTriples),
+        additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+        *locatedTriples);
+  }
+
+  // Return true iff the conversion of an `Id` is the identity for every `Id` of
+  // the given `table`, which is the premise of this fixture.
+  static bool allIdsAreConvertedToThemselves(const IdTable& table) {
+    return ql::ranges::all_of(table.getColumns(), [](const auto& column) {
+      return ql::ranges::all_of(column,
+                                [](Id id) { return convertId(id) == id; });
+    });
+  }
+
+  // Set the index format version in the configuration of the index at
+  // `oldBasename_` to the source format of the converter, so that the converter
+  // accepts that index. Nothing else in the index has to be changed, see the
+  // documentation of this fixture.
+  void pretendThatTheIndexIsInThePreviousFormat() {
+    std::string filename = absl::StrCat(oldBasename_, CONFIGURATION_FILE);
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(filename) >> configuration;
+    configuration["index-format-version"] = sourceVersion;
+    ad_utility::makeOfstream(filename) << configuration.dump(4);
+  }
+
+  // Build an index from the given `turtleInput` with the settings for tests
+  // (which use a block size of two triples per block, so that even a small
+  // index has many blocks), pretend that it is in the previous format, and
+  // convert it. Check that the converted index has exactly the same content as
+  // the index that it was converted from, and return the number of blocks that
+  // each permutation of the latter had (in the order of `Permutation::ALL`), so
+  // that a test can check which case it actually covers.
+  std::vector<size_t> convertAndExpectTheSameContent(std::string turtleInput) {
+    std::vector<size_t> numBlocks;
+    std::vector<IdTable> expectedContent;
+    {
+      Index oldIndex = ad_utility::testing::makeTestIndex(
+          oldBasename_,
+          ad_utility::testing::TestIndexConfig{std::move(turtleInput)});
+      auto locatedTriples =
+          oldIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+      for (auto permutationEnum : Permutation::ALL) {
+        const auto& permutation =
+            oldIndex.getImpl().getPermutation(permutationEnum);
+        numBlocks.push_back(permutation.metaData().blockData().size());
+        expectedContent.push_back(scanAllColumns(permutation, locatedTriples));
+        // Check the premise of this fixture. Without this check, a future
+        // change of the index builder (say, one that stores the graph column as
+        // an encoded IRI) would silently turn these tests into no-ops or let
+        // them fail for the wrong reason.
+        EXPECT_TRUE(allIdsAreConvertedToThemselves(expectedContent.back()))
+            << Permutation::toString(permutationEnum);
+      }
+    }
+    pretendThatTheIndexIsInThePreviousFormat();
+
+    convertIndexToCurrentFormat(oldBasename_, newBasename_);
+
+    Index newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+    newIndex.usePatterns() = true;
+    newIndex.loadAllPermutations() = true;
+    newIndex.createFromOnDiskIndex(newBasename_, false);
+    auto locatedTriples =
+        newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+    size_t i = 0;
+    for (auto permutationEnum : Permutation::ALL) {
+      EXPECT_EQ(
+          scanAllColumns(newIndex.getImpl().getPermutation(permutationEnum),
+                         locatedTriples),
+          expectedContent.at(i))
+          << Permutation::toString(permutationEnum);
+      ++i;
+    }
+    return numBlocks;
+  }
+};
+
+// _____________________________________________________________________________
+TEST_F(MultiBlockIndexFormatConverterTest, permutationsWithExactlyTwoBlocks) {
+  // A single relation with three triples, which the block size of two triples
+  // per block splits into exactly two blocks.
+  std::string turtle =
+      "<http://example.org/s> <http://example.org/p> <http://example.org/o1> "
+      ".\n"
+      "<http://example.org/s> <http://example.org/p> <http://example.org/o2> "
+      ".\n"
+      "<http://example.org/s> <http://example.org/p> <http://example.org/o3> "
+      ".\n";
+  auto numBlocks = convertAndExpectTheSameContent(turtle);
+  // This test deliberately covers only permutations with at most two blocks,
+  // which is the case where the scan of the conversion uses the cancellation
+  // handle without dereferencing it (see `scanAndConvertIds`). The test below
+  // covers the case of more than two blocks.
+  EXPECT_THAT(numBlocks, ::testing::Each(::testing::Le(size_t{2})));
+  EXPECT_THAT(numBlocks, ::testing::Contains(size_t{2}));
+}
+
+// _____________________________________________________________________________
+TEST_F(MultiBlockIndexFormatConverterTest, permutationsWithManyBlocks) {
+  // One relation that is large enough to span several blocks on its own, plus
+  // several small relations, which together give every permutation many blocks.
+  std::string turtle;
+  for (size_t object = 0; object < 20; ++object) {
+    absl::StrAppend(&turtle,
+                    "<http://example.org/big> <http://example.org/p0> "
+                    "<http://example.org/o",
+                    object, "> .\n");
+  }
+  for (size_t subject = 0; subject < 4; ++subject) {
+    for (size_t predicate = 1; predicate < 4; ++predicate) {
+      for (size_t object = 0; object < 5; ++object) {
+        absl::StrAppend(&turtle, "<http://example.org/s", subject,
+                        "> <http://example.org/p", predicate,
+                        "> <http://example.org/o", object, "> .\n");
+      }
+    }
+  }
+  auto numBlocks = convertAndExpectTheSameContent(turtle);
+  EXPECT_THAT(numBlocks, ::testing::Each(::testing::Gt(size_t{2})));
 }
 
 // _____________________________________________________________________________
