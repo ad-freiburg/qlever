@@ -107,6 +107,15 @@ class alignas(16) LocalVocabEntry
   // check below verifies. In particular, a word that is contained in neither
   // the main nor the auxiliary vocabulary still has to be given the bounds of
   // the position at which it would be sorted into the main vocabulary.
+  //
+  // NOTE: The only caller outside of the tests is `toValueId` (see
+  // `index/TripleComponentConversions.h`), which satisfies this by
+  // construction: it obtains the bounds from the very lookup that
+  // `positionInVocabExpensiveCase` performs (see
+  // `LocalVocabContext::lookupWordInVocabularies`), and it only reaches this
+  // constructor for a word that is in none of the vocabularies. The check below
+  // is hence a tautology for that caller, and it is kept for the tests, which
+  // may pass arbitrary bounds.
   template <typename Lower, typename Upper>
   LocalVocabEntry(Base&& base, Lower lower, Upper upper,
                   const LocalVocabContext& context)

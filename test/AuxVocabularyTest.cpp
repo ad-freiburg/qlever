@@ -7,6 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -16,21 +18,39 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
+#include "engine/ExecuteUpdate.h"
+#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
+#include "engine/QueryPlanner.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
 #include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
+#include "index/TripleComponentConversions.h"
 #include "index/vocabulary/AuxVocabulary.h"
 #include "parser/LiteralOrIri.h"
+#include "parser/SparqlParser.h"
+#include "parser/TripleComponent.h"
 
 namespace {
+
+using namespace std::string_literals;
 
 // The functions that export an `Id`, and the type aliases for `LiteralOrIri`
 // and `Literal` that come with them.
 using namespace ql::exportIds;
 
+// NOTE: This alias has to be spelled out, because the SPARQL parser that the
+// end-to-end tests below use pulls in an unrelated global `Literal` class (see
+// `parser/data/Literal.h`), which would make the name ambiguous.
+using Literal = ql::exportIds::Literal;
+
+using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 using ::testing::Optional;
+using ::testing::UnorderedElementsAre;
 
 // The words of the auxiliary vocabulary that the tests below use. In the order
 // of the main vocabulary (see `makeIndexWithAuxVocab`), `"a"` is sorted before
@@ -53,18 +73,17 @@ Id auxId(uint64_t index) {
 
 // An index whose main vocabulary holds `<a>`, `<c>`, `<p>`, and `<s>`, and
 // whose auxiliary vocabulary holds `auxWords`.
-Index makeIndexWithAuxVocab() {
+Index makeIndexWithAuxVocab(const std::string& indexBasename) {
   ad_utility::testing::TestIndexConfig config{"<s> <p> <a> . <s> <p> <c> ."};
   config.auxVocabWords = auxWords;
-  return ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
-                                            std::move(config));
+  return ad_utility::testing::makeTestIndex(indexBasename, std::move(config));
 }
 
 // A fixture for the tests that need an index with an auxiliary vocabulary, see
 // `makeIndexWithAuxVocab`.
 class AuxVocabIndexTest : public ::testing::Test {
  protected:
-  Index index_ = makeIndexWithAuxVocab();
+  Index index_ = makeIndexWithAuxVocab(gtestCurrentTestName());
   std::function<Id(const std::string&)> getId_ =
       ad_utility::testing::makeGetId(index_);
   const LocalVocabContext& context_ = index_.getImpl().getLocalVocabContext();
@@ -372,6 +391,300 @@ TEST(AuxVocabIndex, exportWithoutAuxVocabularyThrows) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       idToLiteralOrIri(index.getImpl(), auxId(0), LocalVocab{}),
       HasSubstr("the index has no auxiliary vocabulary"));
+}
+
+// _____________________________________________________________________________
+// Resolving a word to an `Id` has to consult the same vocabularies as
+// `LocalVocabEntry::positionInVocab()`, else the two disagree about the
+// position of a word of the auxiliary vocabulary, which yields wrong results
+// and trips the check in the corresponding constructor of `LocalVocabEntry`.
+TEST_F(AuxVocabIndexTest, toValueIdUsesAllVocabularies) {
+  const IndexImpl& impl = index_.getImpl();
+
+  // Resolve `iriref` via `toValueId`, which is the conversion that all callers
+  // with a `LocalVocab` at hand use.
+  auto toId = [&impl](std::string_view iriref, LocalVocab& localVocab) {
+    TripleComponent tc{
+        ad_utility::triple_component::Iri::fromIriref(std::string{iriref})};
+    return toValueId(std::move(tc), impl, localVocab);
+  };
+
+  // A word of the auxiliary vocabulary becomes a bare `Id` of that vocabulary.
+  {
+    LocalVocab localVocab;
+    Id id = toId("<b>", localVocab);
+    EXPECT_EQ(id.getDatatype(), Datatype::AuxVocabIndex);
+    EXPECT_EQ(id, auxId(1));
+    EXPECT_EQ(localVocab.size(), 0);
+  }
+
+  // A word of the vocabulary of the main index becomes a bare `Id` of that
+  // vocabulary, as it always did.
+  {
+    LocalVocab localVocab;
+    Id id = toId("<c>", localVocab);
+    EXPECT_EQ(id.getDatatype(), Datatype::VocabIndex);
+    EXPECT_EQ(id, getId_("<c>"));
+    EXPECT_EQ(localVocab.size(), 0);
+  }
+
+  // A word that is in neither vocabulary becomes an entry of the local
+  // vocabulary, whose position is the one that it would have in the main
+  // vocabulary. That position has to be the very one that the entry computes
+  // for itself, which is what the constructor of `LocalVocabEntry` checks.
+  {
+    LocalVocab localVocab;
+    Id id = toId("<e>", localVocab);
+    EXPECT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
+    EXPECT_EQ(localVocab.size(), 1);
+    auto expectedPosition = entry("<e>").positionInVocab();
+    auto position = id.getLocalVocabIndex()->positionInVocab();
+    EXPECT_EQ(position, expectedPosition);
+    // The word is in none of the vocabularies, so the two bounds are equal and
+    // point into the vocabulary of the main index.
+    EXPECT_EQ(position.lowerBound_, position.upperBound_);
+    EXPECT_EQ(Id::fromBits(position.lowerBound_.get()).getDatatype(),
+              Datatype::VocabIndex);
+  }
+}
+
+// _____________________________________________________________________________
+// The same three cases, but for the `TripleComponent` overload that does not
+// add to a local vocabulary. A word of the auxiliary vocabulary now has an
+// `Id`, so this no longer reports it as "not found".
+TEST_F(AuxVocabIndexTest, toValueIdWithoutLocalVocab) {
+  const IndexImpl& impl = index_.getImpl();
+  auto toId = [&impl](std::string_view iriref) {
+    return toValueId(
+        TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(std::string{iriref})},
+        impl);
+  };
+  EXPECT_THAT(toId("<b>"), Optional(auxId(1)));
+  EXPECT_THAT(toId("<c>"), Optional(getId_("<c>")));
+  EXPECT_EQ(toId("<e>"), std::nullopt);
+}
+
+// The end-to-end tests below run actual SPARQL queries and updates against an
+// index with an auxiliary vocabulary. Every query that mentions a word of that
+// vocabulary goes through `toValueId` (see the tests above), so these are the
+// tests that would have caught the mismatch between that function and
+// `LocalVocabEntry::positionInVocab()` when it was introduced.
+
+// A `QueryExecutionContext` for an index with the auxiliary vocabulary
+// `auxWords`, plus everything that such a context owns. NOTE: This deliberately
+// does not use `ad_utility::testing::getQec`, because the updates below modify
+// the index, which must not leak into the shared indices that that function
+// caches.
+struct ContextWithAuxVocab {
+  std::string indexBasename_;
+  std::shared_ptr<Index> index_;
+  QueryResultCache cache_{};
+  NamedResultCache namedResultCache_{};
+  std::shared_ptr<MaterializedViewsManager> materializedViews_ =
+      std::make_shared<MaterializedViewsManager>();
+  QueryExecutionContext qec_;
+
+  explicit ContextWithAuxVocab(std::string indexBasename)
+      : indexBasename_{std::move(indexBasename)},
+        index_{std::make_shared<Index>(makeIndexWithAuxVocab(indexBasename_))},
+        qec_{index_,
+             &cache_,
+             ad_utility::testing::makeAllocator(
+                 ad_utility::MemorySize::megabytes(100)),
+             SortPerformanceEstimator{},
+             &namedResultCache_,
+             materializedViews_} {}
+
+  // Delete the files of the index again. NOTE: The `Index` is still alive at
+  // this point (the `QueryExecutionContext` also holds a reference to it), but
+  // deleting a file that is still open is fine on the platforms that QLever
+  // supports, and the index is only ever read from.
+  ~ContextWithAuxVocab() {
+    for (const std::string& filename :
+         ad_utility::testing::getAllIndexFilenames(indexBasename_)) {
+      ad_utility::deleteFile(filename, false);
+    }
+  }
+};
+
+// Run `query` on `qec` and return the result in TSV format.
+std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
+  // The updates below change the result of a query, so a cached result of an
+  // earlier run of the same query must not be reused.
+  qec->clearCacheUnpinnedOnly();
+  static const EncodedIriManager encodedIriManager;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query);
+  QueryPlanner queryPlanner{qec, cancellationHandle};
+  auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  std::string result;
+  for (const auto& block : ExportQueryExecutionTrees::computeResult(
+           parsedQuery, executionTree, ad_utility::MediaType::tsv, timer,
+           cancellationHandle)) {
+    result += block;
+  }
+  return result;
+}
+
+// Run `query` on `qec` and return the rows of its result, that is, the lines of
+// the TSV without the header.
+std::vector<std::string> runQueryAndGetRows(QueryExecutionContext* qec,
+                                            const std::string& query) {
+  std::vector<std::string> rows =
+      absl::StrSplit(runQuery(qec, query), absl::ByChar('\n'));
+  // The first line is the header, and the result ends with a newline, so the
+  // last element is the empty string after it.
+  AD_CORRECTNESS_CHECK(rows.size() >= 2 && rows.back().empty());
+  rows.pop_back();
+  rows.erase(rows.begin());
+  return rows;
+}
+
+// Run the SPARQL `update` on `context`.
+void runUpdate(ContextWithAuxVocab& context, const std::string& update) {
+  static const EncodedIriManager encodedIriManager;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ad_utility::BlankNodeManager blankNodeManager;
+  auto parsedQueries =
+      SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager, update);
+  context.index_->deltaTriplesManager().modify<void>(
+      [&context, &parsedQueries,
+       &cancellationHandle](DeltaTriples& deltaTriples) {
+        context.qec_.setLocatedTriplesForEvaluation(
+            deltaTriples.getLocatedTriplesSharedStateReference());
+        for (auto& parsedQuery : parsedQueries) {
+          deltaTriples.updateAugmentedMetadata();
+          QueryPlanner queryPlanner{&context.qec_, cancellationHandle};
+          auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
+          ExecuteUpdate::executeUpdate(*context.index_, parsedQuery,
+                                       executionTree, deltaTriples,
+                                       cancellationHandle);
+        }
+      });
+}
+
+// _____________________________________________________________________________
+// Queries that mention a word of the auxiliary vocabulary. NOTE: The words of
+// that vocabulary are not part of any permutation of the index (the auxiliary
+// index that they belong to is not wired up yet, see `AuxVocabulary`), so a
+// triple pattern with such a word matches nothing. The point of these tests is
+// that the queries run at all and yield the words unchanged.
+TEST(AuxVocabIndex, queriesWithWordsOfTheAuxVocabulary) {
+  ContextWithAuxVocab context{gtestCurrentTestName()};
+
+  // A word of the auxiliary vocabulary survives a round trip through `VALUES`,
+  // no matter whether it is an IRI or a literal.
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { VALUES ?o { <b> } }"),
+            "?o\n<b>\n");
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { VALUES ?o { \"a\" } }"),
+            "?o\n\"a\"\n");
+  // The same for a word that is in none of the vocabularies, and for one of the
+  // main vocabulary.
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { VALUES ?o { <e> } }"),
+            "?o\n<e>\n");
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { VALUES ?o { <a> } }"),
+            "?o\n<a>\n");
+
+  // A triple pattern with such a word as its object resp. its subject matches
+  // nothing, but does not crash.
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { ?s ?p <b> }"),
+            "?s\t?p\n");
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { ?s ?p \"a\" }"),
+            "?s\t?p\n");
+  EXPECT_EQ(runQuery(&context.qec_, "SELECT * WHERE { <b> ?p ?o }"),
+            "?p\t?o\n");
+
+  // A word of the auxiliary vocabulary can be combined with a scan of the main
+  // index, here via an `OPTIONAL` that matches nothing.
+  EXPECT_EQ(runQuery(&context.qec_,
+                     "SELECT * WHERE { VALUES ?o { <b> } . "
+                     "OPTIONAL { ?s <p> ?o } }"),
+            "?o\t?s\n<b>\t\n");
+}
+
+// _____________________________________________________________________________
+// An update that inserts a triple whose object is a word of the auxiliary
+// vocabulary. This is the case that the auxiliary vocabulary exists for, and it
+// goes through `toValueId` twice: once for the triple that is inserted, and
+// once for the query that reads it back.
+TEST(AuxVocabIndex, updateWithWordOfTheAuxVocabulary) {
+  ContextWithAuxVocab context{gtestCurrentTestName()};
+  auto objectsOfS = [&context]() {
+    return runQueryAndGetRows(&context.qec_,
+                              "SELECT ?o WHERE { <s> <p> ?o } ORDER BY ?o");
+  };
+  ASSERT_THAT(objectsOfS(), ElementsAre("<a>", "<c>"));
+
+  // Insert a triple whose object is a word of the auxiliary vocabulary, and
+  // then one whose object is in none of the vocabularies. Both have to become
+  // visible. NOTE: These assertions deliberately ignore the order, which the
+  // separate assertion below pins down.
+  runUpdate(context, "INSERT DATA { <s> <p> <b> }");
+  EXPECT_THAT(objectsOfS(), UnorderedElementsAre("<a>", "<b>", "<c>"));
+  runUpdate(context, "INSERT DATA { <s> <p> <e> }");
+  EXPECT_THAT(objectsOfS(), UnorderedElementsAre("<a>", "<b>", "<c>", "<e>"));
+
+  // WARNING: The following assertion pins down the *order* of the result, which
+  // currently is the internal order (see the warning in
+  // `index/LocalVocabEntry.h`): a word of the auxiliary vocabulary is
+  // positioned after all words of the main vocabulary and after all words that
+  // are in none of the vocabularies, no matter what its string value is. So
+  // `<b>` comes last here, instead of between `<a>` and `<c>` where its string
+  // value belongs.
+  //
+  // This is deliberately NOT the order that SPARQL requires, see the detailed
+  // note at `valueIdComparators::detail::compareIdsImpl`. The follow-up PR that
+  // implements the semantic comparison (see the `TODO<joka921>` there) has to
+  // change this expectation to `<a>, <b>, <c>, <e>`. A failure of this
+  // assertion is that fix landing, not a regression.
+  EXPECT_THAT(objectsOfS(), ElementsAre("<a>", "<c>", "<e>", "<b>"));
+}
+
+// _____________________________________________________________________________
+// A query that does not mention any word of the auxiliary vocabulary has to
+// yield exactly the same result as it does on the same index without such a
+// vocabulary. This covers the whole query engine (scans over several blocks,
+// joins, filters, prefilters, sorting, and grouping) at once, and it is the
+// test that a future change of the auxiliary vocabulary has to keep passing.
+TEST(AuxVocabIndex, sameResultsWithAndWithoutAuxVocabulary) {
+  // A knowledge graph with enough triples to span several blocks per
+  // permutation (a block holds two `Id`s per column in the tests, see
+  // `TestIndexConfig::blocksizePermutations`), and with objects of several
+  // datatypes.
+  std::string kg;
+  for (size_t i = 0; i < 12; ++i) {
+    absl::StrAppend(&kg, "<s", i, "> <knows> <s", (i + 1) % 12, "> .\n");
+    absl::StrAppend(&kg, "<s", i, "> <label> \"name", i, "\" .\n");
+    absl::StrAppend(&kg, "<s", i, "> <rank> ", i, " .\n");
+  }
+  ad_utility::testing::TestIndexConfig configWithAuxVocab{kg};
+  configWithAuxVocab.auxVocabWords = auxWords;
+  auto* qecWithout =
+      ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{kg});
+  auto* qecWith = ad_utility::testing::getQec(configWithAuxVocab);
+  ASSERT_TRUE(qecWith->getIndex().getImpl().auxVocab() != nullptr);
+  ASSERT_TRUE(qecWithout->getIndex().getImpl().auxVocab() == nullptr);
+
+  for (const std::string& query :
+       {"SELECT * WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o"s,
+        "SELECT * WHERE { ?s <knows> ?o } ORDER BY ?o"s,
+        "SELECT * WHERE { ?s <knows> ?o . ?o <label> ?l } ORDER BY ?s"s,
+        "SELECT * WHERE { ?s ?p ?o . FILTER (?o > <s5>) } ORDER BY ?s ?p ?o"s,
+        "SELECT * WHERE { ?s ?p ?o . FILTER (?o < \"name5\") } ORDER BY ?o"s,
+        "SELECT * WHERE { ?s ?p ?o . FILTER isIRI(?o) } ORDER BY ?s ?p ?o"s,
+        "SELECT * WHERE { ?s ?p ?o . FILTER isLiteral(?o) } ORDER BY ?o"s,
+        "SELECT ?s (COUNT(?o) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?s "
+        "ORDER BY ?s"s,
+        "SELECT * WHERE { ?s <label> ?o . BIND(CONCAT(STR(?o), \"x\") AS ?b) } "
+        "ORDER BY ?b"s,
+        "SELECT * WHERE { ?s ?p ?o } ORDER BY DESC(?o)"s}) {
+    SCOPED_TRACE(query);
+    EXPECT_EQ(runQuery(qecWith, query), runQuery(qecWithout, query));
+  }
 }
 
 }  // namespace

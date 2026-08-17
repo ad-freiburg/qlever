@@ -13,6 +13,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
@@ -46,6 +47,11 @@ class LocalVocabContext {
   // the word is not contained in the vocabulary.
   using VocabBounds = std::pair<VocabIndex, VocabIndex>;
 
+  // The result of `lookupWordInVocabularies` below: either the `Id` of a word
+  // that is contained in one of the vocabularies of the index, or the bounds of
+  // the position of a word that is contained in none of them.
+  using IdOrVocabBounds = std::variant<Id, VocabBounds>;
+
   virtual ~LocalVocabContext();
 
   // Compare the two given words using the collation of the vocabulary at the
@@ -77,6 +83,27 @@ class LocalVocabContext {
   // vocabulary (see the `EncodedIriManager`). Return `std::nullopt` if `word`
   // cannot be encoded that way.
   virtual std::optional<Id> encodeAsId(std::string_view word) const = 0;
+
+  // Look up `word` in the vocabularies of this index. Return its `Id` if it is
+  // contained in the vocabulary of the main index (an `Id` of type
+  // `VocabIndex`) or in the auxiliary vocabulary (an `Id` of type
+  // `AuxVocabIndex`), and else the bounds of the position at which it would be
+  // sorted into the vocabulary of the main index (in which case the two bounds
+  // are equal, see `VocabBounds`).
+  //
+  // NOTE: This function is deliberately not virtual, but implemented in terms
+  // of the virtual functions above. It is the single place that knows how the
+  // two vocabularies play together, so that all its callers agree on that, in
+  // particular `LocalVocabEntry::positionInVocabExpensiveCase()` and
+  // `toValueIdOrBounds()` (see `index/TripleComponentConversions.h`). Those two
+  // have to agree, because the latter passes the position that it computes to
+  // the corresponding constructor of `LocalVocabEntry`, which checks it against
+  // the former.
+  //
+  // NOTE: This function does not try to encode `word` directly in an `Id` (see
+  // `encodeAsId` above), which its callers have to do themselves if they want
+  // it, and before calling this function.
+  IdOrVocabBounds lookupWordInVocabularies(std::string_view word) const;
 
   // Return the manager for the blank nodes of this index. NOTE: This is the one
   // function here that `LocalVocabEntry` itself does not need. It is required

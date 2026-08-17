@@ -37,8 +37,12 @@ class IndexImpl;
     const EncodedIriManager* encodedIriManager);
 
 // Convert `tripleComponent` to an `Id`. If it is a literal or IRI, resolve it
-// using the vocabulary of `index`. If it is not found there, return the
-// positions of the two neighboring entries.
+// using the vocabularies of `index`, that is, its main vocabulary (which yields
+// an `Id` of type `VocabIndex`) and its auxiliary vocabulary (which yields an
+// `Id` of type `AuxVocabIndex`), see
+// `LocalVocabContext::lookupWordInVocabularies`. If it is found in neither of
+// them, return the positions of the two neighboring entries of the main
+// vocabulary (which then are equal).
 [[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
 toValueIdOrBounds(const TripleComponent& tripleComponent,
                   const IndexImpl& index);

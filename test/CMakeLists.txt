@@ -370,7 +370,7 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(LocalVocabEntryTest index)
 
-addLinkAndDiscoverTest(AuxVocabularyTest index engine)
+addLinkAndDiscoverTest(AuxVocabularyTest index engine sparqlParser)
 
 addLinkAndDiscoverTest(ValuesTest engine)
 
