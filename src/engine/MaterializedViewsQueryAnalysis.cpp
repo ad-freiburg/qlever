@@ -277,7 +277,7 @@ bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
   auto bObj = b.o_.getVariable();
 
   // All three variables must actually be columns of the view (e.g. this is
-  // not the case if the view's query aggregates them away).
+  // not the case if they do not appear in the `SELECT` clause).
   const auto& viewCols = view->variableToColumnMap();
   if (!viewCols.contains(aSubj) || !viewCols.contains(chainVar) ||
       !viewCols.contains(bObj)) {
@@ -307,7 +307,7 @@ bool QueryPatternCache::analyzeJoinStar(
   Variable subject = triples[0].s_.getVariable();
 
   // The subject must actually be a column of the view (e.g. this is not the
-  // case if the view's query aggregates it away).
+  // case if they do not appear in the `SELECT` clause).
   const auto& viewCols = view->variableToColumnMap();
   if (!viewCols.contains(subject)) {
     return false;
