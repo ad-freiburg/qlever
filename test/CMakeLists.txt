@@ -146,6 +146,8 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ServerTest engine server)
 
+    addLinkAndDiscoverTest(HttpApiHelpersTest server)
+
     addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
     addLinkAndDiscoverTest(UrlParserTest)
@@ -264,9 +266,11 @@ addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
-addLinkAndDiscoverTest(AllocatorWithLimitTest)
-
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
@@ -551,6 +555,8 @@ else ()
 endif ()
 
 addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+
+addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 

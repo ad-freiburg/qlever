@@ -26,10 +26,10 @@ struct Centroid {
   GeoPoint centroid_;
 
  public:
-  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {};
-  Centroid(double lat, double lng) : centroid_{lat, lng} {};
+  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {}
+  Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
-  GeoPoint centroid() const { return centroid_; };
+  GeoPoint centroid() const { return centroid_; }
 };
 
 // The individual coordinates describing the bounding box.
@@ -80,7 +80,7 @@ struct GeometryType {
  public:
   explicit GeometryType(uint8_t type);
 
-  uint8_t type() const { return type_; };
+  uint8_t type() const { return type_; }
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
@@ -94,13 +94,13 @@ struct NumGeometries {
   uint32_t numGeometries_;
 
  public:
-  NumGeometries(uint32_t numGeometries) : numGeometries_{numGeometries} {};
+  NumGeometries(uint32_t numGeometries) : numGeometries_{numGeometries} {}
 
   uint32_t numGeometries() const { return numGeometries_; }
 
   constexpr bool operator==(const NumGeometries& other) const {
     return numGeometries_ == other.numGeometries_;
-  };
+  }
 };
 
 // Represents the length of the geometry in meters.
@@ -134,7 +134,7 @@ struct MetricArea {
   MetricArea() = default;
 #endif
 
-  double area() const { return area_; };
+  double area() const { return area_; }
 
   bool isValid() const { return !std::isnan(area_); }
 };

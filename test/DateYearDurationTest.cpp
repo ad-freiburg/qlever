@@ -7,6 +7,8 @@
 #include <bitset>
 
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "global/Constants.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
@@ -15,6 +17,7 @@
 #include "util/Random.h"
 
 using ad_utility::source_location;
+using ad_utility::testing::encodedIriManager;
 
 namespace {
 
@@ -25,11 +28,6 @@ ad_utility::SlowRandomIntGenerator hourGenerator{0, 23};
 ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
 ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
 ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
-
-auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
 }  // namespace
 
 TEST(Date, Size) {

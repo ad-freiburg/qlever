@@ -416,7 +416,7 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  public:
-  explicit NQuadParser(const EncodedIriManager* ev) : Base{ev} {};
+  explicit NQuadParser(const EncodedIriManager* ev) : Base{ev} {}
   explicit NQuadParser(const EncodedIriManager* ev,
                        TripleComponent defaultGraphId)
       : Base{ev}, defaultGraphId_{std::move(defaultGraphId)} {}
@@ -576,7 +576,7 @@ class RdfStreamParser : public Parser {
 
  public:
   // Default construction needed for tests
-  explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {};
+  explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {}
 
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
@@ -636,7 +636,7 @@ class RdfParallelParser : public Parser {
  public:
   using Triple = std::array<std::string, 3>;
   // Default construction needed for tests
-  explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {};
+  explicit RdfParallelParser(const EncodedIriManager* ev) : Parser{ev} {}
 
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
@@ -738,7 +738,7 @@ class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
   explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
-      : RdfParserBase{encodedIriManager} {};
+      : RdfParserBase{encodedIriManager} {}
 
   // Construct the parser from a type-erased input range of file specifications
   // and eagerly start parsing them on background threads.

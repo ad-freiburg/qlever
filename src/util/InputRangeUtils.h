@@ -204,7 +204,7 @@ struct LoopControl {
   template <typename R>
   static LoopControl yieldAll(R&& r) {
     return LoopControl{InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}};
-  };
+  }
 };
 
 // `loopControlValueT` is a helper variable to get the stored type out of a
