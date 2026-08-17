@@ -12,7 +12,6 @@
 #include <limits>
 #include <tuple>
 
-#include "absl/strings/str_cat.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
@@ -2322,11 +2321,7 @@ TEST_P(ParallelConstructMatchesSerialTest, MatchesSerial) {
 INSTANTIATE_TEST_SUITE_P(
     ConstructExportMediaAndThreads, ParallelConstructMatchesSerialTest,
     ::testing::Combine(::testing::ValuesIn(kConstructExportMediaTypes),
-                       ::testing::ValuesIn(kConstructExportThreadCounts)),
-    [](const auto& info) {
-      const auto [mediaType, numThreads] = info.param;
-      return absl::StrCat("mt", static_cast<int>(mediaType), "_t", numThreads);
-    });
+                       ::testing::ValuesIn(kConstructExportThreadCounts)));
 
 class ParallelConstructThreadCountTest
     : public ::testing::TestWithParam<size_t> {};
@@ -2384,10 +2379,7 @@ TEST_P(ParallelConstructThreadCountTest, EmptyResult) {
 
 INSTANTIATE_TEST_SUITE_P(ConstructExportThreadCounts,
                          ParallelConstructThreadCountTest,
-                         ::testing::ValuesIn(kConstructExportThreadCounts),
-                         [](const auto& info) {
-                           return absl::StrCat("t", info.param);
-                         });
+                         ::testing::ValuesIn(kConstructExportThreadCounts));
 
 // White-box test for `splitBlockIntoChunks`. `getRowIndices` never yields
 // an empty view, but the function must still handle one.
