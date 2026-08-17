@@ -551,6 +551,21 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       ::testing::HasSubstr(
           "The query to write a materialized view returned a string not "
           "contained in the index (local vocabulary entry)"));
+  // A view is always re-sorted into SPO order for storage, so a `LIMIT`/
+  // `OFFSET` in the defining query would not even consistently determine
+  // which rows end up in the view (a plain `LIMIT`/`OFFSET` without `ORDER
+  // BY` only ever selects an arbitrary subset of rows to begin with). This
+  // must be rejected instead of silently ignored or non-deterministically
+  // applied.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk(
+          "testView3", qlv().parseAndPlanQuery(simpleWriteQuery_ + " LIMIT 1")),
+      ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk(
+          "testView4",
+          qlv().parseAndPlanQuery(simpleWriteQuery_ + " OFFSET 1")),
+      ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
 }
 
 // _____________________________________________________________________________

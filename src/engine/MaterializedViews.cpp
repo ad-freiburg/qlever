@@ -54,6 +54,16 @@ MaterializedViewWriter::MaterializedViewWriter(
       memoryLimit_{std::move(memoryLimit)},
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
+  // A view is always re-sorted into SPO order for on-disk storage, so a
+  // `LIMIT`/`OFFSET` in the defining query (which, without an `ORDER BY`, only
+  // ever selects an arbitrary subset of rows to begin with) would not even
+  // consistently determine which rows end up in the view. Reject it outright
+  // instead of writing a view with confusing, implementation-defined content.
+  if (!plannedQuery.parsedQuery()._limitOffset.isUnconstrained()) {
+    throw MaterializedViewConfigException(
+        "The query to write a materialized view may not contain a LIMIT or "
+        "OFFSET clause.");
+  }
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
   columnNames_ = ::ranges::to<std::vector<Variable>>(columnNamesAndPermutation |
