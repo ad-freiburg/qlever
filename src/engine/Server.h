@@ -162,12 +162,10 @@ class Server {
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
-  // Clear the delta triples of the currently active index (not a stale
-  // snapshot, even if a concurrent rebuild swaps the index while this is
-  // running) and return the resulting counts. Not cancellable. Unlike
-  // `processVacuumDeltaTriples` below, this is unconditional and has no
-  // timeout, so it neither needs the request/response nor can it fail
-  // partway through.
+  // Run `qlever().clearDeltaTriples()` on `updateThreadPool_` and return the
+  // resulting counts. Not cancellable. Unlike `processVacuumDeltaTriples`
+  // below, this is unconditional and has no timeout, so it neither needs the
+  // request/response nor can it fail partway through.
   Awaitable<DeltaTriplesCount> clearDeltaTriples();
 
   // Vacuum (remove redundant) delta triples of the currently active index,

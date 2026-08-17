@@ -405,19 +405,11 @@ Awaitable<DeltaTriplesCount> Server::clearDeltaTriples() {
   // Conan setup.
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this] {
-        // Snapshot here, on the (single-threaded) `updateThreadPool_`, so we
-        // modify the currently active index and not a stale one that a
-        // concurrent rebuild may have swapped out (whose changes would be
-        // lost).
-        auto snapshot = indexAndViewsSnapshot();
-        return snapshot->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
-            [](auto& deltaTriples) {
-              deltaTriples.clear();
-              return deltaTriples.getCounts();
-            });
-      },
-      handle);
+      // Call `qlever().clearDeltaTriples()` here, on the (single-threaded)
+      // `updateThreadPool_`, so its snapshot reflects the currently active
+      // index and not a stale one that a concurrent rebuild may have swapped
+      // out (whose changes would be lost).
+      [this] { return qlever().clearDeltaTriples(); }, handle);
   auto countAfterClear = co_await std::move(coroutine);
   co_return countAfterClear;
 }

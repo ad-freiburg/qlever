@@ -525,6 +525,20 @@ class Qlever {
   // Completely clear the `QueryResultCache` (non-named).
   void clearQueryResultCache();
 
+  // Clear the delta triples of the currently active index (not a stale
+  // snapshot, even if a concurrent rebuild swaps the index while this is
+  // running) and return the resulting counts.
+  //
+  // NOTE: There is currently no test that exercises this directly through
+  // `Qlever`, independent of the HTTP `Server` layer (covered today only via
+  // `ServerTest.clearDeltaTriples`), because `Qlever` has no public API to
+  // populate delta triples on its own -- SPARQL updates are only executed via
+  // `Server::processUpdateImpl`.
+  // TODO<damekt> Once `processUpdateImpl` (or equivalent) also moves to
+  // `Qlever`, add a `QleverTest.cpp` test that populates delta triples
+  // through it and calls `clearDeltaTriples` directly on `Qlever`.
+  DeltaTriplesCount clearDeltaTriples() const;
+
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
   //
