@@ -78,8 +78,8 @@ TEST(QueryRegistry, verifyActiveQueryInfoToJsonWorks) {
 
 TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
   QueryRegistry registry{};
-  auto queryIdOne = registry.uniqueId("my-query");
-  auto queryIdTwo = registry.uniqueId("my-query");
+  auto queryIdOne = registry.uniqueId("my-query", QueryOperation::QUERY);
+  auto queryIdTwo = registry.uniqueId("my-query", QueryOperation::QUERY);
 
   EXPECT_NE(queryIdOne.toQueryId(), queryIdTwo.toQueryId());
 }
@@ -88,10 +88,10 @@ TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
 
 TEST(QueryRegistry, verifyUniqueIdFromStringEnforcesUniqueness) {
   QueryRegistry registry{};
-  auto optionalQueryIdOne =
-      registry.uniqueIdFromString("01123581321345589144", "my-query");
-  auto optionalQueryIdTwo =
-      registry.uniqueIdFromString("01123581321345589144", "my-query");
+  auto optionalQueryIdOne = registry.uniqueIdFromString(
+      "01123581321345589144", "my-query", QueryOperation::QUERY);
+  auto optionalQueryIdTwo = registry.uniqueIdFromString(
+      "01123581321345589144", "my-query", QueryOperation::QUERY);
 
   EXPECT_TRUE(optionalQueryIdOne.has_value());
   EXPECT_FALSE(optionalQueryIdTwo.has_value());
@@ -102,13 +102,13 @@ TEST(QueryRegistry, verifyUniqueIdFromStringEnforcesUniqueness) {
 TEST(QueryRegistry, verifyIdIsUnregisteredAfterUse) {
   QueryRegistry registry{};
   {
-    auto optionalQueryId =
-        registry.uniqueIdFromString("01123581321345589144", "my-query");
+    auto optionalQueryId = registry.uniqueIdFromString(
+        "01123581321345589144", "my-query", QueryOperation::QUERY);
     EXPECT_TRUE(optionalQueryId.has_value());
   }
   {
-    auto optionalQueryId =
-        registry.uniqueIdFromString("01123581321345589144", "my-query");
+    auto optionalQueryId = registry.uniqueIdFromString(
+        "01123581321345589144", "my-query", QueryOperation::QUERY);
     EXPECT_TRUE(optionalQueryId.has_value());
   }
 }
@@ -118,10 +118,10 @@ TEST(QueryRegistry, verifyIdIsUnregisteredAfterUse) {
 TEST(QueryRegistry, demonstrateRegistryLocalUniqueness) {
   QueryRegistry registryOne{};
   QueryRegistry registryTwo{};
-  auto optQidOne =
-      registryOne.uniqueIdFromString("01123581321345589144", "my-query");
-  auto optQidTwo =
-      registryTwo.uniqueIdFromString("01123581321345589144", "my-query");
+  auto optQidOne = registryOne.uniqueIdFromString(
+      "01123581321345589144", "my-query", QueryOperation::QUERY);
+  auto optQidTwo = registryTwo.uniqueIdFromString(
+      "01123581321345589144", "my-query", QueryOperation::QUERY);
   ASSERT_TRUE(optQidOne.has_value());
   ASSERT_TRUE(optQidTwo.has_value());
   // The QueryId object doesn't know anything about registries,
@@ -137,7 +137,8 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
   std::unique_ptr<OwningQueryId> holder;
   {
     QueryRegistry registry{};
-    holder = std::make_unique<OwningQueryId>(registry.uniqueId("my-query"));
+    holder = std::make_unique<OwningQueryId>(
+        registry.uniqueId("my-query", QueryOperation::QUERY));
   }
 }
 
@@ -145,7 +146,7 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
 
 TEST(QueryRegistry, verifyCancellationHandleIsCreated) {
   QueryRegistry registry{};
-  auto queryId = registry.uniqueId("my-query");
+  auto queryId = registry.uniqueId("my-query", QueryOperation::QUERY);
 
   auto handle1 = registry.getCancellationHandle(queryId.toQueryId());
   auto handle2 = registry.getCancellationHandle(queryId.toQueryId());
@@ -175,7 +176,7 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());
 
   {
-    auto queryId1 = registry.uniqueId("my-query");
+    auto queryId1 = registry.uniqueId("my-query", QueryOperation::QUERY);
 
     EXPECT_THAT(registry.getActiveQueries(),
                 UnorderedElementsAre(
@@ -183,7 +184,7 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
                          Field(&ActiveQueryInfo::query_, "my-query"))));
 
     {
-      auto queryId2 = registry.uniqueId("other-query");
+      auto queryId2 = registry.uniqueId("other-query", QueryOperation::QUERY);
 
       EXPECT_THAT(registry.getActiveQueries(),
                   UnorderedElementsAre(
@@ -206,7 +207,7 @@ TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
 
 TEST(QueryRegistry, statusDefaultsToFailed) {
   QueryRegistry registry{};
-  auto owned = registry.uniqueId("my-query");
+  auto owned = registry.uniqueId("my-query", QueryOperation::QUERY);
   EXPECT_EQ(owned.status(), QueryStatus::FAILED);
 }
 
@@ -214,7 +215,7 @@ TEST(QueryRegistry, statusDefaultsToFailed) {
 
 TEST(QueryRegistry, setStatusIsObservable) {
   QueryRegistry registry{};
-  auto owned = registry.uniqueId("my-query");
+  auto owned = registry.uniqueId("my-query", QueryOperation::QUERY);
   ASSERT_EQ(owned.status(), QueryStatus::FAILED);
 
   owned.setStatus(QueryStatus::OK);
@@ -229,7 +230,7 @@ TEST(QueryRegistry, setStatusIsObservable) {
 // The status field must survive a move construction of `OwningQueryId`.
 TEST(QueryRegistry, statusSurvivesMove) {
   QueryRegistry registry{};
-  auto owned = registry.uniqueId("my-query");
+  auto owned = registry.uniqueId("my-query", QueryOperation::QUERY);
   owned.setStatus(QueryStatus::CANCELLED);
 
   OwningQueryId moved = std::move(owned);
@@ -243,6 +244,14 @@ TEST(QueryRegistry, statusSurvivesMove) {
 TEST(QueryStatus, toStringFallbackForUnknownValue) {
   EXPECT_EQ(ad_utility::websocket::toString(static_cast<QueryStatus>(42)),
             "unknown");
+}
+
+// _____________________________________________________________________________
+
+// The two operation kinds as they appear in the `type` field of a start event.
+TEST(QueryOperation, toString) {
+  EXPECT_EQ(ad_utility::websocket::toString(QueryOperation::QUERY), "query");
+  EXPECT_EQ(ad_utility::websocket::toString(QueryOperation::UPDATE), "update");
 }
 
 // _____________________________________________________________________________
@@ -264,7 +273,7 @@ TEST(QueryRegistry, onStartFiresWithQueryDetails) {
 
   auto owned =
       registry.uniqueIdFromString("01123581321345589144", "SELECT * WHERE {}",
-                                  "10.0.0.5", QueryOperation::QUERY);
+                                  QueryOperation::QUERY, "10.0.0.5");
   ASSERT_TRUE(owned.has_value());
 
   ASSERT_EQ(starts.size(), 1u);
@@ -288,9 +297,11 @@ TEST(QueryRegistry, onStartNotFiredForDuplicateId) {
   int starts = 0;
   registry.addOnStart([&starts](const QueryRegistry::StartInfo&) { ++starts; });
 
-  auto first = registry.uniqueIdFromString("01123581321345589144", "first");
+  auto first = registry.uniqueIdFromString("01123581321345589144", "first",
+                                           QueryOperation::QUERY);
   ASSERT_TRUE(first.has_value());
-  auto second = registry.uniqueIdFromString("01123581321345589144", "second");
+  auto second = registry.uniqueIdFromString("01123581321345589144", "second",
+                                            QueryOperation::QUERY);
   EXPECT_FALSE(second.has_value());
 
   EXPECT_EQ(starts, 1);
@@ -308,7 +319,8 @@ TEST(QueryRegistry, throwingStartCallbackCleansUpEntry) {
     throw std::runtime_error("start callback failed");
   });
 
-  EXPECT_THROW(registry.uniqueIdFromString("01123581321345589144", "q"),
+  EXPECT_THROW(registry.uniqueIdFromString("01123581321345589144", "q",
+                                           QueryOperation::QUERY),
                std::runtime_error);
 
   // End fired once and the entry was erased (an empty snapshot reads the same
@@ -329,7 +341,8 @@ TEST(QueryRegistry, onEndFiresAtDestructionWithDefaultStatus) {
       [&ends](const QueryRegistry::EndInfo& info) { ends.push_back(info); });
 
   {
-    auto owned = registry.uniqueIdFromString("01123581321345589144", "q");
+    auto owned = registry.uniqueIdFromString("01123581321345589144", "q",
+                                             QueryOperation::QUERY);
     ASSERT_TRUE(owned.has_value());
     EXPECT_THAT(ends, IsEmpty());
   }
@@ -358,7 +371,7 @@ std::string runCycleCaptureEndStatus(
     captured = json.at("status").get<std::string>();
   });
   {
-    auto owned = registry.uniqueIdFromString("qid", "q");
+    auto owned = registry.uniqueIdFromString("qid", "q", QueryOperation::QUERY);
     EXPECT_TRUE(owned.has_value());
     owned->setStatus(toSet);
   }
@@ -385,7 +398,8 @@ TEST(QueryRegistry, onEndFiresEvenWhenRegistryDestroyedFirst) {
   {
     QueryRegistry registry{};
     registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
-    owned = registry.uniqueIdFromString("01123581321345589144", "q");
+    owned = registry.uniqueIdFromString("01123581321345589144", "q",
+                                        QueryOperation::QUERY);
     ASSERT_TRUE(owned.has_value());
   }  // registry gone; the weak_ptr in the lambda expires
   EXPECT_EQ(ends, 0);
@@ -405,7 +419,8 @@ TEST(QueryRegistry, sharedStatusReachesEndCallback) {
   });
 
   {
-    auto owned = registry.uniqueIdFromString("qid-shared", "q");
+    auto owned =
+        registry.uniqueIdFromString("qid-shared", "q", QueryOperation::QUERY);
     ASSERT_TRUE(owned.has_value());
     auto handle = owned->sharedStatus();
     OwningQueryId movedAway = std::move(owned.value());
@@ -429,7 +444,8 @@ TEST(QueryRegistry, multipleCallbacksAllFire) {
   registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
 
   {
-    auto owned = registry.uniqueIdFromString("01123581321345589144", "q");
+    auto owned = registry.uniqueIdFromString("01123581321345589144", "q",
+                                             QueryOperation::QUERY);
     ASSERT_TRUE(owned.has_value());
     EXPECT_EQ(starts, 2);
     EXPECT_EQ(ends, 0);
@@ -449,9 +465,9 @@ TEST(QueryRegistry, exactlyOneEndPerStart) {
   registry.addOnEnd([&ends](const QueryRegistry::EndInfo&) { ++ends; });
 
   {
-    auto a = registry.uniqueIdFromString("id-a", "q");
-    auto b = registry.uniqueIdFromString("id-b", "q");
-    auto dup = registry.uniqueIdFromString("id-a", "q");
+    auto a = registry.uniqueIdFromString("id-a", "q", QueryOperation::QUERY);
+    auto b = registry.uniqueIdFromString("id-b", "q", QueryOperation::QUERY);
+    auto dup = registry.uniqueIdFromString("id-a", "q", QueryOperation::QUERY);
     ASSERT_TRUE(a.has_value());
     ASSERT_TRUE(b.has_value());
     ASSERT_FALSE(dup.has_value());
