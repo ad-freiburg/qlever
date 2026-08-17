@@ -14,9 +14,12 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryExecutionContext.h"
 #include "libqlever/Qlever.h"
 #include "util/Exception.h"
+#include "util/FilesystemHelpers.h"
 
 namespace materializedViewsTestHelpers {
 
@@ -27,6 +30,21 @@ static constexpr std::string_view dummyTurtle = R"(
   <s1> <p2> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
   <s2> <p1> "xyz" .
   <s2> <p3> <http://example.com/> .
+)";
+
+static constexpr std::string_view cacheKeyRewriteDummyTurtle = R"(
+  @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+  <s1> <p1> "abc" .
+  <s1> <p3> "abc1" .
+  <s1> <p3> "abc2" .
+  <s1> <p3> "abc3" .
+  <s2> <p1> "xyz" .
+  <s1> <p2> "1"^^xsd:integer .
+  <s2> <p3> <s3> .
+  <s3> <p2> "7"^^xsd:integer .
+  <s2> <p3> <s4> .
+  <s3> <p2> "5"^^xsd:integer .
+  <s3> <p4> <http://example.com/> .
 )";
 
 // _____________________________________________________________________________
@@ -49,13 +67,10 @@ inline void makeTestIndex(const std::string& basename, const std::string& kg) {
 inline void removeTestIndex(const std::string& basename) {
   std::regex pattern(absl::StrCat(basename, "\\..*"));
   std::cout << "Removing test files " << basename << ".*" << std::endl;
-  for (const auto& entry :
-       std::filesystem::directory_iterator(std::filesystem::current_path())) {
-    if (entry.is_regular_file() &&
-        std::regex_match(entry.path().filename().string(), pattern)) {
-      std::filesystem::remove(entry.path());
-    }
-  }
+  qlever::util::deleteFilesInDirectory(
+      ql::filesystem::current_path(), [&pattern](const auto& path) {
+        return std::regex_match(path.filename().string(), pattern);
+      });
 }
 
 // _____________________________________________________________________________
@@ -96,6 +111,11 @@ class MaterializedViewsTest : public ::testing::Test {
   qlever::Qlever& qlv() {
     AD_CORRECTNESS_CHECK(qlv_ != nullptr);
     return *qlv_;
+  }
+
+  // ___________________________________________________________________________
+  std::shared_ptr<QueryExecutionContext> getQec() {
+    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
   }
 
   // ___________________________________________________________________________
@@ -152,6 +172,14 @@ class MaterializedViewsTestLarge : public MaterializedViewsTest {
 };
 
 // _____________________________________________________________________________
+class MaterializedViewsCacheKeyRewriteTest : public MaterializedViewsTest {
+ protected:
+  std::string getDummyTurtle() const override {
+    return std::string{cacheKeyRewriteDummyTurtle};
+  }
+};
+
+// _____________________________________________________________________________
 struct RewriteTestParams {
   // Query to write the test view.
   std::string writeQuery_;
@@ -196,10 +224,14 @@ inline void PrintTo(const RewriteTestParams& p, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
-inline void qpExpect(qlever::Qlever& qlv, const auto& query,
+template <typename Query>
+inline void qpExpect(qlever::Qlever& qlv, const Query& query,
                      ::testing::Matcher<const QueryExecutionTree&> matcher,
                      source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
+  // For query planning to produce the expected results reliably, we need to
+  // clear the cache.
+  qlv.clearQueryResultCache();
   auto plannedQuery = qlv.parseAndPlanQuery(std::string{query});
   EXPECT_THAT(plannedQuery.queryExecutionTree(), matcher);
 };
@@ -227,15 +259,27 @@ inline auto viewScanSimple(std::string viewName, std::string a, std::string b,
 };
 
 // _____________________________________________________________________________
+template <typename ViewName, typename Query>
 inline void expectNotSuitableForRewrite(
     const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
-    const auto& viewName, const auto& query,
+    const ViewName& viewName, const Query& query,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
-  manager.writeViewToDisk(viewName, qlv.parseAndPlanQuery(query));
-  auto view = manager.getView(viewName);
-  EXPECT_FALSE(qpc.analyzeView(view));
+  auto plan = qlv.parseAndPlanQuery(query);
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+  manager.writeViewToDisk(viewName, plan);
+  auto view = manager.getView(viewName, qec.get());
+  qpc.analyzeView(view, qec.get());
+  // `analyzeView` may still return `true` because the view got registered for
+  // cache-key based rewriting, even for queries that (by design) are not
+  // suitable for the pattern-based (star/chain) rewriting tested here. So
+  // check the latter directly instead of relying on the overall return value.
+  const auto& graphPattern = plan.parsedQuery()._rootGraphPattern;
+  ASSERT_EQ(graphPattern._graphPatterns.size(), 1u);
+  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(
+                     qec.get(), graphPattern._graphPatterns.at(0).getBasic())
+                  .empty());
   manager.unloadViewIfLoaded(viewName);
 };
 

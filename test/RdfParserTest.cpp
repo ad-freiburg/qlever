@@ -17,6 +17,7 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -316,7 +317,7 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
   auto result = ladttc("POINT(7.8 47.9)", fromIri(GEO_WKT_LITERAL));
-  auto vid = result.toValueIdIfNotString(encodedIriManager());
+  auto vid = toValueIdIfNotString(result, encodedIriManager());
   ASSERT_TRUE(vid.has_value() &&
               vid.value().getDatatype() == Datatype::GeoPoint);
   auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
@@ -922,17 +923,20 @@ std::vector<TurtleTriple> parseFromFile(
 // `useBatchInterface` argument) and possible additional args, and run this
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
-auto forAllParallelParsers(const auto& function, const auto&... args) {
+template <typename Function, typename... Args>
+auto forAllParallelParsers(const Function& function, const Args&... args) {
   function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, true, args...);
   function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, false, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, true, args...);
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, false, args...);
 }
-auto forAllMultifileParsers(const auto& function, const auto&... args) {
+template <typename Function, typename... Args>
+auto forAllMultifileParsers(const Function& function, const Args&... args) {
   function(ti<RdfMultifileParser>, true, args...);
 }
 
-auto forAllParsers(const auto& function, const auto&... args) {
+template <typename Function, typename... Args>
+auto forAllParsers(const Function& function, const Args&... args) {
   function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, true, args...);
   function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, false, args...);
   function(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>, true, args...);
@@ -1489,8 +1493,8 @@ _:blank ex:b ex:c .
         EXPECT_EQ(triple.subject_, blankNodeId.value())
             << "Blank node label _:blank should have consistent ID across "
                "batches, but got different IDs: "
-            << blankNodeId.value().toRdfLiteral() << " vs "
-            << triple.subject_.toRdfLiteral();
+            << toRdfLiteral(blankNodeId.value()) << " vs "
+            << toRdfLiteral(triple.subject_);
         foundAsSubject = true;
         break;
       }

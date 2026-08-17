@@ -1028,6 +1028,52 @@ TEST(QueryPlanner, numPathsPerTarget) {
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
+// _____________________________________________________________________________
+TEST(QueryPlanner, maxDepth) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 2};
+  h::expect(
+      R"(
+PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+SELECT ?start ?end ?path ?edge WHERE {
+  SERVICE pathSearch: {
+    _:path pathSearch:algorithm pathSearch:allPaths ;
+           pathSearch:source <x1> ;
+           pathSearch:source <x2> ;
+           pathSearch:target <y> ;
+           pathSearch:target <z> ;
+           pathSearch:pathColumn ?path ;
+           pathSearch:edgeColumn ?edge ;
+           pathSearch:start ?start ;
+           pathSearch:end ?end ;
+           pathSearch:maxDepth 2 ;
+    {
+      SELECT * WHERE {
+        ?start <p> ?end .
+      }
+    }
+  }
+}
+)",
+      h::pathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+}
+
 TEST(QueryPlanner, PathSearchWithEdgeProperties) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join;
@@ -1606,6 +1652,60 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The parameter <numPathsPerTarget> expects an integer"),
+      InvalidSparqlQueryException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchWrongArgumentMaxDepth) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:maxDepth <two>;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter <maxDepth> expects an integer"),
+      InvalidSparqlQueryException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchNegativeMaxDepth) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:maxDepth -1;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter <maxDepth> must not be negative"),
       InvalidSparqlQueryException);
 }
 
@@ -2600,6 +2700,33 @@ TEST(QueryPlanner, Exists) {
       "SELECT ?x (SAMPLE(EXISTS{?a ?b ?c}) as ?s) { ?x ?y ?z } GROUP BY ?x",
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
                  h::ExistsJoin(xyz, abc)));
+
+  // Inside a `GROUP BY`, an `EXISTS` that is not inside an aggregate may only
+  // be correlated with the grouped variables, so that its result is constant
+  // within each group. Here the body `{?x ?b ?c}` only shares the grouped `?x`
+  // with the outer query.
+  h::expect("SELECT ?x (EXISTS{?x ?b ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+            h::GroupBy({V{"?x"}}, {"(EXISTS{?x ?b ?c} as ?e)"},
+                       h::ExistsJoin(::testing::_,
+                                     h::hasVariables({"?x", "?b", "?c"}))));
+  // Correlating such an `EXISTS` with a non-grouped variable (here `?y`) is
+  // rejected, because the SPARQL standard doesn't clearly define the semantics
+  // of this case.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(
+          "SELECT ?x (EXISTS{?x ?y ?c} as ?e) { ?x ?y ?z } GROUP BY ?x",
+          ad_utility::testing::getQec()),
+      HasSubstr("The EXISTS in the expression (EXISTS{?x ?y ?c} as ?e) uses "
+                "the variable ?y from the query body, but this variable is "
+                "not part of the GROUP BY."));
+  // In contrast, an `EXISTS` inside an aggregate is evaluated once per row and
+  // may therefore use non-grouped variables (here `?y`), just like in a
+  // `FILTER`.
+  h::expect(
+      "SELECT ?x (SAMPLE(EXISTS{?x ?y ?c}) as ?e) { ?x ?y ?z } GROUP BY ?x",
+      h::GroupBy(
+          {V{"?x"}}, {"(SAMPLE(EXISTS{?x ?y ?c}) as ?e)"},
+          h::ExistsJoin(::testing::_, h::hasVariables({"?x", "?y", "?c"}))));
 
   // Similar tests, but with multiple EXISTS clauses
   auto existsAbcDef = h::ExistsJoin(h::ExistsJoin(xyz, abc), def);

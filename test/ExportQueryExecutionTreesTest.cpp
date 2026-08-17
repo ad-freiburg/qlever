@@ -7,13 +7,9 @@
 #include <gmock/gmock.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/IndexScan.h"
-#include "engine/QueryExportTypes.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
-#include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
-#include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -129,8 +125,9 @@ struct TestCaseConstructQuery {
                                     // including triples with UNDEF values.
   uint64_t resultSizeExported;      // The expected number of results exported.
   std::string resultTsv;            // The expected result in TSV format.
-  std::string resultCsv;            // The expected result in CSV format
-  std::string resultTurtle;         // The expected result in Turtle format
+  std::string resultCsv;            // The expected result in CSV format.
+  std::string resultTurtle;         // The expected result in Turtle format.
+  std::string resultNtriples;       // The expected result in NTriples format.
   nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
                                     // Note: this member only contains the inner
                                     // result array with the bindings and NOT
@@ -203,6 +200,8 @@ void runConstructQueryTestCase(
   EXPECT_EQ(resultJson["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, ntriples),
+            testCase.resultNtriples);
 
   // Test the interaction of normal limit (the LIMIT of the query) and export
   // limit (the value of the `send` parameter).
@@ -406,6 +405,12 @@ TEST(ExportQueryExecutionTrees, Integers) {
       "<s> <p> -42019234865781 .\n"
       "<s> <p> 42 .\n"
       "<s> <p> 4012934858173560 .\n",
+      // NTriples
+      "<s> <p> \"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int> "
+      ".\n"
+      "<s> <p> \"42\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+      "<s> <p> \"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int> "
+      ".\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
@@ -486,6 +491,11 @@ TEST(ExportQueryExecutionTrees, Bool) {
       "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
       "<s> <p> true .\n"
       "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
+      // Ntriples
+      "<s> <p> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s> <p> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
@@ -540,6 +550,8 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
       // CSV
       "",
       // Turtle
+      "",
+      // Ntriples
       "", []() { return nlohmann::json::parse("[]"); }()};
   runConstructQueryTestCase(testCaseConstruct);
 }
@@ -684,6 +696,22 @@ TEST(ExportQueryExecutionTrees, Floats) {
       "<s> <p> 960000.06 .\n"
       "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
       "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
+      // N-Triples
+      "<s> <p> \"-INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+      "<s> <p> "
+      "\"-42019234865780982022144.0\"^^<http://www.w3.org/2001/"
+      "XMLSchema#decimal> .\n"
+      "<s> <p> "
+      "\"4.012934858174e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal> "
+      ".\n"
+      "<s> <p> \"1e-10\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+      "<s> <p> \"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+      "<s> <p> \"100.0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+      "<s> <p> \"123456.0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+      "<s> <p> \"960000.06\"^^<http://www.w3.org/2001/XMLSchema#decimal> "
+      ".\n"
+      "<s> <p> \"INF\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+      "<s> <p> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#double> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{
@@ -753,6 +781,10 @@ TEST(ExportQueryExecutionTrees, Dates) {
       "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\"\n",
       // Turtle
+      "<s> <p> "
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
+      ".\n",
+      // N-Triples
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
       ".\n",
@@ -838,6 +870,8 @@ TEST(ExportQueryExecutionTrees, Entities) {
       "<s>,<p>,<http://qlever.com/o>\n",
       // Turtle
       "<s> <p> <http://qlever.com/o> .\n",
+      // N-triples
+      "<s> <p> <http://qlever.com/o> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "<http://qlever.com/o>"s});
@@ -886,6 +920,8 @@ TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
       // CSV
       "<s>,<p>,\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
       // Turtle
+      "<s> <p> \"Some\\\"Where\tOver,\"@en-ca .\n",
+      // N-Triples
       "<s> <p> \"Some\\\"Where\tOver,\"@en-ca .\n",
       []() {
         nlohmann::json j;
@@ -936,6 +972,8 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
       "<s>,<p>,\"\"\"something\"\"^^<www.example.org/bim>\"\n",
       // Turtle
       "<s> <p> \"something\"^^<www.example.org/bim> .\n",
+      // N-Triples
+      "<s> <p> \"something\"^^<www.example.org/bim> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s,
@@ -984,6 +1022,8 @@ TEST(ExportQueryExecutionTrees, LiteralPlain) {
       "<s>,<p>,\"\"\"something\"\"\"\n",
       // Turtle
       "<s> <p> \"something\" .\n",
+      // N-Triples
+      "<s> <p> \"something\" .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "\"something\""s});
@@ -1029,6 +1069,8 @@ testIriKg</uri></binding>
       // CSV
       "<s>,<p>,\"<https://\t: )\ntestIriKg>\"\n",
       // Turtle
+      "<s> <p> <https://\t: )\ntestIriKg> .\n",
+      // N-Triples
       "<s> <p> <https://\t: )\ntestIriKg> .\n",
       []() {
         nlohmann::json j;
@@ -1101,6 +1143,10 @@ TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
       "<s> <p> <iriescaped\x01o\x02"
       "e\x03i\x04o\x05u\x06"
       "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d> .\n",
+      // N-Triples
+      "<s> <p> <iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{
@@ -1150,6 +1196,8 @@ TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
       "<s>,<p>,\"\"\" hallo\n\t welt\"\"\"\n",
       // Turtle
       "<s> <p> \" hallo\\n\t welt\" .\n",
+      // N-Triples
+      "<s> <p> \" hallo\\n\t welt\" .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "\" hallo\n\t welt\""s});
@@ -1192,6 +1240,7 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       "BY ?o",
       1,
       0,
+      "",
       "",
       "",
       "",
@@ -1315,6 +1364,15 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
       "_:g3_0,<p>,_:u3_a\n"
       "_:g3_1,<p>,_:u3_a\n",
       // Turtle
+      "_:g0_0 <p> _:u0_a .\n"
+      "_:g0_1 <p> _:u0_a .\n"
+      "_:g1_0 <p> _:u1_a .\n"
+      "_:g1_1 <p> _:u1_a .\n"
+      "_:g2_0 <p> _:u2_a .\n"
+      "_:g2_1 <p> _:u2_a .\n"
+      "_:g3_0 <p> _:u3_a .\n"
+      "_:g3_1 <p> _:u3_a .\n",
+      // N-Triples
       "_:g0_0 <p> _:u0_a .\n"
       "_:g0_1 <p> _:u0_a .\n"
       "_:g1_0 <p> _:u1_a .\n"
@@ -1499,8 +1557,9 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       runQueryStreamableResult(kg, constructQuery,
                                ad_utility::MediaType::sparqlXml),
-      ::testing::ContainsRegex(
-          "XML export is currently not supported for CONSTRUCT"));
+      ::testing::HasSubstr(
+          "application/sparql-results+xml is not supported for CONSTRUCT "
+          "queries."));
 
   // Binary export is not supported for CONSTRUCT queries.
   ASSERT_THROW(runQueryStreamableResult(kg, constructQuery,
@@ -2036,3 +2095,177 @@ TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
     ASSERT_FALSE(result.contains("meta"));
   }
 }
+
+// _____________________________________________________________________________
+// Regression test for the `Full` deduplication of CONSTRUCT results: the same
+// RDF term may reach the CONSTRUCT template through two different kinds of
+// `Id`. A term that comes straight from the data is a `VocabIndex` `Id`, while
+// a term computed by an expression such as `STR` is materialized in the query's
+// `LocalVocab` and is therefore a `LocalVocabIndex` `Id`.
+//
+// Both branches of the `UNION` below instantiate the identical triple
+// `<s> <p> "Alice"`, once via `?o` bound directly from the data and once via
+// `BIND(STR(?l) AS ?o)`. Deduplication keys are compared bitwise, so unless
+// `ConstructDeduplicator::canonicalize` maps the `LocalVocabIndex` `Id` back
+// onto the index vocabulary's `VocabIndex` `Id`, the two keys differ and the
+// duplicate survives.
+TEST(ExportQueryExecutionTrees, ConstructFullDeduplicationAcrossLocalVocab) {
+  const std::string kg =
+      "<http://example.org/x> <http://example.org/name> \"Alice\" . "
+      "<http://example.org/y> <http://example.org/label> \"Alice\" .";
+  const std::string query =
+      "PREFIX ex: <http://example.org/>\n"
+      "CONSTRUCT { ex:s ex:p ?o }\n"
+      "WHERE {\n"
+      "  { ?x ex:name ?o }\n"
+      "  UNION\n"
+      "  { ?y ex:label ?l  BIND(STR(?l) AS ?o) }\n"
+      "}";
+
+  using ad_utility::DeduplicationMode;
+  const std::string expected =
+      "<http://example.org/s> <http://example.org/p> \"Alice\" .\n";
+
+  // Without deduplication both branches emit the triple.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::none());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        absl::StrCat(expected, expected));
+  }
+
+  // With `Full` deduplication the triple is emitted exactly once.
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+            DeduplicationMode::full());
+    EXPECT_EQ(
+        runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+        expected);
+  }
+}
+
+// A minimal smoke test that the deduplication is wired end-to-end. VALUES
+// clause that emits the identical triple 3 times.
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesNoneKeepsDuplicates) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>)"
+      " } }";
+  const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::none());
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            absl::StrCat(expected, expected, expected));
+}
+
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesFullDropsDuplicates) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>) (<ex:s> <ex:p> <ex:o>)"
+      " } }";
+  const std::string expected = "<ex:s> <ex:p> <ex:o> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::full());
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            expected);
+}
+
+// A-B-A pattern with a batch-wise window of 1: A inserted, B inserted
+// (evicts A), A inserted again (evicts B, A is new again). All three insertions
+// are distinct insertions from the deduplicator's point of view, so all three
+// are emitted.
+TEST(ExportQueryExecutionTrees,
+     ConstructDeduplicationValuesLruAbaPatternEvictsAndReemits) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>) (<ex:a> <ex:a> <ex:a>)"
+      " } }";
+  const std::string a = "<ex:a> <ex:a> <ex:a> .\n";
+  const std::string b = "<ex:b> <ex:b> <ex:b> .\n";
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::lru(1));
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            absl::StrCat(a, b, a));
+}
+
+namespace {
+// ____________________________________________________________________________
+// Formats the single triple `<ex:c> <ex:c> <ex:c> .` for one lowercase
+// letter `c`, used by `ConstructDeduplicationLruWindowTest`.
+std::string lruWindowTriple(char c) {
+  return absl::StrCat("<ex:", std::string(1, c), "> <ex:", std::string(1, c),
+                      "> <ex:", std::string(1, c), "> .\n");
+}
+}  // namespace
+
+// Batchwise deduplication with a stream of 5 unique triples, each repeated
+// twice. Thus we expect 10 triples total. The window size controls how many
+// duplicates survive.
+struct LruWindowParam {
+  size_t windowSize;
+  // The letters (each standing for one `<ex:c> <ex:c> <ex:c>` triple)
+  // expected to survive deduplication, in order.
+  std::string expectedLetters;
+};
+
+class ConstructDeduplicationLruWindowTest
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<LruWindowParam> {};
+
+TEST_P(ConstructDeduplicationLruWindowTest, window) {
+  const std::string kg = "";
+  const std::string query =
+      "CONSTRUCT { ?s ?p ?o } WHERE {"
+      " VALUES (?s ?p ?o) {"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>)"
+      "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
+      "  (<ex:e> <ex:e> <ex:e>)"
+      "  (<ex:a> <ex:a> <ex:a>) (<ex:b> <ex:b> <ex:b>)"
+      "  (<ex:c> <ex:c> <ex:c>) (<ex:d> <ex:d> <ex:d>)"
+      "  (<ex:e> <ex:e> <ex:e>)"
+      " } }";
+
+  std::string expected;
+  for (char letter : GetParam().expectedLetters) {
+    absl::StrAppend(&expected, lruWindowTriple(letter));
+  }
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::lru(GetParam().windowSize));
+  EXPECT_EQ(runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+            expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    WindowSizes, ConstructDeduplicationLruWindowTest,
+    ::testing::Values(
+        // window 4: A is 5 positions back when it reappears. Thus, it has
+        // already been evicted from the deduplication window when it re-appears
+        // in the triple stream and is thus emitted. All 10 triples survive
+        // (window is too small to catch any repeating triples).
+        LruWindowParam{4, "abcdeabcde"},
+        // window 5: the second 'a' is only 5 positions after the first.
+        // Thus, this triple is still in the deduplication cache when it
+        // re-appears. Suppressed. 'b'-'e' repeats hit the same window
+        // and are suppressed too. Result: 5 unique triples.
+        LruWindowParam{5, "abcde"},
+        // window 10: all duplicates are caught, 5 unique triples remain.
+        LruWindowParam{10, "abcde"}));

@@ -7,6 +7,7 @@
 
 #include <thread>
 
+#include "util/GTestHelpers.h"
 #include "util/Timer.h"
 #include "util/jthread.h"
 
@@ -115,7 +116,7 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);
   }
-  ASSERT_THAT(s, ::testing::MatchesRegex("message: (2[5-9]|3[0-9])"));
+  ASSERT_THAT(s, MatchesRegex("message: (2[5-9]|3[0-9])"));
 }
 
 // ____________________________________________________________________________

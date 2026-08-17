@@ -13,8 +13,8 @@
 #include "engine/SpatialJoinAlgorithms.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace SpatialJoinTestHelpers {
 
@@ -529,6 +529,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    nullptr,
                                    0,
                                    0,
+                                   std::vector<ColumnIndex>{},
                                    std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),

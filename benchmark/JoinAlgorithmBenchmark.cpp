@@ -1351,14 +1351,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   single measurement took longer than was allowed via configuration options, or
   the stop function returned `true`.
   */
+  template <QL_CONCEPT_OR_TYPENAME(ad_utility::SameAsAny<float, size_t>)
+                ChangingParameterValue,
+            QL_CONCEPT_OR_TYPENAME(ad_utility::InvocableWithExactReturnType<
+                                   bool, float, size_t, size_t, size_t, size_t,
+                                   float, float>) StopFunction>
   bool addNewRowToBenchmarkTable(
-      ResultTable* table,
-      const QL_CONCEPT_OR_NOTHING(
-          ad_utility::SameAsAny<float, size_t>) auto changingParameterValue,
-      QL_CONCEPT_OR_NOTHING(ad_utility::InvocableWithExactReturnType<
-                            bool, float, size_t, size_t, size_t, size_t, float,
-                            float>) auto stopFunction,
-      const float overlap, const std::optional<size_t>& resultTableNumRows,
+      ResultTable* table, const ChangingParameterValue changingParameterValue,
+      StopFunction stopFunction, const float overlap,
+      const std::optional<size_t>& resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const float& ratioRows,
       const size_t& smallerTableNumRows, const size_t& smallerTableNumColumns,

@@ -14,8 +14,8 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/EncodedIriManager.h"
 #include "index/Index.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a

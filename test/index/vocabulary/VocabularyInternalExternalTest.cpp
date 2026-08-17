@@ -114,3 +114,19 @@ TEST(VocabularyInternalExternal, AccessOperator) {
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }
+
+// _____________________________________________________________________________
+TEST(VocabularyInternalExternal, ScanAll) {
+  // `scanAll` delegates to the external vocabulary and must yield all words in
+  // order.
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary("ScanAll")(words);
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()),
+              ::testing::ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInternalExternal, ScanAllEmptyVocabulary) {
+  auto vocab = createVocabulary("ScanAllEmpty")(std::vector<std::string>{});
+  EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
+}

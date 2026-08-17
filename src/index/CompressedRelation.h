@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <optional>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -187,7 +188,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Return true if a sequence of `CompressedBlockMetadata` is sorted, and if
   // all the triples that are the same when disregarding the graph are in the
   // same block.
-  static bool checkInvariantsForSortedBlocks(const auto& sequenceOfBlocks) {
+  template <typename SequenceOfBlocks>
+  static bool checkInvariantsForSortedBlocks(
+      const SequenceOfBlocks& sequenceOfBlocks) {
     return ::ranges::all_of(
         ::ranges::views::sliding(sequenceOfBlocks, 2),
         [](const auto& adjacent) {
@@ -305,7 +308,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_ = makeBlockWriteQueue();
+  ad_utility::TaskQueue<false> blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -320,12 +323,17 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
+  /// If `numWriterThreads` is set, it determines the number of threads that
+  /// compress and write blocks; otherwise the runtime parameter
+  /// `permutation-writer-num-threads` is used (see `makeBlockWriteQueue`).
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f,
-      ad_utility::MemorySize uncompressedBlocksizePerColumn)
+      ad_utility::MemorySize uncompressedBlocksizePerColumn,
+      std::optional<size_t> numWriterThreads = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
-        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn} {}
+        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
+        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {}
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
@@ -525,9 +533,12 @@ class CompressedRelationWriter {
       T inputs, std::string filename, ad_utility::MemorySize blocksize);
 
   // Create a `TaskQueue` for the compression and writing of blocks. The number
-  // of threads is determined by the runtime parameter
-  // "permutation-writer-num-threads".
-  static ad_utility::TaskQueue<false> makeBlockWriteQueue();
+  // of threads is `numThreadsOverride` if set, and otherwise determined by the
+  // runtime parameter "permutation-writer-num-threads". In both cases, a value
+  // of 0 means "as many threads as the hardware has", and larger values are
+  // capped at that number.
+  static ad_utility::TaskQueue<false> makeBlockWriteQueue(
+      std::optional<size_t> numThreadsOverride);
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfThreads);
 };
@@ -545,6 +556,15 @@ class CompressedRelationReader {
   using ColumnIndicesRef = ql::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+
+  // Optional override for the number of threads used to read and decompress
+  // blocks in `asyncParallelBlockGenerator`. When set, it takes precedence over
+  // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
+  // runtime index rebuild, which scans the old permutations through a dedicated
+  // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
+  // read/decompress parallelism without affecting query scans (which use the
+  // permutation's shared reader, where this stays `nullopt`).
+  std::optional<size_t> lazyScanNumThreadsOverride_ = std::nullopt;
 
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
@@ -871,11 +891,13 @@ class CompressedRelationReader {
   const Allocator& allocator() const { return allocator_; }
 
   // Allow to construct a `CompressedRelationReader` using a different
-  // allocator.
+  // allocator. The underlying file descriptor is duplicated (instead of
+  // opening the file again by name), so this also works when the file has
+  // been renamed since it was opened (see `File::duplicateForReading`).
   CompressedRelationReader makeReaderWithReboundAllocator(
       Allocator allocator) const {
     return CompressedRelationReader{std::move(allocator),
-                                    ad_utility::File{file_.name(), "r"},
+                                    file_.duplicateForReading(),
                                     useGraphPostProcessing_};
   }
 

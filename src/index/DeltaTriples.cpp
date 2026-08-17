@@ -16,6 +16,7 @@
 
 #include "Permutation.h"
 #include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
@@ -23,6 +24,7 @@
 #include "index/IndexImpl.h"
 #include "index/IndexRebuilder.h"
 #include "index/LocatedTriples.h"
+#include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Serializer/TripleSerializer.h"
 
@@ -92,9 +94,11 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
+template <typename IsInternal>
 void DeltaTriples::eraseTriplesInPermutation(
     Permutation::Enum permutation, ql::span<const IdTriple<0>> triples,
-    auto isInternal, ad_utility::SharedCancellationHandle cancellationHandle) {
+    IsInternal isInternal,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   // The requested `Permutation` and `LocatedTriplesPerBlock` for that
   // permutation from which the triples are erased.
   const auto& perm = index_.getPermutation(permutation);
@@ -232,10 +236,10 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
   Triples internalTriples;
   // Initialize on first use.
   if (languagePredicate_.isUndefined()) {
-    languagePredicate_ =
+    languagePredicate_ = toValueId(
         TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}
-            .toValueId(index_, localVocab_);
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)},
+        index_, localVocab_);
   }
   ad_utility::HashSet<Id> addedObjects;
   for (const auto& triple : triples) {
@@ -260,8 +264,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
     auto specialPredicate =
         ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
-    Id specialId = TripleComponent{std::move(specialPredicate)}.toValueId(
-        index_, localVocab_);
+    Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
+                             index_, localVocab_);
     // Extra triple `<subject> @language@<predicate> "object"@language`.
     internalTriples.push_back(
         IdTriple<0>{std::array{ids.at(0), specialId, objectId, ids.at(3)}});
@@ -272,8 +276,9 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     }
     Id langtagId =
         languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
-          return TripleComponent{ad_utility::convertLangtagToEntityUri(tag)}
-              .toValueId(index_, localVocab_);
+          return toValueId(
+              TripleComponent{ad_utility::convertLangtagToEntityUri(tag)},
+              index_, localVocab_);
         });
 
     // Because we don't track the exact counts of existing objects, we just
@@ -479,11 +484,10 @@ LocatedTriplesSharedState DeltaTriples::getLocatedTriplesSharedStateCopy()
     const {
   // Create a copy of the `LocatedTriplesState` for use as a constant
   // snapshot.
-  return LocatedTriplesSharedState{
-      std::make_shared<LocatedTriplesState>(LocatedTriplesState{
-          locatedTriples_->locatedTriplesPerBlock_,
-          locatedTriples_->internalLocatedTriplesPerBlock_,
-          localVocab_.getLifetimeExtender(), locatedTriples_->index_})};
+  return LocatedTriplesSharedState{std::make_shared<LocatedTriplesState>(
+      locatedTriples_->locatedTriplesPerBlock_,
+      locatedTriples_->internalLocatedTriplesPerBlock_,
+      localVocab_.getLifetimeExtender(), locatedTriples_->index_, getCounts())};
 }
 
 // ____________________________________________________________________________
@@ -657,13 +661,13 @@ void DeltaTriples::writeToDisk() const {
                }) |
            ql::views::join;
   };
-  std::filesystem::path tempPath = filenameForPersisting_.value();
+  ql::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
   ad_utility::serializeIds(
       tempPath, localVocab_,
       std::array{toRange(triplesSetsNormal_.triplesDeleted_),
                  toRange(triplesSetsNormal_.triplesInserted_)});
-  std::filesystem::rename(tempPath, filenameForPersisting_.value());
+  ql::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
 // _____________________________________________________________________________
@@ -672,8 +676,8 @@ void DeltaTriples::readFromDisk() {
     return;
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
-  auto [vocab, idRanges] =
-      ad_utility::deserializeIds(filenameForPersisting_.value(), index_);
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getLocalVocabContext());
   if (idRanges.empty()) {
     return;
   }
@@ -710,14 +714,26 @@ void DeltaTriples::setPersists(std::optional<std::string> filename) {
 }
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
-    std::string filename) {
+bool DeltaTriples::persists() const {
+  return filenameForPersisting_.has_value();
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdates(std::string filename,
+                                                          bool readFromDisk) {
   modify<void>(
-      [&filename](DeltaTriples& deltaTriples) {
+      [&filename, readFromDisk](DeltaTriples& deltaTriples) {
         deltaTriples.setPersists(std::move(filename));
-        deltaTriples.readFromDisk();
+        if (readFromDisk) {
+          deltaTriples.readFromDisk();
+        }
       },
       false);
+}
+
+// _____________________________________________________________________________
+bool DeltaTriplesManager::persists() const {
+  return deltaTriples_.rlock()->persists();
 }
 
 // _____________________________________________________________________________
@@ -745,7 +761,9 @@ void DeltaTriples::addFromSnapshotDiff(
     ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("computeLocatedTriplesDiff");
   auto difference = computeLocatedTriplesDiff(oldState, newState);
-  difference.remapIds([&idMapping](Id& id) { remapId(idMapping, id); });
+  difference.remapIds([this, &idMapping](Id& id) {
+    remapId(idMapping, id, localVocab_, index_);
+  });
   tracer.endTrace("computeLocatedTriplesDiff");
   tracer.beginTrace("insertDiffedTriples");
   auto addTriples = [this, &cancellationHandle, &difference, &tracer](
@@ -760,13 +778,21 @@ void DeltaTriples::addFromSnapshotDiff(
   addTriples(vi<true>, vi<true>);
   addTriples(vi<true>, vi<false>);
   tracer.endTrace("insertDiffedTriples");
+  // The four calls above bypass `insertTriples`/`deleteTriples` and thus do
+  // not consolidate. Consolidation is required before any read access, in
+  // particular before the `updateAugmentedMetadata` that follows in
+  // `DeltaTriplesManager::modify`.
+  tracer.beginTrace("consolidate");
+  consolidateAll();
+  tracer.endTrace("consolidate");
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
 }
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE void DeltaTriples::remapId(
-    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id) {
+void DeltaTriples::remapId(
+    const qlever::indexRebuilder::IndexRebuildMapping& idMapping, Id& id,
+    LocalVocab& localVocab, const IndexImpl& index) {
   const auto& [insertionPositions, localVocabMapping, blankNodeBlocks,
                minBlankNodeIndex] = idMapping;
   auto type = id.getDatatype();
@@ -775,11 +801,20 @@ AD_ALWAYS_INLINE void DeltaTriples::remapId(
   } else if (type == Datatype::LocalVocabIndex) {
     auto it = localVocabMapping.find(id.getBits());
     // If we have a mapping, this means that the new index used this to make a
-    // vocab index out of it and we have to do the same. If we don't have a
-    // mapping it will remain a local vocab index that is then copied into the
-    // delta triples vocabulary and remapped then.
+    // vocab index out of it and we have to do the same.
     if (it != localVocabMapping.end()) {
       id = it->second;
+    } else {
+      // Without a mapping the id remains of type `LocalVocabIndex` (a word
+      // first seen by updates after the rebuild snapshot was taken). It still
+      // points to an entry that is anchored to the OLD index; in particular,
+      // its lazily cached position refers to the old vocabulary. Insert a
+      // *re-anchored* copy (anchored to the new index, with an empty position
+      // cache) into the local vocab and rewrite the id, so that no entry of the
+      // new index references the old index, which is destroyed after the swap.
+      id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+          LocalVocabEntry{id.getLocalVocabIndex()->asLiteralOrIri(),
+                          index.getLocalVocabContext()}));
     }
   } else if (type == Datatype::BlankNodeIndex) {
     auto value = qlever::indexRebuilder::tryRemapBlankNodeId(

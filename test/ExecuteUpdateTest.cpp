@@ -452,7 +452,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
-                  LocalVocabEntry{literalOrIri, index});
+                  LocalVocabEntry{literalOrIri, index.getLocalVocabContext()});
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),

@@ -5,7 +5,7 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "index/Vocabulary.h"
+#include "index/vocabulary/Vocabulary.h"
 
 #include <iostream>
 
@@ -296,6 +296,21 @@ template <typename UnderlyingVocabulary, typename C, typename I>
 auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
     -> AccessReturnType {
   return vocabulary_[idx.get()];
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  return vocabulary_.lookupBatch(indices);
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabLookupOutput Vocabulary<S, C, I>::lookupBatchesStreamed(
+    VocabLookupInput input) const {
+  return vocabulary_.lookupBatchesStreamed(std::move(input));
 }
 
 // Explicit template instantiations

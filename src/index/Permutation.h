@@ -78,6 +78,13 @@ class Permutation {
   // to "PSO".
   static std::string_view toString(Enum permutation);
 
+  // Return the paths of the files that store `permutation` for the index with
+  // the given `onDiskBase` (the permutation file and its `.meta` file). For the
+  // files of an internal permutation, pass the base name with the
+  // `QLEVER_INTERNAL_INDEX_INFIX` already appended.
+  static std::vector<ql::filesystem::path> fileNames(
+      Enum permutation, std::string_view onDiskBase);
+
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
   static KeyOrder toKeyOrder(Enum permutation);
@@ -162,11 +169,18 @@ class Permutation {
   // `CompressedRelationReader` with an unlimited-memory allocator instead of
   // this permutation's shared reader. This allows the scan to run independently
   // of memory constraints imposed on most queries.
+  //
+  // `numThreadsOverride`, if set, overrides the number of block read/decompress
+  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
+  // parameter is used, as for query scans). The runtime index rebuild uses this
+  // to throttle its read parallelism (and hence peak CPU) without affecting
+  // queries.
   LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      std::optional<size_t> numThreadsOverride = std::nullopt) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.

@@ -10,12 +10,15 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
-#include <filesystem>
+#include <absl/functional/any_invocable.h>
+
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionContext.h"
@@ -33,6 +36,8 @@
 #include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
+#include "util/metrics/Metrics.h"
+#include "util/metrics/ServerMetrics.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -49,18 +54,30 @@ class ServerForTesting;
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
+  // Build a `QueryExecutionContext` for a given `IndexAndViews` snapshot,
+  // capturing the request-specific settings (message sender, pinning). This
+  // lets the caller bind the context to whichever snapshot is current when the
+  // operation actually runs (see `processUpdate`).
+  using MakeQueryExecutionContext =
+      absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
+          SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationAutomaticRebuild);
+  FRIEND_TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs);
   friend serverTestHelpers::ServerForTesting;
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   std::string accessToken, const qlever::EngineConfig& config,
-                  bool noAccessCheck = false);
+                  bool noAccessCheck = false,
+                  std::shared_ptr<ad_utility::metrics::MetricsReader>
+                      metricsReader = nullptr);
 
   virtual ~Server() = default;
 
@@ -70,7 +87,7 @@ class Server {
 
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
-  void configureQueryEventLog(const std::filesystem::path& path);
+  void configureQueryEventLog(const ql::filesystem::path& path);
 
   // Get server statistics.
   static json composeStatsJson(const Index& index);
@@ -100,6 +117,25 @@ class Server {
   // Indicates if an index rebuild is currently in progress so that we prevent
   // triggering this twice.
   std::atomic_bool rebuildInProgress_{false};
+
+  // If set, an index rebuild is triggered automatically after an update
+  // whenever the strategy says so, see `triggerRebuildIfStrategySaysSo`. Set
+  // via the `--rebuild-index-strategy` option of `qlever-server`.
+  std::optional<qlever::RebuildIndexStrategy> rebuildIndexStrategy_;
+
+  // Which `previous.*` index directories to keep after a successful rebuild
+  // (manual or automatic), see `KeepPreviousIndexDirs`. Set via the
+  // `--rebuild-keep-previous-index-dirs` option of `qlever-server`.
+  qlever::KeepPreviousIndexDirs keepPreviousIndexDirs_ =
+      qlever::KeepPreviousIndexDirs::OriginalAndMostRecent;
+
+  // MetricsReader for serving the /metrics endpoint. `nullptr` when metrics are
+  // disabled (--enable-metrics not passed).
+  std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader_;
+
+  // Deregisters callbacks on destruction. Declared after `qlever_` so that it
+  // is destroyed before `qlever_` which the callbacks access.
+  std::unique_ptr<ServerMetrics> metrics_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -186,11 +222,11 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          SharedIndexAndView indexAndViews, std::vector<ParsedQuery>&& updates,
+          MakeQueryExecutionContext makeQec, std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
+          const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
+          std::optional<PlannedQuery>& plannedUpdate);
 
   // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
@@ -206,9 +242,25 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
+  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
+  // meters for the simplification of geometries before indexing) from its
+  // string representation. Return `std::nullopt` if `simplificationStr` is
+  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
+  // floating-point number.
+  static std::optional<double> parsePinGeoIndexSimplification(
+      const std::optional<std::string>& simplificationStr);
+  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
+  // Describe the pinning of a named result (and, if applicable, of its geo
+  // index) for the request log line, e.g. `" [pin result with name
+  // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
+  // string if `pinResultWithName` is `std::nullopt`.
+  static std::string describePinResultWithNameForLog(
+      const std::optional<std::string>& pinResultWithName,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters);
+  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
-  auto prepareOperation(SharedIndexAndView indexAndViews,
-                        std::string_view operationName,
+  auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
                         ad_utility::websocket::MessageSender messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
@@ -223,18 +275,20 @@ class Server {
   // set, then the `qec` is configured such that the query result will be stored
   // in the named result cache. If `pinNamedGeoIndex` is also set, it is
   // expected to be the variable name of a column (without leading `?`) on which
-  // a geometry index should be built. Throws if named pinning is required, but
-  // the access token is not okay.
+  // a geometry index should be built. If `geoIndexSimplificationInMeters` is
+  // also set, geometries are simplified with the given maximum error in meters
+  // before indexing. Throw if named pinning is required, but the access token
+  // is not okay.
   static void configurePinnedResultWithName(
       const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex, bool accessTokenOk,
+      const std::optional<std::string>& pinNamedGeoIndex,
+      std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
       QueryExecutionContext& qec);
 
   // Plan a parsed query.
-  PlannedQuery planQuery(ParsedQuery&& operation,
-                         const ad_utility::Timer& requestTimer,
-                         TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle) const;
+  PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle, TimeLimit timeLimit,
+                         const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -332,21 +386,44 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
-  // Given a name and query, compute the query result and write a new
-  // materialized view of this result to disk. This assumes that the access
-  // token has already been checked.
-  void writeMaterializedView(
-      const std::string& name,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
-      const ad_utility::Timer& requestTimer,
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      TimeLimit timeLimit);
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 
-  // Trigger an index rebuild with `indexBaseName` as the base name for the new
-  // index. This assumes that the access token has already been checked and no
-  // other build is currently in progress.
-  Awaitable<void> rebuildIndex(const std::string& indexBaseName);
+  // Trigger an index rebuild: build a new index from the current state
+  // (including updates) in a temporary directory, swap it in, move the old
+  // index to the directory for the old index, and move the new index to the
+  // place of the old one (see `Qlever::swapInRebuiltIndex`). The two optional
+  // arguments override the defaults for the temporary directory and the
+  // directory for the old index; the full resolved configuration is returned.
+  // This assumes that the access token has already been checked and no other
+  // rebuild is currently in progress.
+  Awaitable<qlever::IndexRebuildConfig> rebuildIndex(
+      std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
+
+  // Like `rebuildIndex` above, but do nothing and return `std::nullopt` if
+  // another rebuild is currently in progress (the `rebuildInProgress_` flag
+  // is held for the duration of the rebuild). This is the common
+  // implementation behind the two ways of triggering a rebuild: the manual
+  // `cmd=rebuild-index` HTTP request and the automatic trigger below.
+  Awaitable<std::optional<qlever::IndexRebuildConfig>>
+  rebuildIndexUnlessInProgress(
+      std::optional<std::string> rebuildTmpDir,
+      std::optional<std::string> rebuildPreviousIndexDir);
+
+  // If `rebuildIndexStrategy_` is set and it says a rebuild should be
+  // triggered for `count` (the number of delta triples after an update) and
+  // the given number of triples in the current index, trigger an index
+  // rebuild in the background, unless one is already in progress. Returns
+  // immediately; the rebuild runs detached and logs its success or failure.
+  void triggerRebuildIfStrategySaysSo(const DeltaTriplesCount& count,
+                                      size_t numIndexTriples);
+
+  // The background coroutine spawned by `triggerRebuildIfStrategySaysSo`:
+  // run the rebuild (unless one is already in progress) and log the outcome.
+  Awaitable<void> runAutomaticRebuild();
+
+  // Completion handler of that coroutine: log the exception, if there is one.
+  static void logAutomaticRebuildFailure(std::exception_ptr exception);
 
   // Getters for the `Qlever` instance, as well as its data members.
   qlever::Qlever& qlever() { return qlever_; }

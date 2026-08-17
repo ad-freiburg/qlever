@@ -23,6 +23,30 @@ class ZstdWrapper {
     return result;
   }
 
+  // Return the size of the uncompressed data of the ZSTD frame that starts at
+  // `src` and consists of `numBytes` bytes, as stored in the header of that
+  // frame. Throw a descriptive exception if `src` does not point to the
+  // beginning of a valid ZSTD frame (in particular, if `numBytes` is too small
+  // to even hold a frame header), or if the frame does not store the size of
+  // its uncompressed data (which is the case for frames written by a streaming
+  // compressor, but never for frames written by `compress` above). Note that
+  // only the frame header is inspected, so this is cheap, but it does not
+  // detect corruption of the compressed data itself.
+  static size_t getUncompressedSize(const void* src, size_t numBytes) {
+    auto uncompressedSize = ZSTD_getFrameContentSize(src, numBytes);
+    if (uncompressedSize == ZSTD_CONTENTSIZE_ERROR) {
+      throw std::runtime_error{
+          "Could not determine the size of the uncompressed data: the given "
+          "data does not start with a valid ZSTD frame header"};
+    }
+    if (uncompressedSize == ZSTD_CONTENTSIZE_UNKNOWN) {
+      throw std::runtime_error{
+          "Could not determine the size of the uncompressed data: the given "
+          "ZSTD frame does not store that size in its header"};
+    }
+    return static_cast<size_t>(uncompressedSize);
+  }
+
   // Decompress the given byte array, assuming that the size of the decompressed
   // data is known.
   CPP_template(typename T)(

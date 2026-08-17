@@ -7,6 +7,7 @@
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
+#include "util/VectorWithMemoryLimit.h"
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
@@ -66,7 +67,7 @@ size_t IdTableUtils::countDistinct(
   }
   // Store whether the `i`-th entry in the `input` is equal to the `i+1`-th
   // entry in the columns that have already been checked.
-  std::vector<char, ad_utility::AllocatorWithLimit<char>> counter(
+  ad_utility::VectorWithMemoryLimit<char> counter(
       input.numRows() - 1, static_cast<char>(true), input.getAllocator());
 
   // For each column, set the entries in `counter` to 0 where there's a

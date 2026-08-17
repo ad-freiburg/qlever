@@ -51,17 +51,38 @@ CPP_concept ReadPolicyConcept =
     concepts::unsigned_integral<typename T::BatchHandle> &&
     CPP_requires_ref(ReadPolicy_, T);
 
+// Abstract base of `BatchManager` so a pool can hold managers of different
+// `ReadPolicy`s behind a unified interface and pick the backend at runtime.
+class BatchManagerBase {
+ public:
+  using BatchHandle = uint64_t;
+  virtual ~BatchManagerBase() = default;
+
+  [[nodiscard]] virtual BatchHandle addBatch(int fd,
+                                             ql::span<const size_t> numBytes,
+                                             ql::span<const uint64_t> offsets,
+                                             ql::span<char*> buffers) = 0;
+
+  virtual void wait(BatchHandle handle) = 0;
+};
+
 // `BatchManager` owns the batch bookkeeping (minting a `BatchHandle` per batch,
 // validating the input spans) and delegates the reads from the underlying
 // Vocabulary to the `Policy`, which must satisfy the `ReadPolicy` concept
 // above.
 template <typename ReadPolicy>
-class BatchManager {
-  static_assert(ReadPolicyConcept<ReadPolicy>,
-                "BatchManager's Policy must satisfy the ReadPolicy concept.");
+class BatchManager final : public BatchManagerBase {
+  static_assert(
+      ReadPolicyConcept<ReadPolicy>,
+      "BatchManager's ReadPolicy must satisfy the ReadPolicyConcept concept.");
+  // The policy is only valid if the policy's handle type matches the base's.
+  static_assert(
+      std::is_same_v<typename ReadPolicy::BatchHandle,
+                     BatchManagerBase::BatchHandle>,
+      "ReadPolicy::BatchHandle must match BatchManagerBase::BatchHandle.");
 
  public:
-  using BatchHandle = typename ReadPolicy::BatchHandle;
+  using BatchHandle = typename BatchManagerBase::BatchHandle;
 
   explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
 
@@ -70,7 +91,7 @@ class BatchManager {
 
   [[nodiscard]] BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
                                      ql::span<const uint64_t> offsets,
-                                     ql::span<char*> buffers) {
+                                     ql::span<char*> buffers) override {
     validateSameLength(numBytes, offsets, buffers);
 
     BatchHandle handle = nextBatchHandle_++;
@@ -82,10 +103,10 @@ class BatchManager {
   }
 
   // Block until every read in `handle` has completed.
-  void wait(BatchHandle handle) { policy_.wait(handle); }
+  void wait(BatchHandle handle) override { policy_.wait(handle); }
 
  private:
-  ReadPolicy policy_;
+  [[no_unique_address]] ReadPolicy policy_;
   BatchHandle nextBatchHandle_ = 0;
 
   template <typename Span0, typename... Spans>
@@ -93,7 +114,7 @@ class BatchManager {
     const auto n = ql::ranges::size(first);
     auto valid = ((ql::ranges::size(rest) == n) && ...);
     if (!valid) {
-      AD_THROW("spans should have same length");
+      AD_THROW("spans must have same length");
     }
     return;
   }
@@ -215,6 +236,33 @@ using BatchIoManager = BatchManager<IoUringPolicy>;
 #else
 using BatchIoManager = BatchManager<SyncIoPolicy>;
 #endif
+
+// Build a batch manager. When io_uring is compiled in and the runtime flag
+// `preferIoUring` is set, try to build an `IoUringManager`. If its setup
+// syscall fails at runtime clear `preferIoUring` and fall back to a
+// `SyncIoManager`. Passing the flag by reference makes this probe-once: after
+// the first failure, every subsequent call goes straight to the sync manager,
+// so we don't repeat a failing syscall.
+inline std::unique_ptr<BatchManagerBase> makeBatchManager(
+    bool& preferIoUring, unsigned ringSize = 256) {
+#ifdef QLEVER_HAS_IO_URING
+  if (preferIoUring) {
+    try {
+      return std::make_unique<BatchManager<IoUringPolicy>>(ringSize);
+    } catch (const std::exception& e) {
+      preferIoUring = false;
+      AD_LOG_WARN << "io_uring is compiled in but unavailable at runtime ("
+                  << e.what()
+                  << "); falling back to synchronous pread for vocabulary "
+                     "lookups"
+                  << std::endl;
+    }
+  }
+#else
+  preferIoUring = false;
+#endif
+  return std::make_unique<BatchManager<SyncIoPolicy>>(ringSize);
+}
 
 }  // namespace ad_utility
 

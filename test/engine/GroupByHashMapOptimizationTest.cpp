@@ -28,8 +28,9 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
       std::make_shared<ad_utility::CancellationHandle<>>(),
       sparqlExpression::EvaluationContext::TimePoint::max()};
 
-  Id calculate(const auto& data) {
-    return data.calculateResult(qec_->getIndex(), &localVocab_);
+  template <typename Data>
+  Id calculate(const Data& data) {
+    return data.calculateResult(qec_->getLocalVocabContext(), &localVocab_);
   }
 
   template <typename T>

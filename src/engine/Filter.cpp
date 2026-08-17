@@ -79,7 +79,7 @@ Result Filter::computeResult(bool requestLaziness) {
 
   if (requestLaziness) {
     return {Result::LazyResult{
-                ad_utility::OwningView{ad_utility::CachingTransformInputRange{
+                ad_utility::CachingTransformInputRange{
                     subRes->idTables(),
                     [this, subRes](auto& idTableVocabPair) {
                       IdTable filteredTable = this->filterIdTable(
@@ -87,7 +87,7 @@ Result Filter::computeResult(bool requestLaziness) {
                       return Result::IdTableVocabPair{
                           std::move(filteredTable),
                           std::move(idTableVocabPair.localVocab_)};
-                    }}} |
+                    }} |
 
                 ql::views::filter(
                     [](const auto& pair) { return !pair.idTable_.empty(); })},

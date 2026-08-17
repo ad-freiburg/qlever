@@ -7,6 +7,7 @@
 
 #include <string_view>
 
+#include "index/TripleComponentConversions.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 
@@ -45,6 +46,15 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
           "The parameter <numPathsPerTarget> expects an integer");
     }
     numPathsPerTarget_ = object.getInt();
+  } else if (predString == "maxDepth") {
+    if (!object.isInt()) {
+      throw PathSearchException("The parameter <maxDepth> expects an integer");
+    }
+    if (object.getInt() < 0) {
+      throw PathSearchException(
+          "The parameter <maxDepth> must not be negative");
+    }
+    maxDepth_ = static_cast<uint64_t>(object.getInt());
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
       throw PathSearchException("The <algorithm> value has to be an IRI");
@@ -62,7 +72,8 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException(absl::StrCat(
         "Unsupported argument <", predString,
         "> in PathSearch. Supported Arguments: <source>, <target>, <start>, "
-        "<end>, <pathColumn>, <edgeColumn>, <edgeProperty>, <algorithm>."));
+        "<end>, <pathColumn>, <edgeColumn>, <edgeProperty>, <algorithm>, "
+        "<cartesian>, <numPathsPerTarget>, <maxDepth>."));
   }
 }
 
@@ -79,7 +90,7 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
             "Only one variable is allowed per search side");
       }
       LocalVocab lv;
-      auto id = TripleComponent{comp}.toValueId(index, lv);
+      auto id = toValueId(TripleComponent{comp}, index, lv);
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         throw PathSearchException("No vocabulary entry for " + comp.toString());
       } else {
@@ -110,7 +121,7 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
       algorithm_,          sources,         targets,
       start_.value(),      end_.value(),    pathColumn_.value(),
       edgeColumn_.value(), edgeProperties_, cartesian_,
-      numPathsPerTarget_};
+      numPathsPerTarget_,  maxDepth_};
 }
 
 }  // namespace parsedQuery

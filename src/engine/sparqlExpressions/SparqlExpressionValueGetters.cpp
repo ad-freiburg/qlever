@@ -13,10 +13,10 @@
 #include "global/ValueId.h"
 #include "index/ExportIds.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/ParsedUri.h"
 
 using namespace sparqlExpression::detail;
@@ -683,6 +683,8 @@ template struct TypeErasedValueGetter<LiteralValueGetterWithoutStrFunction>;
 template struct TypeErasedValueGetter<
     IsValueIdValueGetter<Datatype::BlankNodeIndex>>;
 template struct TypeErasedValueGetter<IsValueIdValueGetter<Datatype::GeoPoint>>;
+template struct TypeErasedValueGetter<
+    IsValueIdValueGetter<Datatype::EncodedVal>>;
 template struct TypeErasedValueGetter<IsNumericValueGetter>;
 template struct TypeErasedValueGetter<IsIriValueGetter>;
 template struct TypeErasedValueGetter<IsLiteralValueGetter>;

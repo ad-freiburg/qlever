@@ -9,8 +9,8 @@
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/GTestHelpers.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/HashSet.h"
 
 // _____________________________________________________________________________

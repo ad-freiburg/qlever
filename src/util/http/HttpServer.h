@@ -6,8 +6,12 @@
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
 
+#include <absl/cleanup/cleanup.h>
+
+#include <chrono>
 #include <cstdlib>
 #include <future>
+#include <thread>
 
 #include "backports/span.h"
 #include "util/Exception.h"
@@ -16,6 +20,7 @@
 #include "util/http/beast.h"
 #include "util/http/websocket/WebSocketSession.h"
 #include "util/jthread.h"
+#include "util/metrics/InstrumentedExecutor.h"
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
 namespace net = boost::asio;       // from <boost/asio.hpp>
@@ -73,16 +78,34 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
+  std::shared_ptr<ad_utility::IoContextMetrics> ioContextMetrics_ =
+      std::make_shared<ad_utility::IoContextMetrics>(
+          ad_utility::makeIoContextMetrics());
+  // `instrumentedExec_` and `executor_` depend on `ioContext_`.
+  ad_utility::InstrumentedExecutor<net::io_context::executor_type>
+      instrumentedExec_;
+  net::any_io_executor executor_;
+
+  // `websocketHandler_` depends on `executor_`.
   WebSocketHandler webSocketHandler_;
   ad_utility::MemorySize lazyBodyChunkSize_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
   // unit tests.
-  net::strand<net::io_context::executor_type> acceptorStrand_ =
-      net::make_strand(ioContext_);
+  // Use strand<any_io_executor> so that coroutines (which use any_io_executor
+  // internally) and socket type conversions all work without type friction.
+  // The any_io_executor wraps our InstrumentedExecutor, so every handler
+  // dispatch is still instrumented.
+  net::strand<net::any_io_executor> acceptorStrand_ =
+      net::make_strand(executor_);
   tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
+  // Number of currently active `session` coroutines. `shutDown` waits (for a
+  // bounded time) until this reaches zero before stopping the `io_context`, so
+  // that in-flight sessions can finish (in particular, flush their final log
+  // messages). See `shutDown` for details.
+  std::atomic<int> numActiveSessions_ = 0;
 
  public:
   /// Construct from the `queryRegistry`, port and ip address, on which this
@@ -98,7 +121,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   template <typename HandlerSupplier>
   static constexpr bool isSupplier =
       ad_utility::InvocableWithConvertibleReturnType<
-          HandlerSupplier, WebSocketHandler, net::io_context&>;
+          HandlerSupplier, WebSocketHandler, net::any_io_executor&>;
   CPP_template_2(typename HandlerSupplier)(
       requires isSupplier<
           HandlerSupplier>) explicit HttpServer(unsigned short port,
@@ -119,9 +142,12 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
+        instrumentedExec_{ioContext_.get_executor(), ioContextMetrics_},
+        executor_{instrumentedExec_},
         webSocketHandler_{
-            std::invoke(std::move(webSocketHandlerSupplier), ioContext_)},
+            std::invoke(std::move(webSocketHandlerSupplier), executor_)},
         lazyBodyChunkSize_{lazyBodyChunkSize} {
+    ioContextMetrics_->maxHandlers_->Record(numServerThreads_);
     try {
       tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
@@ -183,6 +209,24 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
 
     // Wait until the posted task has successfully executed
     future.wait();
+
+    // Give still-active sessions a bounded grace period to finish before we
+    // tear down the `io_context`. This matters because a session may be
+    // suspended at an `async_*` operation between sending its response and
+    // running its exception-handling/logging code. `ioContext_.stop()` discards
+    // all queued completion handlers, so without this wait the handler that
+    // would resume such a session (and let it log) may never run, losing the
+    // log output. The client has already received the response at that point,
+    // so a test that shuts down right after reading the response would race
+    // with the server's logging (see `HttpTest`'s `ErrorHandlingInSession`).
+    // The bound is a safety net so that a genuinely stuck session (e.g. an idle
+    // keep-alive or WebSocket connection) cannot make `shutDown` hang forever.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (numActiveSessions_.load() > 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
     // Make sure the tests don't run forever because without this `run()` may
     // not terminate.
     ioContext_.stop();
@@ -433,7 +477,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
         // Although a coroutine is conceptually single-threaded we still
         // schedule onto an explicit strand because the Websocket implementation
         // expects a strand.
-        auto strand = net::make_strand(ioContext_);
+        auto strand = net::make_strand(executor_);
         auto socket =
             co_await acceptor_.async_accept(strand, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
@@ -452,6 +496,14 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   // This coroutine handles a single http session which is represented by a
   // socket.
   boost::asio::awaitable<void> session(tcp::socket socket) {
+    // Track this session as active so that `shutDown` can wait for it to finish
+    // before stopping the `io_context`. The counter is decremented when this
+    // coroutine's frame is destroyed, i.e. after all of its code (including any
+    // exception logging) has run.
+    numActiveSessions_.fetch_add(1);
+    absl::Cleanup decrementActiveSessions{
+        [this]() { numActiveSessions_.fetch_sub(1); }};
+
     beast::flat_buffer buffer;
     beast::tcp_stream stream{std::move(socket)};
 
@@ -571,6 +623,6 @@ HttpServer(unsigned short, const std::string&, int, HttpHandler,
            WebSocketHandlerSupplier)
     -> HttpServer<
         BodyReadMode::Eager, HttpHandler,
-        std::invoke_result_t<WebSocketHandlerSupplier, net::io_context&>>;
+        std::invoke_result_t<WebSocketHandlerSupplier, net::any_io_executor&>>;
 
 #endif  // QLEVER_HTTPSERVER_H

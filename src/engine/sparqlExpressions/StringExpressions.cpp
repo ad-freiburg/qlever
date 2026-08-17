@@ -13,7 +13,8 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
-#include "index/EncodedIriManager.h"
+#include "index/TripleComponentConversions.h"
+#include "index/vocabulary/EncodedIriManager.h"
 #include "parser/RdfParser.h"
 #include "util/ParsedUri.h"
 #include "util/StringUtils.h"
@@ -158,10 +159,26 @@ struct UpperOrLowerCaseImpl {
   }
 };
 
+// `ad_utility::utf8ToLower` and `ad_utility::utf8ToUpper` have an optional
+// locale argument, so their addresses cannot be used directly as the
+// (single-argument) non-type template argument of `UpperOrLowerCaseImpl`. Wrap
+// them in functions with the exact required signature.
+// TODO<RobinTF> These use the locale-independent (root) case conversion, as
+// `LCASE` and `UCASE` always have. Note that this can differ from the
+// (locale-dependent) lowercasing the index uses for its vocabulary, which could
+// in principle lead to missed lookups; revisit once a locale can be wired into
+// the n-ary string expressions.
+inline std::string utf8ToLowerRootLocale(std::string_view s) {
+  return ad_utility::utf8ToLower(s);
+}
+inline std::string utf8ToUpperRootLocale(std::string_view s) {
+  return ad_utility::utf8ToUpper(s);
+}
+
 using UppercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToUpper>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&utf8ToUpperRootLocale>>;
 using LowercaseExpression =
-    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&ad_utility::utf8ToLower>>;
+    LiteralExpressionImpl<1, UpperOrLowerCaseImpl<&utf8ToLowerRootLocale>>;
 
 // SUBSTR
 class SubstrImpl {
@@ -597,7 +614,7 @@ struct StrIriDtTag {
       auto tc =
           TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
               content, inputIri.value(), ev);
-      auto id = tc.toValueIdIfNotString(&ev);
+      auto id = toValueIdIfNotString(tc, &ev);
       if (id.has_value()) {
         return id.value();
       }

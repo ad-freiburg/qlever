@@ -18,8 +18,10 @@
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 
-class IndexImpl;
-using LocalVocabContext = IndexImpl;
+// The interface that this class needs from the index it belongs to. Only
+// forward-declared here, because its definition requires `global/Id.h`, which
+// in turn requires this header (see the note on `IdProxy` below).
+class LocalVocabContext;
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -66,7 +68,8 @@ class alignas(16) LocalVocabEntry
       : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known.
-  LocalVocabEntry(Base&& base, auto lower, auto upper,
+  template <typename Lower, typename Upper>
+  LocalVocabEntry(Base&& base, Lower lower, Upper upper,
                   const LocalVocabContext& context)
       : Base{std::move(base)},
         context_{&context},
@@ -142,6 +145,22 @@ class alignas(16) LocalVocabEntry
   // performance.
   ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
+
+  // Two entries are equal if and only if their string representations are, so
+  // forward to the base class instead of going through `compareThreeWay`, which
+  // would use the much more expensive collation of the vocabulary. This is what
+  // happens implicitly anyway (the operators defined by the macro above do not
+  // include `operator==`), but state it explicitly so that it doesn't silently
+  // change when `compareThreeWay` does.
+  bool operator==(const LocalVocabEntry& rhs) const {
+    return static_cast<const Base&>(*this) == static_cast<const Base&>(rhs);
+  }
+  // Declaring `operator==` above hides the ones inherited from `Base`, which
+  // would otherwise make comparisons against a plain `LiteralOrIri` ill-formed.
+  using Base::operator==;
+
+  // Expose `context_` for testing.
+  const LocalVocabContext& getContextForTesting() const { return *context_; }
 
  private:
   // The expensive case of looking up the position in vocab.

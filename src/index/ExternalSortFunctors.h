@@ -70,7 +70,8 @@ using SortByOSP = SortTriple<2, 0, 1>;
 
 struct SortText {
   // < comparator
-  bool operator()(const auto& a, const auto& b) const {
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
     return ql::ranges::lexicographical_compare(
         a, b, [](const Id& x, const Id& y) {
           return x.compareWithoutLocalVocab(y) < 0;

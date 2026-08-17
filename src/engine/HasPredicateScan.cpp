@@ -11,6 +11,7 @@
 #include "engine/Join.h"
 #include "engine/PermutationSelector.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 // Assert that the `type` is a valid value for the `ScanType` enum.
@@ -109,9 +110,9 @@ std::string HasPredicateScan::getDescriptor() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
-      return "HasPredicateScan free subject: " + subject_.toRdfLiteral();
+      return "HasPredicateScan free subject: " + toRdfLiteral(subject_);
     case ScanType::FREE_O:
-      return "HasPredicateScan free object: " + object_.toRdfLiteral();
+      return "HasPredicateScan free object: " + toRdfLiteral(object_);
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
@@ -281,9 +282,9 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   };
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id = tc.toValueId(getIndex());
+    std::optional<Id> id = toValueId(tc, getIndex());
     if (!id.has_value()) {
-      AD_THROW("The entity '" + tc.toRdfLiteral() +
+      AD_THROW("The entity '" + toRdfLiteral(tc) +
                "' required by `ql:has-predicate` is not in the vocabulary.");
     }
     return id.value();

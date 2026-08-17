@@ -263,7 +263,8 @@ struct CompressedRelationWriter::PermutationWriter {
   // 1. The relation buffer is at the block size limit, AND
   // 2. The current triple has different first three columns than the last
   //    triple in the buffer (to ensure equal triples stay in same block)
-  bool isEndOfBlockForLargeRelation(const auto& curRemainingCols) {
+  template <typename CurRemainingCols>
+  bool isEndOfBlockForLargeRelation(const CurRemainingCols& curRemainingCols) {
     if (relation_.size() < blocksize_) {
       return false;
     }

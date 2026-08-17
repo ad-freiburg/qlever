@@ -10,6 +10,7 @@
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -96,7 +97,8 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 // Check that `expected` and `actual` have the same contents. The `int`s in
 // expected are converted to `Id`s of type `VocabIndex` using the `V`-function
 // before the comparison.
-void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
+template <typename Expected>
+void checkThatTablesAreEqual(const Expected& expected, const IdTable& actual,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
@@ -270,7 +272,8 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`.  `blocksize` is the size of the
 // blocks in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
+template <typename Inputs>
+void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
                              ad_utility::MemorySize blocksize,
                              float locatedTriplesProbability = 0.5) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
@@ -1041,8 +1044,10 @@ TEST(CompressedRelationReader, getFirstAndLastTripleIgnoringGraph) {
       currentSnapshot->getLocatedTriplesForPermutation<false>(permutationEnum);
 
   auto getId = [&index](std::string_view iri) {
-    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(iri)}
-        .toValueId(index)
+    return toValueId(
+               TripleComponent{
+                   ad_utility::triple_component::Iri::fromIriref(iri)},
+               index)
         .value();
   };
   auto a = getId("<a>");
@@ -1113,7 +1118,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       std::move(testIndexConfig));
   index.deltaTriplesManager().modify<void>(
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
-        LocalVocabEntry entry = LocalVocabEntry::fromIriref("<zzz>", index);
+        LocalVocabEntry entry =
+            LocalVocabEntry::fromIriref("<zzz>", index.getLocalVocabContext());
         Id id = Id::makeFromLocalVocabIndex(&entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
@@ -1369,6 +1375,29 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
     EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+  }
+  {
+    // An explicit override (used by the runtime index rebuild via
+    // `rebuild-permutation-writer-num-threads`) wins over the runtime
+    // parameter.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
+                                    1};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+  }
+  {
+    // An override is capped at the number of hardware threads, just like the
+    // runtime parameter.
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
+                                    1337};
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
+              threads);
+    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
+              threads * 2);
   }
 }
 
