@@ -275,7 +275,7 @@ class WktSimplify {
 
 // A generic operation for all geometric relation functions, like
 // `geof:sfIntersects`.
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 class WktGeometricRelation {
  public:
   ValueId operator()(
@@ -286,7 +286,8 @@ class WktGeometricRelation {
     AD_THROW(
         "Geometric relations via the `geof:sfIntersects` ... functions are "
         "currently only implemented for a subset of all possible queries. More "
-        "details on GeoSPARQL support can be found on the QLever Wiki.");
+        "details on GeoSPARQL support can be found in the QLever Docs "
+        "(https://docs.qlever.dev/geosparql/).");
   }
 };
 

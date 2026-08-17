@@ -921,7 +921,7 @@ class CompressedExternalIdTableSorter
       }
       return blockSizeForOutput;
     }
-  };
+  }
 };
 }  // namespace ad_utility
 

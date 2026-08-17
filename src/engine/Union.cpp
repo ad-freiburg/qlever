@@ -390,6 +390,32 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
+  // Note that we use the merged `getLimitOffset()` and not the clause that was
+  // passed in, which only holds the increment that was just added. The bound
+  // below depends on the total limit and offset, so for nested subqueries the
+  // increment alone would be too small.
+  const auto& limitOffset = getLimitOffset();
+  if (!limitOffset._limit.has_value()) {
+    return;
+  }
+  uint64_t limit = limitOffset._limit.value();
+  uint64_t offset = limitOffset._offset;
+  // We have to be careful to not cause an overflow when adding the offset and
+  // the limit.
+  if (limit > std::numeric_limits<uint64_t>::max() - offset) {
+    return;
+  }
+  // Both children only have to supply their first `limit + offset` rows: Each
+  // row of the result consumes exactly one row of one of the children, no
+  // matter whether they are concatenated or merged according to `targetOrder_`.
+  for (auto& subtree : _subtrees) {
+    subtree = subtree->clone();
+    subtree->applyLimitOffset(LimitOffsetClause{limit + offset});
+  }
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));

@@ -17,6 +17,8 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -1215,6 +1217,7 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
+using ad_utility::testing::encodedIriManager;
 
 const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
     {std::string{QLEVER_INTERNAL_PREFIX_NAME},
@@ -1230,10 +1233,9 @@ auto parse =
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
-      static EncodedIriManager encodedIriManager;
       ParserAndVisitor p{
-          &blankNodeManager,   &encodedIriManager, input,
-          std::move(prefixes), std::move(clauses), disableSomeChecks};
+          &blankNodeManager,   encodedIriManager(), input,
+          std::move(prefixes), std::move(clauses),  disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }

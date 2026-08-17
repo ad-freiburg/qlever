@@ -50,4 +50,4 @@ ParseException::ParseException(std::string_view cause,
   } else {
     causeWithMetadata_ = cause_;
   }
-};
+}

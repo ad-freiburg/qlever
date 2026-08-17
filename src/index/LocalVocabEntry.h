@@ -119,7 +119,7 @@ class alignas(16) LocalVocabEntry
     IdProxy upperBound_;
 
     QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PositionInVocab, lowerBound_,
-                                                upperBound_);
+                                                upperBound_)
   };
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
