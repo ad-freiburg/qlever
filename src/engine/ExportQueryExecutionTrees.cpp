@@ -41,6 +41,13 @@ namespace {
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
 
+// `0` for `construct-export-num-threads` means all logical cores.
+size_t resolveConstructExportNumThreads() {
+  const size_t n =
+      getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>();
+  return n == 0 ? std::max(1u, std::thread::hardware_concurrency()) : n;
+}
+
 // _____________________________________________________________________________
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -839,14 +846,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   // whose ID-space filter and `dedupVocab_` re-anchoring are guarded by a
   // mutex (see `ConstructDeduplicator::isNew`); the string formatting happens
   // outside the lock.
-  size_t numThreads =
-      getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>();
   bool dedupActive =
       !std::holds_alternative<ad_utility::DeduplicationMode::None>(
-          getRuntimeParameter<&RuntimeParameters::constructDeduplication_>().value_);
-  if (numThreads == 0) {
-    numThreads = std::max(1u, std::thread::hardware_concurrency());
-  }
+          getRuntimeParameter<&RuntimeParameters::constructDeduplication_>()
+              .value_);
+  const size_t numThreads = resolveConstructExportNumThreads();
   // Copy the cancellation handle (instead of moving it like the serial path),
   // because the parallel path checks it again while collecting the results.
   auto config = makeConstructEvaluationConfig(qet, cancellationHandle);
