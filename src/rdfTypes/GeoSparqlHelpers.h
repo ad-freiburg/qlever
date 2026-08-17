@@ -334,8 +334,9 @@ class WktDe9imRelation {
       [[maybe_unused]] const std::optional<std::string>& pattern) const {
     AD_THROW(
         "The `geof:relate` function is currently only implemented for a "
-        "subset of all possible queries. More details on GeoSPARQL support "
-        "can be found in the QLever Docs "
+        "subset of all possible queries, namely spatial joins using `FILTER "
+        "geof:relate(?geometryA, ?geometryB, \"<DE-9IM pattern>\")`. More "
+        "details on GeoSPARQL support can be found in the QLever Docs "
         "(https://docs.qlever.dev/geosparql/).");
   }
 };

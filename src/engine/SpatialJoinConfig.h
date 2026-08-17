@@ -21,6 +21,7 @@
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 #include "util/EnumWithStrings.h"
+#include "util/Exception.h"
 
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
@@ -52,6 +53,19 @@ struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<double> maxDist_ = std::nullopt;
   std::optional<De9imFilterString> de9imFilter_ = std::nullopt;
+
+  // The constructor checks that `maxDist_` and `de9imFilter_` are only set
+  // together with their respective matching `joinType_`, because these
+  // fields are not independent of each other.
+  explicit LibSpatialJoinConfig(
+      SpatialJoinType joinType, std::optional<double> maxDist = std::nullopt,
+      std::optional<De9imFilterString> de9imFilter = std::nullopt)
+      : joinType_{joinType}, maxDist_{maxDist}, de9imFilter_{de9imFilter} {
+    AD_CORRECTNESS_CHECK(!maxDist_.has_value() ||
+                         joinType_ == SpatialJoinType::WITHIN_DIST);
+    AD_CORRECTNESS_CHECK(!de9imFilter_.has_value() ||
+                         joinType_ == SpatialJoinType::DE9IM);
+  }
 };
 
 // Configuration to restrict the results provided by the SpatialJoin

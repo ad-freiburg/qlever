@@ -87,6 +87,10 @@ NARY_EXPRESSION(
     GeoRelationExpression, 2,
     FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
+// The actual `geof:relate` expression is currently unimplemented (see
+// `WktDe9imRelation` in `GeoSparqlHelpers.h`), it is only usable via query
+// rewriting to a `SpatialJoin`. The value getters below are thus dummies for
+// now.
 NARY_EXPRESSION(De9imRelationExpression, 3,
                 FV<ad_utility::WktDe9imRelation, GeoPointValueGetter,
                    GeoPointValueGetter, StringValueGetter>);
@@ -415,7 +419,7 @@ using Ptr = sparqlExpression::SparqlExpression::Ptr;
 #endif
 #define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)          \
   template Ptr sparqlExpression::makeGeoRelationExpression< \
-      SpatialJoinType::Enum::joinType>(Ptr, Ptr);
+      SpatialJoinType::Enum::joinType>(Ptr, Ptr)
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
