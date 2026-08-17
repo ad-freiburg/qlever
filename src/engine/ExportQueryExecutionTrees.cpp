@@ -855,15 +855,18 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   if (numThreads <= 1) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-    return constructQueryResultSerial<format>(
+    auto gen = constructQueryResultSerial<format>(
         qet, constructTriples, limitAndOffset, std::move(rowIndices),
         std::move(config), streamableYielder);
+    for (auto&& chunk : gen) {
+      STREAMABLE_YIELD(chunk);
+    }
 #else
     constructQueryResultSerial<format>(qet, constructTriples, limitAndOffset,
                                        std::move(rowIndices), std::move(config),
                                        streamableYielder);
-    return;
 #endif
+    STREAMABLE_RETURN;
   }
 
   if (dedupActive) {
@@ -872,17 +875,19 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
             config.mode_, *qet.getQec());
   }
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  return constructQueryResultParallel<format>(
+  auto gen = constructQueryResultParallel<format>(
       qet, constructTriples, limitAndOffset, std::move(rowIndices),
-      std::move(config), numThreads, std::move(cancellationHandle),
-      streamableYielder);
+      std::move(config), numThreads, cancellationHandle, streamableYielder);
+  for (auto&& chunk : gen) {
+    STREAMABLE_YIELD(chunk);
+  }
 #else
   constructQueryResultParallel<format>(
       qet, constructTriples, limitAndOffset, std::move(rowIndices),
       std::move(config), numThreads, std::move(cancellationHandle),
       streamableYielder);
-  return;
 #endif
+  STREAMABLE_RETURN;
 }
 
 // _____________________________________________________________________________
