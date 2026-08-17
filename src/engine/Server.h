@@ -19,6 +19,7 @@
 
 #include "backports/filesystem.h"
 #include "engine/ExecuteUpdate.h"
+#include "engine/HttpApiHelpers.h"
 #include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -63,9 +64,7 @@ class Server {
       absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
           SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
-  FRIEND_TEST(ServerTest, composeStatsJson);
   FRIEND_TEST(ServerTest, createMessageSender);
-  FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
   FRIEND_TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings);
@@ -89,10 +88,6 @@ class Server {
   // Open `path` and register start/end callbacks on the query registry that
   // write one JSONL line per query event to it. Call once, after construction.
   void configureQueryEventLog(const ql::filesystem::path& path);
-
-  // Get server statistics.
-  static json composeStatsJson(const Index& index);
-  json composeCacheStatsJson() const;
 
  private:
   qlever::Qlever qlever_;
@@ -277,9 +272,8 @@ class Server {
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
-      const Index& index, const LocatedTriplesState& locatedTriples,
-      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
-      const UpdateMetadata& updateMetadata,
+      const LocatedTriplesState& locatedTriples,
+      const PlannedQuery& plannedQuery, const UpdateMetadata& updateMetadata,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
@@ -292,37 +286,6 @@ class Server {
           const RequestT& request, ResponseT&& send, TimeLimit timeLimit,
           std::optional<PlannedQuery>& plannedUpdate);
 
-  // Determine media type candidates to be used for the result. Media types are
-  // determined (in this order) by the current action (e.g.,
-  // "action=csv_export") and by the "Accept" header of the request. The latter
-  // option can produce multiple candidates.
-  CPP_template(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ad_utility::MediaType> determineMediaTypes(
-          const ad_utility::url_parser::ParamValueMap& params,
-          const RequestT& request);
-  FRIEND_TEST(ServerTest, determineMediaType);
-  // Determine whether the subtrees and the result should be pinned.
-  static std::pair<bool, bool> determineResultPinning(
-      const ad_utility::url_parser::ParamValueMap& params);
-  FRIEND_TEST(ServerTest, determineResultPinning);
-  // Parse the `pin-geo-index-simplification` parameter (the maximum error in
-  // meters for the simplification of geometries before indexing) from its
-  // string representation. Return `std::nullopt` if `simplificationStr` is
-  // `std::nullopt`. Throw if `simplificationStr` is set, but is not a valid
-  // floating-point number.
-  static std::optional<double> parsePinGeoIndexSimplification(
-      const std::optional<std::string>& simplificationStr);
-  FRIEND_TEST(ServerTest, parsePinGeoIndexSimplification);
-  // Describe the pinning of a named result (and, if applicable, of its geo
-  // index) for the request log line, e.g. `" [pin result with name
-  // \"myPin\" with geo index on ?geom, simplification=5m]"`. Return the empty
-  // string if `pinResultWithName` is `std::nullopt`.
-  static std::string describePinResultWithNameForLog(
-      const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex,
-      std::optional<double> geoIndexSimplificationInMeters);
-  FRIEND_TEST(ServerTest, describePinResultWithNameForLog);
   //  Prepare the execution of an operation.
   auto prepareOperation(std::string_view operationName,
                         std::string_view operationSPARQL,
@@ -330,24 +293,14 @@ class Server {
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit, bool accessTokenOk,
                         std::string_view clientIp);
-  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
-  static void adjustParsedQueryLimitOffset(
-      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
-      const ad_utility::url_parser::ParamValueMap& parameters);
 
-  // Configure pinned of named results on the `qec`. If `pinResultWithName` is
-  // set, then the `qec` is configured such that the query result will be stored
-  // in the named result cache. If `pinNamedGeoIndex` is also set, it is
-  // expected to be the variable name of a column (without leading `?`) on which
-  // a geometry index should be built. If `geoIndexSimplificationInMeters` is
-  // also set, geometries are simplified with the given maximum error in meters
-  // before indexing. Throw if named pinning is required, but the access token
-  // is not okay.
+  // Configure pinning of a named result on the `qec`. If `pinResultWithName`
+  // is set, then the `qec` is configured such that the query result will be
+  // stored in the named result cache accordingly. Throw if `pinResultWithName`
+  // is set, but the access token is not okay.
   static void configurePinnedResultWithName(
-      const std::optional<std::string>& pinResultWithName,
-      const std::optional<std::string>& pinNamedGeoIndex,
-      std::optional<double> geoIndexSimplificationInMeters, bool accessTokenOk,
-      QueryExecutionContext& qec);
+      std::optional<QueryExecutionContext::PinResultWithName> pinResultWithName,
+      bool accessTokenOk, QueryExecutionContext& qec);
 
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation, QueryExecutionContext& qec,
@@ -363,16 +316,11 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   UpdateMetadata processUpdateImpl(
-      const Index& index, const PlannedQuery& plannedUpdate,
+      const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
-
-  static json composeErrorResponseJson(
-      const std::string& query, const std::string& errorMsg,
-      const ad_utility::Timer& requestTimer,
-      const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
@@ -446,8 +394,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, ResponseT& send,
-          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-          const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
+          ad_utility::MediaType mediaType, const PlannedQuery plannedQuery,
+          const ad_utility::Timer requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);

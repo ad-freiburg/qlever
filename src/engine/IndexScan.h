@@ -180,6 +180,16 @@ class IndexScan final : public Operation {
     return numVariables() == target;
   }
 
+  // The result of an index scan contains every matching triple (or quad, if a
+  // graph column is present) exactly once, so it is already distinct as soon as
+  // `distinctIndices` covers the identifying columns (the variable columns and
+  // the graph column). This also works when columns were stripped, as long as
+  // no identifying column was stripped away. Scans of materialized views are
+  // never known to be distinct, because they are not deduplicated. See the
+  // implementation for details.
+  bool isDistinctByImpl(
+      const std::vector<ColumnIndex>& distinctIndices) const override;
+
   // Full index scans will never be able to fit in the cache on datasets the
   // size of wikidata, so we don't even need to try and waste performance.
   bool unlikelyToFitInCache(
@@ -278,6 +288,12 @@ class IndexScan final : public Operation {
       std::optional<std::vector<CompressedBlockMetadata>> blocks =
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  // Return the columns of the "full" result (without any columns stripped) that
+  // hold the variables of the scan triple and the graph, in this order. These
+  // are exactly the columns by which the full result is sorted. The combination
+  // of the values in these columns is unique for each row of the full result.
+  std::vector<ColumnIndex> variableAndGraphColumns() const;
 
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that

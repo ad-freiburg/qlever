@@ -33,7 +33,7 @@ constexpr auto pow(T base, int exponent) {
     result *= base;
   }
   return result;
-};
+}
 
 /*
  * @brief A compile time for loop, which passes the loop index to the
@@ -186,7 +186,7 @@ struct ValueSequenceImpl {};
 
 template <typename T, const T&... values>
 struct ValueSequenceRefImpl {};
-};  // namespace detail
+}  // namespace detail
 
 template <typename T, T... values>
 using ValueSequence = detail::ValueSequenceImpl<T, values...>;
@@ -244,7 +244,7 @@ CPP_template(typename Int, size_t NumIntegers)(
     value /= numValues;
   }
   return res;
-};
+}
 
 // Store the result of `integerToArray` in a `constexpr` variable which has
 // linkage, and can therefore be used in C++17 mode as a `const&` template
