@@ -165,8 +165,9 @@ class Server {
   // Clear the delta triples of the currently active index (not a stale
   // snapshot, even if a concurrent rebuild swaps the index while this is
   // running) and return the resulting counts. Not cancellable. Unlike
-  // `vacuumDeltaTriples` below, this is unconditional and has no timeout, so
-  // it neither needs the request/response nor can it fail partway through.
+  // `processVacuumDeltaTriples` below, this is unconditional and has no
+  // timeout, so it neither needs the request/response nor can it fail
+  // partway through.
   Awaitable<DeltaTriplesCount> clearDeltaTriples();
 
   // Vacuum (remove redundant) delta triples of the currently active index,
@@ -177,8 +178,23 @@ class Server {
   // case. Otherwise the resulting vacuum stats are returned.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<std::optional<nlohmann::json>> vacuumDeltaTriples(
+      Awaitable<std::optional<nlohmann::json>> processVacuumDeltaTriples(
           std::optional<std::string_view> userTimeout, bool accessTokenOk,
+          const RequestT& request, ResponseT& send);
+
+  // Handle a `write-materialized-view` command: extract the view name, query,
+  // and timeout from `parameters`/`operation`, execute the query, and store
+  // its result as a named materialized view. Uses the same convention as
+  // `processVacuumDeltaTriples` above: an empty optional means an error
+  // response has already been sent to the client. On success, `operation` is
+  // reset to `None{}` so that `process()` doesn't also try to execute it as a
+  // regular query.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<std::optional<nlohmann::json>> processWriteMaterializedView(
+          const ad_utility::url_parser::ParamValueMap& parameters,
+          ad_utility::url_parser::sparqlOperation::Operation& operation,
+          bool accessTokenOk, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send);
 
   /// Handle a single HTTP request. Check whether a file request or a query was

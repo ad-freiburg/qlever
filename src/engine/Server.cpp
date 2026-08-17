@@ -425,7 +425,7 @@ Awaitable<DeltaTriplesCount> Server::clearDeltaTriples() {
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<std::optional<nlohmann::json>> Server::vacuumDeltaTriples(
+    Awaitable<std::optional<nlohmann::json>> Server::processVacuumDeltaTriples(
         std::optional<std::string_view> userTimeout, bool accessTokenOk,
         const RequestT& request, ResponseT& send) {
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
@@ -451,6 +451,73 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       handle);
   co_return co_await std::move(coroutine);
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<std::optional<nlohmann::json>> Server::
+        processWriteMaterializedView(
+            const ad_utility::url_parser::ParamValueMap& parameters,
+            ad_utility::url_parser::sparqlOperation::Operation& operation,
+            bool accessTokenOk, const ad_utility::Timer& requestTimer,
+            const RequestT& request, ResponseT& send) {
+  // Extract name parameter for materialized view.
+  auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(parameters,
+                                                                  "view-name");
+  AD_CONTRACT_CHECK(name.has_value(),
+                    "Writing a materialized view requires a name to be set "
+                    "via the 'view-name' parameter");
+  AD_CONTRACT_CHECK(name.value() != "",
+                    "The name for the view may not be empty");
+
+  // Extract query body.
+  auto query = std::visit(
+      [](const auto& op) -> Query {
+        using T = std::decay_t<decltype(op)>;
+        if constexpr (std::is_same_v<T, Query>) {
+          return op;
+        } else {
+          static_assert(
+              ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
+          throw std::runtime_error(
+              "Action 'write-materialized-view' requires a 'SELECT' query.");
+        }
+      },
+      operation);
+
+  // Extract time limit.
+  auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+      ad_utility::url_parser::checkParameter(parameters, "timeout",
+                                             std::nullopt),
+      accessTokenOk, request, send);
+  if (!timeLimit.has_value()) {
+    // If the optional is empty, this indicates an error response has been
+    // sent to the client already. We can stop here.
+    co_return std::nullopt;
+  }
+
+  // Call `Qlever::writeMaterializedView` with the extracted parameters. This
+  // assumes that the access token has already been checked. Note that storing
+  // the coroutine in a variable first and then awaiting it is required due to
+  // lifetime issues on certain compilers.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [name, query, requestTimer, cancellationHandle, timeLimit,
+       this]() mutable {
+        qlever().writeMaterializedView(
+            name.value(), std::move(query.query_), query.datasetClauses_,
+            std::move(cancellationHandle), timeLimit.value(), requestTimer);
+      },
+      cancellationHandle);
+  co_await std::move(coroutine);
+
+  // Prevent regular query processing by removing the query from the request.
+  operation = None{};
+
+  co_return nlohmann::json{{"materialized-view-written", name.value()}};
 }
 
 // _____________________________________________________________________________
@@ -539,7 +606,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = jsonResponse(json(countAfterClear));
   } else if (auto cmd = checkParameter("cmd", "vacuum-delta-triples")) {
     dispatchLog(*cmd, accessTokenOk);
-    auto vacuumStats = co_await vacuumDeltaTriples(
+    auto vacuumStats = co_await processVacuumDeltaTriples(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!vacuumStats.has_value()) {
       co_return;
@@ -573,59 +640,13 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     }
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     dispatchLog(*cmd, accessTokenOk);
-
-    // Extract name parameter for materialized view.
-    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        parameters, "view-name");
-    AD_CONTRACT_CHECK(name.has_value(),
-                      "Writing a materialized view requires a name to be set "
-                      "via the 'view-name' parameter");
-    AD_CONTRACT_CHECK(name.value() != "",
-                      "The name for the view may not be empty");
-
-    // Extract query body.
-    auto query = std::visit(
-        [](const auto& op) -> Query {
-          using T = std::decay_t<decltype(op)>;
-          if constexpr (std::is_same_v<T, Query>) {
-            return op;
-          } else {
-            static_assert(
-                ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
-            throw std::runtime_error(
-                "Action 'write-materialized-view' requires a 'SELECT' query.");
-          }
-        },
-        parsedHttpRequest.operation_);
-
-    // Extract time limit.
-    auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
-        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
-    AD_CONTRACT_CHECK(timeLimit.has_value(), "Missing timeout");
-
-    // Call `Qlever::writeMaterializedView` with the extracted parameters. This
-    // assumes that the access token has already been checked. Note that storing
-    // the coroutine in a variable first and then awaiting it is required due to
-    // lifetime issues on certain compilers.
-    auto cancellationHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    auto coroutine = computeInNewThread(
-        queryThreadPool_,
-        [name, query, requestTimer, cancellationHandle, timeLimit,
-         this]() mutable {
-          qlever().writeMaterializedView(
-              name.value(), std::move(query.query_), query.datasetClauses_,
-              std::move(cancellationHandle), timeLimit.value(), requestTimer);
-        },
-        cancellationHandle);
-    co_await std::move(coroutine);
-
-    // Construct simple response JSON.
-    nlohmann::json json{{"materialized-view-written", name.value()}};
-    response = jsonResponse(json);
-
-    // Prevent regular query processing by removing the query from the request.
-    parsedHttpRequest.operation_ = None{};
+    auto materializedViewStats = co_await processWriteMaterializedView(
+        parameters, parsedHttpRequest.operation_, accessTokenOk, requestTimer,
+        request, send);
+    if (!materializedViewStats.has_value()) {
+      co_return;
+    }
+    response = jsonResponse(materializedViewStats.value());
   } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
     dispatchLog(*cmd, accessTokenOk);
 
