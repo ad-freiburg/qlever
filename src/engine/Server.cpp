@@ -690,7 +690,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       co_return;
     }
     using ad_utility::websocket::QueryOperation;
-    using ad_utility::websocket::QueryStatus;
     // Computed here, above `createMessageSender`, because that call writes the
     // `start` log event and needs the operation type.
     const bool isUpdateOperation =
@@ -702,6 +701,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         isUpdateOperation ? QueryOperation::UPDATE : QueryOperation::QUERY,
         clientIp);
     // Grab the shared handle before `messageSender` is moved below.
+    using enum ad_utility::websocket::QueryStatus;
     auto queryStatus = messageSender.sharedStatus();
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
@@ -737,12 +737,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                               cancellationHandle, *qecPtr, std::move(request),
                               send, timeLimit.value(), plannedQuery);
       }
-      queryStatus->store(QueryStatus::OK);
+      queryStatus->store(OK);
       co_return;
     } catch (const ad_utility::CancellationException& e) {
       queryStatus->store(e.state() == ad_utility::CancellationState::TIMEOUT
-                             ? QueryStatus::TIMEOUT
-                             : QueryStatus::CANCELLED);
+                             ? TIMEOUT
+                             : CANCELLED);
       throw;
     }
   };
