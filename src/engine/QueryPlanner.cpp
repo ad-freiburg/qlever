@@ -2306,6 +2306,34 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // other one.
   if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    // For a path that can have length zero, binding a side is not always
+    // equivalent to a plain join with the unbound path: the plain join
+    // restricts the bound values to subjects and objects that occur in the
+    // graph, which by default we deliberately don't (see
+    // `TransitivePathBase::matchWithKnowledgeGraph`). So if the joined values
+    // don't provably originate from the graph, the bound plan must be the only
+    // candidate.
+    auto isPathWithLengthZero = [](const SubtreePlan& plan) {
+      auto path = std::dynamic_pointer_cast<const TransitivePathBase>(
+          plan._qet->getRootOperation());
+      return path != nullptr && path->getMinDist() == 0;
+    };
+    bool aIsPath = isPathWithLengthZero(a);
+    if (aIsPath || isPathWithLengthZero(b)) {
+      const auto& otherTree = aIsPath ? b._qet : a._qet;
+      // This call succeeded inside `createJoinWithTransitivePath`, so the
+      // result is guaranteed to have a value.
+      auto [pathCol, otherCol] =
+          getJoinColumnsForTransitivePath(jcs, aIsPath).value();
+      const auto& otherVar =
+          otherTree->getVariableAndInfoByColumnIndex(otherCol).first;
+      if (!otherTree->getRootOperation()->columnOriginatesFromGraphOrUndef(
+              otherVar)) {
+        return candidates;
+      }
+    }
+#endif
   }
 
   if (jcs.size() >= 2) {
