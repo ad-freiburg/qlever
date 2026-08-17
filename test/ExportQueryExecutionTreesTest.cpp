@@ -15,6 +15,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
 using namespace std::string_literals;
@@ -25,11 +26,7 @@ using ::testing::Eq;
 using ::testing::HasSubstr;
 
 namespace {
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  static EncodedIriManager evM;
-  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
-}
+using ad_utility::testing::parseQuery;
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.

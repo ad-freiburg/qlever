@@ -77,8 +77,7 @@ struct SweeperTestResult {
   // ___________________________________________________________________________
   void printResults(const ValIdToGeomName& vMap) const {
     for (const auto& [sjType, valIdLeft, valIdRight, dist] : results_) {
-      std::cout << "RESULTS: type="
-                << SpatialJoinTypeString.at(static_cast<int>(sjType))
+      std::cout << "RESULTS: type=" << sjType.toString()
                 << " left=" << vMap.at(valIdLeft)
                 << " right=" << vMap.at(valIdRight) << " dist=" << dist
                 << std::endl;
@@ -190,7 +189,7 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperResult& results,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   sj::SweeperCfg cfg =
       SpatialJoinAlgorithms::libspatialjoinSweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
@@ -202,8 +201,8 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
       results[t].push_back({WITHIN_DIST, std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
     } else {
-      results[t].push_back(
-          {static_cast<SpatialJoinType>(pred[0]), std::atoi(a), std::atoi(b)});
+      results[t].push_back({static_cast<SpatialJoinType::Enum>(pred[0]),
+                            std::atoi(a), std::atoi(b)});
     }
   };
   return cfg;
@@ -414,7 +413,7 @@ inline void checkSweeperTestResult(
     GeoRelationWithIds key{sjType, valIdLeft, valIdRight};
     ASSERT_TRUE(expectedResultsAndDist.contains(key))
         << "Unexpected result found " << vMap.at(valIdLeft) << " "
-        << vMap.at(valIdRight) << " of type " << static_cast<size_t>(sjType);
+        << vMap.at(valIdRight) << " of type " << sjType;
     ASSERT_NEAR(expectedResultsAndDist[key], dist, 0.01);
     ++numActualResults;
   }

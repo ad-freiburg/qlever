@@ -13,6 +13,7 @@
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/Conversions.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace m = matchers;
@@ -20,6 +21,7 @@ namespace p = parsedQuery;
 
 using Var = Variable;
 namespace {
+using ad_utility::testing::parseQuery;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
 auto iriV = ad_utility::testing::iriV;
@@ -28,11 +30,6 @@ const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
   const auto& tripleComponent = std::get<PropertyPath>(varOrPath).getIri();
   return tripleComponent.toStringRepresentation();
-}
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  static EncodedIriManager evM;
-  return SparqlParser::parseQuery(&evM, std::move(query), datasets);
 }
 }  // namespace
 

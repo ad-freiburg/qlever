@@ -158,7 +158,7 @@ CPP_template(typename S)(requires StoresStringOrId<S>) auto makeValueId(
     static_assert(ad_utility::isSimilar<S, LocalVocabEntry>);
     return Id::makeFromLocalVocabIndex(&value);
   }
-};
+}
 
 // Compare two elements that are either strings or IDs in some way (see the
 // `StoresStringOrId` concept) according to the specified comparison (see

@@ -12,6 +12,8 @@
 
 #include "../QueryPlannerTestHelpers.h"
 #include "../SparqlExpressionTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
@@ -24,6 +26,7 @@
 
 namespace {
 using namespace sparqlParserTestHelpers;
+using ad_utility::testing::encodedIriManager;
 using std::string;
 
 auto iri = ad_utility::testing::iri;
@@ -33,12 +36,6 @@ PropertyPath PathIri(std::string_view iri) {
   return PropertyPath::fromIri(
       ad_utility::triple_component::Iri::fromIriref(iri));
 }
-
-const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-}
-
 using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace
 
