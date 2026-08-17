@@ -453,17 +453,7 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3191.
-// With a `SplitVocabulary`, iterating KB words via contiguous indices
-// `0, ..., vocab.size() - 1` used to crash, and `vocab.isLiteral(index)`
-// (only checking the default sub-vocabulary's ranges) misclassified
-// non-default-sub-vocabulary literals (e.g. WKT) as non-literals, so their
-// words silently scored 0 instead of throwing. The WKT literal must not be a
-// `POINT` (those become `GeoPoint` IDs, never entering the vocabulary), and
-// scoring must be `TFIDF` (only then does `ScoreData::calculateScoreData`
-// run). A leading dummy word/doc pair avoids starting at context/document ID
-// 0, which would otherwise mask a separate, unrelated off-by-one between
-// literal context IDs and `ScoreData` document IDs.
+// Regression test for #3191.
 TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{
       "<a> <b> \"hello world\" . "
@@ -480,10 +470,6 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
       qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
   ASSERT_EQ(helloResult.size(), 1u);
 
-  // The WKT literal (stored in the geo sub-vocabulary of the `SplitVocabulary`
-  // due to `on-disk-compressed-geo-split`) must be scored just like the plain
-  // literal above; a score of 0 would indicate that it was wrongly treated as
-  // a non-literal and thus skipped by `ScoreData::calculateScoreData`.
   IdTable polygonResult =
       qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
   ASSERT_EQ(polygonResult.size(), 1u);
