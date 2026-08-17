@@ -4,7 +4,6 @@
 
 #include "engine/NeutralOptional.h"
 
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 
 // _____________________________________________________________________________
@@ -152,13 +151,10 @@ VariableToColumnMap NeutralOptional::computeVariableToColumnMap() const {
   return variableColumns;
 }
 
-// _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-NeutralOptional::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, {tree_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> children) {
-        return ad_utility::makeExecutionTree<NeutralOptional>(
-            getExecutionContext(), std::move(children.at(0)));
-      });
-}
+// Note: `NeutralOptional` does not override `makeTreeWithBindColumn`. When
+// `tree_` produces zero rows, `computeResult` fabricates a single all-`UNDEF`
+// row without evaluating any expression, so a `BIND` pushed into `tree_`
+// would silently lose its value (e.g. a constant `BIND` would become `UNDEF`)
+// instead of being evaluated on that fallback row like an un-pushed `BIND`
+// would be. There is no cheap way to tell whether `tree_` is guaranteed to be
+// non-empty, so the push down is disallowed entirely.

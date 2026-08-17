@@ -320,4 +320,4 @@ MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
         return ad_utility::makeExecutionTree<MultiColumnJoin>(
             getExecutionContext(), std::move(left), std::move(right));
       });
-};
+}

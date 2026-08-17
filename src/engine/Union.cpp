@@ -398,43 +398,46 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // For a `UNION`, the `BIND` must be pushed into all children that cover the
-  // expression variables. Otherwise rows from children without the `BIND` would
-  // have `UNDEF`s for the target variable.
+  // TODO<joka921/RobinTF> Implement this optimization for the `sortedUnion`
+  // case. `computeVariableToColumnMap` assigns column indices to variables in
+  // order of their physical column index within each subtree; inserting the
+  // `BIND`'s column into the middle of a child's columns can therefore shift
+  // the `UNION`-level column index of every variable that used to come after
+  // it, so `targetOrder_` can no longer be reused as-is and would first have
+  // to be translated to the new indices.
+  if (!targetOrder_.empty()) {
+    return std::nullopt;
+  }
+
+  // For a `UNION`, the `BIND` must be pushed into every child. A child that
+  // doesn't cover the expression variables can't compute the `BIND` at all,
+  // and leaving it unchanged would rely on `UNION`'s generic `UNDEF`-filling
+  // for the missing target column -- which just fills in `UNDEF` instead of
+  // evaluating the `BIND` expression, silently changing the result for any
+  // expression that isn't itself `UNDEF` on `UNDEF` input (e.g. `COALESCE`).
   const auto& bindExpressionVars = bind._expression.containedVariables();
 
-  // Try to push the `BIND` into each child that covers all expression
-  // variables.
   std::array<std::shared_ptr<QueryExecutionTree>, 2> results;
   // This also guarantees equality of `std::tuple_size<T>::value`, because the
   // size is a template parameter.
   static_assert(std::is_same_v<decltype(_subtrees), decltype(results)>);
 
-  bool anyChildCoversVars = false;
   for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
     if (!subtree->getRootOperation()->coversVariables(bindExpressionVars)) {
-      // This child cannot produce the `BIND`'s column, so it is left
-      // unchanged; `UNION` already fills in `UNDEF` for columns that are not
-      // produced by all children.
-      results[i] = subtree;
-      continue;
+      return std::nullopt;
     }
-    anyChildCoversVars = true;
     auto result = subtree->getRootOperation()->makeTreeWithBindColumn(bind);
     if (!result.has_value()) {
       return std::nullopt;
     }
     results[i] = std::move(result.value());
   }
-  if (!anyChildCoversVars) {
-    return std::nullopt;
-  }
 
-  // All relevant children have the `BIND` target column added. Make a new
-  // `UNION` object with the new children, preserving the sort order.
+  // All children have the `BIND` target column added. Make a new `UNION`
+  // object with the new children (there is no sort order to preserve here,
+  // see the `targetOrder_` check above).
   return ad_utility::makeExecutionTree<Union>(
-      getExecutionContext(), std::move(results[0]), std::move(results[1]),
-      targetOrder_);
+      getExecutionContext(), std::move(results[0]), std::move(results[1]));
 }
 
 // _____________________________________________________________________________

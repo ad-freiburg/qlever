@@ -36,8 +36,8 @@ class Bind : public Operation {
 
   // `BIND` needs to be able to push down other `BIND`s if the query contains
   // multiple `BIND`s of which only some can be rewritten.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  makeTreeWithBindColumn(const parsedQuery::Bind& bind) const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;

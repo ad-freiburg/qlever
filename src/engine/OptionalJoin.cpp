@@ -699,31 +699,18 @@ OptionalJoin::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // Try to push the `BIND` into the left (non-optional) child.
+  // The `BIND` can only be pushed into the left (non-optional) child. Pushing
+  // it into the right (optional) child would be unsound: for left rows that
+  // don't find a match, `OptionalJoin` fills all of the right side's columns
+  // with `UNDEF`, including the pushed-down `BIND` column, instead of
+  // evaluating the `BIND` expression on the (genuinely) unbound input. This
+  // silently changes the result for any expression that isn't `UNDEF` itself
+  // on `UNDEF` input, e.g. `COALESCE`.
   auto newLeft = _left->getRootOperation()->makeTreeWithBindColumn(bind);
-  if (newLeft.has_value()) {
-    return ad_utility::makeExecutionTree<OptionalJoin>(
-        getExecutionContext(), std::move(newLeft.value()), _right,
-        keepJoinColumns_);
+  if (!newLeft.has_value()) {
+    return std::nullopt;
   }
-
-  // If the right (optional) child covers the `BIND`s variables, but the left
-  // child doesn't, we can also try the push down there.
-  const auto& bindExpressionVars = bind._expression.containedVariables();
-  bool leftUnrelated =
-      !_left->getRootOperation()->coversVariables(bindExpressionVars) &&
-      !_left->isVariableCovered(bind._target);
-  bool rightApplicable =
-      _right->getRootOperation()->coversVariables(bindExpressionVars) &&
-      !_right->isVariableCovered(bind._target);
-  if (leftUnrelated && rightApplicable) {
-    auto newRight = _right->getRootOperation()->makeTreeWithBindColumn(bind);
-    if (newRight.has_value()) {
-      return ad_utility::makeExecutionTree<OptionalJoin>(
-          getExecutionContext(), _left, std::move(newRight.value()),
-          keepJoinColumns_);
-    }
-  }
-
-  return std::nullopt;
+  return ad_utility::makeExecutionTree<OptionalJoin>(getExecutionContext(),
+                                                     std::move(newLeft.value()),
+                                                     _right, keepJoinColumns_);
 }
