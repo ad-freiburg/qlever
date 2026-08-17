@@ -234,6 +234,27 @@ class ExportQueryExecutionTrees {
   // Empty blocks yield no chunks.
   static std::vector<TableWithRange> splitBlockIntoChunks(
       const TableWithRange& block, size_t rowsPerChunk);
+
+  // Yield one formatted triple at a time from `rowIndices`.
+  template <ad_utility::MediaType format>
+  static STREAMABLE_GENERATOR_TYPE constructQueryResultSerial(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
+      const LimitOffsetClause& limitAndOffset,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      qlever::constructExport::EvaluationConfig config,
+      STREAMABLE_YIELDER_ARG_DECL);
+
+  // Format each live WHERE block on a `TaskQueue` of `numThreads` workers.
+  // Join the current block before the generator advances.
+  template <ad_utility::MediaType format>
+  static STREAMABLE_GENERATOR_TYPE constructQueryResultParallel(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
+      const LimitOffsetClause& limitAndOffset,
+      ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+      qlever::constructExport::EvaluationConfig config, size_t numThreads,
+      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

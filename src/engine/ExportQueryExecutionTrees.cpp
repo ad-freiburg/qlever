@@ -854,37 +854,73 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   auto config = makeConstructEvaluationConfig(qet, cancellationHandle);
 
   if (numThreads <= 1) {
-    // ----- Serial path -----
-    // Serialize the rows with the same generator pipeline as the parallel
-    // path, yielding one triple at a time so that the export stays streaming.
-    auto triples = qlever::constructExport::ConstructTripleGenerator::
-        generateFormattedTriples(constructTriples, qet.getVariableColumns(),
-                                 std::move(rowIndices), limitAndOffset._offset,
-                                 format, config);
-    for (const std::string& triple : triples) {
-      STREAMABLE_YIELD(triple);
-    }
-    STREAMABLE_RETURN;
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+    return constructQueryResultSerial<format>(
+        qet, constructTriples, limitAndOffset, std::move(rowIndices),
+        std::move(config), streamableYielder);
+#else
+    constructQueryResultSerial<format>(qet, constructTriples, limitAndOffset,
+                                       std::move(rowIndices), std::move(config),
+                                       streamableYielder);
+    return;
+#endif
   }
 
-  // ----- Parallel path -----
-  // When triple deduplication is active, all chunks share one deduplicator so
-  // that duplicate triples are dropped across chunk boundaries as well. The
-  // shared filter is made thread-safe by a mutex (see
-  // `ConstructDeduplicator::isNew`), so the parallel path stays enabled.
   if (dedupActive) {
     config.sharedDeduplicator_ =
         std::make_shared<qlever::constructExport::ConstructDeduplicator>(
             config.mode_, *qet.getQec());
   }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  return constructQueryResultParallel<format>(
+      qet, constructTriples, limitAndOffset, std::move(rowIndices),
+      std::move(config), numThreads, std::move(cancellationHandle),
+      streamableYielder);
+#else
+  constructQueryResultParallel<format>(
+      qet, constructTriples, limitAndOffset, std::move(rowIndices),
+      std::move(config), numThreads, std::move(cancellationHandle),
+      streamableYielder);
+  return;
+#endif
+}
 
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::constructQueryResultSerial(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples,
+    const LimitOffsetClause& limitAndOffset,
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+    qlever::constructExport::EvaluationConfig config,
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
+  auto triples = qlever::constructExport::ConstructTripleGenerator::
+      generateFormattedTriples(constructTriples, qet.getVariableColumns(),
+                               std::move(rowIndices), limitAndOffset._offset,
+                               format, config);
+  for (const std::string& triple : triples) {
+    STREAMABLE_YIELD(triple);
+  }
+  STREAMABLE_RETURN;
+}
+
+// _____________________________________________________________________________
+template <ad_utility::MediaType format>
+STREAMABLE_GENERATOR_TYPE
+ExportQueryExecutionTrees::constructQueryResultParallel(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples,
+    const LimitOffsetClause& limitAndOffset,
+    ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
+    qlever::constructExport::EvaluationConfig config, size_t numThreads,
+    CancellationHandle cancellationHandle,
+    [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   // Walk lazy WHERE blocks one at a time. Workers may only touch the current
   // block: its IdTable view dies when the generator advances. Each block is
   // cut into contiguous chunks of `BATCH_SIZE` rows and submitted in order
   // to a pool of `numThreads` workers. At most `2 * numThreads` chunk strings
   // are in flight so later chunks of a large block are not all materialized
-  // before the first one is yielded. Chunk size is the generator batch, not
-  // a runtime parameter: a second knob would drift from `IdCache` / lookup.
+  // before the first one is yielded.
   const size_t rowsPerChunk =
       qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE;
   const size_t window = 2 * numThreads;

@@ -10,7 +10,9 @@
 #include <gmock/gmock.h>
 
 #include <limits>
+#include <tuple>
 
+#include "absl/strings/str_cat.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
@@ -2274,12 +2276,11 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{10, "abcde"}));
 
 // ____________________________________________________________________________
-// The parallel CONSTRUCT serialization (construct-export-num-threads > 1)
-// must produce byte-identical output to the serial path, regardless of the
-// number of groups the rows are split into.
+// Parallel CONSTRUCT export. `numThreads` is the `TaskQueue` worker count
+// (software threads). 0 means `hardware_concurrency()`. These sizes do not
+// require that many hardware cores.
 
 namespace {
-// A knowledge graph with `numTriples` triples `<s0> <p> <o0>` ...
 std::string makeConstructKg(size_t numTriples) {
   std::string kg;
   for (size_t i = 0; i < numTriples; ++i) {
@@ -2288,8 +2289,6 @@ std::string makeConstructKg(size_t numTriples) {
   return kg;
 }
 
-// Returns the streamed result of the given CONSTRUCT query for the given
-// media type, with `numThreads` workers. Chunk size is `BATCH_SIZE`.
 std::string constructResultWithThreads(const std::string& kg,
                                        const std::string& query,
                                        ad_utility::MediaType mediaType,
@@ -2298,63 +2297,68 @@ std::string constructResultWithThreads(const std::string& kg,
       &RuntimeParameters::constructExportNumThreads_>(numThreads);
   return runQueryStreamableResult(kg, query, mediaType);
 }
+
+constexpr ad_utility::MediaType kConstructExportMediaTypes[] = {
+    ad_utility::MediaType::tsv, ad_utility::MediaType::turtle,
+    ad_utility::MediaType::ntriples};
+
+constexpr size_t kConstructExportThreadCounts[] = {0, 1, 2, 4, 8};
 }  // namespace
 
-TEST(ExportQueryExecutionTrees, ParallelConstructSerializationMatchesSerial) {
-  using enum ad_utility::MediaType;
-  // More than one `BATCH_SIZE` chunk so several workers get work.
+class ParallelConstructMatchesSerialTest
+    : public ::testing::TestWithParam<
+          std::tuple<ad_utility::MediaType, size_t>> {};
+
+TEST_P(ParallelConstructMatchesSerialTest, MatchesSerial) {
+  const auto [mediaType, numThreads] = GetParam();
   const std::string kg = makeConstructKg(
       qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE + 200);
   const std::string query = "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?s";
-  // Reference output from the serial path (default thread count).
-  const std::string expectedTsv = runQueryStreamableResult(kg, query, tsv);
-  const std::string expectedTurtle =
-      runQueryStreamableResult(kg, query, turtle);
-  const std::string expectedNtriples =
-      runQueryStreamableResult(kg, query, ntriples);
-
-  for (size_t numThreads : {size_t{2}, size_t{4}, size_t{8}}) {
-    EXPECT_EQ(constructResultWithThreads(kg, query, tsv, numThreads),
-              expectedTsv)
-        << "numThreads = " << numThreads;
-    EXPECT_EQ(constructResultWithThreads(kg, query, turtle, numThreads),
-              expectedTurtle)
-        << "numThreads = " << numThreads;
-    EXPECT_EQ(constructResultWithThreads(kg, query, ntriples, numThreads),
-              expectedNtriples)
-        << "numThreads = " << numThreads;
-  }
-
-  // numThreads == 0 means "all logical cores" and must also match.
-  EXPECT_EQ(constructResultWithThreads(kg, query, tsv, 0), expectedTsv);
+  const std::string expected = runQueryStreamableResult(kg, query, mediaType);
+  EXPECT_EQ(constructResultWithThreads(kg, query, mediaType, numThreads),
+            expected);
 }
 
-// Blank-node labels in the CONSTRUCT output depend on the global row index
-// (via the row offset). Chunks must keep those indices, also with OFFSET.
-TEST(ExportQueryExecutionTrees, ParallelConstructSerializationBlankNodes) {
+INSTANTIATE_TEST_SUITE_P(
+    ConstructExportMediaAndThreads, ParallelConstructMatchesSerialTest,
+    ::testing::Combine(::testing::ValuesIn(kConstructExportMediaTypes),
+                       ::testing::ValuesIn(kConstructExportThreadCounts)),
+    [](const auto& info) {
+      const auto [mediaType, numThreads] = info.param;
+      return absl::StrCat("mt", static_cast<int>(mediaType), "_t", numThreads);
+    });
+
+class ParallelConstructThreadCountTest
+    : public ::testing::TestWithParam<size_t> {};
+
+TEST_P(ParallelConstructThreadCountTest, BlankNodesNoOffset) {
   using enum ad_utility::MediaType;
   const std::string kg = makeConstructKg(
       qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE + 100);
   const std::string query =
       "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s";
-  const std::string queryWithOffset =
-      "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s LIMIT 60 OFFSET 30";
-  for (const auto& q : {query, queryWithOffset}) {
-    const std::string expected = runQueryStreamableResult(kg, q, turtle);
-    EXPECT_EQ(constructResultWithThreads(kg, q, turtle, 4), expected);
-    std::string parallel = constructResultWithThreads(kg, q, turtle, 4);
-    EXPECT_EQ(parallel, expected);
-    EXPECT_NE(parallel.find("_:u"), std::string::npos);
-  }
+  const std::string expected = runQueryStreamableResult(kg, query, turtle);
+  std::string parallel =
+      constructResultWithThreads(kg, query, turtle, GetParam());
+  EXPECT_EQ(parallel, expected);
+  EXPECT_NE(parallel.find("_:u"), std::string::npos);
 }
 
-// When triple deduplication is active, the parallel path stays enabled: the
-// chunks share one `ConstructDeduplicator`.
-// This test verifies that the output must match the serial path.
-TEST(ExportQueryExecutionTrees, ParallelConstructSerializationWithDedup) {
+TEST_P(ParallelConstructThreadCountTest, BlankNodesWithOffset) {
   using enum ad_utility::MediaType;
-  // Duplicate triples in the result (each ?o appears twice), so deduplication
-  // changes the output.
+  const std::string kg = makeConstructKg(
+      qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE + 100);
+  const std::string query =
+      "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s LIMIT 60 OFFSET 30";
+  const std::string expected = runQueryStreamableResult(kg, query, turtle);
+  std::string parallel =
+      constructResultWithThreads(kg, query, turtle, GetParam());
+  EXPECT_EQ(parallel, expected);
+  EXPECT_NE(parallel.find("_:u"), std::string::npos);
+}
+
+TEST_P(ParallelConstructThreadCountTest, WithDedup) {
+  using enum ad_utility::MediaType;
   std::string kg;
   for (size_t i = 0; i < 50; ++i) {
     absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
@@ -2365,22 +2369,25 @@ TEST(ExportQueryExecutionTrees, ParallelConstructSerializationWithDedup) {
       setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
           ad_utility::DeduplicationMode::full());
   const std::string expected = runQueryStreamableResult(kg, query, turtle);
-  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 4), expected);
-  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 0), expected);
+  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, GetParam()),
+            expected);
 }
 
-// The parallel path must also handle an empty result (no rows to serialize):
-// the output is empty and no worker tasks are submitted.
-TEST(ExportQueryExecutionTrees, ParallelConstructSerializationEmptyResult) {
+TEST_P(ParallelConstructThreadCountTest, EmptyResult) {
   using enum ad_utility::MediaType;
   const std::string kg = makeConstructKg(5);
   const std::string query =
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o FILTER(?s = <s999>)}";
-  for (size_t numThreads : {size_t{1}, size_t{4}}) {
-    EXPECT_EQ(constructResultWithThreads(kg, query, tsv, numThreads), "");
-    EXPECT_EQ(constructResultWithThreads(kg, query, turtle, numThreads), "");
-  }
+  EXPECT_EQ(constructResultWithThreads(kg, query, tsv, GetParam()), "");
+  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, GetParam()), "");
 }
+
+INSTANTIATE_TEST_SUITE_P(ConstructExportThreadCounts,
+                         ParallelConstructThreadCountTest,
+                         ::testing::ValuesIn(kConstructExportThreadCounts),
+                         [](const auto& info) {
+                           return absl::StrCat("t", info.param);
+                         });
 
 // White-box test for `splitBlockIntoChunks`. `getRowIndices` never yields
 // an empty view, but the function must still handle one.
