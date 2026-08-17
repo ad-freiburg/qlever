@@ -45,9 +45,8 @@ std::optional<PreprocessedTerm> ConstructTemplatePreprocessor::preprocessIri(
     const Iri& iri) {
   ValueId dedupId = resolveConstantDedupId(TripleComponent{iri});
   return PrecomputedConstant{
-      .evaluatedTerm_ =
-          std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
-      .dedupId_ = dedupId};
+      std::make_shared<const EvaluatedTermData>(iri.toSparql(), nullptr),
+      dedupId};
 }
 
 // _____________________________________________________________________________
@@ -69,9 +68,8 @@ ConstructTemplatePreprocessor::preprocessLiteral(const Literal& literal,
           literal.toSparql());
   ValueId dedupId = resolveConstantDedupId(std::move(parsedObject));
   return PrecomputedConstant{
-      .evaluatedTerm_ =
-          std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
-      .dedupId_ = dedupId};
+      std::make_shared<const EvaluatedTermData>(literal.literal(), nullptr),
+      dedupId};
 }
 
 // _____________________________________________________________________________
@@ -86,9 +84,8 @@ ConstructTemplatePreprocessor::preprocessVariable(const Variable& variable) {
 // _____________________________________________________________________________
 std::optional<PreprocessedTerm>
 ConstructTemplatePreprocessor::preprocessBlankNode(const BlankNode& blankNode) {
-  return PrecomputedBlankNode{
-      .prefix_ = blankNode.isGenerated() ? "_:g" : "_:u",
-      .suffix_ = absl::StrCat("_", blankNode.label())};
+  return PrecomputedBlankNode{blankNode.isGenerated() ? "_:g" : "_:u",
+                              absl::StrCat("_", blankNode.label())};
 }
 
 // _____________________________________________________________________________

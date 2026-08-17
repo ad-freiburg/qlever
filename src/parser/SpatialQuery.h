@@ -10,6 +10,29 @@
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
+// If `filter` is a syntactically valid DE-9IM filter pattern (i.e. exactly 9
+// characters, each one of `0`-`2`, `T`/`t`, `F`/`f`, or `*`, see
+// `De9imFilterString` above), return it as a `De9imFilterString`, else
+// `std::nullopt`. Note: this does not check whether the pattern can match
+// disjoint geometries, see `de9imFilterCanMatchDisjoint` below for that.
+std::optional<De9imFilterString> parseDe9imFilterString(
+    std::string_view filter);
+
+// Whether the given (syntactically valid) DE-9IM `filter` could match a
+// disjoint pair of geometries. Patterns for which this holds (e.g.
+// `*********` or the literal disjoint pattern `FF*FF****`) are unsupported:
+// the pinned `libspatialjoin` never enumerates disjoint candidate pairs to
+// its callback (see `Sweeper::doDE9IMCheck`), regardless of the configured
+// filter, so accepting such a pattern would silently omit matching disjoint
+// pairs from the result.
+//
+// The DE-9IM matrix entries are ordered II, IB, IE, BI, BB, BE, EI, EB, EE. A
+// pair of geometries is disjoint iff II, IB, BI, and BB (indices 0, 1, 3, 4)
+// are all `F`. A filter character only excludes `F` if it is a digit, `T`, or
+// `t`; `*` and `F`/`f` both admit it. If all four of these positions admit
+// `F`, the pattern could match a disjoint pair.
+bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter);
+
 namespace parsedQuery {
 
 class SpatialSearchException : public std::runtime_error {
@@ -44,13 +67,19 @@ struct SpatialQuery : MagicServiceQuery {
   // `PayloadAllVariables` to ensure appropriate semantics.
   PayloadVariables payloadVariables_;
 
-  // Optional further argument: the join algorithm. If it is not given, the
-  // default algorithm is used implicitly.
+  // The join algorithm. Mandatory for the `SERVICE spatialSearch:` syntax
+  // (checked in `toSpatialJoinConfiguration`); implicitly set to a fixed
+  // value for the deprecated magic predicate syntax, which has no way to
+  // specify it.
   std::optional<SpatialJoinAlgorithm> algo_;
 
   // Optional join type for libspatialjoin. If it is not given, INTERSECT
   // is used implicitly.
   std::optional<SpatialJoinType> joinType_;
+
+  // The DE-9IM filter pattern, mandatory if and only if `joinType_` is
+  // `SpatialJoinType::DE9IM`.
+  std::optional<De9imFilterString> de9imFilter_;
 
   // If the s2-point-polyline algorithm is used, the right side of the spatial
   // join will be an already existing s2 index together with the fully
@@ -85,21 +114,12 @@ struct SpatialQuery : MagicServiceQuery {
   // Throw if the current configuration is invalid.
   void validate() const override;
 
-  constexpr std::string_view name() const override { return "spatial join"; };
+  constexpr std::string_view name() const override { return "spatial join"; }
 
  private:
   // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.
   void throwIf(bool throwCondition, std::string_view message) const;
 };
-
-namespace detail {
-
-// Convert a string like `libspatialjoin` to the corresponding enum element.
-// Throws a `SpatialSearchException` for invalid inputs.
-SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
-    std::string_view identifier);
-
-}  // namespace detail
 
 }  // namespace parsedQuery
 
