@@ -8,7 +8,9 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "backports/algorithm.h"
 #include "parser/SparqlParser.h"
+#include "util/TransparentFunctors.h"
 
 namespace {
 
@@ -181,11 +183,12 @@ namespace {
 // subqueries.
 std::vector<std::string> allWarnings(const ParsedQuery& query) {
   std::vector<std::string> warnings = query.warnings();
-  for (const auto& operation : query._rootGraphPattern._graphPatterns) {
-    if (auto* subquery = std::get_if<parsedQuery::Subquery>(&operation)) {
-      ql::ranges::copy(allWarnings(subquery->get()),
-                       std::back_inserter(warnings));
-    }
+  for (const parsedQuery::Subquery& subquery :
+       query._rootGraphPattern._graphPatterns |
+           ql::views::filter(
+               ad_utility::holdsAlternative<parsedQuery::Subquery>) |
+           ql::views::transform(ad_utility::get<parsedQuery::Subquery>)) {
+    ql::ranges::copy(allWarnings(subquery.get()), std::back_inserter(warnings));
   }
   return warnings;
 }
@@ -248,4 +251,11 @@ TEST(NamedSubquery, invalidQueries) {
       parse("WITH %a AS { ?s ?p ?o }"
             "SELECT * WHERE { { SELECT * WHERE { INCLUDE %a } } }"),
       ::testing::HasSubstr("`SELECT *` is not allowed here"));
+  // No `INCLUDE` inside a `SERVICE`: the body of a `SERVICE` is evaluated by
+  // the remote endpoint, which does not know the named subquery.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { SERVICE <http://example.org/sparql> {"
+            " { SELECT ?s WHERE { INCLUDE %a } } } }"),
+      ::testing::HasSubstr("not supported inside SERVICE"));
 }

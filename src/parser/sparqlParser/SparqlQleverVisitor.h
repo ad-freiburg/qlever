@@ -220,7 +220,8 @@ class SparqlQleverVisitor {
   // A valid `INCLUDE %name` (as the entire body of a subquery) is expanded in
   // `visit(GroupGraphPatternContext*)` and never reaches this function, so
   // this function always reports an error for a misplaced `INCLUDE`.
-  [[noreturn]] GraphPatternOperation visit(Parser::IncludeClauseContext* ctx);
+  [[noreturn]] static GraphPatternOperation visit(
+      Parser::IncludeClauseContext* ctx);
 
   // If the body of the given group graph pattern is exactly one `INCLUDE`
   // clause, return that clause, otherwise `nullptr`.
@@ -629,15 +630,16 @@ class SparqlQleverVisitor {
     std::vector<Variable> visibleVariables_;
   };
 
-  // Call `visitCall` with a fresh (initially empty) `parsedQuery_` and
+  // Visit the given context with a fresh (initially empty) `parsedQuery_` and
   // `visibleVariables_` and restore the previous state afterwards, also when
   // an exception is thrown. This is used for the parts of a query that are
   // parsed in a clean environment, without access to the variables of the
   // outer query, namely the argument of `EXISTS` and the definition of a
   // named subquery.
-  template <typename VisitCall>
-  auto visitInFreshQueryContext(const VisitCall& visitCall)
-      -> FreshQueryContextResult<decltype(visitCall())>;
+  template <typename Ctx>
+  auto visitInFreshQueryContext(Ctx* ctx)
+      -> FreshQueryContextResult<
+          decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))>;
 
   // Create a new generated blank node.
   BlankNode newBlankNode();

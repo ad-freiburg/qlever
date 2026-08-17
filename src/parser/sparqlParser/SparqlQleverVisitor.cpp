@@ -8,6 +8,7 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/function_ref.h>
 #include <absl/strings/str_split.h>
 #include <absl/time/time.h>
@@ -354,8 +355,7 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // The definitions of named subqueries also only affect the internal state.
   // They are visited in the order in which they appear, so a definition can
   // `INCLUDE` previously defined named subqueries.
-  ql::ranges::for_each(ctx->namedSubqueryDefinition(),
-                       [this](auto* definition) { this->visit(definition); });
+  visitVector(ctx->namedSubqueryDefinition());
   auto query =
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
@@ -1574,18 +1574,21 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename VisitCall>
-auto Visitor::visitInFreshQueryContext(const VisitCall& visitCall)
-    -> FreshQueryContextResult<decltype(visitCall())> {
+template <typename Ctx>
+auto Visitor::visitInFreshQueryContext(Ctx* ctx)
+    -> FreshQueryContextResult<
+        decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))> {
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
   auto variablesBackup = std::exchange(visibleVariables_, {});
-  auto restoreBackups =
-      ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-          [this, &queryBackup, &variablesBackup]() {
-            parsedQuery_ = std::move(queryBackup);
-            visibleVariables_ = std::move(variablesBackup);
-          });
-  auto result = visitCall();
+  // The restoring assignments are moves and cannot throw, so the cleanup
+  // is safe also during stack unwinding.
+  static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
+  static_assert(std::is_nothrow_move_assignable_v<std::vector<Variable>>);
+  absl::Cleanup restoreBackups{[this, &queryBackup, &variablesBackup]() {
+    parsedQuery_ = std::move(queryBackup);
+    visibleVariables_ = std::move(variablesBackup);
+  }};
+  auto result = visit(ctx);
   // NOTE: The following moves happen before `restoreBackups` runs, which then
   // assigns the backups over the moved-from members.
   return {std::move(result), std::move(parsedQuery_),
@@ -1607,19 +1610,18 @@ void Visitor::visit(Parser::NamedSubqueryDefinitionContext* ctx) {
                      name, " AS { ... }`. The reverse order `WITH { ... } AS ",
                      name, "`, as used by Blazegraph, is not supported"));
   }
-  if (namedSubqueries_.contains(name)) {
-    reportError(ctx, absl::StrCat("The named subquery \"", name,
-                                  "\" is defined more than once"));
-  }
   // The pattern of a named subquery is parsed in a clean environment: it sees
   // no variables from the outside, and its variables only become visible via
   // the SELECT clause of the subquery around an `INCLUDE`.
-  auto freshContextResult = visitInFreshQueryContext(
-      [this, ctx]() { return visit(ctx->groupGraphPattern()); });
-  namedSubqueries_.emplace(
+  auto freshContextResult = visitInFreshQueryContext(ctx->groupGraphPattern());
+  auto [it, isNewName] = namedSubqueries_.emplace(
       std::move(name),
       NamedSubquery{std::move(freshContextResult.result_),
                     std::move(freshContextResult.visibleVariables_)});
+  if (!isNewName) {
+    reportError(ctx, absl::StrCat("The named subquery \"", it->first,
+                                  "\" is defined more than once"));
+  }
 }
 
 // ____________________________________________________________________________________
@@ -1650,6 +1652,18 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
     Parser::IncludeClauseContext* includeCtx,
     Parser::GroupGraphPatternContext* ctx) {
   const auto name = includeCtx->NAMED_SUBQUERY_NAME()->getText();
+  // The body of a `SERVICE` is sent to the remote endpoint as the original
+  // query text, where the definition of the named subquery does not exist.
+  for (auto* parent = ctx->parent; parent != nullptr; parent = parent->parent) {
+    if (dynamic_cast<Parser::ServiceGraphPatternContext*>(parent) != nullptr) {
+      reportError(
+          includeCtx,
+          absl::StrCat("`INCLUDE ", name,
+                       "` is not supported inside SERVICE, because the body "
+                       "of a SERVICE is evaluated by the remote endpoint, "
+                       "which does not know the named subquery"));
+    }
+  }
   // The group must be the body of a subquery. The `visit` call reports the
   // error for a misplaced `INCLUDE` and does not return.
   auto* whereClause = dynamic_cast<Parser::WhereClauseContext*>(ctx->parent);
@@ -2988,8 +3002,7 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
   // which also apply to the argument of `EXISTS`). It is therefore parsed in a
   // fresh query context.
-  auto freshContextResult =
-      visitInFreshQueryContext([this, pattern]() { return visit(pattern); });
+  auto freshContextResult = visitInFreshQueryContext(pattern);
   ParsedQuery argumentOfExists = std::move(freshContextResult.parsedQuery_);
   SelectClause& selectClause = argumentOfExists.selectClause();
   // Even though we set the `SELECT` clause to `*`, we will limit the visible
