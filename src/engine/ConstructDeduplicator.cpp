@@ -87,6 +87,11 @@ bool ConstructDeduplicator::isNew(size_t templateTripleIdx,
   if (tmpl.tripleContainsBlankNode_[templateTripleIdx]) {
     return true;
   }
+  // Hold the lock only around the shared ID-space filter and the `dedupVocab_`
+  // re-anchoring. The caller formats the resulting triple to a string outside
+  // this call, i.e. outside the lock, which keeps the parallel export path
+  // from serializing the expensive string formatting.
+  std::lock_guard lock{mutex_};
   // Reset only at a triple boundary, never mid-key (would dangle the key).
   resetIfVocabTooLarge();
   return filter_.insert(makeFullTripleKey(

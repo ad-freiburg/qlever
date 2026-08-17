@@ -8,6 +8,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
+
 #include "engine/ConstructDeduplicator.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
@@ -349,6 +352,49 @@ TEST_F(ConstructDeduplicatorTest, perTripleFilterRejectsNone) {
 // precondition violation.
 TEST_F(ConstructDeduplicatorTest, noneModeIsRejected) {
   EXPECT_ANY_THROW(ConstructDeduplicator(DeduplicationMode::none(), *qec_));
+}
+
+//______________________________________________________________________________
+// The parallel export path shares one `ConstructDeduplicator` across worker
+// threads. `isNew` guards the shared filter and `dedupVocab_` with a mutex, so
+// concurrent calls must not lose or duplicate keys: each distinct key must be
+// reported "new" exactly once, regardless of how the same key submissions are
+// interleaved across threads.
+TEST_F(ConstructDeduplicatorTest, isNewThreadSafeSharedFilter) {
+  constexpr size_t numKeys = 64;
+  constexpr size_t numThreads = 8;
+  std::vector<LocalVocabRow> rows;
+  rows.reserve(numKeys);
+  for (size_t i = 0; i < numKeys; ++i) {
+    rows.push_back(makeLocalVocabRow("literal-" + std::to_string(i)));
+  }
+
+  auto tmpl = makeSingleTripleTemplate();
+  ConstructDeduplicator deduplicator = makeFullDeduplicator();
+
+  // Every thread submits every key, so each distinct key is seen
+  // `numThreads` times in total, but must still be reported "new" exactly once.
+  std::atomic<size_t> totalNew{0};
+  std::vector<std::thread> threads;
+  threads.reserve(numThreads);
+  for (size_t t = 0; t < numThreads; ++t) {
+    threads.emplace_back([&, t]() {
+      size_t localNew = 0;
+      for (size_t i = 0; i < numKeys; ++i) {
+        const LocalVocabRow& row = rows[(i + t) % numKeys];
+        if (deduplicator.isNew(0, 0, tmpl, row.ctx())) {
+          ++localNew;
+        }
+      }
+      totalNew.fetch_add(localNew, std::memory_order_relaxed);
+    });
+  }
+  for (std::thread& thread : threads) {
+    thread.join();
+  }
+  // Each of the `numKeys` distinct keys is reported new exactly once across all
+  // threads; every later submission of the same key is a duplicate.
+  EXPECT_EQ(totalNew.load(), numKeys);
 }
 
 }  // namespace

@@ -1,10 +1,15 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2023 - 2026, The QLever Authors, in particular:
+//
+// 2023 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
+
+#include <limits>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
@@ -17,6 +22,7 @@
 #include "util/ParseableDuration.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -2266,3 +2272,198 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
+
+// ____________________________________________________________________________
+// The parallel CONSTRUCT serialization (construct-export-num-threads > 1)
+// must produce byte-identical output to the serial path, regardless of the
+// number of groups the rows are split into.
+
+namespace {
+// A knowledge graph with `numTriples` triples `<s0> <p> <o0>` ...
+std::string makeConstructKg(size_t numTriples) {
+  std::string kg;
+  for (size_t i = 0; i < numTriples; ++i) {
+    absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
+  }
+  return kg;
+}
+
+// Returns the streamed result of the given CONSTRUCT query for the given
+// media type, with `numThreads` workers. Chunk size is `BATCH_SIZE`.
+std::string constructResultWithThreads(const std::string& kg,
+                                       const std::string& query,
+                                       ad_utility::MediaType mediaType,
+                                       size_t numThreads) {
+  auto cleanupThreads = setRuntimeParameterForTest<
+      &RuntimeParameters::constructExportNumThreads_>(numThreads);
+  return runQueryStreamableResult(kg, query, mediaType);
+}
+}  // namespace
+
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationMatchesSerial) {
+  using enum ad_utility::MediaType;
+  // More than one `BATCH_SIZE` chunk so several workers get work.
+  const std::string kg = makeConstructKg(
+      qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE + 200);
+  const std::string query = "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?s";
+  // Reference output from the serial path (default thread count).
+  const std::string expectedTsv = runQueryStreamableResult(kg, query, tsv);
+  const std::string expectedTurtle =
+      runQueryStreamableResult(kg, query, turtle);
+  const std::string expectedNtriples =
+      runQueryStreamableResult(kg, query, ntriples);
+
+  for (size_t numThreads : {size_t{2}, size_t{4}, size_t{8}}) {
+    EXPECT_EQ(constructResultWithThreads(kg, query, tsv, numThreads),
+              expectedTsv)
+        << "numThreads = " << numThreads;
+    EXPECT_EQ(constructResultWithThreads(kg, query, turtle, numThreads),
+              expectedTurtle)
+        << "numThreads = " << numThreads;
+    EXPECT_EQ(constructResultWithThreads(kg, query, ntriples, numThreads),
+              expectedNtriples)
+        << "numThreads = " << numThreads;
+  }
+
+  // numThreads == 0 means "all logical cores" and must also match.
+  EXPECT_EQ(constructResultWithThreads(kg, query, tsv, 0), expectedTsv);
+}
+
+// Blank-node labels in the CONSTRUCT output depend on the global row index
+// (via the row offset). Chunks must keep those indices, also with OFFSET.
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationBlankNodes) {
+  using enum ad_utility::MediaType;
+  const std::string kg = makeConstructKg(
+      qlever::constructExport::ConstructTripleGenerator::BATCH_SIZE + 100);
+  const std::string query =
+      "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s";
+  const std::string queryWithOffset =
+      "CONSTRUCT {?s ?p _:b} WHERE {?s ?p ?o} ORDER BY ?s LIMIT 60 OFFSET 30";
+  for (const auto& q : {query, queryWithOffset}) {
+    const std::string expected = runQueryStreamableResult(kg, q, turtle);
+    EXPECT_EQ(constructResultWithThreads(kg, q, turtle, 4), expected);
+    std::string parallel = constructResultWithThreads(kg, q, turtle, 4);
+    EXPECT_EQ(parallel, expected);
+    EXPECT_NE(parallel.find("_:u"), std::string::npos);
+  }
+}
+
+// When triple deduplication is active, the parallel path stays enabled: the
+// chunks share one `ConstructDeduplicator`.
+// This test verifies that the output must match the serial path.
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationWithDedup) {
+  using enum ad_utility::MediaType;
+  // Duplicate triples in the result (each ?o appears twice), so deduplication
+  // changes the output.
+  std::string kg;
+  for (size_t i = 0; i < 50; ++i) {
+    absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
+    absl::StrAppend(&kg, "<s", i, "> <p> <o", i, "> .\n");
+  }
+  const std::string query = "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?s";
+  auto cleanupDedup =
+      setRuntimeParameterForTest<&RuntimeParameters::constructDeduplication_>(
+          ad_utility::DeduplicationMode::full());
+  const std::string expected = runQueryStreamableResult(kg, query, turtle);
+  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 4), expected);
+  EXPECT_EQ(constructResultWithThreads(kg, query, turtle, 0), expected);
+}
+
+// The parallel path must also handle an empty result (no rows to serialize):
+// the output is empty and no worker tasks are submitted.
+TEST(ExportQueryExecutionTrees, ParallelConstructSerializationEmptyResult) {
+  using enum ad_utility::MediaType;
+  const std::string kg = makeConstructKg(5);
+  const std::string query =
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o FILTER(?s = <s999>)}";
+  for (size_t numThreads : {size_t{1}, size_t{4}}) {
+    EXPECT_EQ(constructResultWithThreads(kg, query, tsv, numThreads), "");
+    EXPECT_EQ(constructResultWithThreads(kg, query, turtle, numThreads), "");
+  }
+}
+
+// White-box test for `splitBlockIntoChunks`. `getRowIndices` never yields
+// an empty view, but the function must still handle one.
+TEST(ExportQueryExecutionTrees, SplitBlockIntoChunks) {
+  std::vector<IdTable> tables;
+  std::vector<LocalVocab> vocabs;
+  auto makeBlock = [&tables, &vocabs](uint64_t begin, uint64_t end) {
+    tables.push_back(makeIdTableFromVector({{0}}));
+    vocabs.emplace_back();
+    return TableWithRange{
+        TableConstRefWithVocab{tables.back().asStaticView<0>(), vocabs.back()},
+        ql::views::iota(begin, end)};
+  };
+  auto rangesOf = [](const std::vector<TableWithRange>& chunks) {
+    std::vector<std::pair<uint64_t, uint64_t>> ranges;
+    for (const auto& chunk : chunks) {
+      const uint64_t begin = *ql::ranges::begin(chunk.view_);
+      ranges.emplace_back(begin, begin + ql::ranges::size(chunk.view_));
+    }
+    return ranges;
+  };
+
+  {
+    auto chunks =
+        ExportQueryExecutionTrees::splitBlockIntoChunks(makeBlock(0, 10), 3);
+    EXPECT_THAT(rangesOf(chunks),
+                ElementsAre(std::pair<uint64_t, uint64_t>{0, 3},
+                            std::pair<uint64_t, uint64_t>{3, 6},
+                            std::pair<uint64_t, uint64_t>{6, 9},
+                            std::pair<uint64_t, uint64_t>{9, 10}));
+  }
+  {
+    auto chunks = ExportQueryExecutionTrees::splitBlockIntoChunks(
+        makeBlock(100, 105), 10);
+    EXPECT_THAT(rangesOf(chunks),
+                ElementsAre(std::pair<uint64_t, uint64_t>{100, 105}));
+  }
+  {
+    auto chunks =
+        ExportQueryExecutionTrees::splitBlockIntoChunks(makeBlock(0, 0), 4);
+    EXPECT_TRUE(chunks.empty());
+  }
+  EXPECT_ANY_THROW(
+      ExportQueryExecutionTrees::splitBlockIntoChunks(makeBlock(0, 5), 0));
+}
+
+// ____________________________________________________________________________
+// White-box test for `serializeConstructGroup`, the per-format serialization
+// body shared by the workers of the parallel CONSTRUCT export.  It must
+// serialize a single row range exactly as the serial path does, concatenated
+// into one output string.
+TEST(ExportQueryExecutionTrees, SerializeConstructGroup) {
+  using namespace qlever::constructExport;
+  auto qec = ad_utility::testing::getQec("<s> <p> <o> .");
+  const Index& index = qec->getIndex();
+  auto handle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  EvaluationConfig config{index, std::move(handle), *qec};
+
+  const auto idS = ad_utility::testing::makeGetId(index)("<s>");
+  auto result = std::make_shared<const Result>(
+      makeIdTableFromVector({{idS}}), std::vector<ColumnIndex>{}, LocalVocab{});
+  Triples templateTriples{
+      std::array{GraphTerm{ad_utility::testing::iriV("<s>")},
+                 GraphTerm{ad_utility::testing::iriV("<p>")},
+                 GraphTerm{ad_utility::testing::iriV("<o>")}}};
+  VariableToColumnMap varMap{};
+  auto singleRange = [&result] {
+    TableWithRange twr{
+        TableConstRefWithVocab{result->idTableView(), result->localVocab()},
+        ql::views::iota(uint64_t{0}, uint64_t{1})};
+    return ad_utility::InputRangeTypeErased(
+        std::vector<TableWithRange>{std::move(twr)});
+  };
+
+  const std::string turtleOut =
+      ExportQueryExecutionTrees::serializeConstructGroup<
+          ad_utility::MediaType::turtle>(templateTriples, varMap, singleRange(),
+                                         /*rowOffset=*/0, config);
+  EXPECT_EQ(turtleOut, "<s> <p> <o> .\n");
+
+  const std::string tsvOut = ExportQueryExecutionTrees::serializeConstructGroup<
+      ad_utility::MediaType::tsv>(templateTriples, varMap, singleRange(),
+                                  /*rowOffset=*/0, config);
+  EXPECT_EQ(tsvOut, "<s>\t<p>\t<o>\n");
+}
