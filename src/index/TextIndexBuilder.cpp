@@ -170,6 +170,9 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
     // NOTE: We must iterate via `scanAll()` and not via indices `0, 1, ...,
     // vocab_.size() - 1`, because a `SplitVocabulary` (e.g. for geometries)
     // uses non-contiguous, marker-encoded indices for its `operator[]`.
+    // TODO<ullingerc>: Iterating over all geometries here is wasteful, since we
+    // never want them in the text index. Add a configuration option that lets
+    // `scanAll()` skip a sub-vocabulary (e.g. geometries) entirely.
     for (const auto& [index, text] : vocab_.scanAll()) {
       if (!isLiteral(text)) {
         continue;
@@ -179,9 +182,7 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
       // into a buffer that is reused when the range is advanced.
       WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
       co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
+      std::string_view textView = stripQuotesAndDatatype(text);
       for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
         WordsFileLine wordLine{std::move(word), false, contextId, 1};
         co_yield wordLine;

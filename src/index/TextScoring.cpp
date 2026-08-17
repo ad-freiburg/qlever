@@ -86,8 +86,7 @@ void ScoreData::calculateScoreData(const std::string& docsFileName,
     // vocabulary from these same literals. Skipping this step would tokenize
     // the raw vocabulary entry (e.g. including a trailing `^^<...>`) and
     // produce different words than during vocabulary building.
-    std::string_view textView = text.substr(0, text.rfind('"'));
-    textView.remove_prefix(1);
+    std::string_view textView = stripQuotesAndDatatype(text);
 
     // Parse words in literal
     addDocumentOrLiteralToScoreDataInvertedIndex(textView, docId, textVocab,
