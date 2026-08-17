@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <cmath>
 #include <string>
 #include <variant>
 #include <vector>
@@ -911,6 +912,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     responseGenerator = wrapGeneratorWithCpuQuota(std::move(responseGenerator),
                                                   std::move(cpuQuota));
   }
+#else
+  // NOTE:
+  // In the reduced C++17 build the whole result is produced eagerly inside
+  // the `computeResult` call above, which already runs under the cgroup
+  // membership, so no wrapping of the (then nonexistent) lazy generator is
+  // needed.
 #endif
 
   auto response = ad_utility::httpUtils::createOkResponse(
@@ -1028,9 +1035,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Determine the CPU quota for this query. The runtime parameter
   // `query-cpu-quota-cores` is the default, the URL parameter
-  // `cpu-quota-cores` overrides it. Raising the quota above the default,
-  // or using one at all when the default is `0` (disabled), requires a
-  // valid access token.
+  // `cpu-quota-cores` overrides it. Raising the quota above the default
+  // requires a valid access token. A value of `0` means "no quota" and is
+  // therefore the maximal raise, not a lowering: without an access token a
+  // query can only tighten its own quota, never escape it.
   double cpuQuotaCores =
       getRuntimeParameter<&RuntimeParameters::queryCpuQuotaCores_>();
   if (auto candidate = ad_utility::url_parser::checkParameter(
@@ -1041,6 +1049,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     } catch (const std::exception&) {
       throw std::runtime_error(absl::StrCat(
           "The parameter \"cpu-quota-cores\" must be a number, but was \"",
+          candidate.value(), "\""));
+    }
+    if (!std::isfinite(requested) || requested < 0 || requested > 1024) {
+      throw std::runtime_error(absl::StrCat(
+          "The parameter \"cpu-quota-cores\" must be between 0 and 1024,"
+          " but was \"",
           candidate.value(), "\""));
     }
     bool isTightening =

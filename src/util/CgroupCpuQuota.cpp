@@ -24,19 +24,24 @@ namespace {
 constexpr int64_t cpuPeriodUsec = 100'000;
 
 #ifdef __linux__
-// Write `content` to `file` with a single plain `write` syscall, return
-// true on success. Cgroup control files must not be written via buffered
-// streams: `std::ofstream` may defer the failing `write` to the close and
-// then swallow the error, making failures undetectable.
-bool writeToCgroupFile(const std::filesystem::path& file,
-                       const std::string& content) {
+// Write `content` to `file` with a single plain `write` syscall. Returns
+// `0` on success and the `errno` of the failing syscall otherwise. Cgroup
+// control files must not be written via buffered streams: `std::ofstream`
+// may defer the failing `write` to the close and then swallow the error,
+// making failures undetectable.
+int writeToCgroupFile(const std::filesystem::path& file,
+                      const std::string& content) {
   int fd = ::open(file.c_str(), O_WRONLY);
   if (fd < 0) {
-    return false;
+    return errno;
   }
-  ssize_t written = ::write(fd, content.data(), content.size());
+  ssize_t written;
+  do {
+    written = ::write(fd, content.data(), content.size());
+  } while (written < 0 && errno == EINTR);
+  int result = written == static_cast<ssize_t>(content.size()) ? 0 : errno;
   ::close(fd);
-  return written == static_cast<ssize_t>(content.size());
+  return result;
 }
 
 pid_t currentTid() { return static_cast<pid_t>(::syscall(SYS_gettid)); }
@@ -85,12 +90,11 @@ CgroupCpuQuota::~CgroupCpuQuota() {
 // _____________________________________________________________________________
 void CgroupCpuQuota::enterCurrentThread() const {
 #ifdef __linux__
-  bool ok =
-      writeToCgroupFile(dir_ / "cgroup.threads", std::to_string(currentTid()));
-  if (!ok) {
-    AD_LOG_WARN << "Failed to move thread " << currentTid()
-                << " into query cgroup " << dir_ << " (errno " << errno << ", "
-                << std::strerror(errno) << ")" << std::endl;
+  pid_t tid = currentTid();
+  int error = writeToCgroupFile(dir_ / "cgroup.threads", std::to_string(tid));
+  if (error != 0) {
+    AD_LOG_WARN << "Failed to move thread " << tid << " into query cgroup "
+                << dir_ << " (" << std::strerror(error) << ")" << std::endl;
   }
 #endif
 }
@@ -98,7 +102,16 @@ void CgroupCpuQuota::enterCurrentThread() const {
 // _____________________________________________________________________________
 void CgroupCpuQuota::leaveCurrentThread() const {
 #ifdef __linux__
-  writeToCgroupFile(parentThreadsFile_, std::to_string(currentTid()));
+  pid_t tid = currentTid();
+  int error = writeToCgroupFile(parentThreadsFile_, std::to_string(tid));
+  if (error != 0) {
+    // A thread that stays behind in the query cgroup keeps its quota for
+    // unrelated work and prevents the removal of the cgroup, so this must
+    // not fail silently.
+    AD_LOG_WARN << "Failed to move thread " << tid
+                << " back out of query cgroup " << dir_ << " ("
+                << std::strerror(error) << ")" << std::endl;
+  }
 #endif
 }
 
@@ -144,17 +157,23 @@ void CgroupCpuQuotaManager::initialize() {
   // works is the feature enabled.
   auto probeDir = baseDir_ / "ql_probe";
   std::error_code ec;
+  // A stale probe directory from an unclean shutdown would make the
+  // creation fail and thereby permanently disable the feature, so remove
+  // it first (the removal fails harmlessly if there is nothing to remove;
+  // note that cgroupfs only supports plain `rmdir` of empty leaves).
+  std::filesystem::remove(probeDir, ec);
   std::filesystem::create_directory(probeDir, ec);
   bool ok = !ec;
-  ok = ok && writeToCgroupFile(probeDir / "cgroup.type", "threaded");
-  ok = ok && writeToCgroupFile(baseDir_ / "cgroup.subtree_control", "+cpu");
+  ok = ok && writeToCgroupFile(probeDir / "cgroup.type", "threaded") == 0;
+  ok =
+      ok && writeToCgroupFile(baseDir_ / "cgroup.subtree_control", "+cpu") == 0;
   ok = ok && writeToCgroupFile(probeDir / "cpu.max",
                                std::to_string(cpuPeriodUsec) + " " +
-                                   std::to_string(cpuPeriodUsec));
+                                   std::to_string(cpuPeriodUsec)) == 0;
   ok = ok && writeToCgroupFile(probeDir / "cgroup.threads",
-                               std::to_string(currentTid()));
+                               std::to_string(currentTid())) == 0;
   ok = ok && writeToCgroupFile(baseDir_ / "cgroup.threads",
-                               std::to_string(currentTid()));
+                               std::to_string(currentTid())) == 0;
   std::filesystem::remove(probeDir, ec);
   supported_ = ok;
   if (supported_) {
@@ -179,17 +198,21 @@ std::shared_ptr<CgroupCpuQuota> CgroupCpuQuotaManager::createQuota(
     return nullptr;
   }
 #ifdef __linux__
-  auto dir = baseDir_ / ("ql_query_" + std::to_string(nextId_.fetch_add(1)));
+  // The PID in the name avoids collisions with cgroups leaked by a
+  // previous server process in the same scope (the counter restarts at
+  // zero) and attributes leftovers to their process when debugging.
+  auto dir = baseDir_ / ("ql_query_" + std::to_string(::getpid()) + "_" +
+                         std::to_string(nextId_.fetch_add(1)));
   std::error_code ec;
   std::filesystem::create_directory(dir, ec);
   if (ec) {
     return nullptr;
   }
   auto quotaUsec = static_cast<int64_t>(cores * cpuPeriodUsec);
-  bool ok =
-      writeToCgroupFile(dir / "cgroup.type", "threaded") &&
-      writeToCgroupFile(dir / "cpu.max", std::to_string(quotaUsec) + " " +
-                                             std::to_string(cpuPeriodUsec));
+  bool ok = writeToCgroupFile(dir / "cgroup.type", "threaded") == 0 &&
+            writeToCgroupFile(dir / "cpu.max",
+                              std::to_string(quotaUsec) + " " +
+                                  std::to_string(cpuPeriodUsec)) == 0;
   if (!ok) {
     std::filesystem::remove(dir, ec);
     return nullptr;
