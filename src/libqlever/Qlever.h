@@ -20,6 +20,7 @@
 #include "backports/filesystem.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/KeepPreviousIndexDirs.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -507,6 +508,20 @@ class Qlever {
   std::string query(std::string query,
                     ad_utility::MediaType mediaType =
                         ad_utility::MediaType::sparqlJson) const;
+
+  // Execute `plannedUpdate` (a `PlannedQuery` for which
+  // `ParsedQuery::hasUpdateClause()` holds) against `deltaTriples`, and
+  // return metadata about the update (timing, number of triples changed,
+  // etc.). The caller must have exclusive access to `deltaTriples`. Also
+  // clears the query and named-result caches, because all cache entries have
+  // been invalidated by the update anyway (the located-triples snapshot is
+  // part of the cache key).
+  UpdateMetadata applyUpdate(
+      const PlannedQuery& plannedUpdate,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      DeltaTriples& deltaTriples,
+      ad_utility::timer::TimeTracer& tracer =
+          ad_utility::timer::DEFAULT_TIME_TRACER);
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
   // with the given options (name and possibly request for building a geometry

@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "backports/filesystem.h"
-#include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/GraphStoreProtocol.h"
 #include "engine/HttpApiHelpers.h"
@@ -1101,32 +1100,6 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
 }
 
 // ____________________________________________________________________________
-UpdateMetadata Server::processUpdateImpl(
-    const PlannedQuery& plannedUpdate,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
-  const auto& qet = plannedUpdate.queryExecutionTree();
-  AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
-
-  DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      plannedUpdate.getIndex(), plannedUpdate.parsedQuery(), qet, deltaTriples,
-      cancellationHandle, tracer);
-  updateMetadata.countBefore_ = countBefore;
-  updateMetadata.countAfter_ = deltaTriples.getCounts();
-
-  tracer.beginTrace("clearCache");
-  // Clear the cache, because all cache entries have been invalidated by
-  // the update anyway (The index of the located triples snapshot is
-  // part of the cache key).
-  qlever().cache().clearAll();
-  qlever().namedResultCache().clear();
-  tracer.endTrace("clearCache");
-
-  return updateMetadata;
-}
-
-// ____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
@@ -1194,7 +1167,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                 // Update the delta triples.
                 // Use `this` explicitly to silence false-positive
                 // errors on captured `this` being unused.
-                auto updateMetadata = this->processUpdateImpl(
+                auto updateMetadata = this->qlever().applyUpdate(
                     plannedUpdate.value(), cancellationHandle, deltaTriples,
                     tracer);
                 tracer.endTrace("execution");
