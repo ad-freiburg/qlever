@@ -383,6 +383,13 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
   }
 }
 
+// _____________________________________________________________________________
+void ParsedQuery::updateExportLimit(std::optional<uint64_t> sendLimit) {
+  if (sendLimit.has_value()) {
+    _limitOffset.exportLimit_ = sendLimit;
+  }
+}
+
 // ____________________________________________________________________________
 bool ParsedQuery::isAggregatingQuery() const {
   return !_groupByVariables.empty() ||

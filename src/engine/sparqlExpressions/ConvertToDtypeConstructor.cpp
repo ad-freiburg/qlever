@@ -63,7 +63,7 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
       }
     }
     return Id::makeUndefined();
-  };
+  }
 
   // ___________________________________________________________________________
   template <typename N>
@@ -76,7 +76,7 @@ CPP_template(typename T, bool AllowExponentialNotation = true)(
     } else {
       return Id::makeFromDouble(resNumber);
     }
-  };
+  }
 
  public:
   ValueId operator()(IntDoubleStr value) const {
