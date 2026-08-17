@@ -44,7 +44,7 @@ class Filter : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
+  std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
   std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }

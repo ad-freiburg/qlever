@@ -347,7 +347,7 @@ class FrequencyEncode {
           FrequencyEncode,
           ql::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
     initialize(std::forward<View>(view));
-  };
+  }
 
   FrequencyEncode() = delete;
   FrequencyEncode(const FrequencyEncode&) = delete;
@@ -400,7 +400,7 @@ class GapEncode {
       !ranges::same_as<GapEncode, ql::remove_cvref_t<
                                       View>>)) explicit GapEncode(View&& view) {
     initialize(std::forward<View>(view));
-  };
+  }
 
   GapEncode() = delete;
   GapEncode(const GapEncode&) = delete;

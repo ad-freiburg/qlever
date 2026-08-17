@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -42,16 +43,15 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
-#include "parser/SparqlParser.h"
 #include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TypeTraits.h"
 
 using ad_utility::source_location;
+using ad_utility::testing::parseQuery;
 
 namespace queryPlannerTestHelpers {
 using namespace ::testing;
@@ -427,6 +427,7 @@ struct SpatialJoinMatcher {
                   PayloadVariables payloadVariables,
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
+                  std::optional<De9imFilterString> de9imFilter,
                   const ChildArgs&... childMatchers) const {
     return RootOperation<::SpatialJoin>(AllOf(
         children(childMatchers...),
@@ -440,6 +441,7 @@ struct SpatialJoinMatcher {
                     Eq(payloadVariables)),
         AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
         AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getDe9imFilter, Eq(de9imFilter)),
         AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
   }
 };
@@ -491,6 +493,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a subtree that matches the `actualMatcher` and additionally has the
+// given `LIMIT`/`OFFSET` attached to its root operation.
+inline QetMatcher WithLimitOffset(const LimitOffsetClause& limitOffset,
+                                  const QetMatcher& actualMatcher) {
+  return AllOf(RootOperationBase(
+                   AD_PROPERTY(::Operation, getLimitOffset, Eq(limitOffset))),
+               actualMatcher);
+}
 
 // Match a `DISTINCT` operation.
 constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
@@ -617,8 +628,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 template <typename QueryPlannerClass = QueryPlanner>
 inline QueryExecutionTree parseAndPlan(std::string query,
                                        QueryExecutionContext* qec) {
-  static EncodedIriManager ev;
-  ParsedQuery pq = SparqlParser::parseQuery(&ev, std::move(query));
+  ParsedQuery pq = parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
   auto tree =
