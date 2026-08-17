@@ -72,18 +72,28 @@ CgroupCpuQuota::CgroupCpuQuota(std::filesystem::path dir,
 CgroupCpuQuota::~CgroupCpuQuota() {
 #ifdef __linux__
   // Worker threads normally have exited or left already. If the group is
-  // still busy, wait briefly, then give up and leak the group (it becomes
+  // still busy, actively move the stragglers back to the parent group
+  // instead of waiting for them (sleeping here would block the thread that
+  // finishes the query, which measurably slows down every query). Only if
+  // that fails repeatedly, give up and leak the group (it becomes
   // removable once its last thread exits and does no harm until then).
   std::error_code ec;
-  for (size_t i = 0; i < 20; ++i) {
+  for (size_t i = 0; i < 3; ++i) {
     std::filesystem::remove(dir_, ec);
     if (!ec) {
       return;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::ifstream threads{dir_ / "cgroup.threads"};
+    std::string tid;
+    while (std::getline(threads, tid)) {
+      writeToCgroupFile(parentThreadsFile_, tid);
+    }
   }
-  AD_LOG_WARN << "Could not remove query cgroup " << dir_ << " ("
-              << ec.message() << ")" << std::endl;
+  std::filesystem::remove(dir_, ec);
+  if (ec) {
+    AD_LOG_WARN << "Could not remove query cgroup " << dir_ << " ("
+                << ec.message() << ")" << std::endl;
+  }
 #endif
 }
 
