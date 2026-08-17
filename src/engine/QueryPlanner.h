@@ -257,6 +257,7 @@ class QueryPlanner {
  protected:
   QueryExecutionContext* getQec() const { return _qec; }
 
+
  private:
   QueryExecutionContext* _qec;
 
@@ -733,7 +734,8 @@ class QueryPlanner {
       const std::vector<SubtreePlan>& lastRow);
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
-      bool allowReplacementPlans = false);
+      bool allowReplacementPlans,
+      const qlever::Allocator<Id>& alloc);
 
   // Helper for `fillDpTab` that extracts a subset of possible
   // `ReplacementPlans` that is applicable to a connected component given by the
