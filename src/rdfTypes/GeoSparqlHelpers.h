@@ -323,19 +323,20 @@ class WktGeometricRelation {
 };
 
 // The `geof:relate` function, which checks two geometries against an
-// arbitrary DE-9IM intersection pattern (the third argument).
+// arbitrary DE-9IM intersection pattern (the third argument). Currently this is
+// a dummy implementation only present to allow query rewriting to a
+// `SpatialJoin`.
 class WktDe9imRelation {
  public:
   ValueId operator()(
-      // TODO<ullingerc> For implementation, use a new appropriate value getter
-      // for geometry literals and points.
       [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
       [[maybe_unused]] const std::optional<GeoPoint>& geoRight,
       [[maybe_unused]] const std::optional<std::string>& pattern) const {
     AD_THROW(
         "The `geof:relate` function is currently only implemented for a "
         "subset of all possible queries. More details on GeoSPARQL support "
-        "can be found on the QLever Wiki.");
+        "can be found in the QLever Docs "
+        "(https://docs.qlever.dev/geosparql/).");
   }
 };
 
