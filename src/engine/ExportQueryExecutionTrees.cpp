@@ -854,7 +854,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   bool dedupActive =
       !std::holds_alternative<ad_utility::DeduplicationMode::None>(
-          getRuntimeParameter<&RuntimeParameters::constructDeduplication_>().value_);
+          getRuntimeParameter<&RuntimeParameters::constructDeduplication_>()
+              .value_);
   if (dedupActive) {
     // When triple deduplication is active, the chunks share a single
     // deduplicator.
