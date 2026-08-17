@@ -841,11 +841,9 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   // outside the lock.
   size_t numThreads =
       getRuntimeParameter<&RuntimeParameters::constructExportNumThreads_>();
-  const auto& dedupMode =
-      getRuntimeParameter<&RuntimeParameters::constructDeduplication_>();
   bool dedupActive =
       !std::holds_alternative<ad_utility::DeduplicationMode::None>(
-          dedupMode.value_);
+          getRuntimeParameter<&RuntimeParameters::constructDeduplication_>().value_);
   if (numThreads == 0) {
     numThreads = std::max(1u, std::thread::hardware_concurrency());
   }
