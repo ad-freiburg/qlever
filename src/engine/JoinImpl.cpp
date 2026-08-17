@@ -47,7 +47,9 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
                    ColumnIndex t1JoinCol, ColumnIndex t2JoinCol,
                    bool keepJoinColumn,
                    bool allowSwappingChildrenOnlyForTesting)
-    : Operation(qec), keepJoinColumn_{keepJoinColumn} {
+    : Operation(qec),
+      multiplicities_{allocator().template as<float>()},
+      keepJoinColumn_{keepJoinColumn} {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
@@ -445,17 +447,35 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
     return;
   }
 
+  // Use the allocator of the result table (which is configured by whoever
+  // requested this join, e.g. `Operation::allocator()`) for the scratch data
+  // structures below as well, so that all dynamic allocations performed by
+  // this hash join are routed through the same (potentially PMR-backed)
+  // memory resource instead of the global heap.
+  auto allocator = dynRes->getAllocator();
+
   IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
+  auto idTableToHashMap = [&allocator](const auto& table,
+                                       const ColumnIndex jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
     using Table = std::decay_t<decltype(table)>;
-    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
+    using Row = typename Table::row_type;
+    using RowVector = std::vector<Row, decltype(allocator.as<Row>())>;
+    // `HashMapWithMemoryLimit` (unlike `HashMap`/`absl::flat_hash_map`, see the
+    // comment at its definition) is exception-safe when used with an allocator
+    // that may throw on allocation, which is why it is used here instead.
+    ad_utility::HashMapWithMemoryLimit<Id, RowVector> map{
+        allocator.as<std::pair<const Id, RowVector>>()};
     for (const auto& row : table) {
-      map[row[jc]].push_back(row);
+      auto it = map.find(row[jc]);
+      if (it == map.end()) {
+        it = map.try_emplace(row[jc], RowVector{allocator.as<Row>()}).first;
+      }
+      it->second.push_back(row);
     }
     return map;
   };
