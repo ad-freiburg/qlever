@@ -410,6 +410,29 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     return cacheKeyAdded;
   }
 
+  // A top-level `FILTER` restricts which rows end up on disk, but (unlike the
+  // triples analyzed below) is not part of `_graphPatterns` and would
+  // otherwise go unnoticed by `graphPatternInvariantFilter`.
+  if (!parsed.value()._rootGraphPattern._filters.empty()) {
+    explainIgnore("The view's query has a top-level FILTER");
+    return cacheKeyAdded;
+  }
+
+  // A trailing `VALUES` clause also restricts the on-disk rows and is stored
+  // separately from `_rootGraphPattern`, so it needs an explicit check too.
+  if (parsed.value().postQueryValuesClause_.has_value()) {
+    explainIgnore("The view's query has a trailing VALUES clause");
+    return cacheKeyAdded;
+  }
+
+  // `DISTINCT`/`REDUCED` change the cardinality of the result and thus of the
+  // join, which the chain/star rewriting below does not account for.
+  const auto& selectClause = parsed.value().selectClause();
+  if (selectClause.distinct_ || selectClause.reduced_) {
+    explainIgnore("The view's query uses DISTINCT or REDUCED");
+    return cacheKeyAdded;
+  }
+
   auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
   if (graphPatternsFiltered.size() != 1) {
     explainIgnore(

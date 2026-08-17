@@ -228,3 +228,51 @@ TEST(MaterializedViewsStarRewriteAggregationTest,
   expectNotSuitableForRewrite(qlv, manager, "unprojectedChainObjectView",
                               "SELECT ?s ?m { ?s <p1> ?m . ?m <p2> ?o }");
 }
+
+// _____________________________________________________________________________
+// Regression test: a top-level FILTER, a trailing VALUES clause, or
+// DISTINCT/REDUCED in the view's defining query restrict which rows actually
+// end up on disk, but (unlike aggregation) do not remove any variable from
+// `variableToColumnMap()`. Without an explicit check for these, a query with
+// the same star/chain pattern could be silently rewritten to read the view
+// even though its content is only a restricted subset of the join.
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     restrictingModifiersNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  // Star / chain with a top-level FILTER.
+  expectNotSuitableForRewrite(
+      qlv, manager, "filteredStarView",
+      "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 . FILTER(?s = <s1>) }");
+  expectNotSuitableForRewrite(
+      qlv, manager, "filteredChainView",
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o . FILTER(?s = <s1>) }");
+
+  // Star / chain with a trailing VALUES clause.
+  expectNotSuitableForRewrite(
+      qlv, manager, "valuesStarView",
+      "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } VALUES ?s { <s1> }");
+  expectNotSuitableForRewrite(
+      qlv, manager, "valuesChainView",
+      "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } VALUES ?s { <s1> }");
+
+  // Star with DISTINCT, chain with REDUCED.
+  expectNotSuitableForRewrite(
+      qlv, manager, "distinctStarView",
+      "SELECT DISTINCT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+  expectNotSuitableForRewrite(
+      qlv, manager, "reducedChainView",
+      "SELECT REDUCED ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o }");
+}
