@@ -11,6 +11,7 @@
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "index/Index.h"
 #include "parser/ParsedQuery.h"
 
 // This module contains type aliases from `libqlever`, which need to be in a
@@ -111,6 +112,8 @@ struct PlannedQuery {
     queryExecutionTree_ = queryExecutionTree_->clone();
     AD_CORRECTNESS_CHECK(qec_.get() == queryExecutionTree_->getQec());
   }
+
+  const Index& getIndex() const { return qec_->getIndex(); }
 };
 }  // namespace qlever
 
