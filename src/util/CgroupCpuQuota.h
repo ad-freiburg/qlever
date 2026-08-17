@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <vector>
 
 namespace ad_utility {
 
@@ -84,14 +86,29 @@ class CgroupCpuQuotaManager {
 
   // Create a cgroup for one query with a quota of `cores` CPUs. Returns
   // `nullptr` if unsupported or `cores <= 0`.
+  //
+  // NOTE:
+  // The cgroups are pooled: destroying the returned object puts its cgroup
+  // on a free list for reuse instead of removing it. Creating and removing
+  // cgroups takes global kernel locks and involves RCU grace periods, which
+  // under the churn of a busy server adds tens of milliseconds per query,
+  // while rewriting `cpu.max` of a pooled group is cheap.
   std::shared_ptr<CgroupCpuQuota> createQuota(double cores);
 
  private:
+  friend class CgroupCpuQuota;
   CgroupCpuQuotaManager() = default;
+  // Take a free pooled cgroup directory or create a new one. Returns an
+  // empty optional if creation fails.
+  std::optional<std::filesystem::path> acquireDir();
+  // Return a cgroup directory to the pool.
+  void releaseDir(std::filesystem::path dir);
   bool initialized_ = false;
   bool supported_ = false;
   std::filesystem::path baseDir_;
   std::atomic<uint64_t> nextId_ = 0;
+  std::mutex poolMutex_;
+  std::vector<std::filesystem::path> pool_;
 };
 
 }  // namespace ad_utility

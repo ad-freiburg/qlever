@@ -6,7 +6,6 @@
 #include <cerrno>
 #include <cstring>
 #include <fstream>
-#include <thread>
 
 #include "util/Log.h"
 
@@ -71,29 +70,16 @@ CgroupCpuQuota::CgroupCpuQuota(std::filesystem::path dir,
 // _____________________________________________________________________________
 CgroupCpuQuota::~CgroupCpuQuota() {
 #ifdef __linux__
-  // Worker threads normally have exited or left already. If the group is
-  // still busy, actively move the stragglers back to the parent group
-  // instead of waiting for them (sleeping here would block the thread that
-  // finishes the query, which measurably slows down every query). Only if
-  // that fails repeatedly, give up and leak the group (it becomes
-  // removable once its last thread exits and does no harm until then).
-  std::error_code ec;
-  for (size_t i = 0; i < 3; ++i) {
-    std::filesystem::remove(dir_, ec);
-    if (!ec) {
-      return;
-    }
-    std::ifstream threads{dir_ / "cgroup.threads"};
-    std::string tid;
-    while (std::getline(threads, tid)) {
-      writeToCgroupFile(parentThreadsFile_, tid);
-    }
+  // Worker threads normally have exited or left already. Actively move any
+  // stragglers back to the parent group (sleeping here would block the
+  // thread that finishes the query), then return the group to the pool for
+  // reuse by a later query.
+  std::ifstream threads{dir_ / "cgroup.threads"};
+  std::string tid;
+  while (std::getline(threads, tid)) {
+    writeToCgroupFile(parentThreadsFile_, tid);
   }
-  std::filesystem::remove(dir_, ec);
-  if (ec) {
-    AD_LOG_WARN << "Could not remove query cgroup " << dir_ << " ("
-                << ec.message() << ")" << std::endl;
-  }
+  CgroupCpuQuotaManager::getInstance().releaseDir(std::move(dir_));
 #endif
 }
 
@@ -202,12 +188,16 @@ void CgroupCpuQuotaManager::initialize() {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<CgroupCpuQuota> CgroupCpuQuotaManager::createQuota(
-    double cores) {
-  if (!supported_ || cores <= 0) {
-    return nullptr;
-  }
+std::optional<std::filesystem::path> CgroupCpuQuotaManager::acquireDir() {
 #ifdef __linux__
+  {
+    std::lock_guard lock{poolMutex_};
+    if (!pool_.empty()) {
+      auto dir = std::move(pool_.back());
+      pool_.pop_back();
+      return dir;
+    }
+  }
   // The PID in the name avoids collisions with cgroups leaked by a
   // previous server process in the same scope (the counter restarts at
   // zero) and attributes leftovers to their process when debugging.
@@ -216,19 +206,44 @@ std::shared_ptr<CgroupCpuQuota> CgroupCpuQuotaManager::createQuota(
   std::error_code ec;
   std::filesystem::create_directory(dir, ec);
   if (ec) {
+    return std::nullopt;
+  }
+  if (writeToCgroupFile(dir / "cgroup.type", "threaded") != 0) {
+    std::filesystem::remove(dir, ec);
+    return std::nullopt;
+  }
+  return dir;
+#else
+  return std::nullopt;
+#endif
+}
+
+// _____________________________________________________________________________
+void CgroupCpuQuotaManager::releaseDir(std::filesystem::path dir) {
+  std::lock_guard lock{poolMutex_};
+  pool_.push_back(std::move(dir));
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<CgroupCpuQuota> CgroupCpuQuotaManager::createQuota(
+    double cores) {
+  if (!supported_ || cores <= 0) {
+    return nullptr;
+  }
+#ifdef __linux__
+  auto dir = acquireDir();
+  if (!dir.has_value()) {
     return nullptr;
   }
   auto quotaUsec = static_cast<int64_t>(cores * cpuPeriodUsec);
-  bool ok = writeToCgroupFile(dir / "cgroup.type", "threaded") == 0 &&
-            writeToCgroupFile(dir / "cpu.max",
-                              std::to_string(quotaUsec) + " " +
-                                  std::to_string(cpuPeriodUsec)) == 0;
-  if (!ok) {
-    std::filesystem::remove(dir, ec);
+  if (writeToCgroupFile(dir.value() / "cpu.max",
+                        std::to_string(quotaUsec) + " " +
+                            std::to_string(cpuPeriodUsec)) != 0) {
+    releaseDir(std::move(dir).value());
     return nullptr;
   }
   return std::shared_ptr<CgroupCpuQuota>{
-      new CgroupCpuQuota{std::move(dir), baseDir_ / "cgroup.threads"}};
+      new CgroupCpuQuota{std::move(dir).value(), baseDir_ / "cgroup.threads"}};
 #else
   return nullptr;
 #endif
