@@ -11,6 +11,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -537,6 +538,60 @@ TEST(ServerTest, clearDeltaTriples) {
   EXPECT_THAT(responseBodyAsJson(std::move(response)),
               testing::Optional(testing::Eq(
                   json{{"inserted", 0}, {"deleted", 0}, {"total", 0}})));
+  EXPECT_THAT(server.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              testing::Optional(testing::Eq(DeltaTriplesCount{0, 0})));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, vacuumDeltaTriples) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  // Without this, the single block of the (tiny) test index doesn't meet the
+  // minimum size for `vacuum` to process it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          size_t{0});
+
+  // Insert a triple that is already in the index; this is a redundant
+  // insertion that `vacuum` should remove.
+  auto insertRequest =
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
+  EXPECT_THAT(server.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+
+  auto vacuumRequest = [](std::optional<std::string> accessToken) {
+    auto request = makeGetRequest("/?cmd=vacuum-delta-triples");
+    if (accessToken.has_value()) {
+      request.set(http::field::authorization, "Bearer " + accessToken.value());
+    }
+    return request;
+  };
+
+  // The command requires a valid access token.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.process(vacuumRequest(std::nullopt)),
+      testing::HasSubstr("vacuum-delta-triples requires a valid access token"));
+  EXPECT_THAT(server.deltaTriplesManager()
+                  .getCurrentLocatedTriplesSharedState()
+                  ->counts_,
+              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+
+  // With a valid access token, the redundant insertion is vacuumed away and
+  // the response reports the resulting stats.
+  auto response = server.process(vacuumRequest("accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_EQ(body.value()["external"]["insertionsRemoved"], 1);
   EXPECT_THAT(server.deltaTriplesManager()
                   .getCurrentLocatedTriplesSharedState()
                   ->counts_,

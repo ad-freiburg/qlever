@@ -425,6 +425,37 @@ Awaitable<DeltaTriplesCount> Server::clearDeltaTriples() {
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<std::optional<nlohmann::json>> Server::vacuumDeltaTriples(
+        std::optional<std::string_view> userTimeout, bool accessTokenOk,
+        const RequestT& request, ResponseT& send) {
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  std::optional<TimeLimit> timeLimit = co_await verifyUserSubmittedQueryTimeout(
+      userTimeout, accessTokenOk, request, send);
+  if (!timeLimit.has_value()) {
+    // If the optional is empty, this indicates an error response has been
+    // sent to the client already. We can stop here.
+    co_return std::nullopt;
+  }
+  auto cancelTimeoutOnDestruction =
+      cancelAfterDeadline(handle, timeLimit.value());
+
+  auto coroutine = computeInNewThread(
+      updateThreadPool_,
+      [this, handle] {
+        // Snapshot on the update thread (see `clearDeltaTriples` above).
+        auto snapshot = indexAndViewsSnapshot();
+        return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
+            [handle](auto& deltaTriples) {
+              return deltaTriples.vacuum(handle);
+            });
+      },
+      handle);
+  co_return co_await std::move(coroutine);
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
@@ -508,33 +539,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = jsonResponse(json(countAfterClear));
   } else if (auto cmd = checkParameter("cmd", "vacuum-delta-triples")) {
     dispatchLog(*cmd, accessTokenOk);
-
-    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    std::optional<TimeLimit> timeLimit =
-        co_await verifyUserSubmittedQueryTimeout(
-            checkParameter("timeout", std::nullopt), accessTokenOk, request,
-            send);
-    if (!timeLimit.has_value()) {
-      // If the optional is empty, this indicates an error response has been
-      // sent to the client already. We can stop here.
+    auto vacuumStats = co_await vacuumDeltaTriples(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    if (!vacuumStats.has_value()) {
       co_return;
     }
-    auto cancelTimeoutOnDestruction =
-        cancelAfterDeadline(handle, timeLimit.value());
-
-    auto coroutine = computeInNewThread(
-        updateThreadPool_,
-        [this, handle] {
-          // Snapshot on the update thread (see `clear-delta-triples` above).
-          auto snapshot = indexAndViewsSnapshot();
-          return snapshot->index_.deltaTriplesManager().modify<nlohmann::json>(
-              [handle](auto& deltaTriples) {
-                return deltaTriples.vacuum(handle);
-              });
-        },
-        handle);
-    auto vacuumStats = co_await std::move(coroutine);
-    response = jsonResponse(vacuumStats);
+    response = jsonResponse(vacuumStats.value());
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     dispatchLog(*cmd, accessTokenOk);
     response = jsonResponse(json(globalRuntimeParameters.rlock()->toMap()));

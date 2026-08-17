@@ -164,8 +164,22 @@ class Server {
 
   // Clear the delta triples of the currently active index (not a stale
   // snapshot, even if a concurrent rebuild swaps the index while this is
-  // running) and return the resulting counts. Not cancellable.
+  // running) and return the resulting counts. Not cancellable. Unlike
+  // `vacuumDeltaTriples` below, this is unconditional and has no timeout, so
+  // it neither needs the request/response nor can it fail partway through.
   Awaitable<DeltaTriplesCount> clearDeltaTriples();
+
+  // Vacuum (remove redundant) delta triples of the currently active index,
+  // honoring a user-submitted timeout (see `verifyUserSubmittedQueryTimeout`).
+  // Unlike `clearDeltaTriples` above, this can fail (an invalid timeout), in
+  // which case an error response has already been sent to the client and an
+  // empty optional is returned; the caller must stop processing in that
+  // case. Otherwise the resulting vacuum stats are returned.
+  CPP_template(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<std::optional<nlohmann::json>> vacuumDeltaTriples(
+          std::optional<std::string_view> userTimeout, bool accessTokenOk,
+          const RequestT& request, ResponseT& send);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
