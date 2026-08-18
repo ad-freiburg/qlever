@@ -18,6 +18,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "CompilationInfo.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -897,6 +898,26 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_EQ(uniquePredicates, 3);
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso"));
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
+
+  // Writing the same permutation with the writer-thread throttle disabled
+  // (0 means "fall back to `permutation-writer-num-threads`") must give the
+  // same result. Together with the default of 1 used by the calls above and
+  // below, this exercises the translation of the runtime parameter to the
+  // writer-thread override on both of its branches. Use a separate base name,
+  // so that the permutation that was already finalized above stays intact.
+  {
+    auto cleanupParameter = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
+    index.setOnDiskBase(onDiskBase + ".unthrottled");
+    auto [uniquePredicatesUnthrottled, metaUnthrottled] =
+        index.createPermutationWithoutMetadata(
+            4,
+            ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
+                tables.at(0).clone(), tables.at(1).clone()}},
+            permutation, false);
+    index.setOnDiskBase(onDiskBase);
+    EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
+  }
 
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(

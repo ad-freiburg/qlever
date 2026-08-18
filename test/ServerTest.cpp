@@ -10,6 +10,7 @@
 
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/HttpError.h"
@@ -20,7 +21,6 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
@@ -29,80 +29,22 @@
 using nlohmann::json;
 
 namespace {
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
+// Expect that `call()` throws an `HttpError` with status 403 Forbidden and
+// with a message that matches `messageMatcher`.
+auto expectForbiddenError = [](auto call, auto messageMatcher,
+                               ad_utility::source_location l =
+                                   AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  try {
+    call();
+    FAIL() << "Expected an `HttpError` to be thrown";
+  } catch (const HttpError& e) {
+    EXPECT_EQ(e.status(), boost::beast::http::status::forbidden);
+    EXPECT_THAT(e.what(), messageMatcher);
+  }
 };
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
-                                  datasets);
-}
-
 }  // namespace
-TEST(ServerTest, determineResultPinning) {
-  EXPECT_THAT(Server::determineResultPinning(
-                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
-              testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
-              testing::Pair(false, true));
-  EXPECT_THAT(
-      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
-      testing::Pair(false, false));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, determineMediaType) {
-  auto MakeRequest = [](const std::optional<std::string>& accept,
-                        const http::verb method = http::verb::get,
-                        const std::string& target = "/",
-                        const std::string& body = "") {
-    auto req = http::request<http::string_body>{method, target, 11};
-    if (accept.has_value()) {
-      req.set(http::field::accept, accept.value());
-    }
-    req.body() = body;
-    req.prepare_payload();
-    return req;
-  };
-  auto checkActionMediatype = [&](const std::string& actionName,
-                                  ad_utility::MediaType expectedMediaType) {
-    EXPECT_THAT(Server::determineMediaTypes({{"action", {actionName}}},
-                                            MakeRequest(std::nullopt)),
-                testing::ElementsAre(expectedMediaType));
-  };
-  // The media type associated with the action overrides the `Accept` header.
-  EXPECT_THAT(Server::determineMediaTypes(
-                  {{"action", {"csv_export"}}},
-                  MakeRequest("application/sparql-results+json")),
-              testing::ElementsAre(ad_utility::MediaType::csv));
-  checkActionMediatype("csv_export", ad_utility::MediaType::csv);
-  checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
-  checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
-  checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
-  checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
-  checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
-  EXPECT_THAT(Server::determineMediaTypes(
-                  {}, MakeRequest("application/sparql-results+json")),
-              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
-  // No supported media type in the `Accept` header. (Contrary to it's docstring
-  // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
-  // exception if no supported media type is found.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::determineMediaTypes({}, MakeRequest("text/css")),
-      testing::HasSubstr("Not a single media type known to this parser was "
-                         "detected in \"text/css\"."));
-  // No `Accept` header means that any content type is allowed.
-  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest(std::nullopt)),
-              testing::ElementsAre());
-  // No `Accept` header and an empty `Accept` header are not distinguished.
-  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest("")),
-              testing::ElementsAre());
-}
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
@@ -172,30 +114,6 @@ TEST(ServerTest, getQueryId) {
   // Without custom query ids, unique ids are generated.
   auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, composeStatsJson) {
-  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
-  json expectedJson{{"git-hash-index", "git short hash not set"},
-                    {"git-hash-server", "git short hash not set"},
-                    {"version-server", "project version not set"},
-                    {"name-index", ""},
-                    {"name-text-index", ""},
-                    {"num-entity-occurrences", 0},
-                    {"num-objects-internal", 0},
-                    {"num-objects-normal", 1},
-                    {"num-permutations", 6},
-                    {"num-predicates-internal", 1},
-                    {"num-predicates-normal", 1},
-                    {"num-subjects-internal", 0},
-                    {"num-subjects-normal", 1},
-                    {"num-text-records", 0},
-                    {"num-triples-internal", 1},
-                    {"num-triples-normal", 1},
-                    {"num-word-occurrences", 0}};
-  EXPECT_THAT(server.composeStatsJson(server.indexAndViewsSnapshot()->index_),
-              testing::Eq(expectedJson));
 }
 
 // _____________________________________________________________________________
@@ -269,13 +187,12 @@ TEST(ServerTest, createResponseMetadata) {
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
-          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          plannedQuery, plannedQuery.queryExecutionTree(), UpdateMetadata{},
-          tracer2),
+          *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+          UpdateMetadata{}, tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-      plannedQuery, plannedQuery.queryExecutionTree(), updateMetadata, tracer2);
+      *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+      updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -298,74 +215,16 @@ TEST(ServerTest, createResponseMetadata) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, adjustParsedQueryLimitOffset) {
-  using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
-    ParsedQuery parsed = parseQuery(std::move(operation));
-    auto* qec = ad_utility::testing::getQec();
-    QueryExecutionTree qet =
-        QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
-            .createExecutionTree(parsed);
-    return {std::move(parsed), std::move(qet), *qec};
-  };
-  auto expectExportLimit =
-      [&makePlannedQuery](
-          ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
-          std::string operation =
-              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
-                                                                      {"12"}}},
-          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(l);
-        auto pq = makePlannedQuery(std::move(operation));
-        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
-        EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
-                    testing::Eq(limit));
-      };
-
-  std::string complexQuery{
-      "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
-      "BIND(RAND() as ?r) . } OFFSET 5"};
-
-  // Check that the export limit is set for `qlever-results+json`.
-  expectExportLimit(qleverJson, 12);
-  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
-                    {{"send", {"13"}}});
-  expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
-
-  // Check that the export limit is set for `sparql-results+json` if and
-  // only if the runtime parameter `sparql-results-json-with-time`  is set.
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
-    expectExportLimit(sparqlJson, 12);
-  }
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
-    expectExportLimit(sparqlJson, std::nullopt);
-  }
-
-  // Check that no export limit is set for other media types.
-  expectExportLimit(csv, std::nullopt);
-  expectExportLimit(csv, std::nullopt, complexQuery);
-  expectExportLimit(tsv, std::nullopt);
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, configurePinnedResultWithName) {
   auto qec = ad_utility::testing::getQec();
 
-  // Test with no pinNamed value - should not modify qec
-  std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
-                                        true, *qec);
+  // Test with no pin - should not modify qec
+  Server::configurePinnedResultWithName(std::nullopt, true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
-  // Test with pinNamed and valid access token - should set the pin name
-  std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
-                                        true, *qec);
+  // Test with a name and valid access token - should set the pin name
+  Server::configurePinnedResultWithName(
+      QueryExecutionContext::PinResultWithName{"test_query_name"}, true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
@@ -373,9 +232,11 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
-  // Test with pinNamed AND pinned geo Var.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", std::nullopt,
-                                        true, *qec);
+  // Test with name AND pinned geo var.
+  Server::configurePinnedResultWithName(
+      QueryExecutionContext::PinResultWithName{"test_query_name",
+                                               Variable{"?geom_var"}},
+      true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
@@ -385,8 +246,11 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
-  // Test with pinNamed, geo var, AND simplification.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", 10.0, true, *qec);
+  // Test with name, geo var, AND simplification.
+  Server::configurePinnedResultWithName(
+      QueryExecutionContext::PinResultWithName{"test_query_name",
+                                               Variable{"?geom_var"}, 10.0},
+      true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
@@ -397,10 +261,13 @@ TEST(ServerTest, configurePinnedResultWithName) {
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
-  // Test with pinNamed but invalid access token - should throw exception
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
-                                            std::nullopt, false, *qec),
+  // Pinning without a valid access token is rejected with 403 Forbidden.
+  expectForbiddenError(
+      [&] {
+        Server::configurePinnedResultWithName(
+            QueryExecutionContext::PinResultWithName{"test_query_name"}, false,
+            *qec);
+      },
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
@@ -409,61 +276,26 @@ TEST(ServerTest, configurePinnedResultWithName) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, parsePinGeoIndexSimplification) {
-  // No value given - no simplification.
-  EXPECT_EQ(Server::parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
-
-  // A valid positive number is parsed correctly.
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("10.5"),
-              ::testing::Optional(10.5));
-
-  // A non-numeric value throws.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::parsePinGeoIndexSimplification("not-a-number"),
-      testing::HasSubstr(
-          "Invalid value for `pin-geo-index-simplification`: must be a "
-          "floating-point number of meters."));
-
-  // Negative and zero values are not rejected by the parser itself (that is
-  // left to the downstream consumer, see `GeoConverters::simplifyPolyline`).
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("-5"),
-              ::testing::Optional(-5.0));
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("0"),
-              ::testing::Optional(0.0));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, describePinResultWithNameForLog) {
-  // No pinned name - nothing to describe.
-  EXPECT_EQ(Server::describePinResultWithNameForLog(std::nullopt, std::nullopt,
-                                                    std::nullopt),
-            "");
-
-  // Pinned name only.
-  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", std::nullopt,
-                                                    std::nullopt),
-            " [pin result with name \"myPin\"]");
-
-  // Pinned name and geo index, but no simplification.
-  EXPECT_EQ(
-      Server::describePinResultWithNameForLog("myPin", "geom", std::nullopt),
-      " [pin result with name \"myPin\" with geo index on ?geom]");
-
-  // Pinned name, geo index, and simplification.
-  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", "geom", 5.0),
-            " [pin result with name \"myPin\" with geo index on ?geom, "
-            "simplification=5m]");
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
   auto config = serverTestHelpers::getDefaultConfig();
   Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      server.checkAccessToken("invalidAccessToken"),
+  // An invalid access token results in a 403 Forbidden response.
+  expectForbiddenError(
+      [&] { server.checkAccessToken("invalidAccessToken"); },
       testing::HasSubstr("Access token was provided but it was invalid"));
+
+  // Same when the server was started without `--access-token` at all.
+  Server serverWithoutToken{4322, 1, "", config};
+  expectForbiddenError(
+      [&] { serverWithoutToken.checkAccessToken("someToken"); },
+      testing::HasSubstr("Access token was provided but server was started "
+                         "without --access-token"));
+
+  // No access token provided at all is not an error here, it just means that
+  // operations requiring one are rejected later.
+  EXPECT_FALSE(serverWithoutToken.checkAccessToken(std::nullopt));
 
   config.persistUpdates_ = false;
 
