@@ -274,7 +274,7 @@ void TextIndexBuilder::addContextToVector(
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(true),
                           Id::makeFromInt(context.get()),
-                          Id::makeFromInt(it->first.getVocabIndex().get()),
+                          Id::makeFromVocabIndex(it->first.getVocabIndex()),
                           Id::makeFromDouble(it->second)});
     }
   }
@@ -297,7 +297,12 @@ void TextIndexBuilder::createTextIndex(const std::string& filename,
     TextBlockIndex textBlockIndex = value[0].getInt();
     bool flag = value[1].getBool();
     TextRecordIndex textRecordIndex = TextRecordIndex::make(value[2].getInt());
-    WordOrEntityIndex wordOrEntityIndex = value[3].getInt();
+    // Entities are stored as a `VocabIndex`-typed `Id` (see
+    // `addContextToVector`), since they do not always fit into the
+    // signed 60-bit range of an integer `Id`; words are stored as a plain
+    // `Int`-typed `Id`.
+    WordOrEntityIndex wordOrEntityIndex =
+        flag ? value[3].getVocabIndex().get() : value[3].getInt();
     Score score = static_cast<Score>(value[4].getDouble());
     if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
