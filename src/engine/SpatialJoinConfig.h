@@ -21,6 +21,7 @@
 #include "parser/PayloadVariables.h"
 #include "rdfTypes/Variable.h"
 #include "util/EnumWithStrings.h"
+#include "util/Exception.h"
 
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole
@@ -31,7 +32,8 @@
 // https://en.wikipedia.org/wiki/DE-9IM). Stored without a null terminator.
 using De9imFilterString = std::array<char, 9>;
 
-// Parsing and validation of `De9imFilterString`s, see `parser/SpatialQuery.h`.
+// Parsing and validation of `De9imFilterString`s, see
+// `rdfTypes/GeoSparqlHelpers.h`.
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -49,8 +51,25 @@ struct MaxDistanceConfig {
 // DE-9IM filter pattern only for the `DE9IM` join type.
 struct LibSpatialJoinConfig {
   SpatialJoinType joinType_;
-  std::optional<double> maxDist_ = std::nullopt;
-  std::optional<De9imFilterString> de9imFilter_ = std::nullopt;
+  std::optional<double> maxDist_;
+  std::optional<De9imFilterString> de9imFilter_;
+
+  // For join types other than `WITHIN_DIST`/`DE9IM`, where neither
+  // `maxDist_` nor `de9imFilter_` apply.
+  explicit LibSpatialJoinConfig(SpatialJoinType joinType)
+      : LibSpatialJoinConfig(joinType, std::nullopt, std::nullopt) {}
+
+  // The constructor checks that `maxDist_` and `de9imFilter_` are only set
+  // together with their respective matching `joinType_`, because these
+  // fields are not independent of each other.
+  LibSpatialJoinConfig(SpatialJoinType joinType, std::optional<double> maxDist,
+                       std::optional<De9imFilterString> de9imFilter)
+      : joinType_{joinType}, maxDist_{maxDist}, de9imFilter_{de9imFilter} {
+    AD_CORRECTNESS_CHECK(!maxDist_.has_value() ||
+                         joinType_ == SpatialJoinType::WITHIN_DIST);
+    AD_CORRECTNESS_CHECK(!de9imFilter_.has_value() ||
+                         joinType_ == SpatialJoinType::DE9IM);
+  }
 };
 
 // Configuration to restrict the results provided by the SpatialJoin

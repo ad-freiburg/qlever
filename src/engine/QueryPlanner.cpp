@@ -160,11 +160,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // 2. Only non-aggretating aliases without GROUP BY.
   // Note: When a GROUP BY is present, then all aliases have to be aggregating,
   // this is handled correctly in all cases.
-  bool doGroupBy = !pq._groupByVariables.empty() ||
-                   patternTrickTuple.has_value() ||
-                   ql::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
-                     return alias._expression.containsAggregate();
-                   });
+  bool doGroupBy = pq.isAggregatingQuery() || patternTrickTuple.has_value();
 
   // Set TEXTLIMIT
   textLimit_ = pq._limitOffset.textLimit_;
