@@ -261,9 +261,8 @@ class QueryPlanner {
   QueryExecutionContext* _qec;
 
   // Used to count the number of unique variables created using
-  // generateUniqueVarName. Mutable because `generateUniqueVarName` is called
-  // from `seedFilterSubstitutes`, which is `const`.
-  mutable size_t _internalVarCount = 0;
+  // generateUniqueVarName
+  size_t _internalVarCount = 0;
 
   bool _enablePatternTrick = true;
 
@@ -322,7 +321,7 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) const;
+      const std::vector<SparqlFilter>& filters);
 
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
@@ -363,7 +362,7 @@ class QueryPlanner {
       const ad_utility::sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
 
-  Variable generateUniqueVarName() const;
+  Variable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
   static ParsedQuery::GraphPattern uniteGraphPatterns(

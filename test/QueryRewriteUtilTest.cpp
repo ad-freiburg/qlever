@@ -149,14 +149,14 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   auto sjResult = rewrite(filter);
   ASSERT_TRUE(sjResult.has_value());
   const auto& sjConf = sjResult.value().config_;
-  ASSERT_EQ(sjConf.left_, V{"?a"});
-  ASSERT_EQ(sjConf.right_, V{"?b"});
-  ASSERT_EQ(sjConf.joinType_, WITHIN_DIST);
-  std::visit([](const auto& task) { ASSERT_EQ(task.maxDist_, 10.0); },
+  EXPECT_EQ(sjConf.left_, V{"?a"});
+  EXPECT_EQ(sjConf.right_, V{"?b"});
+  EXPECT_EQ(sjConf.joinType_, WITHIN_DIST);
+  std::visit([](const auto& task) { EXPECT_EQ(task.maxDist_, 10.0); },
              sjConf.task_);
   // Both sides are variables, so no child is prebuilt.
-  ASSERT_FALSE(sjResult.value().childLeft_.has_value());
-  ASSERT_FALSE(sjResult.value().childRight_.has_value());
+  EXPECT_FALSE(sjResult.value().childLeft_.has_value());
+  EXPECT_FALSE(sjResult.value().childRight_.has_value());
 
   // Unrelated `FILTER(math:pow(?a, ?b) <= 10.0)` results in `std::nullopt`
   auto [unrelExpr, unrelCall] = makeUnrelated();
@@ -165,7 +165,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   SparqlFilter unrelFilter{SparqlExpressionPimpl{
       std::move(unrelExprSharedPtr),
       "<http://www.w3.org/2005/xpath-functions/math#pow>(?a, ?b) <= 10.0"}};
-  ASSERT_FALSE(rewrite(unrelFilter).has_value());
+  EXPECT_FALSE(rewrite(unrelFilter).has_value());
 
   // Construct `FILTER(geof:relate(?a, ?b, "T*T***T**"))`
   auto [de9imExpr, de9imCall] = makeDe9imRelation();
@@ -178,11 +178,11 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
   auto de9imSjResult = rewrite(de9imFilter);
   ASSERT_TRUE(de9imSjResult.has_value());
   const auto& de9imSjConf = de9imSjResult.value().config_;
-  ASSERT_EQ(de9imSjConf.left_, V{"?a"});
-  ASSERT_EQ(de9imSjConf.right_, V{"?b"});
-  ASSERT_EQ(de9imSjConf.joinType_, DE9IM);
+  EXPECT_EQ(de9imSjConf.left_, V{"?a"});
+  EXPECT_EQ(de9imSjConf.right_, V{"?b"});
+  EXPECT_EQ(de9imSjConf.joinType_, DE9IM);
   const auto& de9imTask = std::get<LibSpatialJoinConfig>(de9imSjConf.task_);
-  ASSERT_EQ(de9imTask.de9imFilter_, parseDe9imFilterString("T*T***T**"));
+  EXPECT_EQ(de9imTask.de9imFilter_, parseDe9imFilterString("T*T***T**"));
 }
 
 // _____________________________________________________________________________
@@ -203,9 +203,9 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
   auto sjResult = rewrite(filter);
   ASSERT_TRUE(sjResult.has_value());
   const auto& sjConf = sjResult.value().config_;
-  ASSERT_EQ(sjConf.left_, V{"?a"});
-  ASSERT_NE(sjConf.right_, V{"?a"});
-  ASSERT_FALSE(sjResult.value().childLeft_.has_value());
+  EXPECT_EQ(sjConf.left_, V{"?a"});
+  EXPECT_NE(sjConf.right_, V{"?a"});
+  EXPECT_FALSE(sjResult.value().childLeft_.has_value());
   ASSERT_TRUE(sjResult.value().childRight_.has_value());
 
   // The prebuilt child is a one-row `VALUES` clause binding `sjConf.right_`
@@ -224,7 +224,7 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
       std::move(bothFixedSharedPtr),
       "<http://www.opengis.net/def/function/geosparql/"
       "metricDistance>(<fixed point>, <fixed point>) <= 10.0"}};
-  ASSERT_FALSE(rewrite(bothFixedFilter).has_value());
+  EXPECT_FALSE(rewrite(bothFixedFilter).has_value());
 }
 
 // TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +

@@ -1180,7 +1180,7 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 }
 
 // _____________________________________________________________________________
-Variable QueryPlanner::generateUniqueVarName() const {
+Variable QueryPlanner::generateUniqueVarName() {
   return Variable{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX,
                                _internalVarCount++)};
 }
@@ -1760,7 +1760,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
-    const std::vector<SparqlFilter>& filters) const {
+    const std::vector<SparqlFilter>& filters) {
   FiltersAndOptionalSubstitutes plans;
   plans.reserve(filters.size());
 
