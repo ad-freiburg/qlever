@@ -3,7 +3,6 @@
 // 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
-
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
