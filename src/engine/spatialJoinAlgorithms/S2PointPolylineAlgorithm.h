@@ -11,14 +11,14 @@
 #ifndef QLEVER_SRC_ENGINE_S2POINTPOLYLINEALGORITHM_H
 #define QLEVER_SRC_ENGINE_S2POINTPOLYLINEALGORITHM_H
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 
 // Spatial join between a set of `GeoPoint`s (left table) and the polylines
 // cached in a named result (right table, see `NamedResultCache`), using an
 // `S2ClosestEdgeQuery`. Only supports `maxDistance` tasks.
-class S2PointPolylineAlgorithm : public SpatialJoinAlgorithms {
+class S2PointPolylineAlgorithm : public SpatialJoinAlgorithmBase {
  public:
-  using SpatialJoinAlgorithms::SpatialJoinAlgorithms;
+  using SpatialJoinAlgorithmBase::SpatialJoinAlgorithmBase;
 
   Result run() override;
 };

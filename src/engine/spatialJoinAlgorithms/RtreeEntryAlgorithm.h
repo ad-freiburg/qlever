@@ -17,7 +17,7 @@
 #include <boost/geometry/geometries/point.hpp>
 #include <variant>
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/VectorWithMemoryLimit.h"
 
@@ -94,7 +94,7 @@ using Value = std::pair<Box, RtreeEntry>;
 // r-tree over these entries). The S2-based algorithms only support points and
 // `LibspatialjoinAlgorithm` parses geometries completely differently, so none
 // of them need (or get) this shared state.
-class RtreeEntryAlgorithm : public SpatialJoinAlgorithms {
+class RtreeEntryAlgorithm : public SpatialJoinAlgorithmBase {
  protected:
   using Point = BoostGeometryNamespace::Point;
   using Box = BoostGeometryNamespace::Box;
@@ -102,7 +102,7 @@ class RtreeEntryAlgorithm : public SpatialJoinAlgorithms {
   using RtreeEntry = BoostGeometryNamespace::RtreeEntry;
 
  public:
-  using SpatialJoinAlgorithms::SpatialJoinAlgorithms;
+  using SpatialJoinAlgorithmBase::SpatialJoinAlgorithmBase;
 
   // calculates the midpoint of the given Box
   Point calculateMidpointOfBox(const Box& box) const;

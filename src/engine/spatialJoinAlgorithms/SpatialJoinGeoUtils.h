@@ -25,7 +25,7 @@
 class S2Polyline;
 
 // Free functions used to prepare geometries for a spatial join. Unlike the
-// classes in `SpatialJoinAlgorithms.h`, these don't need any of the state of
+// classes in `SpatialJoinAlgorithmBase.h`, these don't need any of the state of
 // a concrete spatial join algorithm (input tables, join columns, etc.), and
 // several of them are needed by more than one algorithm, or by code that
 // isn't part of any algorithm at all (parsing the index, building an `S2`

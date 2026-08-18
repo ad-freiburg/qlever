@@ -9,8 +9,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
-#define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
+#ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMBASE_H
+#define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMBASE_H
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
@@ -23,14 +23,14 @@
 // cancellation). Helpers shared by only a subset of the algorithms belong in
 // an intermediate class instead (see `RtreeEntryAlgorithm.h`), so the other
 // algorithms don't inherit state/methods they never use.
-class SpatialJoinAlgorithms {
+class SpatialJoinAlgorithmBase {
  public:
   // initialize the Algorithm with the needed parameters
-  SpatialJoinAlgorithms(QueryExecutionContext* qec,
-                        PreparedSpatialJoinParams params,
-                        SpatialJoinConfiguration config,
-                        std::optional<SpatialJoin*> spatialJoin = std::nullopt);
-  virtual ~SpatialJoinAlgorithms() = default;
+  SpatialJoinAlgorithmBase(
+      QueryExecutionContext* qec, PreparedSpatialJoinParams params,
+      SpatialJoinConfiguration config,
+      std::optional<SpatialJoin*> spatialJoin = std::nullopt);
+  virtual ~SpatialJoinAlgorithmBase() = default;
 
   // Run the algorithm and compute the join result.
   virtual Result run() = 0;
@@ -54,4 +54,4 @@ class SpatialJoinAlgorithms {
   std::optional<SpatialJoin*> spatialJoin_;
 };
 
-#endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
+#endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMBASE_H

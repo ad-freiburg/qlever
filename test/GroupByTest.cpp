@@ -30,7 +30,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
-#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"

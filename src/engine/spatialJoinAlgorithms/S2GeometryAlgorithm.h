@@ -11,14 +11,14 @@
 #ifndef QLEVER_SRC_ENGINE_S2GEOMETRYALGORITHM_H
 #define QLEVER_SRC_ENGINE_S2GEOMETRYALGORITHM_H
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 
 // Spatial join between two sets of `GeoPoint`s using an S2 point index and a
 // nearest-neighbor query. Supports `maxDistance` and `nearestNeighbors`
 // tasks, but not areas/linestrings/....
-class S2GeometryAlgorithm : public SpatialJoinAlgorithms {
+class S2GeometryAlgorithm : public SpatialJoinAlgorithmBase {
  public:
-  using SpatialJoinAlgorithms::SpatialJoinAlgorithms;
+  using SpatialJoinAlgorithmBase::SpatialJoinAlgorithmBase;
 
   Result run() override;
 };

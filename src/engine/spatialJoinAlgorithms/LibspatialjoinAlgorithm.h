@@ -15,13 +15,13 @@
 #include <spatialjoin/Sweeper.h>
 #include <util/geo/Geo.h>
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Spatial join for all `SpatialJoinType`s (`INTERSECTS`, `CONTAINS`, `WITHIN`,
 // `WITHIN_DIST`, `DE9IM`, ...) and all geometry types, backed by the
 // `libspatialjoin` sweepline algorithm.
-class LibspatialjoinAlgorithm : public SpatialJoinAlgorithms {
+class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
  public:
   // In addition to the parameters shared by all algorithms, this is the only
   // algorithm that also needs the bounding-box prefilter columns (used for
@@ -32,8 +32,8 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithms {
                           std::optional<SpatialJoin*> spatialJoin,
                           SpatialJoinBoundingBoxColumns boundingBoxColsLeft,
                           SpatialJoinBoundingBoxColumns boundingBoxColsRight)
-      : SpatialJoinAlgorithms(qec, std::move(params), std::move(config),
-                              spatialJoin),
+      : SpatialJoinAlgorithmBase(qec, std::move(params), std::move(config),
+                                 spatialJoin),
         boundingBoxColsLeft_{std::move(boundingBoxColsLeft)},
         boundingBoxColsRight_{std::move(boundingBoxColsRight)} {}
 

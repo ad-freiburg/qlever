@@ -9,10 +9,10 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 
 // ____________________________________________________________________________
-SpatialJoinAlgorithms::SpatialJoinAlgorithms(
+SpatialJoinAlgorithmBase::SpatialJoinAlgorithmBase(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
     SpatialJoinConfiguration config, std::optional<SpatialJoin*> spatialJoin)
     : qec_{qec},
@@ -21,7 +21,7 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       spatialJoin_{spatialJoin} {}
 
 // ____________________________________________________________________________
-void SpatialJoinAlgorithms::addResultTableEntry(
+void SpatialJoinAlgorithmBase::addResultTableEntry(
     IdTable* result, const IdTableView<0>* idTableLeft,
     const IdTableView<0>* idTableRight, size_t rowLeft, size_t rowRight,
     Id distance, bool swapLeftAndRight) const {
@@ -61,7 +61,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(
 }
 
 // ____________________________________________________________________________
-void SpatialJoinAlgorithms::throwIfCancelled() const {
+void SpatialJoinAlgorithmBase::throwIfCancelled() const {
   if (spatialJoin_.has_value()) {
     spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
   }
