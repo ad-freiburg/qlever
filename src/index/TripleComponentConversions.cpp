@@ -73,7 +73,7 @@ std::string toRdfLiteral(const TripleComponent& tripleComponent) {
 }
 
 // _____________________________________________________________________________
-std::variant<Id, std::pair<VocabIndex, VocabIndex>> toValueIdOrBounds(
+LocalVocabContext::IdOrVocabBounds toValueIdOrBounds(
     const TripleComponent& tripleComponent, const IndexImpl& index) {
   AD_CONTRACT_CHECK(!tripleComponent.isString());
   std::optional<Id> vid =
@@ -90,13 +90,10 @@ std::variant<Id, std::pair<VocabIndex, VocabIndex>> toValueIdOrBounds(
   // the lookup that a `LocalVocabEntry` performs, which is required because
   // `toValueId` below passes the result to the constructor of that class that
   // takes the position in the vocabularies, see
-  // `LocalVocabContext::lookupWordInVocabularies`.
-  auto idOrBounds =
-      index.getLocalVocabContext().lookupWordInVocabularies(content);
-  if (const auto* id = std::get_if<Id>(&idOrBounds)) {
-    return *id;
-  }
-  return std::get<LocalVocabContext::VocabBounds>(idOrBounds);
+  // `LocalVocabContext::lookupWordInVocabularies`. That function returns
+  // exactly the type that this function returns, so the result is passed on
+  // unchanged.
+  return index.getLocalVocabContext().lookupWordInVocabularies(content);
 }
 
 // _____________________________________________________________________________
@@ -116,7 +113,7 @@ Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
   if (const auto* id = std::get_if<Id>(&idOrBounds)) {
     return *id;
   }
-  using Bounds = std::pair<VocabIndex, VocabIndex>;
+  using Bounds = LocalVocabContext::VocabBounds;
   AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
   auto [lower, upper] = std::get<Bounds>(idOrBounds);
   // If `toValueIdOrBounds` could not convert to `Id`, we have a Literal or Iri,

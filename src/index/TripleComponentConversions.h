@@ -12,12 +12,11 @@
 
 #include <optional>
 #include <string>
-#include <utility>
-#include <variant>
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
 #include "index/LocalVocab.h"
+#include "index/LocalVocabContext.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/TripleComponent.h"
 
@@ -43,9 +42,8 @@ class IndexImpl;
 // `LocalVocabContext::lookupWordInVocabularies`. If it is found in neither of
 // them, return the positions of the two neighboring entries of the main
 // vocabulary (which then are equal).
-[[nodiscard]] std::variant<Id, std::pair<VocabIndex, VocabIndex>>
-toValueIdOrBounds(const TripleComponent& tripleComponent,
-                  const IndexImpl& index);
+[[nodiscard]] LocalVocabContext::IdOrVocabBounds toValueIdOrBounds(
+    const TripleComponent& tripleComponent, const IndexImpl& index);
 
 // Like `toValueIdOrBounds`, but return `std::nullopt` if not found.
 [[nodiscard]] std::optional<Id> toValueId(
