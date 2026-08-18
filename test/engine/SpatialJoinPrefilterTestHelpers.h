@@ -190,8 +190,7 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      SweeperDistResult& resultDists,
                                      double withinDist) {
   using enum SpatialJoinType::Enum;
-  sj::SweeperCfg cfg =
-      LibspatialjoinAlgorithm::libspatialjoinSweeperConfig(1, 1_GB);
+  sj::SweeperCfg cfg = LibspatialjoinAlgorithm::sweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
@@ -285,9 +284,9 @@ inline void runParsingAndSweeper(
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numThreadsLeft] =
-      sjAlgo.libspatialjoinParse(
-          false, {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-          sweeper, 1, std::nullopt);
+      sjAlgo.parse(false,
+                   {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
+                   sweeper, 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
   // `sweeper.setFilterBox(box);` here.
 
@@ -298,7 +297,7 @@ inline void runParsingAndSweeper(
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numThreadsRight] =
-      sjAlgo.libspatialjoinParse(
+      sjAlgo.parse(
           true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
           sweeper, 1, prefilterBox);
 

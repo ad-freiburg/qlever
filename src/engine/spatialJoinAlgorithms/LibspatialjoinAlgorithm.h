@@ -25,7 +25,7 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithms {
  public:
   // In addition to the parameters shared by all algorithms, this is the only
   // algorithm that also needs the bounding-box prefilter columns (used for
-  // prefiltering geometries before parsing, see `libspatialjoinParse`).
+  // prefiltering geometries before parsing, see `parse`).
   LibspatialjoinAlgorithm(QueryExecutionContext* qec,
                           PreparedSpatialJoinParams params,
                           SpatialJoinConfiguration config,
@@ -49,12 +49,12 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithms {
   // added geometries, which may be used as a prefilter at next call and the
   // number of geometries added. This function is only `public` for testing
   // purposes and should otherwise not be used outside of this class.
-  struct LibSpatialJoinParseInput {
+  struct ParseInput {
     const IdTableView<0>* idTable_;
     ColumnIndex geomsCol_;
     SpatialJoinBoundingBoxColumns boundingBoxCols_;
   };
-  struct LibSpatialJoinParseMetadata {
+  struct ParseMetadata {
     // Aggregated bounding box of all parsed geometries
     util::geo::I32Box aggBoundingBox_;
     // Number of geometries that were actually parsed excluding prefiltered ones
@@ -65,10 +65,9 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithms {
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;
   };
-  LibSpatialJoinParseMetadata libspatialjoinParse(
-      bool leftOrRightSide, LibSpatialJoinParseInput input,
-      sj::Sweeper& sweeper, size_t numThreads,
-      std::optional<util::geo::I32Box> prefilterBox) const;
+  ParseMetadata parse(bool leftOrRightSide, ParseInput input,
+                      sj::Sweeper& sweeper, size_t numThreads,
+                      std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Prepare a libspatialjoin `SweeperCfg`. The result doesn't have any of its
   // callbacks set yet. Before feeding the configuration to a `Sweeper` you
@@ -76,23 +75,22 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithms {
   // `withinDist` should be set if a proximity search is intended. This
   // function is only `public` for testing purposes and should otherwise not
   // be used outside of this class.
-  static sj::SweeperCfg libspatialjoinSweeperConfig(
+  static sj::SweeperCfg sweeperConfig(
       size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
 
  private:
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is
-  // disabled. See `libspatialjoinParse`.
+  // disabled. See `parse`.
   static double maxAreaPrefilterBox();
 
-  // Helper for `libspatialjoinParse` to get the bounding box from an
-  // `IdTable` if available.
+  // Helper for `parse` to get the bounding box from an `IdTable` if
+  // available.
   static std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
       const IdTableView<0>* idTable,
       const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 
-  // Retrieve the number of threads to be used for `libspatialjoinParse` and
-  // `run`.
+  // Retrieve the number of threads to be used for `parse` and `run`.
   static size_t getNumThreads();
 
   // After adding the given amount of rows to the WKT parser, it will be checked

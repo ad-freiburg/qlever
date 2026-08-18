@@ -31,10 +31,10 @@ class S2Polyline;
 // isn't part of any algorithm at all (parsing the index, building an `S2`
 // index for a materialized view). Helpers used by only a single algorithm
 // live as static methods on that algorithm's class instead (e.g.
-// `LibspatialjoinAlgorithm::libspatialjoinSweeperConfig`).
+// `LibspatialjoinAlgorithm::sweeperConfig`).
 namespace ad_utility::detail::spatialjoin {
 
-// Helper for `LibspatialjoinAlgorithm::libspatialjoinParse` to check the
+// Helper for `LibspatialjoinAlgorithm::parse` to check the
 // bounding box (only if available from a `GeoVocabulary`) of a given
 // vocabulary entry against the `prefilterLatLngBox`. Returns `true` if the
 // geometry can be discarded just by the bounding box. If the bounding box is

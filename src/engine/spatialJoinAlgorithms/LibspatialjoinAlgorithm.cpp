@@ -59,7 +59,7 @@ size_t LibspatialjoinAlgorithm::getNumThreads() {
 }
 
 // ____________________________________________________________________________
-sj::SweeperCfg LibspatialjoinAlgorithm::libspatialjoinSweeperConfig(
+sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
   using enum SpatialJoinType::Enum;
   // `libspatialjoin` reports a match for one of these relations by invoking
@@ -110,9 +110,8 @@ sj::SweeperCfg LibspatialjoinAlgorithm::libspatialjoinSweeperConfig(
 }
 
 // ____________________________________________________________________________
-LibspatialjoinAlgorithm::LibSpatialJoinParseMetadata
-LibspatialjoinAlgorithm::libspatialjoinParse(
-    bool leftOrRightSide, LibSpatialJoinParseInput input, sj::Sweeper& sweeper,
+LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
+    bool leftOrRightSide, ParseInput input, sj::Sweeper& sweeper,
     size_t numThreads, std::optional<util::geo::I32Box> prefilterBox) const {
   const auto [idTable, column, boundingBoxes] = input;
 
@@ -202,8 +201,8 @@ Result LibspatialjoinAlgorithm::run() {
   }
 
   // Configure the sweeper.
-  sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(
-      NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
+  sj::SweeperCfg sweeperCfg =
+      sweeperConfig(NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
   sweeperCfg.withinDist = withinDist;
   // For the `DE9IM` join type, let `libspatialjoin` compute the full DE-9IM
   // matrix for every candidate pair and only report those matching the
@@ -255,12 +254,11 @@ Result LibspatialjoinAlgorithm::run() {
   // smaller one. Compute the bounding box of the smaller table (appropriately
   // inflated for `WITHIN_DIST` joins) and only add those geometries from the
   // larger table that intersect this bounding box.
-  auto runParser = [&](LibSpatialJoinParseInput smaller,
-                       LibSpatialJoinParseInput larger, bool smallerIsRight) {
+  auto runParser = [&](ParseInput smaller, ParseInput larger,
+                       bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
     auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
-        libspatialjoinParse(smallerIsRight, smaller, sweeper, NUM_THREADS,
-                            std::nullopt);
+        parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-smaller-side", threadsSmall);
@@ -276,8 +274,8 @@ Result LibspatialjoinAlgorithm::run() {
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
     auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
-        libspatialjoinParse(!smallerIsRight, larger, sweeper, NUM_THREADS,
-                            sweeper.getPaddedBoundingBox(boxSmall));
+        parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
+              sweeper.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsTotal = sweeper.numElements();
     AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
     auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
@@ -296,10 +294,9 @@ Result LibspatialjoinAlgorithm::run() {
     return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
-  LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol,
-                                           boundingBoxColsLeft_};
-  LibSpatialJoinParseInput rightTableAndCol{idTableRight, rightJoinCol,
-                                            boundingBoxColsRight_};
+  ParseInput leftTableAndCol{idTableLeft, leftJoinCol, boundingBoxColsLeft_};
+  ParseInput rightTableAndCol{idTableRight, rightJoinCol,
+                              boundingBoxColsRight_};
   bool nonEmptyChildren =
       idTableLeft->size() < idTableRight->size()
           ? runParser(leftTableAndCol, rightTableAndCol, false)

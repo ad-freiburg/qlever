@@ -172,7 +172,7 @@ struct RuntimeParameters {
   // returns for more threads.
   SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
-  // `LibspatialjoinAlgorithm::libspatialjoinParse()`.
+  // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
   // Push joins into both children of unions if this leads to a cheaper
   // cost-estimate.
