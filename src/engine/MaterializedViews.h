@@ -371,7 +371,7 @@ class MaterializedViewsManager {
  public:
   MaterializedViewsManager() = default;
   explicit MaterializedViewsManager(std::string onDiskBase)
-      : onDiskBase_{std::move(onDiskBase)} {};
+      : onDiskBase_{std::move(onDiskBase)} {}
 
   // For use with the default constructor: set the index basename after creation
   // of the `MaterializedViewsManager`. This should only be called once and

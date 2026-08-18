@@ -236,12 +236,12 @@ class IdTable {
   CPP_template(typename = void)(
       requires CPP_NOT(isView) CPP_and columnsAreAllocatable CPP_and
           std::is_default_constructible_v<Allocator>) IdTable()
-      : IdTable{NumColumns, Allocator{}} {};
+      : IdTable{NumColumns, Allocator{}} {}
 
   CPP_template(typename = void)(
       requires CPP_NOT(isView)
           CPP_and columnsAreAllocatable) explicit IdTable(Allocator allocator)
-      : IdTable{NumColumns, std::move(allocator)} {};
+      : IdTable{NumColumns, std::move(allocator)} {}
 
   // `IdTables` are expensive to copy, so we disable accidental copies as they
   // are most likely bugs. To explicitly copy an `IdTable`, the `clone()` member

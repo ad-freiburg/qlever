@@ -42,11 +42,11 @@ struct IdTriple {
 
   CPP_template_2(typename = void)(requires(N == 0)) explicit IdTriple(
       const std::array<Id, NumCols>& idsIn)
-      : data_{idsIn, {}} {};
+      : data_{idsIn, {}} {}
 
   explicit IdTriple(const std::array<Id, NumCols>& idsIn,
                     const Payload& payload)
-      : data_{idsIn, payload} {};
+      : data_{idsIn, payload} {}
 
   friend std::ostream& operator<<(std::ostream& os, const IdTriple& triple) {
     os << "IdTriple(";

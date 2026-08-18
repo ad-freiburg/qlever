@@ -47,7 +47,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 
   AD_CORRECTNESS_CHECK(numGeometries_ > 0,
                        "Number of geometries must be strictly positive.");
-};
+}
 
 // ____________________________________________________________________________
 std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
@@ -83,12 +83,12 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
 }
 
 // ____________________________________________________________________________
-GeometryType::GeometryType(uint8_t type) : type_{type} {};
+GeometryType::GeometryType(uint8_t type) : type_{type} {}
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {
   AD_CORRECTNESS_CHECK(length_ >= 0, "Metric length must be positive");
-};
+}
 
 // ____________________________________________________________________________
 std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
@@ -99,7 +99,7 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
     return std::nullopt;
   }
   return GeometryType{wktType};
-};
+}
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
@@ -159,7 +159,7 @@ BoundingBox::BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
           lowerLeft.getLng() <= upperRight.getLng(),
       "Bounding box coordinates invalid: first point must be lower "
       "left and second point must be upper right of a rectangle.");
-};
+}
 
 // ____________________________________________________________________________
 MetricArea GeometryInfo::getMetricArea() const { return metricArea_; }
@@ -183,7 +183,7 @@ std::string BoundingBox::asWkt() const {
 }
 
 // ____________________________________________________________________________
-MetricLength GeometryInfo::getMetricLength() const { return metricLength_; };
+MetricLength GeometryInfo::getMetricLength() const { return metricLength_; }
 
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(
@@ -193,7 +193,7 @@ std::optional<MetricLength> GeometryInfo::getMetricLength(
     return std::nullopt;
   }
   return {detail::computeMetricLength(parsed.value())};
-};
+}
 
 // ____________________________________________________________________________
 MetricArea::MetricArea(double area) : area_{area} {
@@ -218,7 +218,7 @@ double BoundingBox::getBoundingCoordinate() const {
     // versions don't like it.
     AD_FAIL();
   }
-};
+}
 
 // Explicit instantiations
 template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MIN_X>()
@@ -265,7 +265,7 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
-};
+}
 
 // Explicit instantiations
 template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
@@ -297,7 +297,7 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
-};
+}
 
 // Explicit instantiations
 template std::optional<GeometryInfo>
