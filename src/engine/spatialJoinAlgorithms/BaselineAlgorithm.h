@@ -21,6 +21,13 @@ class BaselineAlgorithm : public RtreeEntryAlgorithm {
   using RtreeEntryAlgorithm::RtreeEntryAlgorithm;
 
   Result run() override;
+
+ private:
+  // The maximum-results constraint, only meaningful for the `BASELINE` and
+  // `S2_GEOMETRY` algorithms (the only ones supporting a `NearestNeighbors`
+  // task), so it's self-computed from `config_` here rather than in the base
+  // class.
+  std::optional<size_t> maxResults_ = config_.getMaxResults();
 };
 
 #endif  // QLEVER_SRC_ENGINE_BASELINEALGORITHM_H

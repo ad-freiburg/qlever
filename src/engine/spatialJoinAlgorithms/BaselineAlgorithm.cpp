@@ -18,8 +18,8 @@ Result BaselineAlgorithm::run() {
   throw std::runtime_error("not supported in C++17 mode currently");
 #else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -52,13 +52,13 @@ Result BaselineAlgorithm::run() {
 
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Double ||
-          (maxDist.has_value() &&
-           (dist.getDouble() * 1000) > maxDist.value())) {
+          (maxDist_.has_value() &&
+           (dist.getDouble() * 1000) > maxDist_.value())) {
         continue;
       }
 
       // If there is no `maxResults_` we can add the result row immediately
-      if (!maxResults.has_value()) {
+      if (!maxResults_.has_value()) {
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, dist);
         continue;
@@ -67,14 +67,14 @@ Result BaselineAlgorithm::run() {
       // Ensure `maxResults_` constraint using priority queue
       intermediate.push(std::pair{rowRight, dist.getDouble()});
       // Too many results? Drop the worst one
-      if (intermediate.size() > maxResults.value()) {
+      if (intermediate.size() > maxResults_.value()) {
         intermediate.pop();
       }
     }
 
     // If we are using the priority queue, we didn't add the results in the
     // inner loop, so we do it now.
-    if (maxResults.has_value()) {
+    if (maxResults_.has_value()) {
       size_t numResults = intermediate.size();
       for (size_t item = 0; item < numResults; item++) {
         // Get and remove largest item from priority queue

@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -159,6 +160,34 @@ struct SpatialJoinConfiguration {
   // Cache name for precomputed right child with s2 index (only for
   // s2-point-polyline algorithm)
   std::optional<std::string> rightCacheName_ = std::nullopt;
+
+  // Extract the maximum distance constraint from `task_`, if the task type
+  // specifies one. Every task type has a (possibly always-empty) `maxDist_`
+  // field, so this is defined for all of them.
+  std::optional<double> getMaxDist() const {
+    auto visitor = [](const auto& config) -> std::optional<double> {
+      return config.maxDist_;
+    };
+    return std::visit(visitor, task_);
+  }
+
+  // Extract the maximum-results constraint from `task_`. Only
+  // `NearestNeighborsConfig` tasks specify one; for `MaxDistanceConfig` and
+  // `LibSpatialJoinConfig` tasks this is always `std::nullopt`.
+  std::optional<size_t> getMaxResults() const {
+    auto visitor = [](const auto& config) -> std::optional<size_t> {
+      using T = std::decay_t<decltype(config)>;
+      if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
+        return std::nullopt;
+      } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
+        return std::nullopt;
+      } else {
+        static_assert(std::is_same_v<T, NearestNeighborsConfig>);
+        return config.maxResults_;
+      }
+    };
+    return std::visit(visitor, task_);
+  }
 };
 
 // The spatial join operation without a limit on the maximum number of results

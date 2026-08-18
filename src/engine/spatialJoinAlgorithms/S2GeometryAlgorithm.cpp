@@ -23,8 +23,8 @@ using namespace geometryConverters;
 // ____________________________________________________________________________
 Result S2GeometryAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   S2PointIndex<size_t> s2index;
@@ -32,7 +32,7 @@ Result S2GeometryAlgorithm::run() {
   // Optimization: If we only search by maximum distance, the operation is
   // symmetric, so the larger table can be used for the index
   bool indexOfRight =
-      (maxResults.has_value() || (idTableLeft->size() > idTableRight->size()));
+      (maxResults_.has_value() || (idTableLeft->size() > idTableRight->size()));
   auto indexTable = indexOfRight ? idTableRight : idTableLeft;
   auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
@@ -49,13 +49,13 @@ Result S2GeometryAlgorithm::run() {
   // Construct a query object with the given constraints
   auto s2query = S2ClosestPointQuery<size_t>{&s2index};
 
-  if (maxResults.has_value()) {
+  if (maxResults_.has_value()) {
     s2query.mutable_options()->set_max_results(
-        static_cast<int>(maxResults.value()));
+        static_cast<int>(maxResults_.value()));
   }
-  if (maxDist.has_value()) {
+  if (maxDist_.has_value()) {
     s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-        util::units::Meters(static_cast<float>(maxDist.value()))));
+        util::units::Meters(static_cast<float>(maxDist_.value()))));
   }
 
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;

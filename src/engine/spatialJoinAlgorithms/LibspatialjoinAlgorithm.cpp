@@ -208,8 +208,8 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 // ____________________________________________________________________________
 Result LibspatialjoinAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
+      params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -230,7 +230,7 @@ Result LibspatialjoinAlgorithm::run() {
   // a value < 0 to disable the `WITHIN_DIST` calculation in `libspatialjoin`.
   double withinDist = -1;
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
-    withinDist = maxDist.value_or(0);
+    withinDist = maxDist_.value_or(0);
     spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
   }
 

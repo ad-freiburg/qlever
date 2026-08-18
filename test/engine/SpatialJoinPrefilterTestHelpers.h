@@ -243,9 +243,11 @@ inline void runParsingAndSweeper(
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   // Build `LibspatialjoinAlgorithm` instance from spatial join operation
-  auto [prepared, bbCols] = spatialJoin->onlyForTestingGetPrepareJoin();
-  LibspatialjoinAlgorithm sjAlgo{qec,         prepared,     config,
-                                 spatialJoin, bbCols.left_, bbCols.right_};
+  auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
+  auto [bbLeft, bbRight] =
+      spatialJoin->onlyForTestingGetLibspatialjoinBoundingBoxCols();
+  LibspatialjoinAlgorithm sjAlgo{qec,         prepared, config,
+                                 spatialJoin, bbLeft,   bbRight};
 
   // The regular implementation can also be tested instead of this mock version,
   // but then only limited information is available.

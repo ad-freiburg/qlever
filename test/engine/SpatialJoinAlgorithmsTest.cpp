@@ -1628,7 +1628,7 @@ TEST(SpatialJoin, trueAreaDistance) {
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
-    auto [params, bbCols] = spatialJoin->onlyForTestingGetPrepareJoin();
+    auto params = spatialJoin->onlyForTestingGetPrepareJoin();
     BoundingBoxAlgorithm algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(useMidpointForAreas);
@@ -1676,7 +1676,7 @@ TEST(SpatialJoin, mixedDataSet) {
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
-    auto [params, bbCols] = spatialJoin->onlyForTestingGetPrepareJoin();
+    auto params = spatialJoin->onlyForTestingGetPrepareJoin();
     BoundingBoxAlgorithm algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(false);

@@ -43,7 +43,7 @@ bool BoundingBoxAlgorithm::isContainedInBoundingBoxes(
 // ____________________________________________________________________________
 std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
-  const auto& maxDist = params_.maxDist_;
+  const auto& maxDist = maxDist_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -121,7 +121,7 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
 // ____________________________________________________________________________
 std::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
-  const auto& maxDist = params_.maxDist_;
+  const auto& maxDist = maxDist_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -258,8 +258,8 @@ Result BoundingBoxAlgorithm::run() {
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
@@ -325,7 +325,7 @@ Result BoundingBoxAlgorithm::run() {
       }
       auto distance = computeDist(res.second, entry.value());
       AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
-      if (distance.getDouble() * 1000 <= maxDist.value()) {
+      if (distance.getDouble() * 1000 <= maxDist_.value()) {
         // make sure, that no duplicate elements are inserted in the result
         // table. As duplicates can only occur, when areas are not approximated
         // as midpoints, the additional runtime can be saved in that case

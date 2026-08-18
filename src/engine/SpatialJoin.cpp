@@ -141,26 +141,12 @@ bool SpatialJoin::isConstructed() const { return childLeft_ && childRight_; }
 
 // ____________________________________________________________________________
 std::optional<double> SpatialJoin::getMaxDist() const {
-  auto visitor = [](const auto& config) -> std::optional<double> {
-    return config.maxDist_;
-  };
-  return std::visit(visitor, config_.task_);
+  return config_.getMaxDist();
 }
 
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxResults() const {
-  auto visitor = [](const auto& config) -> std::optional<size_t> {
-    using T = std::decay_t<decltype(config)>;
-    if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
-      return std::nullopt;
-    } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      return std::nullopt;
-    } else {
-      static_assert(std::is_same_v<T, NearestNeighborsConfig>);
-      return config.maxResults_;
-    }
-  };
-  return std::visit(visitor, config_.task_);
+  return config_.getMaxResults();
 }
 
 // ____________________________________________________________________________
@@ -495,21 +481,26 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 }
 
 // ____________________________________________________________________________
-std::pair<PreparedSpatialJoinParams, LibspatialjoinBoundingBoxCols>
-SpatialJoin::prepareJoin() const {
+SpatialJoin::SwappedJoinSides SpatialJoin::getSwappedJoinSides() const {
+  // Swap sides for within spatial join type computed using contains
+  auto swapSides = config_.joinType_.has_value() &&
+                   config_.joinType_.value() == SpatialJoinType::WITHIN;
+  return swapSides ? SwappedJoinSides{childRight_, childLeft_, config_.right_,
+                                      config_.left_}
+                   : SwappedJoinSides{childLeft_, childRight_, config_.left_,
+                                      config_.right_};
+}
+
+// ____________________________________________________________________________
+PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTableView();
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
-  // Swap sides for within spatial join type computed using contains
-  auto swapSides = config_.joinType_.has_value() &&
-                   config_.joinType_.value() == SpatialJoinType::WITHIN;
-  auto childLeft = swapSides ? childRight_ : childLeft_;
-  auto childRight = swapSides ? childLeft_ : childRight_;
-  auto joinVarLeft = swapSides ? config_.right_ : config_.left_;
-  auto joinVarRight = swapSides ? config_.left_ : config_.right_;
+  auto [childLeft, childRight, joinVarLeft, joinVarRight] =
+      getSwappedJoinSides();
 
   // Input tables.
   auto [idTableLeft, resultLeft] = getIdTable(childLeft);
@@ -518,10 +509,6 @@ SpatialJoin::prepareJoin() const {
   // Input table columns for the join.
   ColumnIndex leftJoinCol = childLeft->getVariableColumn(joinVarLeft);
   ColumnIndex rightJoinCol = childRight->getVariableColumn(joinVarRight);
-
-  // Column indices of precomputed bounding boxes, if applicable.
-  auto bbLeft = getBoundingBoxColumnIndices(childLeft, joinVarLeft);
-  auto bbRight = getBoundingBoxColumnIndices(childRight, joinVarRight);
 
   // Filtering the left side is not possible through payload cols but there may
   // be invisible columns, for example from a transitive path, that need to be
@@ -543,12 +530,24 @@ SpatialJoin::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return {PreparedSpatialJoinParams{
-              idTableLeft, std::move(resultLeft), idTableRight,
-              std::move(resultRight), leftJoinCol, rightJoinCol,
-              std::move(leftSelectedCols), std::move(rightSelectedCols),
-              numColumns, getMaxDist(), getMaxResults()},
-          LibspatialjoinBoundingBoxCols{bbLeft, bbRight}};
+  return PreparedSpatialJoinParams{idTableLeft,
+                                   std::move(resultLeft),
+                                   idTableRight,
+                                   std::move(resultRight),
+                                   leftJoinCol,
+                                   rightJoinCol,
+                                   std::move(leftSelectedCols),
+                                   std::move(rightSelectedCols),
+                                   numColumns};
+}
+
+// ____________________________________________________________________________
+std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+SpatialJoin::prepareLibspatialjoinBoundingBoxCols() const {
+  auto [childLeft, childRight, joinVarLeft, joinVarRight] =
+      getSwappedJoinSides();
+  return {getBoundingBoxColumnIndices(childLeft, joinVarLeft),
+          getBoundingBoxColumnIndices(childRight, joinVarRight)};
 }
 
 // ____________________________________________________________________________
@@ -556,15 +555,16 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_CONTRACT_CHECK(
       isConstructed(),
       "SpatialJoin needs two children, but at least one is missing");
-  auto [params, bbCols] = prepareJoin();
+  auto params = prepareJoin();
   if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
     return BaselineAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return S2GeometryAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    return LibspatialjoinAlgorithm{
-        _executionContext,       params, config_, this, std::move(bbCols.left_),
-        std::move(bbCols.right_)}
+    auto [bbLeft, bbRight] = prepareLibspatialjoinBoundingBoxCols();
+    return LibspatialjoinAlgorithm{_executionContext, params,
+                                   config_,           this,
+                                   std::move(bbLeft), std::move(bbRight)}
         .run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
     return S2PointPolylineAlgorithm{_executionContext, params, config_, this}

@@ -25,8 +25,8 @@ using namespace geometryConverters;
 // ____________________________________________________________________________
 Result S2PointPolylineAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults] = params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
+      params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
@@ -34,13 +34,14 @@ Result S2PointPolylineAlgorithm::run() {
                      .get(config_.rightCacheName_.value())
                      ->cachedGeoIndex_;
   AD_CORRECTNESS_CHECK(s2index.has_value());
-  AD_CORRECTNESS_CHECK(!maxResults.has_value() && maxDist.has_value());
+  AD_CORRECTNESS_CHECK(!config_.getMaxResults().has_value() &&
+                       maxDist_.has_value());
 
   // Construct a query object with the given constraints
   auto s2indexPtr = s2index.value().getIndex();
   auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
   s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-      util::units::Meters(static_cast<float>(maxDist.value()))));
+      util::units::Meters(static_cast<float>(maxDist_.value()))));
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
   ad_utility::Timer timerS2{ad_utility::Timer::Stopped};

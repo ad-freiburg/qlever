@@ -57,6 +57,12 @@ class SpatialJoinAlgorithmBase {
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
   std::optional<SpatialJoin*> spatialJoin_;
+
+  // The maximum distance constraint, used by every algorithm. Self-computed
+  // from `config_` (declared above, so it's already initialized by the time
+  // this default member initializer runs), instead of being threaded through
+  // `params_` by `SpatialJoin::prepareJoin()`.
+  std::optional<double> maxDist_ = config_.getMaxDist();
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMBASE_H
