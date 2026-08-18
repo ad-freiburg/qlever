@@ -426,7 +426,7 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     if (!subtree->getRootOperation()->coversVariables(bindExpressionVars)) {
       return std::nullopt;
     }
-    auto result = subtree->getRootOperation()->makeTreeWithBindColumn(bind);
+    auto result = QueryExecutionTree::makeTreeWithBindColumn(subtree, bind);
     if (!result.has_value()) {
       return std::nullopt;
     }

@@ -1729,6 +1729,18 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       auto existsRight = ad_utility::makeExecutionTree<ExistsJoin>(
           &pq2.queryExecutionContext(), otherTree2, viewTree2, V{"?exists"});
       EXPECT_FALSE(pushBind(existsRight).has_value());
+
+      // Regression test: the right child of an `ExistsJoin` is not visible
+      // outside the `EXISTS`, so it may legally reuse the `BIND`'s target
+      // variable name (`?bind`) for one of its own columns. Pushing the
+      // `BIND` into the left child regardless would make `ExistsJoin` treat
+      // `?bind` as a join column shared with the right child, which can
+      // change the Boolean result. The push down must be refused instead.
+      auto [pq3, viewTree3, otherTree3] = makeViewAndOtherTree(
+          SparqlTripleSimple{V{"?s"}, tc::Iri::fromIriref("<p1>"), V{"?bind"}});
+      auto existsRightReusesTarget = ad_utility::makeExecutionTree<ExistsJoin>(
+          &pq3.queryExecutionContext(), viewTree3, otherTree3, V{"?exists"});
+      EXPECT_FALSE(pushBind(existsRightReusesTarget).has_value());
     }
 
     // `Minus`: the `BIND` can only be pushed into the left child.
@@ -1976,6 +1988,45 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       auto filterOpOnOther = ad_utility::makeExecutionTree<Filter>(
           &pq.queryExecutionContext(), otherTree, filterExpr);
       EXPECT_FALSE(pushBind(filterOpOnOther).has_value());
+    }
+
+    // Regression test: `QueryExecutionTree::makeTreeWithBindColumn` (the
+    // entry point used by the query planner, unlike `pushBind` above which
+    // calls each operation's override directly) must preserve `LIMIT`/
+    // `OFFSET` and a restricted set of externally visible variables (as set
+    // by a subquery's `SELECT` clause) that were attached to the original
+    // root. The push down otherwise silently drops both, because it
+    // constructs a fresh `Operation` for the rewritten subtree. The
+    // restriction is applied on a `Filter` wrapping the view scan (rather
+    // than on the view scan itself), so that only the externally visible
+    // variables -- not the scan's own physical columns -- are restricted.
+    {
+      auto [pq, viewTree, otherTree] = makeViewAndOtherTree(sharesOnlyS);
+      sparqlExpression::SparqlExpressionPimpl trueExpr{
+          std::make_shared<sparqlExpression::IdExpression>(
+              Id::makeFromBool(true)),
+          "true"};
+      auto filterTree = ad_utility::makeExecutionTree<Filter>(
+          &pq.queryExecutionContext(), viewTree, trueExpr);
+      filterTree->applyLimitOffset(LimitOffsetClause{5});
+      filterTree->getRootOperation()->setSelectedVariablesForSubquery(
+          {V{"?s"}});
+
+      auto result =
+          QueryExecutionTree::makeTreeWithBindColumn(filterTree, bind);
+      ASSERT_TRUE(result.has_value());
+      EXPECT_EQ(result.value()->getRootOperation()->getLimitOffset()._limit,
+                5ul);
+
+      const auto& visible = result.value()
+                                ->getRootOperation()
+                                ->getExternallyVisibleVariableColumns();
+      EXPECT_TRUE(visible.contains(V{"?s"}));
+      // The `BIND` target must become visible, since it was computed at what
+      // used to be the (now rewritten) root.
+      EXPECT_TRUE(visible.contains(V{"?bind"}));
+      // `?o` was hidden by the subquery's `SELECT ?s` and must stay hidden.
+      EXPECT_FALSE(visible.contains(V{"?o"}));
     }
   }
 

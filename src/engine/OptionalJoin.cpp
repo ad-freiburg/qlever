@@ -706,7 +706,7 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // evaluating the `BIND` expression on the (genuinely) unbound input. This
   // silently changes the result for any expression that isn't `UNDEF` itself
   // on `UNDEF` input, e.g. `COALESCE`.
-  auto newLeft = _left->getRootOperation()->makeTreeWithBindColumn(bind);
+  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
   if (!newLeft.has_value()) {
     return std::nullopt;
   }

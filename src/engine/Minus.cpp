@@ -108,7 +108,7 @@ Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   if (_right->isVariableCovered(bind._target)) {
     return std::nullopt;
   }
-  auto newLeft = _left->getRootOperation()->makeTreeWithBindColumn(bind);
+  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
   if (!newLeft.has_value()) {
     return std::nullopt;
   }

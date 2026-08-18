@@ -241,6 +241,20 @@ class QueryExecutionTree {
       const std::set<Variable>& variablesToKeep,
       HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
+  // Try to push the given `BIND` down into `qet`'s operation tree (see
+  // `Operation::makeTreeWithBindColumn`). If the push down succeeds, this
+  // additionally restores the `LIMIT`/`OFFSET` and the externally visible
+  // (SELECT-restricted) variables of `qet`'s original root onto the
+  // rewritten tree, which the individual `makeTreeWithBindColumn`
+  // implementations do not (and must not) handle themselves, and adds the
+  // `BIND`'s target as a newly visible variable. This is needed because the
+  // rewrite constructs fresh `Operation`s for the affected subtree, which
+  // would otherwise silently drop such metadata attached to the original
+  // root, e.g. when `qet` is (part of) a subquery.
+  static std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const std::shared_ptr<QueryExecutionTree>& qet,
+                         const parsedQuery::Bind& bind);
+
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
   // deterministic when called repeatedly. This is important to find a

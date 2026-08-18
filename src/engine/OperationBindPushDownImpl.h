@@ -43,7 +43,7 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
         child->isVariableCovered(bind._target)) {
       continue;
     }
-    auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
+    auto result = QueryExecutionTree::makeTreeWithBindColumn(child, bind);
     if (result.has_value()) {
       child = result.value();
       anyChildRewritten = true;
