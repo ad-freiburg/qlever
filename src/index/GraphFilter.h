@@ -29,7 +29,7 @@ class GraphFilter {
  public:
   // Marker type for the "ALL" case.
   struct AllTag {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag, )
   };
 
   // ALL, WHITELIST, BLACKLIST

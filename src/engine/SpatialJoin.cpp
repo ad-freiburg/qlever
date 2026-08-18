@@ -161,6 +161,19 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
 }
 
 // ____________________________________________________________________________
+std::optional<De9imFilterString> SpatialJoin::getDe9imFilter() const {
+  auto visitor = [](const auto& config) -> std::optional<De9imFilterString> {
+    using T = std::decay_t<decltype(config)>;
+    if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
+      return config.de9imFilter_;
+    } else {
+      return std::nullopt;
+    }
+  };
+  return std::visit(visitor, config_.task_);
+}
+
+// ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
   std::vector<QueryExecutionTree*> result;
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
@@ -202,7 +215,13 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
       auto joinType = getJoinType();
       os << "libspatialjoin on: "
-         << (int)joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
+         << joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
+      auto de9imFilter = getDe9imFilter();
+      if (de9imFilter.has_value()) {
+        os << "de9imFilter: "
+           << std::string_view{de9imFilter->data(), de9imFilter->size()}
+           << "\n";
+      }
     }
 
     // Uses distance variable?
@@ -247,9 +266,15 @@ std::string SpatialJoin::getDescriptor() const {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      return absl::StrCat(
-          "Spatial Join of ", left, " and ", right, " using ",
-          SpatialJoinTypeString.at(static_cast<int>(config.joinType_)));
+      auto descriptor = absl::StrCat("Spatial Join of ", left, " and ", right,
+                                     " using ", config.joinType_);
+      if (config.de9imFilter_.has_value()) {
+        absl::StrAppend(&descriptor, " (",
+                        std::string_view{config.de9imFilter_->data(),
+                                         config.de9imFilter_->size()},
+                        ")");
+      }
+      return descriptor;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -299,7 +324,7 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
-  using enum SpatialJoinAlgorithm;
+  using enum SpatialJoinAlgorithm::Enum;
   if (!childLeft_ || !childRight_) {
     return 1;  // dummy return, as the class does not have its children yet
   }
@@ -329,7 +354,9 @@ size_t SpatialJoin::getCostEstimate() {
     } else {
       AD_CORRECTNESS_CHECK(
           ad_utility::contains(
-              std::array{S2_GEOMETRY, BOUNDING_BOX, S2_POINT_POLYLINE},
+              std::array{SpatialJoinAlgorithm{S2_GEOMETRY},
+                         SpatialJoinAlgorithm{BOUNDING_BOX},
+                         SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
               config_.algo_),
           "Unknown SpatialJoin Algorithm.");
 
@@ -524,6 +551,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    getMaxDist(),
                                    getMaxResults(),
                                    config_.joinType_,
+                                   getDe9imFilter(),
                                    config_.rightCacheName_,
                                    bbLeft,
                                    bbRight};
