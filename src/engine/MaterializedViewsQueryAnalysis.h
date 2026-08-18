@@ -167,6 +167,24 @@ class QueryPatternCache {
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
 
+// Result of `checkQueryPatternRewriteEligibility`: either the reason why
+// `parsed` is not eligible for pattern-based (star/chain) rewriting, or (if
+// `ignoreReason_` is `std::nullopt`) the triples of its single
+// `BasicGraphPattern` for further analysis.
+struct QueryPatternRewriteEligibility {
+  std::optional<std::string> ignoreReason_;
+  std::vector<SparqlTriple> triples_;
+};
+
+// Helper for `QueryPatternCache::analyzeView` that checks whether a view's
+// defining query even has a shape that pattern-based (star/chain) rewriting
+// could apply to, before the actual (more expensive) triple-level analysis:
+// no aggregation, no top-level FILTER/VALUES/DISTINCT/REDUCED/LIMIT/OFFSET
+// that would restrict the on-disk rows, and exactly one `BasicGraphPattern`
+// with at least one triple (after skipping invariant patterns like `BIND`).
+QueryPatternRewriteEligibility checkQueryPatternRewriteEligibility(
+    const ParsedQuery& parsed);
+
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
 

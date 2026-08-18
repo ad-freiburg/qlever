@@ -403,62 +403,12 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   bool cacheKeyAdded = insert(full);
   cacheKeyAdded = insert(withoutInvariant) || cacheKeyAdded;
 
-  if (parsed.value().isAggregatingQuery()) {
-    explainIgnore(
-        "The view's query aggregates (GROUP BY, either explicit or implicit "
-        "via an aggregate expression in the SELECT clause)");
+  auto eligibility = checkQueryPatternRewriteEligibility(parsed.value());
+  if (eligibility.ignoreReason_.has_value()) {
+    explainIgnore(eligibility.ignoreReason_.value());
     return cacheKeyAdded;
   }
-
-  // A top-level `FILTER` restricts which rows end up on disk, but (unlike the
-  // triples analyzed below) is not part of `_graphPatterns` and would
-  // otherwise go unnoticed by `graphPatternInvariantFilter`.
-  if (!parsed.value()._rootGraphPattern._filters.empty()) {
-    explainIgnore("The view's query has a top-level FILTER");
-    return cacheKeyAdded;
-  }
-
-  // A trailing `VALUES` clause also restricts the on-disk rows and is stored
-  // separately from `_rootGraphPattern`, so it needs an explicit check too.
-  if (parsed.value().postQueryValuesClause_.has_value()) {
-    explainIgnore("The view's query has a trailing VALUES clause");
-    return cacheKeyAdded;
-  }
-
-  // `DISTINCT`/`REDUCED` change the cardinality of the result and thus of the
-  // join, which the chain/star rewriting below does not account for.
-  const auto& selectClause = parsed.value().selectClause();
-  if (selectClause.distinct_ || selectClause.reduced_) {
-    explainIgnore("The view's query uses DISTINCT or REDUCED");
-    return cacheKeyAdded;
-  }
-
-  // A `LIMIT`/`OFFSET` restricts the view to an (order-dependent, arbitrary)
-  // subset of the join's rows, which must not be treated as a complete source
-  // for pattern-based rewriting of unrelated queries.
-  if (!parsed.value()._limitOffset.isUnconstrained()) {
-    explainIgnore("The view's query has a LIMIT or OFFSET clause");
-    return cacheKeyAdded;
-  }
-
-  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed.value());
-  if (graphPatternsFiltered.size() != 1) {
-    explainIgnore(
-        "The view has more than one graph pattern (even after skipping ignored "
-        "patterns)");
-    return cacheKeyAdded;
-  }
-  const auto& graphPattern = graphPatternsFiltered.at(0);
-  if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
-    explainIgnore("The graph pattern is not a basic set of triples");
-    return cacheKeyAdded;
-  }
-  // TODO<ullingerc> Property path is stored as a single predicate here.
-  const auto& triples = graphPattern.getBasic()._triples;
-  if (triples.size() == 0) {
-    explainIgnore("The query body is empty");
-    return cacheKeyAdded;
-  }
+  const auto& triples = eligibility.triples_;
   bool patternFound = false;
 
   // TODO<ullingerc> Possibly handle chain by property path.
@@ -510,6 +460,63 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
            return !pattern.visit(invariantCheck);
          }) |
          ::ranges::to<std::vector>();
+}
+
+// _____________________________________________________________________________
+QueryPatternRewriteEligibility checkQueryPatternRewriteEligibility(
+    const ParsedQuery& parsed) {
+  if (parsed.isAggregatingQuery()) {
+    return {
+        "The view's query aggregates (GROUP BY, either explicit or implicit "
+        "via an aggregate expression in the SELECT clause)",
+        {}};
+  }
+
+  // A top-level `FILTER` restricts which rows end up on disk, but (unlike the
+  // triples analyzed below) is not part of `_graphPatterns` and would
+  // otherwise go unnoticed by `graphPatternInvariantFilter`.
+  if (!parsed._rootGraphPattern._filters.empty()) {
+    return {"The view's query has a top-level FILTER", {}};
+  }
+
+  // A trailing `VALUES` clause also restricts the on-disk rows and is stored
+  // separately from `_rootGraphPattern`, so it needs an explicit check too.
+  if (parsed.postQueryValuesClause_.has_value()) {
+    return {"The view's query has a trailing VALUES clause", {}};
+  }
+
+  // `DISTINCT`/`REDUCED` change the cardinality of the result and thus of the
+  // join, which the chain/star rewriting below does not account for.
+  const auto& selectClause = parsed.selectClause();
+  if (selectClause.distinct_ || selectClause.reduced_) {
+    return {"The view's query uses DISTINCT or REDUCED", {}};
+  }
+
+  // A `LIMIT`/`OFFSET` restricts the view to an (order-dependent, arbitrary)
+  // subset of the join's rows, which must not be treated as a complete source
+  // for pattern-based rewriting of unrelated queries.
+  if (!parsed._limitOffset.isUnconstrained()) {
+    return {"The view's query has a LIMIT or OFFSET clause", {}};
+  }
+
+  auto graphPatternsFiltered = graphPatternInvariantFilter(parsed);
+  if (graphPatternsFiltered.size() != 1) {
+    return {
+        "The view has more than one graph pattern (even after skipping "
+        "ignored patterns)",
+        {}};
+  }
+  auto& graphPattern = graphPatternsFiltered.at(0);
+  if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(graphPattern)) {
+    return {"The graph pattern is not a basic set of triples", {}};
+  }
+  // TODO<ullingerc> Property path is stored as a single predicate here.
+  auto triples = std::move(graphPattern.getBasic()._triples);
+  if (triples.empty()) {
+    return {"The query body is empty", {}};
+  }
+
+  return {std::nullopt, std::move(triples)};
 }
 
 // _____________________________________________________________________________
