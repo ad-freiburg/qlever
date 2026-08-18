@@ -847,8 +847,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 
   if (numThreads <= 1) {
     STREAMABLE_YIELD_FROM(constructQueryResultSerial<format>(
-        qet, constructTriples, limitAndOffset, std::move(rowIndices),
-        std::move(config), streamableYielder));
+        qet.getVariableColumns(), constructTriples, limitAndOffset._offset,
+        std::move(rowIndices), std::move(config), streamableYielder));
     STREAMABLE_RETURN;
   }
 
@@ -864,24 +864,24 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
             config.mode_, *qet.getQec());
   }
   STREAMABLE_YIELD_FROM(constructQueryResultParallel<format>(
-      qet, constructTriples, limitAndOffset, std::move(rowIndices),
-      std::move(config), numThreads, cancellationHandle, streamableYielder));
+      qet.getVariableColumns(), constructTriples, limitAndOffset._offset,
+      std::move(rowIndices), std::move(config), numThreads, cancellationHandle,
+      streamableYielder));
   STREAMABLE_RETURN;
 }
 
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::constructQueryResultSerial(
-    const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset,
+    VariableToColumnMap variableColumns,
+    ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
     qlever::constructExport::EvaluationConfig config,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   auto triples = qlever::constructExport::ConstructTripleGenerator::
-      generateFormattedTriples(constructTriples, qet.getVariableColumns(),
-                               std::move(rowIndices), limitAndOffset._offset,
-                               format, config);
+      generateFormattedTriples(constructTriples, variableColumns,
+                               std::move(rowIndices), rowOffset, format,
+                               config);
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
   }
@@ -892,9 +892,8 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::constructQueryResultSerial(
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultParallel(
-    const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset,
+    VariableToColumnMap variableColumns,
+    ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
     qlever::constructExport::EvaluationConfig config, size_t numThreads,
     CancellationHandle cancellationHandle,
@@ -910,9 +909,6 @@ ExportQueryExecutionTrees::constructQueryResultParallel(
   const size_t window = 2 * numThreads;
   ad_utility::TaskQueue<false> queue{window, numThreads,
                                      "ConstructExportParallel"};
-  const auto& templateTriples = constructTriples;
-  const auto& variableColumns = qet.getVariableColumns();
-  const size_t rowOffset = limitAndOffset._offset;
 
   for (TableWithRange& block : rowIndices) {
     std::vector<TableWithRange> chunks =
@@ -926,11 +922,11 @@ ExportQueryExecutionTrees::constructQueryResultParallel(
     while (nextGet < chunks.size()) {
       while (nextSubmit < chunks.size() && nextSubmit - nextGet < window) {
         futures[nextSubmit] = queue.submit(
-            [&templateTriples, &variableColumns, rowOffset, &config,
+            [&constructTriples, &variableColumns, rowOffset, &config,
              chunk = std::move(chunks[nextSubmit])]() mutable {
               std::vector<TableWithRange> one{std::move(chunk)};
               return serializeConstructGroup<format>(
-                  templateTriples, variableColumns,
+                  constructTriples, variableColumns,
                   InputRangeTypeErased(std::move(one)), rowOffset, config);
             });
         ++nextSubmit;

@@ -236,11 +236,12 @@ class ExportQueryExecutionTrees {
       const TableWithRange& block, size_t rowsPerChunk);
 
   // Yield one formatted triple at a time from `rowIndices`.
+  // Parameters that the coroutine still needs after the first yield are
+  // taken by value so they live in the coroutine frame.
   template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultSerial(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      const LimitOffsetClause& limitAndOffset,
+      VariableToColumnMap variableColumns,
+      ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
       qlever::constructExport::EvaluationConfig config,
       STREAMABLE_YIELDER_ARG_DECL);
@@ -249,9 +250,8 @@ class ExportQueryExecutionTrees {
   // Join the current block before the generator advances.
   template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultParallel(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      const LimitOffsetClause& limitAndOffset,
+      VariableToColumnMap variableColumns,
+      ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
       qlever::constructExport::EvaluationConfig config, size_t numThreads,
       CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
