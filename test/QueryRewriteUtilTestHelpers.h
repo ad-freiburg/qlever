@@ -11,6 +11,8 @@
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/Constants.h"
+#include "parser/SpatialQuery.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
@@ -23,11 +25,13 @@ using V = Variable;
 using enum SpatialJoinType::Enum;
 using enum UnitOfMeasurement;
 using ad_utility::triple_component::Iri;
+using ad_utility::triple_component::Literal;
 using Ptr = SparqlExpression::Ptr;
 
 using GeoDistanceFilter =
     std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>;
 using DistancePtrAndExpected = std::pair<Ptr, std::optional<GeoDistanceCall>>;
+using De9imPtrAndExpected = std::pair<Ptr, std::optional<De9imRelationCall>>;
 
 // Test helper for `GeoFunctionCall`
 inline void checkGeoFunctionCall(const std::optional<GeoFunctionCall>& a,
@@ -53,6 +57,18 @@ inline void checkGeoDistanceCall(const std::optional<GeoDistanceCall>& a,
     return;
   }
   ASSERT_EQ(a.value().unit_, b.value().unit_);
+}
+
+// Test helper for `De9imRelationCall`
+inline void checkDe9imRelationCall(const std::optional<De9imRelationCall>& a,
+                                   const std::optional<De9imRelationCall>& b,
+                                   Loc loc = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(loc);
+  checkGeoFunctionCall(a, b);
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_EQ(a.value().pattern_, b.value().pattern_);
 }
 
 // Test helper for `getGeoDistanceFilter`
@@ -95,6 +111,17 @@ inline DistancePtrAndExpected makeMetricDist() {
 //______________________________________________________________________________
 inline DistancePtrAndExpected makeUnrelated() {
   return {makePowExpression(getExpr(V{"?a"}), getExpr(V{"?b"})), std::nullopt};
+}
+
+//______________________________________________________________________________
+inline De9imPtrAndExpected makeDe9imRelation(
+    std::string pattern = "T*T***T**") {
+  De9imRelationCall exp{{DE9IM, V{"?a"}, V{"?b"}},
+                        parseDe9imFilterString(pattern).value()};
+  auto ptr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      getExpr(Literal::literalWithoutQuotes(pattern)));
+  return {std::move(ptr), exp};
 }
 
 //______________________________________________________________________________
