@@ -259,8 +259,7 @@ Result BoundingBoxAlgorithm::run() {
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
-              bbLeft, bbRight] = params_;
+              maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table

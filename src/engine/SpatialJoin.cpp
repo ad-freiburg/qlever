@@ -495,7 +495,8 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
 }
 
 // ____________________________________________________________________________
-PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
+std::pair<PreparedSpatialJoinParams, LibspatialjoinBoundingBoxCols>
+SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTableView();
@@ -542,22 +543,12 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return PreparedSpatialJoinParams{idTableLeft,
-                                   std::move(resultLeft),
-                                   idTableRight,
-                                   std::move(resultRight),
-                                   leftJoinCol,
-                                   rightJoinCol,
-                                   std::move(leftSelectedCols),
-                                   std::move(rightSelectedCols),
-                                   numColumns,
-                                   getMaxDist(),
-                                   getMaxResults(),
-                                   config_.joinType_,
-                                   getDe9imFilter(),
-                                   config_.rightCacheName_,
-                                   bbLeft,
-                                   bbRight};
+  return {PreparedSpatialJoinParams{
+              idTableLeft, std::move(resultLeft), idTableRight,
+              std::move(resultRight), leftJoinCol, rightJoinCol,
+              std::move(leftSelectedCols), std::move(rightSelectedCols),
+              numColumns, getMaxDist(), getMaxResults()},
+          LibspatialjoinBoundingBoxCols{bbLeft, bbRight}};
 }
 
 // ____________________________________________________________________________
@@ -565,13 +556,15 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_CONTRACT_CHECK(
       isConstructed(),
       "SpatialJoin needs two children, but at least one is missing");
-  auto params = prepareJoin();
+  auto [params, bbCols] = prepareJoin();
   if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
     return BaselineAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return S2GeometryAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    return LibspatialjoinAlgorithm{_executionContext, params, config_, this}
+    return LibspatialjoinAlgorithm{
+        _executionContext,       params, config_, this, std::move(bbCols.left_),
+        std::move(bbCols.right_)}
         .run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
     return S2PointPolylineAlgorithm{_executionContext, params, config_, this}

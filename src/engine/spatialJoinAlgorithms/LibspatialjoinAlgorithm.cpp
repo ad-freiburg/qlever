@@ -13,9 +13,10 @@
 
 #include <spatialjoin/BoxIds.h>
 
+#include <thread>
+
 #include "backports/filesystem.h"
 #include "engine/SpatialJoinParser.h"
-#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -26,6 +27,86 @@
 double LibspatialjoinAlgorithm::maxAreaPrefilterBox() {
   return static_cast<double>(
       getRuntimeParameter<&RuntimeParameters::spatialJoinPrefilterMaxSize_>());
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::BoundingBox>
+LibspatialjoinAlgorithm::getBoundingBoxFromIdTable(
+    const IdTableView<0>* idTable,
+    const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
+  if (!boundingBoxes.has_value()) {
+    return std::nullopt;
+  }
+  auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
+  auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
+  if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
+      idUpperRight.getDatatype() != Datatype::GeoPoint) {
+    return std::nullopt;
+  }
+  return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
+                                 idUpperRight.getGeoPoint()};
+}
+
+// ____________________________________________________________________________
+size_t LibspatialjoinAlgorithm::getNumThreads() {
+  size_t maxHwConcurrency = std::thread::hardware_concurrency();
+  size_t userPreference =
+      getRuntimeParameter<&RuntimeParameters::spatialJoinMaxNumThreads_>();
+  if (userPreference == 0 || maxHwConcurrency < userPreference) {
+    return maxHwConcurrency;
+  }
+  return userPreference;
+}
+
+// ____________________________________________________________________________
+sj::SweeperCfg LibspatialjoinAlgorithm::libspatialjoinSweeperConfig(
+    size_t threads, ad_utility::MemorySize totalAllowedMemory) {
+  using enum SpatialJoinType::Enum;
+  // `libspatialjoin` reports a match for one of these relations by invoking
+  // `writeRelCb` (see below) with a `pred` argument equal to the
+  // corresponding `sep...` string set below. These strings are otherwise
+  // opaque to `libspatialjoin`, so any distinct single byte per relation
+  // works; we simply (ab)use the (small) numeric value of the enum, which is
+  // not meant to be human-readable.
+  auto sep = [](SpatialJoinType type) {
+    return std::string{static_cast<char>(type.value())};
+  };
+  AD_CORRECTNESS_CHECK(threads > 0);
+
+  sj::SweeperCfg cfg;
+  cfg.numThreads = threads;
+  cfg.numCacheThreads = threads;
+  // Cache memory per thread, in bytes
+  cfg.geomCacheMaxSize = totalAllowedMemory.getBytes() / threads;
+  cfg.geomCacheMaxNumElements = 10'000;
+  cfg.sepIsect = sep(INTERSECTS);
+  cfg.sepContains = sep(CONTAINS);
+  cfg.sepCovers = sep(COVERS);
+  cfg.sepTouches = sep(TOUCHES);
+  cfg.sepEquals = sep(EQUALS);
+  cfg.sepOverlaps = sep(OVERLAPS);
+  cfg.sepCrosses = sep(CROSSES);
+  cfg.useBoxIds = true;
+  cfg.useArea = true;
+  cfg.useOBB = false;
+  cfg.useDiagBox = true;
+  cfg.useFastSweepSkip = true;
+  cfg.noGeometryChecks = false;
+  cfg.euclideanDist = false;
+  cfg.haversineApprox = false;
+  cfg.computeDE9IM = false;
+  cfg.de9imFilter = ::util::geo::FANY;
+  // Never let `libspatialjoin` fall back to a self-join when it considers one
+  // side to be empty; QLever's callbacks rely on the first geometry of each
+  // result pair coming from the left side and the second one from the right
+  // side (see #3068).
+  cfg.forceTwoSided = true;
+  cfg.writeRelCb = {};
+  cfg.logCb = {};
+  cfg.statsCb = {};
+  cfg.sweepProgressCb = {};
+  cfg.sweepCancellationCb = {};
+  return cfg;
 }
 
 // ____________________________________________________________________________
@@ -78,8 +159,7 @@ LibspatialjoinAlgorithm::libspatialjoinParse(
        &boundingBoxes](size_t row) {
         parser.addValueIdToQueue(
             geoms[row], row, leftOrRightSide,
-            ad_utility::detail::spatialjoin::getBoundingBoxFromIdTable(
-                idTable, boundingBoxes, row));
+            getBoundingBoxFromIdTable(idTable, boundingBoxes, row));
       },
       [this]() { throwIfCancelled(); });
 
@@ -96,14 +176,13 @@ LibspatialjoinAlgorithm::libspatialjoinParse(
 Result LibspatialjoinAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
-              bbLeft, bbRight] = params_;
+              maxDist, maxResults] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
-  size_t NUM_THREADS = ad_utility::detail::spatialjoin::getNumThreads();
+  size_t NUM_THREADS = getNumThreads();
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
-  auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
+  auto joinTypeVal = config_.joinType_.value_or(SpatialJoinType::INTERSECTS);
   // Within should be replaced by contains on swapped tables.
   auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
   if (swapBack) {
@@ -123,14 +202,14 @@ Result LibspatialjoinAlgorithm::run() {
   }
 
   // Configure the sweeper.
-  sj::SweeperCfg sweeperCfg =
-      ad_utility::detail::spatialjoin::libspatialjoinSweeperConfig(
-          NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
+  sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(
+      NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
   sweeperCfg.withinDist = withinDist;
   // For the `DE9IM` join type, let `libspatialjoin` compute the full DE-9IM
   // matrix for every candidate pair and only report those matching the
   // user-provided filter pattern.
   if (joinTypeVal == SpatialJoinType::DE9IM) {
+    auto de9imFilter = spatialJoin_.value()->getDe9imFilter();
     AD_CORRECTNESS_CHECK(de9imFilter.has_value());
     sweeperCfg.computeDE9IM = true;
     sweeperCfg.de9imFilter = ::util::geo::DE9IMFilter(de9imFilter->data());
@@ -217,9 +296,10 @@ Result LibspatialjoinAlgorithm::run() {
     return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
-  LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol, bbLeft};
+  LibSpatialJoinParseInput leftTableAndCol{idTableLeft, leftJoinCol,
+                                           boundingBoxColsLeft_};
   LibSpatialJoinParseInput rightTableAndCol{idTableRight, rightJoinCol,
-                                            bbRight};
+                                            boundingBoxColsRight_};
   bool nonEmptyChildren =
       idTableLeft->size() < idTableRight->size()
           ? runParser(leftTableAndCol, rightTableAndCol, false)

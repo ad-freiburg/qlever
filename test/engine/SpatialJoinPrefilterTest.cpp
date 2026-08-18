@@ -11,6 +11,7 @@
 
 #include "./SpatialJoinPrefilterTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 
 // _____________________________________________________________________________
 namespace {

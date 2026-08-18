@@ -27,13 +27,13 @@ using namespace geometryConverters;
 Result S2PointPolylineAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
-              bbLeft, bbRight] = params_;
+              maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
-  AD_CORRECTNESS_CHECK(rightCacheName.has_value());
-  auto s2index =
-      qec_->namedResultCache().get(rightCacheName.value())->cachedGeoIndex_;
+  AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
+  auto s2index = qec_->namedResultCache()
+                     .get(config_.rightCacheName_.value())
+                     ->cachedGeoIndex_;
   AD_CORRECTNESS_CHECK(s2index.has_value());
   AD_CORRECTNESS_CHECK(!maxResults.has_value() && maxDist.has_value());
 

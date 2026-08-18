@@ -25,8 +25,7 @@ using namespace geometryConverters;
 Result S2GeometryAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
-              bbLeft, bbRight] = params_;
+              maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   S2PointIndex<size_t> s2index;

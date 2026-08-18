@@ -26,7 +26,6 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
-#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -192,7 +191,7 @@ inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
                                      double withinDist) {
   using enum SpatialJoinType::Enum;
   sj::SweeperCfg cfg =
-      ad_utility::detail::spatialjoin::libspatialjoinSweeperConfig(1, 1_GB);
+      LibspatialjoinAlgorithm::libspatialjoinSweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
@@ -245,8 +244,9 @@ inline void runParsingAndSweeper(
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   // Build `LibspatialjoinAlgorithm` instance from spatial join operation
-  auto prepared = spatialJoin->onlyForTestingGetPrepareJoin();
-  LibspatialjoinAlgorithm sjAlgo{qec, prepared, config, spatialJoin};
+  auto [prepared, bbCols] = spatialJoin->onlyForTestingGetPrepareJoin();
+  LibspatialjoinAlgorithm sjAlgo{qec,         prepared,     config,
+                                 spatialJoin, bbCols.left_, bbCols.right_};
 
   // The regular implementation can also be tested instead of this mock version,
   // but then only limited information is available.

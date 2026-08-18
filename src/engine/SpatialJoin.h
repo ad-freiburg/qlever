@@ -24,7 +24,12 @@
 using SpatialJoinBoundingBoxColumns =
     std::optional<std::pair<ColumnIndex, ColumnIndex>>;
 
-// helper struct to improve readability in prepareJoin()
+// helper struct to improve readability in prepareJoin(). Holds only the input
+// used by every algorithm; `joinType_`/`rightCacheName_` are already
+// available on `SpatialJoinConfiguration` (which every algorithm also has),
+// and the DE-9IM filter and bounding-box prefilter columns are needed only by
+// `LibspatialjoinAlgorithm` (see `SpatialJoin::getDe9imFilter()` and
+// `LibspatialjoinBoundingBoxCols` below).
 struct PreparedSpatialJoinParams {
   const IdTableView<0>* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
@@ -37,11 +42,15 @@ struct PreparedSpatialJoinParams {
   size_t numColumns_;
   std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
-  std::optional<SpatialJoinType> joinType_;
-  std::optional<De9imFilterString> de9imFilter_;
-  std::optional<std::string> rightCacheName_;
-  SpatialJoinBoundingBoxColumns boundingBoxColsLeft_;
-  SpatialJoinBoundingBoxColumns boundingBoxColsRight_;
+};
+
+// The bounding-box prefilter columns for both sides of the join, only needed
+// by `LibspatialjoinAlgorithm`. Returned alongside `PreparedSpatialJoinParams`
+// by `prepareJoin()` because both depend on the same (possibly swapped, for
+// `WITHIN`) choice of left/right child.
+struct LibspatialjoinBoundingBoxCols {
+  SpatialJoinBoundingBoxColumns left_;
+  SpatialJoinBoundingBoxColumns right_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -162,7 +171,8 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
-  PreparedSpatialJoinParams onlyForTestingGetPrepareJoin() const {
+  std::pair<PreparedSpatialJoinParams, LibspatialjoinBoundingBoxCols>
+  onlyForTestingGetPrepareJoin() const {
     return prepareJoin();
   }
 
@@ -198,7 +208,8 @@ class SpatialJoin : public Operation {
   VariableToColumnMap getVarColMapPayloadVars() const;
 
   // helper function, to initialize various required objects for both algorithms
-  PreparedSpatialJoinParams prepareJoin() const;
+  std::pair<PreparedSpatialJoinParams, LibspatialjoinBoundingBoxCols>
+  prepareJoin() const;
 
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;

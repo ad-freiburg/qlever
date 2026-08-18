@@ -533,10 +533,6 @@ inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
                                    std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt,
                                    std::nullopt};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};

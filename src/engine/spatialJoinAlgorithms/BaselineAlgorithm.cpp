@@ -19,8 +19,7 @@ Result BaselineAlgorithm::run() {
 #else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
-              bbLeft, bbRight] = params_;
+              maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to

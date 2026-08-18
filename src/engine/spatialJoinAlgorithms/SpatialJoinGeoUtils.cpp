@@ -13,13 +13,8 @@
 
 #include <s2/s2polyline.h>
 
-#include <thread>
-
-#include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
 #include "index/ExportIds.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
-#include "util/Exception.h"
 #include "util/GeoConverters.h"
 
 using namespace geometryConverters;
@@ -61,34 +56,6 @@ bool prefilterGeoByBoundingBox(
 }
 
 // ____________________________________________________________________________
-std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
-    const IdTableView<0>* idTable,
-    const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
-  if (!boundingBoxes.has_value()) {
-    return std::nullopt;
-  }
-  auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
-  auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
-  if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
-      idUpperRight.getDatatype() != Datatype::GeoPoint) {
-    return std::nullopt;
-  }
-  return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
-                                 idUpperRight.getGeoPoint()};
-}
-
-// ____________________________________________________________________________
-size_t getNumThreads() {
-  size_t maxHwConcurrency = std::thread::hardware_concurrency();
-  size_t userPreference =
-      getRuntimeParameter<&RuntimeParameters::spatialJoinMaxNumThreads_>();
-  if (userPreference == 0 || maxHwConcurrency < userPreference) {
-    return maxHwConcurrency;
-  }
-  return userPreference;
-}
-
-// ____________________________________________________________________________
 std::optional<GeoPoint> getPoint(const IdTableView<0>* restable, size_t row,
                                  ColumnIndex col) {
   auto id = restable->at(row, col);
@@ -114,57 +81,6 @@ std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
   }
   auto line = lineFromWKT<double>(str.value().first);
   return line.empty() ? std::nullopt : std::optional{toS2Polyline(line)};
-}
-
-// ____________________________________________________________________________
-sj::SweeperCfg libspatialjoinSweeperConfig(
-    size_t threads, ad_utility::MemorySize totalAllowedMemory) {
-  using enum SpatialJoinType::Enum;
-  // `libspatialjoin` reports a match for one of these relations by invoking
-  // `writeRelCb` (see below) with a `pred` argument equal to the
-  // corresponding `sep...` string set below. These strings are otherwise
-  // opaque to `libspatialjoin`, so any distinct single byte per relation
-  // works; we simply (ab)use the (small) numeric value of the enum, which is
-  // not meant to be human-readable.
-  auto sep = [](SpatialJoinType type) {
-    return std::string{static_cast<char>(type.value())};
-  };
-  AD_CORRECTNESS_CHECK(threads > 0);
-
-  sj::SweeperCfg cfg;
-  cfg.numThreads = threads;
-  cfg.numCacheThreads = threads;
-  // Cache memory per thread, in bytes
-  cfg.geomCacheMaxSize = totalAllowedMemory.getBytes() / threads;
-  cfg.geomCacheMaxNumElements = 10'000;
-  cfg.sepIsect = sep(INTERSECTS);
-  cfg.sepContains = sep(CONTAINS);
-  cfg.sepCovers = sep(COVERS);
-  cfg.sepTouches = sep(TOUCHES);
-  cfg.sepEquals = sep(EQUALS);
-  cfg.sepOverlaps = sep(OVERLAPS);
-  cfg.sepCrosses = sep(CROSSES);
-  cfg.useBoxIds = true;
-  cfg.useArea = true;
-  cfg.useOBB = false;
-  cfg.useDiagBox = true;
-  cfg.useFastSweepSkip = true;
-  cfg.noGeometryChecks = false;
-  cfg.euclideanDist = false;
-  cfg.haversineApprox = false;
-  cfg.computeDE9IM = false;
-  cfg.de9imFilter = ::util::geo::FANY;
-  // Never let `libspatialjoin` fall back to a self-join when it considers one
-  // side to be empty; QLever's callbacks rely on the first geometry of each
-  // result pair coming from the left side and the second one from the right
-  // side (see #3068).
-  cfg.forceTwoSided = true;
-  cfg.writeRelCb = {};
-  cfg.logCb = {};
-  cfg.statsCb = {};
-  cfg.sweepProgressCb = {};
-  cfg.sweepCancellationCb = {};
-  return cfg;
 }
 
 }  // namespace ad_utility::detail::spatialjoin
