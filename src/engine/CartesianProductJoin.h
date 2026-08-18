@@ -110,6 +110,11 @@ class CartesianProductJoin : public Operation {
   // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
+  // NOTE: Reporting a sort order here would additionally require revisiting
+  // `calculateSubResults`, which pushes a `LIMIT` into the children while the
+  // result is already being computed, at which point an invalidated sort order
+  // could no longer be repaired (see the caution note on
+  // `Operation::applyLimitOffset`).
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
