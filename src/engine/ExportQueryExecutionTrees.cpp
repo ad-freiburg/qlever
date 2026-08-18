@@ -845,10 +845,11 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   // because the parallel path checks it again while collecting the results.
   auto config = makeConstructEvaluationConfig(qet, cancellationHandle);
 
+  ConstructStreamParams streamParams{qet.getVariableColumns(), constructTriples,
+                                     limitAndOffset._offset, std::move(config)};
   if (numThreads <= 1) {
     STREAMABLE_YIELD_FROM(constructQueryResultSerial<format>(
-        qet.getVariableColumns(), constructTriples, limitAndOffset._offset,
-        std::move(rowIndices), std::move(config), streamableYielder));
+        std::move(streamParams), std::move(rowIndices), streamableYielder));
     STREAMABLE_RETURN;
   }
 
@@ -859,29 +860,26 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   if (dedupActive) {
     // When triple deduplication is active, the chunks share a single
     // deduplicator.
-    config.sharedDeduplicator_ =
+    streamParams.config_.sharedDeduplicator_ =
         std::make_shared<qlever::constructExport::ConstructDeduplicator>(
-            config.mode_, *qet.getQec());
+            streamParams.config_.mode_, *qet.getQec());
   }
   STREAMABLE_YIELD_FROM(constructQueryResultParallel<format>(
-      qet.getVariableColumns(), constructTriples, limitAndOffset._offset,
-      std::move(rowIndices), std::move(config), numThreads, cancellationHandle,
-      streamableYielder));
+      std::move(streamParams), std::move(rowIndices), numThreads,
+      cancellationHandle, streamableYielder));
   STREAMABLE_RETURN;
 }
 
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::constructQueryResultSerial(
-    VariableToColumnMap variableColumns,
-    ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
+    ConstructStreamParams params,
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-    qlever::constructExport::EvaluationConfig config,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   auto triples = qlever::constructExport::ConstructTripleGenerator::
-      generateFormattedTriples(constructTriples, variableColumns,
-                               std::move(rowIndices), rowOffset, format,
-                               config);
+      generateFormattedTriples(params.constructTriples_,
+                               params.variableColumns_, std::move(rowIndices),
+                               params.rowOffset_, format, params.config_);
   for (const std::string& triple : triples) {
     STREAMABLE_YIELD(triple);
   }
@@ -892,11 +890,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::constructQueryResultSerial(
 template <ad_utility::MediaType format>
 STREAMABLE_GENERATOR_TYPE
 ExportQueryExecutionTrees::constructQueryResultParallel(
-    VariableToColumnMap variableColumns,
-    ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
+    ConstructStreamParams params,
     ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-    qlever::constructExport::EvaluationConfig config, size_t numThreads,
-    CancellationHandle cancellationHandle,
+    size_t numThreads, CancellationHandle cancellationHandle,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
   // Walk lazy WHERE blocks one at a time. Workers may only touch the current
   // block: its IdTable view dies when the generator advances. Each block is
@@ -922,12 +918,12 @@ ExportQueryExecutionTrees::constructQueryResultParallel(
     while (nextGet < chunks.size()) {
       while (nextSubmit < chunks.size() && nextSubmit - nextGet < window) {
         futures[nextSubmit] = queue.submit(
-            [&constructTriples, &variableColumns, rowOffset, &config,
-             chunk = std::move(chunks[nextSubmit])]() mutable {
+            [&params, chunk = std::move(chunks[nextSubmit])]() mutable {
               std::vector<TableWithRange> one{std::move(chunk)};
               return serializeConstructGroup<format>(
-                  constructTriples, variableColumns,
-                  InputRangeTypeErased(std::move(one)), rowOffset, config);
+                  params.constructTriples_, params.variableColumns_,
+                  InputRangeTypeErased(std::move(one)), params.rowOffset_,
+                  params.config_);
             });
         ++nextSubmit;
       }

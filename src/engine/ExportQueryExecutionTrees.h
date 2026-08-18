@@ -235,26 +235,29 @@ class ExportQueryExecutionTrees {
   static std::vector<TableWithRange> splitBlockIntoChunks(
       const TableWithRange& block, size_t rowsPerChunk);
 
+  // Inputs the CONSTRUCT stream coroutines own in their frame.
+  struct ConstructStreamParams {
+    VariableToColumnMap variableColumns_;
+    ad_utility::sparql_types::Triples constructTriples_;
+    size_t rowOffset_;
+    qlever::constructExport::EvaluationConfig config_;
+  };
+
   // Yield one formatted triple at a time from `rowIndices`.
-  // Parameters that the coroutine still needs after the first yield are
-  // taken by value so they live in the coroutine frame.
   template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultSerial(
-      VariableToColumnMap variableColumns,
-      ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
+      ConstructStreamParams params,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      qlever::constructExport::EvaluationConfig config,
       STREAMABLE_YIELDER_ARG_DECL);
 
   // Format each live WHERE block on a `TaskQueue` of `numThreads` workers.
   // Join the current block before the generator advances.
   template <ad_utility::MediaType format>
   static STREAMABLE_GENERATOR_TYPE constructQueryResultParallel(
-      VariableToColumnMap variableColumns,
-      ad_utility::sparql_types::Triples constructTriples, size_t rowOffset,
+      ConstructStreamParams params,
       ad_utility::InputRangeTypeErased<TableWithRange> rowIndices,
-      qlever::constructExport::EvaluationConfig config, size_t numThreads,
-      CancellationHandle cancellationHandle, STREAMABLE_YIELDER_ARG_DECL);
+      size_t numThreads, CancellationHandle cancellationHandle,
+      STREAMABLE_YIELDER_ARG_DECL);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
