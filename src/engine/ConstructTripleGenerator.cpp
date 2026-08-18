@@ -98,13 +98,13 @@ CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
 // non-owning handle (`IdTableView` + `LocalVocab` ref); the underlying result
 // storage must still outlive the whole export, as with every other CONSTRUCT
 // export path.
-auto processTableBatches(TableWithRange table, BatchEvalContext context,
+auto processTableBatches(const TableWithRange& table, BatchEvalContext context,
                          size_t tableRowOffset) {
   // Copy the cheap pieces out first so neither `chunk` nor the transform
   // lambda retain a reference into the by-value `table` parameter.
   auto rowView = table.view_;
   const TableConstRefWithVocab tableWithVocab = table.tableWithVocab_;
-  return ranges::views::chunk(std::move(rowView),
+  return ranges::views::chunk(rowView,
                               ConstructTripleGenerator::BATCH_SIZE) |
          ql::views::transform([tableWithVocab, context = std::move(context),
                                tableRowOffset](auto chunkView) {
