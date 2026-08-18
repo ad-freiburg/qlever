@@ -376,8 +376,11 @@ class DeltaTriples {
   // successive insertions referring to the same local vocab entries; (2) It
   // avoids storing local vocab entries or blank nodes that were created only
   // temporarily when evaluating the WHERE clause of an update query.
+  // NOTE: Words that already have a non-local `Id` are not stored in the
+  // `localVocab_` at all, see `LocalVocab::getIdAndAddIfNotContained`.
   void rewriteLocalVocabEntriesAndBlankNodes(Triples& triples);
   FRIEND_TEST(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes);
+  FRIEND_TEST(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab);
 
   // The difference between two `LocatedTriplesState` snapshots, split into
   // inserted/deleted and internal/external triples.

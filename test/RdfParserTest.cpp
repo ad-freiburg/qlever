@@ -13,6 +13,8 @@
 #include <string>
 
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
@@ -27,6 +29,7 @@
 
 using std::string;
 using namespace std::literals;
+using ad_utility::testing::encodedIriManager;
 using ad_utility::use_type_identity::ti;
 using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
 using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
@@ -37,10 +40,6 @@ namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
-};
-auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
 };
 
 auto re2Parser = []() { return Re2Parser{encodedIriManager()}; };

@@ -11,6 +11,7 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -44,6 +45,7 @@
 #include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/TransparentFunctors.h"
 #include "util/json.h"
 
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
@@ -267,7 +269,7 @@ class IndexImpl {
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
 
-  const auto& getVocab() const { return vocab_; };
+  const auto& getVocab() const { return vocab_; }
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly
@@ -305,7 +307,7 @@ class IndexImpl {
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
-  };
+  }
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -413,7 +415,7 @@ class IndexImpl {
 
     // Returns true if the text block contains entries outside of the requested
     // range
-    bool hasToBeFiltered() const { return optIdRange_.has_value(); };
+    bool hasToBeFiltered() const { return optIdRange_.has_value(); }
 
     // The id range of the prefix or word used to retrieve the text block(s). It
     // is only set if computeHasToBeFiltered was determined to be true during
@@ -484,7 +486,7 @@ class IndexImpl {
 
   float getAverageNofEntityContexts() const {
     return textMeta_.getAverageNofEntityContexts();
-  };
+  }
 
   void setKbName(const std::string& name);
 
@@ -649,10 +651,12 @@ class IndexImpl {
                                         bool internal) const;
 
   // Create a `CompressedRelationWriter` and a callback that adds the metadata
-  // of large relations to the `metaData` object.
+  // of large relations to the `metaData` object. If `numWriterThreads` is
+  // set, it overrides the number of compress/write threads of the writer
+  // (see the `CompressedRelationWriter` constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
-      IndexMetaData& metaData, size_t numColumns,
-      const std::string& fileName) const;
+      IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
+      std::optional<size_t> numWriterThreads = std::nullopt) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -666,12 +670,14 @@ class IndexImpl {
   // columns in the relation (usually 4, sometimes 6 with patterns).
   // `fileName` is the base name of the files to write to (without suffixes).
   // `sortedTriples` is an input range that provides the triples in the correct
-  // order.
+  // order. If `numWriterThreads` is set, it overrides the number of
+  // compress/write threads (see `getWriterAndCallback`).
   // Return the number of triples written and the metadata for the written
   // permutation.
   std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
-      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples);
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      std::optional<size_t> numWriterThreads = std::nullopt);
 
  protected:
   // _______________________________________________________________________
@@ -987,9 +993,12 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state.
+  // triples shared state. `progress` is called (possibly from several
+  // threads) with the number of newly scanned rows; this is used by the index
+  // rebuild for progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
-      const LocatedTriplesSharedState& locatedTriplesSharedState) const;
+      const LocatedTriplesSharedState& locatedTriplesSharedState,
+      const std::function<void(size_t)>& progress = ad_utility::noop) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

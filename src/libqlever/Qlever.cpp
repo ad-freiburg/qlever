@@ -30,7 +30,9 @@
 #include "libqlever/QleverTypes.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/Log.h"
 #include "util/TimeTracer.h"
 #include "util/http/UrlParser.h"
 
@@ -38,13 +40,18 @@ namespace qlever {
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading)
-    : allocator_{ad_utility::AllocatorWithLimit<Id>{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-              config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES)),
-          [this](ad_utility::MemorySize numMemoryToAllocate) {
-            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
-                                            numMemoryToAllocate);
-          }}},
+    : Qlever(config, skipLoading,
+             qlever::makeAllocatorWithLimit<Id>(
+                 config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
+                 [this](ad_utility::MemorySize numMemoryToAllocate) {
+                   cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                                   numMemoryToAllocate);
+                 })) {}
+
+// _____________________________________________________________________________
+Qlever::Qlever(const EngineConfig& config, bool skipLoading,
+               Allocator<Id> allocator)
+    : allocator_{std::move(allocator)},
       indexAndViews_{std::make_shared<IndexAndViews>(
           Index{allocator_}, MaterializedViewsManager{})},
       enablePatternTrick_{!config.noPatterns_},
@@ -95,7 +102,8 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading)
   // Preload materialized views as requested by the user.
   for (const auto& viewName : config.preloadMaterializedViews_) {
     try {
-      materializedViewsManager.loadView(viewName);
+      auto qec = createQueryExecutionContext(indexAndViewsSnapshot());
+      materializedViewsManager.loadView(viewName, qec.get());
     } catch (const std::exception& ex) {
       AD_LOG_ERROR << "Preloading materialized view '" << viewName
                    << "' failed: " << ex.what() << "." << std::endl;
@@ -233,6 +241,9 @@ void Qlever::queryAndPinResultWithName(std::string name, std::string query) {
 void Qlever::clearNamedResultCache() { namedResultCache_.clear(); }
 
 // _____________________________________________________________________________
+void Qlever::clearQueryResultCache() { cache_.clearAll(); }
+
+// _____________________________________________________________________________
 void Qlever::eraseResultWithName(std::string name) {
   namedResultCache_.erase(name);
 }
@@ -364,9 +375,16 @@ bool Qlever::isMaterializedViewLoaded(const std::string& name) const {
 }
 
 // ___________________________________________________________________________
-void Qlever::loadMaterializedView(std::string name) const {
+void Qlever::unloadMaterializedView(const std::string& name) const {
   const auto indexAndViews = indexAndViewsSnapshot();
-  indexAndViews->materializedViewsManager_.loadView(name);
+  indexAndViews->materializedViewsManager_.unloadViewIfLoaded(name);
+}
+
+// ___________________________________________________________________________
+void Qlever::loadMaterializedView(std::string name) const {
+  auto indexAndViews = indexAndViewsSnapshot();
+  auto qec = createQueryExecutionContext(indexAndViews);
+  indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 }
 
 // ___________________________________________________________________________
@@ -498,13 +516,41 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
   // The defaults are: build the new index in `rebuild.<current datetime>.tmp`
   // and move the old index to `previous.<datetime of the build of the current
   // index>`.
+  //
+  // The datetime of the index build has a granularity of one second, so when
+  // rebuilds happen in quick succession (e.g. automatic rebuilds on a small
+  // index, see `--rebuild-index-strategy`), two index generations can carry
+  // the same datetime, and the default directory for the second of them is
+  // then already taken. Append `.1`, `.2`, ... in that case (like the
+  // numbered backups of `logrotate`). Without this, the rebuild would fail,
+  // and since a failed rebuild does not swap (and hence does not re-stamp the
+  // datetime of the served index), all subsequent rebuilds would fail the
+  // same way. Only the default name is uniquified; an explicitly given
+  // directory that is taken remains an error (see the checks below).
+  //
+  // NOTE: The check-then-use is not atomic; this is fine because rebuilds
+  // are serialized (see `Server::rebuildInProgress_`).
+  auto uniquify = [](const std::string& directory) {
+    std::string candidate = directory;
+    for (size_t i = 1; fs::exists(candidate); ++i) {
+      if (i > 99) {
+        throw std::runtime_error{absl::StrCat(
+            "The directories \"", directory, "\" and \"", directory,
+            ".1\" through \"", directory,
+            ".99\" all already exist; remove some of them or specify a "
+            "directory explicitly via `rebuild-previous-index-dir`")};
+      }
+      candidate = absl::StrCat(directory, ".", i);
+    }
+    return candidate;
+  };
   std::string baseNameForRebuild = resolveBaseName(
       std::move(rebuildTmpDir),
       absl::StrCat("rebuild.", IndexImpl::formatIndexBuildTime(absl::Now()),
                    ".tmp"));
   std::string baseNameForOldIndex = resolveBaseName(
       std::move(rebuildPreviousIndexDir),
-      absl::StrCat("previous.", index.getImpl().dateOfIndexBuild()));
+      uniquify(absl::StrCat("previous.", index.getImpl().dateOfIndexBuild())));
 
   // Check the two base names that were derived from the arguments: they must be
   // relative (they are resolved against the working directory of the engine,
@@ -542,8 +588,86 @@ IndexRebuildConfig Qlever::makeIndexRebuildConfig(
 }
 
 // ___________________________________________________________________________
+void Qlever::cleanUpPreviousIndexDirs(const std::string& indexBaseName,
+                                      KeepPreviousIndexDirs policy) {
+  if (policy == KeepPreviousIndexDirs::All) {
+    return;
+  }
+  // Nothing in here may throw: when this runs, the rebuild has already
+  // succeeded, so a failure of the cleanup must only be logged. Deletion
+  // failures are handled (and skipped) individually below; the catch covers
+  // everything else (e.g. a failure while enumerating the directories or
+  // opening the log file).
+  try {
+    cleanUpPreviousIndexDirsImpl(indexBaseName, policy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Failed to clean up the previous index directories: "
+                 << e.what() << std::endl;
+  }
+}
+
+// ___________________________________________________________________________
+void Qlever::cleanUpPreviousIndexDirsImpl(const std::string& indexBaseName,
+                                          KeepPreviousIndexDirs policy) {
+  namespace fs = ql::filesystem;
+  // Collect the `previous.*` directories in the directory of the index. The
+  // parent path is empty if the base name lies in the working directory
+  // itself.
+  fs::path indexDir = fs::path{indexBaseName}.parent_path();
+  if (indexDir.empty()) {
+    indexDir = fs::current_path();
+  }
+  auto previousDirs =
+      qlever::util::directoriesWithPrefix(indexDir, "previous.");
+
+  // Order the directories from the oldest to the newest by the time they were
+  // last written to. Nothing writes into such a directory after the rebuild
+  // that created it, so this is the order in which they were created. Two
+  // rebuilds within the same second can produce equal timestamps (depending
+  // on the filesystem backend); such ties are broken by name, which contains
+  // the build date of the retired index (with a numeric suffix for repeated
+  // dates, see `makeIndexRebuildConfig`) and hence also increases from the
+  // oldest to the newest.
+  auto sortKey = [](const fs::path& dir) {
+    return std::pair{fs::last_write_time(dir), dir.filename().string()};
+  };
+  ql::ranges::sort(previousDirs, std::less{}, sortKey);
+
+  // Keep or delete each directory according to the policy. The decisions are
+  // written to the log file of the rebuild that has just finished (which was
+  // moved into place together with the index), not to the server log.
+  auto logFile = ad_utility::makeOfstream(
+      absl::StrCat(indexBaseName, REBUILD_INDEX_LOG_SUFFIX), std::ios::app);
+  auto log = [&logFile](std::string_view severity = "INFO") -> std::ostream& {
+    return logFile << ad_utility::Log::getTimeStamp() << " - " << severity
+                   << ": ";
+  };
+  log() << "Checking which previous index directories to keep or delete ("
+        << policy << ")" << std::endl;
+  for (size_t i = 0; i < previousDirs.size(); ++i) {
+    const fs::path& dir = previousDirs[i];
+    bool keep = keepPreviousIndexDir(policy, i, previousDirs.size());
+    log() << dir.filename().string() << " -> " << (keep ? "KEEP" : "DELETE")
+          << std::endl;
+    if (!keep) {
+      ql::error_code errorCode;
+      fs::remove_all(dir, errorCode);
+      if (errorCode) {
+        // A failed deletion additionally goes to the server log, where
+        // operators look for errors.
+        log("ERROR") << "Failed to delete \"" << dir.filename().string()
+                     << "\": " << errorCode.message() << std::endl;
+        AD_LOG_ERROR << "Failed to delete \"" << dir.filename().string()
+                     << "\": " << errorCode.message() << std::endl;
+      }
+    }
+  }
+}
+
+// ___________________________________________________________________________
 void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
-                                       const IndexRebuildConfig& config) {
+                                       const IndexRebuildConfig& config,
+                                       KeepPreviousIndexDirs policy) {
   namespace fs = ql::filesystem;
 
   // Move a `file` whose name starts with `fromBasename` so that its base-name
@@ -618,6 +742,13 @@ void Qlever::moveRebuiltIndexIntoPlace(IndexAndViews& newIndexAndViews,
                 << directoryOfNewIndexSource.string()
                 << "\" in which the new index was built" << std::endl;
   }
+
+  // Apply the configured policy for which `previous.*` index directories to
+  // keep, right after the move that has just retired the old index into such
+  // a directory. A failure is only logged (`cleanUpPreviousIndexDirs` never
+  // throws): the new index is already in place, so the rebuild as a whole has
+  // succeeded.
+  cleanUpPreviousIndexDirs(config.newIndexTarget(), policy);
 }
 
 // ___________________________________________________________________________
@@ -657,7 +788,8 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
 void Qlever::swapInRebuiltIndex(
     const Index& index, RebuildResult rebuildResult,
     const ad_utility::SharedCancellationHandle& handle,
-    const IndexRebuildConfig& config) {
+    const IndexRebuildConfig& config,
+    KeepPreviousIndexDirs keepPreviousIndexDirs) {
   auto& [oldSnapshot, mapping, newIndexAndViews] = rebuildResult;
   auto newSnapshot =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
@@ -683,7 +815,7 @@ void Qlever::swapInRebuiltIndex(
   // consistently on the old index (the swap below has not happened and open
   // file handles survive the renames), but the on-disk layout has to be
   // repaired manually before the next restart.
-  moveRebuiltIndexIntoPlace(*newIndexAndViews, config);
+  moveRebuiltIndexIntoPlace(*newIndexAndViews, config, keepPreviousIndexDirs);
   swapIndexAndViews(std::move(newIndexAndViews));
   // Clear the query cache, including pinned entries: cached results were
   // computed against the old index, so their `VocabIndex` ids are in the old

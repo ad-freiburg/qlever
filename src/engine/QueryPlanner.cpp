@@ -43,6 +43,7 @@
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
+#include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
@@ -159,11 +160,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // 2. Only non-aggretating aliases without GROUP BY.
   // Note: When a GROUP BY is present, then all aliases have to be aggregating,
   // this is handled correctly in all cases.
-  bool doGroupBy = !pq._groupByVariables.empty() ||
-                   patternTrickTuple.has_value() ||
-                   ql::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
-                     return alias._expression.containsAggregate();
-                   });
+  bool doGroupBy = pq.isAggregatingQuery() || patternTrickTuple.has_value();
 
   // Set TEXTLIMIT
   textLimit_ = pq._limitOffset.textLimit_;
@@ -340,7 +337,7 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
       }
     }
     distinctPlan._qet =
-        makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
+        QueryExecutionTree::createDistinctTree(parent._qet, keepIndices);
     added.push_back(distinctPlan);
   }
   return added;
@@ -602,7 +599,7 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
   return result;
-};
+}
 
 // Helper function for `handleRepeatedVariables` below. Replace a single
 // position of the `scanTriple`, denoted by the `rewritePosition` by a new
@@ -876,7 +873,8 @@ auto QueryPlanner::seedWithScansAndText(
             "to confusing semantics. Please upgrade your query to the new "
             "syntax 'SERVICE ",
             SPATIAL_SEARCH_IRI,
-            " { ... }'. For more information, please see the QLever Wiki."));
+            " { ... }'. For more information, please see the QLever Docs "
+            "(https://docs.qlever.dev/geosparql/)."));
       }
       pushPlan(plan);
       continue;
@@ -1771,7 +1769,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     }
   }
   return plans;
-};
+}
 
 // _____________________________________________________________________________
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
@@ -2204,7 +2202,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
     }
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
-};
+}
 
 // _________________________________________________________________________________
 size_t QueryPlanner::findSmallestExecutionTree(
@@ -2476,6 +2474,14 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
       return;
     }
 
+    // Don't distribute over a UNION that has a LIMIT or OFFSET attached to it.
+    // Such a LIMIT/OFFSET applies to the union of both children and can neither
+    // be pushed into the individual children nor be applied to the result of
+    // the join, so the optimization is simply not applicable here.
+    if (!unionOperation->getLimitOffset().isUnconstrained()) {
+      return;
+    }
+
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
@@ -2621,8 +2627,7 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   // Check if the user allows query rewriting.
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
-  if (!getRuntimeParameter<
-          &RuntimeParameters::enableMaterializedViewQueryRewrite_>()) {
+  if (_qec->disableMaterializedViewRewriting()) {
     return plans;
   }
 
@@ -3157,7 +3162,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
   }
-};
+}
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
