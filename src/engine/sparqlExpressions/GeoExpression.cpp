@@ -325,12 +325,12 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  // Extract variables
-  auto p1 = de9imExpr->children()[0]->getVariableOrNullopt();
+  // Extract variables or fixed values
+  auto p1 = getVariableOrFixedGeoOperand(*de9imExpr->children()[0]);
   if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 = de9imExpr->children()[1]->getVariableOrNullopt();
+  auto p2 = getVariableOrFixedGeoOperand(*de9imExpr->children()[1]);
   if (!p2.has_value()) {
     return std::nullopt;
   }
@@ -347,8 +347,9 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
     return std::nullopt;
   }
 
-  return De9imRelationCall{{SpatialJoinType::DE9IM, p1.value(), p2.value()},
-                           pattern.value()};
+  return De9imRelationCall{
+      {SpatialJoinType::DE9IM, std::move(p1).value(), std::move(p2).value()},
+      pattern.value()};
 }
 
 // _____________________________________________________________________________

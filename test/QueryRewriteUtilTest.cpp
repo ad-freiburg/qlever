@@ -106,21 +106,38 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*variablePatternPtr), std::nullopt);
 
-  // The left argument must be a variable; a constant is rejected.
+  // A constant left argument is resolved to a fixed `GeoOperand`, just like
+  // for the other GeoSPARQL predicates.
   auto nonVarLeftPtr = makeDe9imRelationExpression(
       getExpr(ValueId::makeFromInt(42)), getExpr(V{"?b"}),
       getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
           "T*T***T**")));
+  De9imRelationCall nonVarLeftExp{
+      {DE9IM, TripleComponent{ValueId::makeFromInt(42)}, V{"?b"}},
+      parseDe9imFilterString("T*T***T**").value()};
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarLeftPtr),
-                         std::nullopt);
+                         nonVarLeftExp);
 
-  // The right argument must be a variable; a constant is rejected.
+  // Same for a constant right argument.
   auto nonVarRightPtr = makeDe9imRelationExpression(
       getExpr(V{"?a"}), getExpr(ValueId::makeFromInt(42)),
       getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
           "T*T***T**")));
+  De9imRelationCall nonVarRightExp{
+      {DE9IM, V{"?a"}, TripleComponent{ValueId::makeFromInt(42)}},
+      parseDe9imFilterString("T*T***T**").value()};
   checkDe9imRelationCall(getDe9imRelationExpressionParameters(*nonVarRightPtr),
-                         std::nullopt);
+                         nonVarRightExp);
+
+  // An unsupported expression type (neither a variable, `IdExpression`,
+  // `StringLiteralExpression`, nor `IriExpression`) as an argument is
+  // rejected.
+  auto unsupportedArgPtr = makeDe9imRelationExpression(
+      makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}),
+      getExpr(ad_utility::triple_component::Literal::literalWithoutQuotes(
+          "T*T***T**")));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*unsupportedArgPtr), std::nullopt);
 
   // A syntactically valid pattern that could still match disjoint geometries
   // is rejected, because `geof:relate` currently only supports patterns that
@@ -225,6 +242,27 @@ TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfigWithFixedValue) {
       "<http://www.opengis.net/def/function/geosparql/"
       "metricDistance>(<fixed point>, <fixed point>) <= 10.0"}};
   EXPECT_FALSE(rewrite(bothFixedFilter).has_value());
+}
+
+// _____________________________________________________________________________
+TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
+  // A fixed IRI operand (for example a named geometry resource) is resolved
+  // to a `GeoOperand`, just like a literal or `ValueId`.
+  auto iriPtr = makeGeoRelationExpression<INTERSECTS>(
+      getExpr(V{"?a"}),
+      getExpr(Iri::fromIrirefWithoutBrackets("http://example.com/geom")));
+  GeoFunctionCall iriExp{INTERSECTS, V{"?a"},
+                         TripleComponent{Iri::fromIrirefWithoutBrackets(
+                             "http://example.com/geom")}};
+  checkGeoFunctionCall(getGeoFunctionExpressionParameters(*iriPtr), iriExp);
+
+  // An unsupported expression type (neither a variable, `IdExpression`,
+  // `StringLiteralExpression`, nor `IriExpression`) as an argument is
+  // rejected.
+  auto unsupportedArgPtr = makeGeoRelationExpression<INTERSECTS>(
+      makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
+  checkGeoFunctionCall(getGeoFunctionExpressionParameters(*unsupportedArgPtr),
+                       std::nullopt);
 }
 
 // TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +

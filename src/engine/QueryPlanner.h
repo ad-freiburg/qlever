@@ -319,10 +319,15 @@ class QueryPlanner {
 
   // Function for optimization query rewrites: The function returns pairs of
   // filters with the corresponding substitute subtree plan. This is currently
-  // used to translate GeoSPARQL filters to spatial join operations.
+  // used to translate GeoSPARQL filters to spatial join operations. Protected
+  // (rather than private) so that tests can override it (as done in
+  // `QueryPlannerWithMockFilterSubstitute`) or wrap it to observe the
+  // generated candidates.
+ protected:
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+ private:
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
   // Turn a generic `PropertyPath` into a `GraphPattern` that can be used for
