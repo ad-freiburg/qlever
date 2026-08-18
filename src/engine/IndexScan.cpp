@@ -159,7 +159,7 @@ string IndexScan::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 bool IndexScan::resultDoesMatchCacheKey() const {
   return !scanSpecAndBlocksIsPrefiltered_;
-};
+}
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
@@ -227,6 +227,56 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
     }
   }
   return result;
+}
+
+// _____________________________________________________________________________
+bool IndexScan::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // Duplicate triples are removed during scanning, so the result contains every
+  // matching triple (or quad, if a graph column is present) exactly once. Its
+  // rows are therefore uniquely identified by the triple's variable columns
+  // plus the graph column; all other (payload) columns, e.g. the `pattern`
+  // column, are functionally determined by those. The scan is thus distinct wrt
+  // `distinctIndices` iff `distinctIndices` is a superset of the identifying
+  // columns. Note that it does not have to be equal to them: additional columns
+  // in `distinctIndices` can only make two rows differ in more places, so they
+  // never destroy distinctness. Conversely, a `distinctIndices` that misses
+  // even one identifying column (e.g. `DISTINCT ?s` for `?s ?p ?o`) makes this
+  // function return `false`, because the remaining columns may well repeat.
+  //
+  // Exception: For materialized views the deduplication during scanning is
+  // deliberately deactivated (see the `MaterializedView` constructor), so a
+  // view scan may well contain duplicate rows.
+  if (permutation().permutationType() == Permutation::Type::MATERIALIZED_VIEW) {
+    return false;
+  }
+
+  // The identifying columns are those of the variables of the triple plus that
+  // of the graph variable. We look them up in the variable-to-column map, which
+  // directly gives us the columns of the actual result. An identifying variable
+  // that was stripped away is missing from that map; then the columns that
+  // remain don't identify a row uniquely and the scan is not distinct.
+  const auto& varColMap = getExternallyVisibleVariableColumns();
+  auto isCoveredByDistinctIndices = [&varColMap,
+                                     &distinctIndices](const Variable& var) {
+    auto it = varColMap.find(var);
+    return it != varColMap.end() &&
+           ad_utility::contains(distinctIndices, it->second.columnIndex_);
+  };
+
+  for (const TripleComponent* component : {&subject_, &predicate_, &object_}) {
+    if (component->isVariable() &&
+        !isCoveredByDistinctIndices(component->getVariable())) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < additionalColumns_.size(); ++i) {
+    if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID &&
+        !isCoveredByDistinctIndices(additionalVariables_.at(i))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // _____________________________________________________________________________
@@ -497,14 +547,14 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       ad_utility::CachingTransformInputRange{
           std::move(lazyScanAllCols), makeApplyColumnSubset(),
           ql::type_identity<LazyScanMetadata>{}}};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
                                             locatedTriplesState());
-};
+}
 
 // _____________________________________________________________________________
 std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>

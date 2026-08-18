@@ -16,7 +16,7 @@
 namespace {
 
 using namespace SpatialJoinPrefilterTestHelpers;
-using enum SpatialJoinType;
+using enum SpatialJoinType::Enum;
 
 // Each of the following tests creates a `QueryExecutionContext` on a
 // `GeoVocabulary` which holds various carefully selected literals. It
@@ -35,15 +35,16 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterNoIntersections) {
   // With prefilter: No results but one entire side gets filtered out by
   // bounding box
   SweeperTestResult testResult;
-  runParsingAndSweeper(qec, "de", "other", {INTERSECTS}, testResult, true);
+  runParsingAndSweeper(qec, "de", "other", LibSpatialJoinConfig{INTERSECTS},
+                       testResult, true);
   checkSweeperTestResult(vMap, testResult,
                          {{}, boundingBoxGermanPlaces, {}, 3, 3, 3, 0},
                          INTERSECTS, true);
 
   // Without prefilter: No results but everything has to be checked
   SweeperTestResult testResultNoFilter;
-  runParsingAndSweeper(qec, "de", "other", {INTERSECTS}, testResultNoFilter,
-                       false);
+  runParsingAndSweeper(qec, "de", "other", LibSpatialJoinConfig{INTERSECTS},
+                       testResultNoFilter, false);
   checkSweeperTestResult(
       vMap, testResultNoFilter,
       {{}, boundingBoxGermanPlaces, boundingBoxOtherPlaces, 6, 0, 3, 3},
@@ -69,8 +70,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
 
   // Intersects: Campus intersects road and main building
   SweeperTestResult testResultIntersects;
-  runParsingAndSweeper(qec, "uni-separate", "de", {INTERSECTS},
-                       testResultIntersects, true);
+  runParsingAndSweeper(qec, "uni-separate", "de",
+                       LibSpatialJoinConfig{INTERSECTS}, testResultIntersects,
+                       true);
   checkSweeperTestResult(vMap, testResultIntersects,
                          {{{INTERSECTS, vIdCampus, vIdGkAllee, 0},
                            {INTERSECTS, vIdCampus, vIdUni, 0}},
@@ -84,8 +86,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
 
   // Contains: Campus contains main building
   SweeperTestResult testResultContains;
-  runParsingAndSweeper(qec, "uni-separate", "de", {CONTAINS},
-                       testResultContains, true);
+  runParsingAndSweeper(qec, "uni-separate", "de",
+                       LibSpatialJoinConfig{CONTAINS}, testResultContains,
+                       true);
   checkSweeperTestResult(vMap, testResultContains,
                          {{
                               {CONTAINS, vIdCampus, vIdUni, 0},
@@ -101,12 +104,13 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
   // Within distance 5km: Minster satisfies this, s.t. all three geometries
   // from the right are expected to be returned.
   SweeperTestResult testResultWithinDist;
-  runParsingAndSweeper(qec, "uni-separate", "de", {WITHIN_DIST, 5000},
+  runParsingAndSweeper(qec, "uni-separate", "de",
+                       LibSpatialJoinConfig{WITHIN_DIST, 5000, std::nullopt},
                        testResultWithinDist, true);
   checkSweeperTestResult(vMap, testResultWithinDist,
                          {{{WITHIN_DIST, vIdCampus, vIdGkAllee, 0},
                            {WITHIN_DIST, vIdCampus, vIdUni, 0},
-                           {WITHIN_DIST, vIdCampus, vIdMinster, 2225.01}},
+                           {WITHIN_DIST, vIdCampus, vIdMinster, 2224.7948}},
                           {},
                           {},
                           4,
@@ -136,8 +140,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
   // Intersects with prefiltering: Three geometries in Germany intersect, the
   // other three don't and can be excluded by prefiltering
   SweeperTestResult testResultIntersects;
-  runParsingAndSweeper(qec, "approx-de", "other", {INTERSECTS},
-                       testResultIntersects, true);
+  runParsingAndSweeper(qec, "approx-de", "other",
+                       LibSpatialJoinConfig{INTERSECTS}, testResultIntersects,
+                       true);
   const SweeperResultWithIds expectedResultIntersects{
       {INTERSECTS, vIdGermany, vIdMinster, 0},
       {INTERSECTS, vIdGermany, vIdUni, 0},
@@ -149,8 +154,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
 
   // Intersects without prefiltering: Same result but all geometries are checked
   SweeperTestResult testResultNoFilter;
-  runParsingAndSweeper(qec, "approx-de", "other", {INTERSECTS},
-                       testResultNoFilter, false);
+  runParsingAndSweeper(qec, "approx-de", "other",
+                       LibSpatialJoinConfig{INTERSECTS}, testResultNoFilter,
+                       false);
   checkSweeperTestResult(vMap, testResultNoFilter,
                          {expectedResultIntersects, boundingBoxGermany,
                           boundingBoxAllPlaces, 7, 0, 1, 6},
@@ -160,14 +166,16 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
   // box of the left side (Germany) but within the distance range, New York is
   // outside
   SweeperTestResult testResultWithinDist;
-  runParsingAndSweeper(qec, "approx-de", "other", {WITHIN_DIST, 1'000'000},
-                       testResultWithinDist, true);
+  runParsingAndSweeper(
+      qec, "approx-de", "other",
+      LibSpatialJoinConfig{WITHIN_DIST, 1'000'000, std::nullopt},
+      testResultWithinDist, true);
   checkSweeperTestResult(vMap, testResultWithinDist,
                          {{{WITHIN_DIST, vIdGermany, vIdUni, 0},
                            {WITHIN_DIST, vIdGermany, vIdMinster, 0},
                            {WITHIN_DIST, vIdGermany, vIdGkAllee, 0},
-                           {WITHIN_DIST, vIdGermany, vIdLondon, 426521.1497},
-                           {WITHIN_DIST, vIdGermany, vIdParis, 314975.6311}},
+                           {WITHIN_DIST, vIdGermany, vIdLondon, 426521.1762},
+                           {WITHIN_DIST, vIdGermany, vIdParis, 314975.6313}},
                           {},
                           {},
                           6,
@@ -197,8 +205,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
     // Intersects with prefiltering, but prefiltering is not used due to too
     // large bounding box
     SweeperTestResult testResult;
-    runParsingAndSweeper(qec, "other", "uni-separate", {INTERSECTS}, testResult,
-                         true, true);
+    runParsingAndSweeper(qec, "other", "uni-separate",
+                         LibSpatialJoinConfig{INTERSECTS}, testResult, true,
+                         true);
     checkSweeperTestResult(vMap, testResult,
                            {{{INTERSECTS, vIdUni, vIdUniSep, 0},
                              {INTERSECTS, vIdGkAllee, vIdUniSep, 0}},
@@ -223,8 +232,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterDeactivatedTooLargeBox) {
     // Using the custom max size of the prefilter box, prefiltering should now
     // be used again.
     SweeperTestResult testResultCustomMax;
-    runParsingAndSweeper(qec, "other", "uni-separate", {INTERSECTS},
-                         testResultCustomMax, true, false);
+    runParsingAndSweeper(qec, "other", "uni-separate",
+                         LibSpatialJoinConfig{INTERSECTS}, testResultCustomMax,
+                         true, false);
     checkSweeperTestResult(vMap, testResultCustomMax,
                            {{{INTERSECTS, vIdUni, vIdUniSep, 0},
                              {INTERSECTS, vIdGkAllee, vIdUniSep, 0}},
@@ -257,7 +267,7 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterRegularImplementation) {
 
   // Within search: Geometry inside of Germany
   SweeperTestResult testResultRegularImpl;
-  runParsingAndSweeper(qec, "other", "approx-de", {WITHIN},
+  runParsingAndSweeper(qec, "other", "approx-de", LibSpatialJoinConfig{WITHIN},
                        testResultRegularImpl, true, false, true);
   // Here we can only check the results and the number of geometries skipped by
   // prefilter, because we are not using the mock algorithm which captures the
@@ -277,8 +287,9 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterRegularImplementation) {
 
   // One child is an empty index scan
   SweeperTestResult testResultEmpty;
-  runParsingAndSweeper(qec, "does-not-exist", "approx-de", {INTERSECTS},
-                       testResultEmpty, true, false, true);
+  runParsingAndSweeper(qec, "does-not-exist", "approx-de",
+                       LibSpatialJoinConfig{INTERSECTS}, testResultEmpty, true,
+                       false, true);
   checkSweeperTestResult(vMap, testResultEmpty, {{}, {}, {}, 0, 0, 0, 0});
 }
 

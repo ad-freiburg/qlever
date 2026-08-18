@@ -20,21 +20,21 @@ class NeutralElementOperation : public Operation {
   // customized by every child class.
   [[nodiscard]] std::string getCacheKeyImpl() const override {
     return "Neutral Element";
-  };
+  }
 
  public:
   [[nodiscard]] std::string getDescriptor() const override {
     return "NeutralElement";
-  };
-  [[nodiscard]] size_t getResultWidth() const override { return 0; };
+  }
+  [[nodiscard]] size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 
  public:
-  float getMultiplicity(size_t) override { return 0; };
-  bool knownEmptyResult() override { return false; };
+  float getMultiplicity(size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
 
   std::unique_ptr<Operation> cloneImpl() const override {
     return std::make_unique<NeutralElementOperation>(_executionContext);
@@ -43,7 +43,7 @@ class NeutralElementOperation : public Operation {
  protected:
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
     return {};
-  };
+  }
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
@@ -58,7 +58,7 @@ class NeutralElementOperation : public Operation {
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
     return {};
-  };
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H

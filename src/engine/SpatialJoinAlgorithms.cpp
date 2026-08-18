@@ -186,7 +186,7 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
              : std::nullopt;
-};
+}
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
@@ -268,13 +268,13 @@ double SpatialJoinAlgorithms::computeDist(const size_t geometryIndex1,
   return boost::apply_visitor(ClosestPointVisitor(),
                               geometries_.at(geometryIndex1),
                               geometries_.at(geometryIndex2));
-};
+}
 
 // ____________________________________________________________________________
 size_t SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
   geometries_.emplace_back(Point(point.getLng(), point.getLat()));
   return geometries_.size() - 1;  // index of the last element
-};
+}
 
 // ____________________________________________________________________________
 Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
@@ -355,8 +355,8 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 #else
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -431,9 +431,15 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 // ____________________________________________________________________________
 sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
+  // `libspatialjoin` reports a match for one of these relations by invoking
+  // `writeRelCb` (see below) with a `pred` argument equal to the
+  // corresponding `sep...` string set below. These strings are otherwise
+  // opaque to `libspatialjoin`, so any distinct single byte per relation
+  // works; we simply (ab)use the (small) numeric value of the enum, which is
+  // not meant to be human-readable.
   auto sep = [](SpatialJoinType type) {
-    return std::string{static_cast<char>(type)};
+    return std::string{static_cast<char>(type.value())};
   };
   AD_CORRECTNESS_CHECK(threads > 0);
 
@@ -455,9 +461,11 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
   cfg.useOBB = false;
   cfg.useDiagBox = true;
   cfg.useFastSweepSkip = true;
-  cfg.useInnerOuter = false;
   cfg.noGeometryChecks = false;
+  cfg.euclideanDist = false;
+  cfg.haversineApprox = false;
   cfg.computeDE9IM = false;
+  cfg.de9imFilter = ::util::geo::FANY;
   // Never let `libspatialjoin` fall back to a self-join when it considers one
   // side to be empty; QLever's callbacks rely on the first geometry of each
   // result pair coming from the left side and the second one from the right
@@ -475,8 +483,8 @@ sj::SweeperCfg SpatialJoinAlgorithms::libspatialjoinSweeperConfig(
 Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -505,13 +513,25 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   sj::SweeperCfg sweeperCfg = libspatialjoinSweeperConfig(
       NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
   sweeperCfg.withinDist = withinDist;
+  // For the `DE9IM` join type, let `libspatialjoin` compute the full DE-9IM
+  // matrix for every candidate pair and only report those matching the
+  // user-provided filter pattern.
+  if (joinTypeVal == SpatialJoinType::DE9IM) {
+    AD_CORRECTNESS_CHECK(de9imFilter.has_value());
+    sweeperCfg.computeDE9IM = true;
+    sweeperCfg.de9imFilter = ::util::geo::DE9IMFilter(de9imFilter->data());
+  }
   sweeperCfg.writeRelCb = [&results, &resultDists, joinTypeVal](
                               size_t t, const char* a, size_t, const char* b,
                               size_t, const char* pred, size_t) {
     if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
       resultDists[t].push_back(atof(pred));
-    } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+    } else if (joinTypeVal == SpatialJoinType::DE9IM) {
+      // `libspatialjoin` only invokes this callback for pairs that already
+      // matched `sweeperCfg.de9imFilter`.
+      results[t].push_back({std::atoi(a), std::atoi(b)});
+    } else if (pred[0] == static_cast<char>(joinTypeVal.value())) {
       results[t].push_back({std::atoi(a), std::atoi(b)});
     }
   };
@@ -636,8 +656,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   S2PointIndex<size_t> s2index;
@@ -703,8 +723,8 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(rightCacheName.has_value());
@@ -767,8 +787,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -848,8 +868,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -1047,8 +1067,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
-              maxDist, maxResults, joinType, rightCacheName, bbLeft, bbRight] =
-      params_;
+              maxDist, maxResults, joinType, de9imFilter, rightCacheName,
+              bbLeft, bbRight] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table

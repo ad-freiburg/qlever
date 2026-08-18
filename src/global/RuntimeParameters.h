@@ -56,7 +56,13 @@ struct RuntimeParameters {
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
   SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of threads that read and decompress the blocks of a lazy index
+  // scan. Each lazy scan of a query has its own pool of this many threads.
+  // The value must be at least `1` (enforced by a parameter constraint).
+  // The default of `2` is enough for typical queries, where the operation
+  // that consumes the blocks processes them on a single thread and can barely
+  // keep up with the decompression even for `1` thread.
+  SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
   // The number of threads used to read and decompress blocks when scanning
   // permutations during a runtime index rebuild (see `IndexRebuilder`), both
   // for the main scan of the old permutations and for the statistics
@@ -154,13 +160,17 @@ struct RuntimeParameters {
   // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
   // The maximum number of threads for the parallel counting loops of the
-  // pattern trick (see `CountAvailablePredicates`). The value `0` (the
-  // default) means the number of logical cores of the machine.
-  SizeT patternTrickNumThreads_{0, "pattern-trick-num-threads"};
+  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
+  // number of logical cores of the machine. The default of `3` captures most
+  // of the speedup, with quickly diminishing returns for more threads.
+  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
   // The number of threads for the parallel sort of intermediate results
   // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
-  // as `1`. Only effective when QLever was built with `USE_PARALLEL`.
-  SizeT parallelSortNumThreads_{4, "parallel-sort-num-threads"};
+  // as `1`. Only effective when QLever was built with the CMake option
+  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
+  // default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more threads.
+  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
   // `SpatialJoinAlgorithms::libspatialjoinParse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};

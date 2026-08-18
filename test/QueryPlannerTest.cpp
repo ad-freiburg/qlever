@@ -9,14 +9,15 @@
 #include <range/v3/view/cartesian_product.hpp>
 
 #include "./printers/PayloadVariablePrinters.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
-#include "parser/SparqlParser.h"
 #include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -24,6 +25,7 @@ namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
+using ad_utility::testing::parseQuery;
 using queryPlannerTestHelpers::NamedTag;
 }  // namespace
 using ::testing::HasSubstr;
@@ -31,11 +33,6 @@ using ::testing::HasSubstr;
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
-}
-
-auto parseQuery(std::string query) {
-  static EncodedIriManager evM;
-  return SparqlParser::parseQuery(&evM, std::move(query));
 }
 
 TEST(QueryPlanner, createTripleGraph) {
@@ -737,6 +734,31 @@ TEST(QueryPlanner, CartesianProductJoin) {
       h::CartesianProductJoin(
           h::Join(scan("?s", "<p>", "<o>"), scan("?s", "<p2>", "?o2")),
           scan("?x", "<b>", "?c")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, DistinctIsPushedDown) {
+  auto scan = h::IndexScanFromStrings;
+
+  // `SELECT DISTINCT *` over a full index scan `?s ?p ?o` is a no-op: the scan
+  // already produces distinct rows, so no `Distinct` operation is added.
+  h::expect("SELECT DISTINCT * WHERE { ?s ?p ?o }", scan("?s", "?p", "?o"));
+
+  // The `DISTINCT` is pushed through the `CartesianProductJoin` into its
+  // children instead of being applied on top of the (potentially huge)
+  // product. Here both children are single-variable scans that are already
+  // distinct, so no `Distinct` operation is added at all.
+  h::expect("SELECT DISTINCT * WHERE { <s> <p> ?o . ?a <b> <c> }",
+            h::CartesianProductJoin(scan("<s>", "<p>", "?o"),
+                                    scan("?a", "<b>", "<c>")));
+
+  // Test based on https://github.com/ad-freiburg/qlever/issues/1895.
+  h::expect(
+      "SELECT DISTINCT * WHERE { ?s <p> <o> . ?s <p2> <o2> . ?x <b> <c> }",
+      h::CartesianProductJoin(
+          h::Distinct({0}, h::Join(scan("?s", "<p>", "<o>"),
+                                   scan("?s", "<p2>", "<o2>"))),
+          scan("?x", "<b>", "<c>")));
 }
 
 namespace {
@@ -3046,6 +3068,27 @@ TEST(QueryPlanner, ensureRuntimeParameterDisablesDistributiveUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
+  // Make sure that the optimization is enabled, so that this test actually
+  // tests something.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/3162. The
+  // `LIMIT` of the subquery applies to the `UNION` as a whole. Pushing the join
+  // into the children of the `UNION` would drop the `LIMIT` and thus change the
+  // semantics of the query, so the `UNION` has to be kept intact.
+  h::expect(
+      "SELECT * { VALUES ?s { <x> } "
+      "{ SELECT * { { ?s <label> ?o } UNION { ?s <is-a> ?o } } LIMIT 1 } }",
+      h::Join(h::Sort(h::ValuesClause("VALUES (?s) { (<x>) }")),
+              h::WithLimitOffset(
+                  LimitOffsetClause{1},
+                  h::Union(h::IndexScanFromStrings("?s", "<label>", "?o"),
+                           h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."
@@ -4097,7 +4140,8 @@ SELECT ?p (COUNT(DISTINCT ?s) AS ?cnt) WHERE {
   SERVICE qlss: {
     _:config qlss:left ?e ;
              qlss:right ?z ;
-             qlss:maxDistance 500 .
+             qlss:maxDistance 500 ;
+             qlss:algorithm qlss:s2 .
   }
 }
 GROUP BY ?p

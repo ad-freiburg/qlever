@@ -36,7 +36,7 @@ using ad_utility::HashSetWithMemoryLimit;
 using ad_utility::OverloadCallOperator;
 
 // `TripleDeduplicator` stores either all unique previously seen CONSTRUCT
-// triples (global mode), or just the N last seen triples (batchwise mode). When
+// triples (full mode), or the N most recently used triples (lru mode). When
 // a new triple is passed to the filter (via `insert`), it stores it in the
 // cache. For a previously seen triple that is already in the cache, `insert`
 // just informs the caller that the triple is a duplicate.
@@ -55,8 +55,8 @@ class TripleDeduplicator {
 
   Deduplicator deduplicator_;
 
-  // Build the dedup structure for `mode`: an unbounded hash set for `Global`
-  // and a bounded LRU cache for `BatchWise` (capacity = batch size).
+  // Build the dedup structure for `mode`: an unbounded hash set for `Full`
+  // and a bounded LRU cache for `Lru` (capacity `N`).
   //
   // Precondition: `mode` is not `None`. `None` means "no deduplication", so the
   // caller (`ConstructDeduplicator`) must not construct a filter for it.
@@ -78,7 +78,7 @@ class TripleDeduplicator {
 class ConstructDeduplicator {
  public:
   // `maxDedupVocabSize` bounds the memory of the internal `dedupVocab_` in the
-  // `BatchWise` mode, and is ignored in the `Global` mode.
+  // `Lru` mode, and is ignored in the `Full` mode.
   //
   // Precondition: `mode` is not `DeduplicationMode::None`. For `None` the
   // caller must not construct this state at all (see the class comment).
@@ -106,20 +106,14 @@ class ConstructDeduplicator {
              const PreprocessedConstructTemplate& tmpl,
              const BatchEvaluationContext& ctx);
 
-  // Insert the `key` into the `deduplicator_`. This is used for ground triples
-  // which consist only of constants. If later an instantiated triple
-  // "accidentally" matches the ground triple, it is also detected as a
-  // duplicate.
-  void seedGroundTriple(const DeduplicationKey& key);
-
  private:
   DeduplicationMode mode_;
   std::reference_wrapper<const QueryExecutionContext> queryExecutionContext_;
   // Approximate total byte size of the strings currently held in `dedupVocab_`.
-  // Only tracked in `BatchWise` mode; stays `0` in `Global` mode.
+  // Only tracked in `Lru` mode; stays `0` in `Full` mode.
   size_t dedupVocabBytes_ = 0;
-  // Set by `computeMaxDedupVocabBytes` below. Only meaningful in `BatchWise`
-  // mode; `0` (unused) in `Global` mode.
+  // Set by `computeMaxDedupVocabBytes` below. Only meaningful in `Lru`
+  // mode; `0` (unused) in `Full` mode.
   size_t maxDedupVocabBytes_;
 
   // `dedupVocab_` owns every local-vocab entry referenced by a stored key.
@@ -128,10 +122,10 @@ class ConstructDeduplicator {
   // The deduplicator that decides whether a triple was already emitted.
   TripleDeduplicator filter_;
 
-  // Compute the byte threshold that bounds `dedupVocab_` in `BatchWise` mode:
+  // Compute the byte threshold that bounds `dedupVocab_` in `Lru` mode:
   // The explicit `maxDedupVocabSize` if given, else a default value that is
-  // roughly equal to the size of the batch-wise triple cache in the
-  // `deduplicator_`. `Global` mode does no memory accounting, so this returns a
+  // roughly equal to the size of the LRU triple cache in the
+  // `deduplicator_`. `Full` mode does no memory accounting, so this returns a
   // dummy `0` there (see the definition).
   static size_t computeMaxDedupVocabBytes(
       const DeduplicationMode& mode,
@@ -148,19 +142,16 @@ class ConstructDeduplicator {
   // returned unchanged.
   ValueId canonicalize(ValueId id);
 
-  // Canonicalize every element of the `key` using `canonicalize` above.
-  DeduplicationKey canonicalizeKey(DeduplicationKey key);
-
-  // Bound `dedupVocab_`s memory in `BatchWise` mode: once the accumulated
+  // Bound `dedupVocab_`s memory in `Lru` mode: once the accumulated
   // string bytes reach the threshold, drop all dedup state and start fresh. The
   // filter's keys reference `dedupVocab_`, so both are reset together.
   void resetIfVocabTooLarge();
 
-  // Return true iff the deduplication mode is `BatchWise`, i.e. the mode that
+  // Return true iff the deduplication mode is `Lru`, i.e. the mode that
   // bounds its `dedupVocab_` and may reset its state (see
   // `resetIfVocabTooLarge`).
-  bool isBatchWise() const {
-    return std::holds_alternative<DeduplicationMode::BatchWise>(mode_.value_);
+  bool isLru() const {
+    return std::holds_alternative<DeduplicationMode::Lru>(mode_.value_);
   }
 };
 

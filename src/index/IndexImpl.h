@@ -269,7 +269,7 @@ class IndexImpl {
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
 
-  const auto& getVocab() const { return vocab_; };
+  const auto& getVocab() const { return vocab_; }
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   // Replace the currently loaded vocabulary with a zero-copy view directly
@@ -307,7 +307,7 @@ class IndexImpl {
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
-  };
+  }
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -415,7 +415,7 @@ class IndexImpl {
 
     // Returns true if the text block contains entries outside of the requested
     // range
-    bool hasToBeFiltered() const { return optIdRange_.has_value(); };
+    bool hasToBeFiltered() const { return optIdRange_.has_value(); }
 
     // The id range of the prefix or word used to retrieve the text block(s). It
     // is only set if computeHasToBeFiltered was determined to be true during
@@ -486,7 +486,7 @@ class IndexImpl {
 
   float getAverageNofEntityContexts() const {
     return textMeta_.getAverageNofEntityContexts();
-  };
+  }
 
   void setKbName(const std::string& name);
 
