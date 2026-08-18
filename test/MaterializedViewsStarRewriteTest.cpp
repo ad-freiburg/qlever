@@ -137,3 +137,94 @@ INSTANTIATE_TEST_SUITE_P(MaterializedViewsTest,
 
                              // Forced greedy planning.
                              RewriteTestParams{std::string{simpleStar}, 1}));
+
+// _____________________________________________________________________________
+// Regression test for #3193: an aggregate in the view's query removes one of
+// the pattern's variables from the view's columns (`?o1`/`?m` only occur inside
+// `COUNT(...)`), so neither the star nor the chain must be registered for
+// pattern-based rewriting. Covers both explicit (`GROUP BY`) and implicit
+// (aggregate in `SELECT` without a `GROUP BY` clause) aggregation.
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     aggregatingPatternsNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingStarView",
+      "SELECT ?s (COUNT(?o1) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
+      "GROUP BY ?s");
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingChainView",
+      "SELECT ?s (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
+      "GROUP BY ?s");
+
+  // Same as above, but the star's subject (rather than one of its arms) is
+  // aggregated away.
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingStarSubjectView",
+      "SELECT ?o1 ?o2 (COUNT(?s) AS ?c) { ?s <p1> ?o1 . ?s <p2> ?o2 } "
+      "GROUP BY ?o1 ?o2");
+
+  // Same as `aggregatingChainView` above, but the chain's first (subject) or
+  // last (object) variable is aggregated away instead of the middle one.
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingChainSubjectView",
+      "SELECT ?m ?o (COUNT(?s) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
+      "GROUP BY ?m ?o");
+  expectNotSuitableForRewrite(
+      qlv, manager, "aggregatingChainObjectView",
+      "SELECT ?s ?m (COUNT(?o) AS ?c) { ?s <p1> ?m . ?m <p2> ?o } "
+      "GROUP BY ?s ?m");
+
+  // Same as `aggregatingChainView` above, but the `GROUP BY` is implicit (no
+  // explicit `GROUP BY` clause, just an aggregate in the `SELECT` clause).
+  expectNotSuitableForRewrite(
+      qlv, manager, "implicitlyAggregatingChainView",
+      "SELECT (COUNT(?m) AS ?c) { ?s <p1> ?m . ?m <p2> ?o }");
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsStarRewriteAggregationTest,
+     unprojectedVariablePatternsNotRewritten) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string starTtl =
+      " <s1> <p1> <o1a> . \n"
+      " <s1> <p2> <o2a> . \n"
+      " <s2> <p1> <o1b> . \n"
+      " <s2> <p2> <o2b> . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, starTtl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+
+  // Star: the subject is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedStarSubjectView",
+                              "SELECT ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+  // Star: one arm's object is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedStarArmView",
+                              "SELECT ?s ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 }");
+
+  // Chain: the subject is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainSubjectView",
+                              "SELECT ?m ?o { ?s <p1> ?m . ?m <p2> ?o }");
+  // Chain: the middle (chain) variable is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainMiddleView",
+                              "SELECT ?s ?o { ?s <p1> ?m . ?m <p2> ?o }");
+  // Chain: the object is not selected.
+  expectNotSuitableForRewrite(qlv, manager, "unprojectedChainObjectView",
+                              "SELECT ?s ?m { ?s <p1> ?m . ?m <p2> ?o }");
+}
