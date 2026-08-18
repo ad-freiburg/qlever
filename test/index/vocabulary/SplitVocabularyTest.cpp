@@ -479,6 +479,14 @@ TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv, result,
                                                                 indices);
   EXPECT_ANY_THROW(sv.lookupBatch(ql::span<const size_t>{}));
+
+  const std::array<size_t, 3> oneMarker{
+      static_cast<size_t>(sv.addMarker(0, 1)),
+      static_cast<size_t>(sv.addMarker(0, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+  };
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      sv, sv.lookupBatch(oneMarker), oneMarker);
   sv.close();
 }
 

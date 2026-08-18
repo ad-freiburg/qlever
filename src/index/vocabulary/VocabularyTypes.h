@@ -131,6 +131,31 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
+// Copy `words` into one contiguous `VocabBatchLookupData` buffer. Use this
+// when the views come from mixed owners that cannot share one result object.
+inline VocabBatchLookupResult makeOwnedVocabBatch(
+    ql::span<const std::string_view> words) {
+  AD_CONTRACT_CHECK(!words.empty());
+  auto data = std::make_shared<VocabBatchLookupData>();
+  size_t total = 0;
+  for (std::string_view word : words) {
+    total += word.size();
+  }
+  data->buffer().resize(total);
+  data->views().resize(words.size());
+  size_t offset = 0;
+  char* buffer = data->buffer().data();
+  for (size_t i = 0; i < words.size(); ++i) {
+    const std::string_view word = words[i];
+    if (!word.empty()) {
+      std::memcpy(buffer + offset, word.data(), word.size());
+    }
+    data->views()[i] = std::string_view{buffer + offset, word.size()};
+    offset += word.size();
+  }
+  return VocabBatchLookupData::asResult(std::move(data));
+}
+
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
 // implementation. They simply loop over the indices and issue the ordinary

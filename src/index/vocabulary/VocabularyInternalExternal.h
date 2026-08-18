@@ -62,7 +62,8 @@ class VocabularyInternalExternal {
 
   // Resolve `indices` in request order. Words present in `internalVocab_` are
   // taken from RAM. The remaining indices are resolved in one
-  // `externalVocab_.lookupBatch` call (the on-disk path).
+  // `externalVocab_.lookupBatch` call (the on-disk path). If every index
+  // misses the RAM cache, return that disk result without copying.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________

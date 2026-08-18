@@ -8,6 +8,8 @@
 #include <absl/functional/function_ref.h>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "../../util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
@@ -86,6 +88,19 @@ TEST(VocabBatchLookupData, AsResultEmpty) {
   auto data = std::make_shared<VocabBatchLookupData>();
   VocabBatchLookupResult result = VocabBatchLookupData::asResult(data);
   EXPECT_TRUE(result->empty());
+}
+
+TEST(VocabBatchLookupData, MakeOwnedVocabBatchCopiesViews) {
+  const std::string a = "alpha";
+  const std::string empty;
+  const std::string b = "beta";
+  const std::array<std::string_view, 3> views{a, empty, b};
+  auto result = makeOwnedVocabBatch(views);
+  ASSERT_EQ(result->size(), 3u);
+  EXPECT_EQ((*result)[0], "alpha");
+  EXPECT_EQ((*result)[1], "");
+  EXPECT_EQ((*result)[2], "beta");
+  EXPECT_NE((*result)[0].data(), a.data());
 }
 
 // Tests for `PmrVocabBatchLookupData`: the `monotonic_buffer_resource` backing

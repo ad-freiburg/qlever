@@ -210,30 +210,40 @@ class SplitVocabulary {
       unmarkedPerMarker[marker].push_back(getVocabIndex(idx));
     }
 
-    std::vector<std::string> words(indices.size());
+    std::array<VocabBatchLookupResult, numberOfVocabs> batches;
+    uint8_t usedMarkers = 0;
+    uint8_t lastUsedMarker = 0;
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
       if (unmarkedPerMarker[marker].empty()) {
         continue;
       }
-      auto batch = std::visit(
+      batches[marker] = std::visit(
           [&](const auto& vocab) {
             return vocab.lookupBatch(unmarkedPerMarker[marker]);
           },
           underlying_[marker]);
-      AD_CORRECTNESS_CHECK(batch->size() == unmarkedPerMarker[marker].size());
-      for (auto [slot, word] :
-           ::ranges::views::zip(slotsPerMarker[marker], *batch)) {
-        words[slot] = std::string{word};
-      }
+      AD_CORRECTNESS_CHECK(batches[marker]->size() ==
+                           unmarkedPerMarker[marker].size());
+      ++usedMarkers;
+      lastUsedMarker = marker;
     }
 
-    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-    data->buffer() = std::move(words);
-    data->views().reserve(data->buffer().size());
-    for (const auto& word : data->buffer()) {
-      data->views().push_back(word);
+    // One marker: return that batch. Mixed markers cannot share one buffer.
+    if (usedMarkers == 1) {
+      return std::move(batches[lastUsedMarker]);
     }
-    return StringVectorVocabBatchLookupData::asResult(std::move(data));
+
+    std::vector<std::string_view> assembled(indices.size());
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (!batches[marker]) {
+        continue;
+      }
+      for (auto [slot, word] :
+           ::ranges::views::zip(slotsPerMarker[marker], *batches[marker])) {
+        assembled[slot] = word;
+      }
+    }
+    return makeOwnedVocabBatch(assembled);
   }
 
   //____________________________________________________________________________

@@ -11,10 +11,10 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
@@ -30,7 +30,7 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
-  std::vector<std::string> words(indices.size());
+  std::vector<std::string_view> assembled(indices.size());
   std::vector<size_t> diskIndices;
   std::vector<size_t> diskSlots;
   diskIndices.reserve(indices.size());
@@ -39,27 +39,28 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
     auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
-      words[i] = std::string{fromInternal.value()};
+      assembled[static_cast<size_t>(i)] = fromInternal.value();
     } else {
-      diskSlots.push_back(i);
+      diskSlots.push_back(static_cast<size_t>(i));
       diskIndices.push_back(idx);
     }
   }
 
-  if (!diskIndices.empty()) {
-    auto disk = externalVocab_.lookupBatch(diskIndices);
-    AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
-    for (auto [slot, word] : ::ranges::views::zip(diskSlots, *disk)) {
-      words[slot] = std::string{word};
-    }
+  // CONSTRUCT cache misses are almost all external. Hand the disk batch
+  // through so we do not copy the already-owned compressed bytes.
+  if (diskIndices.size() == indices.size()) {
+    return externalVocab_.lookupBatch(diskIndices);
   }
 
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  VocabBatchLookupResult disk;
+  if (!diskIndices.empty()) {
+    disk = externalVocab_.lookupBatch(diskIndices);
+    AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
+    for (auto [slot, word] : ::ranges::views::zip(diskSlots, *disk)) {
+      assembled[slot] = word;
+    }
+  }
+  return makeOwnedVocabBatch(assembled);
 }
 
 // _____________________________________________________________________________
