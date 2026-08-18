@@ -432,7 +432,7 @@ struct MetricAreaVisitor {
 
   double operator()(const ParsedWkt& geom) const {
     return std::visit(MetricAreaVisitor{}, geom);
-  };
+  }
 };
 
 static constexpr MetricAreaVisitor computeMetricArea;
@@ -604,7 +604,7 @@ CPP_template(typename Projection)(
       T multi) const {
     ql::ranges::transform(multi, multi.begin(), *this);
     return multi;
-  };
+  }
 
   // Polygons require special treatment for inner (~ a line) and outer
   // boundaries (~ a multi line).

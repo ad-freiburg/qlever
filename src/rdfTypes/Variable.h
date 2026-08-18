@@ -60,7 +60,7 @@ class Variable {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Variable, _name)
 
   // The construction of PrefilterExpressions requires a defined < order.
-  bool operator<(const Variable& other) const { return _name < other._name; };
+  bool operator<(const Variable& other) const { return _name < other._name; }
 
   // Make the type hashable for absl, see
   // https://abseil.io/docs/cpp/guides/hash.
