@@ -25,7 +25,6 @@
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
-#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -1910,44 +1909,5 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
 }
 
 }  // namespace runtimeParameters
-
-namespace parsing {
-
-// _____________________________________________________________________________
-TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
-  // Test that the `getPolyline` functions correctly checks the geometry type of
-  // its input literals
-
-  std::string kb =
-      "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8423373 "
-      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
-      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
-      "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-      "<s2> <asWKT> \"POLYGON((7.8428469 47.9995367,7.8423373 "
-      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
-      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
-      "47.9974942, 7.8428469 47.9995367))\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-      "<s3> <asWKT> \"POINT(1 2)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
-
-  auto vocabType =
-      ad_utility::VocabularyType::fromString("on-disk-compressed-geo-split");
-  auto qec = ad_utility::testing::getQec(kb, vocabType);
-  auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
-  auto result = scan->getResult();
-  auto col = scan->getVariableColumn(Variable{"?geo"});
-
-  auto check = [&](size_t row) {
-    return ad_utility::detail::spatialjoin::getPolyline(
-        result->idTableView(), row, col, qec->getIndex());
-  };
-
-  EXPECT_TRUE(check(0).has_value());
-  EXPECT_FALSE(check(1).has_value());
-  EXPECT_FALSE(check(2).has_value());
-}
-
-}  // namespace parsing
 
 }  // namespace

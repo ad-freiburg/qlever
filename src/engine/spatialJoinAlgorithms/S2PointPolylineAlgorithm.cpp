@@ -16,7 +16,6 @@
 #include <s2/util/units/length-units.h>
 
 #include "engine/NamedResultCache.h"
-#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "util/GeoConverters.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
@@ -49,8 +48,7 @@ Result S2PointPolylineAlgorithm::run() {
 
   // Use the index to lookup the points of the other table
   for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
-    auto p = ad_utility::detail::spatialjoin::getPoint(idTableLeft, rowLeft,
-                                                       leftJoinCol);
+    auto p = getPoint(idTableLeft, rowLeft, leftJoinCol);
     if (!p.has_value()) {
       continue;
     }

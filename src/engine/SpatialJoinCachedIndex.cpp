@@ -9,7 +9,8 @@
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
+#include "index/ExportIds.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GeoConverters.h"
 
 // An instance of this type erased class holds the actual data for each
@@ -32,8 +33,7 @@ class SpatialJoinCachedIndexImpl {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     for (size_t row = 0; row < restable.size(); row++) {
-      auto p = ad_utility::detail::spatialjoin::getPolyline(restable, row, col,
-                                                            index);
+      auto p = SpatialJoinCachedIndex::getPolyline(restable, row, col, index);
       if (!p.has_value()) {
         continue;
       }
@@ -51,6 +51,26 @@ class SpatialJoinCachedIndexImpl {
     return shapeIndexToRow;
   }
 };
+
+// ____________________________________________________________________________
+std::optional<S2Polyline> SpatialJoinCachedIndex::getPolyline(
+    const IdTableView<0>& restable, size_t row, ColumnIndex col,
+    const Index& index) {
+  auto id = restable.at(row, col);
+  auto str = ql::exportIds::idToStringAndType(index, id, {});
+  if (!str.has_value()) {
+    return std::nullopt;
+  }
+  // The `lineFromWKT` function skips the part of the string before the first
+  // opening bracket. The geometry type needs to be checked separately.
+  if (ad_utility::detail::getWKTType(str.value().first) !=
+      ad_utility::detail::WKTType::LINESTRING) {
+    return std::nullopt;
+  }
+  auto line = ad_utility::detail::lineFromWKT<double>(str.value().first);
+  return line.empty() ? std::nullopt
+                      : std::optional{geometryConverters::toS2Polyline(line)};
+}
 
 // ____________________________________________________________________________
 SpatialJoinCachedIndex::SpatialJoinCachedIndex(

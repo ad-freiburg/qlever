@@ -14,7 +14,7 @@ add_library(engine
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp
-        spatialJoinAlgorithms/SpatialJoinAlgorithmBase.cpp spatialJoinAlgorithms/SpatialJoinGeoUtils.cpp
+        spatialJoinAlgorithms/SpatialJoinAlgorithmBase.cpp
         spatialJoinAlgorithms/RtreeEntryAlgorithm.cpp
         spatialJoinAlgorithms/BaselineAlgorithm.cpp spatialJoinAlgorithms/S2GeometryAlgorithm.cpp
         spatialJoinAlgorithms/S2PointPolylineAlgorithm.cpp spatialJoinAlgorithms/BoundingBoxAlgorithm.cpp

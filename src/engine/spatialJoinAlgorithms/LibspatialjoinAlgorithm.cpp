@@ -48,6 +48,40 @@ LibspatialjoinAlgorithm::getBoundingBoxFromIdTable(
 }
 
 // ____________________________________________________________________________
+bool LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+    const std::optional<::util::geo::DBox>& prefilterLatLngBox,
+    const Index& index, VocabIndex vocabIndex,
+    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
+  if (prefilterLatLngBox.has_value()) {
+    auto hasNoIntersection =
+        [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
+          return !::util::geo::intersects(
+              prefilterLatLngBox.value(),
+              ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
+        };
+
+    // Use the `precomputedBoundingBox` for filtering if available.
+    if (precomputedBoundingBox.has_value()) {
+      return hasNoIntersection(precomputedBoundingBox.value());
+    }
+
+    // Otherwise, use the `GeoVocabulary` for filtering.
+    auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
+    if (geoInfo.has_value()) {
+      // We have a bounding box: Check intersection with prefilter box.
+      return hasNoIntersection(geoInfo.value().getBoundingBox());
+    } else {
+      // Since we know that this function is only called if we have a
+      // `GeoVocabulary`, we know that a geometry without precomputed bounding
+      // box must be invalid and can thus be skipped.
+      return true;
+    }
+  }
+  // If we don't have the required information, we cannot discard the geometry.
+  return false;
+}
+
+// ____________________________________________________________________________
 size_t LibspatialjoinAlgorithm::getNumThreads() {
   size_t maxHwConcurrency = std::thread::hardware_concurrency();
   size_t userPreference =

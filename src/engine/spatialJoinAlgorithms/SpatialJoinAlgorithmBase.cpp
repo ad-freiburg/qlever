@@ -66,3 +66,12 @@ void SpatialJoinAlgorithmBase::throwIfCancelled() const {
     spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
   }
 }
+
+// ____________________________________________________________________________
+std::optional<GeoPoint> SpatialJoinAlgorithmBase::getPoint(
+    const IdTableView<0>* restable, size_t row, ColumnIndex col) {
+  auto id = restable->at(row, col);
+  return id.getDatatype() == Datatype::GeoPoint
+             ? std::optional{id.getGeoPoint()}
+             : std::nullopt;
+}

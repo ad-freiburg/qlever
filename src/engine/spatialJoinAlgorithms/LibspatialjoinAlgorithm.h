@@ -16,6 +16,7 @@
 #include <util/geo/Geo.h>
 
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
+#include "index/Index.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Spatial join for all `SpatialJoinType`s (`INTERSECTS`, `CONTAINS`, `WITHIN`,
@@ -77,6 +78,20 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   // be used outside of this class.
   static sj::SweeperCfg sweeperConfig(
       size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
+
+  // Check the bounding box (only if available from a `GeoVocabulary`) of a
+  // given vocabulary entry against `prefilterLatLngBox`. Returns `true` if
+  // the geometry can be discarded just by the bounding box. If a
+  // `precomputedBoundingBox` is already available (for example from an
+  // `IdTable` with dedicated bounding-box columns), it is used instead of
+  // looking up the `GeoVocabulary`. Otherwise this should only be called if
+  // the index is known to be built on a `GeoVocabulary`. Used by
+  // `ad_utility::detail::parallel_wkt_parser::WKTParser` (see
+  // `SpatialJoinParser.cpp`), which only ever parses WKT for this algorithm.
+  static bool prefilterGeoByBoundingBox(
+      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
+      const Index& index, VocabIndex vocabIndex,
+      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
 
  private:
   // Maximum area of bounding box in square coordinates for prefiltering

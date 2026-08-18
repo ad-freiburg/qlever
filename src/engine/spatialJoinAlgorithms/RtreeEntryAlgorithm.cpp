@@ -10,7 +10,6 @@
 
 #include "engine/spatialJoinAlgorithms/RtreeEntryAlgorithm.h"
 
-#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "index/ExportIds.h"
 #include "util/Exception.h"
 
@@ -132,8 +131,7 @@ std::optional<RtreeEntry> RtreeEntryAlgorithm::getRtreeEntry(
   throw std::runtime_error("getRtreeEntry is not supported in this build");
 #else
   RtreeEntry entry{row, std::nullopt, std::nullopt, std::nullopt};
-  entry.geoPoint_ =
-      ad_utility::detail::spatialjoin::getPoint(idTable, row, col);
+  entry.geoPoint_ = getPoint(idTable, row, col);
 
   if (!entry.geoPoint_) {
     entry.geometryIndex_ = getAnyGeometry(idTable, row, col);

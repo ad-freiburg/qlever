@@ -48,6 +48,11 @@ class SpatialJoinAlgorithmBase {
   // cancelled.
   void throwIfCancelled() const;
 
+  // Returns a GeoPoint if the element of the given table represents one. Used
+  // by the S2-based algorithms as well as `RtreeEntryAlgorithm`.
+  static std::optional<GeoPoint> getPoint(const IdTableView<0>* restable,
+                                          size_t row, ColumnIndex col);
+
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
