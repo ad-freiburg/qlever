@@ -10,7 +10,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
 #include "parser/SparqlParser.h"
-#include "util/TransparentFunctors.h"
+#include "util/VariantRangeFilter.h"
 
 namespace {
 
@@ -184,10 +184,8 @@ namespace {
 std::vector<std::string> allWarnings(const ParsedQuery& query) {
   std::vector<std::string> warnings = query.warnings();
   for (const parsedQuery::Subquery& subquery :
-       query._rootGraphPattern._graphPatterns |
-           ql::views::filter(
-               ad_utility::holdsAlternative<parsedQuery::Subquery>) |
-           ql::views::transform(ad_utility::get<parsedQuery::Subquery>)) {
+       ad_utility::filterRangeOfVariantsByType<parsedQuery::Subquery>(
+           query._rootGraphPattern._graphPatterns)) {
     ql::ranges::copy(allWarnings(subquery.get()), std::back_inserter(warnings));
   }
   return warnings;
