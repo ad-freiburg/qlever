@@ -261,8 +261,9 @@ class QueryPlanner {
   QueryExecutionContext* _qec;
 
   // Used to count the number of unique variables created using
-  // generateUniqueVarName
-  size_t _internalVarCount = 0;
+  // generateUniqueVarName. Mutable because `generateUniqueVarName` is called
+  // from `seedFilterSubstitutes`, which is `const`.
+  mutable size_t _internalVarCount = 0;
 
   bool _enablePatternTrick = true;
 
@@ -362,7 +363,7 @@ class QueryPlanner {
       const ad_utility::sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
 
-  Variable generateUniqueVarName();
+  Variable generateUniqueVarName() const;
 
   // Creates a tree of unions with the given patterns as the trees leaves
   static ParsedQuery::GraphPattern uniteGraphPatterns(

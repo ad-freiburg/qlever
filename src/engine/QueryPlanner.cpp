@@ -1180,7 +1180,7 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 }
 
 // _____________________________________________________________________________
-Variable QueryPlanner::generateUniqueVarName() {
+Variable QueryPlanner::generateUniqueVarName() const {
   return Variable{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX,
                                _internalVarCount++)};
 }
@@ -1559,6 +1559,14 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   dpTab.push_back(std::move(connectedComponent));
   size_t numSeeds = findUniqueNodeIds(dpTab.back(), false);
 
+  if (numSeeds < 2) {
+    // The loop below (which starts at `k = 2`) never runs for 0 or 1 seeds,
+    // so a filter substitute that could apply to the single seed alone (for
+    // example a `SpatialJoin` with a fixed-value side, which needs no second
+    // seed to join with) would otherwise never get a chance to be applied.
+    applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
+  }
+
   for (size_t k = 2; k <= numSeeds; ++k) {
     AD_LOG_TRACE << "Producing plans that unite " << k << " triples."
                  << std::endl;
@@ -1759,13 +1767,19 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
   for (const auto& [i, filterExpression] :
        ::ranges::views::enumerate(filters)) {
     // Check if the filter expression is suitable for spatial join optimization
-    auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
-    if (!sjConfig.has_value()) {
+    auto sjResult = rewriteFilterToSpatialJoinConfig(
+        filterExpression, _qec, [this] { return generateUniqueVarName(); });
+    if (!sjResult.has_value()) {
       plans.push_back({filterExpression, std::nullopt});
     } else {
-      // Construct spatial join
+      // Construct spatial join. A side that was a fixed value in the filter
+      // already has its (one-row `VALUES`) child built; a side that is an
+      // ordinary variable is left unset and gets attached later via the
+      // normal join graph, exactly as for a variable-to-variable filter.
       auto plan = makeSubtreePlan<SpatialJoin>(
-          _qec, sjConfig.value(), std::nullopt, std::nullopt, true);
+          _qec, std::move(sjResult.value().config_),
+          std::move(sjResult.value().childLeft_),
+          std::move(sjResult.value().childRight_), true);
       // Mark that this subtree plan handles (that is, substitutes) the filter
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;

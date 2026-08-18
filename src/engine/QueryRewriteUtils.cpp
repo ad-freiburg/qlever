@@ -6,9 +6,39 @@
 
 #include <stdexcept>
 
+#include "engine/QueryExecutionTree.h"
+#include "engine/Values.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+
+using sparqlExpression::GeoOperand;
+
+namespace {
+
+// A `GeoOperand` resolved to a `Variable` (for `SpatialJoinConfiguration`)
+// together with, for a fixed value, the one-row `VALUES` tree that binds it
+// to a fresh internal variable.
+struct ResolvedGeoOperand {
+  Variable variable_;
+  std::optional<std::shared_ptr<QueryExecutionTree>> child_ = std::nullopt;
+};
+
+// _____________________________________________________________________________
+ResolvedGeoOperand resolveGeoOperand(
+    const GeoOperand& operand, QueryExecutionContext* qec,
+    const std::function<Variable()>& generateUniqueVarName) {
+  if (const auto* var = std::get_if<Variable>(&operand)) {
+    return {*var};
+  }
+  Variable var = generateUniqueVarName();
+  auto tree = ad_utility::makeExecutionTree<Values>(
+      qec,
+      parsedQuery::SparqlValues{{var}, {{std::get<TripleComponent>(operand)}}});
+  return {std::move(var), std::move(tree)};
+}
+
+}  // namespace
 
 // Try the three supported filter patterns in turn and directly build the
 // resulting `LibSpatialJoinConfig` together with the joined variables. Kept
@@ -44,8 +74,9 @@ getSpatialJoinConfigForFilter(
 }
 
 // _____________________________________________________________________________
-std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
-    const SparqlFilter& filter) {
+std::optional<SpatialJoinRewriteResult> rewriteFilterToSpatialJoinConfig(
+    const SparqlFilter& filter, QueryExecutionContext* qec,
+    const std::function<Variable()>& generateUniqueVarName) {
   const auto& filterBody = *filter.expression_.getPimpl();
 
   // Currently, we can only optimize GeoSPARQL filters.
@@ -55,20 +86,31 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
   }
   auto& [config, call] = configAndCall.value();
 
-  if (call.left_ == call.right_) {
+  // If neither side is a variable, there is nothing to join on. Leave this
+  // (rare, degenerate) case to ordinary `FILTER` evaluation.
+  bool leftIsVar = std::holds_alternative<Variable>(call.left_);
+  bool rightIsVar = std::holds_alternative<Variable>(call.right_);
+  if (!leftIsVar && !rightIsVar) {
+    return std::nullopt;
+  }
+
+  if (leftIsVar && rightIsVar &&
+      std::get<Variable>(call.left_) == std::get<Variable>(call.right_)) {
     // TODO<ullingerc> As soon as we have a baseline implementation of
     // `WktGeometricRelation`, replace this `throw` by `return std::nullopt;`.
-    throw std::runtime_error(absl::StrCat(
-        "Unsupported GeoSPARQL filter: Variable ", call.left_.name(),
-        " on both sides. Is this what you intended?"));
+    throw std::runtime_error(
+        absl::StrCat("Unsupported GeoSPARQL filter: Variable ",
+                     std::get<Variable>(call.left_).name(),
+                     " on both sides. Is this what you intended?"));
   }
+
   auto joinType = call.function_;
-  return SpatialJoinConfiguration{std::move(config),
-                                  std::move(call.left_),
-                                  std::move(call.right_),
-                                  std::nullopt,
-                                  PayloadVariables::all(),
-                                  SpatialJoinAlgorithm::LIBSPATIALJOIN,
-                                  joinType,
-                                  std::nullopt};
+  auto left = resolveGeoOperand(call.left_, qec, generateUniqueVarName);
+  auto right = resolveGeoOperand(call.right_, qec, generateUniqueVarName);
+  return SpatialJoinRewriteResult{
+      SpatialJoinConfiguration{
+          std::move(config), std::move(left.variable_),
+          std::move(right.variable_), std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, joinType, std::nullopt},
+      std::move(left.child_), std::move(right.child_)};
 }
