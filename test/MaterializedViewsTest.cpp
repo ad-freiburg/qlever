@@ -551,12 +551,8 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       ::testing::HasSubstr(
           "The query to write a materialized view returned a string not "
           "contained in the index (local vocabulary entry)"));
-  // A view is always re-sorted into SPO order for storage, so a `LIMIT`/
-  // `OFFSET` in the defining query would not even consistently determine
-  // which rows end up in the view (a plain `LIMIT`/`OFFSET` without `ORDER
-  // BY` only ever selects an arbitrary subset of rows to begin with). This
-  // must be rejected instead of silently ignored or non-deterministically
-  // applied.
+  // `LIMIT`/`OFFSET` in the defining query must be rejected, see
+  // `MaterializedViewWriter`'s constructor.
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.writeViewToDisk(
           "testView3", qlv().parseAndPlanQuery(simpleWriteQuery_ + " LIMIT 1")),
@@ -566,10 +562,8 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
           "testView4",
           qlv().parseAndPlanQuery(simpleWriteQuery_ + " OFFSET 1")),
       ::testing::HasSubstr("may not contain a LIMIT or OFFSET clause"));
-  // A view is always stored sorted by its first (up to three) columns (SPO
-  // order), so an `ORDER BY`/`INTERNAL SORT BY` that does not request exactly
-  // that ascending prefix of the view's columns would have its requested
-  // order silently discarded when writing the view. This must be rejected.
+  // An `ORDER BY`/`INTERNAL SORT BY` inconsistent with the view's storage
+  // order must be rejected, see `throwIfOrderByInconsistentWithViewOrder`.
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.writeViewToDisk(
           "testView5",
@@ -580,6 +574,20 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
       manager.writeViewToDisk(
           "testView6",
           qlv().parseAndPlanQuery(simpleWriteQuery_ + " ORDER BY DESC(?s)")),
+      ::testing::HasSubstr(
+          "must be an ascending prefix of the view's columns"));
+  // More `ORDER BY` keys than the view has columns.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk(
+          "testView8", qlv().parseAndPlanQuery(
+                           "SELECT ?s ?p { ?s ?p ?o } ORDER BY ?s ?p ?o")),
+      ::testing::HasSubstr(
+          "must be an ascending prefix of the view's columns"));
+  // An `ORDER BY` key that is not a column of the query result at all.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.writeViewToDisk(
+          "testView9", qlv().parseAndPlanQuery(simpleWriteQuery_ +
+                                               " ORDER BY ?doesNotExist")),
       ::testing::HasSubstr(
           "must be an ascending prefix of the view's columns"));
   // An `ORDER BY` that is consistent with the view's storage order (an

@@ -77,12 +77,6 @@ MaterializedViewWriter::MaterializedViewWriter(
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
-  // A view is always stored sorted by its first (up to three) columns (SPO
-  // order). An `ORDER BY`/`INTERNAL SORT BY` in the defining query has no
-  // effect on this on-disk order (writing bypasses the exporter that would
-  // otherwise honor it), so unless it requests exactly that prefix of the
-  // view's columns in ascending order, reject the query instead of silently
-  // discarding the requested order.
   const auto& orderBy = parsedQuery_._orderBy;
   if (orderBy.empty()) {
     return;
