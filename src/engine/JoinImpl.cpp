@@ -471,10 +471,10 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
     ad_utility::HashMapWithMemoryLimit<Id, RowVector> map{
         allocator.as<std::pair<const Id, RowVector>>()};
     for (const auto& row : table) {
-      auto it = map.find(row[jc]);
-      if (it == map.end()) {
-        it = map.try_emplace(row[jc], RowVector{allocator.as<Row>()}).first;
-      }
+      // `try_emplace` (unlike `map[row[jc]]`) only constructs `RowVector` if
+      // `row[jc]` is a new key, which is required since `RowVector`'s
+      // allocator has no default constructor.
+      auto [it, _] = map.try_emplace(row[jc], RowVector{allocator.as<Row>()});
       it->second.push_back(row);
     }
     return map;
