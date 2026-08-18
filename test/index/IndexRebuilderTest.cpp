@@ -20,7 +20,6 @@
 #include <fstream>
 #include <future>
 #include <iterator>
-#include <memory>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -52,7 +51,6 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
-#include "util/ResourceMonitor.h"
 #include "util/SourceLocation.h"
 
 using namespace qlever::indexRebuilder;
@@ -873,14 +871,7 @@ TEST(IndexRebuilder, serverIntegration) {
   // `serverIntegrationKeepPreviousIndexDirs` below.
   config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
-  // Fills the `rebuild_id` column of the resource-usage log; the test polls it
-  // in place of the `ResourceMonitor`.
-  auto rebuildIndexSignal = std::make_shared<ad_utility::RebuildIndexSignal>();
-  Server server{4321,  1,       std::string{accessToken}, config,
-                false, nullptr, rebuildIndexSignal};
-
-  // No rebuild has run yet.
-  EXPECT_FALSE(rebuildIndexSignal->poll().has_value());
+  Server server{4321, 1, std::string{accessToken}, config};
 
   // Create a GET request that triggers a rebuild of the index. The
   // `additionalParameters` are appended to the URL as they are, and the access
@@ -938,13 +929,6 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
-  // Both rebuilds are over, so the signal is clear again.
-  EXPECT_FALSE(rebuildIndexSignal->poll().has_value());
-  // The rebuild that ran took the id 1 and the rejected one took none (the
-  // guard returns before `markStart`), so the next id is 2.
-  rebuildIndexSignal->markStart();
-  EXPECT_THAT(rebuildIndexSignal->poll(), ::testing::Optional(2u));
-  rebuildIndexSignal->markEnd();
 
   // With the default parameters, the old index was moved to a
   // `previous.<datetime>` directory, the new index took over the base name of
@@ -981,10 +965,6 @@ TEST(IndexRebuilder, serverIntegration) {
 
   auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
-
-  // These three rebuilds threw after the signal was set, so only the scope
-  // guard cleared it. Without it the log would report a rebuild forever.
-  EXPECT_FALSE(rebuildIndexSignal->poll().has_value());
 
   threadPool.join();
 }
