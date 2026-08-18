@@ -906,12 +906,13 @@ ExportQueryExecutionTrees::constructQueryResultParallel(
   ad_utility::TaskQueue<false> queue{window, numThreads,
                                      "ConstructExportParallel"};
 
-  for (TableWithRange& block : rowIndices) {
+  for (const TableWithRange& block : rowIndices) {
     std::vector<TableWithRange> chunks =
         splitBlockIntoChunks(block, rowsPerChunk);
     if (chunks.empty()) {
       continue;
     }
+
     std::vector<std::future<std::string>> futures(chunks.size());
     size_t nextSubmit = 0;
     size_t nextGet = 0;
