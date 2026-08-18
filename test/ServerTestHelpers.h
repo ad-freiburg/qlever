@@ -37,19 +37,6 @@ inline std::string responseBodyToString(
                        respWithCommonIterators.end(), "");
 }
 
-// Call `Server::process` on `request`, using a `MockSend` to capture the
-// response it would have sent instead of actually sending it, and return
-// that captured response. Shared by `ServerForTesting::process` and the
-// `IndexRebuilder` server-integration tests, which cannot use
-// `ServerForTesting` because it creates a fresh `io_context` per request
-// (see `serverIntegrationKeepPreviousIndexDirs` in `IndexRebuilderTest.cpp`
-// for why that is unsafe there).
-inline boost::asio::awaitable<ResT> process(Server& server, ReqT& request) {
-  Server::MockSend mockSend;
-  co_await server.process(request, mockSend);
-  co_return std::move(mockSend.response_);
-}
-
 // Test the HTTP request processing of the `Server` class. The underlying
 // `Server` lives for the whole lifetime of this object, so multiple operations
 // can be executed against the same server (e.g. a `SELECT` after an `UPDATE`),
@@ -86,15 +73,27 @@ class ServerForTesting {
     server_->configureQueryEventLog(path);
   }
 
+  // Call `Server::process` on `request`, using a `MockSend` to capture the
+  // response it would have sent instead of actually sending it, and return
+  // that captured response. Static (rather than requiring a
+  // `ServerForTesting` instance, which owns its own `io_context`) so it can
+  // also be reused by the `IndexRebuilder` server-integration tests, which
+  // cannot use the instance method below because it creates a fresh
+  // `io_context` per request (see `serverIntegrationKeepPreviousIndexDirs`
+  // in `IndexRebuilderTest.cpp` for why that is unsafe there).
+  static boost::asio::awaitable<ResT> process(Server& server, ReqT& request) {
+    Server::MockSend mockSend;
+    co_await server.process(request, mockSend);
+    co_return std::move(mockSend.response_);
+  }
+
   // Apply `Server::process` on the given request and return the
   // `http::response`. A fresh `io_context` and `QueryHub` are created per
   // request, but the `Server` itself is reused across calls.
   ResT process(const ReqT& request) {
-    return runOnFreshIoContext(
-        request,
-        [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
-          co_return co_await serverTestHelpers::process(*server, request);
-        });
+    return runOnFreshIoContext(request, [](Server* server, ReqT& request) {
+      return ServerForTesting::process(*server, request);
+    });
   }
 
   // Apply `Server::handleHttpRequest` on the given request and return the

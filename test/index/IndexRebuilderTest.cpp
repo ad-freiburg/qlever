@@ -887,7 +887,7 @@ TEST(IndexRebuilder, serverIntegration) {
   // Create the coroutine that lets the `server` process the given `request`
   // and returns the response that would have been sent.
   auto makeTask = [&server](serverTestHelpers::ReqT& request) {
-    return serverTestHelpers::process(server, request);
+    return serverTestHelpers::ServerForTesting::process(server, request);
   };
 
   // Perform the given `request` on the `threadPool` and return a future for the
@@ -1006,10 +1006,11 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
       "/?cmd=rebuild-index&access-token=accessToken"
       "&rebuild-tmp-dir=droppedState.tmp"
       "&rebuild-previous-index-dir=droppedState.old");
-  auto response =
-      net::co_spawn(threadPool, serverTestHelpers::process(server, request),
-                    net::use_future)
-          .get();
+  auto response = net::co_spawn(threadPool,
+                                serverTestHelpers::ServerForTesting::process(
+                                    server, request),
+                                net::use_future)
+                      .get();
   EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
 
   EXPECT_THAT(logStream.str(),
@@ -1158,9 +1159,10 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   // between `pthread_cond_signal` and `pthread_cond_destroy`.
   auto performRequest = [&server,
                          &threadPool](serverTestHelpers::ReqT& request) {
-    return net::co_spawn(threadPool,
-                         serverTestHelpers::process(server, request),
-                         net::use_future)
+    return net::co_spawn(
+               threadPool,
+               serverTestHelpers::ServerForTesting::process(server, request),
+               net::use_future)
         .get();
   };
 
