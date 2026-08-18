@@ -104,8 +104,7 @@ auto processTableBatches(const TableWithRange& table, BatchEvalContext context,
   // lambda retain a reference into the by-value `table` parameter.
   auto rowView = table.view_;
   const TableConstRefWithVocab tableWithVocab = table.tableWithVocab_;
-  return ranges::views::chunk(rowView,
-                              ConstructTripleGenerator::BATCH_SIZE) |
+  return ranges::views::chunk(rowView, ConstructTripleGenerator::BATCH_SIZE) |
          ql::views::transform([tableWithVocab, context = std::move(context),
                                tableRowOffset](auto chunkView) {
            return computeBatch(tableWithVocab, chunkView, context,
