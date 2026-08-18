@@ -154,17 +154,14 @@ class Server {
   // are only defined in `Server.cpp`, so callers in other translation units
   // can only invoke them through an explicit template instantiation, which in
   // turn requires a type with linkage.
-  template <typename ResponseT>
   class MockSend {
    public:
-    explicit MockSend(ResponseT& response) : response_{response} {}
-    Awaitable<void> operator()(auto response) const {
+    Awaitable<void> operator()(auto response) {
       response_ = std::move(response);
       co_return;
     }
 
-   private:
-    ResponseT& response_;
+    ad_utility::httpUtils::ResponseT response_;
   };
 
   CPP_template(typename CancelTimeout)(
@@ -219,9 +216,9 @@ class Server {
   // need the "allow headers" header, while GET and POST only need "allow
   // origin"; the same headers are sent for all three to avoid two similar
   // code paths.
-  CPP_template(typename RequestT, typename sendT)(
+  CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> handleHttpRequest(RequestT request, sendT& send);
+      Awaitable<void> handleHttpRequest(RequestT request, SendT& send);
 
   // Build the `WebSocketHandler` passed to `HttpServer` in `run()`. Call once
   // at server startup with the server's `io_context` executor; set up the

@@ -133,9 +133,9 @@ CPP_template_def(typename RequestT)(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename RequestT, typename sendT)(
+CPP_template_def(typename RequestT, typename SendT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::handleHttpRequest(RequestT request, sendT& send) {
+    Awaitable<void> Server::handleHttpRequest(RequestT request, SendT& send) {
   using namespace ad_utility::httpUtils;
 
   auto sendWithAccessControlHeaders =
@@ -179,10 +179,8 @@ CPP_template_def(typename RequestT, typename sendT)(
 // `IndexRebuilder` `FRIEND_TEST`s), which cannot see this template's
 // definition, can call `handleHttpRequest` directly with a `MockSend` to
 // capture the response instead of sending it.
-template Server::Awaitable<void>
-Server::handleHttpRequest<Server::StringBodyRequest,
-                          Server::MockSend<ad_utility::httpUtils::ResponseT>>(
-    StringBodyRequest, MockSend<ad_utility::httpUtils::ResponseT>&);
+template Server::Awaitable<void> Server::handleHttpRequest<
+    Server::StringBodyRequest, Server::MockSend>(StringBodyRequest, MockSend&);
 
 // _____________________________________________________________________________
 std::function<Server::Awaitable<void>(const Server::StringBodyRequest&,
@@ -849,9 +847,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // definition, can call `process` directly with a `MockSend` to capture the
 // response instead of sending it.
 template Server::Awaitable<void>
-Server::process<Server::StringBodyRequest,
-                Server::MockSend<ad_utility::httpUtils::ResponseT>&>(
-    StringBodyRequest&, MockSend<ad_utility::httpUtils::ResponseT>&);
+Server::process<Server::StringBodyRequest, Server::MockSend&>(
+    StringBodyRequest&, MockSend&);
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::planQuery(

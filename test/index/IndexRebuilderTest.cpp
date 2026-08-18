@@ -888,10 +888,9 @@ TEST(IndexRebuilder, serverIntegration) {
   // and returns the response that would have been sent.
   auto makeTask = [&server](auto& request)
       -> boost::asio::awaitable<ad_utility::httpUtils::ResponseT> {
-    ad_utility::httpUtils::ResponseT res;
-    Server::MockSend<ad_utility::httpUtils::ResponseT> mockSend{res};
+    Server::MockSend mockSend;
     co_await server.process(request, mockSend);
-    co_return res;
+    co_return std::move(mockSend.response_);
   };
 
   // Perform the given `request` on the `threadPool` and return a future for the
@@ -1013,10 +1012,9 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
   auto response = net::co_spawn(
                       threadPool,
                       [&server, &request]() -> boost::asio::awaitable<ResT> {
-                        ResT res;
-                        Server::MockSend<ResT> mockSend{res};
+                        Server::MockSend mockSend;
                         co_await server.process(request, mockSend);
-                        co_return res;
+                        co_return std::move(mockSend.response_);
                       }(),
                       net::use_future)
                       .get();
@@ -1171,11 +1169,9 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
                threadPool,
                [&server, &request]()
                    -> boost::asio::awaitable<ad_utility::httpUtils::ResponseT> {
-                 ad_utility::httpUtils::ResponseT res;
-                 Server::MockSend<ad_utility::httpUtils::ResponseT> mockSend{
-                     res};
+                 Server::MockSend mockSend;
                  co_await server.process(request, mockSend);
-                 co_return res;
+                 co_return std::move(mockSend.response_);
                }(),
                net::use_future)
         .get();

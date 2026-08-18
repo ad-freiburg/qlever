@@ -80,10 +80,9 @@ class ServerForTesting {
     return runOnFreshIoContext(
         request,
         [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
-          ResT res;
-          Server::MockSend<ResT> mockSend{res};
+          Server::MockSend mockSend;
           co_await server->process(request, mockSend);
-          co_return res;
+          co_return std::move(mockSend.response_);
         });
   }
 
@@ -97,10 +96,9 @@ class ServerForTesting {
     return runOnFreshIoContext(
         request,
         [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
-          ResT res;
-          Server::MockSend<ResT> mockSend{res};
+          Server::MockSend mockSend;
           co_await server->handleHttpRequest(std::move(request), mockSend);
-          co_return res;
+          co_return std::move(mockSend.response_);
         });
   }
 
