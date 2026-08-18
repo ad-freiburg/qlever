@@ -7,6 +7,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Sort.h"
@@ -93,6 +94,63 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeReturnsInputWhenAlreadyDistinct) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // When the root operation is already distinct wrt `distinctIndices`, the
+  // `DISTINCT` is a no-op and `createDistinctTree` returns the tree unchanged.
+  // A `LIMIT 1` makes any operation distinct wrt any columns.
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {1}}), Vars{Variable{"?x"}});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+
+  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{0}), values);
+  EXPECT_EQ(QueryExecutionTree::createDistinctTree(values, SC{}), values);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeFallbackAddsDistinct) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // A generic operation that is not known to be distinct (and cannot push the
+  // `DISTINCT` down) simply gets a `Distinct` on top.
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 1}, {2, 3}}),
+      Vars{Variable{"?x"}, Variable{"?y"}});
+
+  auto tree = QueryExecutionTree::createDistinctTree(values, SC{0, 1});
+  auto distinct = std::dynamic_pointer_cast<Distinct>(tree->getRootOperation());
+  ASSERT_TRUE(distinct);
+  EXPECT_EQ(distinct->getDistinctColumns(), (SC{0, 1}));
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {1}, {2}}), Vars{Variable{"?x"}});
+
+  // `DISTINCT` over zero columns keeps at most one row and is realized as a
+  // `LIMIT 1`, not as a `Distinct`.
+  auto tree = QueryExecutionTree::createDistinctTree(values, SC{});
+  EXPECT_FALSE(std::dynamic_pointer_cast<Distinct>(tree->getRootOperation()));
+  EXPECT_EQ(tree->getRootOperation()->getLimitOffset()._limit, 1u);
+
+  // The input tree is cloned, not mutated.
+  EXPECT_FALSE(values->getRootOperation()->getLimitOffset()._limit.has_value());
+
+  EXPECT_EQ(tree->getResult(false)->idTableView(),
+            makeIdTableFromVector({{0}}));
+}
+
+// _____________________________________________________________________________
 TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
   using Vars = std::vector<std::optional<Variable>>;
   Vars vars{std::nullopt, std::nullopt, std::nullopt};
@@ -131,6 +189,44 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
                 .at(0)
                 ->getRootOperation()
                 ->getLimitOffset(),
+            limitOffset);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = getQec();
+
+  LimitOffsetClause limitOffset{2, 3};
+
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}}), Vars{Var{"?a"}});
+
+  // `Union` natively supports creating a sorted variant of itself, which
+  // replaces the root operation and therefore has to restore the limit.
+  auto unionTree = ad_utility::makeExecutionTree<Union>(qec, leftT, rightT);
+  unionTree->applyLimitOffset(limitOffset);
+
+  auto sortedTree = QueryExecutionTree::createSortedTree(unionTree, {0});
+  ASSERT_TRUE(std::dynamic_pointer_cast<Union>(sortedTree->getRootOperation()));
+  EXPECT_EQ(sortedTree->getRootOperation()->getLimitOffset(), limitOffset);
+
+  // `ValuesForTesting` doesn't support this natively, so an additional `Sort`
+  // is added on top and the limit stays where it is.
+  auto valuesForTesting = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}, {0}}), Vars{Var{"?a"}});
+  valuesForTesting->applyLimitOffset(limitOffset);
+
+  auto sortedValues =
+      QueryExecutionTree::createSortedTree(valuesForTesting, {0});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<Sort>(sortedValues->getRootOperation()));
+  EXPECT_TRUE(
+      sortedValues->getRootOperation()->getLimitOffset().isUnconstrained());
+  EXPECT_EQ(valuesForTesting->getRootOperation()->getLimitOffset(),
             limitOffset);
 }
 

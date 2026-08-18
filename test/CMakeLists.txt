@@ -146,6 +146,8 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 
     addLinkAndDiscoverTest(ServerTest engine server)
 
+    addLinkAndDiscoverTest(HttpApiHelpersTest server)
+
     addLinkAndDiscoverTest(SparqlProtocolTest engine)
 
     addLinkAndDiscoverTest(UrlParserTest)
@@ -195,6 +197,8 @@ addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
 addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
+
+addLinkAndDiscoverTest(KeepPreviousIndexDirsTest qlever)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
@@ -262,9 +266,11 @@ addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
-addLinkAndDiscoverTest(AllocatorWithLimitTest)
-
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
@@ -374,6 +380,8 @@ addLinkAndDiscoverTest(LoadTest engine)
 if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
     addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 endif ()
+
+addLinkAndDiscoverTest(HttpProxyConfigTest http)
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
@@ -547,6 +555,8 @@ else ()
 endif ()
 
 addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine)
+
+addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 

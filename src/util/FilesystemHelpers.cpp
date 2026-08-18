@@ -99,6 +99,19 @@ size_t deleteFilesInDirectory(
 }
 
 // _____________________________________________________________________________
+std::vector<fs::path> directoriesWithPrefix(const fs::path& directory,
+                                            std::string_view prefix) {
+  std::vector<fs::path> result;
+  for (const auto& entry : ql::directoryRange(directory)) {
+    if (entry.is_directory() &&
+        ql::starts_with(entry.path().filename().string(), prefix)) {
+      result.push_back(entry.path());
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
 bool isSubdirectoryOf(const std::string& path,
                       const std::string& containerPath) {
   auto normalize = [](const auto& p) {

@@ -16,6 +16,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -84,6 +85,31 @@ namespace {
 const ad_utility::triple_component::Iri a =
     ad_utility::triple_component::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+}  // namespace
+
+namespace {
+// Call `function` with `argList[Idxs]...`, moved. Used by
+// `createNaryExpression` below to turn a compile-time `N` into that many moved
+// arguments.
+template <typename F, size_t... Idxs>
+ExpressionPtr invokeWithMovedArgs(F& function,
+                                  std::vector<ExpressionPtr>& argList,
+                                  std::index_sequence<Idxs...>) {
+  return function(std::move(argList[Idxs])...);
+}
+
+// Factory for a callable that creates a `SparqlExpression` with exactly `N`
+// children taken from `argList`, after checking the number of arguments via
+// `checkNumArgs`. Used by `Visitor::processIriFunctionCall` to avoid
+// duplicating this logic for every fixed arity (unary, binary, ternary, ...).
+template <size_t N, typename ArgList, typename CheckNumArgs>
+auto createNaryExpression(ArgList& argList, CheckNumArgs& checkNumArgs) {
+  return [&argList, &checkNumArgs](auto function) {
+    checkNumArgs(N);
+    return invokeWithMovedArgs(function, argList,
+                               std::make_index_sequence<N>{});
+  };
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -179,21 +205,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
   };
 
   using namespace sparqlExpression;
-  // Create `SparqlExpression` with one child.
-  auto createUnary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
-    checkNumArgs(1);  // Check is unary.
-    return function(std::move(argList[0]));
-  };
-  // Create `SparqlExpression` with two children.
-  auto createBinary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr>) {
-    checkNumArgs(2);  // Check is binary.
-    return function(std::move(argList[0]), std::move(argList[1]));
-  };
+  // Create `SparqlExpression`s with a fixed number of children, checking the
+  // number of arguments beforehand.
+  auto createUnary = createNaryExpression<1>(argList, checkNumArgs);
+  auto createBinary = createNaryExpression<2>(argList, checkNumArgs);
+  auto createTernary = createNaryExpression<3>(argList, checkNumArgs);
   // Create `SparqlExpression` with two or three children (currently used for
   // backward-compatible geof:distance function)
   auto createBinaryOrTernary =
@@ -235,7 +251,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
   };
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       {"length", &makeLengthExpression},
@@ -253,6 +269,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
+    } else if (functionName == "relate") {
+      return createTernary(&makeDe9imRelationExpression);
     } else if (ad_utility::contains(geoUnaryFuncs, functionName)) {
       return createUnary(geoUnaryFuncs.at(functionName));
     } else if (ad_utility::contains(geoBinaryFuncs, functionName)) {
@@ -591,10 +609,10 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
 // ____________________________________________________________________________________
 DatasetClause Visitor::visit(Parser::DatasetClauseContext* ctx) {
   if (ctx->defaultGraphClause()) {
-    return {.dataset_ = visit(ctx->defaultGraphClause()), .isNamed_ = false};
+    return {visit(ctx->defaultGraphClause()), false};
   } else {
     AD_CORRECTNESS_CHECK(ctx->namedGraphClause());
-    return {.dataset_ = visit(ctx->namedGraphClause()), .isNamed_ = true};
+    return {visit(ctx->namedGraphClause()), true};
   }
 }
 
@@ -869,7 +887,7 @@ std::pair<GraphOrDefault, GraphOrDefault> Visitor::visitFromTo(
     std::vector<Parser::GraphOrDefaultContext*> ctxs) {
   AD_CORRECTNESS_CHECK(ctxs.size() == 2);
   return {visit(ctxs[0]), visit(ctxs[1])};
-};
+}
 
 // ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
@@ -1502,9 +1520,9 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
                 "`using-named-graph-uri` http parameters are used");
   }
   if (ctx->NAMED()) {
-    return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
+    return {visit(ctx->iri()), true};
   } else {
-    return {.dataset_ = visit(ctx->iri()), .isNamed_ = false};
+    return {visit(ctx->iri()), false};
   }
 }
 
