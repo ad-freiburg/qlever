@@ -763,7 +763,8 @@ TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
   auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
       qec,
       SpatialJoinConfiguration{
-          LibSpatialJoinConfig{SpatialJoinType::WITHIN, std::nullopt},
+          LibSpatialJoinConfig{SpatialJoinType::WITHIN, std::nullopt,
+                               std::nullopt},
           Variable{"?a"}, Variable{"?c"}, std::nullopt, PayloadVariables::all(),
           SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN},
       qetLeft, qetRight);

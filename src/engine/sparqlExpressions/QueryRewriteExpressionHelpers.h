@@ -48,6 +48,17 @@ struct GeoDistanceCall : public GeoFunctionCall {
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr);
 
+// Helper struct for `getDe9imRelationExpressionParameters`
+struct De9imRelationCall : public GeoFunctionCall {
+  De9imFilterString pattern_;
+};
+
+// Same as `getGeoFunctionExpressionParameters`, but for the `geof:relate`
+// function, which additionally carries a DE-9IM filter pattern as its third
+// argument. Also implemented in `GeoExpression.cpp`.
+std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
+    const SparqlExpression& expr);
+
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H
