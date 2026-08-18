@@ -24,7 +24,7 @@
 
 namespace ad_utility {
 /**
- * A Queue of tasks, which are executed by a thread pool. Tasks can be enqued
+ * A Queue of tasks, which are executed by a thread pool. Tasks can be enqueued
  * via calls to push(). The destructor, or its manual equivalent finish(),
  * block until all tasks have run to completion.
  * @tparam TrackTimes if set to true, the time that is spent waiting for push()
