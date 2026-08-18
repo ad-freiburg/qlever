@@ -235,7 +235,7 @@ class ExportQueryExecutionTrees {
   static std::vector<TableWithRange> splitBlockIntoChunks(
       const TableWithRange& block, size_t rowsPerChunk);
 
-  // Inputs the CONSTRUCT stream coroutines own in their frame.
+  // Inputs the CONSTRUCT-stream-coroutines own in their frame.
   struct ConstructStreamParams {
     VariableToColumnMap variableColumns_;
     ad_utility::sparql_types::Triples constructTriples_;
