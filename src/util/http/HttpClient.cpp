@@ -250,11 +250,9 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
     }
   };
 
-  return {.status_ = status,
-          .contentType_ = contentType,
-          .location_ = location,
-          .body_ = getBody(std::move(client), std::move(responseParser),
-                           std::move(buffer), std::move(handle))};
+  return {status, contentType, location,
+          getBody(std::move(client), std::move(responseParser),
+                  std::move(buffer), std::move(handle))};
 }
 
 // ____________________________________________________________________________

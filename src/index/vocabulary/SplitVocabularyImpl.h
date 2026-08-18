@@ -72,7 +72,7 @@ SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
         },
         underlyingVocabularies[i]);
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>

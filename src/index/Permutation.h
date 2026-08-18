@@ -229,7 +229,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const KeyOrder& keyOrder() const { return keyOrder_; };
+  const KeyOrder& keyOrder() const { return keyOrder_; }
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
