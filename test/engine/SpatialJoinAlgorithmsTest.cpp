@@ -23,8 +23,9 @@
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -1076,7 +1077,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   // 'startPoint'
   auto checkOutside = [&](const Point& point1, const Point& startPoint,
                           const std::vector<Box>& bbox,
-                          SpatialJoinAlgorithms* spatialJoinAlg) {
+                          BoundingBoxAlgorithm* spatialJoinAlg) {
     // check if the point is contained in any bounding box
     bool within = spatialJoinAlg->isContainedInBoundingBoxes(bbox, point1);
     if (!within) {
@@ -1087,7 +1088,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
     }
   };
 
-  SpatialJoinAlgorithms spatialJoinAlgs =
+  BoundingBoxAlgorithm spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting(maxDistInMeters);
 
   std::vector<Box> bbox = spatialJoinAlgs.computeQueryBox(startPoint);
@@ -1163,7 +1164,7 @@ TEST(SpatialJoin, computeBoundingBox) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoin, isContainedInBoundingBoxes) {
-  SpatialJoinAlgorithms spatialJoinAlgs =
+  BoundingBoxAlgorithm spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting();
 
   // note that none of the boxes is overlapping, therefore we can check, that
@@ -1277,7 +1278,7 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
     ASSERT_DOUBLE_EQ(point.get<1>(), lat);
   };
 
-  SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
+  BoundingBoxAlgorithm sja = getDummySpatialJoinAlgsForWrapperTesting();
 
   BoostGeometryNamespace::AnyGeometry geometryA;
   std::string wktA =
@@ -1324,7 +1325,7 @@ TEST(SpatialJoin, MidpointOfBoundingBox) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
-  SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
+  BoundingBoxAlgorithm sja = getDummySpatialJoinAlgsForWrapperTesting();
 
   // the following polygon is from the eiffel tower
   BoostGeometryNamespace::AnyGeometry geometryEiffel;
@@ -1630,7 +1631,7 @@ TEST(SpatialJoin, trueAreaDistance) {
     spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
     PreparedSpatialJoinParams params =
         spatialJoin->onlyForTestingGetPrepareJoin();
-    SpatialJoinAlgorithms algorithms{
+    BoundingBoxAlgorithm algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(useMidpointForAreas);
     auto entryLeft = algorithms.onlyForTestingGetRtreeEntry(
@@ -1679,10 +1680,10 @@ TEST(SpatialJoin, mixedDataSet) {
     spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
     PreparedSpatialJoinParams params =
         spatialJoin->onlyForTestingGetPrepareJoin();
-    SpatialJoinAlgorithms algorithms{
+    BoundingBoxAlgorithm algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(false);
-    auto res = algorithms.BoundingBoxAlgorithm();
+    auto res = algorithms.run();
     // that the id table contains all the necessary other columns and gets
     // constructed correctly has already been extensively tested elsewhere.
     // Here we only test, that the distance between GeoPoints and areas gets
@@ -1940,8 +1941,8 @@ TEST(SpatialJoin, GetPolylineGeometryTypeCheck) {
   auto col = scan->getVariableColumn(Variable{"?geo"});
 
   auto check = [&](size_t row) {
-    return SpatialJoinAlgorithms::getPolyline(result->idTableView(), row, col,
-                                              qec->getIndex());
+    return ad_utility::detail::spatialjoin::getPolyline(
+        result->idTableView(), row, col, qec->getIndex());
   };
 
   EXPECT_TRUE(check(0).has_value());

@@ -326,37 +326,37 @@ TEST_P(SpatialJoinPrefilterGeoByBoundingBoxTest, Test) {
   auto bbNewYork = getPrecomputedBoundingBox(areaStatueOfLiberty);
   auto idxInvalid = getValId(nMap, "invalid").getVocabIndex();
 
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxGermany, index, idxUni, bbUni));
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxGermany, index, idxLondon, bbLondon));
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxGermany, index, idxNewYork, bbNewYork));
 
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxUniAndLondon, index, idxUni, bbUni));
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxUniAndLondon, index, idxLondon, bbLondon));
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxUniAndLondon, index, idxNewYork, bbNewYork));
 
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxOtherPlaces, index, idxUni, bbUni));
 
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxUniAndLondon, index, idxInvalid, std::nullopt));
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxGermany, index, idxInvalid, std::nullopt));
-  EXPECT_TRUE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_TRUE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       boundingBoxOtherPlaces, index, idxInvalid, std::nullopt));
 
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       std::nullopt, index, idxUni, bbUni));
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       std::nullopt, index, idxLondon, bbLondon));
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       std::nullopt, index, idxNewYork, bbNewYork));
-  EXPECT_FALSE(SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+  EXPECT_FALSE(ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
       std::nullopt, index, idxInvalid, std::nullopt));
 }
 

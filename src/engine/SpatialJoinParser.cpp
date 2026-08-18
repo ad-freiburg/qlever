@@ -6,7 +6,7 @@
 
 #include <range/v3/numeric/accumulate.hpp>
 
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -52,7 +52,7 @@ void WKTParser::processQueue(size_t t) {
         // If we have a prefilter box, check if we also have a precomputed
         // bounding box for the geometry this `VocabIndex` is referring to.
         if (_usePrefiltering &&
-            SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
+            ad_utility::detail::spatialjoin::prefilterGeoByBoundingBox(
                 _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
                 job.boundingBox)) {
           prefilterCounter++;

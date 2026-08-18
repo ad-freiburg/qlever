@@ -9,7 +9,7 @@
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinGeoUtils.h"
 #include "util/GeoConverters.h"
 
 // An instance of this type erased class holds the actual data for each
@@ -32,7 +32,8 @@ class SpatialJoinCachedIndexImpl {
     ShapeIndexToRow shapeIndexToRow;
     AD_CORRECTNESS_CHECK(s2index_.num_shape_ids() == 0);
     for (size_t row = 0; row < restable.size(); row++) {
-      auto p = SpatialJoinAlgorithms::getPolyline(restable, row, col, index);
+      auto p = ad_utility::detail::spatialjoin::getPolyline(restable, row, col,
+                                                            index);
       if (!p.has_value()) {
         continue;
       }

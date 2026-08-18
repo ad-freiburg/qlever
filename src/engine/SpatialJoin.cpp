@@ -30,13 +30,17 @@
 #include "engine/NamedResultCache.h"
 #include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
+#include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
+#include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
+#include "engine/spatialJoinAlgorithms/S2GeometryAlgorithm.h"
+#include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
@@ -561,29 +565,32 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_CONTRACT_CHECK(
       isConstructed(),
       "SpatialJoin needs two children, but at least one is missing");
-  SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(), config_,
-                                   this};
+  auto params = prepareJoin();
   if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
-    return algorithms.BaselineAlgorithm();
+    return BaselineAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
-    return algorithms.S2geometryAlgorithm();
+    return S2GeometryAlgorithm{_executionContext, params, config_, this}.run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    return algorithms.LibspatialjoinAlgorithm();
+    return LibspatialjoinAlgorithm{_executionContext, params, config_, this}
+        .run();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
-    return algorithms.S2PointPolylineAlgorithm();
+    return S2PointPolylineAlgorithm{_executionContext, params, config_, this}
+        .run();
   } else {
     AD_CORRECTNESS_CHECK(config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
                          "Unknown SpatialJoin Algorithm.");
-    // as the BoundingBoxAlgorithms only works for max distance and not for
+    // as the BoundingBoxAlgorithm only works for max distance and not for
     // nearest neighbors, S2geometry gets called as a backup, if the query is
     // asking for the nearest neighbors
     if (std::get_if<MaxDistanceConfig>(&config_.task_)) {
-      return algorithms.BoundingBoxAlgorithm();
+      return BoundingBoxAlgorithm{_executionContext, params, config_, this}
+          .run();
     } else {
       addWarning(
           "The bounding box spatial join algorithm does not support nearest "
           "neighbor search. Using s2 geometry algorithm instead.");
-      return algorithms.S2geometryAlgorithm();
+      return S2GeometryAlgorithm{_executionContext, params, config_, this}
+          .run();
     }
   }
 }
