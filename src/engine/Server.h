@@ -47,10 +47,24 @@ CPP_concept QueryOrUpdate =
                           ad_utility::url_parser::sparqlOperation::Query,
                           ad_utility::url_parser::sparqlOperation::Update>;
 
-// Forward declaration for testing.
+class Server;
+
+// Forward declarations for testing.
 namespace serverTestHelpers {
 class ServerForTesting;
-}
+
+using StringBodyRequest =
+    boost::beast::http::request<boost::beast::http::string_body>;
+
+// Call `Server::process` on `request`, capturing the response it would have
+// sent (via a `Server::MockSend`) instead of actually sending it, and return
+// that captured response. Declared here (and befriended below) so that
+// `ServerForTesting` and the `IndexRebuilder` integration tests can share one
+// definition instead of duplicating the `MockSend`/`co_await` boilerplate.
+// Defined in `ServerTestHelpers.h`.
+boost::asio::awaitable<ad_utility::httpUtils::ResponseT> process(
+    Server& server, StringBodyRequest& request);
+}  // namespace serverTestHelpers
 
 //! The HTTP Server used.
 class Server {
@@ -71,6 +85,8 @@ class Server {
   FRIEND_TEST(IndexRebuilder, serverIntegrationAutomaticRebuild);
   FRIEND_TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs);
   friend serverTestHelpers::ServerForTesting;
+  friend boost::asio::awaitable<ad_utility::httpUtils::ResponseT>
+  serverTestHelpers::process(Server&, serverTestHelpers::StringBodyRequest&);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,

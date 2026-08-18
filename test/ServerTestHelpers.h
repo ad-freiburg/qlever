@@ -37,6 +37,19 @@ inline std::string responseBodyToString(
                        respWithCommonIterators.end(), "");
 }
 
+// Call `Server::process` on `request`, using a `MockSend` to capture the
+// response it would have sent instead of actually sending it, and return
+// that captured response. Shared by `ServerForTesting::process` and the
+// `IndexRebuilder` server-integration tests, which cannot use
+// `ServerForTesting` because it creates a fresh `io_context` per request
+// (see `serverIntegrationKeepPreviousIndexDirs` in `IndexRebuilderTest.cpp`
+// for why that is unsafe there).
+inline boost::asio::awaitable<ResT> process(Server& server, ReqT& request) {
+  Server::MockSend mockSend;
+  co_await server.process(request, mockSend);
+  co_return std::move(mockSend.response_);
+}
+
 // Test the HTTP request processing of the `Server` class. The underlying
 // `Server` lives for the whole lifetime of this object, so multiple operations
 // can be executed against the same server (e.g. a `SELECT` after an `UPDATE`),
@@ -80,9 +93,7 @@ class ServerForTesting {
     return runOnFreshIoContext(
         request,
         [](Server* server, ReqT& request) -> boost::asio::awaitable<ResT> {
-          Server::MockSend mockSend;
-          co_await server->process(request, mockSend);
-          co_return std::move(mockSend.response_);
+          co_return co_await serverTestHelpers::process(*server, request);
         });
   }
 
