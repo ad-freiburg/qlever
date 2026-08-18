@@ -335,8 +335,12 @@ class WktDe9imRelation {
     AD_THROW(
         "The `geof:relate` function is currently only implemented for a "
         "subset of all possible queries, namely spatial joins using `FILTER "
-        "geof:relate(?geometryA, ?geometryB, \"<DE-9IM pattern>\")`. More "
-        "details on GeoSPARQL support can be found in the QLever Docs "
+        "geof:relate(?geometryA, ?geometryB, \"<DE-9IM pattern>\")`. The "
+        "pattern must be a fixed string literal that is a valid DE-9IM "
+        "intersection pattern (exactly nine characters, each one of `0`, "
+        "`1`, `2`, `T`, `F`, or `*`) and that cannot match disjoint "
+        "geometries (for example, `FF*FF****` is currently not supported). "
+        "More details on GeoSPARQL support can be found in the QLever Docs "
         "(https://docs.qlever.dev/geosparql/).");
   }
 };

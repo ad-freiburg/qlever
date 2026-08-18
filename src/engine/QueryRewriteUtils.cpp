@@ -12,10 +12,11 @@
 
 // Try the three supported filter patterns in turn and directly build the
 // resulting `LibSpatialJoinConfig` together with the joined variables. Kept
-// as a lambda (as opposed to three loose `optional`s that have to be kept in
-// sync manually) so that the join type, maximum distance, and DE-9IM filter
-// pattern -- which depend on each other -- can only leave this function
-// bundled together in a single consistent `LibSpatialJoinConfig`.
+// as a separate function (as opposed to three loose `optional`s in the
+// caller that have to be kept in sync manually) so that the join type,
+// maximum distance, and DE-9IM filter pattern -- which depend on each other
+// -- can only leave this function bundled together in a single consistent
+// `LibSpatialJoinConfig`.
 static std::optional<
     std::pair<LibSpatialJoinConfig, sparqlExpression::GeoFunctionCall>>
 getSpatialJoinConfigForFilter(
