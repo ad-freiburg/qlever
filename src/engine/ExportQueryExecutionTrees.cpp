@@ -776,7 +776,7 @@ std::vector<TableWithRange> ExportQueryExecutionTrees::splitBlockIntoChunks(
   }
   const uint64_t begin0 = *ql::ranges::begin(block.view_);
   const uint64_t end = begin0 + ql::ranges::size(block.view_);
-  const uint64_t step = static_cast<uint64_t>(rowsPerChunk);
+  const auto step = static_cast<uint64_t>(rowsPerChunk);
   for (uint64_t begin = begin0; begin < end; begin += step) {
     const uint64_t pieceEnd = std::min(end, begin + step);
     chunks.emplace_back(block.tableWithVocab_,
