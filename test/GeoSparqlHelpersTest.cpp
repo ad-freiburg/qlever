@@ -147,4 +147,14 @@ TEST(GeoSparqlHelpers, WktGeometricRelation) {
   checkGeoRelationDummyImpl<WITHIN>();
 }
 
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, WktDe9imRelation) {
+  // The `geof:relate` function is currently only a dummy implementation.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::WktDe9imRelation()(GeoPoint{1, 1}, GeoPoint{2, 2},
+                                     std::string{"T*T***T**"}),
+      ::testing::HasSubstr(
+          "currently only implemented for a subset of all possible queries"));
+}
+
 }  // namespace
