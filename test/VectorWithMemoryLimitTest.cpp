@@ -18,15 +18,16 @@
 #include "util/VectorWithMemoryLimit.h"
 
 using ad_utility::AllocatorWithLimit;
-using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
 using ad_utility::VectorWithMemoryLimit;
 using namespace ad_utility::memory_literals;
 
 namespace {
-// Create an `AllocatorWithLimit<T>` with the given `limit`.
+// Create an `AllocatorWithLimit<T>` with the given `limit`. Note that we have
+// to use the backend-agnostic factory function here, because the constructors
+// of the various allocator backends differ (see `util/Allocator.h`).
 template <typename T = int>
 AllocatorWithLimit<T> makeAllocator(ad_utility::MemorySize limit) {
-  return AllocatorWithLimit<T>{makeAllocationMemoryLeftThreadsafeObject(limit)};
+  return ad_utility::makeAllocatorWithLimit<T>(limit);
 }
 }  // namespace
 

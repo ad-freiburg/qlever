@@ -23,6 +23,7 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
+#include "util/http/HttpProxyConfig.h"
 #include "util/metrics/Metrics.h"
 
 using std::size_t;
@@ -174,6 +175,18 @@ int main(int argc, char** argv) {
       "reaches the given `fraction` (a number greater than 0) of the number "
       "of index triples, but never below `min` and always at `max` (e.g. "
       "\"automatic:10000:1000000:0.1\").");
+  add("rebuild-keep-previous-index-dirs",
+      po::value(&config.keepPreviousIndexDirs_)
+          ->default_value(qlever::KeepPreviousIndexDirs::OriginalAndMostRecent),
+      "Which `previous.*` index directories to keep after a successful index "
+      "rebuild, manual or automatic (each rebuild moves the index that was "
+      "served so far into such a directory): \"all\" (keep all of them), "
+      "\"none\" (delete all of them), \"original-only\" (keep only the "
+      "oldest), \"most-recent-only\" (keep only the most recently created), "
+      "or \"original-and-most-recent\" (the default, keep both). The choices "
+      "and the default are the same as for the `--keep-previous-index-dirs` "
+      "option of the `qlever rebuild-index` command, which applies the same "
+      "policy on the client side.");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -236,10 +249,10 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
       R"("Controls deduplication of triples in CONSTRUCT query results. "
       "\"none\" (default): no deduplication, every triple is emitted. "
-      "\"global\": a triple is emitted at most once across the entire result. "
-      "\"batchwise:N\" (positive integer N): deduplicate against the N most "
-      "recently seen unique triples per template triple (bounded memory, "
-      "partial deduplication).")");
+      "\"full\": a triple is emitted at most once across the entire result. "
+      "\"lru:N\" (positive integer N): deduplicate against the N most "
+      "recently used unique triples, with one cache shared across all "
+      "template triples (bounded memory, partial deduplication).")");
   add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
@@ -307,6 +320,32 @@ int main(int argc, char** argv) {
                 << std::endl;
   }
 
+  // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
+  // environment. We do this eagerly so that a malformed proxy URL fails the
+  // startup with a readable message, instead of only surfacing on the first
+  // federated query. Only log if a proxy is actually configured, to not add
+  // noise for the common case.
+  try {
+    const auto& proxy = ad_utility::httpProxy::globalProxy();
+    if (proxy.has_value()) {
+      AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
+                  << proxy->asStringForLogging() << std::endl;
+    }
+    // The uppercase `HTTP_PROXY` is deliberately ignored (following `curl`,
+    // see `HttpProxyConfig.h`), but silently doing so would be confusing, so
+    // leave a hint.
+    if (ad_utility::httpProxy::uppercaseHttpProxyIsSetButIgnored()) {
+      AD_LOG_INFO << "The environment variable `HTTP_PROXY` (uppercase) is "
+                     "set, but deliberately ignored; use the lowercase "
+                     "`http_proxy` to configure a proxy for outgoing requests"
+                  << std::endl;
+    }
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
+                 << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
   // Resolve the `--rebuild-index-strategy` option. A bad value fails the
   // startup with a readable message, before the index is loaded.
   try {
@@ -320,6 +359,15 @@ int main(int argc, char** argv) {
   if (config.rebuildIndexStrategy_.has_value()) {
     AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
                 << rebuildIndexStrategy << ")" << std::endl;
+  }
+
+  // The `--rebuild-keep-previous-index-dirs` option is parsed directly into
+  // `config.keepPreviousIndexDirs_` (a bad value fails the startup with a
+  // readable message, via the `validate` hook in `EnumWithStrings.h`).
+  if (config.keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
+    AD_LOG_INFO << "Cleanup of previous index directories after each rebuild "
+                   "enabled (--rebuild-keep-previous-index-dirs "
+                << config.keepPreviousIndexDirs_ << ")" << std::endl;
   }
 
   try {

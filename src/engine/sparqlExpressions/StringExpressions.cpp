@@ -187,7 +187,7 @@ class SubstrImpl {
   static bool isNan(NumericValue n) {
     auto ptr = std::get_if<double>(&n);
     return ptr != nullptr && std::isnan(*ptr);
-  };
+  }
 
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.

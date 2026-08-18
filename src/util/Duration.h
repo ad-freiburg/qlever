@@ -108,13 +108,13 @@ class DayTimeDuration {
   //
   // To retrieve the initial number of milliseconds, we just subtract
   // boundTotalMilliseconds from totalMilliSeconds_. (line 181-182)
-  uint64_t totalMilliseconds_ : numMillisecondBits = 0;
+  uint64_t totalMilliseconds_ : numMillisecondBits;
 
   // The value of unusedBits_ is relevant w.r.t. to the DateYearOrDuration class
   // for properly shifting a given input value of type dayTimeDuration and
   // thus make it convertible to an intern Id (ValueId) -> The underlying
   // DayTimeDuration and corresponding values can be extracted again.
-  uint64_t unusedBits_ : numUnusedBits = 0;
+  uint64_t unusedBits_ : numUnusedBits;
 
  public:
   // `DurationValue` is used to return all xsd:dayTimeDuration components over
@@ -140,7 +140,10 @@ class DayTimeDuration {
   // duration: `P0DT0H0M0S` (as xsd:dayTimeDuration string).
   constexpr DayTimeDuration(Type signType = Type::Positive, int days = 0,
                             int hours = 0, int minutes = 0,
-                            double seconds = 0.00) {
+                            double seconds = 0.00)
+      // Note: The bit-fields have to be initialized here, because default
+      // member initializers for bit-fields are only allowed since C++20.
+      : totalMilliseconds_(0), unusedBits_(0) {
     setValues(days, hours, minutes, seconds, signType);
   }
 
