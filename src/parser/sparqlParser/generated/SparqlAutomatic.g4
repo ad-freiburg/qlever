@@ -635,8 +635,8 @@ numericLiteralNegative
     ;
 
 booleanLiteral
-    : 'true'
-    | 'false'
+    : TRUE
+    | FALSE
     ;
 
 string
@@ -783,6 +783,8 @@ AVG : A V G;
 STDEV : S T D E V ;
 SAMPLE : S A M P L E;
 SEPARATOR : S E P A R A T O R;
+TRUE : T R U E;
+FALSE : F A L S E;
 
 // LEXER RULES
 

@@ -3061,7 +3061,7 @@ std::variant<int64_t, double> Visitor::visit(
 
 // ____________________________________________________________________________________
 bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
-  return ctx->getText() == "true";
+  return static_cast<bool>(ctx->TRUE());
 }
 
 // ____________________________________________________________________________________
