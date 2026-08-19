@@ -119,15 +119,36 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
 
   noStarRewrite("SELECT * { <s1> <p1> ?o1 . ?s <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . <s1> <p2> ?o2 }");
-  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 } ");
-  noStarRewrite("SELECT * { ?s <p1> ?s . ?s <p2> ?o1 }");
-  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> <o2a> }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> <o2a> }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?o2 ^<p2> ?s }");
-  noStarRewrite("SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2>* ?o2 }");
+
+  // The general pattern matcher (subgraph isomorphism between the view's
+  // pattern graph and the query, see `MaterializedViewsQueryAnalysis`) is not
+  // restricted to the "star" and "chain" shapes above: it also accepts
+  // patterns the old special-cased star/chain code used to reject solely
+  // because its predicate-keyed lookup could not represent them.
+  auto generalPatternRewrite = [&qlv, &manager](std::string query,
+                                                source_location sourceLocation =
+                                                    AD_CURRENT_SOURCE_LOC()) {
+    auto l = generateLocationTrace(sourceLocation);
+    expectSuitableForRewrite(qlv, manager, "generalPatternView", query);
+  };
+
+  // Two arms with the same predicate (rejected by the old star cache, which
+  // needed distinct predicates as its lookup key).
+  generalPatternRewrite("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }");
+  // A self-loop arm (subject and object of one triple are the same
+  // variable).
+  generalPatternRewrite("SELECT * { ?s <p1> ?s . ?s <p2> ?o1 }");
+  // Two arms converging on the same object variable instead of distinct ones.
+  generalPatternRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 }");
+  // Two triples with no variable in common (a disconnected pattern); still a
+  // valid embedding target since there is no shared-variable constraint
+  // between them to violate.
+  generalPatternRewrite("SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }");
 }
 
 // _____________________________________________________________________________

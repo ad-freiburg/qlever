@@ -20,9 +20,174 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
+#include "util/HashSet.h"
 #include "util/VariantRangeFilter.h"
 
 namespace materializedViewsQueryAnalysis {
+
+// _____________________________________________________________________________
+std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
+    const ViewPtr& view, const std::vector<SparqlTriple>& triples) {
+  const auto& viewCols = view->variableToColumnMap();
+  std::vector<PatternEdge> edges;
+  edges.reserve(triples.size());
+  for (const auto& triple : triples) {
+    // Variables as predicate and sequence property paths are not supported by
+    // query rewriting; the latter are expected to be replaced by joins during
+    // earlier stages of query planning.
+    auto predicate = triple.getSimplePredicate();
+    if (!predicate.has_value() || !triple.s_.isVariable() ||
+        !triple.o_.isVariable()) {
+      return std::nullopt;
+    }
+    auto subject = triple.s_.getVariable();
+    auto object = triple.o_.getVariable();
+    // All three variables must actually be columns of the view (e.g. this is
+    // not the case if they do not appear in the `SELECT` clause, or have been
+    // removed by aggregation).
+    if (!viewCols.contains(subject) || !viewCols.contains(object)) {
+      return std::nullopt;
+    }
+    edges.push_back({std::move(subject), std::string{predicate.value()},
+                     std::move(object)});
+  }
+  return edges;
+}
+
+// _____________________________________________________________________________
+namespace {
+
+// Check whether `boundColumns` (the set of view column indices that a match
+// would bind to a fixed value from the user's query) forms a legal prefix for
+// a single SPO-sorted view permutation: fixed values are only allowed in the
+// arrangements subject, subject+predicate, subject+predicate+object (see
+// `MaterializedView::throwIfColumnsHaveIllegalFixedValues`). Columns beyond
+// index 2 are payload-only and can never be fixed.
+bool isLegalFixedValuePrefix(const ad_utility::HashSet<size_t>& boundColumns) {
+  for (size_t col : boundColumns) {
+    if (col > 2) {
+      return false;
+    }
+  }
+  for (size_t col : {size_t{1}, size_t{2}}) {
+    if (boundColumns.contains(col) && !boundColumns.contains(col - 1)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Try to assign `viewVar` to `queryNode` inside `state`, respecting
+// injectivity (two distinct view variables must not be matched to the same
+// query-side variable or fixed value). Returns `false` (leaving `state`
+// unmodified) if `viewVar` is already assigned to a different node, or if
+// `queryNode` is already used by a different view variable.
+bool tryAssign(PatternMatchState& state, const Variable& viewVar,
+               const TripleComponent& queryNode) {
+  auto it = state.assignment_.find(viewVar);
+  if (it != state.assignment_.end()) {
+    return it->second == queryNode;
+  }
+  for (const auto& [otherVar, otherNode] : state.assignment_) {
+    if (otherNode == queryNode) {
+      return false;
+    }
+  }
+  state.assignment_.emplace(viewVar, queryNode);
+  return true;
+}
+
+// Recursively extend `state` (which already covers `edges[0, edgeIdx)`) by
+// matching `edges[edgeIdx]` against every not-yet-used candidate query triple
+// with the same predicate, and so on for the remaining edges. Every full
+// match (one for each edge) is appended to `results`. This is a plain
+// backtracking search (in the style of VF2's core loop): at the scale of a
+// materialized view's defining query and a single SPARQL basic graph pattern
+// (both realistically well under a hundred triples), this is fast enough
+// without the extra preprocessing that large-graph subgraph-isomorphism
+// algorithms (VF3, RI, ...) rely on to pay for themselves.
+void extendMatch(const std::vector<PatternEdge>& edges, size_t edgeIdx,
+                 const parsedQuery::BasicGraphPattern& triples,
+                 const TriplesByPredicate& triplesByPredicate,
+                 ad_utility::HashSet<size_t>& usedTriples,
+                 PatternMatchState& state,
+                 std::vector<PatternMatchState>& results) {
+  if (edgeIdx == edges.size()) {
+    results.push_back(state);
+    return;
+  }
+  const auto& edge = edges[edgeIdx];
+  auto it = triplesByPredicate.find(edge.predicate_);
+  if (it == triplesByPredicate.end()) {
+    return;
+  }
+  for (size_t tripleIdx : it->second) {
+    if (usedTriples.contains(tripleIdx)) {
+      continue;
+    }
+    const auto& triple = triples._triples.at(tripleIdx);
+    auto assignmentBackup = state.assignment_;
+    if (tryAssign(state, edge.subject_, triple.s_) &&
+        tryAssign(state, edge.object_, triple.o_)) {
+      usedTriples.insert(tripleIdx);
+      state.coveredTriples_.push_back(tripleIdx);
+
+      extendMatch(edges, edgeIdx + 1, triples, triplesByPredicate, usedTriples,
+                  state, results);
+
+      state.coveredTriples_.pop_back();
+      usedTriples.erase(tripleIdx);
+    }
+    state.assignment_ = assignmentBackup;
+  }
+}
+
+}  // namespace
+
+// _____________________________________________________________________________
+void QueryPatternCache::matchPattern(
+    QueryExecutionContext* qec, const ViewPattern& pattern,
+    const parsedQuery::BasicGraphPattern& triples,
+    const TriplesByPredicate& triplesByPredicate,
+    std::vector<MaterializedViewJoinReplacement>& result) const {
+  // Quick reject: every predicate used by the pattern must appear at least
+  // once among the query's triples, otherwise no embedding can possibly
+  // exist and the (more expensive) search below can be skipped entirely.
+  for (const auto& edge : pattern.edges_) {
+    if (!triplesByPredicate.contains(edge.predicate_)) {
+      return;
+    }
+  }
+
+  std::vector<PatternMatchState> matches;
+  ad_utility::HashSet<size_t> usedTriples;
+  PatternMatchState state;
+  extendMatch(pattern.edges_, 0, triples, triplesByPredicate, usedTriples,
+              state, matches);
+
+  const auto& viewCols = pattern.view_->variableToColumnMap();
+  for (auto& match : matches) {
+    ad_utility::HashSet<size_t> boundColumns;
+    for (const auto& [viewVar, node] : match.assignment_) {
+      if (!node.isVariable()) {
+        boundColumns.insert(viewCols.at(viewVar).columnIndex_);
+      }
+    }
+    if (!isLegalFixedValuePrefix(boundColumns)) {
+      continue;
+    }
+
+    parsedQuery::MaterializedViewQuery::RequestedColumns cols;
+    for (auto& [viewVar, node] : match.assignment_) {
+      cols.insert({viewVar, std::move(node)});
+    }
+    result.push_back(
+        {pattern.view_->makeIndexScan(
+             qec, parsedQuery::MaterializedViewQuery{pattern.view_->name(),
+                                                     std::move(cols)}),
+         std::move(match.coveredTriples_)});
+  }
+}
 
 // _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
@@ -30,332 +195,31 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
   std::vector<MaterializedViewJoinReplacement> result;
+  if (patterns_.empty()) {
+    return result;
+  }
 
-  // All triples of the form `anything <iri> ?variable` where `<iri>` is covered
-  // by a materialized view, stored by `?variable` for finding chains.
-  VariableToTripleIndices chainLeft;
-
-  // All triples of the form `?variable <iri> ?otherVariable` where `<iri>` is
-  // covered by a materialized view, where `?variable` is different from
-  // `?otherVariable`, stored by `?variable` for finding chains.
-  // The same is required for star join detection.
-  VariableToTripleIndices chainRight;
-
+  // Group the query's triples by predicate and collect all views that could
+  // possibly match (share at least one predicate with the query). Only
+  // triples with a simple IRI predicate that is covered by at least one
+  // loaded view's pattern are relevant.
+  TriplesByPredicate triplesByPredicate;
+  ad_utility::HashSet<ViewPtr> candidateViews;
   for (const auto& [tripleIdx, triple] :
        ::ranges::views::enumerate(triples._triples)) {
-    const auto iri = triple.getSimplePredicate();
-    // Variables as predicate are not supported by query rewriting and sequence
-    // property paths are expected to be replaced by joins during earlier stages
-    // of query planning.
-    if (!iri.has_value()) {
+    auto iri = triple.getSimplePredicate();
+    if (!iri.has_value() || !predicateInView_.contains(iri.value())) {
       continue;
     }
-    // If no view that we know of contains this predicate so we can ignore
-    // this triple altogether.
-    if (!predicateInView_.contains(iri.value())) {
-      continue;
-    }
-    // Check for potential join chain or star triple.
-    if (!triple.o_.isVariable()) {
-      continue;
-    }
-    if (triple.s_.isVariable()) {
-      // This triple could be the right side of a chain join.
-      chainRight[triple.s_.getVariable()].push_back(tripleIdx);
-    }
-    if (triple.s_ != triple.o_) {
-      // This triple could be the left side of a chain join.
-      chainLeft[triple.o_.getVariable()].push_back(tripleIdx);
-    }
+    triplesByPredicate[std::string{iri.value()}].push_back(tripleIdx);
+    ql::ranges::copy(predicateInView_.at(iri.value()),
+                     std::inserter(candidateViews, candidateViews.end()));
   }
 
-  // Using the information collected by the pass over all triples, assemble all
-  // chains that can potentially be rewritten.
-  makeScansFromChainCandidates(qec, triples, result, chainLeft, chainRight);
-
-  // Assemble all stars that can potentially be rewritten. Reuses the analysis
-  // performed for chain joins.
-  makeScansFromStarCandidates(qec, triples, result, chainRight);
-
+  for (const auto& view : candidateViews) {
+    matchPattern(qec, patterns_.at(view), triples, triplesByPredicate, result);
+  }
   return result;
-}
-
-// _____________________________________________________________________________
-void QueryPatternCache::makeScansFromChainCandidates(
-    QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
-    std::vector<MaterializedViewJoinReplacement>& result,
-    const VariableToTripleIndices& chainLeft,
-    const VariableToTripleIndices& chainRight) const {
-  for (const auto& [varLeft, triplesLeft] : chainLeft) {
-    // No triples for the right side on the same variable have been collected.
-    if (!chainRight.contains(varLeft)) {
-      continue;
-    }
-
-    // Iterate over all chains present and check if they can be rewritten to a
-    // view scan.
-    for (auto tripleIdxRight : chainRight.at(varLeft)) {
-      for (auto tripleIdxLeft : triplesLeft) {
-        const auto& left = triples._triples.at(tripleIdxLeft);
-        const auto& right = triples._triples.at(tripleIdxRight);
-
-        // Lookup key based on `std::string_view` avoids copying the IRIs. We
-        // have already checked that the triples have single IRIs as predicates.
-        ChainedPredicatesForLookup key{left.getSimplePredicate().value(),
-                                       right.getSimplePredicate().value()};
-
-        // Lookup if there are matching views. There could potentially be
-        // multiple (e.g. with different sorting).
-        auto it = simpleChainCache_.find(key);
-        if (it == simpleChainCache_.end()) {
-          continue;
-        }
-        for (const auto& chainInfo : *(it->second)) {
-          // If the subject of the chain is fixed, but the subject is not the
-          // first column of the view, rewriting cannot be applied.
-          if (!left.s_.isVariable() && chainInfo.view_->variableToColumnMap()
-                                               .at(chainInfo.subject_)
-                                               .columnIndex_ != 0) {
-            continue;
-          }
-          // We have found a materialized view for this chain. Construct an
-          // `IndexScan`.
-          result.push_back(
-              {makeScanForSingleChain(qec, chainInfo, left.s_, varLeft,
-                                      right.o_.getVariable()),
-               {tripleIdxLeft, tripleIdxRight}});
-        }
-      }
-    }
-  }
-}
-
-// _____________________________________________________________________________
-void QueryPatternCache::makeScansFromStarCandidates(
-    QueryExecutionContext* qec, const parsedQuery::BasicGraphPattern& triples,
-    std::vector<MaterializedViewJoinReplacement>& result,
-    const VariableToTripleIndices& starCandidates) const {
-  if (starCache_.empty()) {
-    return;
-  }
-  auto getTriples =
-      [&triples](size_t idx) -> std::pair<size_t, const SparqlTriple&> {
-    return {idx, triples._triples.at(idx)};
-  };
-
-  for (const auto& [subject, members] : starCandidates) {
-    // The candidates are the triples of the query grouped by subject variable.
-    // If there aren't at least two triples sharing the subject, this group
-    // can't be a star.
-    if (members.size() < 2) {
-      continue;
-    }
-
-    ad_utility::HashSet<ViewPtr> candidateViews;
-    ad_utility::HashMap<std::string_view, size_t> predicateToTripleIdx;
-    ad_utility::HashSet<Variable> objects;
-
-    for (const auto& [idx, triple] :
-         ql::views::transform(members, getTriples)) {
-      // Check constraints on object: must be a variable different from the
-      // subject and not appear multiple times.
-      if (!triple.o_.isVariable() || triple.o_ == subject ||
-          !objects.insert(triple.o_.getVariable()).second) {
-        continue;
-      }
-      // Each predicate may only appear once.
-      if (!predicateToTripleIdx
-               .insert({triple.getSimplePredicate().value(), idx})
-               .second) {
-        continue;
-      }
-      // Remember all views that have this predicate.
-      const auto& it =
-          predicateInView_.find(triple.getSimplePredicate().value());
-      if (it == predicateInView_.end()) {
-        continue;
-      }
-      ql::ranges::copy(it->second,
-                       std::inserter(candidateViews, candidateViews.end()));
-    }
-
-    // Compute a sorted vector of all the predicates in the query star.
-    auto queryPredicates = predicateToTripleIdx | ql::views::keys |
-                           ::ranges::to<std::vector<std::string_view>>();
-    ql::ranges::sort(queryPredicates);
-
-    // Check all the possible views if they are actually applicable.
-    for (auto view : candidateViews) {
-      // Does this view provide a join star?
-      auto it = starCache_.find(view);
-      if (it == starCache_.end()) {
-        continue;
-      }
-      // Does the query contain a superset of the star arms of the view?
-      const auto& starInfo = it->second;
-      if (ql::ranges::includes(queryPredicates,
-                               starInfo.arms_ | ql::views::keys)) {
-        parsedQuery::MaterializedViewQuery::RequestedColumns cols;
-        std::vector<size_t> coveredTriples;
-
-        // The subject must be read.
-        cols.insert({starInfo.subject_, subject});
-
-        // The variable to variable mapping for all the objects of the star.
-        for (const auto& [predicate, object] : starInfo.arms_) {
-          size_t idx = predicateToTripleIdx.at(predicate);
-          auto queryObject = triples._triples.at(idx).o_;
-          cols.insert({object, queryObject});
-          coveredTriples.push_back(idx);
-        }
-
-        // Construct the `MaterializedViewJoinReplacement`, in particular the
-        // `IndexScan`.
-        result.push_back({makeScanForStar(qec, view, std::move(cols)),
-                          std::move(coveredTriples)});
-      }
-    }
-  }
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<IndexScan> QueryPatternCache::makeScanForSingleChain(
-    QueryExecutionContext* qec, ChainInfo cached, TripleComponent subject,
-    std::optional<Variable> chain, Variable object) const {
-  auto& [cSubject, cChainVar, cObject, view] = cached;
-  parsedQuery::MaterializedViewQuery::RequestedColumns cols{
-      {std::move(cSubject), std::move(subject)},
-      {std::move(cObject), std::move(object)},
-  };
-  if (chain.has_value()) {
-    cols.insert({std::move(cChainVar), std::move(chain.value())});
-  }
-  return view->makeIndexScan(
-      qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<IndexScan> QueryPatternCache::makeScanForStar(
-    QueryExecutionContext* qec, ViewPtr view,
-    parsedQuery::MaterializedViewQuery::RequestedColumns cols) const {
-  return view->makeIndexScan(
-      qec, parsedQuery::MaterializedViewQuery{view->name(), std::move(cols)});
-}
-
-// _____________________________________________________________________________
-bool QueryPatternCache::analyzeSimpleChain(ViewPtr view, const SparqlTriple& a,
-                                           const SparqlTriple& b) {
-  // Check predicates.
-  auto aPred = a.getSimplePredicate();
-  if (!aPred.has_value()) {
-    return false;
-  }
-  auto bPred = b.getSimplePredicate();
-  if (!bPred.has_value()) {
-    return false;
-  }
-
-  // Check variables.
-  if (!a.s_.isVariable()) {
-    return false;
-  }
-  auto aSubj = a.s_.getVariable();
-
-  if (!a.o_.isVariable() || a.o_.getVariable() == aSubj) {
-    return false;
-  }
-  auto chainVar = a.o_.getVariable();
-
-  if (!b.s_.isVariable() || b.s_.getVariable() != chainVar) {
-    return false;
-  }
-
-  if (!b.o_.isVariable() || b.o_.getVariable() == chainVar ||
-      b.o_.getVariable() == aSubj) {
-    return false;
-  }
-  auto bObj = b.o_.getVariable();
-
-  // All three variables must actually be columns of the view (e.g. this is
-  // not the case if they do not appear in the `SELECT` clause).
-  const auto& viewCols = view->variableToColumnMap();
-  if (!viewCols.contains(aSubj) || !viewCols.contains(chainVar) ||
-      !viewCols.contains(bObj)) {
-    return false;
-  }
-
-  // Insert chain to cache.
-  ChainedPredicates preds{aPred.value(), bPred.value()};
-  auto [it, wasNew] = simpleChainCache_.try_emplace(preds, nullptr);
-  if (it->second == nullptr) {
-    it->second = std::make_shared<std::vector<ChainInfo>>();
-  }
-  it->second->push_back(
-      ChainInfo{std::move(aSubj), std::move(chainVar), std::move(bObj), view});
-  return true;
-}
-
-// _____________________________________________________________________________
-bool QueryPatternCache::analyzeJoinStar(
-    ViewPtr view, const std::vector<SparqlTriple>& triples) {
-  AD_CORRECTNESS_CHECK(triples.size() >= 2);
-
-  // All triples must have the same variable subject.
-  if (!triples[0].s_.isVariable()) {
-    return false;
-  }
-  Variable subject = triples[0].s_.getVariable();
-
-  // The subject must actually be a column of the view (e.g. this is not the
-  // case if they do not appear in the `SELECT` clause).
-  const auto& viewCols = view->variableToColumnMap();
-  if (!viewCols.contains(subject)) {
-    return false;
-  }
-
-  std::vector<StarArm> arms;
-  ad_utility::HashSet<std::string> predicates;
-  ad_utility::HashSet<Variable> objects;
-
-  for (const auto& triple : triples) {
-    // Same subject variable.
-    if (!triple.s_.isVariable() || triple.s_.getVariable() != subject) {
-      return false;
-    }
-    // Simple IRI predicate.
-    auto pred = triple.getSimplePredicate();
-    if (!pred.has_value()) {
-      return false;
-    }
-    // Predicates must be distinct.
-    if (!predicates.insert(std::string{pred.value()}).second) {
-      return false;
-    }
-    // The object must be a variable.
-    if (!triple.o_.isVariable()) {
-      return false;
-    }
-    Variable obj = triple.o_.getVariable();
-    if (obj == subject) {
-      return false;
-    }
-    // Object variables must be distinct.
-    if (!objects.insert(obj).second) {
-      return false;
-    }
-    // The object must actually be a column of the view.
-    if (!viewCols.contains(obj)) {
-      return false;
-    }
-    arms.push_back({std::string{pred.value()}, obj});
-  }
-
-  // Sort arms by predicate for linear-time matching.
-  ql::ranges::sort(arms, {}, &StarArm::first);
-
-  // Insert star into cache.
-  starCache_.insert({view, StarInfo{subject, std::move(arms)}});
-  return true;
 }
 
 // _____________________________________________________________________________
@@ -363,7 +227,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   auto explainIgnore = [&](const std::string& reason) {
     AD_LOG_INFO << "Materialized view '" << view->name()
                 << "' will not be added to the query pattern cache for "
-                   "pattern-based (star/chain) query rewriting. Reason: "
+                   "pattern-based query rewriting. Reason: "
                 << reason << "." << std::endl;
   };
 
@@ -411,17 +275,14 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   const auto& triples = eligibility.triples_;
   bool patternFound = false;
 
-  // TODO<ullingerc> Possibly handle chain by property path.
-  if (triples.size() == 2) {
-    const auto& a = triples.at(0);
-    const auto& b = triples.at(1);
-    patternFound =
-        analyzeSimpleChain(view, a, b) || analyzeSimpleChain(view, b, a);
-  }
-
-  // Check for a join star of arbitrary size (>= 2 arms).
-  if (!patternFound && triples.size() >= 2) {
-    patternFound = analyzeJoinStar(view, triples);
+  // A pattern needs at least two triples: a single triple has no join for
+  // pattern-based rewriting to eliminate (a plain `IndexScan` on the main
+  // index is already as good as reading the view).
+  if (triples.size() >= 2) {
+    if (auto edges = buildPatternEdges(view, triples)) {
+      patterns_.insert({view, ViewPattern{std::move(edges.value()), view}});
+      patternFound = true;
+    }
   }
 
   // Remember predicates that appear in certain views, only if any pattern is
@@ -486,7 +347,7 @@ QueryPatternRewriteEligibility checkQueryPatternRewriteEligibility(
   }
 
   // `DISTINCT`/`REDUCED` change the cardinality of the result and thus of the
-  // join, which the chain/star rewriting below does not account for.
+  // join, which the pattern-based rewriting below does not account for.
   const auto& selectClause = parsed.selectClause();
   if (selectClause.distinct_ || selectClause.reduced_) {
     return {"The view's query uses DISTINCT or REDUCED", {}};
@@ -521,19 +382,13 @@ QueryPatternRewriteEligibility checkQueryPatternRewriteEligibility(
 
 // _____________________________________________________________________________
 void QueryPatternCache::removeView(ViewPtr view) {
-  // Remove `view` from chain cache.
-  for (auto& [chain, views] : simpleChainCache_) {
-    ql::erase_if(*views,
-                 [&view](const ChainInfo& info) { return info.view_ == view; });
-  }
+  // Remove `view` from pattern cache.
+  patterns_.erase(view);
 
   // Remove `view` from predicate cache.
   for (auto& [pred, views] : predicateInView_) {
     ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
   }
-
-  // Remove `view` from star cache.
-  starCache_.erase(view);
 
   // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
   // works natively with our hash map unlike `ql::erase_if`.

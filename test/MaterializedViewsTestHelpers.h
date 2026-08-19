@@ -290,6 +290,31 @@ inline void expectNotSuitableForRewrite(
   manager.unloadViewIfLoaded(viewName);
 };
 
+// _____________________________________________________________________________
+// The inverse of `expectNotSuitableForRewrite`: checks that `analyzeView`
+// extracts a pattern from a view created with `query` as its defining query,
+// by checking that the identical triples (which then trivially embed into
+// the view's own pattern) are matched by `makeJoinReplacementIndexScans`.
+template <typename ViewName, typename Query>
+inline void expectSuitableForRewrite(
+    const qlever::Qlever& qlv, const MaterializedViewsManager& manager,
+    const ViewName& viewName, const Query& query,
+    source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto l = generateLocationTrace(sourceLocation);
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  auto plan = qlv.parseAndPlanQuery(query);
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+  manager.writeViewToDisk(viewName, plan);
+  auto view = manager.getView(viewName, qec.get());
+  qpc.analyzeView(view, qec.get());
+  const auto& graphPattern = plan.parsedQuery()._rootGraphPattern;
+  ASSERT_EQ(graphPattern._graphPatterns.size(), 1u);
+  EXPECT_FALSE(qpc.makeJoinReplacementIndexScans(
+                      qec.get(), graphPattern._graphPatterns.at(0).getBasic())
+                   .empty());
+  manager.unloadViewIfLoaded(viewName);
+};
+
 }  // namespace materializedViewsTestHelpers
 
 #endif  // QLEVER_TEST_MATERIALIZEDVIEWSTESTHELPERS_H_
