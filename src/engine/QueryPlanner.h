@@ -717,7 +717,7 @@ class QueryPlanner {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);
       return std::move(v[idx]);
-    };
+    }
   };
 
   /**

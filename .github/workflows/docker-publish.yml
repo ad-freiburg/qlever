@@ -19,8 +19,11 @@ env:
 
 concurrency:
   # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
-  # directly fall back to the commit hash which will be distinct for each push to master.
-  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.sha}}'
+  # directly fall back to the run id which is always distinct.
+  #
+  # NOTE: The commit sha is the same between the tag and commit push, which produce differently
+  # tagged images.
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.run_id}}'
   cancel-in-progress: true
 
 # This workflow is heavily based on https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners .
@@ -47,6 +50,8 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          flavor: &metadata_flavor |
+            latest=false
           # The tag rules are shared with the `docker-merge` job via this YAML
           # anchor, so both jobs derive the same `org.opencontainers.image.version`
           # for the per-arch labels and the multi-arch index annotations.
@@ -57,9 +62,16 @@ jobs:
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
             # For pushes to the primary branch, use the normal tags.
             type=raw,value=latest,enable={{is_default_branch}}
-            # Note: this is `pr-` in this step, but the tags are also not used in this step.
-            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable={{is_default_branch}}
-            type=sha,prefix=commit-,enable={{is_default_branch}}
+            # `pr_num` is empty in the `build` job (which does not use the tags) and for pushes to
+            # master whose head commit is not the squash-merge of a PR (no "(#<pr>)" suffix). The
+            # non-empty check prevents publishing a bare `pr-` tag in the latter case.
+            #
+            # NOTE: The check is a GitHub expression, which cannot be combined with the
+            # `{{is_default_branch}}` template into a single boolean, so the template is replaced
+            # by its GitHub-expression equivalent.
+            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable=${{ github.ref == 'refs/heads/master' && steps.pr.outputs.pr_num != '' }}
+            # Set `priority` higher than `pr-{number}` and `latest` (both 200) to have `commit-{sha}` as the version.
+            type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
             # For pull requests, derive a version from the PR number.
             type=ref,event=pr
       - name: Set up Docker Buildx
@@ -140,6 +152,7 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
         with:
           images: ${{ env.IMAGE }}
+          flavor: *metadata_flavor
           # Reuse the tag rules defined in the `build` job (the `image_tags`
           # anchor) so the version is identical in the labels and annotations.
           tags: *image_tags
