@@ -63,8 +63,12 @@ jobs:
             # For pushes to the primary branch, use the normal tags.
             type=raw,value=latest,enable={{is_default_branch}}
             # `pr_num` is empty in the `build` job (which does not use the tags) and for pushes to
-            # master whose head commit message has no "(#<pr>)" suffix, e.g. force pushes. The
+            # master whose head commit is not the squash-merge of a PR (no "(#<pr>)" suffix). The
             # non-empty check prevents publishing a bare `pr-` tag in the latter case.
+            #
+            # NOTE: The check is a GitHub expression, which cannot be combined with the
+            # `{{is_default_branch}}` template into a single boolean, so the template is replaced
+            # by its GitHub-expression equivalent.
             type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable=${{ github.ref == 'refs/heads/master' && steps.pr.outputs.pr_num != '' }}
             # Set `priority` higher than `pr-{number}` and `latest` (both 200) to have `commit-{sha}` as the version.
             type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
