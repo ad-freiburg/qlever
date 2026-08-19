@@ -122,13 +122,13 @@ class ServerForTesting {
     boost::asio::io_context io;
     std::future<ResT> fut = co_spawn(
         io,
-        [fn](auto request, Server* server,
-             auto& io) -> boost::asio::awaitable<ResT> {
+        [](auto request, Server* server, auto& io,
+           auto fn) -> boost::asio::awaitable<ResT> {
           auto queryHub = std::make_shared<ad_utility::websocket::QueryHub>(
               io.get_executor());
           server->queryHub_ = queryHub;
           co_return co_await fn(server, request);
-        }(request, server_.get(), io),
+        }(request, server_.get(), io, fn),
         boost::asio::use_future);
     io.run();
     return fut.get();
