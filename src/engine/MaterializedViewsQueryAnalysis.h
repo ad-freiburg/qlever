@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 #define QLEVER_SRC_ENGINE_MATERIALIZEDVIEWSQUERYANALYSIS_H_
 
+#include <variant>
+
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
@@ -140,23 +142,17 @@ class QueryPatternCache {
 std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
     const ParsedQuery& parsed);
 
-// Result of `checkQueryPatternRewriteEligibility`: either the reason why
-// `parsed` is not eligible for pattern-based rewriting, or (if
-// `ignoreReason_` is `std::nullopt`) the triples of its single
-// `BasicGraphPattern` for further analysis.
-struct QueryPatternRewriteEligibility {
-  std::optional<std::string> ignoreReason_;
-  std::vector<SparqlTriple> triples_;
-};
+// Human-readable explanation why a query is not eligible for pattern-based
+// rewriting, as returned by `getTriplesForPatternRewrite`.
+using RewriteIgnoreReason = std::string;
 
-// Helper for `QueryPatternCache::analyzeView` that checks whether a view's
-// defining query even has a shape that pattern-based rewriting could apply
-// to, before the actual (more expensive) triple-level analysis:
-// no aggregation, no top-level FILTER/VALUES/DISTINCT/REDUCED/LIMIT/OFFSET
-// that would restrict the on-disk rows, and exactly one `BasicGraphPattern`
-// with at least one triple (after skipping invariant patterns like `BIND`).
-QueryPatternRewriteEligibility checkQueryPatternRewriteEligibility(
-    const ParsedQuery& parsed);
+// Helper for `QueryPatternCache::analyzeView`: extracts the triples of a
+// view's defining query's single `BasicGraphPattern` for further pattern
+// analysis, or returns a `RewriteIgnoreReason` if the query's shape rules
+// that out beforehand (aggregation, a top-level FILTER/VALUES/DISTINCT/
+// REDUCED/LIMIT/OFFSET, or anything but one flat `BasicGraphPattern`).
+std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+getTriplesForPatternRewrite(const ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;
