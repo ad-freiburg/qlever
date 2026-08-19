@@ -51,7 +51,7 @@ namespace serverTestHelpers {
 class ServerForTesting;
 }
 
-//! The HTTP Server used.
+// The HTTP Server used.
 class Server {
   using json = nlohmann::json;
   using SharedIndexAndView = std::shared_ptr<qlever::Qlever::IndexAndViews>;
@@ -96,8 +96,8 @@ class Server {
   bool noAccessCheck_;
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
-  /// Non-owning reference to the `QueryHub` instance living inside
-  /// the `WebSocketHandler` created for `HttpServer`.
+  // Non-owning reference to the `QueryHub` instance living inside
+  // the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   boost::asio::static_thread_pool queryThreadPool_;
@@ -106,7 +106,7 @@ class Server {
   static constexpr size_t UPDATE_THREAD_POOL_SIZE = 1;
   boost::asio::static_thread_pool updateThreadPool_{UPDATE_THREAD_POOL_SIZE};
 
-  /// Executor with a single thread that is used to run timers asynchronously.
+  // Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
 
   // Indicates if an index rebuild is currently in progress so that we prevent
@@ -146,9 +146,9 @@ class Server {
           CancelTimeout,
           absl::Cleanup>) struct CancellationHandleAndTimeoutTimerCancel {
     SharedCancellationHandle handle_;
-    /// Object of type `absl::Cleanup` that when destroyed cancels the timer
-    /// that would otherwise invoke the cancellation of the `handle_` via the
-    /// time limit.
+    // Object of type `absl::Cleanup` that when destroyed cancels the timer
+    // that would otherwise invoke the cancellation of the `handle_` via the
+    // time limit.
     CancelTimeout cancelTimeout_;
   };
 
@@ -162,12 +162,11 @@ class Server {
           -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
-  /// Handle a single HTTP request. Check whether a file request or a query was
-  /// sent, and dispatch to functions handling these cases. This function
-  /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
-  /// \param req The HTTP request.
-  /// \param send The action that sends a http:response. (see the
-  ///             `HttpServer.h` for documentation).
+  // Handle a single HTTP request. Check whether a file request or a query was
+  // sent, and dispatch to functions handling these cases. This function
+  // requires the constraints for the `HttpHandler` in `HttpServer.h`.
+  // `request` is the HTTP request, `send` the action that sends a
+  // `http:response` (documented in `HttpServer.h`).
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> process(RequestT& request, ResponseT&& send);
@@ -189,8 +188,8 @@ class Server {
           const std::optional<PlannedQuery>& plannedQuery);
 
   // Out of a list of allowed media types, choose the one that best fits the
-  // given query type. Currently it just chooses the first from the list. If the
-  // list is empty, just choose one that works for the given query type.
+  // given query type. Currently, it just chooses the first from the list. If
+  // the list is empty, just choose one that works for the given query type.
   static ad_utility::MediaType chooseBestFittingMediaType(
       const std::vector<ad_utility::MediaType>& candidates,
       const ParsedQuery& parsedQuery);
@@ -247,7 +246,8 @@ class Server {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, std::string_view operation,
+          const RequestT& request, std::string_view operationString,
+          ad_utility::websocket::QueryOperation operationType,
           std::string_view clientIp = {});
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
@@ -258,74 +258,78 @@ class Server {
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
-  /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
-  /// its completion, wrapping the result.
+  // Invoke `function` on `threadPool_`, and return an awaitable to wait for
+  // its completion, wrapping the result.
   CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
       requires ql::concepts::invocable<Function>)
       Awaitable<T> computeInNewThread(
           boost::asio::static_thread_pool& threadPool, Function function,
           SharedCancellationHandle handle);
 
-  /// This method extracts a client-defined query id from the passed HTTP
-  /// request if it is present. If it is not present or empty, a new
-  /// pseudo-random id will be chosen by the server. Note that this id is not
-  /// communicated to the client in any way. It ensures that every query has a
-  /// unique id and therefore that the code doesn't need to check for an empty
-  /// case. In the case of conflict when using a manual id, a
-  /// `QueryAlreadyInUseError` exception is thrown.
-  ///
-  /// \param request The HTTP request to extract the id from.
-  /// \param query A string representation of the query to register an id for.
-  ///
-  /// \return An OwningQueryId object. It removes itself from the registry
-  ///         on destruction.
+  // This method extracts a client-defined query id from the passed HTTP
+  // request if it is present. If it is not present or empty, a new
+  // pseudo-random id will be chosen by the server. Note that this id is not
+  // communicated to the client in any way. It ensures that every query has a
+  // unique id and therefore that the code doesn't need to check for an empty
+  // case. In the case of conflict when using a manual id, a
+  // `QueryAlreadyInUseError` exception is thrown.
+  //
+  // `request`: the HTTP request to extract the id from.
+  // `query`: a string representation of the query to register an id for.
+  // `operationType`: whether a query or an update is registered; recorded as
+  //     `type` on the `start` event of the query event log.
+  // `clientIp`: the client's IP, empty if the `X-Real-IP` header is absent.
+  //
+  // Returns an `OwningQueryId` that removes itself from the registry on
+  // destruction.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::OwningQueryId
       getQueryId(const RequestT& request, std::string_view query,
+                 ad_utility::websocket::QueryOperation operationType,
                  std::string_view clientIp = {});
 
-  /// Schedule a task to trigger the timeout after the `timeLimit`.
-  /// The returned callback can be used to prevent this task from executing
-  /// either because the `cancellationHandle` has been aborted by some other
-  /// means or because the task has been completed successfully.
+  // Schedule a task to trigger the timeout after the `timeLimit`.
+  // The returned callback can be used to prevent this task from executing
+  // either because the `cancellationHandle` has been aborted by some other
+  // means or because the task has been completed successfully.
   auto cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
       -> QL_CONCEPT_OR_NOTHING(
           ad_utility::InvocableWithExactReturnType<void>) auto;
 
-  /// Acquire the `CancellationHandle` for the given `QueryId`, start the
-  /// watchdog and call `cancelAfterDeadline` to set the timeout after
-  /// `timeLimit`. Return an object of type
-  /// `CancellationHandleAndTimeoutTimerCancel`, where the `cancelTimeout_`
-  /// member can be invoked to cancel the imminent cancellation via timeout.
+  // Acquire the `CancellationHandle` for the given `QueryId`, start the
+  // watchdog and call `cancelAfterDeadline` to set the timeout after
+  // `timeLimit`. Return an object of type
+  // `CancellationHandleAndTimeoutTimerCancel`, where the `cancelTimeout_`
+  // member can be invoked to cancel the imminent cancellation via timeout.
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
                                TimeLimit timeLimit)
       -> QL_CONCEPT_OR_NOTHING(ad_utility::isInstantiation<
                                CancellationHandleAndTimeoutTimerCancel>) auto;
 
-  /// Check if the access token is valid. Return true if the access token
-  /// exists and is valid. Return false if there's no access token passed.
-  /// Throw an exception if there is a token passed but it doesn't match,
-  /// or there is no access token set by the server config. The error message is
-  /// formulated towards end users, it can be sent directly as the text of an
-  /// HTTP error response.
+  // Check if the access token is valid. Return true if the access token
+  // exists and is valid. Return false if there's no access token passed.
+  // Throw an exception if there is a token passed but it doesn't match,
+  // or there is no access token set by the server config. The error message is
+  // formulated towards end users, it can be sent directly as the text of an
+  // HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
   FRIEND_TEST(ServerTest, checkAccessToken);
 
-  /// Check if user-provided timeout is authorized with a valid access-token or
-  /// lower than the server default. Return an empty optional and send a 403
-  /// Forbidden HTTP response if the change is not allowed. Return the new
-  /// timeout otherwise.
+  // Check if user-provided timeout is authorized with a valid access-token or
+  // lower than the server default. Return an empty optional and send a 403
+  // Forbidden HTTP response if the change is not allowed. Return the new
+  // timeout otherwise.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) boost::asio::
       awaitable<std::optional<Server::TimeLimit>> verifyUserSubmittedQueryTimeout(
           std::optional<std::string_view> userTimeout, bool accessTokenOk,
           const RequestT& request, ResponseT& send) const;
 
-  /// Send response for the streamable media types (tsv, csv, octet-stream,
-  /// turtle, sparqlJson, qleverJson).
+  // Send response for the streamable media types (tsv, csv, octet-stream,
+  // turtle, sparqlJson, qleverJson).
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> sendStreamableResponse(
