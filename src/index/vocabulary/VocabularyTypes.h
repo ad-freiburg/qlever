@@ -133,38 +133,6 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
-// Copy `words` into one contiguous `VocabBatchLookupData` buffer. Use this
-// when the views come from mixed owners that cannot share one result object.
-inline VocabBatchLookupResult makeOwnedVocabBatch(
-    ql::span<const std::string_view> words) {
-  AD_CONTRACT_CHECK(!words.empty());
-  auto data = std::make_shared<VocabBatchLookupData>();
-
-  size_t totalBufferSize = 0;
-  for (std::string_view word : words) {
-    totalBufferSize += word.size();
-  }
-  data->buffer().resize(totalBufferSize);
-  data->views().resize(words.size());
-
-  size_t offset = 0;
-  char* buffer = data->buffer().data();
-
-  for (size_t i = 0; i < words.size(); ++i) {
-    const std::string_view word = words[i];
-
-    if (!word.empty()) {
-      // TODO<marvin>: what does std::memcpy do exactly?
-      std::memcpy(buffer + offset, word.data(), word.size());
-    }
-
-    data->views()[i] = std::string_view{buffer + offset, word.size()};
-    offset += word.size();
-  }
-
-  return VocabBatchLookupData::asResult(std::move(data));
-}
-
 // Hold child `VocabBatchLookupResult`s so their strings stay alive. Point
 // `views()` into those children or into `indexRamWords`.
 struct MultiOwnerVocabBatchLookupData

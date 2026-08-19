@@ -90,19 +90,6 @@ TEST(VocabBatchLookupData, AsResultEmpty) {
   EXPECT_TRUE(result->empty());
 }
 
-TEST(VocabBatchLookupData, MakeOwnedVocabBatchCopiesViews) {
-  const std::string a = "alpha";
-  const std::string empty;
-  const std::string b = "beta";
-  const std::array<std::string_view, 3> views{a, empty, b};
-  auto result = makeOwnedVocabBatch(views);
-  ASSERT_EQ(result->size(), 3u);
-  EXPECT_EQ((*result)[0], "alpha");
-  EXPECT_EQ((*result)[1], "");
-  EXPECT_EQ((*result)[2], "beta");
-  EXPECT_NE((*result)[0].data(), a.data());
-}
-
 TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
   auto firstOwner = std::make_shared<StringVectorVocabBatchLookupData>();
   firstOwner->buffer() = {"alpha", "beta"};
