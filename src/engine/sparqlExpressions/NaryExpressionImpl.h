@@ -354,7 +354,7 @@ using NaryExpression = NaryExpressionStronglyTyped<Args...>;
   class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
     using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
     using Base::Base;                                                        \
-  };
+  }
 
 // Takes a `Function` that returns a numeric value (integral or floating point)
 // and converts it to a function, that takes the same arguments and returns the

@@ -1179,7 +1179,7 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
     errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
   }
-};
+}
 
 // _______________________________________________________________________
 template <typename T>
@@ -1227,7 +1227,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
     errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
   }
-};
+}
 
 // _______________________________________________________________________
 template <typename T>

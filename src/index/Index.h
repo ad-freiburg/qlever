@@ -54,7 +54,10 @@ class Index {
     static NumNormalAndInternal fromNormal(size_t normal) {
       return {normal, 0};
     }
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
+    // Note: The expansion of `NLOHMANN_DEFINE_TYPE_INTRUSIVE` ends in complete
+    // `friend` function definitions, so a trailing `;` would be an extra one,
+    // which is ill-formed (and rejected with `-pedantic-errors`).
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal)
   };
 
   // Store all information about possible search results from the text index in

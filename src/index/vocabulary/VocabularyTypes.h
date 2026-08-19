@@ -274,7 +274,7 @@ class WordWriterBase {
           " bug, or it can happen when an exception was thrown in the"
           " constructor of the subclass."sv);
     }
-  };
+  }
 
   // Calling this function will signal that the last word has been pushed.
   // Implementations might e.g. flush all buffers to disk and close underlying

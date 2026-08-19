@@ -106,7 +106,7 @@ std::optional<Literal> getLiteralOrNullopt(
     return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
@@ -135,7 +135,7 @@ LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.indexToString(id.getWordVocabIndex()))};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
@@ -143,7 +143,7 @@ std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.getTextExcerpt(id.getTextRecordIndex()))};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
