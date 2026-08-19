@@ -62,9 +62,16 @@ struct PatternMatchState {
 };
 
 // Query-side triples with a simple IRI predicate, grouped by that predicate,
-// for fast lookup of match candidates for a given pattern edge.
+// for fast lookup of match candidates for a given pattern edge. Keyed by
+// `string_view` (into the predicate IRI owned by the query triple itself, see
+// `SparqlTriple::getSimplePredicate`) rather than `string` to avoid copying
+// every relevant predicate; safe because a `TriplesByPredicate` never outlives
+// the `BasicGraphPattern` it was built from within a single
+// `makeJoinReplacementIndexScans` call. Looked up with `PatternEdge`'s owned
+// `std::string` predicates via heterogeneous lookup (as already relied upon
+// for `predicateInView_` below).
 using TriplesByPredicate =
-    ad_utility::HashMap<std::string, std::vector<size_t>>;
+    ad_utility::HashMap<std::string_view, std::vector<size_t>>;
 
 struct ByCacheKeyInfo {
   ViewPtr view_;
@@ -87,11 +94,11 @@ struct MaterializedViewJoinReplacement {
 // of an existing materialized view.
 class QueryPatternCache {
  private:
-  // Cache for predicates appearing in a materialized view. The `ViewPtr`s are
-  // kept sorted. Used to quickly find candidate views for a query (views that
-  // could not possibly match are ruled out without running the more expensive
-  // pattern matching below), and to reject a candidate whose pattern uses a
-  // predicate absent from the query without a full search.
+  // Cache for predicates appearing in a materialized view. Used to quickly
+  // find candidate views for a query (views that could not possibly match are
+  // ruled out without running the more expensive pattern matching below), and
+  // to reject a candidate whose pattern uses a predicate absent from the query
+  // without a full search.
   ad_utility::HashMap<std::string, std::vector<ViewPtr>> predicateInView_;
 
   // All patterns extracted from materialized views, one entry per view that
@@ -126,19 +133,23 @@ class QueryPatternCache {
   // per triple) from the triples of its defining query. Returns `nullopt` if
   // any triple disqualifies the view from pattern-based rewriting: a
   // non-simple predicate (property path or variable predicate), a fixed
-  // subject/object, or a subject/object that is not a column of the view (not
-  // selected, or removed by aggregation).
+  // subject/object, a subject/object that is not a column of the view (not
+  // selected, or removed by aggregation), or (see `isConnected` in the .cpp
+  // file) a pattern that is disconnected (has more than one connected
+  // component), which the query planner could never select a replacement for
+  // regardless of cost.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
       const ViewPtr& view, const std::vector<SparqlTriple>& triples);
 
   // Search for all embeddings of `pattern` into `triples` (using
-  // `triplesByPredicate` for fast candidate lookup) and add a
+  // `triplesByPredicate` for fast candidate lookup, and `budget` as the
+  // maximum number of candidate assignments to try) and add a
   // `MaterializedViewJoinReplacement` for each valid one (i.e. one where fixed
   // values from the query only end up on a legal prefix of the view's columns,
   // see `isLegalFixedValuePrefix`) to `result`.
   void matchPattern(QueryExecutionContext* qec, const ViewPattern& pattern,
                     const parsedQuery::BasicGraphPattern& triples,
-                    const TriplesByPredicate& triplesByPredicate,
+                    const TriplesByPredicate& triplesByPredicate, size_t budget,
                     std::vector<MaterializedViewJoinReplacement>& result) const;
 };
 
