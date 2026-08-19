@@ -62,8 +62,10 @@ jobs:
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
             # For pushes to the primary branch, use the normal tags.
             type=raw,value=latest,enable={{is_default_branch}}
-            # Note: this is `pr-` in this step, but the tags are also not used in this step.
-            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable={{is_default_branch}}
+            # `pr_num` is empty in the `build` job (which does not use the tags) and for pushes to
+            # master whose head commit message has no "(#<pr>)" suffix, e.g. force pushes. The
+            # non-empty check prevents publishing a bare `pr-` tag in the latter case.
+            type=raw,value=pr-${{ steps.pr.outputs.pr_num }},enable=${{ github.ref == 'refs/heads/master' && steps.pr.outputs.pr_num != '' }}
             # Set `priority` higher than `pr-{number}` and `latest` (both 200) to have `commit-{sha}` as the version.
             type=sha,prefix=commit-,enable={{is_default_branch}},priority=201
             # For pull requests, derive a version from the PR number.
