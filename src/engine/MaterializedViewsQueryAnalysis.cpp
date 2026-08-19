@@ -112,11 +112,16 @@ bool isLegalFixedValuePrefix(unsigned boundColumnsMask) {
 
 // Match `viewSide` against `queryNode` inside `state`. A fixed `viewSide` is
 // a plain equality check (not bound; it's not a view column). Otherwise
-// `viewSide` is a view variable: enforces injectivity (no two view variables
-// map to the same query node) and prunes bindings that can never satisfy
-// `isLegalFixedValuePrefix` later (a smaller-column variable already bound to
-// a query *variable* rules out fixing this one). Returns `false`, leaving
-// `state` unmodified, on rejection.
+// `viewSide` is a view variable: enforces injectivity for query *variables*
+// (no two view variables map to the same query variable, since a single
+// index scan can't assert their equality) and prunes bindings that can never
+// satisfy `isLegalFixedValuePrefix` later (a smaller-column variable already
+// bound to a query variable rules out fixing this one). Two view variables
+// both fixed to the same query *constant* is fine (e.g. a chain view
+// `?a <p1> ?b . ?b <p2> ?c` answering `<x> <p1> <x> . <x> <p2> ?c`) -- that
+// is just two independent equality filters on the view's scan, which
+// `MaterializedView::makeScanConfig` explicitly allows. Returns `false`,
+// leaving `state` unmodified, on rejection.
 bool tryAssign(PatternMatchState& state, const TripleComponent& viewSide,
                const TripleComponent& queryNode,
                const VariableToColumnMap& viewCols) {
@@ -130,7 +135,7 @@ bool tryAssign(PatternMatchState& state, const TripleComponent& viewSide,
   }
   size_t col = queryNode.isVariable() ? 0 : viewCols.at(viewVar).columnIndex_;
   for (const auto& [otherVar, otherNode] : state.assignment_) {
-    if (otherNode == queryNode) {
+    if (queryNode.isVariable() && otherNode == queryNode) {
       return false;
     }
     if (!queryNode.isVariable() && otherNode.isVariable() &&
@@ -160,28 +165,81 @@ void undoAssign(PatternMatchState& state, const TripleComponent& viewSide,
   }
 }
 
+// Hard cap on how many replacements `makeJoinReplacementIndexScans` collects
+// in total across every candidate view for one query: each one becomes a
+// candidate plan the query planner must separately consider, so leaving this
+// unbounded would let the total planning cost scale with the number of
+// loaded views on top of the pattern-match budget already bounding each
+// individual view's search. ponytail: fixed constant, comfortably above what
+// any realistic view/query shape needs; promote to a runtime parameter if a
+// real workload needs it tuned.
+constexpr size_t kMaxReplacements = 1000;
+
+// Checks a completed match in `state` against `isLegalFixedValuePrefix` and,
+// if legal, builds the resulting `MaterializedViewJoinReplacement` and adds
+// it to `result`. Takes `state` by const reference rather than moving out of
+// it: `state` is the single mutable object `extendMatch`'s backtracking
+// search threads through the whole recursion, still needed afterwards to
+// undo this branch's bindings, so a legal match must be copied out, not
+// moved.
+void emitIfLegal(QueryExecutionContext* qec, const ViewPattern& pattern,
+                 const VariableToColumnMap& viewCols,
+                 const PatternMatchState& state,
+                 std::vector<MaterializedViewJoinReplacement>& result) {
+  // Fixed query values must land on a legal column prefix; a payload column
+  // (index > 2) bound to a fixed value is always illegal.
+  unsigned boundColumnsMask = 0;
+  for (const auto& [viewVar, node] : state.assignment_) {
+    if (!node.isVariable()) {
+      size_t col = viewCols.at(viewVar).columnIndex_;
+      if (col > 2) {
+        return;
+      }
+      boundColumnsMask |= (1u << col);
+    }
+  }
+  if (!isLegalFixedValuePrefix(boundColumnsMask)) {
+    return;
+  }
+  result.push_back(
+      {pattern.view_->makeIndexScan(
+           qec, parsedQuery::MaterializedViewQuery{pattern.view_->name(),
+                                                   state.assignment_}),
+       state.coveredTriples_});
+}
+
 // Recursively extend `state` (which already covers `edges[0, edgeIdx)`) by
 // matching `edges[edgeIdx]` against each of its candidate query triples
 // (`candidatesByEdge[edgeIdx]`, precomputed per predicate in `matchPattern`),
-// then recursing into the remaining edges. Every full match is appended to
-// `results`. Plain VF2-style backtracking: `undoAssign` only removes the
-// bindings this step added, and "already used" is a linear scan of
-// `state.coveredTriples_` (both O(pattern size), cheaper than hashing at this
-// scale).
+// then recursing into the remaining edges. A completed match is validated
+// and turned into a replacement immediately (`emitIfLegal`) instead of being
+// collected into an intermediate list first. Plain VF2-style backtracking:
+// `undoAssign` only removes the bindings this step added, and "already used"
+// is a linear scan of `state.coveredTriples_` (both O(pattern size), cheaper
+// than hashing at this scale).
 //
-// `stepsRemaining` caps the total number of candidates tried across the whole
-// search, guarding against combinatorial blowup (e.g. a predicate repeated
-// many times on both sides). On reaching 0, `truncated` is set and the search
-// stops; `results` may then be incomplete.
+// `stepsRemaining` caps the total number of candidates tried across the
+// whole search; `result.size() >= kMaxReplacements` separately caps the
+// total number of matches collected, since a cheap-to-complete match (e.g. a
+// two-edge view with a repeated predicate) can exhaust neither the steps nor
+// find anything illegal, yet still complete tens of thousands of times
+// within the step budget. Either limit sets `truncated` and stops the
+// search; `result` may then be missing some applicable rewrites for this
+// view.
 void extendMatch(
     const std::vector<PatternEdge>& edges,
     const std::vector<const std::vector<size_t>*>& candidatesByEdge,
     size_t edgeIdx, const parsedQuery::BasicGraphPattern& triples,
+    QueryExecutionContext* qec, const ViewPattern& pattern,
     const VariableToColumnMap& viewCols, PatternMatchState& state,
-    std::vector<PatternMatchState>& results, size_t& stepsRemaining,
-    bool& truncated) {
+    std::vector<MaterializedViewJoinReplacement>& result,
+    size_t& stepsRemaining, bool& truncated) {
+  if (result.size() >= kMaxReplacements) {
+    truncated = true;
+    return;
+  }
   if (edgeIdx == edges.size()) {
-    results.push_back(state);
+    emitIfLegal(qec, pattern, viewCols, state, result);
     return;
   }
   const auto& edge = edges[edgeIdx];
@@ -202,8 +260,8 @@ void extendMatch(
       if (tryAssign(state, edge.object_, triple.o_, viewCols)) {
         state.coveredTriples_.push_back(tripleIdx);
 
-        extendMatch(edges, candidatesByEdge, edgeIdx + 1, triples, viewCols,
-                    state, results, stepsRemaining, truncated);
+        extendMatch(edges, candidatesByEdge, edgeIdx + 1, triples, qec, pattern,
+                    viewCols, state, result, stepsRemaining, truncated);
 
         state.coveredTriples_.pop_back();
       }
@@ -235,47 +293,19 @@ void QueryPatternCache::matchPattern(
 
   const auto& viewCols = pattern.view_->variableToColumnMap();
 
-  std::vector<PatternMatchState> matches;
   PatternMatchState state;
   size_t stepsRemaining = budget;
   bool truncated = false;
-  extendMatch(pattern.edges_, candidatesByEdge, 0, triples, viewCols, state,
-              matches, stepsRemaining, truncated);
+  extendMatch(pattern.edges_, candidatesByEdge, 0, triples, qec, pattern,
+              viewCols, state, result, stepsRemaining, truncated);
   if (truncated) {
     AD_LOG_WARN << "Pattern matching for materialized view '"
                 << pattern.view_->name()
-                << "' exceeded the `materialized-view-pattern-match-budget`; "
-                   "some applicable rewrites using this view may have been "
-                   "missed for this query."
+                << "' exceeded the `materialized-view-pattern-match-budget` "
+                   "or the per-query replacement cap; some applicable "
+                   "rewrites using this view may have been missed for this "
+                   "query."
                 << std::endl;
-  }
-
-  for (auto& match : matches) {
-    // Fixed query values must land on a legal column prefix; a payload
-    // column (index > 2) bound to a fixed value is always illegal.
-    unsigned boundColumnsMask = 0;
-    bool hasIllegalColumn = false;
-    for (const auto& [viewVar, node] : match.assignment_) {
-      if (!node.isVariable()) {
-        size_t col = viewCols.at(viewVar).columnIndex_;
-        if (col > 2) {
-          hasIllegalColumn = true;
-          break;
-        }
-        boundColumnsMask |= (1u << col);
-      }
-    }
-    if (hasIllegalColumn || !isLegalFixedValuePrefix(boundColumnsMask)) {
-      continue;
-    }
-
-    // `assignment_` and `RequestedColumns` are the same type.
-    result.push_back(
-        {pattern.view_->makeIndexScan(
-             qec,
-             parsedQuery::MaterializedViewQuery{pattern.view_->name(),
-                                                std::move(match.assignment_)}),
-         std::move(match.coveredTriples_)});
   }
 }
 

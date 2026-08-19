@@ -224,6 +224,33 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
                              ::testing::UnorderedElementsAre(0u, 1u))));
   }
 
+  // Two different view variables can legitimately be fixed to the *same*
+  // query value: `<gp2s> <p1> <gp2s>` fixes both the chain's `?a` and `?b` to
+  // `<gp2s>`. This must not be rejected as an injectivity violation the way
+  // two different query *variables* landing on the same view variable would
+  // be -- `MaterializedView::makeScanConfig` explicitly allows the same
+  // fixed value on more than one column. Checked directly against
+  // `QueryPatternCache`, like the two cases above.
+  {
+    auto plan = qlv.parseAndPlanQuery(
+        "SELECT * { <gp2s> <p1> <gp2s> . <gp2s> <p2> ?c . <gp2s> <p9> ?o9 }");
+    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+    manager.writeViewToDisk(
+        "repeatedFixedValueView",
+        qlv.parseAndPlanQuery("SELECT * { ?a <p1> ?b . ?b <p2> ?c }"));
+    auto view = manager.getView("repeatedFixedValueView", qec.get());
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    qpc.analyzeView(view, qec.get());
+    const auto& triples =
+        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+    auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
+    using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
+    EXPECT_THAT(replacements,
+                ::testing::ElementsAre(
+                    AD_FIELD(MaterializedViewJoinReplacement, coveredTriples_,
+                             ::testing::UnorderedElementsAre(0u, 1u))));
+  }
+
   // Disconnected pattern (no shared variable): rejected outright, since the
   // planner could never select a replacement spanning two components.
   expectNotSuitableForRewrite(

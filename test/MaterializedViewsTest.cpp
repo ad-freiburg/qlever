@@ -2226,3 +2226,47 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetZeroDisables) {
   EXPECT_THAT(logStream.str(), ::testing::Not(::testing::HasSubstr(
                                    "materialized-view-pattern-match-budget")));
 }
+
+// _____________________________________________________________________________
+// Regression test: a cheap-to-complete match (here, a duplicate predicate on
+// a two-edge view, matched against many triples sharing one subject and
+// predicate) can complete far more times than the pattern-match budget alone
+// would suggest is safe to hand to the query planner as candidate plans, so
+// the total number of replacements collected must be capped independently.
+TEST(MaterializedViewsPatternMatchBudgetTest, ReplacementCountIsCapped) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase,
+                                              " <s1> <p0> <o1> .\n");
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  manager.writeViewToDisk(
+      "capView",
+      qlv.parseAndPlanQuery("SELECT * { ?s <cp1> ?o1 . ?s <cp1> ?o2 }"));
+  auto view = manager.getView("capView", qec.get());
+  qpc.analyzeView(view, qec.get());
+
+  // 40 triples sharing one subject and predicate: assigning two distinct
+  // ones to the view's two (structurally interchangeable) arms yields
+  // 40*39 = 1560 matches, comfortably over the replacement cap. Parsed
+  // directly (bypassing the query planner) to sidestep its 64-triple limit.
+  std::string hostQuery = "SELECT * { ";
+  for (int i = 0; i < 40; ++i) {
+    hostQuery += absl::StrCat("<s> <cp1> <o", i, "> . ");
+  }
+  hostQuery += "}";
+  EncodedIriManager encodedIriManager;
+  auto parsed = SparqlParser::parseQuery(&encodedIriManager, hostQuery, {});
+  const auto& triples =
+      parsed._rootGraphPattern._graphPatterns.at(0).getBasic();
+
+  auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
+  EXPECT_GT(replacements.size(), 0u);
+  EXPECT_LE(replacements.size(), 1000u);
+}
