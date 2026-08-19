@@ -195,6 +195,17 @@ class Server {
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send);
 
+  // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
+  // parameters and trigger a rebuild unless one is already in progress.
+  // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,
+  // this never needs to bypass query processing, so it returns the response
+  // directly instead of following the optional-json convention.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<ad_utility::httpUtils::ResponseT> processRebuildIndex(
+          const ad_utility::url_parser::ParamValueMap& parameters,
+          const RequestT& request);
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.

@@ -620,16 +620,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = jsonResponse(json);
   } else if (auto cmd = checkParameter("cmd", "rebuild-index")) {
     dispatchLog(*cmd, accessTokenOk);
-    auto config = co_await rebuildIndexUnlessInProgress(
-        checkParameter("rebuild-tmp-dir", std::nullopt),
-        checkParameter("rebuild-previous-index-dir", std::nullopt));
-    if (config.has_value()) {
-      response = jsonResponse(config->successResponseAsJson());
-    } else {
-      response = createHttpResponseFromString(
-          "Another rebuild is currently in progress!",
-          http::status::too_many_requests, request, MediaType::textPlain);
-    }
+    response = co_await processRebuildIndex(parameters, request);
   } else if (auto cmd = checkParameter("cmd", "write-materialized-view")) {
     dispatchLog(*cmd, accessTokenOk);
     auto materializedViewStats = co_await processWriteMaterializedView(
@@ -1578,6 +1569,26 @@ Awaitable<qlever::IndexRebuildConfig> Server::rebuildIndex(
       net::use_awaitable);
   co_await std::move(swapRoutine);
   co_return config;
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<ad_utility::httpUtils::ResponseT> Server::processRebuildIndex(
+        const ad_utility::url_parser::ParamValueMap& parameters,
+        const RequestT& request) {
+  using namespace ad_utility::httpUtils;
+  auto config = co_await rebuildIndexUnlessInProgress(
+      ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
+                                             std::nullopt),
+      ad_utility::url_parser::checkParameter(
+          parameters, "rebuild-previous-index-dir", std::nullopt));
+  if (!config.has_value()) {
+    co_return createHttpResponseFromString(
+        "Another rebuild is currently in progress!",
+        http::status::too_many_requests, request, MediaType::textPlain);
+  }
+  co_return createJsonResponse(config->successResponseAsJson(), request);
 }
 
 // _____________________________________________________________________________
