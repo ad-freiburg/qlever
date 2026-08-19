@@ -393,9 +393,12 @@ PreparedTensorIndexParams TensorIndex::prepareJoin() const {
 
 // ____________________________________________________________________________
 Result TensorIndex::computeResult([[maybe_unused]] bool requestLaziness) {
+  AD_LOG_TIME_START(tensorIndexComputeResult);
   auto params = prepareJoin();
   auto searchImpl = TensorIndexImpl(params, getExecutionContext());
-  return searchImpl.computeTensorIndexResult();
+  auto result = searchImpl.computeTensorIndexResult();
+  AD_LOG_TIME_END(tensorIndexComputeResult);
+  return result;
 }
 
 // ____________________________________________________________________________

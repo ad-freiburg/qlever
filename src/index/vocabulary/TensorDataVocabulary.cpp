@@ -123,6 +123,7 @@ TensorDataVocabulary<V>::WordWriter::~WordWriter() {
 template <typename V>
 std::optional<TensorData> TensorDataVocabulary<V>::getTensorData(
     uint64_t index) const {
+  AD_LOG_TIME_START(readTensorData);
   AD_CONTRACT_CHECK(index < size());
   // Allocate the required number of bytes
   auto offsetAndSize = getOffsetAndSize(index);
@@ -135,7 +136,9 @@ std::optional<TensorData> TensorDataVocabulary<V>::getTensorData(
   // Read into the buffer
   tensorVocabFile_.read(buffer.data(), buffer.size(), offsetAndSize.offset_);
   // Deserialize the buffer into a `TensorData` object and return it
-  return TensorData::deserialize(buffer);
+  auto tensor_data = TensorData::deserialize(buffer);
+  AD_LOG_TIME_END(readTensorData);
+  return tensor_data;
 }
 
 // Explicit template instantiations

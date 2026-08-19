@@ -78,7 +78,9 @@ TensorData TensorData::parseFromString(const std::string_view& dataString) {
   // add the kParseStopWhenDoneFlag be a bit more robust in parsing
   Document document;
   document.Parse<kParseStopWhenDoneFlag>(dataString.data(), dataString.size());
-  // AD_LOG_INFO << "Parsing tensor data from string: " << dataString << std::endl;
+  AD_LOG_DEBUG << "Parsing tensor data from string: " << dataString
+               << std::endl;
+  AD_LOG_TIME_START(tensorFromString);
   if (document.HasParseError()) {
     ssize_t offset = document.GetErrorOffset();
     size_t contextLowerBound = std::max(static_cast<ssize_t>(0), offset - 10);
@@ -96,7 +98,10 @@ TensorData TensorData::parseFromString(const std::string_view& dataString) {
                      GetParseError_En(document.GetParseError()), " at offset ",
                      offset, " (context: '", errorContext, "')")};
   }
-  return parseFromJSON(document, dataString);
+  auto tensorData = parseFromJSON(document, dataString);
+  AD_LOG_TIME_END(tensorFromString);
+
+  return tensorData;
 }
 TensorData TensorData::parseFromJSON(Document& json,
                                      const std::string_view& dataString) {
@@ -208,23 +213,32 @@ std::optional<TensorData> TensorData::fromLiteral(
 
 float TensorData::cosineSimilarity(const TensorData& tensor1,
                                    const TensorData& tensor2) {
+  AD_LOG_TIME_START(tensorCosineSimilarity);
   if (!isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for cosine similarity"};
+    throw std::runtime_error{
+        "Tensors are not broadcastable for cosine similarity"};
   }
   float inner = dot(tensor1, tensor2);
   float norm1 = norm(tensor1);
   float norm2 = norm(tensor2);
 
   if (norm1 == 0.0f || norm2 == 0.0f) return 0.0f;
-  return inner / (norm1 * norm2);
+  float similarity = inner / (norm1 * norm2);
+
+  AD_LOG_TIME_END(tensorCosineSimilarity);
+  return similarity;
 }
 float TensorData::euclideanDistance(const TensorData& tensor1,
                                     const TensorData& tensor2) {
+  AD_LOG_TIME_START(tensorEuclideanDistance);
   if (!isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for euclidean distance"};
+    throw std::runtime_error{
+        "Tensors are not broadcastable for euclidean distance"};
   }
   auto diff = subtract(tensor1, tensor2);
-  return norm(diff);
+  auto result = norm(diff);
+  AD_LOG_TIME_END(tensorEuclideanDistance);
+  return result;
 }
 
 float TensorData::norm(const TensorData& tensor) {
@@ -328,6 +342,7 @@ std::vector<uint8_t> TensorData::serialize() const {
 }
 
 TensorData TensorData::deserialize(const std::vector<uint8_t>& buffer) {
+  AD_LOG_TIME_START(tensorFromBuffer);
   if (buffer.size() < 1 + sizeof(uint64_t)) {
     throw std::runtime_error{"Buffer too small to deserialize TensorData"};
   }
@@ -364,5 +379,7 @@ TensorData TensorData::deserialize(const std::vector<uint8_t>& buffer) {
       buffer.data() + 1 + sizeof(uint64_t) + numDimensions * sizeof(uint64_t),
       numElements * sizeof(float));
 
-  return TensorData(std::move(tensorData), std::move(shape), dtype);
+  auto tData = TensorData(std::move(tensorData), std::move(shape), dtype);
+  AD_LOG_TIME_END(tensorFromBuffer);
+  return tData;
 }

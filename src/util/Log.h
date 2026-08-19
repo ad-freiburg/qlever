@@ -49,6 +49,26 @@ enum class LogLevel {
 #define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
 #define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
 
+#define ENABLE_TIME_DIFF 1
+#ifdef ENABLE_TIME_DIFF
+#define AD_LOG_TIME_START(marker)                                  \
+  AD_LOG(LogLevel::INFO) << "--TIMING (" << #marker << ") START--" \
+                         << std::endl;                             \
+  auto start_##marker = std::chrono::high_resolution_clock::now();
+
+#define AD_LOG_TIME_END(marker)                                               \
+  auto end_##marker = std::chrono::high_resolution_clock::now();              \
+  auto duration_##marker =                                                    \
+      std::chrono::duration_cast<std::chrono::nanoseconds>(end_##marker -    \
+                                                            start_##marker);  \
+  AD_LOG(LogLevel::INFO) << "--TIMING (" << #marker                           \
+                         << ") END: " << duration_##marker.count() << " ns--" \
+                         << std::endl;
+#else
+#define AD_LOG_TIME_START(marker)
+#define AD_LOG_TIME_END(marker)
+#endif
+
 using enum LogLevel;
 
 namespace ad_utility {

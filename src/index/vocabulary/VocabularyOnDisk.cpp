@@ -21,10 +21,12 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
 
 // _____________________________________________________________________________
 std::string VocabularyOnDisk::operator[](uint64_t idx) const {
+  AD_LOG_TIME_START(readWordFromDisk);
   AD_CONTRACT_CHECK(idx < size());
   auto offsetAndSize = getOffsetAndSize(idx);
   std::string result(offsetAndSize.size_, '\0');
   file_.read(result.data(), offsetAndSize.size_, offsetAndSize.offset_);
+  AD_LOG_TIME_END(readWordFromDisk);
   return result;
 }
 

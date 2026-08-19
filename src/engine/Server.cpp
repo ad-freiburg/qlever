@@ -1044,10 +1044,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // This actually processes the query and sends the result in the
   // requested format.
+  AD_LOG_TIME_START(processQueryAndSendResult);
   co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
                                   plannedQuery.value(),
                                   plannedQuery.value().queryExecutionTree_,
                                   requestTimer, cancellationHandle);
+  AD_LOG_TIME_END(processQueryAndSendResult);
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"
