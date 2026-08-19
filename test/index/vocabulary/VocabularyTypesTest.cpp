@@ -103,6 +103,34 @@ TEST(VocabBatchLookupData, MakeOwnedVocabBatchCopiesViews) {
   EXPECT_NE((*result)[0].data(), a.data());
 }
 
+TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
+  auto firstOwner = std::make_shared<StringVectorVocabBatchLookupData>();
+  firstOwner->buffer() = {"alpha", "beta"};
+  firstOwner->views() = {firstOwner->buffer()[0], firstOwner->buffer()[1]};
+  auto first = StringVectorVocabBatchLookupData::asResult(firstOwner);
+
+  auto secondOwner = std::make_shared<StringVectorVocabBatchLookupData>();
+  secondOwner->buffer() = {"gamma"};
+  secondOwner->views() = {secondOwner->buffer()[0]};
+  auto second = StringVectorVocabBatchLookupData::asResult(secondOwner);
+
+  const char* alphaData = (*first)[0].data();
+  const char* gammaData = (*second)[0].data();
+  std::vector<std::string_view> mixed{(*first)[0], (*second)[0], (*first)[1]};
+  std::vector<VocabBatchLookupResult> owners{std::move(first),
+                                             std::move(second)};
+  firstOwner.reset();
+  secondOwner.reset();
+
+  auto result = keepAliveVocabBatch(std::move(owners), std::move(mixed));
+  ASSERT_EQ(result->size(), 3u);
+  EXPECT_EQ((*result)[0], "alpha");
+  EXPECT_EQ((*result)[1], "gamma");
+  EXPECT_EQ((*result)[2], "beta");
+  EXPECT_EQ((*result)[0].data(), alphaData);
+  EXPECT_EQ((*result)[1].data(), gammaData);
+}
+
 // Tests for `PmrVocabBatchLookupData`: the `monotonic_buffer_resource` backing
 // used when words are produced incrementally with sizes not known up front
 // (e.g. decompressing one word at a time in `CompressedVocabulary`). Each word

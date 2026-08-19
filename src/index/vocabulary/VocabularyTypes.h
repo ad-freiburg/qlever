@@ -138,23 +138,51 @@ inline VocabBatchLookupResult makeOwnedVocabBatch(
     ql::span<const std::string_view> words) {
   AD_CONTRACT_CHECK(!words.empty());
   auto data = std::make_shared<VocabBatchLookupData>();
-  size_t total = 0;
+
+  size_t totalBufferSize = 0;
   for (std::string_view word : words) {
-    total += word.size();
+    totalBufferSize += word.size();
   }
-  data->buffer().resize(total);
+  data->buffer().resize(totalBufferSize);
   data->views().resize(words.size());
+
   size_t offset = 0;
   char* buffer = data->buffer().data();
+
   for (size_t i = 0; i < words.size(); ++i) {
     const std::string_view word = words[i];
+
     if (!word.empty()) {
+      // TODO<marvin>: what does std::memcpy do exactly?
       std::memcpy(buffer + offset, word.data(), word.size());
     }
+
     data->views()[i] = std::string_view{buffer + offset, word.size()};
     offset += word.size();
   }
+
   return VocabBatchLookupData::asResult(std::move(data));
+}
+
+// A batch result that does not own character bytes. `buffer()` holds other
+// `VocabBatchLookupResult`s so their strings stay alive. `views()` points
+// into those children (or into longer-lived storage such as the internal
+// RAM vocabulary). Use this on mixed-owner paths instead of copying bytes.
+struct MultiOwnerVocabBatchLookupData
+    : VocabLookupDataCommonBase<std::vector<VocabBatchLookupResult>> {};
+
+// Keep `owners` alive and expose `viewsInInputOrder` as the public span.
+// The views must remain valid for as long as `owners` (and any immortal
+// storage they also point into) live. `owners` may be empty when every
+// view already has a longer lifetime than the result.
+inline VocabBatchLookupResult keepAliveVocabBatch(
+    std::vector<VocabBatchLookupResult> owners,
+    std::vector<std::string_view> viewsInInputOrder) {
+  AD_CONTRACT_CHECK(!viewsInInputOrder.empty());
+  auto data = std::make_shared<MultiOwnerVocabBatchLookupData>();
+  data->buffer() = std::move(owners);
+  data->views() = std::move(viewsInInputOrder);
+  return MultiOwnerVocabBatchLookupData::asResult(std::move(data));
 }
 
 // Generic sequential fallback implementations of the batch-lookup interface,

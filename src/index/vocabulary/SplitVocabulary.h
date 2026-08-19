@@ -197,54 +197,72 @@ class SplitVocabulary {
   }
 
   // Partition `indices` by marker and forward each group to the matching
-  // underlying `lookupBatch`. Result order matches `indices`, including
+  // underlying `lookupBatch`. The result order matches `indices`, including
   // duplicates and mixed markers. `OnDiskCompressedGeoSplit` therefore
   // reaches the on-disk batch path instead of walking `operator[]`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
 
-    std::array<std::vector<size_t>, numberOfVocabs> slotsPerMarker;
-    std::array<std::vector<size_t>, numberOfVocabs> unmarkedPerMarker;
-    for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
-      const uint8_t marker = getMarker(idx);
-      slotsPerMarker[marker].push_back(static_cast<size_t>(i));
-      unmarkedPerMarker[marker].push_back(getVocabIndex(idx));
+    std::array<std::vector<size_t>, numberOfVocabs> resultPositionByMarker;
+    std::array<std::vector<size_t>, numberOfVocabs>
+        underlyingVocabIndicesByMarker;
+
+    for (auto [resultPosition, markedIndex] :
+         ::ranges::views::enumerate(indices)) {
+      const uint8_t marker = getMarker(markedIndex);
+      resultPositionByMarker[marker].push_back(
+          static_cast<size_t>(resultPosition));
+
+      underlyingVocabIndicesByMarker[marker].push_back(
+          getVocabIndex(markedIndex));
     }
 
-    std::array<VocabBatchLookupResult, numberOfVocabs> batches;
-    uint8_t usedMarkers = 0;
-    uint8_t lastUsedMarker = 0;
+    std::array<VocabBatchLookupResult, numberOfVocabs> lookupResultByMarker;
+    uint8_t numNonemptyMarkers = 0;
+    uint8_t lastNonemptyMarker = 0;
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (unmarkedPerMarker[marker].empty()) {
+      if (underlyingVocabIndicesByMarker[marker].empty()) {
         continue;
       }
-      batches[marker] = std::visit(
+
+      lookupResultByMarker[marker] = std::visit(
           [&](const auto& vocab) {
-            return vocab.lookupBatch(unmarkedPerMarker[marker]);
+            return vocab.lookupBatch(underlyingVocabIndicesByMarker[marker]);
           },
           underlying_[marker]);
-      AD_CORRECTNESS_CHECK(batches[marker]->size() ==
-                           unmarkedPerMarker[marker].size());
-      ++usedMarkers;
-      lastUsedMarker = marker;
+
+      AD_CORRECTNESS_CHECK(lookupResultByMarker[marker]->size() ==
+                           underlyingVocabIndicesByMarker[marker].size());
+
+      ++numNonemptyMarkers;
+      lastNonemptyMarker = marker;
     }
 
     // One marker: return that batch. Mixed markers cannot share one buffer.
-    if (usedMarkers == 1) {
-      return std::move(batches[lastUsedMarker]);
+    if (numNonemptyMarkers == 1) {
+      return std::move(lookupResultByMarker[lastNonemptyMarker]);
     }
 
-    std::vector<std::string_view> assembled(indices.size());
+    std::vector<std::string_view> viewsInInputOrder(indices.size());
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (!batches[marker]) {
+      if (lookupResultByMarker[marker] == nullptr) {
         continue;
       }
-      for (auto [slot, word] :
-           ::ranges::views::zip(slotsPerMarker[marker], *batches[marker])) {
-        assembled[slot] = word;
+
+      for (auto [resultPosition, lookupResult] : ::ranges::views::zip(
+               resultPositionByMarker[marker], *lookupResultByMarker[marker])) {
+        viewsInInputOrder[resultPosition] = lookupResult;
       }
     }
-    return makeOwnedVocabBatch(assembled);
+
+    std::vector<VocabBatchLookupResult> owners;
+    owners.reserve(numNonemptyMarkers);
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (lookupResultByMarker[marker] != nullptr) {
+        owners.push_back(std::move(lookupResultByMarker[marker]));
+      }
+    }
+    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
   }
 
   //____________________________________________________________________________

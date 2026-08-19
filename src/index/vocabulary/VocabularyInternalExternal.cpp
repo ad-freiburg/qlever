@@ -60,7 +60,11 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
       assembled[slot] = word;
     }
   }
-  return makeOwnedVocabBatch(assembled);
+  std::vector<VocabBatchLookupResult> owners;
+  if (disk) {
+    owners.push_back(std::move(disk));
+  }
+  return keepAliveVocabBatch(std::move(owners), std::move(assembled));
 }
 
 // _____________________________________________________________________________
