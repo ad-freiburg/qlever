@@ -129,26 +129,45 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
   // pattern graph and the query, see `MaterializedViewsQueryAnalysis`) is not
   // restricted to the "star" and "chain" shapes above: it also accepts
   // patterns the old special-cased star/chain code used to reject solely
-  // because its predicate-keyed lookup could not represent them.
-  auto generalPatternRewrite = [&qlv, &manager](std::string query,
-                                                source_location sourceLocation =
-                                                    AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    expectSuitableForRewrite(qlv, manager, "generalPatternView", query);
-  };
+  // because its predicate-keyed lookup could not represent them. Each case
+  // checks (like the other rewrite tests above) that the query plans to
+  // exactly the expected view scan, not merely that some rewrite was found.
+  auto generalPatternView =
+      std::bind_front(&viewScanSimple, "generalPatternView");
 
   // Two arms with the same predicate (rejected by the old star cache, which
-  // needed distinct predicates as its lookup key).
-  generalPatternRewrite("SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }");
+  // needed distinct predicates as its lookup key). Since both arms are
+  // structurally and semantically interchangeable here, either may end up
+  // bound to which of the two (identically named, since view and query are
+  // the same text) object variables -- same ambiguity as
+  // `simpleStarJoinPredicateTwice` above, hence `AnyOf`.
+  expectSuitableForRewrite(
+      qlv, "generalPatternView", "SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 }",
+      ::testing::AnyOf(generalPatternView("?s", "?o1", "?o2"),
+                       generalPatternView("?s", "?o2", "?o1")));
+
   // A self-loop arm (subject and object of one triple are the same
-  // variable).
-  generalPatternRewrite("SELECT * { ?s <p1> ?s . ?s <p2> ?o1 }");
-  // Two arms converging on the same object variable instead of distinct ones.
-  generalPatternRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 }");
+  // variable), alongside a normal arm.
+  expectSuitableForRewrite(
+      qlv, "generalPatternView",
+      "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 }",
+      generalPatternView("?s", "?o1", "?o2"));
+
+  // Two arms converging on the same object variable instead of distinct
+  // ones, alongside a normal arm.
+  expectSuitableForRewrite(
+      qlv, "generalPatternView",
+      "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 }",
+      generalPatternView("?s", "?o1", "?o2"));
+
   // Two triples with no variable in common (a disconnected pattern); still a
   // valid embedding target since there is no shared-variable constraint
-  // between them to violate.
-  generalPatternRewrite("SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }");
+  // between them to violate. 4 distinct variables, so the 4th (?o2) is an
+  // additional (non-SPO) column of the view.
+  expectSuitableForRewrite(qlv, "generalPatternView",
+                           "SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }",
+                           viewScan("generalPatternView", "?s1", "?o1", "?s2",
+                                    std::nullopt, {{3, V{"?o2"}}}));
 }
 
 // _____________________________________________________________________________
