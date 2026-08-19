@@ -1775,7 +1775,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
-    ReplacementPlans replacementPlans) {
+    absl::FunctionRef<ReplacementPlans()> makeReplacementPlans) {
   auto [initialPlans, additionalFilters] =
       seedWithScansAndText(tg, children, textLimits);
   ql::ranges::move(additionalFilters, std::back_inserter(filters));
@@ -1797,6 +1797,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   TextLimitVec textLimitVec(textLimits.begin(), textLimits.end());
+  std::optional<ReplacementPlans> replacementPlans;
   for (auto& component : components | ql::views::values) {
     std::vector<const SubtreePlan*> g;
     uint64_t coveredNodes = 0;
@@ -1814,9 +1815,19 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
           << std::endl;
     }
 
+    // Pattern-based replacement plans are only needed for a component that is
+    // planned greedily: under dynamic programming a `QueryExecutionTree` is
+    // built for every subset of the component's triples, so the cache-key based
+    // rewriting in `QueryExecutionTree::readFromMaterializedView` already finds
+    // every materialized view that covers such a subset. Finding the patterns
+    // is a search, so it is done at most once and only if it is needed.
+    if (useGreedyPlanning && !replacementPlans.has_value()) {
+      replacementPlans = makeReplacementPlans();
+    }
     auto [applicableReplacementPlans, hasApplicableReplacementPlans] =
-        findApplicableReplacementPlans(replacementPlans, coveredNodes,
-                                       useGreedyPlanning);
+        useGreedyPlanning ? findApplicableReplacementPlans(
+                                replacementPlans.value(), coveredNodes)
+                          : std::pair<ReplacementPlans, bool>{};
 
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
@@ -3456,13 +3467,14 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   // is where these cache keys are matched.
   planner_._qec->materializedViewsManager()
       .registerCacheKeysWithFixedFirstColumn(planner_._qec, candidateTriples_);
-  auto replacementPlans =
-      planner_.createMaterializedViewJoinReplacements(candidateTriples_);
+  auto makeReplacementPlans = [this]() {
+    return planner_.createMaterializedViewJoinReplacements(candidateTriples_);
+  };
   auto tg = planner_.createTripleGraph(&candidateTriples_);
   auto lastRow =
       planner_
           .fillDpTab(tg, rootPattern_->_filters, rootPattern_->textLimits_,
-                     candidatePlans_, std::move(replacementPlans))
+                     candidatePlans_, makeReplacementPlans)
           .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
@@ -3484,8 +3496,7 @@ void QueryPlanner::GraphPatternPlanner::visitDescribe(
 // _______________________________________________________________
 std::pair<QueryPlanner::ReplacementPlans, bool>
 QueryPlanner::findApplicableReplacementPlans(
-    ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
-    bool useGreedyPlanning) {
+    ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds) {
   // TODO<ullingerc> This could be hash-map based if we would return the
   // indices in the create helper and pass them as part of `replacementPlans`.
 
@@ -3512,16 +3523,14 @@ QueryPlanner::findApplicableReplacementPlans(
   // Filter the plans to be disjunctive for greedy planning. This is done in
   // reversed order of the number of triples they cover, s.t. plans covering
   // more triples are preferred over smaller ones.
-  if (useGreedyPlanning) {
-    uint64_t nodesCoveredByReplacementPlans = 0;
-    for (auto& plans : applicableReplacementPlans | ql::views::reverse) {
-      ql::erase_if(plans, [&](SubtreePlan& plan) {
-        bool res =
-            (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
-        nodesCoveredByReplacementPlans |= plan._idsOfIncludedNodes;
-        return res;
-      });
-    }
+  uint64_t nodesCoveredByReplacementPlans = 0;
+  for (auto& plans : applicableReplacementPlans | ql::views::reverse) {
+    ql::erase_if(plans, [&](SubtreePlan& plan) {
+      bool res =
+          (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
+      nodesCoveredByReplacementPlans |= plan._idsOfIncludedNodes;
+      return res;
+    });
   }
 
   return {std::move(applicableReplacementPlans), hasApplicableReplacementPlans};
