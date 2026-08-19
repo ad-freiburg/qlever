@@ -19,8 +19,10 @@ env:
 
 concurrency:
   # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
-  # directly fall back to the run id which is always distinct. Note: the commit sha the same between the
-  # tag and commit push which produce differently tagged images.
+  # directly fall back to the run id which is always distinct.
+  #
+  # NOTE: The commit sha is the same between the tag and commit push, which produce differently
+  # tagged images.
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.run_id}}'
   cancel-in-progress: true
 
