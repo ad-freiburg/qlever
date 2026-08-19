@@ -55,61 +55,6 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
-namespace {
-// Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
-// the log message and whether it requires a valid access token.
-struct CommandMeta {
-  std::string_view name;
-  std::string_view description;
-  bool requiresAuth;
-};
-
-constexpr std::array kCommands = {
-    CommandMeta{"stats", "get index statistics", false},
-    CommandMeta{"cache-stats", "get cache statistics", false},
-    CommandMeta{"clear-cache", "clear the cache (unpinned elements only)",
-                false},
-    CommandMeta{"clear-cache-complete",
-                "clear cache completely (including unpinned elements)", true},
-    CommandMeta{"clear-named-cache", "clear the cache for named results", true},
-    CommandMeta{"clear-delta-triples", "clear delta triples", true},
-    CommandMeta{"vacuum-delta-triples",
-                "vacuum (remove redundant) delta triples", true},
-    CommandMeta{"get-settings", "get server settings", false},
-    CommandMeta{"get-index-id", "get index ID", false},
-    CommandMeta{"dump-active-queries", "dump active queries", true},
-    CommandMeta{"rebuild-index", "rebuilding index", true},
-    CommandMeta{"write-materialized-view", "write materialized view", true},
-    CommandMeta{"load-materialized-view", "explicitly load materialized view",
-                true},
-    CommandMeta{"delete-materialized-view", "delete materialized view", true},
-};
-
-// Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
-// action being authorized, for the error message.
-void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
-  if (!accessTokenOk) {
-    throw HttpError(boost::beast::http::status::forbidden,
-                    absl::StrCat(actionName,
-                                 " requires a valid access token but no "
-                                 "access token was provided"));
-  }
-}
-
-// Look up metadata for `cmd` in `kCommands`, run the access-token check (if
-// required), and log it. `cmd` must name an entry in `kCommands` -- it always
-// comes from a literal used in the `process()` dispatch below.
-void dispatchLog(std::string_view cmd, bool accessTokenOk) {
-  auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name);
-  AD_CORRECTNESS_CHECK(it != kCommands.end());
-  if (it->requiresAuth) {
-    requireValidAccessToken(accessTokenOk, it->name);
-  }
-  AD_LOG_INFO << "Processing command \"" << it->name
-              << "\": " << it->description << std::endl;
-}
-}  // namespace
-
 // __________________________________________________________________________
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
@@ -548,12 +493,72 @@ nlohmann::json Server::processDeleteMaterializedView(
   return json{{"materialized-view-deleted", name}};
 }
 
+namespace {
+// Helpers used only by `Server::process` below, for dispatching its `cmd=`
+// URL parameter.
+namespace serverProcessHelpers {
+// Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
+// the log message and whether it requires a valid access token.
+struct CommandMeta {
+  std::string_view name;
+  std::string_view description;
+  bool requiresAuth;
+};
+
+constexpr std::array kCommands = {
+    CommandMeta{"stats", "get index statistics", false},
+    CommandMeta{"cache-stats", "get cache statistics", false},
+    CommandMeta{"clear-cache", "clear the cache (unpinned elements only)",
+                false},
+    CommandMeta{"clear-cache-complete",
+                "clear cache completely (including unpinned elements)", true},
+    CommandMeta{"clear-named-cache", "clear the cache for named results", true},
+    CommandMeta{"clear-delta-triples", "clear delta triples", true},
+    CommandMeta{"vacuum-delta-triples",
+                "vacuum (remove redundant) delta triples", true},
+    CommandMeta{"get-settings", "get server settings", false},
+    CommandMeta{"get-index-id", "get index ID", false},
+    CommandMeta{"dump-active-queries", "dump active queries", true},
+    CommandMeta{"rebuild-index", "rebuilding index", true},
+    CommandMeta{"write-materialized-view", "write materialized view", true},
+    CommandMeta{"load-materialized-view", "explicitly load materialized view",
+                true},
+    CommandMeta{"delete-materialized-view", "delete materialized view", true},
+};
+
+// Throw a 403 `HttpError` if `accessTokenOk` is false; `actionName` names the
+// action being authorized, for the error message.
+void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
+  if (!accessTokenOk) {
+    throw HttpError(boost::beast::http::status::forbidden,
+                    absl::StrCat(actionName,
+                                 " requires a valid access token but no "
+                                 "access token was provided"));
+  }
+}
+
+// Look up metadata for `cmd` in `kCommands`, run the access-token check (if
+// required), and log it. `cmd` must name an entry in `kCommands` -- it always
+// comes from a literal used in the `process()` dispatch below.
+void dispatchLog(std::string_view cmd, bool accessTokenOk) {
+  auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name);
+  AD_CORRECTNESS_CHECK(it != kCommands.end());
+  if (it->requiresAuth) {
+    requireValidAccessToken(accessTokenOk, it->name);
+  }
+  AD_LOG_INFO << "Processing command \"" << it->name
+              << "\": " << it->description << std::endl;
+}
+}  // namespace serverProcessHelpers
+}  // namespace
+
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
+  using namespace serverProcessHelpers;
   // Acquire the current index and the materialized views manager exactly once
   // for the whole request, under a single read lock. This way a concurrent
   // rebuild that swaps both in cannot make different helpers observe a
@@ -592,11 +597,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
 
   // We call `createJsonResponse` always with the same `request` parameter.
-  auto jsonResponse = [&request](json j) {
+  auto jsonResponse = [&request](const json& j) {
     return createJsonResponse(j, request);
   };
 
-  // We call `composeCacheStats()` always with the same parameters.
+  // We call `composeCacheStats()` always with the same parameters:
+  // `qlever()).cache()` and `qlever().namedResultCache()`.
   auto cacheStats = [&cache = qlever().cache(),
                      &namedResultCache = qlever().namedResultCache()]() {
     return composeCacheStats(cache, namedResultCache);
