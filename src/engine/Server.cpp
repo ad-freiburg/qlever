@@ -456,14 +456,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
             ad_utility::url_parser::sparqlOperation::Operation& operation,
             bool accessTokenOk, const ad_utility::Timer& requestTimer,
             const RequestT& request, ResponseT& send) {
-  // Extract name parameter for materialized view.
-  auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(parameters,
-                                                                  "view-name");
-  AD_CONTRACT_CHECK(name.has_value(),
-                    "Writing a materialized view requires a name to be set "
-                    "via the 'view-name' parameter");
-  AD_CONTRACT_CHECK(name.value() != "",
-                    "The name for the view may not be empty");
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
+  AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
 
   // Extract query body.
   auto query = std::visit(
@@ -502,7 +497,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       [name, query, requestTimer, cancellationHandle, timeLimit,
        this]() mutable {
         qlever().writeMaterializedView(
-            name.value(), std::move(query.query_), query.datasetClauses_,
+            name, std::move(query.query_), query.datasetClauses_,
             std::move(cancellationHandle), timeLimit.value(), requestTimer);
       },
       cancellationHandle);
@@ -511,7 +506,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Prevent regular query processing by removing the query from the request.
   operation = None{};
 
-  co_return nlohmann::json{{"materialized-view-written", name.value()}};
+  co_return nlohmann::json{{"materialized-view-written", name}};
 }
 
 // _____________________________________________________________________________
@@ -519,18 +514,38 @@ nlohmann::json Server::processLoadMaterializedView(
     const ad_utility::url_parser::ParamValueMap& parameters,
     SharedIndexAndView& indexAndViews,
     ad_utility::url_parser::sparqlOperation::Operation& operation) {
-  // Extract materialized view name parameter.
-  auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(parameters,
-                                                                  "view-name");
-  AD_CONTRACT_CHECK(name.has_value());
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
   auto qec = qlever().createQueryExecutionContext(indexAndViews);
-  indexAndViews->materializedViewsManager_.loadView(name.value(), qec.get());
+  indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
   // Prevent regular query processing by removing the query from the request.
   operation = None{};
 
-  return json{{"materialized-view-loaded", name.value()}};
+  return json{{"materialized-view-loaded", name}};
+}
+
+// _____________________________________________________________________________
+nlohmann::json Server::processDeleteMaterializedView(
+    const ad_utility::url_parser::ParamValueMap& parameters,
+    ad_utility::url_parser::sparqlOperation::Operation& operation) {
+  auto name =
+      qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
+
+  // Snapshot again instead of reusing the snapshot taken at the beginning of
+  // `process()` (see `clear-delta-triples` above for the same pattern), so
+  // that we delete the view from the index that is currently being served
+  // and not from a stale one that a concurrent rebuild has swapped out in the
+  // meantime. Deleting from a stale manager is not unsafe (the rebuild called
+  // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
+  // `deleteView` throw), it would just needlessly fail.
+  indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
+
+  // Prevent regular query processing by removing the query from the request.
+  operation = None{};
+
+  return json{{"materialized-view-deleted", name}};
 }
 
 // _____________________________________________________________________________
@@ -581,7 +596,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     return createJsonResponse(j, request);
   };
 
-  // We call '()` always with the same parameters.
+  // We call `composeCacheStats()` always with the same parameters.
   auto cacheStats = [&cache = qlever().cache(),
                      &namedResultCache = qlever().namedResultCache()]() {
     return composeCacheStats(cache, namedResultCache);
@@ -657,29 +672,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         parameters, indexAndViews, parsedHttpRequest.operation_));
   } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
     dispatchLog(*cmd, accessTokenOk);
-
-    // Extract materialized view name parameter.
-    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        parameters, "view-name");
-    AD_CONTRACT_CHECK(name.has_value(),
-                      "Deleting a materialized view requires a name to be set "
-                      "via the 'view-name' parameter");
-
-    // Snapshot again instead of using `indexAndViews` from the beginning of
-    // this function (see `clear-delta-triples` above for the same pattern), so
-    // that we delete the view from the index that is currently being served and
-    // not from a stale one that a concurrent rebuild has swapped out in the
-    // meantime. Deleting from a stale manager is not unsafe (the rebuild called
-    // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
-    // `deleteView` throw), it would just needlessly fail.
-    indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name.value());
-
-    // Construct simple response JSON.
-    nlohmann::json json{{"materialized-view-deleted", name.value()}};
-    response = jsonResponse(json);
-
-    // Prevent regular query processing by removing the query from the request.
-    parsedHttpRequest.operation_ = None{};
+    response = jsonResponse(processDeleteMaterializedView(
+        parameters, parsedHttpRequest.operation_));
   }
 
   // Ping with or without message.

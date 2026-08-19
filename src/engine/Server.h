@@ -208,6 +208,15 @@ class Server {
       SharedIndexAndView& indexAndViews,
       ad_utility::url_parser::sparqlOperation::Operation& operation);
 
+  // Handle a `delete-materialized-view` command: extract the view name from
+  // `parameters`, delete it via a freshly taken index/views snapshot (not the
+  // one from the beginning of `process()`, so that a concurrent rebuild
+  // cannot make this operate on a stale manager), and reset `operation` to
+  // `None{}`. Synchronous, like `processLoadMaterializedView` above.
+  nlohmann::json processDeleteMaterializedView(
+      const ad_utility::url_parser::ParamValueMap& parameters,
+      ad_utility::url_parser::sparqlOperation::Operation& operation);
+
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
   // Unlike `processVacuumDeltaTriples`/`processWriteMaterializedView` above,
