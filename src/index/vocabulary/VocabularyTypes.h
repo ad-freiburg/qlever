@@ -182,9 +182,10 @@ bool viewBorrowsIndexRam(std::string_view view,
 // Reject a `keepAliveVocabBatch` call that names no lifetime source, or a
 // view that borrows neither `owners` nor `indexRamWords`.
 template <typename IndexRamWordRange>
-void checkKeepAliveViews(const std::vector<VocabBatchLookupResult>& owners,
-                         const std::vector<std::string_view>& viewsInInputOrder,
-                         const IndexRamWordRange& indexRamWords) {
+void checkKeepAliveViews(
+    const std::vector<VocabBatchLookupResult>& owners,
+    [[maybe_unused]] const std::vector<std::string_view>& viewsInInputOrder,
+    const IndexRamWordRange& indexRamWords) {
   const bool hasIndexRamWords = !ql::ranges::empty(indexRamWords);
   AD_CONTRACT_CHECK(!owners.empty() || hasIndexRamWords);
 
