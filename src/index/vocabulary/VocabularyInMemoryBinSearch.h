@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -30,8 +31,12 @@ class VocabularyInMemoryBinSearch
   using Indices = std::vector<uint64_t>;
 
  private:
-  // The actual storage.
-  Words words_;
+  // The actual storage. Held through a `shared_ptr` so that a
+  // `VocabBatchLookupResult` can share ownership of the word bytes its
+  // `string_view`s point into: the buffer then outlives `close()` and even the
+  // vocabulary itself for as long as a result still references it. Never null;
+  // `close()` installs a fresh empty buffer rather than clearing in place.
+  std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
   Indices indices_;
 
  public:
@@ -52,8 +57,8 @@ class VocabularyInMemoryBinSearch
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {
-    AD_CORRECTNESS_CHECK(indices_.size() == words_.size());
-    return words_.size();
+    AD_CORRECTNESS_CHECK(indices_.size() == words_->size());
+    return words_->size();
   }
 
   // Return the word with index `index`. If this index is not part of the
@@ -86,8 +91,13 @@ class VocabularyInMemoryBinSearch
   void close();
 
   // Const access to the underlying words.
-  auto begin() const { return words_.begin(); }
-  auto end() const { return words_.end(); }
+  auto begin() const { return words_->begin(); }
+  auto end() const { return words_->end(); }
+
+  // Shared ownership of the word bytes. A batch-lookup result that hands out
+  // `string_view`s into this vocabulary stores this pointer, so the bytes
+  // cannot be freed while the result is alive.
+  const std::shared_ptr<const Words>& wordStorage() const { return words_; }
 
   // Generic serialization support.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {

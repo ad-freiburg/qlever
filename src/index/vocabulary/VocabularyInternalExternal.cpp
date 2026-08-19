@@ -60,12 +60,16 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
       assembled[slot] = word;
     }
   }
-  std::vector<VocabBatchLookupResult> owners;
+  // Every view in `assembled` points either into the disk batch or into
+  // `internalVocab_`'s word storage. Share ownership of both, so the result
+  // keeps its own bytes alive and does not depend on this vocabulary (or the
+  // index holding it) outliving the result.
+  std::vector<VocabBatchOwner> owners;
   if (disk) {
     owners.push_back(std::move(disk));
   }
-  return keepAliveVocabBatch(std::move(owners), std::move(assembled),
-                             internalVocab_);
+  owners.push_back(internalVocab_.wordStorage());
+  return keepAliveVocabBatch(std::move(owners), std::move(assembled));
 }
 
 // _____________________________________________________________________________
