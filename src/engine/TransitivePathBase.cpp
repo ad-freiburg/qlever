@@ -244,7 +244,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       // (This was previously implemented in copyColumns but had to
       // be moved in order to accommodate of multiple input tables of which only
       // the total number of columns must match).
-      AD_CORRECTNESS_CHECK(inputColsCount == INPUT_WIDTH);
+      AD_CORRECTNESS_CHECK(inputColsCount == INPUT_WIDTH || INPUT_WIDTH == 0);
       AD_CORRECTNESS_CHECK(inputColsCount +
                                (graphVariable_.has_value() ? 3 : 2) ==
                            table.numColumns());
@@ -670,7 +670,8 @@ void TransitivePathBase::copyColumns(const PayloadTable& inputTable,
                                      size_t outputColOffset) const {
   // Since there might be multiple payload tables we can only say that the size
   // of every one of them may not be greater than their total amount of columns.
-  AD_CORRECTNESS_CHECK(inputTable->numColumns() <= INPUT_WIDTH);
+  AD_CORRECTNESS_CHECK(inputTable->numColumns() <= INPUT_WIDTH ||
+                       INPUT_WIDTH == 0);
 
   size_t inCol = 0;
   size_t outCol = 2 + outputColOffset;
