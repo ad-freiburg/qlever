@@ -10,6 +10,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
+#include <chrono>
 #include <functional>
 #include <string_view>
 
@@ -2148,4 +2149,47 @@ TEST(MaterializedViewsManager, viewFilesOnDisk) {
               ::testing::UnorderedElementsAre(
                   MaterializedView::getFilenameBase(base, "viewA"),
                   MaterializedView::getFilenameBase(base, "viewB") + ".spo"));
+}
+
+// _____________________________________________________________________________
+// Regression test for the `materialized-view-pattern-match-budget` runtime
+// parameter: a budget too small to finish even a single successful search (a
+// 2-edge chain needs at least 2 candidate attempts) must not find the match
+// and must log a warning, while the default budget still finds it.
+TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase,
+                                              " <s1> <p0> <o1> .\n");
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  manager.writeViewToDisk(
+      "budgetChain",
+      qlv.parseAndPlanQuery("SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }"));
+  auto view = manager.getView("budgetChain", qec.get());
+  qpc.analyzeView(view, qec.get());
+
+  auto plan = qlv.parseAndPlanQuery("SELECT * { ?s <bp1> ?m . ?m <bp2> ?o }");
+  const auto& triples =
+      plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+
+  {
+    auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto cleanupBudget = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchBudget_>(1);
+    EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("materialized-view-pattern-match-budget"));
+  }
+  {
+    auto cleanupBudget = setRuntimeParameterForTest<
+        &RuntimeParameters::materializedViewPatternMatchBudget_>(100'000);
+    EXPECT_FALSE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+  }
 }

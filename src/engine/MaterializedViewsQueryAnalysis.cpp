@@ -80,22 +80,55 @@ bool isLegalFixedValuePrefix(const ad_utility::HashSet<size_t>& boundColumns) {
 
 // Try to assign `viewVar` to `queryNode` inside `state`, respecting
 // injectivity (two distinct view variables must not be matched to the same
-// query-side variable or fixed value). Returns `false` (leaving `state`
-// unmodified) if `viewVar` is already assigned to a different node, or if
-// `queryNode` is already used by a different view variable.
+// query-side variable or fixed value) and an incremental,
+// sufficient-but-not-complete version of the fixed-value column-prefix rule
+// (see `isLegalFixedValuePrefix`): a binding that fixes `viewVar` to a
+// non-variable is rejected right away if some smaller-column view variable is
+// already bound to a query *variable*, since that combination can never
+// become legal later, regardless of what the rest of the search does. A
+// smaller-column view variable that simply hasn't been visited by the search
+// yet does not trigger this, so `isLegalFixedValuePrefix` remains the
+// authoritative check on a completed match; this is only an early exit so
+// that a run of already-doomed candidates does not, by itself, consume the
+// whole search budget before a legal candidate is ever tried. Returns
+// `false` (leaving `state` unmodified) on any rejection.
+//
+// Both checks scan `state.assignment_` (O(pattern size), not indexed by a
+// second map keyed on `TripleComponent`): pattern sizes are realistically
+// tiny (a handful of variables per materialized view), where the constant
+// overhead of hashing/maintaining a second map measurably outweighs turning
+// an already-cheap linear scan into a hash lookup.
 bool tryAssign(PatternMatchState& state, const Variable& viewVar,
-               const TripleComponent& queryNode) {
+               const TripleComponent& queryNode,
+               const VariableToColumnMap& viewCols) {
   auto it = state.assignment_.find(viewVar);
   if (it != state.assignment_.end()) {
     return it->second == queryNode;
   }
+  size_t col = queryNode.isVariable() ? 0 : viewCols.at(viewVar).columnIndex_;
   for (const auto& [otherVar, otherNode] : state.assignment_) {
     if (otherNode == queryNode) {
+      return false;
+    }
+    if (!queryNode.isVariable() && otherNode.isVariable() &&
+        viewCols.at(otherVar).columnIndex_ < col) {
       return false;
     }
   }
   state.assignment_.emplace(viewVar, queryNode);
   return true;
+}
+
+// Undo a `tryAssign(state, viewVar, ...)` call, but only if it actually
+// inserted a new binding (`wasNew`, computed by the caller before calling
+// `tryAssign`); a call that matched an already-existing identical binding
+// must be left alone; a call that was rejected never mutated `state`, so
+// undoing it is a no-op either way.
+void undoAssign(PatternMatchState& state, const Variable& viewVar,
+                bool wasNew) {
+  if (wasNew) {
+    state.assignment_.erase(viewVar);
+  }
 }
 
 // Recursively extend `state` (which already covers `edges[0, edgeIdx)`) by
@@ -106,18 +139,25 @@ bool tryAssign(PatternMatchState& state, const Variable& viewVar,
 // materialized view's defining query and a single SPARQL basic graph pattern
 // (both realistically well under a hundred triples), this is fast enough
 // without the extra preprocessing that large-graph subgraph-isomorphism
-// algorithms (VF3, RI, ...) rely on to pay for themselves.
+// algorithms (VF3, RI, ...) rely on to pay for themselves. Backtracking undoes
+// only the (at most two) bindings a candidate actually added (`undoAssign`),
+// rather than snapshotting and restoring the whole assignment, so a step's
+// cost does not grow with how much of the pattern is already matched.
 //
-// `stepsRemaining` bounds the total number of candidate assignments tried
-// across the whole search (not just this call), so that a pathological case
-// (e.g. many query triples sharing a predicate that a view's pattern also
-// uses repeatedly, which can blow up combinatorially) aborts the search for
-// this view instead of stalling query planning. Once it reaches `0`, no
-// further candidates are tried and the function returns; `results` may then
-// be missing some (or all) valid embeddings for this view.
+// `stepsRemaining` bounds the total number of *not-already-used* candidate
+// triples tried across the whole search (not just this call), so that a
+// pathological case (e.g. many query triples sharing a predicate that a
+// view's pattern also uses repeatedly, which can blow up combinatorially)
+// aborts the search for this view instead of stalling query planning. Once it
+// reaches `0`, no further candidates are tried and the function returns;
+// `results` may then be missing some (or all) valid embeddings for this view.
+// `triplesByPredicate.at(edge.predicate_)` is safe unconditionally: the
+// caller (`matchPattern`) already checked every edge's predicate is present
+// before starting the search.
 void extendMatch(const std::vector<PatternEdge>& edges, size_t edgeIdx,
                  const parsedQuery::BasicGraphPattern& triples,
                  const TriplesByPredicate& triplesByPredicate,
+                 const VariableToColumnMap& viewCols,
                  ad_utility::HashSet<size_t>& usedTriples,
                  PatternMatchState& state,
                  std::vector<PatternMatchState>& results,
@@ -127,32 +167,31 @@ void extendMatch(const std::vector<PatternEdge>& edges, size_t edgeIdx,
     return;
   }
   const auto& edge = edges[edgeIdx];
-  auto it = triplesByPredicate.find(edge.predicate_);
-  if (it == triplesByPredicate.end()) {
-    return;
-  }
-  for (size_t tripleIdx : it->second) {
+  for (size_t tripleIdx : triplesByPredicate.at(edge.predicate_)) {
+    if (usedTriples.contains(tripleIdx)) {
+      continue;
+    }
     if (stepsRemaining == 0) {
       return;
     }
     --stepsRemaining;
-    if (usedTriples.contains(tripleIdx)) {
-      continue;
-    }
     const auto& triple = triples._triples.at(tripleIdx);
-    auto assignmentBackup = state.assignment_;
-    if (tryAssign(state, edge.subject_, triple.s_) &&
-        tryAssign(state, edge.object_, triple.o_)) {
-      usedTriples.insert(tripleIdx);
-      state.coveredTriples_.push_back(tripleIdx);
+    bool subjectWasNew = !state.assignment_.contains(edge.subject_);
+    if (tryAssign(state, edge.subject_, triple.s_, viewCols)) {
+      bool objectWasNew = !state.assignment_.contains(edge.object_);
+      if (tryAssign(state, edge.object_, triple.o_, viewCols)) {
+        usedTriples.insert(tripleIdx);
+        state.coveredTriples_.push_back(tripleIdx);
 
-      extendMatch(edges, edgeIdx + 1, triples, triplesByPredicate, usedTriples,
-                  state, results, stepsRemaining);
+        extendMatch(edges, edgeIdx + 1, triples, triplesByPredicate, viewCols,
+                    usedTriples, state, results, stepsRemaining);
 
-      state.coveredTriples_.pop_back();
-      usedTriples.erase(tripleIdx);
+        state.coveredTriples_.pop_back();
+        usedTriples.erase(tripleIdx);
+      }
+      undoAssign(state, edge.object_, objectWasNew);
     }
-    state.assignment_ = assignmentBackup;
+    undoAssign(state, edge.subject_, subjectWasNew);
   }
 }
 
@@ -173,13 +212,15 @@ void QueryPatternCache::matchPattern(
     }
   }
 
+  const auto& viewCols = pattern.view_->variableToColumnMap();
+
   std::vector<PatternMatchState> matches;
   ad_utility::HashSet<size_t> usedTriples;
   PatternMatchState state;
   size_t stepsRemaining = getRuntimeParameter<
       &RuntimeParameters::materializedViewPatternMatchBudget_>();
-  extendMatch(pattern.edges_, 0, triples, triplesByPredicate, usedTriples,
-              state, matches, stepsRemaining);
+  extendMatch(pattern.edges_, 0, triples, triplesByPredicate, viewCols,
+              usedTriples, state, matches, stepsRemaining);
   if (stepsRemaining == 0) {
     AD_LOG_WARN << "Pattern matching for materialized view '"
                 << pattern.view_->name()
@@ -189,7 +230,6 @@ void QueryPatternCache::matchPattern(
                 << std::endl;
   }
 
-  const auto& viewCols = pattern.view_->variableToColumnMap();
   for (auto& match : matches) {
     ad_utility::HashSet<size_t> boundColumns;
     for (const auto& [viewVar, node] : match.assignment_) {
