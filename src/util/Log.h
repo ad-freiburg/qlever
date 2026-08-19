@@ -73,12 +73,11 @@ using enum LogLevel::Enum;
 // also introduces a branch at every single call site, which is unfriendly to
 // coverage measurements. The `LogLock` temporary is held for the entire `<<`
 // chain and released at the semicolon that ends the statement.
-#define AD_LOG_BRANCHING(x)                                           \
-  if (x > LOGLEVEL || x > ::ad_utility::detail::runtimeLogLevel.load( \
-                              std::memory_order_relaxed))             \
-    ;                                                                 \
-  else                                                                \
-    (::ad_utility::detail::LogLock{::ad_utility::detail::logMutex},   \
+#define AD_LOG_BRANCHING(x)                                         \
+  if (!::ad_utility::detail::logLevelIsEnabled(x))                  \
+    ;                                                               \
+  else                                                              \
+    (::ad_utility::detail::LogLock{::ad_utility::detail::logMutex}, \
      ::ad_utility::Log::getLog(x))  // NOLINT
 
 // The branchless logger: a plain function call that always returns a stream
