@@ -88,6 +88,9 @@ constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
+const DLine expectLitShortRealWorldLine{DPoint{7.8412948, 47.9977308},
+                                        DPoint{7.8450491, 47.9946000}};
+
 // University building 101 in Freiburg: ca. 1611 square-meters (osmway:33903391)
 constexpr std::string_view litSmallRealWorldPolygon1 =
     "\"POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
@@ -410,10 +413,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
-  EXPECT_EQ(parseRes1.wktType_, util::geo::WKTType::POINT);
-  EXPECT_EQ(parseRes1.actualCrs_, util::geo::CRSType::CRS84);
-  EXPECT_EQ(parseRes1.sourceCrs_, util::geo::CRSType::CRS84);
-  ASSERT_TRUE(parseRes1.parsedWkt_.has_value());
+  EXPECT_THAT(parseRes1, parseResultNear(ParseResult{expectedPoint, POINT,
+                                                     defaultCrs, defaultCrs}));
   auto parsed1 = parseRes1.parsedWkt_.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
@@ -438,10 +439,9 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   EXPECT_EQ(computeMetricLength(parsed1).length(), 0);
   auto parseRes2 = parseWkt(litShortRealWorldLine);
-  EXPECT_EQ(parseRes2.wktType_, 2);
-  EXPECT_EQ(parseRes2.actualCrs_, util::geo::CRSType::CRS84);
-  EXPECT_EQ(parseRes2.sourceCrs_, util::geo::CRSType::CRS84);
-  ASSERT_TRUE(parseRes2.parsedWkt_.has_value());
+  EXPECT_THAT(parseRes2,
+              parseResultNear(ParseResult{expectLitShortRealWorldLine,
+                                          LINESTRING, defaultCrs, defaultCrs}));
   auto parsed2 = parseRes2.parsedWkt_.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
   EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
@@ -451,16 +451,14 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   // Test different Crs Iris.
   auto parseRes3 = parseWkt(litPointWGS84);
-  EXPECT_EQ(parseRes3.wktType_, util::geo::WKTType::POINT);
-  EXPECT_EQ(parseRes3.actualCrs_, util::geo::CRSType::CRS84);
-  EXPECT_EQ(parseRes3.sourceCrs_, util::geo::CRSType::WGS84);
-  ASSERT_TRUE(parseRes3.parsedWkt_.has_value());
+  EXPECT_THAT(parseRes3,
+              parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
+                                          util::geo::CRSType::WGS84}));
 
   auto parseRes4 = parseWkt(litPointWebMerc);
-  EXPECT_EQ(parseRes4.wktType_, util::geo::WKTType::POINT);
-  EXPECT_EQ(parseRes4.actualCrs_, util::geo::CRSType::CRS84);
-  EXPECT_EQ(parseRes4.sourceCrs_, util::geo::CRSType::WEB_MERCATOR);
-  ASSERT_TRUE(parseRes4.parsedWkt_.has_value());
+  EXPECT_THAT(parseRes4,
+              parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
+                                          util::geo::CRSType::WEB_MERCATOR}));
 }
 
 // ____________________________________________________________________________
@@ -677,12 +675,13 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
   // Test for `GeoPoint`.
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
-              parseResultNear(ParseResult{DPoint(2, 1), POINT, CRS84, CRS84}));
+              parseResultNear(ParseResult{DPoint(2, 1), POINT, defaultCrs,
+                                          CRSType::WGS84}));
 
   // Explicit test for a real-world WKT string.
   EXPECT_THAT(parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
               parseResultNear(ParseResult{expectedSmallRealWorldPolygon1,
-                                          POLYGON, CRS84, CRS84}));
+                                          POLYGON, defaultCrs, defaultCrs}));
 
   // Tests for other geometry types (WKT strings).
   auto literals = getAllTestLiterals();
@@ -704,13 +703,14 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
+    // TODO<yarox-1> Skip tests with a CRS IRI. Currently 'getWKT' cannot
+    // reconstruct with the appropriate IRI.
+    if ((literals[i] == litPointWGS84) || (literals[i] == litPointWebMerc))
+      continue;
+
     auto parsedWkt = geometries[i].parsedWkt_;
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
-
-    // TODO<yarox-1> Skip tests with a CRS IRI. Currently 'getWKT' cannot
-    // reconstruct with the appropriate IRI.
-    if ((i == 1) || (i == 2)) continue;
 
     // Test with `ParsedWKT` input.
     EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
@@ -789,15 +789,17 @@ TEST(GeometryInfoTest, ProjectionVisitor) {
   using namespace ad_utility::detail;
 
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-              parseResultNear(ParseResult{std::nullopt, NONE}));
+              parseResultNear(ParseResult{
+                  std::nullopt, NONE, CRSType::UNSUPPORTED, CRSType::CRS84}));
   EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
   EXPECT_THAT(
       projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
-      parseResultNear(ParseResult{
-          projectWebMerc(expectedSmallRealWorldPolygon1), POLYGON}));
+      parseResultNear(
+          ParseResult{projectWebMerc(expectedSmallRealWorldPolygon1), POLYGON,
+                      defaultCrs, defaultCrs}));
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litCollection}}),
-              parseResultNear(
-                  ParseResult{projectWebMerc(expectedCollection), COLLECTION}));
+              parseResultNear(ParseResult{projectWebMerc(expectedCollection),
+                                          COLLECTION, defaultCrs, defaultCrs}));
   EXPECT_THAT(projectWebMerc(expectedLine),
               utilLineNear(DLine{{222638.9816, 222684.2085},
                                  {445277.9632, 445640.1097}}));

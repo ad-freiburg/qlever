@@ -52,11 +52,12 @@ struct ParseResult {
   std::optional<ParsedWkt> parsedWkt_;
   WKTType wktType_;
   // The coordinate reference system in which 'parsedWkt_' is expressed.
-  CRSType actualCrs_ = CRSType::CRS84;
+  CRSType actualCrs_;
   // The CRS that was specified in the original WKT literal's IRI (before
   // projection).
-  CRSType sourceCrs_ = CRSType::CRS84;
+  CRSType sourceCrs_;
 };
+constexpr inline CRSType defaultCrs = CRSType::CRS84;
 
 template <typename T>
 CPP_concept WktSingleGeometryType =
@@ -92,7 +93,7 @@ inline std::string addDatatype(const std::string_view wkt) {
 // If specified the geometry will be projected to a specific spatial reference
 // system.
 inline ParseResult parseWkt(const std::string_view& wkt,
-                            CRSType projCrs = CRSType::CRS84) {
+                            CRSType projCrs = defaultCrs) {
   auto wktLiteral = removeDatatype(wkt);
   auto c = wktLiteral.c_str();
   std::optional<ParsedWkt> parsed = std::nullopt;
@@ -162,6 +163,9 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case NONE:
+        // Set actual CRS type to unsupported as wkt type is invalid.
+        projCrs = CRSType::UNSUPPORTED;
+        break;
       default:
         break;
     }
@@ -467,18 +471,18 @@ static constexpr MetricAreaVisitor computeMetricArea;
 // containing a geometry for `pb_util`.
 struct ParseGeoPointOrWktVisitor {
   ParseResult operator()(const GeoPoint& point,
-                         CRSType projCrs = CRSType::CRS84) const {
+                         CRSType projCrs = defaultCrs) const {
     return ParseResult{geoPointToUtilPoint(point, projCrs), WKTType::POINT,
-                       projCrs};
+                       projCrs, CRSType::WGS84};
   }
 
   ParseResult operator()(const std::string& wkt,
-                         CRSType projCrs = CRSType::CRS84) const {
+                         CRSType projCrs = defaultCrs) const {
     return parseWkt(wkt, projCrs);
   }
 
   ParseResult operator()(const GeoPointOrWkt& geoPointOrWkt,
-                         CRSType projCrs = CRSType::CRS84) const {
+                         CRSType projCrs = defaultCrs) const {
     return std::visit(
         [projCrs](const auto& value) {
           return ParseGeoPointOrWktVisitor{}(value, projCrs);
@@ -488,7 +492,7 @@ struct ParseGeoPointOrWktVisitor {
 
   template <typename T>
   ParseResult operator()(const std::optional<T>& geoPointOrWkt,
-                         CRSType projCrs = CRSType::CRS84) const {
+                         CRSType projCrs = defaultCrs) const {
     if (!geoPointOrWkt.has_value()) {
       return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
                          CRSType::UNSUPPORTED};
