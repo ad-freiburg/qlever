@@ -9,7 +9,7 @@ using std::string;
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
   AD_CORRECTNESS_CHECK(
-      words_->empty() && indices_.empty(),
+      words_->size() == 0 && indices_.empty(),
       "Calling open on the same vocabulary twice is probably a bug");
   {
     auto words = std::make_shared<Words>();
