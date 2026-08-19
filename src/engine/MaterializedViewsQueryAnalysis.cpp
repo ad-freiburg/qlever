@@ -18,6 +18,7 @@
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/VariableCounter.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/VariantRangeFilter.h"
@@ -534,6 +535,203 @@ BindExpressionAndTargetCol extractBindExpressions(
                 varToColMap.at(bind._target).columnIndex_});
   }
   return map;
+}
+
+// _____________________________________________________________________________
+namespace {
+
+// The top-level triples of `parsed`, that is the triples of all
+// `BasicGraphPattern`s that are direct children of the root graph pattern.
+// These are the only triples in which `substituteFirstColumn` substitutes.
+template <typename Query, typename Func>
+void forEachTopLevelTriple(Query& parsed, Func func) {
+  for (auto& pattern : parsed._rootGraphPattern._graphPatterns) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(pattern)) {
+      for (auto& triple : pattern.getBasic()._triples) {
+        func(triple);
+      }
+    }
+  }
+}
+
+// Call `func` for the subject and the object of `triple`, if they are the
+// given `variable`. The predicate is deliberately not visited: a variable
+// predicate cannot be substituted by a `TripleComponent` (see
+// `substituteFirstColumn`, which detects such an occurrence because it is
+// counted by the `VariableCounter` but not here).
+template <typename Func>
+void forEachMatchingSide(SparqlTriple& triple, const Variable& variable,
+                         Func func) {
+  for (TripleComponent* side : {&triple.s_, &triple.o_}) {
+    if (side->isVariable() && side->getVariable() == variable) {
+      func(*side);
+    }
+  }
+}
+
+// One position in a view's own query at which the variable of its first column
+// occurs: the IRI of that triple's predicate, and whether the variable is the
+// triple's subject (as opposed to its object). Used to find the candidate
+// values for a fixed first column in a query, without having to try every
+// fixed value that occurs anywhere in it.
+struct FirstColumnAnchor {
+  std::string_view predicate_;
+  bool isSubject_;
+};
+
+// The `FirstColumnAnchor`s of `variable` in the top-level triples of `parsed`.
+// The `string_view`s of the result point into `parsed`.
+std::vector<FirstColumnAnchor> firstColumnAnchors(const ParsedQuery& parsed,
+                                                  const Variable& variable) {
+  std::vector<FirstColumnAnchor> anchors;
+  forEachTopLevelTriple(parsed, [&](const SparqlTriple& triple) {
+    auto predicate = triple.getSimplePredicate();
+    if (!predicate.has_value()) {
+      return;
+    }
+    for (bool isSubject : {true, false}) {
+      const auto& side = isSubject ? triple.s_ : triple.o_;
+      if (side.isVariable() && side.getVariable() == variable) {
+        anchors.push_back({predicate.value(), isSubject});
+      }
+    }
+  });
+  return anchors;
+}
+
+// Hard cap on the number of candidate values considered per view and query.
+// Each one costs a full (but small) run of the query planner on the view's own
+// query, and the anchors already restrict the candidates to the fixed values
+// that occur with the right predicate in the right position, of which a real
+// query has one or two. ponytail: fixed constant, promote to a runtime
+// parameter only if a real workload needs it tuned.
+constexpr size_t kMaxCandidateValuesPerView = 8;
+
+}  // namespace
+
+// _____________________________________________________________________________
+bool substituteFirstColumn(ParsedQuery& parsed, const Variable& variable,
+                           const TripleComponent& value) {
+  // A `LIMIT`/`OFFSET` restricts the view to an (order-dependent, arbitrary)
+  // subset of its query's rows. The rows of that subset with the first column
+  // equal to `value` are not the same as the rows of the restricted query.
+  if (!parsed._limitOffset.isUnconstrained()) {
+    return false;
+  }
+
+  if (!parsed.hasSelectClause()) {
+    return false;
+  }
+  auto& select = parsed.selectClause();
+
+  // `GROUP BY` would have to group by something that is no longer a column,
+  // and simply dropping it is not equivalent: for a value that does not occur
+  // in the view, an implicit `GROUP BY` returns one row (with `COUNT` = 0,
+  // say), a scan on the view none. `ORDER BY` puts a `Sort` at the root of the
+  // view's query, which a scan on the view (sorted by the view's own columns)
+  // does not reproduce. `HAVING`, a trailing `VALUES` clause, and an alias in
+  // the `SELECT` clause may all refer to `variable`.
+  if (!parsed._groupByVariables.empty() || !parsed._orderBy.empty() ||
+      !parsed._havingClauses.empty() ||
+      parsed.postQueryValuesClause_.has_value() ||
+      !select.getAliases().empty()) {
+    return false;
+  }
+
+  // Only occurrences as the subject or object of a top-level triple are
+  // substituted below, so `variable` must not occur anywhere else: in a
+  // `FILTER`, a `BIND`, a subquery, as a predicate, and so on.
+  parsedQuery::VariableCounter counter;
+  counter(parsed._rootGraphPattern);
+  auto totalCount = ad_utility::findOptional(counter.counts(), variable);
+  size_t numSubstituted = 0;
+  forEachTopLevelTriple(parsed, [&](SparqlTriple& triple) {
+    forEachMatchingSide(triple, variable,
+                        [&](TripleComponent&) { ++numSubstituted; });
+  });
+  if (numSubstituted == 0 || !totalCount.has_value() ||
+      totalCount.value() != numSubstituted) {
+    return false;
+  }
+
+  forEachTopLevelTriple(parsed, [&](SparqlTriple& triple) {
+    forEachMatchingSide(triple, variable,
+                        [&value](TripleComponent& side) { side = value; });
+  });
+
+  // `variable` is not bound by the query anymore, so it must not be selected.
+  auto isVariable = [&variable](const Variable& var) {
+    return var == variable;
+  };
+  ql::erase_if(select.visibleVariables_, isVariable);
+  if (!select.isAsterisk()) {
+    auto selected = select.getSelectedVariables();
+    ql::erase_if(selected, isVariable);
+    if (selected.empty()) {
+      return false;
+    }
+    select.setSelected(std::move(selected));
+  } else if (select.visibleVariables_.empty()) {
+    return false;
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+void addCacheKeysWithFixedFirstColumn(
+    QueryExecutionContext* qec, const std::vector<ViewPtr>& views,
+    const parsedQuery::BasicGraphPattern& triples,
+    ViewCacheKeysWithFixedFirstColumn& result) {
+  for (const auto& view : views) {
+    const auto& parsed = view->parsedQuery();
+    auto variable = view->firstColumnVariable();
+    if (!parsed.has_value() || !variable.has_value()) {
+      continue;
+    }
+    auto anchors = firstColumnAnchors(parsed.value(), variable.value());
+    if (anchors.empty()) {
+      continue;
+    }
+
+    // The fixed values of the query's triples that sit at one of the anchors.
+    std::vector<TripleComponent> values;
+    for (const auto& triple : triples._triples) {
+      if (values.size() >= kMaxCandidateValuesPerView) {
+        break;
+      }
+      auto predicate = triple.getSimplePredicate();
+      if (!predicate.has_value()) {
+        continue;
+      }
+      for (const auto& anchor : anchors) {
+        if (anchor.predicate_ != predicate.value()) {
+          continue;
+        }
+        const auto& side = anchor.isSubject_ ? triple.s_ : triple.o_;
+        if (!side.isVariable() && !ad_utility::contains(values, side)) {
+          values.push_back(side);
+        }
+      }
+    }
+
+    for (const auto& value : values) {
+      // A key that is already known (from an earlier graph pattern of the same
+      // query, or from the view's other key) is kept.
+      auto insert = [&result, &view, &value](auto& cacheKeyAndCol) {
+        if (!cacheKeyAndCol.has_value()) {
+          return;
+        }
+        result.keys_.insert(
+            {std::move(cacheKeyAndCol.value().cacheKey_),
+             std::make_shared<ByCacheKeyInfo>(ByCacheKeyInfo{
+                 view, std::move(cacheKeyAndCol.value().columnMapping_),
+                 value})});
+      };
+      auto [full, withoutInvariant] = view->computeCacheKey(qec, value);
+      insert(full);
+      insert(withoutInvariant);
+    }
+  }
 }
 
 // _____________________________________________________________________________

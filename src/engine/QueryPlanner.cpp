@@ -3452,6 +3452,10 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  // Must happen before the `QueryExecutionTree`s below are built, because that
+  // is where these cache keys are matched.
+  planner_._qec->materializedViewsManager()
+      .registerCacheKeysWithFixedFirstColumn(planner_._qec, candidateTriples_);
   auto replacementPlans =
       planner_.createMaterializedViewJoinReplacements(candidateTriples_);
   auto tg = planner_.createTripleGraph(&candidateTriples_);
