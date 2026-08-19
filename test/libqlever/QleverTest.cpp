@@ -951,6 +951,19 @@ TEST(LibQlever, applyUpdate) {
   ASSERT_TRUE(plannedUpdate.parsedQuery().hasUpdateClause());
 
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // NOTE: This takes a fresh index snapshot, independent of the one
+  // `plannedUpdate` was planned against a few lines above. In general this
+  // is not thread-safe: if a concurrent index rebuild swapped in a new
+  // `IndexAndViews` between the two calls, `deltaTriples` here would belong
+  // to a different `Index` than the one `plannedUpdate` was planned
+  // against, violating `applyUpdate`'s precondition. This test gets away
+  // with it because it is single-threaded and nothing swaps the index in
+  // between. `PlannedQuery`/`QueryExecutionContext` currently don't expose
+  // a way to get back the exact snapshot a query was planned against (only
+  // a `const Index&`), so there is no easy way to avoid the second
+  // snapshot here yet. A future API that threads the `IndexAndViews`
+  // snapshot explicitly through parsing/planning/execution would close
+  // this gap, but that is a larger redesign, out of scope for now.
   auto snapshot = engine.indexAndViewsSnapshot();
   UpdateMetadata updateMetadata =
       snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(

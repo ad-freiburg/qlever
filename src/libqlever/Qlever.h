@@ -513,10 +513,21 @@ class Qlever {
   // Execute `plannedUpdate` (a `PlannedQuery` for which
   // `ParsedQuery::hasUpdateClause()` holds) against `deltaTriples`, and
   // return metadata about the update (timing, number of triples changed,
-  // etc.). The caller must have exclusive access to `deltaTriples`. Also
-  // clear the query and named-result caches, because all cache entries have
-  // been invalidated by the update anyway (the located-triples snapshot is
-  // part of the cache key).
+  // etc.). Also clear the query and named-result caches, because all cache
+  // entries have been invalidated by the update anyway (the located-triples
+  // snapshot is part of the cache key).
+  //
+  // `deltaTriples` must be obtained from the same `Index` that
+  // `plannedUpdate` was planned against (i.e. `plannedUpdate.getIndex()`),
+  // via `Index::deltaTriplesManager().modify(...)`, which also gives the
+  // caller the required exclusive access to it.
+  //
+  // NOTE: This is currently a low-level API, used internally by `Server`,
+  // which already has to obtain the `DeltaTriples` this way to plan the
+  // update against the correct `QueryExecutionContext` in the first place.
+  // A higher-level API that parses and executes an update in one call
+  // (without the caller having to manage the `DeltaTriples` reference itself)
+  // will be added in the future.
   UpdateMetadata applyUpdate(
       const PlannedQuery& plannedUpdate,
       ad_utility::SharedCancellationHandle cancellationHandle,

@@ -225,6 +225,8 @@ UpdateMetadata Qlever::applyUpdate(
     DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree();
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
+  AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
+                       &deltaTriples.getIndex());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
