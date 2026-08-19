@@ -259,3 +259,39 @@ TEST(Distinct, isDistinctBy) {
   EXPECT_FALSE(op.isDistinctBy(SC{0, 2}));
   EXPECT_FALSE(op.isDistinctBy(SC{0}));
 }
+
+// _____________________________________________________________________________
+TEST(Distinct, makeTreeWithStrippedColumns) {
+  IdTable input{makeIdTableFromVector(
+      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
+
+  auto qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input),
+      std::vector<std::optional<Variable>>{
+          {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}});
+
+  // Distinct keeps the original column 1 (?b).
+  // makeTreeWithStrippedColumns has no additional variables.
+  // Therefore, only ?b should remain, now at column index 0.
+  {
+    Distinct distinct{qec, std::move(values), {1}};
+    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree = distinct.makeTreeWithStrippedColumns(std::set<Variable>{});
+    ASSERT_TRUE(resultTree.has_value());
+    ASSERT_TRUE((*resultTree) != nullptr);
+    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
+
+    // check whether resultTree contains one column with name ?b
+    EXPECT_EQ(v2cMap.size(), 1);
+    EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
+    EXPECT_FALSE(v2cMap.contains(V{"?a"}));
+    EXPECT_FALSE(v2cMap.contains(V{"?c"}));
+    EXPECT_FALSE(v2cMap.contains(V{"?d"}));
+
+    // After stripping, ?b should have index 0 instead of index 1 as before.
+    ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?b"}).columnIndex_;
+    EXPECT_EQ(resultColumnIndex, 0);
+  }
+}
