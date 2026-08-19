@@ -329,13 +329,14 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 // NOTE: The block size of the permutation is not stored in an index, so the
 // converted permutation uses the default, exactly like a freshly built index
 // (`IndexImpl::blocksizePermutationPerColumn_`, which nothing but a unit test
-// ever changes). The blocks of the converted permutation may therefore differ
-// from the blocks of the permutation that it was converted from, which is
-// irrelevant for its content, but not for its metadata: a relation that is
-// large enough to occupy blocks of its own in the permutation that is converted
-// can be small enough to share a block with other relations in the converted
-// permutation. Such a relation has no `CompressedRelationMetadata` of its own
-// anymore, that metadata is derived from its block instead (see
+// ever changes, and correspondingly `blocksizeOfConvertedPermutations` here).
+// The blocks of the converted permutation may therefore differ from the blocks
+// of the permutation that it was converted from, which is irrelevant for its
+// content, but not for its metadata: a relation that is large enough to occupy
+// blocks of its own in the permutation that is converted can be small enough to
+// share a block with other relations in the converted permutation. Such a
+// relation has no `CompressedRelationMetadata` of its own anymore, that
+// metadata is derived from its block instead (see
 // `CompressedRelationReader::getMetadataForSmallRelation`). The number of
 // blocks, the `numRows_` and the multiplicities of the converted permutation
 // can therefore differ from those of the permutation that it was converted
@@ -345,7 +346,7 @@ IndexMetaData writePermutation(
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks) {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File{filename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
+      blocksizeOfConvertedPermutations());
   IndexMetaData metaData;
   auto callback =
       [&metaData](ql::span<const CompressedRelationMetadata> metadata) {

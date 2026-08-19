@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -18,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "global/MaterializedViewConstants.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -486,13 +488,15 @@ TEST_F(IndexFormatConverterTest, emptyBasenamesAreARequirementViolation) {
                                HasSubstr("must not be empty"));
 }
 
-// A fixture for the conversion of an index whose permutations have more than
-// one block. The checked-in index in the previous format (see
-// `oldIndexDirectory` above) has exactly one block per permutation, and it
-// cannot be enlarged, because the current code can no longer create an index in
-// that format. The tests below therefore build an index with the *current*
-// index builder and pretend that it is in the previous format, which works
-// because the two formats differ only in the numbering of the datatypes:
+// A fixture for the conversion of indexes with properties that the checked-in
+// index in the previous format (see `oldIndexDirectory` above) does not have:
+// permutations with more than one block, empty permutations, and a relation
+// that is large enough to have a metadata entry of its own. That index has
+// exactly one block per permutation and only tiny relations, and it cannot be
+// changed, because the current code can no longer create an index in that
+// format. The tests below therefore build an index with the *current* index
+// builder and pretend that it is in the previous format, which works because
+// the two formats differ only in the numbering of the datatypes:
 //
 // The conversion of an `Id` is the identity for every datatype that precedes
 // `Datatype::AuxVocabIndex` (which is the datatype that was inserted, see
@@ -570,6 +574,15 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
     ad_utility::makeOfstream(filename) << configuration.dump(4);
   }
 
+  // Load the converted index at `newBasename_` and return it.
+  Index loadConvertedIndex() const {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.usePatterns() = true;
+    index.loadAllPermutations() = true;
+    index.createFromOnDiskIndex(newBasename_, false);
+    return index;
+  }
+
   // Build an index from the given `turtleInput` with the settings for tests
   // (which use a block size of two triples per block, so that even a small
   // index has many blocks), pretend that it is in the previous format, and
@@ -603,10 +616,7 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
 
     convertIndexToCurrentFormat(oldBasename_, newBasename_);
 
-    Index newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
-    newIndex.usePatterns() = true;
-    newIndex.loadAllPermutations() = true;
-    newIndex.createFromOnDiskIndex(newBasename_, false);
+    Index newIndex = loadConvertedIndex();
     auto locatedTriples =
         newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
     size_t i = 0;
@@ -664,6 +674,118 @@ TEST_F(MultiBlockIndexFormatConverterTest, permutationsWithManyBlocks) {
   }
   auto numBlocks = convertAndExpectTheSameContent(turtle);
   EXPECT_THAT(numBlocks, ::testing::Each(::testing::Gt(size_t{2})));
+}
+
+// _____________________________________________________________________________
+TEST_F(MultiBlockIndexFormatConverterTest, convertEmptyIndex) {
+  // An index without any triples. All its permutations are empty, which means
+  // that they have no blocks at all, a case that the conversion has to handle
+  // separately: there is no block from which it could read the number of
+  // columns of the permutation (see `getNumColumns` in
+  // `IndexFormatConverter.cpp`), and there is no first and last triple that it
+  // could compare (see `verifyConvertedPermutation` there).
+  {
+    Index oldIndex = ad_utility::testing::makeTestIndex(
+        oldBasename_, ad_utility::testing::TestIndexConfig{""});
+    for (auto permutationEnum : Permutation::ALL) {
+      EXPECT_TRUE(oldIndex.getImpl()
+                      .getPermutation(permutationEnum)
+                      .metaData()
+                      .blockData()
+                      .empty())
+          << Permutation::toString(permutationEnum);
+    }
+  }
+  pretendThatTheIndexIsInThePreviousFormat();
+
+  convertIndexToCurrentFormat(oldBasename_, newBasename_);
+
+  // The converted index can be loaded, and all its permutations are still
+  // empty, both according to their metadata and when they are scanned.
+  Index newIndex = loadConvertedIndex();
+  auto locatedTriples =
+      newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  for (auto permutationEnum : Permutation::ALL) {
+    SCOPED_TRACE(Permutation::toString(permutationEnum));
+    const auto& permutation =
+        newIndex.getImpl().getPermutation(permutationEnum);
+    EXPECT_TRUE(permutation.metaData().blockData().empty());
+    EXPECT_EQ(permutation.metaData().totalElements(), 0u);
+    IdTable table = permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+            *locatedTriples),
+        {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+        *locatedTriples);
+    EXPECT_EQ(table.numRows(), 0u);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MultiBlockIndexFormatConverterTest, relationWithItsOwnMetadata) {
+  // Only a relation that fills more than 80% of a block of the converted
+  // permutation gets a `CompressedRelationMetadata` entry of its own; the
+  // metadata of a smaller relation is derived from the block that it shares
+  // with other relations (see
+  // `CompressedRelationReader::getMetadataForSmallRelation`). A permutation
+  // that consists only of small relations therefore never invokes the metadata
+  // callback of `writePermutation`, and with the default block size of the
+  // conversion, a large relation has more than 25000 rows, which is far too
+  // much for a unit test. The conversion is thus run with a block size of two
+  // triples per block, which is the same block size that the index that is
+  // converted is built with (see `convertAndExpectTheSameContent` above). A
+  // relation with two rows then already is large enough.
+  ad_utility::MemorySize previousBlocksize = blocksizeOfConvertedPermutations();
+  blocksizeOfConvertedPermutations() = 16_B;
+  absl::Cleanup restoreBlocksize = [previousBlocksize]() {
+    blocksizeOfConvertedPermutations() = previousBlocksize;
+  };
+
+  // The subject `<big>` has two triples, so it is a large relation in the `SPO`
+  // permutation, and the subject `<small>` has one triple, so it stays a small
+  // relation there.
+  std::string turtle =
+      "<http://example.org/big> <http://example.org/p> <http://example.org/o1> "
+      ".\n"
+      "<http://example.org/big> <http://example.org/p> <http://example.org/o2> "
+      ".\n"
+      "<http://example.org/small> <http://example.org/p> "
+      "<http://example.org/o1> .\n";
+  convertAndExpectTheSameContent(turtle);
+
+  // In the `SPO` permutation of the converted index, the large relation has a
+  // metadata entry of its own, which only the metadata callback of
+  // `writePermutation` can have added, and the small relation has none.
+  Index newIndex = loadConvertedIndex();
+  auto getId = ad_utility::testing::makeGetId(newIndex);
+  const auto& metaData =
+      newIndex.getImpl().getPermutation(Permutation::SPO).metaData();
+  auto largeRelation =
+      metaData.getMetaDataIfPresent(getId("<http://example.org/big>"));
+  ASSERT_TRUE(largeRelation.has_value());
+  EXPECT_EQ(largeRelation.value().numRows_, 2u);
+  EXPECT_FALSE(
+      metaData.getMetaDataIfPresent(getId("<http://example.org/small>"))
+          .has_value());
+}
+
+// _____________________________________________________________________________
+TEST(IndexFormatConverter, conversionDescription) {
+  std::string description = conversionDescription();
+  // The description names both index formats between which the converter
+  // converts, each with its pull request number and its date.
+  for (const auto& version : {sourceVersion, targetVersion}) {
+    EXPECT_THAT(description,
+                HasSubstr(absl::StrCat("PR = ", version.prNumber_)));
+    EXPECT_THAT(description,
+                HasSubstr(absl::StrCat("Date = ",
+                                       version.date_.toStringAndType().first)));
+  }
+  // It also states the difference between the two formats and that the index
+  // that is converted is not modified.
+  EXPECT_THAT(description, HasSubstr("auxiliary vocabulary"));
+  EXPECT_THAT(description,
+              HasSubstr("The index that is converted is not modified."));
 }
 
 // _____________________________________________________________________________

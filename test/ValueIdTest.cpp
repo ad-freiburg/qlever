@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <bitset>
+#include <string>
+#include <vector>
 
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
@@ -489,4 +491,78 @@ TEST(ValueId, canBeComparedBitwise) {
   EXPECT_TRUE(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
                   .canBeComparedBitwise());
   EXPECT_TRUE(Id::makeFromEncodedVal(738).canBeComparedBitwise());
+}
+
+// _____________________________________________________________________________
+TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
+  using namespace ad_utility::testing;
+  // Use a fresh index (and not the shared one of `getQec`), because the
+  // auxiliary vocabulary must not leak into other tests.
+  TestIndexConfig config{"<a> <b> <c> ."};
+  config.auxVocabWords = std::vector<std::string>{"<zzz>"};
+  Index index = makeTestIndex(gtestCurrentTestName(), std::move(config));
+  auto mkId = makeGetId(index);
+  const auto& ctx = index.getLocalVocabContext();
+
+  // `<b>` is stored in the vocabulary of the main index, so the position of
+  // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
+  // auxiliary vocabulary, so the position of `entryInAuxVocab` is of type
+  // `AuxVocabIndex`.
+  LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
+  LocalVocabEntry entryInAuxVocab = LocalVocabEntry::fromIriref("<zzz>", ctx);
+  Id localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
+  Id localVocabIdAux = Id::makeFromLocalVocabIndex(&entryInAuxVocab);
+  Id auxVocabId = Id::makeFromAuxVocabIndex(AuxVocabIndex::make(0));
+  // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
+  // one that is greater, and neither of them is a datatype that a position in
+  // the vocabularies can have.
+  Id intId = Id::makeFromInt(42);
+  Id dateId = Id::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
+
+  // `isDatatypeOfPositionInVocab(type) == true` and
+  // `otherType == LocalVocabIndex`: the position of the entry is compared to
+  // the left-hand `Id`.
+  EXPECT_LT(mkId("<a>"), localVocabId);
+  EXPECT_EQ(mkId("<b>"), localVocabId);
+  EXPECT_GT(mkId("<c>"), localVocabId);
+  // The same combination, but with `type == Datatype::AuxVocabIndex`. Note that
+  // every word of the auxiliary vocabulary is positioned after every word of
+  // the vocabulary of the main index.
+  EXPECT_EQ(auxVocabId, localVocabIdAux);
+  EXPECT_GT(auxVocabId, localVocabId);
+  // NOTE: The combination `isDatatypeOfPositionInVocab(type) == true` and
+  // `otherType != LocalVocabIndex` is unreachable. This point is only reached
+  // if exactly one of the two datatypes is `LocalVocabIndex`, so
+  // `otherType != LocalVocabIndex` implies `type == LocalVocabIndex`, which is
+  // none of the datatypes that a position can have.
+
+  // `isDatatypeOfPositionInVocab(type) == false`, but
+  // `otherType == LocalVocabIndex`: the position is not looked up at all, and
+  // the bits are compared instead.
+  EXPECT_LT(intId, localVocabId);
+  EXPECT_GT(dateId, localVocabId);
+
+  // `isDatatypeOfPositionInVocab(type) == false` and
+  // `otherType != LocalVocabIndex`, because `type == LocalVocabIndex`. This is
+  // the mirrored case, which the second condition of `compareThreeWay` handles.
+  // There, `type == LocalVocabIndex` is true and
+  // `isDatatypeOfPositionInVocab(otherType)` is true as well.
+  EXPECT_GT(localVocabId, mkId("<a>"));
+  EXPECT_EQ(localVocabId, mkId("<b>"));
+  EXPECT_LT(localVocabId, mkId("<c>"));
+  EXPECT_EQ(localVocabIdAux, auxVocabId);
+  EXPECT_LT(localVocabId, auxVocabId);
+  // Both operands of the first condition are false, and in the second condition
+  // `type == LocalVocabIndex` is true, but
+  // `isDatatypeOfPositionInVocab(otherType)` is false, so the bits are
+  // compared.
+  EXPECT_GT(localVocabId, intId);
+  EXPECT_LT(localVocabId, dateId);
+  // NOTE: For the second condition, the combination
+  // `type != LocalVocabIndex` and `isDatatypeOfPositionInVocab(otherType) ==
+  // true` is unreachable by the same argument as above: `type !=
+  // LocalVocabIndex` implies `otherType == LocalVocabIndex`, which is none of
+  // the datatypes that a position can have. Its remaining combination
+  // (`type != LocalVocabIndex` and `otherType == LocalVocabIndex`) is the case
+  // of `intId` and `dateId` above.
 }

@@ -13,7 +13,9 @@
 #include <string>
 
 #include "global/Id.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/IndexFormatVersion.h"
+#include "util/MemorySize/MemorySize.h"
 
 // The conversion of an index from the previous on-disk format to the current
 // one, see `convertIndexToCurrentFormat` below. This is what the standalone
@@ -55,6 +57,20 @@ std::string conversionDescription();
 // type `LocalVocabIndex`, which must never be stored on disk (such an `Id`
 // holds a pointer into the memory of the process that created it).
 Id convertId(Id id);
+
+// The block size (per column) with which the permutations of the converted
+// index are written. It is the default block size of the index builder, so that
+// the converted permutations have exactly the blocks that a freshly built index
+// would have. It is not `const`, so that a unit test can set it to a much
+// smaller value; with the default, a relation only gets a
+// `CompressedRelationMetadata` of its own if it has more than 25000 rows, which
+// no unit test can afford to build (see `writePermutation` in the
+// implementation).
+inline ad_utility::MemorySize& blocksizeOfConvertedPermutations() {
+  static ad_utility::MemorySize blocksize =
+      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
+  return blocksize;
+}
 
 // Convert the index with the base name `oldBasename` from the source format to
 // the target format and write the result to the base name `newBasename`. The
