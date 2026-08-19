@@ -166,15 +166,23 @@ inline VocabBatchLookupResult makeOwnedVocabBatch(
 
 // A batch result that does not own character bytes. `buffer()` holds other
 // `VocabBatchLookupResult`s so their strings stay alive. `views()` points
-// into those children (or into longer-lived storage such as the internal
-// RAM vocabulary). Use this on mixed-owner paths instead of copying bytes.
+// into those children, or into storage that outlives this object.
 struct MultiOwnerVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<VocabBatchLookupResult>> {};
 
-// Keep `owners` alive and expose `viewsInInputOrder` as the public span.
-// The views must remain valid for as long as `owners` (and any immortal
-// storage they also point into) live. `owners` may be empty when every
-// view already has a longer lifetime than the result.
+// Build a `VocabBatchLookupResult` whose public span is `viewsInInputOrder`.
+// Each view must point either into one of `owners` or into storage that
+// outlives the returned result (the in-memory internal vocabulary).
+//
+// `owners` are the child batches that those views borrow from. The result
+// holds those `shared_ptr`s, so dropping the caller's copies is safe.
+//
+// `owners` is empty when no child batch is involved. The only intended
+// case is `VocabularyInternalExternal` with every index a RAM hit:
+// `internalVocab_[idx]` views the index's in-memory words, which live as
+// long as the vocabulary, not as a `VocabBatchLookupResult`. The helper
+// still allocates this object so the `vector<string_view>` has an owner.
+// Do not pass views into temporaries with an empty `owners` list.
 inline VocabBatchLookupResult keepAliveVocabBatch(
     std::vector<VocabBatchLookupResult> owners,
     std::vector<std::string_view> viewsInInputOrder) {
