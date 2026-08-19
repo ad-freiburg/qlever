@@ -19,9 +19,12 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <tuple>
+#include <type_traits>
 
 #include "backports/keywords.h"
 #include "util/EnumWithStrings.h"
+#include "util/Forward.h"
 #include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
@@ -66,16 +69,36 @@ class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
 using LogLevel = ad_utility::LogLevel;
 using enum LogLevel::Enum;
 
-// Both the compile-time level (LOGLEVEL) and the runtime level must pass for a
-// message to be logged. The LogLock temporary is held for the entire <<
+// The branching logger: both the compile-time level (LOGLEVEL) and the runtime
+// level must pass for a message to be logged. Nothing after the `<<` is
+// evaluated for a suppressed message, which makes this variant efficient, but
+// also introduces a branch at every single call site, which is unfriendly to
+// coverage measurements. The `LogLock` temporary is held for the entire `<<`
 // chain and released at the semicolon that ends the statement.
-#define AD_LOG(x)                                                     \
+#define AD_LOG_BRANCHING(x)                                           \
   if (x > LOGLEVEL || x > ::ad_utility::detail::runtimeLogLevel.load( \
                               std::memory_order_relaxed))             \
     ;                                                                 \
   else                                                                \
     (::ad_utility::detail::LogLock{::ad_utility::detail::logMutex},   \
-     ::ad_utility::Log::getLog<x>())  // NOLINT
+     ::ad_utility::Log::getLog(x))  // NOLINT
+
+// The branchless logger: a plain function call that always returns a stream
+// (see `ad_utility::getLogStreamBranchless`). For a suppressed message that
+// stream discards its input, so the arguments after the `<<` are always
+// evaluated (which is less efficient), but the call site contains no branch at
+// all (which is friendly to coverage measurements, as the single branch lives
+// in this header instead of in each of the hundreds of call sites).
+#define AD_LOG_BRANCHLESS(x) ::ad_utility::getLogStreamBranchless(x)
+
+// The logger that is actually used by the `AD_LOG_...` macros below. This is
+// the only place where the choice between the two styles above is made; it is
+// controlled by the `BRANCHLESS_LOGGING` CMake option.
+#ifdef QLEVER_BRANCHLESS_LOGGING
+#define AD_LOG(x) AD_LOG_BRANCHLESS(x)
+#else
+#define AD_LOG(x) AD_LOG_BRANCHING(x)
+#endif
 
 // Macros for the different log levels.
 #define AD_LOG_FATAL AD_LOG(LogLevel::Enum::FATAL)
@@ -99,6 +122,22 @@ static constexpr LogLevel::Enum defaultLogLevel =
 // Defaults to the less verbose of INFO and the compile-time LOGLEVEL so that
 // the runtime level is never set to something the binary cannot log.
 inline std::atomic<LogLevel::Enum> runtimeLogLevel = defaultLogLevel;
+// A stream that discards everything that is written to it. It is created from
+// a null `streambuf`, so it is in a `bad` state from the start and every
+// insertion into it is a cheap no-op. It is used by the branchless logger for
+// messages that are suppressed by the compile-time or the runtime log level.
+inline std::ostream& nullStream() {
+  static std::ostream stream{nullptr};
+  return stream;
+}
+
+// Return true if a message with the given `level` has to be logged, according
+// to the compile-time (`LOGLEVEL`) and the runtime log level.
+inline bool logLevelIsEnabled(LogLevel::Enum level) {
+  return level <= LOGLEVEL &&
+         level <= runtimeLogLevel.load(std::memory_order_relaxed);
+}
+
 // Non-[[nodiscard]] wrapper so the comma-operator pattern doesn't trigger
 // -Wunused-value warnings (std::lock_guard itself is [[nodiscard]] in libc++).
 struct LogLock {
@@ -162,11 +201,14 @@ const static std::locale commaLocale(std::locale(), new CommaNumPunct());
 // The class that actually does the logging.
 class Log {
  public:
-  template <LogLevel::Enum LEVEL>
-  static std::ostream& getLog() {
+  // Write the prefix (timestamp and log level) of a single log message to the
+  // global logging stream and return that stream. Note: The caller has to hold
+  // the `detail::logMutex` while calling this and while writing the message
+  // itself, see the `AD_LOG_BRANCHING` macro and the `LogStreamProxy` class.
+  static std::ostream& getLog(LogLevel::Enum level) {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
-           << getTimeStamp() << " - " << LogLevel{LEVEL}.toString() << ": ";
+           << getTimeStamp() << " - " << LogLevel{level}.toString() << ": ";
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
@@ -176,6 +218,97 @@ class Log {
                             absl::LocalTimeZone());
   }
 };
+
+// The stream-like object that is returned by the branchless logger (see the
+// `AD_LOG_BRANCHLESS` macro). It holds the global log mutex and a reference to
+// the stream that the message is written to. As it is returned by value, the
+// temporary lives until the end of the full expression, so the mutex is held
+// for the complete `<<` chain, exactly as for the branching logger. Note that
+// the mutex is also held for suppressed messages, so (as for a message that is
+// actually logged with the branching logger) the arguments of a log message
+// must not log anything themselves.
+class LogStreamProxy {
+ private:
+  detail::LogLock lock_;
+  std::ostream& stream_;
+
+ public:
+  // Acquire the global log mutex and write the prefix of the message with the
+  // given `level`. Note: `lock_` is declared before `stream_`, so the mutex is
+  // acquired before `Log::getLog` writes the prefix.
+  explicit LogStreamProxy(LogLevel::Enum level)
+      : lock_{detail::logMutex},
+        stream_{detail::logLevelIsEnabled(level) ? Log::getLog(level)
+                                                 : detail::nullStream()} {}
+
+  // Write `arg` to the underlying stream. The result is the stream itself, so
+  // that the remaining arguments of the `<<` chain bypass this proxy.
+  template <typename T>
+  std::ostream& operator<<(T&& arg) const {
+    return stream_ << AD_FWD(arg);
+  }
+
+  // Overload for stream manipulators like `std::endl`, for which the template
+  // argument of the overload above cannot be deduced.
+  std::ostream& operator<<(std::ostream& (*manipulator)(std::ostream&)) const {
+    return stream_ << manipulator;
+  }
+};
+
+// The implementation of the `AD_LOG_BRANCHLESS` macro: always return a stream,
+// which discards the message if it is suppressed by the compile-time or the
+// runtime log level. Note: The `LogStreamProxy` is neither copyable nor
+// movable, returning it by value works because of the guaranteed copy elision
+// for prvalues.
+inline LogStreamProxy getLogStreamBranchless(LogLevel::Enum level) {
+  return LogStreamProxy{level};
+}
+
+namespace detail {
+// Write a single log argument to `stream`. Invocable arguments are invoked and
+// their result is written instead, see `lazyLogArgs` below.
+template <typename T>
+void streamLogArg(std::ostream& stream, const T& arg) {
+  if constexpr (std::is_invocable_v<const T&>) {
+    stream << arg();
+  } else {
+    stream << arg;
+  }
+}
+}  // namespace detail
+
+// A group of log arguments that is only written when it is actually inserted
+// into a log stream. Arguments that are invocable are invoked at that point,
+// which makes the computation of expensive log messages lazy also for
+// arguments that are not the first one in a `<<` chain. Note that with the
+// branchless logger the invocables are invoked even for a suppressed message
+// (only the output is discarded), while the branching logger doesn't even
+// evaluate the arguments of a suppressed message. Only use this as a temporary
+// inside a log statement, as it stores references to its arguments.
+template <typename... Args>
+class LazyLogArgs {
+ private:
+  std::tuple<const Args&...> args_;
+
+ public:
+  explicit LazyLogArgs(const Args&... args) : args_{args...} {}
+
+  friend std::ostream& operator<<(std::ostream& stream,
+                                  const LazyLogArgs& lazyArgs) {
+    std::apply(
+        [&stream](const auto&... args) {
+          (detail::streamLogArg(stream, args), ...);
+        },
+        lazyArgs.args_);
+    return stream;
+  }
+};
+
+// Deduce the template arguments of `LazyLogArgs`, see there for details.
+template <typename... Args>
+LazyLogArgs<Args...> lazyLogArgs(const Args&... args) {
+  return LazyLogArgs<Args...>{args...};
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_LOG_H
