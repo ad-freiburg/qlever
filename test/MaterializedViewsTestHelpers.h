@@ -292,21 +292,26 @@ inline void expectNotSuitableForRewrite(
 
 // _____________________________________________________________________________
 // The inverse of `expectNotSuitableForRewrite`: writes and loads a view from
-// `query` itself (so its pattern trivially embeds into the query's own
-// triples) and, like `qpExpect`, checks that planning `query` against it
-// produces exactly `matcher` -- not merely that *some* rewrite was found, but
-// that the specific resulting scan (view, columns, variable mapping) is the
-// expected one, the same way the other rewrite-correctness tests in this file
-// check their positive cases.
-template <typename ViewName, typename Query>
+// `viewQuery` and, like `qpExpect`, checks that planning `testQuery` against
+// it produces exactly `matcher` -- not merely that *some* rewrite was found,
+// but that the specific resulting scan (view, columns, variable mapping) is
+// the expected one, the same way the other rewrite-correctness tests in this
+// file check their positive cases. `testQuery` must not be satisfiable by
+// cache-key-based rewriting alone (see `QueryExecutionTree::
+// readFromMaterializedView`), or this would pass without ever exercising
+// pattern-based rewriting; the established way to ensure that (as in
+// `simpleStarPlusJoin`) is for `testQuery` to be `viewQuery` plus at least one
+// extra triple, so its cache key cannot equal the view's own.
+template <typename ViewName, typename ViewQuery, typename TestQuery>
 inline void expectSuitableForRewrite(
-    qlever::Qlever& qlv, const ViewName& viewName, const Query& query,
+    qlever::Qlever& qlv, const ViewName& viewName, const ViewQuery& viewQuery,
+    const TestQuery& testQuery,
     ::testing::Matcher<const QueryExecutionTree&> matcher,
     source_location sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto l = generateLocationTrace(sourceLocation);
-  qlv.writeMaterializedView(viewName, std::string{query});
+  qlv.writeMaterializedView(viewName, std::string{viewQuery});
   qlv.loadMaterializedView(viewName);
-  qpExpect(qlv, query, matcher, sourceLocation);
+  qpExpect(qlv, testQuery, matcher, sourceLocation);
 };
 
 }  // namespace materializedViewsTestHelpers
