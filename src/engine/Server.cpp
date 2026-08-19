@@ -33,6 +33,7 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "libqlever/Qlever.h"
+#include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
@@ -43,6 +44,7 @@
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/UrlParser.h"
 #include "util/http/websocket/MessageSender.h"
 
 using namespace std::string_literals;
@@ -513,6 +515,25 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 // _____________________________________________________________________________
+nlohmann::json Server::processLoadMaterializedView(
+    const ad_utility::url_parser::ParamValueMap& parameters,
+    SharedIndexAndView& indexAndViews,
+    ad_utility::url_parser::sparqlOperation::Operation& operation) {
+  // Extract materialized view name parameter.
+  auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(parameters,
+                                                                  "view-name");
+  AD_CONTRACT_CHECK(name.has_value());
+
+  auto qec = qlever().createQueryExecutionContext(indexAndViews);
+  indexAndViews->materializedViewsManager_.loadView(name.value(), qec.get());
+
+  // Prevent regular query processing by removing the query from the request.
+  operation = None{};
+
+  return json{{"materialized-view-loaded", name.value()}};
+}
+
+// _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
@@ -632,21 +653,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     response = jsonResponse(materializedViewStats.value());
   } else if (auto cmd = checkParameter("cmd", "load-materialized-view")) {
     dispatchLog(*cmd, accessTokenOk);
-
-    // Extract materialized view name parameter.
-    auto name = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        parameters, "view-name");
-    AD_CONTRACT_CHECK(name.has_value());
-
-    auto qec = qlever().createQueryExecutionContext(indexAndViews);
-    indexAndViews->materializedViewsManager_.loadView(name.value(), qec.get());
-
-    // Construct simple response JSON.
-    nlohmann::json json{{"materialized-view-loaded", name.value()}};
-    response = jsonResponse(json);
-
-    // Prevent regular query processing by removing the query from the request.
-    parsedHttpRequest.operation_ = None{};
+    response = jsonResponse(processLoadMaterializedView(
+        parameters, indexAndViews, parsedHttpRequest.operation_));
   } else if (auto cmd = checkParameter("cmd", "delete-materialized-view")) {
     dispatchLog(*cmd, accessTokenOk);
 

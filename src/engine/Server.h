@@ -33,6 +33,7 @@
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/UrlParser.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
@@ -194,6 +195,18 @@ class Server {
           ad_utility::url_parser::sparqlOperation::Operation& operation,
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send);
+
+  // Handle a `load-materialized-view` command: extract the view name from
+  // `parameters`, load it via `indexAndViews`'s materialized views manager,
+  // and reset `operation` to `None{}` so that `process()` doesn't also try to
+  // execute it as a regular query. Unlike `processWriteMaterializedView`
+  // above, this neither executes a query nor honors a timeout, so it runs
+  // synchronously and either returns its result or throws -- there's no
+  // optional-json/early-return convention needed here.
+  nlohmann::json processLoadMaterializedView(
+      const ad_utility::url_parser::ParamValueMap& parameters,
+      SharedIndexAndView& indexAndViews,
+      ad_utility::url_parser::sparqlOperation::Operation& operation);
 
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.
