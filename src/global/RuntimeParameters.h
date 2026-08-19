@@ -204,6 +204,15 @@ struct RuntimeParameters {
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
 
+  // Upper bound on the number of candidate assignments the pattern-based view
+  // rewriting's subgraph matching (see `MaterializedViewsQueryAnalysis`) will
+  // try per (view, query) pair before giving up on that view. Bounds the
+  // otherwise unbounded backtracking search against pathological cases (e.g.
+  // many triples sharing a predicate that a view's pattern also uses
+  // repeatedly).
+  SizeT materializedViewPatternMatchBudget_{
+      100'000, "materialized-view-pattern-match-budget"};
+
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
   // IRIs that do not start with any of the given prefixes are rejected.

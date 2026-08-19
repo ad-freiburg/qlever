@@ -17,6 +17,7 @@
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
+#include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
@@ -106,12 +107,21 @@ bool tryAssign(PatternMatchState& state, const Variable& viewVar,
 // (both realistically well under a hundred triples), this is fast enough
 // without the extra preprocessing that large-graph subgraph-isomorphism
 // algorithms (VF3, RI, ...) rely on to pay for themselves.
+//
+// `stepsRemaining` bounds the total number of candidate assignments tried
+// across the whole search (not just this call), so that a pathological case
+// (e.g. many query triples sharing a predicate that a view's pattern also
+// uses repeatedly, which can blow up combinatorially) aborts the search for
+// this view instead of stalling query planning. Once it reaches `0`, no
+// further candidates are tried and the function returns; `results` may then
+// be missing some (or all) valid embeddings for this view.
 void extendMatch(const std::vector<PatternEdge>& edges, size_t edgeIdx,
                  const parsedQuery::BasicGraphPattern& triples,
                  const TriplesByPredicate& triplesByPredicate,
                  ad_utility::HashSet<size_t>& usedTriples,
                  PatternMatchState& state,
-                 std::vector<PatternMatchState>& results) {
+                 std::vector<PatternMatchState>& results,
+                 size_t& stepsRemaining) {
   if (edgeIdx == edges.size()) {
     results.push_back(state);
     return;
@@ -122,6 +132,10 @@ void extendMatch(const std::vector<PatternEdge>& edges, size_t edgeIdx,
     return;
   }
   for (size_t tripleIdx : it->second) {
+    if (stepsRemaining == 0) {
+      return;
+    }
+    --stepsRemaining;
     if (usedTriples.contains(tripleIdx)) {
       continue;
     }
@@ -133,7 +147,7 @@ void extendMatch(const std::vector<PatternEdge>& edges, size_t edgeIdx,
       state.coveredTriples_.push_back(tripleIdx);
 
       extendMatch(edges, edgeIdx + 1, triples, triplesByPredicate, usedTriples,
-                  state, results);
+                  state, results, stepsRemaining);
 
       state.coveredTriples_.pop_back();
       usedTriples.erase(tripleIdx);
@@ -162,8 +176,18 @@ void QueryPatternCache::matchPattern(
   std::vector<PatternMatchState> matches;
   ad_utility::HashSet<size_t> usedTriples;
   PatternMatchState state;
+  size_t stepsRemaining = getRuntimeParameter<
+      &RuntimeParameters::materializedViewPatternMatchBudget_>();
   extendMatch(pattern.edges_, 0, triples, triplesByPredicate, usedTriples,
-              state, matches);
+              state, matches, stepsRemaining);
+  if (stepsRemaining == 0) {
+    AD_LOG_WARN << "Pattern matching for materialized view '"
+                << pattern.view_->name()
+                << "' exceeded the `materialized-view-pattern-match-budget`; "
+                   "some applicable rewrites using this view may have been "
+                   "missed for this query."
+                << std::endl;
+  }
 
   const auto& viewCols = pattern.view_->variableToColumnMap();
   for (auto& match : matches) {
