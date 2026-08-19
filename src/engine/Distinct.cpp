@@ -244,7 +244,8 @@ IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Distinct::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+Distinct::makeTreeWithStrippedColumns(
+    const std::set<Variable>& variables) const {
   std::set<Variable> newVariables;
   std::vector<Variable> distinctVars;
   const auto* vars = &variables;
@@ -268,7 +269,6 @@ Distinct::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const
     distinctColumnIndices.push_back(subtree->getVariableColumn(var));
   }
 
-  return ad_utility::makeExecutionTree<Distinct>(getExecutionContext(),
-                                             std::move(subtree),
-                                             distinctColumnIndices);
+  return ad_utility::makeExecutionTree<Distinct>(
+      getExecutionContext(), std::move(subtree), distinctColumnIndices);
 }
