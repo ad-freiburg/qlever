@@ -55,7 +55,7 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 using ad_utility::MediaType;
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
@@ -500,9 +500,9 @@ namespace serverProcessHelpers {
 // Metadata for a `cmd=<name>` URL parameter handled by `Server::process`:
 // the log message and whether it requires a valid access token.
 struct CommandMeta {
-  std::string_view name;
-  std::string_view description;
-  bool requiresAuth;
+  std::string_view name_;
+  std::string_view description_;
+  bool requiresAuth_;
 };
 
 constexpr std::array kCommands = {
@@ -541,13 +541,13 @@ void requireValidAccessToken(bool accessTokenOk, std::string_view actionName) {
 // required), and log it. `cmd` must name an entry in `kCommands` -- it always
 // comes from a literal used in the `process()` dispatch below.
 void dispatchLog(std::string_view cmd, bool accessTokenOk) {
-  auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name);
+  auto it = ql::ranges::find(kCommands, cmd, &CommandMeta::name_);
   AD_CORRECTNESS_CHECK(it != kCommands.end());
-  if (it->requiresAuth) {
-    requireValidAccessToken(accessTokenOk, it->name);
+  if (it->requiresAuth_) {
+    requireValidAccessToken(accessTokenOk, it->name_);
   }
-  AD_LOG_INFO << "Processing command \"" << it->name
-              << "\": " << it->description << std::endl;
+  AD_LOG_INFO << "Processing command \"" << it->name_
+              << "\": " << it->description_ << std::endl;
 }
 }  // namespace serverProcessHelpers
 }  // namespace

@@ -503,16 +503,20 @@ TEST(ServerTest, clearDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
 
+  auto expectCounts = [&server](DeltaTriplesCount expected) {
+    EXPECT_THAT(server.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedState()
+                    ->counts_,
+                testing::Optional(testing::Eq(expected)));
+  };
+
   auto insertRequest =
       makeRequest(http::verb::post, "/",
                   {{http::field::content_type, "application/sparql-update"},
                    {http::field::authorization, "Bearer accessToken"}},
                   "INSERT DATA { <d> <e> <f> }");
   EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
-  EXPECT_THAT(server.deltaTriplesManager()
-                  .getCurrentLocatedTriplesSharedState()
-                  ->counts_,
-              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+  expectCounts(DeltaTriplesCount{1, 0});
 
   auto clearRequest = [](std::optional<std::string> accessToken) {
     auto request = makeGetRequest("/?cmd=clear-delta-triples");
@@ -526,10 +530,7 @@ TEST(ServerTest, clearDeltaTriples) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.process(clearRequest(std::nullopt)),
       testing::HasSubstr("clear-delta-triples requires a valid access token"));
-  EXPECT_THAT(server.deltaTriplesManager()
-                  .getCurrentLocatedTriplesSharedState()
-                  ->counts_,
-              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+  expectCounts(DeltaTriplesCount{1, 0});
 
   // With a valid access token, the delta triples are cleared and the response
   // reports the (now empty) resulting counts.
@@ -538,16 +539,20 @@ TEST(ServerTest, clearDeltaTriples) {
   EXPECT_THAT(responseBodyAsJson(std::move(response)),
               testing::Optional(testing::Eq(
                   json{{"inserted", 0}, {"deleted", 0}, {"total", 0}})));
-  EXPECT_THAT(server.deltaTriplesManager()
-                  .getCurrentLocatedTriplesSharedState()
-                  ->counts_,
-              testing::Optional(testing::Eq(DeltaTriplesCount{0, 0})));
+  expectCounts(DeltaTriplesCount{0, 0});
 }
 
 // _____________________________________________________________________________
 TEST(ServerTest, vacuumDeltaTriples) {
   auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
   auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectCounts = [&server](DeltaTriplesCount expected) {
+    EXPECT_THAT(server.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedState()
+                    ->counts_,
+                testing::Optional(testing::Eq(expected)));
+  };
 
   // Without this, the single block of the (tiny) test index doesn't meet the
   // minimum size for `vacuum` to process it.
@@ -563,10 +568,7 @@ TEST(ServerTest, vacuumDeltaTriples) {
                    {http::field::authorization, "Bearer accessToken"}},
                   "INSERT DATA { <a> <b> <c> }");
   EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
-  EXPECT_THAT(server.deltaTriplesManager()
-                  .getCurrentLocatedTriplesSharedState()
-                  ->counts_,
-              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+  expectCounts(DeltaTriplesCount{1, 0});
 
   auto vacuumRequest = [](std::optional<std::string> accessToken) {
     auto request = makeGetRequest("/?cmd=vacuum-delta-triples");
@@ -580,10 +582,7 @@ TEST(ServerTest, vacuumDeltaTriples) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.process(vacuumRequest(std::nullopt)),
       testing::HasSubstr("vacuum-delta-triples requires a valid access token"));
-  EXPECT_THAT(server.deltaTriplesManager()
-                  .getCurrentLocatedTriplesSharedState()
-                  ->counts_,
-              testing::Optional(testing::Eq(DeltaTriplesCount{1, 0})));
+  expectCounts(DeltaTriplesCount{1, 0});
 
   // With a valid access token, the redundant insertion is vacuumed away and
   // the response reports the resulting stats.
@@ -592,10 +591,7 @@ TEST(ServerTest, vacuumDeltaTriples) {
   auto body = responseBodyAsJson(std::move(response));
   ASSERT_TRUE(body.has_value());
   EXPECT_EQ(body.value()["external"]["insertionsRemoved"], 1);
-  EXPECT_THAT(server.deltaTriplesManager()
-                  .getCurrentLocatedTriplesSharedState()
-                  ->counts_,
-              testing::Optional(testing::Eq(DeltaTriplesCount{0, 0})));
+  expectCounts(DeltaTriplesCount{0, 0});
 }
 
 // _____________________________________________________________________________

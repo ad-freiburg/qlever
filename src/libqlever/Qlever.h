@@ -27,6 +27,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "engine/RebuildIndexStrategy.h"
+#include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -525,9 +526,13 @@ class Qlever {
   // Completely clear the `QueryResultCache` (non-named).
   void clearQueryResultCache();
 
-  // Clear the delta triples of the currently active index (not a stale
-  // snapshot, even if a concurrent rebuild swaps the index while this is
-  // running) and return the resulting counts.
+  // Clear the delta triples of the index snapshot that is active when this
+  // is called, and return the resulting counts. Does not itself guard
+  // against a concurrent rebuild swapping in a different index while this
+  // runs -- `Server::clearDeltaTriples` gets that guarantee by scheduling
+  // this call onto its single-threaded update thread pool, which also
+  // serializes rebuild swaps; a caller that doesn't do the same has no such
+  // protection.
   //
   // NOTE: There is currently no test that exercises this directly through
   // `Qlever`, independent of the HTTP `Server` layer (covered today only via
