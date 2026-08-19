@@ -2152,13 +2152,9 @@ TEST(MaterializedViewsManager, viewFilesOnDisk) {
 }
 
 // _____________________________________________________________________________
-// Regression test for the `materialized-view-pattern-match-budget` runtime
-// parameter: a budget too small to finish even a single successful search (a
-// 2-edge chain needs at least 2 candidate attempts) must not find the match
-// and must log a warning, while the default budget still finds it. A budget
-// of exactly `0` is a distinct case (see `PatternMatchBudgetZeroDisables`
-// below): it deliberately disables pattern-based rewriting rather than being
-// an (accidentally) too-small budget, so it must not log a warning.
+// A budget too small for even one full match (a 2-edge chain needs >= 2
+// candidate attempts) finds nothing and logs a warning; the default budget
+// still finds the match.
 TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
@@ -2198,9 +2194,8 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
 }
 
 // _____________________________________________________________________________
-// A budget of exactly `0` is a valid, deliberate way to disable pattern-based
-// view rewriting (distinct from a too-small budget that was likely not meant
-// to reject every match): no match must be found, and no warning logged.
+// A budget of `0` deliberately disables pattern-based rewriting: no match is
+// found, and (unlike a too-small budget) no warning is logged.
 TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetZeroDisables) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,

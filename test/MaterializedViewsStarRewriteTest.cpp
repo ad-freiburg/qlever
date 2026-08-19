@@ -117,36 +117,22 @@ TEST_P(MaterializedViewsStarRewriteTest, starRewrite) {
                                 "joins was found");
   };
 
+  // Disconnected (fixed subject shares no variable with the other arm); see
+  // `MaterializedViewsGeneralPatternRewriteTest` for the fixed-object case,
+  // which shares `?s` and so *is* suitable for rewriting.
   noStarRewrite("SELECT * { <s1> <p1> ?o1 . ?s <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . <s1> <p2> ?o2 }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 } ");
-  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> <o2a> }");
-  noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2> ?o2 . ?s <p3> <o2a> }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?o2 ^<p2> ?s }");
   noStarRewrite("SELECT * { ?s <p1> ?o1 . ?s <p2>* ?o2 }");
 }
 
 // _____________________________________________________________________________
-// The general pattern matcher (subgraph isomorphism between the view's
-// pattern graph and the query, see `MaterializedViewsQueryAnalysis`) is not
-// restricted to the "star" and "chain" shapes tested above: it also accepts
-// patterns the old special-cased star/chain code used to reject solely
-// because its predicate-keyed lookup could not represent them. Each case
-// checks (like the other rewrite tests in this file) that the query plans to
-// exactly the expected view scan, not merely that some rewrite was found.
-//
-// Uses its own populated dataset (rather than the near-empty placeholder data
-// used by e.g. the budget tests) so the query planner's cost estimates
-// actually favor the view scan over a plain join of (mostly absent) triples;
-// otherwise these assertions would pass or fail based on cost-estimate noise
-// rather than on the matcher's correctness.
-//
-// Every test query below is the view's pattern *plus* an extra `<p9>` arm,
-// not the exact view-defining query: if it were the exact same query,
-// `QueryExecutionTree::readFromMaterializedView` would satisfy it via cache
-// key alone (the whole query's cache key equals the view's), without ever
-// consulting the pattern matcher under test here (as `simpleStarPlusJoin`
-// above relies on for the same reason).
+// Pattern shapes beyond "star" and "chain" that the general subgraph-matcher
+// (see `MaterializedViewsQueryAnalysis`) supports. Uses a populated dataset so
+// the planner's cost estimate favors the view scan. Each test query is the
+// view's pattern plus an extra `<p9>` arm, not the exact view-defining query,
+// so it can't be satisfied by cache-key matching alone.
 TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
   const std::string onDiskBase = gtestCurrentTestName();
   const std::string generalPatternTtl =
@@ -170,33 +156,25 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
       std::bind_front(&viewScanSimple, "generalPatternView");
   auto extraArm = h::IndexScanFromStrings("?s", "<p9>", "?o9");
 
-  // A self-loop arm (subject and object of one triple are the same
-  // variable), alongside a normal arm.
+  // A self-loop arm (subject == object).
   expectSuitableForRewrite(
       qlv, "generalPatternView",
       "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 }",
       "SELECT * { ?s <p1> ?s . ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }",
       h::Join(generalPatternView("?s", "?o1", "?o2"), extraArm));
 
-  // Two arms converging on the same object variable instead of distinct
-  // ones, alongside a normal arm.
+  // Two arms converging on the same object variable.
   expectSuitableForRewrite(
       qlv, "generalPatternView",
       "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 }",
       "SELECT * { ?s <p1> ?o1 . ?s <p2> ?o1 . ?s <p3> ?o2 . ?s <p9> ?o9 }",
       h::Join(generalPatternView("?s", "?o1", "?o2"), extraArm));
 
-  // Two arms with the same predicate (rejected by the old star cache, which
-  // needed distinct predicates as its lookup key). Unlike the cases above,
-  // this is checked directly against `QueryPatternCache` rather than through
-  // the full query planner: a view that self-joins a predicate against itself
-  // materializes the full cross-product of same-subject arm pairs, which
-  // (correctly) makes the query planner's cost estimate prefer a plain join
-  // over reading the view for basically any real data distribution -- this is
-  // the cost-based decision working as intended (see the class comment on
-  // `QueryPatternCache`), not something to route around with a "helpful"
-  // dataset. What's actually under test here is the matcher's correctness on
-  // this shape, so it is checked at that level directly.
+  // Two arms with the same predicate. Checked directly against
+  // `QueryPatternCache`, not through the planner: self-joining a predicate
+  // materializes a cross product, so the planner correctly prefers a plain
+  // join over the view for any real data -- only the matcher is under test
+  // here.
   {
     auto plan = qlv.parseAndPlanQuery(
         "SELECT * { ?s <p1> ?o1 . ?s <p1> ?o2 . ?s <p9> ?o9 }");
@@ -210,8 +188,7 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
     const auto& triples =
         plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
     auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
-    // Both ways of assigning the two (structurally interchangeable) `<p1>`
-    // triples to the view's two arms are valid embeddings.
+    // Both ways of assigning the two `<p1>` triples to the view's arms match.
     using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
     EXPECT_THAT(
         replacements,
@@ -221,12 +198,34 @@ TEST(MaterializedViewsGeneralPatternRewriteTest, generalPatternRewrite) {
                              ::testing::UnorderedElementsAre(0u, 1u)))));
   }
 
-  // Two triples with no variable in common (a disconnected pattern) can never
-  // be selected by the query planner even if cheaper (its DP table is built
-  // per connected component of the *query's* triple graph, before replacement
-  // plans are considered, so a replacement spanning two components is a
-  // subset of neither); such a view is therefore rejected right away, the
-  // same as any other unsupported shape.
+  // One arm's object is a fixed value from the view's own definition (e.g.
+  // `?x osmkey:railway "rail" ; geo:hasGeometry ?g`, a type/tag filter). Not
+  // disqualifying like a fixed value in the *query* (`simpleStarFixedObject`
+  // above): the view is already filtered to it, so it matches a query asking
+  // for that same value. Checked directly against `QueryPatternCache`, since
+  // the fixed arm has no column for `viewScan`'s e2e helper to name.
+  {
+    auto plan = qlv.parseAndPlanQuery(
+        "SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 . ?s <p9> ?o9 }");
+    auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+    manager.writeViewToDisk(
+        "fixedArmView",
+        qlv.parseAndPlanQuery("SELECT * { ?s <p2> <gp2a> . ?s <p3> ?o2 }"));
+    auto view = manager.getView("fixedArmView", qec.get());
+    materializedViewsQueryAnalysis::QueryPatternCache qpc;
+    qpc.analyzeView(view, qec.get());
+    const auto& triples =
+        plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+    auto replacements = qpc.makeJoinReplacementIndexScans(qec.get(), triples);
+    using materializedViewsQueryAnalysis::MaterializedViewJoinReplacement;
+    EXPECT_THAT(replacements,
+                ::testing::ElementsAre(
+                    AD_FIELD(MaterializedViewJoinReplacement, coveredTriples_,
+                             ::testing::UnorderedElementsAre(0u, 1u))));
+  }
+
+  // Disconnected pattern (no shared variable): rejected outright, since the
+  // planner could never select a replacement spanning two components.
   expectNotSuitableForRewrite(
       qlv, manager, "disconnectedPatternView",
       "SELECT * { ?s1 <p1> ?o1 . ?s2 <p2> ?o2 }",

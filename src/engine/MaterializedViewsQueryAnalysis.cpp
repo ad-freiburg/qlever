@@ -28,28 +28,21 @@ namespace materializedViewsQueryAnalysis {
 
 namespace {
 
-// Check whether `edges` (the view's pattern graph: nodes are variables, edges
-// connect a triple's subject and object) is connected, i.e. every edge is
-// reachable from `edges[0]` via edges sharing a variable. `edges` must be
-// non-empty.
-//
-// A disconnected pattern is a perfectly valid subgraph-isomorphism target in
-// principle (`extendMatch` places no connectivity requirement on it), but the
-// query planner's DP table is built separately per connected component of the
-// *query's* triple graph (`QueryPlanner::fillDpTab`, one call per component of
-// `QueryGraph::computeConnectedComponents`), with cartesian products only
-// inserted between components afterwards. A replacement plan whose covered
-// triples span more than one of the query's components is therefore a subset
-// of neither component's node bitmask and can never be selected by
-// `findApplicableReplacementPlans`, regardless of cost. Rejecting a
-// disconnected view pattern here avoids ever running the (necessarily futile)
-// search for it.
+// Whether `edges` (the view's pattern graph) is connected, i.e. every edge is
+// reachable from `edges[0]` via a shared variable. `edges` must be non-empty.
+// Rejected here rather than left to the query planner: its DP table is built
+// per connected component of the *query's* triple graph, so a replacement
+// spanning more than one component could never be selected regardless of
+// cost. Fixed edge sides (see `PatternEdge`) don't connect anything.
 bool isConnected(const std::vector<PatternEdge>& edges) {
   AD_CORRECTNESS_CHECK(!edges.empty());
   ad_utility::HashMap<Variable, std::vector<size_t>> edgesByVariable;
   for (size_t i = 0; i < edges.size(); ++i) {
-    edgesByVariable[edges[i].subject_].push_back(i);
-    edgesByVariable[edges[i].object_].push_back(i);
+    for (const auto& side : {edges[i].subject_, edges[i].object_}) {
+      if (side.isVariable()) {
+        edgesByVariable[side.getVariable()].push_back(i);
+      }
+    }
   }
 
   ad_utility::HashSet<size_t> reached{0};
@@ -57,9 +50,11 @@ bool isConnected(const std::vector<PatternEdge>& edges) {
   while (!toVisit.empty()) {
     size_t current = toVisit.back();
     toVisit.pop_back();
-    for (const Variable& v :
-         {edges[current].subject_, edges[current].object_}) {
-      for (size_t neighbor : edgesByVariable.at(v)) {
+    for (const auto& side : {edges[current].subject_, edges[current].object_}) {
+      if (!side.isVariable()) {
+        continue;
+      }
+      for (size_t neighbor : edgesByVariable.at(side.getVariable())) {
         if (reached.insert(neighbor).second) {
           toVisit.push_back(neighbor);
         }
@@ -78,27 +73,25 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
   std::vector<PatternEdge> edges;
   edges.reserve(triples.size());
   for (const auto& triple : triples) {
-    // Variables as predicate and sequence property paths are not supported by
-    // query rewriting; the latter are expected to be replaced by joins during
-    // earlier stages of query planning.
+    // Variable predicates and non-trivial property paths are unsupported.
     auto predicate = triple.getSimplePredicate();
-    if (!predicate.has_value() || !triple.s_.isVariable() ||
-        !triple.o_.isVariable()) {
+    if (!predicate.has_value()) {
       return std::nullopt;
     }
-    auto subject = triple.s_.getVariable();
-    auto object = triple.o_.getVariable();
-    // All three variables must actually be columns of the view (e.g. this is
-    // not the case if they do not appear in the `SELECT` clause, or have been
-    // removed by aggregation).
-    if (!viewCols.contains(subject) || !viewCols.contains(object)) {
+    // At least one endpoint must be a variable, or the edge can't connect to
+    // the rest of the pattern (see `isConnected`).
+    if (!triple.s_.isVariable() && !triple.o_.isVariable()) {
       return std::nullopt;
     }
-    edges.push_back({std::move(subject), std::string{predicate.value()},
-                     std::move(object)});
+    // A variable endpoint must be a column of the view.
+    auto isUsableColumn = [&viewCols](const TripleComponent& side) {
+      return !side.isVariable() || viewCols.contains(side.getVariable());
+    };
+    if (!isUsableColumn(triple.s_) || !isUsableColumn(triple.o_)) {
+      return std::nullopt;
+    }
+    edges.push_back({triple.s_, std::string{predicate.value()}, triple.o_});
   }
-  // See `isConnected`: a disconnected pattern could never be used by the
-  // query planner anyway, so there is no point registering it.
   if (!isConnected(edges)) {
     return std::nullopt;
   }
@@ -108,43 +101,29 @@ std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
 // _____________________________________________________________________________
 namespace {
 
-// Check whether `boundColumnsMask` (bit `i` set iff view column `i` is bound
-// to a fixed value from the user's query) forms a legal prefix for a single
-// SPO-sorted view permutation: fixed values are only allowed in the
-// arrangements subject, subject+predicate, subject+predicate+object (see
-// `MaterializedView::throwIfColumnsHaveIllegalFixedValues`), i.e. only
-// `0b000`/`0b001`/`0b011`/`0b111`. The caller never sets a bit above 2 (a
-// payload column bound to a fixed value is rejected directly, see
-// `matchPattern`), so no separate "columns beyond index 2" check is needed
-// here.
+// Whether `boundColumnsMask` (bit `i` set iff view column `i` is bound to a
+// fixed value from the query) is a legal prefix for a single SPO-sorted view
+// permutation: only subject, subject+predicate, or subject+predicate+object
+// (`0b001`/`0b011`/`0b111`, or `0b000`) may be fixed.
 bool isLegalFixedValuePrefix(unsigned boundColumnsMask) {
   return boundColumnsMask == 0b000u || boundColumnsMask == 0b001u ||
          boundColumnsMask == 0b011u || boundColumnsMask == 0b111u;
 }
 
-// Try to assign `viewVar` to `queryNode` inside `state`, respecting
-// injectivity (two distinct view variables must not be matched to the same
-// query-side variable or fixed value) and an incremental,
-// sufficient-but-not-complete version of the fixed-value column-prefix rule
-// (see `isLegalFixedValuePrefix`): a binding that fixes `viewVar` to a
-// non-variable is rejected right away if some smaller-column view variable is
-// already bound to a query *variable*, since that combination can never
-// become legal later, regardless of what the rest of the search does. A
-// smaller-column view variable that simply hasn't been visited by the search
-// yet does not trigger this, so `isLegalFixedValuePrefix` remains the
-// authoritative check on a completed match; this is only an early exit so
-// that a run of already-doomed candidates does not, by itself, consume the
-// whole search budget before a legal candidate is ever tried. Returns
-// `false` (leaving `state` unmodified) on any rejection.
-//
-// Both checks scan `state.assignment_` (O(pattern size), not indexed by a
-// second map keyed on `TripleComponent`): pattern sizes are realistically
-// tiny (a handful of variables per materialized view), where the constant
-// overhead of hashing/maintaining a second map measurably outweighs turning
-// an already-cheap linear scan into a hash lookup.
-bool tryAssign(PatternMatchState& state, const Variable& viewVar,
+// Match `viewSide` against `queryNode` inside `state`. A fixed `viewSide` is
+// a plain equality check (not bound; it's not a view column). Otherwise
+// `viewSide` is a view variable: enforces injectivity (no two view variables
+// map to the same query node) and prunes bindings that can never satisfy
+// `isLegalFixedValuePrefix` later (a smaller-column variable already bound to
+// a query *variable* rules out fixing this one). Returns `false`, leaving
+// `state` unmodified, on rejection.
+bool tryAssign(PatternMatchState& state, const TripleComponent& viewSide,
                const TripleComponent& queryNode,
                const VariableToColumnMap& viewCols) {
+  if (!viewSide.isVariable()) {
+    return queryNode == viewSide;
+  }
+  const Variable& viewVar = viewSide.getVariable();
   auto it = state.assignment_.find(viewVar);
   if (it != state.assignment_.end()) {
     return it->second == queryNode;
@@ -163,49 +142,37 @@ bool tryAssign(PatternMatchState& state, const Variable& viewVar,
   return true;
 }
 
-// Undo a `tryAssign(state, viewVar, ...)` call, but only if it actually
-// inserted a new binding (`wasNew`, computed by the caller before calling
-// `tryAssign`); a call that matched an already-existing identical binding
-// must be left alone; a call that was rejected never mutated `state`, so
-// undoing it is a no-op either way.
-void undoAssign(PatternMatchState& state, const Variable& viewVar,
+// Whether `tryAssign(state, viewSide, ...)` would add a new binding (that
+// `undoAssign` then needs to remove on backtrack). Must be called before
+// `tryAssign`, which may itself insert that binding.
+bool isNewBinding(const PatternMatchState& state,
+                  const TripleComponent& viewSide) {
+  return viewSide.isVariable() &&
+         !state.assignment_.contains(viewSide.getVariable());
+}
+
+// Reverses `tryAssign(state, viewSide, ...)` if it added a new binding
+// (`wasNew`, from `isNewBinding`); otherwise a no-op.
+void undoAssign(PatternMatchState& state, const TripleComponent& viewSide,
                 bool wasNew) {
   if (wasNew) {
-    state.assignment_.erase(viewVar);
+    state.assignment_.erase(viewSide.getVariable());
   }
 }
 
 // Recursively extend `state` (which already covers `edges[0, edgeIdx)`) by
-// matching `edges[edgeIdx]` against every not-yet-used candidate query triple
-// with the same predicate, and so on for the remaining edges. Every full
-// match (one for each edge) is appended to `results`. This is a plain
-// backtracking search (in the style of VF2's core loop): at the scale of a
-// materialized view's defining query and a single SPARQL basic graph pattern
-// (both realistically well under a hundred triples), this is fast enough
-// without the extra preprocessing that large-graph subgraph-isomorphism
-// algorithms (VF3, RI, ...) rely on to pay for themselves. Backtracking undoes
-// only the (at most two) bindings a candidate actually added (`undoAssign`),
-// rather than snapshotting and restoring the whole assignment, so a step's
-// cost does not grow with how much of the pattern is already matched.
-// "Already used" is checked via a linear scan of `state.coveredTriples_`
-// instead of a separate hash set: it holds at most `edges.size()` elements
-// (realistically a handful), so a vector scan is cheaper here than hashing.
+// matching `edges[edgeIdx]` against each of its candidate query triples
+// (`candidatesByEdge[edgeIdx]`, precomputed per predicate in `matchPattern`),
+// then recursing into the remaining edges. Every full match is appended to
+// `results`. Plain VF2-style backtracking: `undoAssign` only removes the
+// bindings this step added, and "already used" is a linear scan of
+// `state.coveredTriples_` (both O(pattern size), cheaper than hashing at this
+// scale).
 //
-// `candidatesByEdge[i]` is the precomputed candidate-triple-index list for
-// `edges[i]` (`matchPattern` builds this once from `triplesByPredicate`, so
-// the predicate string is hashed once per edge instead of once per visit).
-//
-// `stepsRemaining` bounds the total number of *not-already-used* candidate
-// triples tried across the whole search (not just this call), so that a
-// pathological case (e.g. many query triples sharing a predicate that a
-// view's pattern also uses repeatedly, which can blow up combinatorially)
-// aborts the search for this view instead of stalling query planning. Once it
-// reaches `0`, no further candidates are tried, `truncated` is set to `true`,
-// and the function returns; `results` may then be missing some (or all) valid
-// embeddings for this view. `truncated` is left unchanged (not set to `false`)
-// if the search simply completes normally, so the caller can tell a genuine
-// early abort (some candidate was never tried) apart from the budget merely
-// reaching `0` exactly when the last candidate needed was already consumed.
+// `stepsRemaining` caps the total number of candidates tried across the whole
+// search, guarding against combinatorial blowup (e.g. a predicate repeated
+// many times on both sides). On reaching 0, `truncated` is set and the search
+// stops; `results` may then be incomplete.
 void extendMatch(
     const std::vector<PatternEdge>& edges,
     const std::vector<const std::vector<size_t>*>& candidatesByEdge,
@@ -229,9 +196,9 @@ void extendMatch(
     }
     --stepsRemaining;
     const auto& triple = triples._triples.at(tripleIdx);
-    bool subjectWasNew = !state.assignment_.contains(edge.subject_);
+    bool subjectWasNew = isNewBinding(state, edge.subject_);
     if (tryAssign(state, edge.subject_, triple.s_, viewCols)) {
-      bool objectWasNew = !state.assignment_.contains(edge.object_);
+      bool objectWasNew = isNewBinding(state, edge.object_);
       if (tryAssign(state, edge.object_, triple.o_, viewCols)) {
         state.coveredTriples_.push_back(tripleIdx);
 
@@ -254,12 +221,8 @@ void QueryPatternCache::matchPattern(
     const parsedQuery::BasicGraphPattern& triples,
     const TriplesByPredicate& triplesByPredicate, size_t budget,
     std::vector<MaterializedViewJoinReplacement>& result) const {
-  // Quick reject: every predicate used by the pattern must appear at least
-  // once among the query's triples, otherwise no embedding can possibly exist
-  // and the (more expensive) search below can be skipped entirely. This also
-  // builds, for each edge, a pointer to its candidate-triple-index list, so
-  // the recursive search below hashes each edge's predicate once here instead
-  // of once per visit.
+  // Quick reject: every edge's predicate must appear in the query, else no
+  // embedding can exist. Also builds each edge's candidate list once.
   std::vector<const std::vector<size_t>*> candidatesByEdge;
   candidatesByEdge.reserve(pattern.edges_.size());
   for (const auto& edge : pattern.edges_) {
@@ -288,9 +251,8 @@ void QueryPatternCache::matchPattern(
   }
 
   for (auto& match : matches) {
-    // A fixed value from the query can only end up on a legal prefix of the
-    // view's columns (see `isLegalFixedValuePrefix`); a payload column
-    // (index > 2) bound to a fixed value is always illegal.
+    // Fixed query values must land on a legal column prefix; a payload
+    // column (index > 2) bound to a fixed value is always illegal.
     unsigned boundColumnsMask = 0;
     bool hasIllegalColumn = false;
     for (const auto& [viewVar, node] : match.assignment_) {
@@ -307,8 +269,7 @@ void QueryPatternCache::matchPattern(
       continue;
     }
 
-    // `PatternMatchState::assignment_` and `RequestedColumns` are the same
-    // type, so the completed match can be moved in directly.
+    // `assignment_` and `RequestedColumns` are the same type.
     result.push_back(
         {pattern.view_->makeIndexScan(
              qec,
@@ -328,23 +289,15 @@ QueryPatternCache::makeJoinReplacementIndexScans(
     return result;
   }
 
-  // A budget of `0` means pattern-based rewriting is deliberately disabled
-  // (see `RuntimeParameters::materializedViewPatternMatchBudget_`); skip all
-  // of the work below, including grouping the query's triples by predicate,
-  // silently. Read once here (not once per candidate view below): it is the
-  // same value for all of them, and this avoids repeatedly locking the
-  // runtime parameters for every view (including ones the quick-reject in
-  // `matchPattern` would otherwise have discarded right away).
+  // A budget of `0` disables pattern-based rewriting entirely.
   size_t budget = getRuntimeParameter<
       &RuntimeParameters::materializedViewPatternMatchBudget_>();
   if (budget == 0) {
     return result;
   }
 
-  // Group the query's triples by predicate and collect all views that could
-  // possibly match (share at least one predicate with the query). Only
-  // triples with a simple IRI predicate that is covered by at least one
-  // loaded view's pattern are relevant.
+  // Group query triples by predicate and collect views sharing a predicate
+  // with the query.
   TriplesByPredicate triplesByPredicate;
   ad_utility::HashSet<ViewPtr> candidateViews;
   for (const auto& [tripleIdx, triple] :
@@ -422,9 +375,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   const auto& triples = eligibility.triples_;
   bool patternFound = false;
 
-  // A pattern needs at least two triples: a single triple has no join for
-  // pattern-based rewriting to eliminate (a plain `IndexScan` on the main
-  // index is already as good as reading the view).
+  // A single triple has no join to eliminate, so a pattern needs at least two.
   if (triples.size() >= 2) {
     if (auto edges = buildPatternEdges(view, triples)) {
       patterns_.insert({view, ViewPattern{std::move(edges.value()), view}});
@@ -432,11 +383,8 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
     }
   }
 
-  // Remember predicates that appear in certain views, only if any pattern is
-  // detected. A view using the same predicate more than once (e.g. two star
-  // arms) ends up listed more than once for that predicate; harmless, since
-  // the only consumer (`makeJoinReplacementIndexScans`) copies these into a
-  // `HashSet` of candidate views, and `removeView` erases all copies.
+  // A view using the same predicate twice (e.g. two star arms) is listed
+  // twice here; harmless, since `removeView` erases all copies.
   if (patternFound) {
     for (const auto& triple : triples) {
       auto predicate = triple.getSimplePredicate();

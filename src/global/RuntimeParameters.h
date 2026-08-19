@@ -204,14 +204,9 @@ struct RuntimeParameters {
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
 
-  // Upper bound on the number of candidate assignments the pattern-based view
-  // rewriting's subgraph matching (see `MaterializedViewsQueryAnalysis`) will
-  // try per (view, query) pair before giving up on that view. Bounds the
-  // otherwise unbounded backtracking search against pathological cases (e.g.
-  // many triples sharing a predicate that a view's pattern also uses
-  // repeatedly). A value of `0` disables pattern-based rewriting entirely (no
-  // candidate is ever tried), without needing to also turn off cache-key-based
-  // rewriting via `enable-materialized-view-query-rewrite`.
+  // Max candidate assignments tried per (view, query) pair by the
+  // pattern-based view rewriting's subgraph matching (see
+  // `MaterializedViewsQueryAnalysis`). `0` disables pattern-based rewriting.
   SizeT materializedViewPatternMatchBudget_{
       100'000, "materialized-view-pattern-match-budget"};
 

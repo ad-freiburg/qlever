@@ -292,16 +292,10 @@ inline void expectNotSuitableForRewrite(
 
 // _____________________________________________________________________________
 // The inverse of `expectNotSuitableForRewrite`: writes and loads a view from
-// `viewQuery` and, like `qpExpect`, checks that planning `testQuery` against
-// it produces exactly `matcher` -- not merely that *some* rewrite was found,
-// but that the specific resulting scan (view, columns, variable mapping) is
-// the expected one, the same way the other rewrite-correctness tests in this
-// file check their positive cases. `testQuery` must not be satisfiable by
-// cache-key-based rewriting alone (see `QueryExecutionTree::
-// readFromMaterializedView`), or this would pass without ever exercising
-// pattern-based rewriting; the established way to ensure that (as in
-// `simpleStarPlusJoin`) is for `testQuery` to be `viewQuery` plus at least one
-// extra triple, so its cache key cannot equal the view's own.
+// `viewQuery`, then checks (like `qpExpect`) that planning `testQuery`
+// produces exactly `matcher`. `testQuery` must not be satisfiable by
+// cache-key-based rewriting alone, or this would pass without exercising the
+// pattern matcher; make it `viewQuery` plus at least one extra triple.
 template <typename ViewName, typename ViewQuery, typename TestQuery>
 inline void expectSuitableForRewrite(
     qlever::Qlever& qlv, const ViewName& viewName, const ViewQuery& viewQuery,
