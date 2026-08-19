@@ -19,8 +19,6 @@
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <tuple>
-#include <type_traits>
 
 #include "backports/keywords.h"
 #include "util/EnumWithStrings.h"
@@ -211,7 +209,13 @@ class Log {
            << getTimeStamp() << " - " << LogLevel{level}.toString() << ": ";
   }
 
-  static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
+  // Imbue the stream that is currently used for logging with the given
+  // `locale`, for example to print large numbers with thousands separators.
+  // Note: This has to be called again after the logging stream was changed via
+  // `setGlobalLoggingStream`, as the locale is a property of the stream.
+  static void imbue(const std::locale& locale) {
+    LogstreamChoice::get().getStream().imbue(locale);
+  }
 
   static std::string getTimeStamp() {
     return absl::FormatTime("%Y-%m-%d %H:%M:%E3S", absl::Now(),
@@ -262,52 +266,6 @@ class LogStreamProxy {
 // for prvalues.
 inline LogStreamProxy getLogStreamBranchless(LogLevel::Enum level) {
   return LogStreamProxy{level};
-}
-
-namespace detail {
-// Write a single log argument to `stream`. Invocable arguments are invoked and
-// their result is written instead, see `lazyLogArgs` below.
-template <typename T>
-void streamLogArg(std::ostream& stream, const T& arg) {
-  if constexpr (std::is_invocable_v<const T&>) {
-    stream << arg();
-  } else {
-    stream << arg;
-  }
-}
-}  // namespace detail
-
-// A group of log arguments that is only written when it is actually inserted
-// into a log stream. Arguments that are invocable are invoked at that point,
-// which makes the computation of expensive log messages lazy also for
-// arguments that are not the first one in a `<<` chain. Note that with the
-// branchless logger the invocables are invoked even for a suppressed message
-// (only the output is discarded), while the branching logger doesn't even
-// evaluate the arguments of a suppressed message. Only use this as a temporary
-// inside a log statement, as it stores references to its arguments.
-template <typename... Args>
-class LazyLogArgs {
- private:
-  std::tuple<const Args&...> args_;
-
- public:
-  explicit LazyLogArgs(const Args&... args) : args_{args...} {}
-
-  friend std::ostream& operator<<(std::ostream& stream,
-                                  const LazyLogArgs& lazyArgs) {
-    std::apply(
-        [&stream](const auto&... args) {
-          (detail::streamLogArg(stream, args), ...);
-        },
-        lazyArgs.args_);
-    return stream;
-  }
-};
-
-// Deduce the template arguments of `LazyLogArgs`, see there for details.
-template <typename... Args>
-LazyLogArgs<Args...> lazyLogArgs(const Args&... args) {
-  return LazyLogArgs<Args...>{args...};
 }
 }  // namespace ad_utility
 
