@@ -198,8 +198,7 @@ class SplitVocabulary {
 
   // Partition `indices` by marker and forward each group to the matching
   // underlying `lookupBatch`. The result order matches `indices`, including
-  // duplicates and mixed markers. `OnDiskCompressedGeoSplit` therefore
-  // reaches the on-disk batch path instead of walking `operator[]`.
+  // duplicates and mixed markers.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
 

@@ -107,26 +107,32 @@ CPP_template(typename UnderlyingVocabulary,
         });
   }
 
-  // Batch-read the compressed words from the underlying vocabulary (which may
-  // itself be on-disk / io_uring), then decompress each word with the decoder
-  // of its block. The result order matches `indices`.
+  // Batch-read the compressed words from the underlying vocabulary, then
+  // decompress each word with the decoder of its block. The result order
+  // matches `indices`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     auto compressed = underlyingVocabulary_.lookupBatch(indices);
     AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
 
+    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+
+    // Move strings into the underlying buffer.
     auto words = ::ranges::to_vector(
         ::ranges::views::zip(indices, *compressed) |
         ql::views::transform([this](const auto& idxAndWord) {
           const auto& [idx, word] = idxAndWord;
           return compressionWrapper_.decompress(word, getDecoderIdx(idx));
         }));
-
-    auto data = std::make_shared<StringVectorVocabBatchLookupData>();
     data->buffer() = std::move(words);
+
+    // build `views()` into the strings of the underlying buffer.
     data->views() = ::ranges::to_vector(
         data->buffer() |
         ql::views::transform(ad_utility::staticCast<std::string_view>));
+
+    // Expose a span of those views; the result keeps `data` (and the strings)
+    // alive.
     return StringVectorVocabBatchLookupData::asResult(std::move(data));
   }
 

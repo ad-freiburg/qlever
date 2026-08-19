@@ -46,8 +46,8 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     }
   }
 
-  // CONSTRUCT cache misses are almost all external. Hand the disk batch
-  // through so we do not copy the already-owned compressed bytes.
+  // Hand the disk batch through so we do not copy the already-owned compressed
+  // bytes.
   if (diskIndices.size() == indices.size()) {
     return externalVocab_.lookupBatch(diskIndices);
   }
