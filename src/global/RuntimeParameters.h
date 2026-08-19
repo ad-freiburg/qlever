@@ -209,7 +209,9 @@ struct RuntimeParameters {
   // try per (view, query) pair before giving up on that view. Bounds the
   // otherwise unbounded backtracking search against pathological cases (e.g.
   // many triples sharing a predicate that a view's pattern also uses
-  // repeatedly).
+  // repeatedly). A value of `0` disables pattern-based rewriting entirely (no
+  // candidate is ever tried), without needing to also turn off cache-key-based
+  // rewriting via `enable-materialized-view-query-rewrite`.
   SizeT materializedViewPatternMatchBudget_{
       100'000, "materialized-view-pattern-match-budget"};
 

@@ -2155,7 +2155,10 @@ TEST(MaterializedViewsManager, viewFilesOnDisk) {
 // Regression test for the `materialized-view-pattern-match-budget` runtime
 // parameter: a budget too small to finish even a single successful search (a
 // 2-edge chain needs at least 2 candidate attempts) must not find the match
-// and must log a warning, while the default budget still finds it.
+// and must log a warning, while the default budget still finds it. A budget
+// of exactly `0` is a distinct case (see `PatternMatchBudgetZeroDisables`
+// below): it deliberately disables pattern-based rewriting rather than being
+// an (accidentally) too-small budget, so it must not log a warning.
 TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
   const std::string onDiskBase = gtestCurrentTestName();
   materializedViewsTestHelpers::makeTestIndex(onDiskBase,
@@ -2192,4 +2195,39 @@ TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetIsRespected) {
         &RuntimeParameters::materializedViewPatternMatchBudget_>(100'000);
     EXPECT_FALSE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
   }
+}
+
+// _____________________________________________________________________________
+// A budget of exactly `0` is a valid, deliberate way to disable pattern-based
+// view rewriting (distinct from a too-small budget that was likely not meant
+// to reject every match): no match must be found, and no warning logged.
+TEST(MaterializedViewsPatternMatchBudgetTest, PatternMatchBudgetZeroDisables) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase,
+                                              " <s1> <p0> <o1> .\n");
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  MaterializedViewsManager manager{onDiskBase};
+  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+
+  materializedViewsQueryAnalysis::QueryPatternCache qpc;
+  manager.writeViewToDisk(
+      "budgetZeroChain",
+      qlv.parseAndPlanQuery("SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }"));
+  auto view = manager.getView("budgetZeroChain", qec.get());
+  qpc.analyzeView(view, qec.get());
+
+  auto plan = qlv.parseAndPlanQuery("SELECT * { ?s <bz1> ?m . ?m <bz2> ?o }");
+  const auto& triples =
+      plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0).getBasic();
+
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto cleanupBudget = setRuntimeParameterForTest<
+      &RuntimeParameters::materializedViewPatternMatchBudget_>(0);
+  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), triples).empty());
+  EXPECT_THAT(logStream.str(), ::testing::Not(::testing::HasSubstr(
+                                   "materialized-view-pattern-match-budget")));
 }

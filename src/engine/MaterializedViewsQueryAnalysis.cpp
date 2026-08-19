@@ -203,6 +203,15 @@ void QueryPatternCache::matchPattern(
     const parsedQuery::BasicGraphPattern& triples,
     const TriplesByPredicate& triplesByPredicate,
     std::vector<MaterializedViewJoinReplacement>& result) const {
+  // A budget of `0` means pattern-based rewriting is deliberately disabled
+  // (see `RuntimeParameters::materializedViewPatternMatchBudget_`); skip the
+  // search silently, without logging it as an exceeded budget below.
+  size_t stepsRemaining = getRuntimeParameter<
+      &RuntimeParameters::materializedViewPatternMatchBudget_>();
+  if (stepsRemaining == 0) {
+    return;
+  }
+
   // Quick reject: every predicate used by the pattern must appear at least
   // once among the query's triples, otherwise no embedding can possibly
   // exist and the (more expensive) search below can be skipped entirely.
@@ -217,8 +226,6 @@ void QueryPatternCache::matchPattern(
   std::vector<PatternMatchState> matches;
   ad_utility::HashSet<size_t> usedTriples;
   PatternMatchState state;
-  size_t stepsRemaining = getRuntimeParameter<
-      &RuntimeParameters::materializedViewPatternMatchBudget_>();
   extendMatch(pattern.edges_, 0, triples, triplesByPredicate, viewCols,
               usedTriples, state, matches, stepsRemaining);
   if (stepsRemaining == 0) {

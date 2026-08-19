@@ -94,8 +94,6 @@ RuntimeParameters::RuntimeParameters() {
   };
   defaultQueryTimeout_.setParameterConstraint(mustBeStrictlyPositive);
   lazyIndexScanNumThreads_.setParameterConstraint(mustBeStrictlyPositive);
-  materializedViewPatternMatchBudget_.setParameterConstraint(
-      mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________
