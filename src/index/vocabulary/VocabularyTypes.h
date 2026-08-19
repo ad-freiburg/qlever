@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "util/Exception.h"
@@ -166,24 +167,68 @@ inline VocabBatchLookupResult makeOwnedVocabBatch(
 
 // A batch result that does not own character bytes. `buffer()` holds other
 // `VocabBatchLookupResult`s so their strings stay alive. `views()` points
-// into those children, or into storage that outlives this object.
+// into those children, or into `indexRamWords` passed to
+// `keepAliveVocabBatch`.
 struct MultiOwnerVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<VocabBatchLookupResult>> {};
 
-// Build a `VocabBatchLookupResult` whose public span is `viewsInInputOrder`.
-// Each view must point either into one of `owners` or into storage that
-// outlives the returned result (the in-memory internal vocabulary).
-//
-// `owners` are the child batches that those views borrow from. The result
-// holds those `shared_ptr`s, so dropping the caller's copies is safe.
-//
-// `owners` is empty when no child batch is involved. The only intended
-// case is `VocabularyInternalExternal` with every index a RAM hit:
-// `internalVocab_[idx]` views the index's in-memory words, which live as
-// long as the vocabulary, not as a `VocabBatchLookupResult`. The helper
-// still allocates this object so the `vector<string_view>` has an owner.
-// Do not pass views into temporaries with an empty `owners` list.
-inline VocabBatchLookupResult keepAliveVocabBatch(
+// Tag for `keepAliveVocabBatch` when no view borrows the index RAM
+// vocabulary. Every view must then sit in `owners`, so `owners` must not
+// be empty.
+struct NoIndexRamWords {};
+
+namespace detail {
+inline bool viewHasSameStorage(std::string_view a, std::string_view b) {
+  return a.data() == b.data() && a.size() == b.size();
+}
+
+inline bool viewBorrowsOwner(
+    std::string_view view, const std::vector<VocabBatchLookupResult>& owners) {
+  for (const auto& owner : owners) {
+    if (owner == nullptr) {
+      continue;
+    }
+    for (std::string_view child : *owner) {
+      if (viewHasSameStorage(view, child)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+template <typename IndexRamWordRange>
+bool viewBorrowsIndexRam(std::string_view view,
+                         const IndexRamWordRange& indexRamWords) {
+  for (const auto& word : indexRamWords) {
+    if (viewHasSameStorage(view, std::string_view{word})) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename IndexRamWordRange>
+void checkKeepAliveViews(const std::vector<VocabBatchLookupResult>& owners,
+                         const std::vector<std::string_view>& viewsInInputOrder,
+                         const IndexRamWordRange& indexRamWords) {
+  const bool hasIndexRamWords = !ql::ranges::empty(indexRamWords);
+  AD_CONTRACT_CHECK(!owners.empty() || hasIndexRamWords);
+  AD_EXPENSIVE_CHECK(([&]() {
+    for (std::string_view view : viewsInInputOrder) {
+      if (viewBorrowsOwner(view, owners)) {
+        continue;
+      }
+      if (hasIndexRamWords && viewBorrowsIndexRam(view, indexRamWords)) {
+        continue;
+      }
+      return false;
+    }
+    return true;
+  }()));
+}
+
+inline VocabBatchLookupResult makeKeepAliveResult(
     std::vector<VocabBatchLookupResult> owners,
     std::vector<std::string_view> viewsInInputOrder) {
   AD_CONTRACT_CHECK(!viewsInInputOrder.empty());
@@ -191,6 +236,35 @@ inline VocabBatchLookupResult keepAliveVocabBatch(
   data->buffer() = std::move(owners);
   data->views() = std::move(viewsInInputOrder);
   return MultiOwnerVocabBatchLookupData::asResult(std::move(data));
+}
+}  // namespace detail
+
+// Build a `VocabBatchLookupResult` whose public span is `viewsInInputOrder`.
+// Each view must borrow a child batch in `owners` or a word in
+// `indexRamWords`.
+//
+// `owners` are child `lookupBatch` results. The returned object holds those
+// `shared_ptr`s so the caller can drop its copies.
+//
+// `indexRamWords` is the index's in-memory word range (for example
+// `internalVocab_`). Those words live as long as the vocabulary. Pass
+// `NoIndexRamWords{}` when every view borrows `owners` only (mixed
+// `SplitVocabulary` markers).
+template <typename IndexRamWordRange>
+VocabBatchLookupResult keepAliveVocabBatch(
+    std::vector<VocabBatchLookupResult> owners,
+    std::vector<std::string_view> viewsInInputOrder,
+    const IndexRamWordRange& indexRamWords) {
+  detail::checkKeepAliveViews(owners, viewsInInputOrder, indexRamWords);
+  return detail::makeKeepAliveResult(std::move(owners),
+                                     std::move(viewsInInputOrder));
+}
+
+inline VocabBatchLookupResult keepAliveVocabBatch(
+    std::vector<VocabBatchLookupResult> owners,
+    std::vector<std::string_view> viewsInInputOrder, NoIndexRamWords) {
+  return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder),
+                             ql::span<const std::string_view>{});
 }
 
 // Generic sequential fallback implementations of the batch-lookup interface,

@@ -64,7 +64,8 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   if (disk) {
     owners.push_back(std::move(disk));
   }
-  return keepAliveVocabBatch(std::move(owners), std::move(assembled));
+  return keepAliveVocabBatch(std::move(owners), std::move(assembled),
+                             internalVocab_);
 }
 
 // _____________________________________________________________________________

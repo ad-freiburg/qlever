@@ -262,7 +262,8 @@ class SplitVocabulary {
         owners.push_back(std::move(lookupResultByMarker[marker]));
       }
     }
-    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
+    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder),
+                               NoIndexRamWords{});
   }
 
   //____________________________________________________________________________
