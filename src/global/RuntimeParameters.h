@@ -63,6 +63,14 @@ struct RuntimeParameters {
   // that consumes the blocks processes them on a single thread and can barely
   // keep up with the decompression even for `1` thread.
   SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
+  // The default CPU quota for a single query, in cores (fractions allowed).
+  // Enforced via a per-query cgroup with a `cpu.max` limit, so it caps the
+  // combined CPU usage of all threads that work for one query. `0` disables
+  // the quota. Requires a writable cgroup v2 subtree (see `CgroupCpuQuota.h`),
+  // otherwise the parameter has no effect. Can be overridden per request via
+  // the `cpu-quota-cores` URL parameter, raising it above this default
+  // requires a valid access token.
+  Double queryCpuQuotaCores_{0.0, "query-cpu-quota-cores"};
   // The number of threads used to read and decompress blocks when scanning
   // permutations during a runtime index rebuild (see `IndexRebuilder`), both
   // for the main scan of the old permutations and for the statistics
