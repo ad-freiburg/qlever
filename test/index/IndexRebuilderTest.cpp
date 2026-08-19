@@ -620,6 +620,21 @@ TEST(IndexRebuilder, materializeToIndex) {
         deltaTriples.insertTriples(
             cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
                                  IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+        // Also insert `<a> <b> <c>` with the subject given as the local-vocab
+        // spelling of `<a>`, as an update with `BIND(IRI(...))` would produce
+        // it. The `Id` must be normalized to the `VocabIndex` `Id` of `<a>`,
+        // otherwise the rebuild below fails on the assertion in
+        // `materializeLocalVocab` (regression test for issue #3172). The
+        // triple already exists in the index, so the expected counts below
+        // are unchanged.
+        LocalVocab outsideVocab;
+        Id localA = Id::makeFromLocalVocabIndex(
+            outsideVocab.getIndexAndAddIfNotContained(
+                LocalVocabEntry::fromIriref("<a>",
+                                            index.getLocalVocabContext())));
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{localA, V(1), V(2), g}}});
       });
 
       auto [state, vocab, blankNodes] =
@@ -869,16 +884,16 @@ TEST(IndexRebuilder, serverIntegration) {
         withAccessToken ? absl::StrCat("&access-token=", accessToken) : ""));
   };
 
-  // Create the coroutine that lets the `server` process the given `request`.
-  auto makeTask = [&server](auto& request) {
-    return server.template onlyForTestingProcess<
-        std::decay_t<decltype(request)>, ad_utility::httpUtils::ResponseT>(
-        request);
+  // Create the coroutine that lets the `server` process the given `request`
+  // and returns the response that would have been sent.
+  auto makeTask = [&server](serverTestHelpers::ReqT& request) {
+    return serverTestHelpers::ServerForTesting::process(server, request);
   };
 
   // Perform the given `request` on the `threadPool` and return a future for the
   // response.
-  auto performRequest = [&threadPool, &makeTask](auto& request) {
+  auto performRequest = [&threadPool,
+                         &makeTask](serverTestHelpers::ReqT& request) {
     return net::co_spawn(threadPool, makeTask(request), net::use_future);
   };
 
@@ -887,15 +902,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // The exception must not be handed out of the coroutine (in particular not
   // via `net::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
   // `AsioTestHelpers.h` for the reason.
-  auto expectRequestFailsWith = [&threadPool, &makeTask](
-                                    auto& request, const auto& matcher,
-                                    ad_utility::source_location location =
-                                        AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(location);
-    EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
-                    threadPool, makeTask(request)),
-                ::testing::Optional(matcher));
-  };
+  auto expectRequestFailsWith =
+      [&threadPool, &makeTask](
+          serverTestHelpers::ReqT& request, const auto& matcher,
+          ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
+        EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
+                        threadPool, makeTask(request)),
+                    ::testing::Optional(matcher));
+      };
 
   // Without access token this operation is not allowed!
   auto request0 = makeRebuildRequest("", false);
@@ -991,14 +1006,11 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
       "/?cmd=rebuild-index&access-token=accessToken"
       "&rebuild-tmp-dir=droppedState.tmp"
       "&rebuild-previous-index-dir=droppedState.old");
-  using ResT = ad_utility::httpUtils::ResponseT;
-  auto response =
-      net::co_spawn(
-          threadPool,
-          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
-              request),
-          net::use_future)
-          .get();
+  auto response = net::co_spawn(threadPool,
+                                serverTestHelpers::ServerForTesting::process(
+                                    server, request),
+                                net::use_future)
+                      .get();
   EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
 
   EXPECT_THAT(logStream.str(),
@@ -1145,12 +1157,11 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   // final coroutine resumption can still be inside the signal on that
   // context's scheduler event; the thread sanitizer reports this as a race
   // between `pthread_cond_signal` and `pthread_cond_destroy`.
-  auto performRequest = [&server, &threadPool](auto& request) {
+  auto performRequest = [&server,
+                         &threadPool](serverTestHelpers::ReqT& request) {
     return net::co_spawn(
                threadPool,
-               server.onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                            ad_utility::httpUtils::ResponseT>(
-                   request),
+               serverTestHelpers::ServerForTesting::process(server, request),
                net::use_future)
         .get();
   };

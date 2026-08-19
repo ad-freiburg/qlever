@@ -433,34 +433,30 @@ TEST(SparqlParser, FunctionCall) {
                                Variable{"?b"}));
 
   // Geometric relation functions
+  using enum SpatialJoinType::Enum;
+  using GeoRelationFn =
+      SparqlExpression::Ptr (*)(SparqlExpression::Ptr, SparqlExpression::Ptr);
+  std::vector<std::pair<std::string_view, GeoRelationFn>> geoRelations{
+      {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
+      {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
+      {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
+      {"sfEquals", &makeGeoRelationExpression<EQUALS>},
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>},
+  };
+  for (const auto& [sparqlName, makeExpr] : geoRelations) {
+    expectFunctionCall(absl::StrCat(geof, sparqlName, ">(?a, ?b)"),
+                       matchNary(makeExpr, Variable{"?a"}, Variable{"?b"}));
+  }
+
+  // DE-9IM relation function
   expectFunctionCall(
-      absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::INTERSECTS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfContains>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CONTAINS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfTouches>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfEquals>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
-                Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(
-      absl::StrCat(geof, "sfWithin>(?a, ?b)"),
-      matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
-                Variable{"?a"}, Variable{"?b"}));
+      absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\")"),
+      matchNaryWithChildrenMatchers(&makeDe9imRelationExpression,
+                                    variableExpressionMatcher(Variable{"?a"}),
+                                    variableExpressionMatcher(Variable{"?b"}),
+                                    matchLiteralExpression(lit("T*T***T**"))));
 
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
@@ -509,6 +505,11 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>()"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "relate>(?a, ?b)"));
+  expectFunctionCallFails(
+      absl::StrCat(geof, "relate>(?a, ?b, \"T*T***T**\", ?c)"));
 
   const std::vector<std::string> unaryGeofFunctionNames = {
       "centroid", "envelope", "geometryType",  "minX",         "minY",

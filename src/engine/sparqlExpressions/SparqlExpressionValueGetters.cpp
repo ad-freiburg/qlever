@@ -493,7 +493,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     return litOrIri.toStringRepresentation();
   }
   return std::nullopt;
-};
+}
 
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
@@ -641,7 +641,7 @@ CPP_template_out_def(typename RequestedInfo)(
       return std::nullopt;
   }
   AD_FAIL();
-};
+}
 
 //______________________________________________________________________________
 CPP_template_out_def(typename RequestedInfo)(
@@ -659,7 +659,7 @@ CPP_template_out_def(typename RequestedInfo)(
         wktLiteral);
   }
   return std::nullopt;
-};
+}
 
 // Explicit instantiations
 namespace sparqlExpression::detail {
@@ -685,7 +685,7 @@ std::optional<int64_t> IntValueGetter::operator()(
     return id.getInt();
   }
   return std::nullopt;
-};
+}
 
 //______________________________________________________________________________
 template <typename ValueGetter>

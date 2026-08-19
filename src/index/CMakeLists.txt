@@ -30,3 +30,6 @@ add_library(index
         InputFileSpecification.cpp
         TripleComponentConversions.cpp)
 qlever_target_link_libraries(index qlever_util basicParser rdfParser vocabulary localVocab global)
+if (NOT REDUCED_FEATURE_SET_FOR_CPP17)
+    target_link_libraries(index PUBLIC Boost::url)
+endif()

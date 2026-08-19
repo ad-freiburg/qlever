@@ -347,13 +347,13 @@ const Variable& MaterializedView::dummySubject() {
 const Variable& MaterializedView::dummyPredicate() {
   static const Variable var{"?_ql_materialized_view_p"};
   return var;
-};
+}
 
 // _____________________________________________________________________________
 const Variable& MaterializedView::dummyObject() {
   static const Variable var{"?_ql_materialized_view_o"};
   return var;
-};
+}
 
 // _____________________________________________________________________________
 MaterializedView::MaterializedView(std::string onDiskBase, std::string name)

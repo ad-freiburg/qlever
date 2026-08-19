@@ -104,6 +104,18 @@ class SparqlQleverVisitor {
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
 
+  // A named subquery (defined via `WITH %name AS { ... }`): the parsed group
+  // graph pattern together with the variables that are visible in it.
+  struct NamedSubquery {
+    ParsedQuery::GraphPattern pattern_;
+    std::vector<Variable> visibleVariables_;
+  };
+
+  // The named subqueries that have been defined so far, by name (including
+  // the leading `%`). Each `INCLUDE %name` is expanded to a copy of the
+  // corresponding pattern.
+  ad_utility::HashMap<std::string, NamedSubquery> namedSubqueries_{};
+
   // The `BASE` IRI of the query if any.
   std::optional<qlever::util::ParsedUri> baseIri_{};
 
@@ -200,6 +212,29 @@ class SparqlQleverVisitor {
   void visit(Parser::PrefixDeclContext* ctx);
 
   ParsedQuery visit(Parser::SelectQueryContext* ctx);
+
+  // Visit the definition of a named subquery (`WITH %name AS { ... }`) and
+  // store the parsed pattern in the `namedSubqueries_` map.
+  void visit(Parser::NamedSubqueryDefinitionContext* ctx);
+
+  // A valid `INCLUDE %name` (as the entire body of a subquery) is expanded in
+  // `visit(GroupGraphPatternContext*)` and never reaches this function, so
+  // this function always reports an error for a misplaced `INCLUDE`.
+  [[noreturn]] static GraphPatternOperation visit(
+      Parser::IncludeClauseContext* ctx);
+
+  // If the body of the given group graph pattern is exactly one `INCLUDE`
+  // clause, return that clause, otherwise `nullptr`.
+  static Parser::IncludeClauseContext* getSoleIncludeClause(
+      Parser::GroupGraphPatternSubContext* ctx);
+
+  // Expand the sole `INCLUDE %name` body of the group graph pattern `ctx`
+  // into a copy of the pattern of the corresponding named subquery. Report an
+  // error if the group is not the body of a subquery or that subquery uses
+  // `SELECT *`.
+  ParsedQuery::GraphPattern visitSoleInclude(
+      Parser::IncludeClauseContext* includeCtx,
+      Parser::GroupGraphPatternContext* ctx);
 
   SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
 
@@ -584,6 +619,27 @@ class SparqlQleverVisitor {
   // Return a callable (not threadsafe) that when being called creates a new
   // internal variable by calling `getNewInternalVariable()` above.
   auto makeInternalVariableGenerator();
+
+  // The result of `visitInFreshQueryContext` below: the result of the visit
+  // call, together with the final state of the fresh `parsedQuery_` and
+  // `visibleVariables_`.
+  template <typename Result>
+  struct FreshQueryContextResult {
+    Result result_;
+    ParsedQuery parsedQuery_;
+    std::vector<Variable> visibleVariables_;
+  };
+
+  // Visit the given context with a fresh (initially empty) `parsedQuery_` and
+  // `visibleVariables_` and restore the previous state afterwards, also when
+  // an exception is thrown. This is used for the parts of a query that are
+  // parsed in a clean environment, without access to the variables of the
+  // outer query, namely the argument of `EXISTS` and the definition of a
+  // named subquery.
+  template <typename Ctx>
+  auto visitInFreshQueryContext(Ctx* ctx)
+      -> FreshQueryContextResult<
+          decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))>;
 
   // Create a new generated blank node.
   BlankNode newBlankNode();
