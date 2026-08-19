@@ -119,7 +119,8 @@ TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
 
 TEST(VocabBatchLookupData, KeepAliveRequiresAnOwner) {
   std::vector<std::string_view> views{"orphan"};
-  EXPECT_ANY_THROW(keepAliveVocabBatch({}, std::move(views)));
+  AD_EXPECT_THROW_WITH_MESSAGE(keepAliveVocabBatch({}, std::move(views)),
+                               ::testing::HasSubstr("owners"));
 }
 
 // A view into an in-memory vocabulary's word storage stays valid after the

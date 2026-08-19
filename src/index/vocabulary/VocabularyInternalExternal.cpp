@@ -33,12 +33,14 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   std::vector<std::string_view> assembled(indices.size());
   std::vector<size_t> diskIndices;
   std::vector<size_t> diskSlots;
+  bool usesInternalVocabulary = false;
   diskIndices.reserve(indices.size());
   diskSlots.reserve(indices.size());
 
   for (auto [i, idx] : ::ranges::views::enumerate(indices)) {
     auto fromInternal = internalVocab_[idx];
     if (fromInternal.has_value()) {
+      usesInternalVocabulary = true;
       assembled[static_cast<size_t>(i)] = fromInternal.value();
     } else {
       diskSlots.push_back(static_cast<size_t>(i));
@@ -68,7 +70,9 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   if (disk) {
     owners.push_back(std::move(disk));
   }
-  owners.push_back(internalVocab_.wordStorage());
+  if (usesInternalVocabulary) {
+    owners.push_back(internalVocab_.wordStorage());
+  }
   return keepAliveVocabBatch(std::move(owners), std::move(assembled));
 }
 
