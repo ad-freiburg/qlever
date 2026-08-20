@@ -125,6 +125,83 @@ class SplitVocabulary {
          }))...);
   }
 
+  // Per-marker buckets used by `lookupBatch`.
+  using IndicesByMarker = std::array<std::vector<size_t>, numberOfVocabs>;
+  using ResultsByMarker = std::array<VocabBatchLookupResult, numberOfVocabs>;
+
+  // Split marked indices into underlying vocab-local index lists.
+  static IndicesByMarker partitionUnderlyingIndicesByMarker(
+      ql::span<const size_t> indices) {
+    IndicesByMarker underlyingVocabIndicesByMarker;
+    for (auto markedIndex : indices) {
+      underlyingVocabIndicesByMarker[getMarker(markedIndex)].push_back(
+          getVocabIndex(markedIndex));
+    }
+    return underlyingVocabIndicesByMarker;
+  }
+
+  // One non-empty marker's batch, plus how many markers were non-empty.
+  struct MarkerBatchLookups {
+    ResultsByMarker lookupResultByMarker{};
+    uint8_t numNonemptyMarkers = 0;
+    uint8_t lastNonemptyMarker = 0;
+  };
+
+  // Dispatch each non-empty marker group to its underlying `lookupBatch`.
+  MarkerBatchLookups lookupBatchesByMarker(
+      const IndicesByMarker& underlyingVocabIndicesByMarker) const {
+    MarkerBatchLookups out;
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (underlyingVocabIndicesByMarker[marker].empty()) {
+        continue;
+      }
+      out.lookupResultByMarker[marker] = std::visit(
+          [&](const auto& vocab) {
+            return vocab.lookupBatch(underlyingVocabIndicesByMarker[marker]);
+          },
+          underlying_[marker]);
+      AD_CORRECTNESS_CHECK(out.lookupResultByMarker[marker]->size() ==
+                           underlyingVocabIndicesByMarker[marker].size());
+      ++out.numNonemptyMarkers;
+      out.lastNonemptyMarker = marker;
+    }
+    return out;
+  }
+
+  // Map each input position to its marker so mixed results can be scattered
+  // back into request order.
+  static IndicesByMarker partitionResultPositionsByMarker(
+      ql::span<const size_t> indices) {
+    IndicesByMarker resultPositionByMarker;
+    for (auto [resultPosition, markedIndex] :
+         ::ranges::views::enumerate(indices)) {
+      resultPositionByMarker[getMarker(markedIndex)].push_back(
+          static_cast<size_t>(resultPosition));
+    }
+    return resultPositionByMarker;
+  }
+
+  // Merge per-marker batches into one result in `indices` order. Callers must
+  // pass more than one non-empty marker; the single-marker fast path returns
+  // that batch directly from `lookupBatch`.
+  static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
+      ql::span<const size_t> indices, MarkerBatchLookups markerLookups) {
+    AD_CONTRACT_CHECK(markerLookups.numNonemptyMarkers > 1);
+    auto resultPositionByMarker = partitionResultPositionsByMarker(indices);
+    std::vector<std::string_view> viewsInInputOrder(indices.size());
+    std::vector<VocabBatchOwner> owners;
+    owners.reserve(markerLookups.numNonemptyMarkers);
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      if (markerLookups.lookupResultByMarker[marker] == nullptr) {
+        continue;
+      }
+      scatterVocabBatchLookupResult(
+          std::move(markerLookups.lookupResultByMarker[marker]),
+          resultPositionByMarker[marker], viewsInInputOrder, owners);
+    }
+    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
+  }
+
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
   // that contains the marker and vocabIndex. The result is guaranteed to be
@@ -196,65 +273,19 @@ class SplitVocabulary {
     return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
   }
 
-  // Partition `indices` by marker and forward each group to the matching
-  // underlying `lookupBatch`. The result order matches `indices`, including
-  // duplicates and mixed markers.
+  // Partition `indices` by marker, look up each group, and reassemble in input
+  // order. Single-marker batches return the underlying result without a merge.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
-
-    std::array<std::vector<size_t>, numberOfVocabs>
-        underlyingVocabIndicesByMarker;
-
-    for (auto markedIndex : indices) {
-      underlyingVocabIndicesByMarker[getMarker(markedIndex)].push_back(
-          getVocabIndex(markedIndex));
-    }
-
-    std::array<VocabBatchLookupResult, numberOfVocabs> lookupResultByMarker;
-    uint8_t numNonemptyMarkers = 0;
-    uint8_t lastNonemptyMarker = 0;
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (underlyingVocabIndicesByMarker[marker].empty()) {
-        continue;
-      }
-
-      lookupResultByMarker[marker] = std::visit(
-          [&](const auto& vocab) {
-            return vocab.lookupBatch(underlyingVocabIndicesByMarker[marker]);
-          },
-          underlying_[marker]);
-
-      AD_CORRECTNESS_CHECK(lookupResultByMarker[marker]->size() ==
-                           underlyingVocabIndicesByMarker[marker].size());
-
-      ++numNonemptyMarkers;
-      lastNonemptyMarker = marker;
-    }
-
+    auto underlyingVocabIndicesByMarker =
+        partitionUnderlyingIndicesByMarker(indices);
+    auto markerLookups = lookupBatchesByMarker(underlyingVocabIndicesByMarker);
     // One marker: return that batch. Mixed markers cannot share one buffer.
-    if (numNonemptyMarkers == 1) {
-      return std::move(lookupResultByMarker[lastNonemptyMarker]);
+    if (markerLookups.numNonemptyMarkers == 1) {
+      return std::move(
+          markerLookups.lookupResultByMarker[markerLookups.lastNonemptyMarker]);
     }
-
-    std::array<std::vector<size_t>, numberOfVocabs> resultPositionByMarker;
-    for (auto [resultPosition, markedIndex] :
-         ::ranges::views::enumerate(indices)) {
-      resultPositionByMarker[getMarker(markedIndex)].push_back(
-          static_cast<size_t>(resultPosition));
-    }
-
-    std::vector<std::string_view> viewsInInputOrder(indices.size());
-    std::vector<VocabBatchOwner> owners;
-    owners.reserve(numNonemptyMarkers);
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (lookupResultByMarker[marker] == nullptr) {
-        continue;
-      }
-      scatterVocabBatchLookupResult(std::move(lookupResultByMarker[marker]),
-                                    resultPositionByMarker[marker],
-                                    viewsInInputOrder, owners);
-    }
-    return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
+    return mergeMarkerBatchesInInputOrder(indices, std::move(markerLookups));
   }
 
   //____________________________________________________________________________
