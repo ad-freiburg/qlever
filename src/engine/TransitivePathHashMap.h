@@ -40,13 +40,15 @@ class HashMapWrapper {
   // Placeholders to return a reference in case no match was found.
   Set emptySet_;
   Map emptyMap_;
+  Set targetIdLookup_;
 
  public:
   // Construct when there is no GRAPH clause.
-  HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator);
+  HashMapWrapper(Map map, Set targetIdLookup,
+                 const ad_utility::AllocatorWithLimit<Id>& allocator);
 
   // Construct when there is a GRAPH clause.
-  HashMapWrapper(MapOfMaps graphMap,
+  HashMapWrapper(MapOfMaps graphMap, Set targetIdLookup,
                  const ad_utility::AllocatorWithLimit<Id>& allocator);
 
   // Return all target nodes for the given source node in the currently

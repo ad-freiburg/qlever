@@ -112,7 +112,7 @@ class GraphSearchTest : public Test {
           map.insert_or_assign(Id::makeFromInt(pair.first),
                                this->initializeSet(pair.second));
         }
-        graphs_.push_back(HashMapWrapper(map, allocator_));
+        graphs_.push_back(HashMapWrapper(map, Set{allocator_}, allocator_));
       }
     } else {
       static_assert(std::is_same_v<T, BinSearchMap>);
@@ -139,7 +139,8 @@ class GraphSearchTest : public Test {
           }
         }
         graphs_.push_back(BinSearchMap(ql::span<const Id>(startIds),
-                                       ql::span<const Id>(targetIds)));
+                                       ql::span<const Id>(targetIds),
+                                       allocator_));
       }
     }
   }
