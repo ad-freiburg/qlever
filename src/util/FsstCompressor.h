@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_FSSTCOMPRESSOR_H
 #define QLEVER_FSSTCOMPRESSOR_H
@@ -51,7 +57,12 @@ class FsstDecoder {
   // `getDecoder()` on that encoder.
   explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
 
-  // Decompress a  single string.
+  // Decompress a single string.
+  //
+  // TODO<ms2144>: Batch lookup currently pays a temporary string per word.
+  // A follow-up may add a buffer-based decode path (caller-owned out buffer +
+  // optional scratch for FsstRepeatedDecoder intermediates) without replacing
+  // this return-by-string API. See CompressedVocabulary::lookupBatch.
   std::string decompress(std::string_view str) const {
     std::string output;
     auto cast = detail::castToUnsignedPtr;

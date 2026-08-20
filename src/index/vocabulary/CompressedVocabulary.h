@@ -111,6 +111,15 @@ CPP_template(typename UnderlyingVocabulary,
   // Batch-read the compressed words from the underlying vocabulary, then
   // decompress each word with the decoder of its block. The result order
   // matches `indices`.
+  //
+  // TODO<ms2144>: Hot-path cost is one temporary std::string (malloc/free) per
+  // word, then an exact-size arena allocate + memcpy into the PMR buffer. A
+  // follow-up should try decoding FSST straight into the arena at the FSST size
+  // bound (8x per stage, 64x for FsstSquared), keep the unused tail, and
+  // measure allocated-vs-used waste before adding trim or a custom bump
+  // resource. Multi-stage FSST still needs a distinct intermediate buffer;
+  // hoist one reusable scratch for the batch rather than changing the existing
+  // decompress() return-by-string API. Tracked outside the lookupBatch wire PR.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     // Still encoded; decompression into the PMR arena happens below.
