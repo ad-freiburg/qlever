@@ -493,6 +493,8 @@ TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
 }
 
 // _____________________________________________________________________________
+}  // namespace
+
 // Direct tests of the private lookupBatch helpers (FRIEND_TEST).
 TEST(Vocabulary, SplitVocabularyPartitionUnderlyingIndicesByMarker) {
   // Marker 0: plain words; marker 1: words starting with `"a`.
@@ -544,13 +546,13 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesByMarkerSingleAndMixed) {
     auto byMarker =
         TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
     auto lookups = sv.lookupBatchesByMarker(byMarker);
-    EXPECT_EQ(lookups.numNonemptyMarkers, 1);
-    EXPECT_EQ(lookups.lastNonemptyMarker, 1);
-    ASSERT_NE(lookups.lookupResultByMarker[1], nullptr);
-    EXPECT_EQ(lookups.lookupResultByMarker[0], nullptr);
-    EXPECT_EQ(lookups.lookupResultByMarker[1]->size(), 2u);
-    EXPECT_EQ((*lookups.lookupResultByMarker[1])[0], sv[sv.addMarker(0, 1)]);
-    EXPECT_EQ((*lookups.lookupResultByMarker[1])[1], sv[sv.addMarker(1, 1)]);
+    EXPECT_EQ(lookups.numNonemptyMarkers_, 1);
+    EXPECT_EQ(lookups.lastNonemptyMarker_, 1);
+    ASSERT_NE(lookups.lookupResultByMarker_[1], nullptr);
+    EXPECT_EQ(lookups.lookupResultByMarker_[0], nullptr);
+    EXPECT_EQ(lookups.lookupResultByMarker_[1]->size(), 2u);
+    EXPECT_EQ((*lookups.lookupResultByMarker_[1])[0], sv[sv.addMarker(0, 1)]);
+    EXPECT_EQ((*lookups.lookupResultByMarker_[1])[1], sv[sv.addMarker(1, 1)]);
   }
 
   // Mixed markers: both batches filled.
@@ -563,11 +565,11 @@ TEST(Vocabulary, SplitVocabularyLookupBatchesByMarkerSingleAndMixed) {
     auto byMarker =
         TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
     auto lookups = sv.lookupBatchesByMarker(byMarker);
-    EXPECT_EQ(lookups.numNonemptyMarkers, 2);
-    ASSERT_NE(lookups.lookupResultByMarker[0], nullptr);
-    ASSERT_NE(lookups.lookupResultByMarker[1], nullptr);
-    EXPECT_EQ(lookups.lookupResultByMarker[0]->size(), 2u);
-    EXPECT_EQ(lookups.lookupResultByMarker[1]->size(), 1u);
+    EXPECT_EQ(lookups.numNonemptyMarkers_, 2);
+    ASSERT_NE(lookups.lookupResultByMarker_[0], nullptr);
+    ASSERT_NE(lookups.lookupResultByMarker_[1], nullptr);
+    EXPECT_EQ(lookups.lookupResultByMarker_[0]->size(), 2u);
+    EXPECT_EQ(lookups.lookupResultByMarker_[1]->size(), 1u);
   }
   sv.close();
 }
@@ -592,7 +594,7 @@ TEST(Vocabulary, SplitVocabularyMergeMarkerBatchesInInputOrder) {
   auto byMarker =
       TwoSplitVocabulary::partitionUnderlyingIndicesByMarker(indices);
   auto lookups = sv.lookupBatchesByMarker(byMarker);
-  ASSERT_EQ(lookups.numNonemptyMarkers, 2);
+  ASSERT_EQ(lookups.numNonemptyMarkers_, 2);
   auto merged = TwoSplitVocabulary::mergeMarkerBatchesInInputOrder(
       indices, std::move(lookups));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv, merged,
@@ -607,6 +609,10 @@ TEST(Vocabulary, SplitVocabularyMergeMarkerBatchesInInputOrder) {
       std::move(singleLookups)));
   sv.close();
 }
+
+namespace {
+using namespace splitVocabTestHelpers;
+using namespace ad_utility;
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyWordWriterDestructor) {
