@@ -599,7 +599,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
 
   // We call `composeCacheStats()` always with the same parameters:
-  // `qlever()).cache()` and `qlever().namedResultCache()`.
+  // `qlever().cache()` and `qlever().namedResultCache()`.
   auto cacheStats = [&cache = qlever().cache(),
                      &namedResultCache = qlever().namedResultCache()]() {
     return composeCacheStats(cache, namedResultCache);

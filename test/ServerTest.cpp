@@ -46,17 +46,6 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
   }
 };
 
-// Expect that calling `fn()` throws with a message stating that `actionName`
-// requires a valid access token.
-auto expectRequiresValidAccessToken = [](std::string_view actionName, auto fn,
-                                         ad_utility::source_location l =
-                                             AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      fn(), testing::HasSubstr(
-                absl::StrCat(actionName, " requires a valid access token")));
-};
-
 // Build a GET request for `target` with an `access-token` Bearer header
 // attached.
 auto makeGetRequestWithAccessToken = [](std::string target,
