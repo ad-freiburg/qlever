@@ -21,23 +21,29 @@ STATIC_LIBS="$BUILD_DIR/static-libs"
 DIST_DIR="$BUILD_DIR/dist"
 NUM_THREADS=$(nproc)
 
+# The compiler can be overridden via the usual `CC`/`CXX` environment
+# variables (the CI sets them, because the default gcc 11 of Ubuntu 22.04
+# crashes with an internal compiler error on QLever's C++20 code).
+GCC="${CC:-gcc}"
+
 # A directory that contains ONLY static archives and is put first in the
 # linker search path. This forces `-ljemalloc`/`-lgomp`/`-lstdc++` to resolve
 # to the `.a` instead of the `.so`. This is needed because an explicit
 # `-lstdc++` (injected by conan's package configs) bypasses
 # `-static-libstdc++`, and because QLever's CMake links jemalloc by name.
 mkdir -p "$STATIC_LIBS"
-MULTIARCH_LIBDIR="/usr/lib/$(gcc -print-multiarch)"
+MULTIARCH_LIBDIR="/usr/lib/$($GCC -print-multiarch)"
 ln -sf "$MULTIARCH_LIBDIR/libjemalloc.a" "$STATIC_LIBS/libjemalloc.a"
-ln -sf "$(gcc -print-file-name=libgomp.a)" "$STATIC_LIBS/libgomp.a"
-ln -sf "$(gcc -print-file-name=libstdc++.a)" "$STATIC_LIBS/libstdc++.a"
+ln -sf "$($GCC -print-file-name=libgomp.a)" "$STATIC_LIBS/libgomp.a"
+ln -sf "$($GCC -print-file-name=libstdc++.a)" "$STATIC_LIBS/libstdc++.a"
 
 # Build the third-party libraries as static libraries via conan (using the
 # repo's `conanfile.txt`; all used recipes default to static). The option
 # `data_packaging=static` compiles ICU's ~30 MB Unicode data into
 # `libicudata.a` — without it, that file is a stub and the binaries fail at
 # runtime with `U_FILE_ACCESS_ERROR`.
-[ -f ~/.conan2/profiles/default ] || conan profile detect
+# Always re-detect, so that the profile picks up the compiler from `CC`.
+conan profile detect --force
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 conan install "$REPO_DIR" -pr:b=default -of=. \
