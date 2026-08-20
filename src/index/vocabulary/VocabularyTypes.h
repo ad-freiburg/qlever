@@ -227,6 +227,22 @@ inline VocabBatchLookupResult makeKeepAliveResult(
 }
 }  // namespace detail
 
+// Scatter one child batch into its positions in the combined result and retain
+// the child as an owner of the referenced word storage.
+inline void scatterVocabBatchLookupResult(
+    VocabBatchLookupResult result, ql::span<const size_t> resultPositions,
+    ql::span<std::string_view> viewsInInputOrder,
+    std::vector<VocabBatchLookupResult>& owners) {
+  AD_CONTRACT_CHECK(result != nullptr);
+  AD_CONTRACT_CHECK(result->size() == resultPositions.size());
+  for (auto [resultPosition, word] :
+       ::ranges::views::zip(resultPositions, *result)) {
+    AD_CORRECTNESS_CHECK(resultPosition < viewsInInputOrder.size());
+    viewsInInputOrder[resultPosition] = word;
+  }
+  owners.push_back(std::move(result));
+}
+
 // Return a result that keeps `owners` alive and exposes `viewsInInputOrder`
 // without copying word bytes. Each view must borrow a child batch in `owners`
 // or a word in `indexRamWords` (the index RAM vocabulary, e.g.

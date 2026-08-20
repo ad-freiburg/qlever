@@ -52,20 +52,16 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     return externalVocab_.lookupBatch(diskIndices);
   }
 
-  VocabBatchLookupResult disk;
   if (!diskIndices.empty()) {
-    disk = externalVocab_.lookupBatch(diskIndices);
-    AD_CORRECTNESS_CHECK(disk->size() == diskIndices.size());
-    for (auto [slot, word] : ::ranges::views::zip(diskSlots, *disk)) {
-      assembled[slot] = word;
-    }
+    auto disk = externalVocab_.lookupBatch(diskIndices);
+    std::vector<VocabBatchLookupResult> owners;
+    owners.reserve(1);
+    scatterVocabBatchLookupResult(std::move(disk), diskSlots, assembled,
+                                  owners);
+    return keepAliveVocabBatch(std::move(owners), std::move(assembled),
+                               internalVocab_);
   }
-  std::vector<VocabBatchLookupResult> owners;
-  if (disk) {
-    owners.push_back(std::move(disk));
-  }
-  return keepAliveVocabBatch(std::move(owners), std::move(assembled),
-                             internalVocab_);
+  return keepAliveVocabBatch({}, std::move(assembled), internalVocab_);
 }
 
 // _____________________________________________________________________________

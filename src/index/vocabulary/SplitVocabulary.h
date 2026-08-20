@@ -243,23 +243,15 @@ class SplitVocabulary {
     }
 
     std::vector<std::string_view> viewsInInputOrder(indices.size());
+    std::vector<VocabBatchLookupResult> owners;
+    owners.reserve(numNonemptyMarkers);
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
       if (lookupResultByMarker[marker] == nullptr) {
         continue;
       }
-
-      for (auto [resultPosition, lookupResult] : ::ranges::views::zip(
-               resultPositionByMarker[marker], *lookupResultByMarker[marker])) {
-        viewsInInputOrder[resultPosition] = lookupResult;
-      }
-    }
-
-    std::vector<VocabBatchLookupResult> owners;
-    owners.reserve(numNonemptyMarkers);
-    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (lookupResultByMarker[marker] != nullptr) {
-        owners.push_back(std::move(lookupResultByMarker[marker]));
-      }
+      scatterVocabBatchLookupResult(std::move(lookupResultByMarker[marker]),
+                                    resultPositionByMarker[marker],
+                                    viewsInInputOrder, owners);
     }
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder),
                                NoIndexRamWords{});
