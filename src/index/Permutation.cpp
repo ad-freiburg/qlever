@@ -142,6 +142,21 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
       limitOffset);
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// ____________________________________________________________________________
+cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+Permutation::getDistinctCol0Ids(
+    const ScanSpecification& scanSpec, bool addGraphColumn,
+    std::optional<std::vector<Id>> idFilter,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState) const {
+  return reader().getDistinctCol0Ids(
+      getScanSpecAndBlocks(scanSpec, locatedTriplesState), addGraphColumn,
+      std::move(idFilter), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState));
+}
+#endif
+
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
   using enum Permutation::Enum;

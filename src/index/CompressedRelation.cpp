@@ -987,6 +987,373 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   return lower;
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+namespace {
+using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
+
+// The number of rows after which `getDistinctCol0Ids` yields a new `IdTable`.
+// This is only an upper bound to keep the memory usage bounded, the sizes of
+// the yielded tables don't matter otherwise.
+constexpr size_t distinctCol0IdsChunkSize = 100'000;
+
+// The index of the graph column in the blocks that `getDistinctCol0Ids` reads.
+// The blocks of a full scan always consist of the three triple columns,
+// followed by the graph column (if it was requested).
+constexpr ColumnIndex graphColumnInBlock = 3;
+
+// The classification of the blocks of a full scan by `BlockSelector` below.
+struct SelectedBlocks {
+  // The blocks that have to be read from disk.
+  std::vector<CompressedBlockMetadata> toRead_;
+  // The IDs (and graph IDs, if requested) that are already known from the block
+  // metadata alone, in ascending order of the IDs, possibly with duplicates.
+  IdTable fromMetadata_;
+};
+
+// Split the blocks of a full scan into those that have to be read from disk and
+// those whose contribution to the distinct `col0Id`s is already known from
+// their metadata (see `CompressedRelationReader::getDistinctCol0Ids`).
+class BlockSelector {
+  const ScanSpecification& scanSpec_;
+  bool addGraphColumn_;
+  const std::optional<std::vector<Id>>& idFilter_;
+  const LocatedTriplesPerBlock& locatedTriples_;
+  SelectedBlocks result_;
+
+ public:
+  BlockSelector(const ScanSpecification& scanSpec, bool addGraphColumn,
+                const std::optional<std::vector<Id>>& idFilter,
+                const LocatedTriplesPerBlock& locatedTriples,
+                const CompressedRelationReader::Allocator& allocator)
+      : scanSpec_{scanSpec},
+        addGraphColumn_{addGraphColumn},
+        idFilter_{idFilter},
+        locatedTriples_{locatedTriples},
+        result_{{}, IdTable{addGraphColumn ? 2u : 1u, allocator}} {}
+
+  // Perform the classification described above.
+  SelectedBlocks select(const ScanSpecAndBlocks& scanSpecAndBlocks) && {
+    const auto& graphFilter = scanSpec_.graphFilter();
+    forEachCandidateBlock(
+        scanSpecAndBlocks,
+        [this, &graphFilter](const CompressedBlockMetadata& block) {
+          if (blockIsFilteredOut(block)) {
+            return;
+          }
+          if (blockNeedsToBeRead(block)) {
+            result_.toRead_.push_back(block);
+            return;
+          }
+          Id id = block.firstTriple_.col0Id_;
+          if (!addGraphColumn_) {
+            addToMetadata(id, Id::makeUndefined());
+            return;
+          }
+          AD_CORRECTNESS_CHECK(block.graphInfo_.has_value());
+          ql::ranges::for_each(
+              block.graphInfo_.value() |
+                  ql::views::filter([&graphFilter](Id graph) {
+                    return graphFilter.isGraphAllowed(graph);
+                  }),
+              [this, id](Id graph) { addToMetadata(id, graph); });
+        });
+    return std::move(result_);
+  }
+
+ private:
+  // Return true iff none of the triples of the given block is contained in one
+  // of the graphs that are allowed by the graph filter. This can only be
+  // determined if the metadata of the block knows all of its graphs.
+  bool blockIsFilteredOut(const CompressedBlockMetadata& block) const {
+    const auto& graphFilter = scanSpec_.graphFilter();
+    if (graphFilter.areAllGraphsAllowed() || !block.graphInfo_.has_value()) {
+      return false;
+    }
+    return ql::ranges::none_of(block.graphInfo_.value(), [&graphFilter](Id id) {
+      return graphFilter.isGraphAllowed(id);
+    });
+  }
+
+  // Return true iff the given block has to be read to determine the IDs (and
+  // graph IDs) that it contributes.
+  bool blockNeedsToBeRead(const CompressedBlockMetadata& block) const {
+    // Blocks with more than a single `col0Id` have to be read to get the IDs in
+    // between.
+    if (block.firstTriple_.col0Id_ != block.lastTriple_.col0Id_) {
+      return true;
+    }
+    // The metadata of a block describes the triples that are stored on disk. If
+    // there are updates for the block, then triples might have been deleted, so
+    // the `col0Id` and the graphs from the metadata are not necessarily part of
+    // the dataset anymore (and inserted triples might add new ones). We
+    // therefore always read such blocks, which makes the located triples be
+    // merged in and hence gives us the actual contents.
+    if (locatedTriples_.containsTriples(block.blockIndex_)) {
+      return true;
+    }
+    // At this point the single `col0Id` of the block is known, so we only have
+    // to read it if we need graph IDs that the metadata doesn't know, or if we
+    // cannot rule out that the graph filter removes all of its triples.
+    return !block.graphInfo_.has_value() &&
+           (addGraphColumn_ || !scanSpec_.graphFilter().areAllGraphsAllowed());
+  }
+
+  // Add the given `id` (together with `graph` if graph IDs are requested) to
+  // `result_.fromMetadata_`, unless it duplicates the previously added row.
+  void addToMetadata(Id id, Id graph) {
+    IdTable& table = result_.fromMetadata_;
+    size_t numRows = table.numRows();
+    if (numRows != 0 && table(numRows - 1, 0) == id &&
+        (!addGraphColumn_ || table(numRows - 1, 1) == graph)) {
+      return;
+    }
+    if (addGraphColumn_) {
+      table.push_back({id, graph});
+    } else {
+      table.push_back({id});
+    }
+  }
+
+  // Call `action` for all blocks that might contain one of the requested IDs,
+  // in ascending order.
+  template <typename Action>
+  void forEachCandidateBlock(const ScanSpecAndBlocks& scanSpecAndBlocks,
+                             const Action& action) {
+    if (!idFilter_.has_value()) {
+      ql::ranges::for_each(scanSpecAndBlocks.getBlockMetadataView(), action);
+      return;
+    }
+    auto firstCol0Id = [](const CompressedBlockMetadata& metadata) {
+      return metadata.firstTriple_.col0Id_;
+    };
+    auto lastCol0Id = [](const CompressedBlockMetadata& metadata) {
+      return metadata.lastTriple_.col0Id_;
+    };
+    const auto& ids = idFilter_.value();
+    auto id = ids.begin();
+    // The blocks are sorted by their `col0Id`s, so for each of the requested
+    // IDs we can binary search the blocks that might contain it.
+    for (const auto& blocks : scanSpecAndBlocks.blockMetadata_) {
+      auto block = blocks.begin();
+      auto firstUnhandledBlock = blocks.begin();
+      while (id != ids.end()) {
+        // Skip all the blocks that only contain smaller `col0Id`s.
+        block =
+            ql::ranges::lower_bound(block, blocks.end(), *id, {}, lastCol0Id);
+        if (block == blocks.end()) {
+          break;
+        }
+        // All the blocks that start with a `col0Id` that is not larger than
+        // `*id` might contain it. Note that they all end with a `col0Id` that
+        // is at least `*id`, because `block` does and the blocks are sorted.
+        auto end =
+            ql::ranges::upper_bound(block, blocks.end(), *id, {}, firstCol0Id);
+        ql::ranges::for_each(
+            ql::ranges::subrange{std::max(block, firstUnhandledBlock), end},
+            action);
+        firstUnhandledBlock = std::max(firstUnhandledBlock, end);
+        ++id;
+      }
+      if (id == ids.end()) {
+        return;
+      }
+    }
+  }
+};
+
+// Insert `value` into the sorted vector `values`, unless it is already there.
+// The vectors this is used for are tiny, so the linear insert is cheaper than
+// sorting and deduplicating afterwards.
+void insertSorted(std::vector<Id>& values, Id value) {
+  auto it = ql::ranges::lower_bound(values, value);
+  if (it == values.end() || *it != value) {
+    values.insert(it, value);
+  }
+}
+
+// A cursor over one of the two ascending sources of IDs that
+// `getDistinctCol0Ids` merges. The tables are fetched one at a time by the
+// `nextTable` function, their first column holds the IDs. If `graphColumn` is
+// set, that column holds the graph IDs.
+template <typename NextTable>
+class IdCursor {
+  NextTable nextTable_;
+  std::optional<ColumnIndex> graphColumn_;
+  std::optional<IdTable> table_ = std::nullopt;
+  size_t row_ = 0;
+  bool isExhausted_ = false;
+
+ public:
+  IdCursor(NextTable nextTable, std::optional<ColumnIndex> graphColumn)
+      : nextTable_{std::move(nextTable)}, graphColumn_{graphColumn} {}
+
+  // The ID of the next row that hasn't been consumed yet, or `std::nullopt` if
+  // all rows have been consumed. Advances to the next table if necessary.
+  std::optional<Id> peek() {
+    while (!table_.has_value() || row_ == table_.value().numRows()) {
+      if (isExhausted_) {
+        return std::nullopt;
+      }
+      table_ = nextTable_();
+      row_ = 0;
+      isExhausted_ = !table_.has_value();
+    }
+    return table_.value()(row_, 0);
+  }
+
+  // Consume all the rows that belong to `id`, adding their graph IDs to
+  // `graphs` (see `insertSorted`) if this cursor has a graph column.
+  void consumeId(Id id, std::vector<Id>& graphs) {
+    while (peek() == std::optional{id}) {
+      if (graphColumn_.has_value()) {
+        insertSorted(graphs, table_.value()(row_, graphColumn_.value()));
+      }
+      ++row_;
+    }
+  }
+};
+
+// Return a function that can be passed to `IdCursor` and that yields the given
+// `table` once and nothing afterwards.
+auto singleTableSource(IdTable table) {
+  return [table = std::optional{std::move(table)}]() mutable {
+    return std::exchange(table, std::nullopt);
+  };
+}
+
+// The IDs that the caller of `getDistinctCol0Ids` requested (all of them if
+// `ids` is `std::nullopt`). The IDs have to be passed to `contains` in
+// ascending order, which makes it run in amortized constant time.
+class RequestedIds {
+  const std::optional<std::vector<Id>>& ids_;
+  size_t index_ = 0;
+
+ public:
+  explicit RequestedIds(const std::optional<std::vector<Id>>& ids)
+      : ids_{ids} {}
+
+  bool contains(Id id) {
+    if (!ids_.has_value()) {
+      return true;
+    }
+    const auto& ids = ids_.value();
+    while (index_ < ids.size() && ids[index_] < id) {
+      ++index_;
+    }
+    return index_ < ids.size() && ids[index_] == id;
+  }
+};
+
+// The smaller of the two IDs, or `std::nullopt` if both of them are
+// `std::nullopt`.
+std::optional<Id> smallerId(std::optional<Id> first, std::optional<Id> second) {
+  if (!first.has_value()) {
+    return second;
+  }
+  if (!second.has_value()) {
+    return first;
+  }
+  return std::min(first.value(), second.value());
+}
+
+// Create an empty table for the result of `getDistinctCol0Ids`, with enough
+// space reserved for one chunk (or for fewer rows if only few IDs were
+// requested).
+IdTable makeResultTable(bool addGraphColumn,
+                        const std::optional<std::vector<Id>>& idFilter,
+                        const CompressedRelationReader::Allocator& allocator) {
+  IdTable table{addGraphColumn ? 2u : 1u, allocator};
+  table.reserve(idFilter.has_value() ? std::min(distinctCol0IdsChunkSize,
+                                                idFilter.value().size())
+                                     : distinctCol0IdsChunkSize);
+  return table;
+}
+
+// Append the rows for a single distinct `id` to `result`. If `result` has a
+// graph column, one row per graph ID is appended, else a single row.
+void appendRowsForId(IdTable& result, Id id, const std::vector<Id>& graphs) {
+  if (result.numColumns() == 1) {
+    result.push_back({id});
+    return;
+  }
+  // `IdTable`s are stored in column-major order, so we write the two columns
+  // separately instead of row by row.
+  size_t numRows = result.numRows();
+  result.resize(numRows + graphs.size());
+  ql::ranges::fill(result.getColumn(0).subspan(numRows), id);
+  ql::ranges::copy(graphs, result.getColumn(1).begin() + numRows);
+}
+
+}  // namespace
+
+// ____________________________________________________________________________
+cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+CompressedRelationReader::getDistinctCol0Ids(
+    ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
+    std::optional<std::vector<Id>> idFilter,
+    CancellationHandle cancellationHandle,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+  AD_CONTRACT_CHECK(cancellationHandle != nullptr);
+  AD_CONTRACT_CHECK(scanSpecAndBlocks.scanSpec_.firstFreeColIndex() == 0,
+                    "`getDistinctCol0Ids` only supports full scans.");
+  AD_EXPENSIVE_CHECK(!idFilter.has_value() ||
+                     ql::ranges::is_sorted(idFilter.value()));
+
+  auto [blocksToRead, fromMetadata] =
+      BlockSelector{scanSpecAndBlocks.scanSpec_, addGraphColumn, idFilter,
+                    locatedTriplesPerBlock, allocator_}
+          .select(scanSpecAndBlocks);
+
+  // Let the inner scan write its statistics (most importantly the number of
+  // blocks it actually read) directly into our own details, such that the
+  // consumer of this generator sees them.
+  auto& details = co_await cppcoro::getDetails;
+  details.numBlocksAll_ = scanSpecAndBlocks.sizeBlockMetadata_;
+  auto scan =
+      lazyScan(scanSpecAndBlocks.scanSpec_, std::move(blocksToRead),
+               addGraphColumn ? ColumnIndices{ADDITIONAL_COLUMN_GRAPH_ID}
+                              : ColumnIndices{},
+               cancellationHandle, locatedTriplesPerBlock, {});
+  scan.setDetailsPointer(&details);
+
+  // The IDs are computed by merging two ascending sources: the IDs that are
+  // known from the block metadata alone, and the IDs from the blocks that had
+  // to be read. We process one ID at a time and collect its graph IDs (if
+  // requested) from both sources before appending it to the result.
+  IdCursor fromMetadataCursor{
+      singleTableSource(std::move(fromMetadata)),
+      addGraphColumn ? std::optional{ColumnIndex{1}} : std::nullopt};
+  IdCursor fromBlocksCursor{
+      [&scan]() { return scan.get(); },
+      addGraphColumn ? std::optional{graphColumnInBlock} : std::nullopt};
+  RequestedIds requestedIds{idFilter};
+
+  std::vector<Id> graphs;
+  IdTable result = makeResultTable(addGraphColumn, idFilter, allocator_);
+  while (true) {
+    cancellationHandle->throwIfCancelled();
+    auto id = smallerId(fromMetadataCursor.peek(), fromBlocksCursor.peek());
+    if (!id.has_value()) {
+      break;
+    }
+    graphs.clear();
+    fromMetadataCursor.consumeId(id.value(), graphs);
+    fromBlocksCursor.consumeId(id.value(), graphs);
+    // Blocks that had to be read can contain IDs that weren't requested.
+    if (requestedIds.contains(id.value())) {
+      appendRowsForId(result, id.value(), graphs);
+    }
+    if (result.numRows() >= distinctCol0IdsChunkSize) {
+      co_yield std::move(result);
+      result = makeResultTable(addGraphColumn, idFilter, allocator_);
+    }
+  }
+  if (!result.empty()) {
+    co_yield std::move(result);
+  }
+}
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
 // ____________________________________________________________________________
 IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
     ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
