@@ -126,6 +126,12 @@ CPP_template(typename UnderlyingVocabulary,
       const auto& [idx, compressedWord] = idxAndCompressedWord;
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
+      // `memory_resource::allocate` returns `void*` to storage we own for
+      // `decompressed.size()` bytes. Casting to `char*` is well-defined and is
+      // the usual way to treat that storage as a byte buffer: we only write
+      // through `memcpy` and then form a `string_view` over the same range.
+      // Alignment is at least `alignof(std::max_align_t)` for this resource,
+      // which is sufficient for an array of `char`.
       auto* mem = static_cast<char*>(buffer->allocate(decompressed.size()));
       std::memcpy(mem, decompressed.data(), decompressed.size());
       views.emplace_back(mem, decompressed.size());
