@@ -37,6 +37,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
+#include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -55,7 +56,8 @@ using ad_utility::MediaType;
 Server::Server(
     unsigned short port, size_t numThreads, std::string accessToken,
     const qlever::EngineConfig& config, bool noAccessCheck,
-    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader)
+    std::shared_ptr<ad_utility::metrics::MetricsReader> metricsReader,
+    std::shared_ptr<ad_utility::RebuildIndexSignal> rebuildIndexSignal)
     : qlever_(config),
       numThreads_(numThreads),
       port_(port),
@@ -64,7 +66,11 @@ Server::Server(
       queryThreadPool_{numThreads},
       rebuildIndexStrategy_(config.rebuildIndexStrategy_),
       keepPreviousIndexDirs_(config.keepPreviousIndexDirs_),
-      metricsReader_(std::move(metricsReader)) {
+      metricsReader_(std::move(metricsReader)),
+      rebuildIndexSignal_(
+          rebuildIndexSignal
+              ? std::move(rebuildIndexSignal)
+              : std::make_shared<ad_utility::RebuildIndexSignal>()) {
   AD_LOG_INFO << "Initializing server ..." << std::endl;
 
   initializeServerMetrics(config.memoryLimit_);
@@ -1549,7 +1555,14 @@ Server::rebuildIndexUnlessInProgress(
   if (rebuildInProgress_.exchange(true)) {
     co_return std::nullopt;
   }
-  absl::Cleanup cleanup{[this]() { rebuildInProgress_.store(false); }};
+  absl::Cleanup cleanup{[this]() {
+    // `markEnd` must come first: once `rebuildInProgress_` is false the next
+    // rebuild may start and set the signal, and clearing it afterward would
+    // wipe out that rebuild's id for its whole duration.
+    rebuildIndexSignal_->markEnd();
+    rebuildInProgress_.store(false);
+  }};
+  rebuildIndexSignal_->markStart();
   co_return co_await rebuildIndex(std::move(rebuildTmpDir),
                                   std::move(rebuildPreviousIndexDir));
 }
