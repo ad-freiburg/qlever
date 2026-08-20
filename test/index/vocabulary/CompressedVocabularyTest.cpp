@@ -26,21 +26,21 @@ struct DummyDecoder {
     return compressed.size();
   }
 
-  static size_t decompressInto(std::string_view compressed, ql::span<char> out,
-                               [[maybe_unused]] std::string& scratch) {
+  static size_t decompressInto(std::string_view compressed,
+                               ql::span<char> out) {
     AD_CONTRACT_CHECK(out.size() >= compressed.size());
-    for (size_t i = 0; i < compressed.size(); ++i) {
-      out[i] = static_cast<char>(compressed[i] - 2);
+    for (auto&& [dest, src] :
+         ::ranges::views::zip(out.subspan(0, compressed.size()), compressed)) {
+      dest = static_cast<char>(src - 2);
     }
     return compressed.size();
   }
 
   static std::string decompress(std::string_view compressed) {
-    std::string result;
-    result.resize(maxDecompressedSize(compressed));
-    std::string scratch;
-    result.resize(decompressInto(
-        compressed, ql::span<char>{result.data(), result.size()}, scratch));
+    std::string result{compressed};
+    for (char& c : result) {
+      c -= 2;
+    }
     return result;
   }
   // This class has no state, but it still needs to be serialized.

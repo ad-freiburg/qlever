@@ -15,6 +15,7 @@
 #include <fsst.h>
 
 #include <array>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -40,6 +41,16 @@ struct CastToUnsignedPtr {
   }
 };
 constexpr CastToUnsignedPtr castToUnsignedPtr{};
+
+// Allocate `bound` bytes, run `decode` into that buffer, and shrink to the
+// number of bytes written.
+template <typename Decode>
+std::string decompressToOwnedString(size_t bound, Decode decode) {
+  std::string output;
+  output.resize(bound);
+  output.resize(decode(ql::span<char>{output.data(), output.size()}));
+  return output;
+}
 }  // namespace detail
 
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
@@ -59,18 +70,20 @@ class FsstDecoder {
   // `getDecoder()` on that encoder.
   explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
 
-  // FSST expands by at most this factor (library guarantee).
-  static constexpr size_t maxExpansionFactor = 8;
+  // Use the FSST library guarantee: expansion is at most this factor.
+  static constexpr size_t MAX_EXPANSION_FACTOR = 8;
 
-  // Upper bound on the decompressed size of `str`.
-  static size_t maxDecompressedSize(std::string_view str) {
-    return maxExpansionFactor * str.size();
+  // Return an upper bound on the decompressed size of `str`.
+  [[nodiscard]] static size_t maxDecompressedSize(std::string_view str) {
+    AD_CONTRACT_CHECK(str.size() <= std::numeric_limits<size_t>::max() /
+                                        MAX_EXPANSION_FACTOR);
+    return MAX_EXPANSION_FACTOR * str.size();
   }
 
   // Decompress `str` into `out`. `out.size()` must be at least
   // `maxDecompressedSize(str)`. Return the number of bytes written.
-  size_t decompressInto(std::string_view str, ql::span<char> out,
-                        [[maybe_unused]] std::string& scratch) const {
+  [[nodiscard]] size_t decompressInto(std::string_view str,
+                                      ql::span<char> out) const {
     const size_t bound = maxDecompressedSize(str);
     AD_CONTRACT_CHECK(out.size() >= bound);
     if (bound == 0) {
@@ -86,12 +99,9 @@ class FsstDecoder {
   // Decompress a single string. Callers that already own an output buffer
   // should use `decompressInto` instead.
   std::string decompress(std::string_view str) const {
-    std::string output;
-    output.resize(maxDecompressedSize(str));
-    std::string scratch;
-    output.resize(decompressInto(
-        str, ql::span<char>{output.data(), output.size()}, scratch));
-    return output;
+    return detail::decompressToOwnedString(
+        maxDecompressedSize(str),
+        [this, str](ql::span<char> out) { return decompressInto(str, out); });
   }
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
@@ -125,21 +135,23 @@ class FsstRepeatedDecoder {
   // `getDecoder()` on that encoder.
   explicit FsstRepeatedDecoder(Decoders decoders) : decoders_{decoders} {}
 
-  static size_t maxDecompressedSize(std::string_view str) {
+  // Return an upper bound on the size after all `N` decoding stages.
+  [[nodiscard]] static size_t maxDecompressedSize(std::string_view str) {
     size_t bound = str.size();
-    for (size_t i = 0; i < N; ++i) {
-      bound *= FsstDecoder::maxExpansionFactor;
+    for (size_t stage = 0; stage < N; ++stage) {
+      AD_CONTRACT_CHECK(bound <= std::numeric_limits<size_t>::max() /
+                                     FsstDecoder::MAX_EXPANSION_FACTOR);
+      bound *= FsstDecoder::MAX_EXPANSION_FACTOR;
     }
     return bound;
   }
 
   // Decompress `str` into `out`. `out.size()` must be at least
-  // `maxDecompressedSize(str)`. For `N >= 2`, `scratch` is grown once to
-  // that same size and kept; stages ping-pong between `out` and `scratch`
-  // so the last stage always writes `out` and no stage reads and writes
-  // the same buffer. Return the number of bytes written.
-  size_t decompressInto(std::string_view str, ql::span<char> out,
-                        std::string& scratch) const {
+  // `maxDecompressedSize(str)`. For `N >= 2`, grow `scratch` to `out.size()`
+  // if it is smaller, then ping-pong stages between `out` and `scratch` so
+  // the last stage always writes `out`. Return the number of bytes written.
+  [[nodiscard]] size_t decompressInto(std::string_view str, ql::span<char> out,
+                                      std::string& scratch) const {
     AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(str));
     if constexpr (N >= 2) {
       if (scratch.size() < out.size()) {
@@ -148,14 +160,13 @@ class FsstRepeatedDecoder {
     }
     std::array<ql::span<char>, 2> buffers{
         out, ql::span<char>{scratch.data(), scratch.size()}};
-    // Even N: first write goes to scratch, last write to `out`.
-    // Odd N: first write goes to `out`, last write to `out`.
+    // For even `N`, write the first stage to `scratch` and the last to `out`.
+    // For odd `N`, write the first and last stages to `out`.
     size_t dest = (N % 2 == 0) ? 1 : 0;
     std::string_view input = str;
     size_t n = 0;
     for (size_t stage = 0; stage < N; ++stage) {
-      n = decoders_[N - 1 - stage].decompressInto(input, buffers[dest],
-                                                  scratch);
+      n = decoders_[N - 1 - stage].decompressInto(input, buffers[dest]);
       input = std::string_view{buffers[dest].data(), n};
       dest ^= 1;
     }
@@ -165,12 +176,10 @@ class FsstRepeatedDecoder {
   // Decompress a single string. Callers that already own an output buffer
   // should use `decompressInto` instead.
   std::string decompress(std::string_view str) const {
-    std::string result;
-    result.resize(maxDecompressedSize(str));
     std::string scratch;
-    result.resize(decompressInto(
-        str, ql::span<char>{result.data(), result.size()}, scratch));
-    return result;
+    return detail::decompressToOwnedString(
+        maxDecompressedSize(str),
+        [&](ql::span<char> out) { return decompressInto(str, out, scratch); });
   }
   // Allow this type to be trivially serializable,
   CPP_template_2(typename T, typename U)(

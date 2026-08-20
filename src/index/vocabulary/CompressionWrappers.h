@@ -63,11 +63,10 @@ template <typename T>
 CPP_concept CompressionWrapper = CPP_requires_ref(CompressionWrapper_, T);
 
 namespace detail {
-// A class that holds a `vector<DecoderT>` and implements the
-// `decompress(string_view, index)` method by forwarding this call to
-// `decoders_[index].decompress(string_view)`. It is used as a building block
-// for types that are supposed to fulfill the `CompressionWrapper` concept
-// above.
+// A class that holds a `vector<DecoderT>` and forwards `decompress`,
+// `maxDecompressedSize`, and `decompressInto` to `decoders_[index]`. It is
+// used as a building block for types that fulfill the `CompressionWrapper`
+// concept above.
 template <typename DecoderT>
 struct DecoderMultiplexer {
   using Decoder = DecoderT;
@@ -88,17 +87,28 @@ struct DecoderMultiplexer {
     ENABLE_CLANG_WARNINGS
   }
 
-  size_t maxDecompressedSize(std::string_view compressed,
-                             size_t decoderIndex) const {
+  // Return an upper bound on the decompressed size of `compressed` using
+  // `decoderIndex`.
+  [[nodiscard]] size_t maxDecompressedSize(std::string_view compressed,
+                                           size_t decoderIndex) const {
     return decoders_.at(decoderIndex).maxDecompressedSize(compressed);
   }
 
-  // Decode into `out`. `scratch` is used by multi-stage FSST; other decoders
-  // ignore it.
-  size_t decompressInto(std::string_view compressed, size_t decoderIndex,
-                        ql::span<char> out, std::string& scratch) const {
+  // Decode `compressed` with `decoderIndex` into `out`. `scratch` is used
+  // only by multi-stage FSST; single-stage decoders ignore it.
+  [[nodiscard]] size_t decompressInto(std::string_view compressed,
+                                      size_t decoderIndex, ql::span<char> out,
+                                      std::string& scratch) const {
     DISABLE_CLANG_UNUSED_RESULT_WARNING
-    return decoders_.at(decoderIndex).decompressInto(compressed, out, scratch);
+    auto& decoder = decoders_.at(decoderIndex);
+    if constexpr (requires {
+                    decoder.decompressInto(compressed, out, scratch);
+                  }) {
+      return decoder.decompressInto(compressed, out, scratch);
+    } else {
+      (void)scratch;
+      return decoder.decompressInto(compressed, out);
+    }
     ENABLE_CLANG_WARNINGS
   }
 

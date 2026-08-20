@@ -65,7 +65,7 @@ class PrefixCompressor {
     return static_cast<char>(NO_PREFIX_CHAR) + word;
   }
 
-  // Upper bound on the decompressed size of `compressedWord`.
+  // Return an upper bound on the decompressed size of `compressedWord`.
   [[nodiscard]] size_t maxDecompressedSize(
       std::string_view compressedWord) const {
     AD_CONTRACT_CHECK(!compressedWord.empty());
@@ -79,30 +79,35 @@ class PrefixCompressor {
 
   // Decompress `compressedWord` into `out`. `out.size()` must be at least
   // `maxDecompressedSize(compressedWord)`. Return the number of bytes written.
-  size_t decompressInto(std::string_view compressedWord, ql::span<char> out,
-                        [[maybe_unused]] std::string& scratch) const {
+  [[nodiscard]] size_t decompressInto(std::string_view compressedWord,
+                                      ql::span<char> out) const {
     const size_t bound = maxDecompressedSize(compressedWord);
     AD_CONTRACT_CHECK(out.size() >= bound);
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
     const std::string_view rest = compressedWord.substr(1);
+    size_t n = 0;
     if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
       const std::string& prefix = prefixToCode_[idx];
-      std::memcpy(out.data(), prefix.data(), prefix.size());
-      std::memcpy(out.data() + prefix.size(), rest.data(), rest.size());
-      return prefix.size() + rest.size();
+      if (!prefix.empty()) {
+        std::memcpy(out.data(), prefix.data(), prefix.size());
+        n = prefix.size();
+      }
     }
-    std::memcpy(out.data(), rest.data(), rest.size());
-    return rest.size();
+    if (!rest.empty()) {
+      std::memcpy(out.data() + n, rest.data(), rest.size());
+      n += rest.size();
+    }
+    return n;
   }
 
   // Decompress the given `compressedWord`.
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
-    std::string result;
-    result.resize(maxDecompressedSize(compressedWord));
-    std::string scratch;
-    result.resize(decompressInto(
-        compressedWord, ql::span<char>{result.data(), result.size()}, scratch));
-    return result;
+    AD_CONTRACT_CHECK(!compressedWord.empty());
+    auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
+    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
+      return prefixToCode_[idx] + compressedWord.substr(1);
+    }
+    return std::string(compressedWord.substr(1));
   }
 
   // From the given list of prefixes, build the internal data structure for

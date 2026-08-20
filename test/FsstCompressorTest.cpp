@@ -367,25 +367,25 @@ TEST(FsstEncoder, firstTest) {
     EXPECT_THAT(s3, ::testing::ElementsAreArray(s));
   }
 
-  // `decompressInto` must write the same bytes as `decompress`, using a
-  // caller-owned buffer sized to `maxDecompressedSize`.
+  // Verify that `decompressInto` writes the same bytes as `decompress` when
+  // using a caller-owned buffer sized to `maxDecompressedSize`.
   {
     auto [buffer, compressedViews, intoDecoder] = FsstEncoder::compressAll(s);
     for (size_t i = 0; i < s.size(); ++i) {
       const std::string viaString = intoDecoder.decompress(compressedViews[i]);
       std::string intoBuf(intoDecoder.maxDecompressedSize(compressedViews[i]),
                           '\0');
-      std::string scratch;
       const size_t n = intoDecoder.decompressInto(
-          compressedViews[i], ql::span<char>{intoBuf.data(), intoBuf.size()},
-          scratch);
-      EXPECT_EQ(n, viaString.size());
-      EXPECT_EQ(std::string_view(intoBuf.data(), n), viaString);
-      EXPECT_EQ(viaString, s[i]);
+          compressedViews[i], ql::span<char>{intoBuf.data(), intoBuf.size()});
+      EXPECT_THAT(n, ::testing::Eq(viaString.size()));
+      EXPECT_THAT(std::string_view(intoBuf.data(), n),
+                  ::testing::Eq(viaString));
+      EXPECT_THAT(viaString, ::testing::Eq(s[i]));
     }
   }
 }
 
+// _____________________________________________________________________________
 template <size_t N>
 void expectRepeatedDecompressIntoMatches(
     const std::vector<std::string>& words) {
@@ -410,18 +410,28 @@ void expectRepeatedDecompressIntoMatches(
     std::string intoBuf(repeated.maxDecompressedSize(compressed[i]), '\0');
     const size_t n = repeated.decompressInto(
         compressed[i], ql::span<char>{intoBuf.data(), intoBuf.size()}, scratch);
-    EXPECT_EQ(n, viaString.size());
-    EXPECT_EQ(std::string_view(intoBuf.data(), n), viaString);
-    EXPECT_EQ(viaString, words[i]);
+    EXPECT_THAT(n, ::testing::Eq(viaString.size()));
+    EXPECT_THAT(std::string_view(intoBuf.data(), n), ::testing::Eq(viaString));
+    EXPECT_THAT(viaString, ::testing::Eq(words[i]));
   }
-  EXPECT_GE(scratch.size(), repeated.maxDecompressedSize(compressed.front()));
+  if constexpr (N >= 2) {
+    EXPECT_GE(scratch.size(), repeated.maxDecompressedSize(compressed.front()));
+  }
 }
 
+// _____________________________________________________________________________
+TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressOneStage) {
+  expectRepeatedDecompressIntoMatches<1>(
+      {"alpha", "beta", "gamma-gamma-gamma"});
+}
+
+// _____________________________________________________________________________
 TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressTwoStages) {
   expectRepeatedDecompressIntoMatches<2>(
       {"alpha", "beta", "gamma-gamma-gamma"});
 }
 
+// _____________________________________________________________________________
 TEST(FsstRepeatedDecoder, decompressIntoMatchesDecompressThreeStages) {
   expectRepeatedDecompressIntoMatches<3>(
       {"alpha", "beta", "gamma-gamma-gamma"});

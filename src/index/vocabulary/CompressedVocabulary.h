@@ -110,11 +110,13 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Batch-read the compressed words from the underlying vocabulary, then
   // decompress each word with the decoder of its block. The result order
-  // matches `indices`. Decode into the PMR arena at the decoder's size bound
-  // (8x per FSST stage). Unused arena tail is kept; trim only after measuring
-  // allocated-vs-used waste. Multi-stage FSST ping-pongs between that arena
-  // slot and one scratch buffer of the same size, grown once to the largest
-  // bound in the batch. `decompress()` still returns `std::string`.
+  // matches `indices`. Allocate each word at the wrapper's
+  // `maxDecompressedSize` in the PMR arena and decode into that slot. Keep
+  // the unused tail; do not trim until allocated-vs-used waste is measured
+  // (`TODO<ms2144>`). Multi-stage FSST reuses `scratch` and grows it when a
+  // larger bound appears. `decompress()` still returns `std::string`.
+  // TODO<ms2144>: Measure arena bound-vs-used waste on Wikidata label batches
+  // before adding trim or a custom bump resource.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     // Still encoded; decompression into the PMR arena happens below.
@@ -138,10 +140,10 @@ CPP_template(typename UnderlyingVocabulary,
       }
       // `memory_resource::allocate` returns `void*` to storage we own for
       // `bound` bytes. Casting to `char*` is well-defined and is the usual
-      // way to treat that storage as a byte buffer: FSST writes through
-      // `fsst_decompress` and then we form a `string_view` over the used
-      // prefix. Alignment is at least `alignof(std::max_align_t)` for this
-      // resource, which is sufficient for an array of `char`.
+      // way to treat that storage as a byte buffer: the selected decoder
+      // writes into it, then we form a `string_view` over the used prefix.
+      // Alignment is at least `alignof(std::max_align_t)` for this resource,
+      // which is sufficient for an array of `char`.
       auto* mem = static_cast<char*>(buffer->allocate(bound));
       const size_t n = compressionWrapper_.decompressInto(
           compressedWord, decoderIdx, ql::span<char>{mem, bound}, scratch);
