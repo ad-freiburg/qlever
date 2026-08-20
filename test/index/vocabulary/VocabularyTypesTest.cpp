@@ -98,6 +98,28 @@ TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
   EXPECT_EQ((*result)[1], "beta");
 }
 
+TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
+  auto first = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
+  auto second = makeStringVectorVocabBatchLookupResult({"gamma"});
+  const char* alphaData = (*first)[0].data();
+  const char* gammaData = (*second)[0].data();
+
+  std::vector<std::string_view> viewsInInputOrder(3);
+  std::vector<VocabBatchLookupResult> owners;
+  const std::array<size_t, 2> firstPositions{2, 0};
+  const std::array<size_t, 1> secondPositions{1};
+  scatterVocabBatchLookupResult(std::move(first), firstPositions,
+                                viewsInInputOrder, owners);
+  scatterVocabBatchLookupResult(std::move(second), secondPositions,
+                                viewsInInputOrder, owners);
+
+  auto result = keepAliveVocabBatch(
+      std::move(owners), std::move(viewsInInputOrder), NoIndexRamWords{});
+  EXPECT_THAT(*result, ::testing::ElementsAre("beta", "gamma", "alpha"));
+  EXPECT_EQ((*result)[2].data(), alphaData);
+  EXPECT_EQ((*result)[1].data(), gammaData);
+}
+
 TEST(VocabBatchLookupData, KeepAliveVocabBatchDoesNotCopyBytes) {
   auto firstOwner = std::make_shared<StringVectorVocabBatchLookupData>();
   firstOwner->buffer() = {"alpha", "beta"};
