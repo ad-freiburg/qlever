@@ -79,10 +79,14 @@ constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // time
 constexpr inline size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 
-// The blocksize parameter of the parallel vocabulary merging. Higher values
-// mean higher memory consumption, whereas a too low value will impact the
-// performance negatively.
-constexpr inline size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
+// The number of words after which the on-disk partial vocabulary writes a
+// splitter (an entry into its sparse index) that allows to seek into the file
+// without reading it from the beginning.
+constexpr inline size_t PARTIAL_VOCAB_SPLITTER_INTERVAL = 100'000;
+
+// The magic number at the beginning of the sparse index of an on-disk partial
+// vocabulary. It also encodes the format version in its lowest bytes.
+constexpr inline uint64_t PARTIAL_VOCAB_INDEX_MAGIC = 0x5156'4F43'4142'0001ULL;
 
 // A buffer size used during the second pass of the Index build.
 // It is not const, so we can set it to a much lower value for unit tests to

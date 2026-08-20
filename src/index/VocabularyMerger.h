@@ -5,9 +5,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -20,6 +22,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "util/HashMap.h"
+#include "util/ParallelBlockMerge.h"
 #include "util/ProgressBar.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializePair.h"
@@ -189,6 +192,184 @@ auto mergeVocabulary(
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
+// A single word of a partial vocabulary, together with the index of the
+// partial vocabulary that it came from. This is the element type of the merge
+// of the partial vocabularies (see `PartialVocabRunsInput` below).
+struct QueueWord {
+  QueueWord() = default;
+  QueueWord(TripleComponentWithIndex&& v, size_t file)
+      : entry_(std::move(v)), partialFileId_(file) {}
+  TripleComponentWithIndex entry_;  // the word, its local ID and the
+                                    // information if it will be externalized
+  size_t partialFileId_;  // from which partial vocabulary did this word come
+
+  [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
+  [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
+
+  [[nodiscard]] const std::string& iriOrLiteral() const {
+    return entry_.iriOrLiteral();
+  }
+
+  [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
+
+  [[nodiscard]] const auto& id() const { return entry_.index_; }
+};
+
+// Return the memory that a single `QueueWord` occupies.
+struct SizeOfQueueWord {
+  ad_utility::MemorySize operator()(const QueueWord& q) const {
+    return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
+                                         q.entry_.iriOrLiteral().size());
+  }
+};
+constexpr inline SizeOfQueueWord sizeOfQueueWord{};
+
+// The input policy (see `ad_utility::parallelBlockMerge::BlockedRunsInput`) for
+// the merge of the partial vocabularies in the files
+// `basename + PARTIAL_VOCAB_WORDS_INFIX + to_string(i)` for `0 <= i <
+// numFiles`. Every such file is one presorted run, and the blocks of that run
+// are exactly the virtual blocks that are described by the sparse splitter
+// index at the end of the file (see `writePartialVocabularyToFile`). The
+// splitter index gives us the number of words as well as the first and the last
+// word of every block without any I/O, which is exactly what the parallel merge
+// needs to split its work into independent chunks.
+//
+// If a file has no (valid) splitter index, then the index is built by a single
+// sequential scan of that file, see `buildIndexByScanning`.
+class PartialVocabRunsInput {
+ public:
+  using value_type = QueueWord;
+
+  // The key by which the words are ordered. It deliberately has the same
+  // accessors as `QueueWord`, such that a single generic comparator can compare
+  // keys and elements in any combination.
+  struct Key {
+    std::string word_;
+    bool isExternal_ = false;
+
+    std::string_view iriOrLiteral() const { return word_; }
+    bool isExternal() const { return isExternal_; }
+  };
+  using Block = std::vector<QueueWord>;
+
+  // The metadata of a single block of a single run, which is the information
+  // that the merge requires without performing any I/O.
+  struct BlockMetadata {
+    // The byte offset at which the record of the first word of the block
+    // starts.
+    uint64_t byteOffset_ = 0;
+    // The number of words in all the previous blocks of the same run.
+    uint64_t numWordsBefore_ = 0;
+    Key firstKey_;
+    Key lastKey_;
+  };
+
+ private:
+  // A single presorted run, that is a single partial vocabulary file.
+  struct Run {
+    // The `File` is shared, because `readBlock` creates a `pread`-based
+    // serializer on it for every single call, possibly from several threads at
+    // the same time.
+    std::shared_ptr<ad_utility::File> file_;
+    // The total number of words in this run.
+    uint64_t numWords_ = 0;
+    // The byte offset directly behind the record of the last word, that is the
+    // end of the part of the file that holds the words.
+    uint64_t wordsEnd_ = 0;
+    std::vector<BlockMetadata> blocks_;
+  };
+
+  std::vector<Run> runs_;
+  // The number of words per block that is used when a file has no valid
+  // splitter index and the metadata has to be built by a sequential scan.
+  size_t fallbackSplitterInterval_;
+
+ public:
+  // Open the `numFiles` partial vocabularies and read (or, as a fallback,
+  // compute) their block metadata. Only unit tests should ever change the
+  // `fallbackSplitterInterval` from its default.
+  explicit PartialVocabRunsInput(
+      const std::string& basename, size_t numFiles,
+      size_t fallbackSplitterInterval = PARTIAL_VOCAB_SPLITTER_INTERVAL);
+
+  // ______________________________________________________________________
+  size_t numRuns() const { return runs_.size(); }
+
+  // ______________________________________________________________________
+  size_t numBlocks(size_t run) const { return runs_.at(run).blocks_.size(); }
+
+  // ______________________________________________________________________
+  size_t numElementsInBlock(size_t run, size_t block) const;
+
+  // ______________________________________________________________________
+  const Key& firstKey(size_t run, size_t block) const {
+    return runs_.at(run).blocks_.at(block).firstKey_;
+  }
+
+  // ______________________________________________________________________
+  const Key& lastKey(size_t run, size_t block) const {
+    return runs_.at(run).blocks_.at(block).lastKey_;
+  }
+
+  // Read the words of a single block from the file of the given run. This is
+  // the only function that performs I/O, and it is thread-safe, because it uses
+  // a `CopyableFileReadSerializer` (which is based on `pread` and therefore
+  // does not touch the file position) that is local to the call.
+  Block readBlock(size_t run, size_t block) const;
+
+  // ______________________________________________________________________
+  Block makeEmptyBlock() const { return Block{}; }
+
+  // ______________________________________________________________________
+  template <typename T>
+  void appendToBlock(Block& block, T&& element) const {
+    block.push_back(std::forward<T>(element));
+  }
+
+  // ______________________________________________________________________
+  ad_utility::MemorySize memorySizeOfElement(const QueueWord& element) const {
+    return sizeOfQueueWord(element);
+  }
+
+  // Return an estimate of the memory that the largest block of any run occupies
+  // once it has been read into a `Block`. The merge uses this to bound the
+  // number of chunks that it keeps in flight, because every such chunk reads up
+  // to one block per run at a time.
+  ad_utility::MemorySize maxBlockMemory() const;
+
+  // Return the metadata of all the blocks of the given run. This is only needed
+  // for testing.
+  const std::vector<BlockMetadata>& blockMetadata(size_t run) const {
+    return runs_.at(run).blocks_;
+  }
+
+ private:
+  // Open the file with the given name and read its block metadata, either from
+  // the splitter index at the end of the file, or, if that index is missing or
+  // broken, by a sequential scan.
+  Run readRun(const std::string& filename) const;
+
+  // Try to read the block metadata of the `run` from the sparse splitter index
+  // at the end of its file. Return false (and leave the `run` unchanged) if the
+  // index is missing or not consistent with the rest of the file, in which case
+  // the caller has to fall back to `buildIndexByScanning`.
+  static bool readSplitterIndex(Run& run, uint64_t fileSize);
+
+  // Build the block metadata of the `run` by a single sequential scan of its
+  // file. This is the fallback for files that were written by hand (as in some
+  // unit tests) or by an older version of QLever, and it is therefore also the
+  // path that defines the *meaning* of the metadata.
+  void buildIndexByScanning(Run& run, uint64_t fileSize) const;
+};
+
+// Return the options for the parallel merge of the partial vocabularies of the
+// given `input` (see `ParallelBlockMerge.h`), such that the merge stays within
+// the given memory budget. The `maxParallelism` is the number of chunks that
+// the scheduler can run at the same time.
+ad_utility::parallelBlockMerge::MergeOptions mergeOptionsForPartialVocabularies(
+    const PartialVocabRunsInput& input, ad_utility::MemorySize memoryToUse,
+    size_t maxParallelism);
+
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
 // `mergeVocabulary` function is a friend.
@@ -226,35 +407,6 @@ class VocabularyMerger {
       const std::vector<std::unique_ptr<re2::RE2>>& blankNodeIriRegexes)
       -> CPP_ret(VocabularyMetaData)(
           requires WordComparator<W>&& WordCallback<C>);
-
-  // Helper `struct` for a word from a partial vocabulary.
-  struct QueueWord {
-    QueueWord() = default;
-    QueueWord(TripleComponentWithIndex&& v, size_t file)
-        : entry_(std::move(v)), partialFileId_(file) {}
-    TripleComponentWithIndex entry_;  // the word, its local ID and the
-                                      // information if it will be externalized
-    size_t partialFileId_;  // from which partial vocabulary did this word come
-
-    [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
-    [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
-
-    [[nodiscard]] const std::string& iriOrLiteral() const {
-      return entry_.iriOrLiteral();
-    }
-
-    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
-
-    [[nodiscard]] const auto& id() const { return entry_.index_; }
-  };
-
-  struct SizeOfQueueWord {
-    ad_utility::MemorySize operator()(const QueueWord& q) const {
-      return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                           q.entry_.iriOrLiteral().size());
-    }
-  };
-  constexpr static SizeOfQueueWord sizeOfQueueWord{};
 
   // Write the queue words in the buffer to their corresponding `idMaps`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
@@ -310,11 +462,45 @@ void writeMappedIdsToExtVec(
  * For each string first writes the size of the string (64 bits). Then the
  * actual string content (no trailing zero) and then the Id (sizeof(Id)
  *
+ * The exact layout of the resulting file is the following:
+ *
+ *     [uint64 numWords]                                  <- offset 0
+ *     numWords x { [word][isExternal][uint64 id] }
+ *     ---- the sparse splitter index ----
+ *     [uint64 numIndexEntries]                           <- byte offset `I`
+ *     numIndexEntries x { [uint64 byteOffsetOfFirstWordOfBlock]
+ *                         [uint64 numWordsBeforeThisBlock]
+ *                         [firstWord][firstIsExternal]
+ *                         [lastWord][lastIsExternal] }
+ *     [uint64 I]                                         <- 16-byte footer
+ *     [uint64 PARTIAL_VOCAB_INDEX_MAGIC]
+ *
+ * Entry `j` of the splitter index describes the virtual block of words with the
+ * indices `[j * splitterInterval, min((j + 1) * splitterInterval, numWords))`.
+ * It stores the first and the last word of that block (together with their
+ * `isExternal` flags), such that a reader has the first and the last key of
+ * each block available without any additional I/O, as well as the exact byte
+ * offset at which the first word record of the block starts, such that a reader
+ * can seek there directly. There are always `ceil(numWords / splitterInterval)`
+ * entries; in particular a vocabulary with zero words leads to zero entries,
+ * but the footer is written in any case.
+ *
+ * NOTE: All the parts before the splitter index are unchanged from the previous
+ * format, so a reader that reads `numWords` and then exactly that many word
+ * records still works and simply ignores the trailing bytes. Conversely, a
+ * reader that wants to use the splitter index has to check the last 8 bytes of
+ * the file for `PARTIAL_VOCAB_INDEX_MAGIC` and fall back to a sequential scan
+ * if the magic is absent (e.g. for files that were written by hand or by an
+ * older version of QLever).
+ *
  * @param els The input
  * @param fileName will write to this file. If it exists it will be overwritten
+ * @param splitterInterval The number of words per virtual block, see above.
+ * Only unit tests should ever change this from its default.
  */
-void writePartialVocabularyToFile(const ItemVec& els,
-                                  const std::string& fileName);
+void writePartialVocabularyToFile(
+    const ItemVec& els, const std::string& fileName,
+    size_t splitterInterval = PARTIAL_VOCAB_SPLITTER_INTERVAL);
 
 /**
  * @brief Take an Array of HashMaps of strings to Ids and insert all the

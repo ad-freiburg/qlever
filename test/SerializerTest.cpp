@@ -1241,6 +1241,41 @@ TEST(BufferedWriteSerializer, FlushOnDestruction) {
 }
 
 // _____________________________________________________________________________
+TEST(BufferedWriteSerializer, GetSerializationPosition) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+
+  std::string bytes = "0123456789ab";
+  BufferedWriteSerializer writer{FileWriteSerializer{filename}, 4_B};
+  EXPECT_EQ(writer.getSerializationPosition(), 0u);
+
+  // Nothing has been flushed yet, the position comes purely from the buffer.
+  writer.serializeBytes(bytes.data(), 3);
+  EXPECT_EQ(writer.getSerializationPosition(), 3u);
+
+  // The fourth byte completes the block, so it is flushed to the file.
+  writer.serializeBytes(bytes.data() + 3, 1);
+  EXPECT_EQ(writer.getSerializationPosition(), 4u);
+
+  // One full block is flushed, one byte remains in the buffer.
+  writer.serializeBytes(bytes.data() + 4, 5);
+  EXPECT_EQ(writer.getSerializationPosition(), 9u);
+
+  // Two more blocks are flushed and the buffer is empty again.
+  writer.serializeBytes(bytes.data() + 9, 3);
+  EXPECT_EQ(writer.getSerializationPosition(), 12u);
+
+  // The position is exactly the size of the file after everything has been
+  // flushed.
+  writer.close();
+  FileReadSerializer reader{filename};
+  std::string read;
+  read.resize(bytes.size());
+  reader.serializeBytes(read.data(), read.size());
+  EXPECT_EQ(read, bytes);
+}
+
+// _____________________________________________________________________________
 TEST(BufferedWriteSerializer, IsWriteSerializer) {
   static_assert(WriteSerializer<BufferedWriteSerializer<FileWriteSerializer>>);
   static_assert(
