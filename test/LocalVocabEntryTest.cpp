@@ -10,6 +10,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <string>
+#include <vector>
+
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "index/IndexImpl.h"
@@ -33,4 +36,41 @@ TEST(LocalVocabEntry, compareThreeWayRequiresMatchingContexts) {
       (void)(entry1 < entry2),
       ::testing::HasSubstr(
           "Contexts of LocalVocabEntries have to be identical"));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocabEntry, compareThreeWayOnlyOneEntryIsContainedInVocabulary) {
+  using namespace ad_utility::testing;
+  // The comparison only looks at the position in the vocabulary if the index
+  // has an auxiliary vocabulary, so create one. Note that this must not leak
+  // into other tests, so build a fresh index instead of using a shared one.
+  TestIndexConfig config{"<a> <b> <c> ."};
+  config.auxVocabWords = std::vector<std::string>{"<zzz>"};
+  Index index = makeTestIndex(gtestCurrentTestName(), std::move(config));
+  const auto& ctx = index.getImpl().getLocalVocabContext();
+
+  // `<b>` is contained in the vocabulary of the main index, so its position is
+  // the single `Id` at which it is stored. `<aa>` is contained in none of the
+  // vocabularies, so its position is the empty range at which it would be
+  // sorted into the vocabulary of the main index, which is exactly the position
+  // of `<b>`. The two entries hence have the same lower bound, and differ only
+  // in whether they are contained.
+  LocalVocabEntry contained = LocalVocabEntry::fromIriref("<b>", ctx);
+  LocalVocabEntry notContained = LocalVocabEntry::fromIriref("<aa>", ctx);
+  auto containedPosition = contained.positionInVocab();
+  auto notContainedPosition = notContained.positionInVocab();
+  ASSERT_EQ(containedPosition.lowerBound_, notContainedPosition.lowerBound_);
+  ASSERT_NE(containedPosition.lowerBound_, containedPosition.upperBound_);
+  ASSERT_EQ(notContainedPosition.lowerBound_, notContainedPosition.upperBound_);
+
+  // The contained word is the greater one, because the word that is contained
+  // in none of the vocabularies is strictly smaller than the word at its
+  // position. This covers `isContained == true, rhsIsContained == false`.
+  EXPECT_EQ(contained.compareThreeWay(notContained),
+            ql::strong_ordering::greater);
+  EXPECT_GT(contained, notContained);
+  // The mirrored case, which covers
+  // `isContained == false, rhsIsContained == true`.
+  EXPECT_EQ(notContained.compareThreeWay(contained), ql::strong_ordering::less);
+  EXPECT_LT(notContained, contained);
 }

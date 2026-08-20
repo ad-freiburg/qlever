@@ -20,6 +20,8 @@ inline constexpr ad_utility::IndexTag wordVocabIndexTag = "WordVocabIndex";
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, wordVocabIndexTag>;
 inline constexpr ad_utility::IndexTag blankNodeIndexTag = "BlankNodeIndex";
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, blankNodeIndexTag>;
+inline constexpr ad_utility::IndexTag auxVocabIndexTag = "AuxVocabIndex";
+using AuxVocabIndex = ad_utility::TypedIndex<uint64_t, auxVocabIndexTag>;
 inline constexpr ad_utility::IndexTag documentIndexTag = "DocumentIndex";
 using DocumentIndex = ad_utility::TypedIndex<uint64_t, documentIndexTag>;
 

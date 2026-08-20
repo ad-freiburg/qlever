@@ -29,6 +29,7 @@
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
+#include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
 #include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
@@ -1409,6 +1410,20 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             << indexFormatVersion.prNumber_
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
+        // If the index is in exactly the format that the index converter
+        // converts from, then it can be rewritten instead of being rebuilt.
+        using namespace qlever::indexFormatConverter;
+        if (indexFormatVersion == sourceVersion &&
+            currentVersion == targetVersion) {
+          AD_LOG_ERROR
+              << "As a third alternative, the `qlever-convert-index` binary "
+                 "can rewrite this index into the current index format, which "
+                 "is much faster than rebuilding it. Note that rebuilding the "
+                 "index is still the recommended way, because it also profits "
+                 "from all improvements to the index building since this "
+                 "index was built."
+              << std::endl;
+        }
       }
       throw std::runtime_error{
           "Incompatible index format, see log message for details"};
@@ -1459,7 +1474,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   } else {
     AD_LOG_ERROR
         << "Key \"locale\" is missing in the metadata. This is probably "
-           "and old index build that is no longer supported by QLever. "
+           "an old index build that is no longer supported by QLever. "
            "Please rebuild your index\n";
     throw std::runtime_error(
         "Missing required key \"locale\" in index build's metadata");
