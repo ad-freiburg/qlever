@@ -144,9 +144,9 @@ class SplitVocabulary {
 
   // Hold each non-empty marker's batch and the count of non-empty markers.
   struct MarkerBatchLookups {
-    ResultsByMarker lookupResultByMarker{};
-    uint8_t numNonemptyMarkers = 0;
-    uint8_t lastNonemptyMarker = 0;
+    ResultsByMarker lookupResultByMarker_{};
+    uint8_t numNonemptyMarkers_ = 0;
+    uint8_t lastNonemptyMarker_ = 0;
   };
 
   // Look up each non-empty marker group via the underlying `lookupBatch`.

@@ -126,7 +126,7 @@ CPP_template(typename UnderlyingVocabulary,
       const auto& [idx, compressedWord] = idxAndCompressedWord;
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
-      char* mem = static_cast<char*>(buffer->allocate(decompressed.size()));
+      auto* mem = static_cast<char*>(buffer->allocate(decompressed.size()));
       std::memcpy(mem, decompressed.data(), decompressed.size());
       views.emplace_back(mem, decompressed.size());
     }
