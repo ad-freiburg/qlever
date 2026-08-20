@@ -192,11 +192,11 @@ class SplitVocabulary {
   // `lookupBatch` directly.
   static VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
       ql::span<const size_t> indices, MarkerBatchLookups markerLookups) {
-    AD_CONTRACT_CHECK(markerLookups.numNonemptyMarkers > 1);
+    AD_CONTRACT_CHECK(markerLookups.numNonemptyMarkers_ > 1);
     auto resultPositionByMarker = partitionResultPositionsByMarker(indices);
     std::vector<std::string_view> viewsInInputOrder(indices.size());
     std::vector<VocabBatchOwner> owners;
-    owners.reserve(markerLookups.numNonemptyMarkers);
+    owners.reserve(markerLookups.numNonemptyMarkers_);
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
       if (markerLookups.lookupResultByMarker[marker] == nullptr) {
         continue;
@@ -294,9 +294,9 @@ class SplitVocabulary {
         partitionUnderlyingIndicesByMarker(indices);
     auto markerLookups = lookupBatchesByMarker(underlyingVocabIndicesByMarker);
     // One marker: return that batch. Mixed markers cannot share one buffer.
-    if (markerLookups.numNonemptyMarkers == 1) {
+    if (markerLookups.numNonemptyMarkers_ == 1) {
       return std::move(
-          markerLookups.lookupResultByMarker[markerLookups.lastNonemptyMarker]);
+          markerLookups.lookupResultByMarker_[markerLookups.lastNonemptyMarker_]);
     }
     return mergeMarkerBatchesInInputOrder(indices, std::move(markerLookups));
   }
