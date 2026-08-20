@@ -314,6 +314,8 @@ class DeltaTriples {
                             OwnedBlocksEntry>>
   copyLocalVocab() const;
 
+  const IndexImpl& getIndex() const { return index_; }
+
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Compute the diff between `oldState` (the snapshot used to start the index
   // rebuild) and `newState` (the current snapshot), remap the IDs using
