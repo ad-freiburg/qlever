@@ -429,3 +429,47 @@ TEST_F(MaterializedViewsCacheKeyRewriteTest,
         }
       )");
 }
+
+// _____________________________________________________________________________
+// Regression test: the sampled placeholder value can coincidentally equal an
+// unrelated, already-fixed literal elsewhere in the view's own query. Without
+// the occurrence-count check in `QueryPatternCache::analyzeView`, substituting
+// a real query value into the resulting cache-key template would also corrupt
+// that unrelated literal, and could then wrongly match a real, unrelated
+// query subtree that happens to fix both positions to the same value.
+TEST(MaterializedViewsCacheKeyRewriteCoincidenceTest,
+     coincidentalPlaceholderCollisionIsSafe) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string ttl =
+      " <a1> <hasLabel> \"abc\" . \n"
+      " <a2> <hasLabel> \"zzz\" . \n"
+      " <d1> <p2> \"abc\" . \n";
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+
+  // The view's first column `?lbl` is sorted ascending, so the sampled
+  // placeholder is its smallest value, "abc". The unrelated second triple is
+  // hard-coded to the exact same literal.
+  qlv.writeMaterializedView("coincView", R"(
+    SELECT ?lbl ?a ?dummy {
+      ?a <hasLabel> ?lbl .
+      ?dummy <p2> "abc" .
+    }
+  )");
+  qlv.loadMaterializedView("coincView");
+
+  // No `<... p2 "zzz">` triple exists, so the correct answer is 0 rows: the
+  // second (unrelated) triple's cartesian factor is empty for this query.
+  auto result = qlv.query(R"(
+    SELECT ?a {
+      ?a <hasLabel> "zzz" .
+      ?d2 <p2> "zzz" .
+    }
+  )",
+                          ad_utility::MediaType::tsv);
+  EXPECT_EQ(result, "?a\n");
+}

@@ -80,9 +80,110 @@ std::optional<TripleComponent> sampleFirstColumnValue(
 // operation that embeds a fixed `TripleComponent` the same way) produces for a
 // triple component fixed to `value`. Anchored on `= "..."` so that replacing
 // it can only ever touch an actually-embedded value, never unrelated cache-key
-// syntax (column counts, operation names, etc.).
+// syntax (column counts, operation names, etc.). NOTE: this only rules out
+// colliding with unrelated *syntax*; it does not rule out colliding with an
+// unrelated, already-fixed value elsewhere in the same cache key that happens
+// to equal `value` -- see the occurrence-count check in `analyzeView`.
 std::string cacheKeyValueAnchor(const TripleComponent& value) {
   return absl::StrCat(" = \"", toRdfLiteral(value), "\"");
+}
+
+// The number of times `needle` occurs in `haystack`, non-overlapping.
+size_t countOccurrences(std::string_view haystack, std::string_view needle) {
+  size_t count = 0;
+  for (size_t pos = haystack.find(needle); pos != std::string_view::npos;
+       pos = haystack.find(needle, pos + needle.size())) {
+    ++count;
+  }
+  return count;
+}
+
+// The top-level triples of `parsed`, that is the triples of all
+// `BasicGraphPattern`s that are direct children of the root graph pattern.
+// These are the only triples in which `substituteFirstColumn` substitutes.
+template <typename Query, typename Func>
+void forEachTopLevelTriple(Query& parsed, Func func) {
+  for (auto& pattern : parsed._rootGraphPattern._graphPatterns) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(pattern)) {
+      for (auto& triple : pattern.getBasic()._triples) {
+        func(triple);
+      }
+    }
+  }
+}
+
+// Call `func` for the subject and the object of `triple`, if they are the
+// given `variable`. The predicate is deliberately not visited: a variable
+// predicate cannot be substituted by a `TripleComponent` (see
+// `substituteFirstColumn`, which detects such an occurrence because it is
+// counted by the `VariableCounter` but not here).
+template <typename Func>
+void forEachMatchingSide(SparqlTriple& triple, const Variable& variable,
+                         Func func) {
+  for (TripleComponent* side : {&triple.s_, &triple.o_}) {
+    if (side->isVariable() && side->getVariable() == variable) {
+      func(*side);
+    }
+  }
+}
+
+// One position in a view's own query at which the variable of its first column
+// occurs: the IRI of that triple's predicate, and whether the variable is the
+// triple's subject (as opposed to its object). Used to find the candidate
+// values for a fixed first column in a query, without having to try every
+// fixed value that occurs anywhere in it.
+struct FirstColumnAnchor {
+  std::string_view predicate_;
+  bool isSubject_;
+};
+
+// The `FirstColumnAnchor`s of `variable` in the top-level triples of `parsed`.
+// The `string_view`s of the result point into `parsed`. There is exactly one
+// anchor per legitimate substitution position, so `.size()` also doubles as
+// the expected number of times a correctly-substituted value appears in a
+// cache key computed from `parsed` (see the occurrence-count check in
+// `analyzeView`).
+std::vector<FirstColumnAnchor> firstColumnAnchors(const ParsedQuery& parsed,
+                                                  const Variable& variable) {
+  std::vector<FirstColumnAnchor> anchors;
+  forEachTopLevelTriple(parsed, [&](const SparqlTriple& triple) {
+    auto predicate = triple.getSimplePredicate();
+    if (!predicate.has_value()) {
+      return;
+    }
+    for (bool isSubject : {true, false}) {
+      const auto& side = isSubject ? triple.s_ : triple.o_;
+      if (side.isVariable() && side.getVariable() == variable) {
+        anchors.push_back({predicate.value(), isSubject});
+      }
+    }
+  });
+  return anchors;
+}
+
+// Hard cap on the number of candidate values considered per view and query.
+// The anchors already restrict the candidates to the fixed values that occur
+// with the right predicate in the right position, of which a real query has
+// one or two; this is just a defensive bound against a pathological query
+// (e.g. a huge `VALUES` clause). ponytail: fixed constant, promote to a
+// runtime parameter only if a real workload needs it tuned.
+constexpr size_t kMaxCandidateValuesPerView = 8;
+
+// Cheaply approximate the cache key that a full replan of a view's query with
+// its first column fixed to `value` would produce, by substituting `value`
+// for the sampled placeholder value that `cacheKeyTemplate` was planned with
+// once (see `sampleFirstColumnValue` and `QueryPatternCache::analyzeView`).
+// This is exact whenever the plan's shape does not depend on which value is
+// fixed (the common case for a view's own, typically small, defining query);
+// if it does not hold for a particular value, the result simply matches
+// nothing real later on -- see `FixedFirstColumnCacheKeyTemplate`.
+std::string substituteValueInCacheKeyTemplate(
+    const FixedFirstColumnCacheKeyTemplate& cacheKeyTemplate,
+    const TripleComponent& value) {
+  return absl::StrReplaceAll(
+      cacheKeyTemplate.cacheKeyTemplate_,
+      {{cacheKeyValueAnchor(cacheKeyTemplate.placeholderValue_),
+        cacheKeyValueAnchor(value)}});
 }
 
 }  // namespace
@@ -471,18 +572,43 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   // once here, so that fixing it to an actual value later, for any number of
   // queries, is a cheap string substitution instead of a full replan (see
   // `addCacheKeysWithFixedFirstColumn`).
-  if (qec != nullptr && view->firstColumnVariable().has_value()) {
+  if (auto variable = view->firstColumnVariable();
+      qec != nullptr && variable.has_value()) {
     if (auto placeholder = sampleFirstColumnValue(qec, *view);
         placeholder.has_value()) {
       auto [fixedFull, fixedWithoutInvariant] =
           view->computeCacheKey(qec, placeholder.value());
+      // The number of places in the view's own query that
+      // `substituteFirstColumn` legitimately fixes to the placeholder (see
+      // `firstColumnAnchors`). A cache key produced from a different number of
+      // occurrences of the placeholder's exact text means the sampled value
+      // coincidentally also occurs as an unrelated, already-fixed constant
+      // elsewhere in the view's own query (or, symmetrically, that two
+      // legitimate occurrences collapsed into one scan) -- either way,
+      // `substituteValueInCacheKeyTemplate`'s blind text substitution could no
+      // longer be trusted to touch only the legitimate occurrences, so the
+      // template is discarded rather than risking an incorrect rewrite.
+      size_t expectedOccurrences =
+          firstColumnAnchors(parsed.value(), variable.value()).size();
+      auto anchor = cacheKeyValueAnchor(placeholder.value());
       std::vector<FixedFirstColumnCacheKeyTemplate> templates;
-      auto addTemplate = [&templates, &placeholder](auto& cacheKeyAndCol) {
-        if (cacheKeyAndCol.has_value()) {
-          templates.push_back({std::move(cacheKeyAndCol.value().columnMapping_),
-                               std::move(cacheKeyAndCol.value().cacheKey_),
-                               placeholder.value()});
+      auto addTemplate = [&](auto& cacheKeyAndCol) {
+        if (!cacheKeyAndCol.has_value()) {
+          return;
         }
+        const auto& key = cacheKeyAndCol.value().cacheKey_;
+        if (countOccurrences(key, anchor) != expectedOccurrences) {
+          AD_LOG_INFO
+              << "Materialized view '" << view->name()
+              << "' will not use the fast, template-based rewriting for a "
+                 "fixed first column: the sampled placeholder value "
+                 "coincidentally collides with an unrelated fixed value "
+                 "elsewhere in the view's own query."
+              << std::endl;
+          return;
+        }
+        templates.push_back({std::move(cacheKeyAndCol.value().columnMapping_),
+                             key, placeholder.value()});
       };
       addTemplate(fixedFull);
       addTemplate(fixedWithoutInvariant);
@@ -627,95 +753,6 @@ BindExpressionAndTargetCol extractBindExpressions(
   }
   return map;
 }
-
-// _____________________________________________________________________________
-namespace {
-
-// The top-level triples of `parsed`, that is the triples of all
-// `BasicGraphPattern`s that are direct children of the root graph pattern.
-// These are the only triples in which `substituteFirstColumn` substitutes.
-template <typename Query, typename Func>
-void forEachTopLevelTriple(Query& parsed, Func func) {
-  for (auto& pattern : parsed._rootGraphPattern._graphPatterns) {
-    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(pattern)) {
-      for (auto& triple : pattern.getBasic()._triples) {
-        func(triple);
-      }
-    }
-  }
-}
-
-// Call `func` for the subject and the object of `triple`, if they are the
-// given `variable`. The predicate is deliberately not visited: a variable
-// predicate cannot be substituted by a `TripleComponent` (see
-// `substituteFirstColumn`, which detects such an occurrence because it is
-// counted by the `VariableCounter` but not here).
-template <typename Func>
-void forEachMatchingSide(SparqlTriple& triple, const Variable& variable,
-                         Func func) {
-  for (TripleComponent* side : {&triple.s_, &triple.o_}) {
-    if (side->isVariable() && side->getVariable() == variable) {
-      func(*side);
-    }
-  }
-}
-
-// One position in a view's own query at which the variable of its first column
-// occurs: the IRI of that triple's predicate, and whether the variable is the
-// triple's subject (as opposed to its object). Used to find the candidate
-// values for a fixed first column in a query, without having to try every
-// fixed value that occurs anywhere in it.
-struct FirstColumnAnchor {
-  std::string_view predicate_;
-  bool isSubject_;
-};
-
-// The `FirstColumnAnchor`s of `variable` in the top-level triples of `parsed`.
-// The `string_view`s of the result point into `parsed`.
-std::vector<FirstColumnAnchor> firstColumnAnchors(const ParsedQuery& parsed,
-                                                  const Variable& variable) {
-  std::vector<FirstColumnAnchor> anchors;
-  forEachTopLevelTriple(parsed, [&](const SparqlTriple& triple) {
-    auto predicate = triple.getSimplePredicate();
-    if (!predicate.has_value()) {
-      return;
-    }
-    for (bool isSubject : {true, false}) {
-      const auto& side = isSubject ? triple.s_ : triple.o_;
-      if (side.isVariable() && side.getVariable() == variable) {
-        anchors.push_back({predicate.value(), isSubject});
-      }
-    }
-  });
-  return anchors;
-}
-
-// Hard cap on the number of candidate values considered per view and query.
-// The anchors already restrict the candidates to the fixed values that occur
-// with the right predicate in the right position, of which a real query has
-// one or two; this is just a defensive bound against a pathological query
-// (e.g. a huge `VALUES` clause). ponytail: fixed constant, promote to a
-// runtime parameter only if a real workload needs it tuned.
-constexpr size_t kMaxCandidateValuesPerView = 8;
-
-// Cheaply approximate the cache key that a full replan of a view's query with
-// its first column fixed to `value` would produce, by substituting `value`
-// for the sampled placeholder value that `cacheKeyTemplate` was planned with
-// once (see `sampleFirstColumnValue` and `QueryPatternCache::analyzeView`).
-// This is exact whenever the plan's shape does not depend on which value is
-// fixed (the common case for a view's own, typically small, defining query);
-// if it does not hold for a particular value, the result simply matches
-// nothing real later on -- see `FixedFirstColumnCacheKeyTemplate`.
-std::string substituteValueInCacheKeyTemplate(
-    const FixedFirstColumnCacheKeyTemplate& cacheKeyTemplate,
-    const TripleComponent& value) {
-  return absl::StrReplaceAll(
-      cacheKeyTemplate.cacheKeyTemplate_,
-      {{cacheKeyValueAnchor(cacheKeyTemplate.placeholderValue_),
-        cacheKeyValueAnchor(value)}});
-}
-
-}  // namespace
 
 // _____________________________________________________________________________
 bool substituteFirstColumn(ParsedQuery& parsed, const Variable& variable,
