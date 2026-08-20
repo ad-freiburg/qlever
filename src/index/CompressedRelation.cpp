@@ -1161,28 +1161,129 @@ class BlockSelector {
   }
 };
 
-// A cursor over the rows of a sorted `IdTable`, used by `getDistinctCol0Ids`
-// below to merge the two sources of IDs.
-class TableCursor {
-  const IdTable& table_;
+// Insert `value` into the sorted vector `values`, unless it is already there.
+// The vectors this is used for are tiny, so the linear insert is cheaper than
+// sorting and deduplicating afterwards.
+void insertSorted(std::vector<Id>& values, Id value) {
+  auto it = ql::ranges::lower_bound(values, value);
+  if (it == values.end() || *it != value) {
+    values.insert(it, value);
+  }
+}
+
+// A cursor over one of the two ascending sources of IDs that
+// `getDistinctCol0Ids` merges. The tables are fetched one at a time by the
+// `nextTable` function, their first column holds the IDs. If `graphColumn` is
+// set, that column holds the graph IDs.
+template <typename NextTable>
+class IdCursor {
+  NextTable nextTable_;
+  std::optional<ColumnIndex> graphColumn_;
+  std::optional<IdTable> table_ = std::nullopt;
   size_t row_ = 0;
+  bool isExhausted_ = false;
 
  public:
-  explicit TableCursor(const IdTable& table) : table_{table} {}
+  IdCursor(NextTable nextTable, std::optional<ColumnIndex> graphColumn)
+      : nextTable_{std::move(nextTable)}, graphColumn_{graphColumn} {}
 
-  // The ID of the current row, or `std::nullopt` if all rows are consumed.
-  std::optional<Id> peek() const {
-    if (row_ == table_.numRows()) {
-      return std::nullopt;
+  // The ID of the next row that hasn't been consumed yet, or `std::nullopt` if
+  // all rows have been consumed. Advances to the next table if necessary.
+  std::optional<Id> peek() {
+    while (!table_.has_value() || row_ == table_.value().numRows()) {
+      if (isExhausted_) {
+        return std::nullopt;
+      }
+      table_ = nextTable_();
+      row_ = 0;
+      isExhausted_ = !table_.has_value();
     }
-    return table_(row_, 0);
+    return table_.value()(row_, 0);
   }
 
-  // The graph ID of the current row.
-  Id graph(ColumnIndex graphColumn) const { return table_(row_, graphColumn); }
-
-  void advance() { ++row_; }
+  // Consume all the rows that belong to `id`, adding their graph IDs to
+  // `graphs` (see `insertSorted`) if this cursor has a graph column.
+  void consumeId(Id id, std::vector<Id>& graphs) {
+    while (peek() == std::optional{id}) {
+      if (graphColumn_.has_value()) {
+        insertSorted(graphs, table_.value()(row_, graphColumn_.value()));
+      }
+      ++row_;
+    }
+  }
 };
+
+// Return a function that can be passed to `IdCursor` and that yields the given
+// `table` once and nothing afterwards.
+auto singleTableSource(IdTable table) {
+  return [table = std::optional{std::move(table)}]() mutable {
+    return std::exchange(table, std::nullopt);
+  };
+}
+
+// The IDs that the caller of `getDistinctCol0Ids` requested (all of them if
+// `ids` is `std::nullopt`). The IDs have to be passed to `contains` in
+// ascending order, which makes it run in amortized constant time.
+class RequestedIds {
+  const std::optional<std::vector<Id>>& ids_;
+  size_t index_ = 0;
+
+ public:
+  explicit RequestedIds(const std::optional<std::vector<Id>>& ids)
+      : ids_{ids} {}
+
+  bool contains(Id id) {
+    if (!ids_.has_value()) {
+      return true;
+    }
+    const auto& ids = ids_.value();
+    while (index_ < ids.size() && ids[index_] < id) {
+      ++index_;
+    }
+    return index_ < ids.size() && ids[index_] == id;
+  }
+};
+
+// The smaller of the two IDs, or `std::nullopt` if both of them are
+// `std::nullopt`.
+std::optional<Id> smallerId(std::optional<Id> first, std::optional<Id> second) {
+  if (!first.has_value()) {
+    return second;
+  }
+  if (!second.has_value()) {
+    return first;
+  }
+  return std::min(first.value(), second.value());
+}
+
+// Create an empty table for the result of `getDistinctCol0Ids`, with enough
+// space reserved for one chunk (or for fewer rows if only few IDs were
+// requested).
+IdTable makeResultTable(bool addGraphColumn,
+                        const std::optional<std::vector<Id>>& idFilter,
+                        const CompressedRelationReader::Allocator& allocator) {
+  IdTable table{addGraphColumn ? 2u : 1u, allocator};
+  table.reserve(idFilter.has_value() ? std::min(distinctCol0IdsChunkSize,
+                                                idFilter.value().size())
+                                     : distinctCol0IdsChunkSize);
+  return table;
+}
+
+// Append the rows for a single distinct `id` to `result`. If `result` has a
+// graph column, one row per graph ID is appended, else a single row.
+void appendRowsForId(IdTable& result, Id id, const std::vector<Id>& graphs) {
+  if (result.numColumns() == 1) {
+    result.push_back({id});
+    return;
+  }
+  // `IdTable`s are stored in column-major order, so we write the two columns
+  // separately instead of row by row.
+  size_t numRows = result.numRows();
+  result.resize(numRows + graphs.size());
+  ql::ranges::fill(result.getColumn(0).subspan(numRows), id);
+  ql::ranges::copy(graphs, result.getColumn(1).begin() + numRows);
+}
+
 }  // namespace
 
 // ____________________________________________________________________________
@@ -1198,7 +1299,6 @@ CompressedRelationReader::getDistinctCol0Ids(
   AD_EXPENSIVE_CHECK(!idFilter.has_value() ||
                      ql::ranges::is_sorted(idFilter.value()));
 
-  size_t numColumns = addGraphColumn ? 2 : 1;
   auto [blocksToRead, fromMetadata] =
       BlockSelector{scanSpecAndBlocks.scanSpec_, addGraphColumn, idFilter,
                     locatedTriplesPerBlock, allocator_}
@@ -1216,109 +1316,36 @@ CompressedRelationReader::getDistinctCol0Ids(
                cancellationHandle, locatedTriplesPerBlock, {});
   scan.setDetailsPointer(&details);
 
-  // The IDs are computed by merging two ascending streams: the IDs that are
+  // The IDs are computed by merging two ascending sources: the IDs that are
   // known from the block metadata alone, and the IDs from the blocks that had
   // to be read. We process one ID at a time and collect its graph IDs (if
-  // requested) from both streams before yielding it.
-  TableCursor metadataCursor{fromMetadata};
-  std::optional<IdTable> block = std::nullopt;
-  size_t blockRow = 0;
-  bool scanIsExhausted = false;
+  // requested) from both sources before appending it to the result.
+  IdCursor fromMetadataCursor{
+      singleTableSource(std::move(fromMetadata)),
+      addGraphColumn ? std::optional{ColumnIndex{1}} : std::nullopt};
+  IdCursor fromBlocksCursor{
+      [&scan]() { return scan.get(); },
+      addGraphColumn ? std::optional{graphColumnInBlock} : std::nullopt};
+  RequestedIds requestedIds{idFilter};
 
-  // The ID of the next row of the blocks that are read, or `std::nullopt` if
-  // they are exhausted. Advances to the next block if necessary.
-  auto peekBlock = [&block, &blockRow, &scanIsExhausted,
-                    &scan]() -> std::optional<Id> {
-    while (!block.has_value() || blockRow == block.value().numRows()) {
-      if (scanIsExhausted) {
-        return std::nullopt;
-      }
-      block = scan.get();
-      blockRow = 0;
-      scanIsExhausted = !block.has_value();
-    }
-    return block.value()(blockRow, 0);
-  };
-
-  // The position in `idFilter`, which only ever moves forward because the IDs
-  // are processed in ascending order.
-  size_t filterIndex = 0;
-  auto isRequested = [&idFilter, &filterIndex](Id id) {
-    if (!idFilter.has_value()) {
-      return true;
-    }
-    const auto& ids = idFilter.value();
-    while (filterIndex < ids.size() && ids[filterIndex] < id) {
-      ++filterIndex;
-    }
-    return filterIndex < ids.size() && ids[filterIndex] == id;
-  };
-
-  // The graph IDs of the ID that is currently being processed, kept sorted and
-  // free of duplicates. The number of graphs per entity is typically tiny, so
-  // the linear insert is cheaper than sorting and deduplicating afterwards.
   std::vector<Id> graphs;
-  auto addGraph = [&graphs](Id graph) {
-    auto it = ql::ranges::lower_bound(graphs, graph);
-    if (it == graphs.end() || *it != graph) {
-      graphs.insert(it, graph);
-    }
-  };
-
-  // Don't over-allocate if only few IDs were requested.
-  size_t reservedRows =
-      idFilter.has_value()
-          ? std::min(distinctCol0IdsChunkSize, idFilter.value().size())
-          : distinctCol0IdsChunkSize;
-  auto makeResultTable = [this, numColumns, reservedRows]() {
-    IdTable table{numColumns, allocator_};
-    table.reserve(reservedRows);
-    return table;
-  };
-
-  IdTable result = makeResultTable();
+  IdTable result = makeResultTable(addGraphColumn, idFilter, allocator_);
   while (true) {
     cancellationHandle->throwIfCancelled();
-    // Take the smaller of the two stream heads.
-    auto fromMetadataId = metadataCursor.peek();
-    auto fromBlockId = peekBlock();
-    if (!fromMetadataId.has_value() && !fromBlockId.has_value()) {
+    auto id = smallerId(fromMetadataCursor.peek(), fromBlocksCursor.peek());
+    if (!id.has_value()) {
       break;
     }
-    Id id = std::min(fromMetadataId.value_or(Id::max()),
-                     fromBlockId.value_or(Id::max()));
-
-    // Consume all the rows of both streams that belong to `id`.
     graphs.clear();
-    while (metadataCursor.peek() == std::optional{id}) {
-      if (addGraphColumn) {
-        addGraph(metadataCursor.graph(1));
-      }
-      metadataCursor.advance();
-    }
-    while (peekBlock() == std::optional{id}) {
-      if (addGraphColumn) {
-        addGraph(block.value()(blockRow, graphColumnInBlock));
-      }
-      ++blockRow;
-    }
-
-    if (!isRequested(id)) {
-      continue;
-    }
-    if (!addGraphColumn) {
-      result.push_back({id});
-    } else {
-      // Append one row per graph. `IdTable`s are stored in column-major order,
-      // so we write the two columns separately instead of row by row.
-      size_t numRows = result.numRows();
-      result.resize(numRows + graphs.size());
-      ql::ranges::fill(result.getColumn(0).subspan(numRows), id);
-      ql::ranges::copy(graphs, result.getColumn(1).begin() + numRows);
+    fromMetadataCursor.consumeId(id.value(), graphs);
+    fromBlocksCursor.consumeId(id.value(), graphs);
+    // Blocks that had to be read can contain IDs that weren't requested.
+    if (requestedIds.contains(id.value())) {
+      appendRowsForId(result, id.value(), graphs);
     }
     if (result.numRows() >= distinctCol0IdsChunkSize) {
       co_yield std::move(result);
-      result = makeResultTable();
+      result = makeResultTable(addGraphColumn, idFilter, allocator_);
     }
   }
   if (!result.empty()) {
