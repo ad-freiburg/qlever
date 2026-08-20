@@ -59,7 +59,7 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   std::vector<VocabBatchOwner> owners;
   if (!diskIndices.empty()) {
     auto disk = externalVocab_.lookupBatch(diskIndices);
-    owners.reserve(1 + static_cast<size_t>(usesInternalVocabulary));
+    owners.reserve(1 + static_cast<size_t>(!internalSlots.empty()));
     scatterVocabBatchLookupResult(std::move(disk), diskSlots, assembled,
                                   owners);
   }
