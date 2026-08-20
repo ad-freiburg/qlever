@@ -183,6 +183,13 @@ inline void scatterVocabBatchLookupResult(
 // without copying word bytes. Every view must point into storage owned by one
 // of the `owners`; the caller establishes that by construction, so there is
 // nothing to verify here.
+//
+// TODO<ms2144>: This API takes independent owner and view lists, so the
+// lifetime link is a call-site convention rather than a structural type. A
+// later redesign could replace it with a builder or an owned-view capability
+// type so slots are only filled together with their storage. Not blocking:
+// production call sites already pair views with shared wordStorage() / child
+// batches correctly after the shared-storage lifetime fix.
 inline VocabBatchLookupResult keepAliveVocabBatch(
     std::vector<VocabBatchOwner> owners,
     std::vector<std::string_view> viewsInInputOrder) {
