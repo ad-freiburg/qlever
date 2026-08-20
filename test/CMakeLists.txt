@@ -495,6 +495,16 @@ addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
+addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(SchedulerPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(OutputSinkPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
+
 addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
