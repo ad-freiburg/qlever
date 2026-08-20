@@ -11,6 +11,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include <cstring>
 #include <string>
 #include <vector>
 
