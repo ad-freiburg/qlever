@@ -185,37 +185,37 @@ class Server {
   // and timeout from `parameters`/`operation`, execute the query, and store
   // its result as a named materialized view. Uses the same convention as
   // `processVacuumDeltaTriples` above: an empty optional means an error
-  // response has already been sent to the client. On success, `operation` is
-  // reset to `None{}` so that `process()` doesn't also try to execute it as a
-  // regular query.
+  // response has already been sent to the client. On success, the caller is
+  // responsible for resetting the request's operation to `None{}` so that
+  // `process()` doesn't also try to execute it as a regular query.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<std::optional<nlohmann::json>> processWriteMaterializedView(
           const ad_utility::url_parser::ParamValueMap& parameters,
-          ad_utility::url_parser::sparqlOperation::Operation& operation,
+          const ad_utility::url_parser::sparqlOperation::Operation& operation,
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send);
 
   // Handle a `load-materialized-view` command: extract the view name from
-  // `parameters`, load it via `indexAndViews`'s materialized views manager,
-  // and reset `operation` to `None{}` so that `process()` doesn't also try to
-  // execute it as a regular query. Unlike `processWriteMaterializedView`
-  // above, this neither executes a query nor honors a timeout, so it runs
-  // synchronously and either returns its result or throws -- there's no
-  // optional-json/early-return convention needed here.
+  // `parameters` and load it via `indexAndViews`'s materialized views
+  // manager. The caller is responsible for resetting the request's operation
+  // to `None{}` so that `process()` doesn't also try to execute it as a
+  // regular query. Unlike `processWriteMaterializedView` above, this neither
+  // executes a query nor honors a timeout, so it runs synchronously and
+  // either returns its result or throws -- there's no optional-json/
+  // early-return convention needed here.
   nlohmann::json processLoadMaterializedView(
       const ad_utility::url_parser::ParamValueMap& parameters,
-      SharedIndexAndView& indexAndViews,
-      ad_utility::url_parser::sparqlOperation::Operation& operation);
+      SharedIndexAndView& indexAndViews);
 
   // Handle a `delete-materialized-view` command: extract the view name from
   // `parameters`, delete it via a freshly taken index/views snapshot (not the
   // one from the beginning of `process()`, so that a concurrent rebuild
-  // cannot make this operate on a stale manager), and reset `operation` to
-  // `None{}`. Synchronous, like `processLoadMaterializedView` above.
+  // cannot make this operate on a stale manager). The caller is responsible
+  // for resetting the request's operation to `None{}`, like
+  // `processLoadMaterializedView` above.
   nlohmann::json processDeleteMaterializedView(
-      const ad_utility::url_parser::ParamValueMap& parameters,
-      ad_utility::url_parser::sparqlOperation::Operation& operation);
+      const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Handle a `rebuild-index` command: extract the tmp-dir/previous-index-dir
   // parameters and trigger a rebuild unless one is already in progress.

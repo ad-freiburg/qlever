@@ -390,7 +390,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     Awaitable<std::optional<nlohmann::json>> Server::
         processWriteMaterializedView(
             const ad_utility::url_parser::ParamValueMap& parameters,
-            ad_utility::url_parser::sparqlOperation::Operation& operation,
+            const ad_utility::url_parser::sparqlOperation::Operation& operation,
             bool accessTokenOk, const ad_utility::Timer& requestTimer,
             const RequestT& request, ResponseT& send) {
   auto name =
@@ -440,33 +440,25 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       cancellationHandle);
   co_await std::move(coroutine);
 
-  // Prevent regular query processing by removing the query from the request.
-  operation = None{};
-
   co_return nlohmann::json{{"materialized-view-written", name}};
 }
 
 // _____________________________________________________________________________
 nlohmann::json Server::processLoadMaterializedView(
     const ad_utility::url_parser::ParamValueMap& parameters,
-    SharedIndexAndView& indexAndViews,
-    ad_utility::url_parser::sparqlOperation::Operation& operation) {
+    SharedIndexAndView& indexAndViews) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
   auto qec = qlever().createQueryExecutionContext(indexAndViews);
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
-  // Prevent regular query processing by removing the query from the request.
-  operation = None{};
-
   return json{{"materialized-view-loaded", name}};
 }
 
 // _____________________________________________________________________________
 nlohmann::json Server::processDeleteMaterializedView(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    ad_utility::url_parser::sparqlOperation::Operation& operation) {
+    const ad_utility::url_parser::ParamValueMap& parameters) {
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
@@ -478,9 +470,6 @@ nlohmann::json Server::processDeleteMaterializedView(
   // `MaterializedViewsManager::retireOnDiskFiles` on it, which makes
   // `deleteView` throw), it would just needlessly fail.
   indexAndViewsSnapshot()->materializedViewsManager_.deleteView(name);
-
-  // Prevent regular query processing by removing the query from the request.
-  operation = None{};
 
   return json{{"materialized-view-deleted", name}};
 }
@@ -675,12 +664,20 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       co_return;
     }
     response = jsonResponse(materializedViewStats.value());
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
   } else if (commandIs("load-materialized-view")) {
-    response = jsonResponse(processLoadMaterializedView(
-        parameters, indexAndViews, parsedHttpRequest.operation_));
+    response =
+        jsonResponse(processLoadMaterializedView(parameters, indexAndViews));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
   } else if (commandIs("delete-materialized-view")) {
-    response = jsonResponse(processDeleteMaterializedView(
-        parameters, parsedHttpRequest.operation_));
+    response = jsonResponse(processDeleteMaterializedView(parameters));
+    // Prevent regular query processing by removing the query from the
+    // request.
+    parsedHttpRequest.operation_ = None{};
   }
 
   // Ping with or without message.
