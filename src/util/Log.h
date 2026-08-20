@@ -232,7 +232,7 @@ class Log {
 // must not log anything themselves.
 class LogStreamProxy {
  private:
-  detail::LogLock lock_;
+  detail::LogLock lock_{detail::logMutex};
   std::ostream& stream_;
 
  public:
@@ -240,21 +240,21 @@ class LogStreamProxy {
   // given `level`. Note: `lock_` is declared before `stream_`, so the mutex is
   // acquired before `Log::getLog` writes the prefix.
   explicit LogStreamProxy(LogLevel::Enum level)
-      : lock_{detail::logMutex},
-        stream_{detail::logLevelIsEnabled(level) ? Log::getLog(level)
+      : stream_{detail::logLevelIsEnabled(level) ? Log::getLog(level)
                                                  : detail::nullStream()} {}
 
   // Write `arg` to the underlying stream. The result is the stream itself, so
   // that the remaining arguments of the `<<` chain bypass this proxy.
   template <typename T>
-  std::ostream& operator<<(T&& arg) const {
-    return stream_ << AD_FWD(arg);
+  friend std::ostream& operator<<(const LogStreamProxy& proxy, T&& arg) {
+    return proxy.stream_ << AD_FWD(arg);
   }
 
   // Overload for stream manipulators like `std::endl`, for which the template
   // argument of the overload above cannot be deduced.
-  std::ostream& operator<<(std::ostream& (*manipulator)(std::ostream&)) const {
-    return stream_ << manipulator;
+  friend std::ostream& operator<<(const LogStreamProxy& proxy,
+                                  std::ostream& (*manipulator)(std::ostream&)) {
+    return proxy.stream_ << manipulator;
   }
 };
 
