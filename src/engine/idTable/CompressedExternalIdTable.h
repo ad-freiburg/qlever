@@ -936,38 +936,33 @@ class CompressedExternalIdTableSorter
                          [ptr = this](const auto& row) { ptr->push(row); });
   }
 
-  // A lazy range that yields the blocks of an underlying merged range and, on
+  // Return a lazy range that yields the blocks of the `merged` range and, on
   // natural exhaustion, checks that the total number of yielded rows is exactly
-  // the number of rows that were pushed. The check deliberately lives in
-  // `get()` and not in a destructor or a `CallbackOnEndView`, because several
-  // callers (for example `Sort` with `requestLaziness`) abandon the range
-  // early, and the check must not fire in that case.
+  // the number of rows that were pushed. The check deliberately happens while
+  // pulling the blocks and not in a destructor or a `CallbackOnEndView`,
+  // because several callers (for example `Sort` with `requestLaziness`) abandon
+  // the range early, and the check must not fire in that case.
   template <size_t N>
-  struct CheckedMergeResult : ad_utility::InputRangeFromGet<IdTableStatic<N>> {
-    ad_utility::InputRangeTypeErased<IdTableStatic<N>> blocks_;
-    const CompressedExternalIdTableSorter* sorter_;
-    size_t numPopped_ = 0;
-
-    // ______________________________________________________________________
-    CheckedMergeResult(
-        ad_utility::InputRangeTypeErased<IdTableStatic<N>> blocks,
-        const CompressedExternalIdTableSorter* sorter)
-        : blocks_{std::move(blocks)}, sorter_{sorter} {}
-
-    // ______________________________________________________________________
-    std::optional<IdTableStatic<N>> get() override {
-      auto block = blocks_.get();
-      if (!block.has_value()) {
-        AD_CORRECTNESS_CHECK(numPopped_ == sorter_->numElementsPushed_, [this] {
-          return absl::StrCat("numPopped: ", numPopped_, "num elements pushed:",
-                              sorter_->numElementsPushed_);
-        });
-        return std::nullopt;
-      }
-      numPopped_ += block.value().numRows();
-      return block;
-    }
-  };
+  auto checkedMergeResult(
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> merged) const {
+    using LoopControl = ad_utility::LoopControl<IdTableStatic<N>>;
+    return ad_utility::InputRangeFromLoopControlGet{
+        [blocks = std::move(merged), sorter = this,
+         numPopped = size_t{0}]() mutable {
+          auto block = blocks.get();
+          if (!block.has_value()) {
+            AD_CORRECTNESS_CHECK(
+                numPopped == sorter->numElementsPushed_, [&numPopped, sorter] {
+                  return absl::StrCat(
+                      "numPopped: ", numPopped,
+                      "num elements pushed:", sorter->numElementsPushed_);
+                });
+            return LoopControl::makeBreak();
+          }
+          numPopped += block.value().numRows();
+          return LoopControl::yieldValue(std::move(block.value()));
+        }};
+  }
 
   void clearUnderlying() override { this->clear(); }
   // Transition from the input phase, where `push()` may be called, to the
@@ -1021,7 +1016,7 @@ class CompressedExternalIdTableSorter
             CompressedIdTableRunsInput<N>{this->writer_}, this->comparator_,
             makeMergeOptions(numRuns, blockSizeOutput), mergeScheduler_);
     return ad_utility::InputRangeTypeErased{
-        CheckedMergeResult<N>{std::move(merged), this}};
+        checkedMergeResult<N>(std::move(merged))};
   }
 
   // Compute the options of the parallel merge phase. The size of the output
@@ -1057,14 +1052,12 @@ class CompressedExternalIdTableSorter
   parallelBlockMerge::MergeOptions makeMergeOptions(size_t numRuns,
                                                     size_t blockSizeOutput) {
     parallelBlockMerge::MergeOptions options;
-    options.outputBlockSize = blockSizeOutput;
     // The number of rows is the only criterion for finishing an output block,
-    // exactly as it was before the merge phase was parallelized. Setting the
-    // memory limit of a block to the memory of `blockSizeOutput` rows makes the
-    // additional criterion of the merge a no-op.
+    // exactly as it was before the merge phase was parallelized.
+    options.outputBlockSize =
+        parallelBlockMerge::OutputBlockSize::numElements(blockSizeOutput);
     const MemorySize memoryPerOutputBlock =
         MemorySize::bytes(blockSizeOutput * this->numColumns_ * sizeof(Id));
-    options.maxOutputBlockMemory = memoryPerOutputBlock;
 
     const size_t offeredParallelism =
         mergeScheduler_ == nullptr ? 1 : mergeScheduler_->maxParallelism();

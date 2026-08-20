@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEOPTIONS_H
 
 #include <cstddef>
+#include <limits>
 
 #include "util/MemorySize/MemorySize.h"
 
@@ -40,17 +41,61 @@ constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD =
     100'000;
 
+// The criterion for when a single output block of the merge is complete. A
+// block is finished as soon as it either contains a given number of elements or
+// occupies a given amount of memory. Use the named constructors below to
+// express which of the two criteria actually matter for a given caller; a
+// criterion that is not specified is simply never the reason for finishing a
+// block.
+class OutputBlockSize {
+ private:
+  size_t maxNumElements_;
+  MemorySize maxMemory_;
+
+ public:
+  // Finish a block after `numElements` elements, no matter how much memory it
+  // occupies (that is, only the number of elements matters).
+  static OutputBlockSize numElements(size_t numElements) {
+    return {numElements, MemorySize::max()};
+  }
+
+  // Finish a block as soon as it occupies `memory`, no matter how many elements
+  // it contains (that is, only the memory matters).
+  static OutputBlockSize memory(MemorySize memory) {
+    return {std::numeric_limits<size_t>::max(), memory};
+  }
+
+  // Finish a block as soon as either of the two limits is reached (that is,
+  // both criteria matter).
+  static OutputBlockSize both(size_t numElements, MemorySize memory) {
+    return {numElements, memory};
+  }
+
+  // Return `true` if a block that contains `numElements` elements and occupies
+  // `memory` is complete and should be emitted.
+  bool isBlockLargeEnough(size_t numElements, MemorySize memory) const {
+    return numElements >= maxNumElements_ || memory >= maxMemory_;
+  }
+
+  // The two limits, mostly for testing and for logging.
+  size_t maxNumElements() const { return maxNumElements_; }
+  MemorySize maxMemory() const { return maxMemory_; }
+
+ private:
+  // The general constructor, only reachable via the named constructors above,
+  // so that a call site always states which criteria it cares about.
+  OutputBlockSize(size_t maxNumElements, MemorySize maxMemory)
+      : maxNumElements_{maxNumElements}, maxMemory_{maxMemory} {}
+};
+
 // The tuning knobs of the parallel merge. All of them have sensible defaults,
 // so that a caller typically only has to set the values it actually cares
 // about.
 struct MergeOptions {
-  // Emit an output block as soon as it contains that many elements.
-  size_t outputBlockSize = DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE;
-
-  // Emit an output block as soon as it occupies that much memory (according to
-  // `BlockedRunsInput::memorySizeOfElement`), even if it contains fewer than
-  // `outputBlockSize` elements.
-  MemorySize maxOutputBlockMemory = DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY;
+  // When to finish a single output block, see `OutputBlockSize`.
+  OutputBlockSize outputBlockSize =
+      OutputBlockSize::both(DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_SIZE,
+                            DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY);
 
   // Aim for that many independent chunks per thread. Larger values improve the
   // load balancing at the cost of a larger scheduling overhead.
@@ -61,10 +106,6 @@ struct MergeOptions {
   // `MergeScheduler::maxParallelism()`.
   size_t maxInFlightChunks = 0;
 
-  // Merge serially (that is, without involving the scheduler at all) if the
-  // input has at most that many runs.
-  size_t serialNumRunsThreshold = 2;
-
   // Merge serially if the input has at most that many elements in total.
   size_t serialNumElementsThreshold =
       DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
@@ -73,13 +114,6 @@ struct MergeOptions {
   // producing worker of that chunk is blocked. This is the back-pressure that
   // bounds the memory consumption of the merge.
   size_t bufferedBlocksPerChunk = 2;
-
-  // Break ties (that is, elements that the comparator considers equal) by the
-  // index of the run, which makes the tie order identical for every number of
-  // chunks, at the cost of up to twice as many calls to the comparator. Leave
-  // this off unless you actually need that property, because the result is
-  // deterministic for a fixed configuration either way.
-  bool stableTieBreaking = false;
 };
 
 }  // namespace ad_utility::parallelBlockMerge

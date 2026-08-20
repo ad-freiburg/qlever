@@ -16,19 +16,23 @@
 #include "backports/concepts.h"
 #include "util/CancellationHandle.h"
 #include "util/Iterators.h"
+#include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/ChunkMerger.h"
+#include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 namespace ad_utility::parallelBlockMerge {
 namespace detail {
 
-// The state of a purely serial merge, exposed as a lazy range of blocks. It
-// owns the input and the comparator, because the `ChunkMerger` only refers to
-// them by pointer.
+// The state of a purely serial merge, exposed as a lazy range of blocks. The
+// merging itself is done by a single `ChunkMerger` that covers the whole key
+// range; the only reason this class exists is that the `ChunkMerger` refers to
+// the input and the comparator by pointer, so somebody has to own them.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
     requires BlockedRunsInput<Input>) class SerialMergeState
-    : public ad_utility::InputRangeFromGet<typename Input::Block> {
+    : public ad_utility::InputRangeFromGet<typename Input::Block>,
+      public ad_utility::NoCopyNoMove {
  public:
   using Block = typename Input::Block;
   using Key = typename Input::Key;
@@ -39,23 +43,18 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   std::optional<ChunkMerger<moveElements, Input, Comparator>> merger_;
 
  public:
-  // ________________________________________________________________________
+  // Construct the owned input and comparator, and the single merger that covers
+  // the whole key range. NOTE: The `merger_` points to the other members, which
+  // is why this class is a `NoCopyNoMove`.
   SerialMergeState(Input input, Comparator comparator, MergeOptions options,
                    ad_utility::SharedCancellationHandle cancellationHandle)
       : input_{std::move(input)}, comparator_{std::move(comparator)} {
-    merger_.emplace(input_, comparator_, std::move(options), std::nullopt,
-                    std::nullopt, std::move(cancellationHandle));
+    merger_.emplace(input_, comparator_, std::move(options), Split<Key>{},
+                    std::move(cancellationHandle));
   }
 
-  // The `merger_` points to the other members, so this class must neither be
-  // copied nor moved.
-  SerialMergeState(const SerialMergeState&) = delete;
-  SerialMergeState& operator=(const SerialMergeState&) = delete;
-  SerialMergeState(SerialMergeState&&) = delete;
-  SerialMergeState& operator=(SerialMergeState&&) = delete;
-
   // ________________________________________________________________________
-  std::optional<Block> get() override { return merger_->nextBlock(); }
+  std::optional<Block> get() override { return merger_->get(); }
 };
 }  // namespace detail
 }  // namespace ad_utility::parallelBlockMerge

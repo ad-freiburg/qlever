@@ -24,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
+#include "util/NoCopyNoMove.h"
 
 // The output policy of the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`): the `BlockSink` concept, and
@@ -50,6 +51,15 @@ CPP_requires(BlockSink_, requires(T& sink, size_t numChunks, size_t chunkIndex,
 // `operator()`, `finishChunk`, and `pushException` are called concurrently from
 // all worker threads and therefore all have to be thread-safe. `setNumChunks`
 // is called exactly once, before any of the other functions.
+//
+// IMPORTANT: `finishChunk` and `pushException` must never throw and therefore
+// have to be `noexcept`. The core calls them on the paths that clean up after a
+// failed chunk, where an exception would leave the consumer waiting forever for
+// a chunk that is never finished. The concept cannot express this requirement
+// (a `noexcept` clause is not available in the C++17 emulation of the
+// concepts), so the core enforces it with a `static_assert` instead, see
+// `ParallelMergeState`. In contrast, `operator()` *may* throw; the core catches
+// such an exception and forwards it via `pushException`.
 template <typename T, typename Block>
 CPP_concept BlockSink = CPP_requires_ref(BlockSink_, T, Block);
 
@@ -72,7 +82,7 @@ CPP_concept BlockSink = CPP_requires_ref(BlockSink_, T, Block);
 // NOTE: The class is neither copyable nor movable, because the producers and
 // the consumer refer to it by reference.
 template <typename Block>
-class InOrderBlockSink {
+class InOrderBlockSink : public ad_utility::NoCopyNoMove {
  private:
   // The state of a single chunk.
   struct PerChunk {
@@ -103,13 +113,6 @@ class InOrderBlockSink {
       : maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk} {
     AD_CONTRACT_CHECK(maxBufferedBlocksPerChunk > 0);
   }
-
-  // The sink is referred to by reference from several threads, so it must not
-  // be copied or moved.
-  InOrderBlockSink(const InOrderBlockSink&) = delete;
-  InOrderBlockSink& operator=(const InOrderBlockSink&) = delete;
-  InOrderBlockSink(InOrderBlockSink&&) = delete;
-  InOrderBlockSink& operator=(InOrderBlockSink&&) = delete;
 
   // Abort, so that no producer is left blocked when this sink goes away.
   ~InOrderBlockSink() { abort(); }
@@ -149,13 +152,23 @@ class InOrderBlockSink {
 
   // Announce that no further blocks will be pushed for the chunk with the given
   // `chunkIndex`. Call this exactly once per chunk. Thread-safe.
-  void finishChunk(size_t chunkIndex) {
-    std::unique_lock lock{mutex_};
-    AD_CONTRACT_CHECK(numChunksIsSet_);
-    AD_CONTRACT_CHECK(chunkIndex < numChunks_);
-    chunks_[chunkIndex].finished_ = true;
-    lock.unlock();
-    consumerCanProceed_.notify_all();
+  //
+  // NOTE: This must never throw, because the core calls it also while it cleans
+  // up after a failed chunk, where an exception would leave the consumer
+  // waiting for a chunk that is never finished. See the `BlockSink` concept
+  // above.
+  void finishChunk(size_t chunkIndex) noexcept {
+    ad_utility::terminateIfThrows(
+        [this, chunkIndex] {
+          std::unique_lock lock{mutex_};
+          AD_CONTRACT_CHECK(numChunksIsSet_);
+          AD_CONTRACT_CHECK(chunkIndex < numChunks_);
+          chunks_[chunkIndex].finished_ = true;
+          lock.unlock();
+          consumerCanProceed_.notify_all();
+        },
+        "Locking or unlocking a mutex in `InOrderBlockSink::finishChunk` "
+        "failed.");
   }
 
   // Forward an `exception` to the consumer, which will rethrow it. Only the

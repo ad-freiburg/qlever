@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <memory>
 #include <utility>
-#include <vector>
 
 #include "backports/concepts.h"
 #include "util/CancellationHandle.h"
@@ -46,18 +45,18 @@ namespace ad_utility::parallelBlockMerge {
 // merged elements as a lazy range of blocks in globally sorted order. The
 // result is deterministic for a fixed configuration (the same `options` and the
 // same `MergeScheduler::maxParallelism()` always yield the same order, also for
-// elements that the `comparator` considers equal). Set
-// `MergeOptions::stableTieBreaking` to additionally make the order of the tied
-// elements independent of the number of chunks; see there for the cost.
+// elements that the `comparator` considers equal). The relative order of tied
+// elements is however *not* specified and in particular may depend on the
+// number of chunks, so a caller that cares about the order of equal elements
+// has to make the `comparator` a total order.
 //
 // The `comparator` has to be able to compare two elements, two keys, as well as
 // an element with a key (in both orders). If `moveElements` is `true`, then the
 // elements are moved out of the input blocks.
 //
 // The merge is performed serially in the calling thread if the input is small
-// (see `MergeOptions::serialNumRunsThreshold` and
-// `MergeOptions::serialNumElementsThreshold`), if the `scheduler` offers no
-// parallelism, or if the input cannot be split into more than one chunk.
+// (see `MergeOptions::serialNumElementsThreshold`), if the `scheduler` offers
+// no parallelism, or if the input cannot be split into more than one chunk.
 //
 // NOTE: The returned range owns everything that the concurrently running tasks
 // refer to, so it is safe (and cheap) to destroy it before it is exhausted.
@@ -79,23 +78,21 @@ CPP_template(bool moveElements, typename Input,
   }
   const size_t maxParallelism = scheduler->maxParallelism();
 
-  bool isSerial =
-      input.numRuns() <= options.serialNumRunsThreshold || maxParallelism <= 1;
+  bool isSerial = maxParallelism <= 1;
   if (!isSerial) {
     isSerial =
         detail::totalNumElements(input) <= options.serialNumElementsThreshold;
   }
 
-  std::vector<Key> splitters;
+  Splitters<Key> splitters;
   size_t maxInFlight = 0;
   if (!isSerial) {
     splitters = computeSplitters(
         input, comparator, maxParallelism * options.targetChunksPerThread);
-    size_t numChunks = splitters.size() + 1;
     size_t requested = options.maxInFlightChunks == 0
                            ? maxParallelism
                            : options.maxInFlightChunks;
-    maxInFlight = std::min({requested, maxParallelism, numChunks});
+    maxInFlight = std::min({requested, maxParallelism, splitters.numChunks()});
     // A single chunk (or a single in-flight chunk) cannot be parallelized, and
     // would even deadlock, because the producer of the only chunk would block
     // on a full buffer.

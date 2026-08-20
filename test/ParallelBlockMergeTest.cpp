@@ -135,8 +135,7 @@ std::vector<typename Input::value_type> mergeToVector(
 // inputs that are used in the tests.
 MergeOptions parallelOptions(size_t outputBlockSize = 7) {
   MergeOptions options;
-  options.outputBlockSize = outputBlockSize;
-  options.serialNumRunsThreshold = 0;
+  options.outputBlockSize = OutputBlockSize::numElements(outputBlockSize);
   options.serialNumElementsThreshold = 0;
   options.targetChunksPerThread = 2;
   return options;
@@ -219,7 +218,7 @@ TEST(ParallelBlockMerge, binaryMerge) {
   SizeVec v1{1, 3, 5};
   SizeVec v2{2, 4, 6};
   MergeOptions options;
-  options.outputBlockSize = 3;
+  options.outputBlockSize = OutputBlockSize::numElements(3);
   auto result = mergeToVector(SizeRuns{{v1, v2}, 3}, std::less<>{}, options);
   EXPECT_THAT(result, ::testing::ElementsAre(1u, 2u, 3u, 4u, 5u, 6u));
 
@@ -248,7 +247,7 @@ TEST(ParallelBlockMerge, moveOfElements) {
         moveElements};
   };
   MergeOptions options;
-  options.outputBlockSize = 3;
+  options.outputBlockSize = OutputBlockSize::numElements(3);
 
   auto result = mergeToVector<false>(makeInput(false), std::less<>{}, options);
   EXPECT_THAT(result, ::testing::ElementsAre("alphaalpha", "betabeta",
@@ -292,10 +291,10 @@ TEST(ParallelBlockMerge, splittersAreStrictlyIncreasing) {
   auto runs = makeRandomRuns(20, 100, 200);
   SizeRuns input{runs, 7};
   for (size_t numChunks : {2u, 3u, 8u, 64u}) {
-    auto splitters = computeSplitters(input, std::less<>{}, numChunks);
-    EXPECT_LE(splitters.size(), numChunks - 1);
-    for (size_t i = 1; i < splitters.size(); ++i) {
-      EXPECT_LT(splitters[i - 1], splitters[i]);
+    auto keys = computeSplitters(input, std::less<>{}, numChunks).keys();
+    EXPECT_LE(keys.size(), numChunks - 1);
+    for (size_t i = 1; i < keys.size(); ++i) {
+      EXPECT_LT(keys[i - 1], keys[i]);
     }
   }
 }
@@ -305,33 +304,33 @@ TEST(ParallelBlockMerge, splitterEdgeCases) {
   // All keys are equal, so there is no way to split the input.
   {
     std::vector<SizeVec> runs{SizeVec(100, 42u), SizeVec(100, 42u)};
-    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 8),
+    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 8).keys(),
                 ::testing::IsEmpty());
   }
   // Zero runs, and only empty runs.
   {
-    EXPECT_THAT(computeSplitters(SizeRuns{{}, 7}, std::less<>{}, 8),
+    EXPECT_THAT(computeSplitters(SizeRuns{{}, 7}, std::less<>{}, 8).keys(),
                 ::testing::IsEmpty());
     std::vector<SizeVec> runs{SizeVec{}, SizeVec{}};
-    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 8),
+    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 8).keys(),
                 ::testing::IsEmpty());
   }
   // A single chunk requires no splitters at all.
   {
     auto runs = makeRandomRuns(4, 50, 50);
-    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 1),
+    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 1).keys(),
                 ::testing::IsEmpty());
-    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 0),
+    EXPECT_THAT(computeSplitters(SizeRuns{runs, 7}, std::less<>{}, 0).keys(),
                 ::testing::IsEmpty());
   }
   // More chunks than blocks: the number of splitters is bounded by the number
   // of distinct block keys.
   {
     std::vector<SizeVec> runs{SizeVec{1, 2, 3, 4, 5, 6}};
-    auto splitters = computeSplitters(SizeRuns{runs, 2}, std::less<>{}, 100);
-    EXPECT_LE(splitters.size(), 3u);
-    for (size_t i = 1; i < splitters.size(); ++i) {
-      EXPECT_LT(splitters[i - 1], splitters[i]);
+    auto keys = computeSplitters(SizeRuns{runs, 2}, std::less<>{}, 100).keys();
+    EXPECT_LE(keys.size(), 3u);
+    for (size_t i = 1; i < keys.size(); ++i) {
+      EXPECT_LT(keys[i - 1], keys[i]);
     }
   }
   // One huge run and many tiny ones. The splitters have to follow the huge run,
@@ -345,12 +344,12 @@ TEST(ParallelBlockMerge, splitterEdgeCases) {
       runs.push_back(SizeVec{i, i + 1});
     }
     SizeRuns input{runs, 64};
-    auto splitters = computeSplitters(input, std::less<>{}, 8);
-    EXPECT_FALSE(splitters.empty());
-    EXPECT_LE(splitters.size(), 7u);
+    auto keys = computeSplitters(input, std::less<>{}, 8).keys();
+    EXPECT_FALSE(keys.empty());
+    EXPECT_LE(keys.size(), 7u);
     // The splitters are spread over the whole range of the huge run and are not
     // all crammed into the range of the tiny ones.
-    EXPECT_GT(splitters.back(), 1000u);
+    EXPECT_GT(keys.back(), 1000u);
     auto expected = sortedConcatenation(runs);
     auto result = mergeToVector(SizeRuns{runs, 64}, std::less<>{},
                                 parallelOptions(128), makeScheduler(4));
@@ -367,12 +366,59 @@ TEST(ParallelBlockMerge, splitterEdgeCases) {
 }
 
 // _____________________________________________________________________________
+TEST(ParallelBlockMerge, blockRangeForRun) {
+  // Two runs with the blocks `[0, 1, 2]`, `[3, 4, 5]`, `[6, 7, 8]` and
+  // `[10, 11, 12]`, plus an empty run.
+  std::vector<SizeVec> runs{SizeVec{0, 1, 2, 3, 4, 5, 6, 7, 8},
+                            SizeVec{10, 11, 12}, SizeVec{}};
+  SizeRuns input{runs, 3};
+  const std::less<> comparator;
+  auto range = [&input, &comparator](std::optional<size_t> lo,
+                                     std::optional<size_t> hi, size_t run) {
+    auto result = detail::blockRangeForRun(
+        input, comparator, Split<size_t>{std::move(lo), std::move(hi)}, run);
+    return std::pair<size_t, size_t>{result.firstBlock_, result.endBlock_};
+  };
+  // Without any bounds, all blocks of the run are in the range.
+  EXPECT_EQ(range(std::nullopt, std::nullopt, 0), Pair(0u, 3u));
+  EXPECT_EQ(range(std::nullopt, std::nullopt, 1), Pair(0u, 1u));
+  // An empty run contributes no block at all.
+  EXPECT_EQ(range(std::nullopt, std::nullopt, 2), Pair(0u, 0u));
+  EXPECT_TRUE(
+      detail::blockRangeForRun(input, comparator, Split<size_t>{}, 2).empty());
+
+  // The upper bound `3` is exactly the first key of the second block, so that
+  // block is already outside of the range. This pins the exact form of the
+  // predicate for the end of the range.
+  EXPECT_EQ(range(std::nullopt, 3, 0), Pair(0u, 1u));
+  // Symmetrically, the lower bound `3` is greater than the last key of the
+  // first block, so that block is outside of the range.
+  EXPECT_EQ(range(3, std::nullopt, 0), Pair(1u, 3u));
+  // Bounds that lie inside a block keep exactly that block.
+  EXPECT_EQ(range(4, 5, 0), Pair(1u, 2u));
+  // A bound that lies between two blocks.
+  EXPECT_EQ(range(2, 6, 0), Pair(0u, 2u));
+
+  // Bounds that exclude the whole run yield an empty range.
+  EXPECT_TRUE(detail::blockRangeForRun(input, comparator,
+                                       Split<size_t>{100, std::nullopt}, 0)
+                  .empty());
+  EXPECT_TRUE(detail::blockRangeForRun(input, comparator,
+                                       Split<size_t>{std::nullopt, 0}, 0)
+                  .empty());
+  // The second run lies completely above the key range `[0, 9)`.
+  EXPECT_TRUE(
+      detail::blockRangeForRun(input, comparator, Split<size_t>{0, 9}, 1)
+          .empty());
+}
+
+// _____________________________________________________________________________
 TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   // A single run with the three blocks `[0, 1, 2]`, `[3, 4, 5]`, `[6, 7, 8]`.
   SizeVec run{0, 1, 2, 3, 4, 5, 6, 7, 8};
   const std::less<> comparator;
   MergeOptions options;
-  options.outputBlockSize = 100;
+  options.outputBlockSize = OutputBlockSize::numElements(100);
 
   // The upper bound `3` is exactly the first key of the second block, so that
   // block must not be read. This pins the exact form of the predicate for the
@@ -380,8 +426,7 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   {
     InstrumentedInput input{SizeRuns{{run}, 3}};
     detail::ChunkMerger<false, InstrumentedInput, std::less<>> merger{
-        input,  comparator, options, std::nullopt, std::optional<size_t>{3},
-        nullptr};
+        input, comparator, options, Split<size_t>{std::nullopt, 3}, nullptr};
     auto block = merger.nextBlock();
     ASSERT_TRUE(block.has_value());
     EXPECT_THAT(block.value(), ::testing::ElementsAre(0u, 1u, 2u));
@@ -394,8 +439,7 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   {
     InstrumentedInput input{SizeRuns{{run}, 3}};
     detail::ChunkMerger<false, InstrumentedInput, std::less<>> merger{
-        input,        comparator, options, std::optional<size_t>{3},
-        std::nullopt, nullptr};
+        input, comparator, options, Split<size_t>{3, std::nullopt}, nullptr};
     auto block = merger.nextBlock();
     ASSERT_TRUE(block.has_value());
     EXPECT_THAT(block.value(), ::testing::ElementsAre(3u, 4u, 5u, 6u, 7u, 8u));
@@ -409,12 +453,7 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
   {
     InstrumentedInput input{SizeRuns{{run}, 3}};
     detail::ChunkMerger<false, InstrumentedInput, std::less<>> merger{
-        input,
-        comparator,
-        options,
-        std::optional<size_t>{4},
-        std::optional<size_t>{5},
-        nullptr};
+        input, comparator, options, Split<size_t>{4, 5}, nullptr};
     auto block = merger.nextBlock();
     ASSERT_TRUE(block.has_value());
     EXPECT_THAT(block.value(), ::testing::ElementsAre(4u));
@@ -425,38 +464,11 @@ TEST(ParallelBlockMerge, chunkBoundaryPredicatesDoNotReadSuperfluousBlocks) {
 }
 
 // _____________________________________________________________________________
-TEST(ParallelBlockMerge, stableTieBreaking) {
-  // Use pairs of which only the first component is compared, so that the order
-  // of the tied elements is visible in the result.
-  auto runs = makeTiedPairRuns();
-  auto merge = [&runs](SharedMergeScheduler scheduler) {
-    MergeOptions options = parallelOptions(64);
-    options.targetChunksPerThread = 3;
-    options.stableTieBreaking = true;
-    return mergeToVector(PairRuns{runs, 32}, ComparePairs{}, options,
-                         std::move(scheduler));
-  };
-
-  auto serial = merge(std::make_shared<InlineMergeScheduler>());
-  ASSERT_EQ(serial.size(), numTiedRuns * numTiedElementsPerRun);
-  EXPECT_TRUE(ql::ranges::is_sorted(serial, ComparePairs{}));
-  // With `stableTieBreaking` the result is the *stable* merge of the runs, so
-  // the ties are resolved in exactly the same way for every number of chunks.
-  EXPECT_THAT(merge(makeScheduler(2)), ::testing::ElementsAreArray(serial));
-  EXPECT_THAT(merge(makeScheduler(8)), ::testing::ElementsAreArray(serial));
-  // The ties are broken by the index of the run, and within a run the original
-  // order is preserved, so the result is exactly `std::stable_sort`.
-  auto expected = concatenation(runs);
-  ql::ranges::stable_sort(expected, ComparePairs{});
-  EXPECT_THAT(serial, ::testing::ElementsAreArray(expected));
-}
-
-// _____________________________________________________________________________
 TEST(ParallelBlockMerge, deterministicAcrossParallelism) {
-  // The default configuration does not break ties by the index of the run, so
-  // the guarantee is a weaker one: the result is fully determined by the input
-  // and the configuration. Without any ties that means that the result is
-  // identical for every number of chunks.
+  // The order of tied elements is not specified, so the guarantee is only
+  // that the result is fully determined by the input and the configuration.
+  // Without any ties that means that the result is identical for every number
+  // of chunks.
   static constexpr size_t numRuns = 16;
   static constexpr size_t numElementsPerRun = 500;
   std::vector<std::vector<Pair>> distinctRuns;
@@ -482,9 +494,8 @@ TEST(ParallelBlockMerge, deterministicAcrossParallelism) {
   EXPECT_THAT(mergeDistinct(makeScheduler(8)),
               ::testing::ElementsAreArray(serial));
 
-  // With ties and the default (unstable) tie breaking, a *fixed* configuration
-  // is still perfectly reproducible, also across repeated runs with different
-  // thread schedules.
+  // With ties, a *fixed* configuration is still perfectly reproducible, also
+  // across repeated runs with different thread schedules.
   auto tiedRuns = makeTiedPairRuns();
   auto mergeTied = [&tiedRuns](SharedMergeScheduler scheduler) {
     MergeOptions options = parallelOptions(64);
@@ -530,8 +541,8 @@ TEST(ParallelBlockMerge, exceptionFromChunkPropagatesSerially) {
   InstrumentedInput input{SizeRuns{runs, 16}};
   input.state_->throwAtRead_ = 1;
   MergeOptions options = parallelOptions(16);
-  // Two runs are below the threshold, so the merge is serial.
-  options.serialNumRunsThreshold = 2;
+  // The input is below the element threshold, so the merge is serial.
+  options.serialNumElementsThreshold = 1'000'000;
   AD_EXPECT_THROW_WITH_MESSAGE(
       mergeToVector(input, std::less<>{}, options, makeScheduler(4)),
       ::testing::HasSubstr("readBlock failed"));
@@ -615,8 +626,8 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
   auto runs = makeRandomRuns(4, 100, 100);
   MergeOptions options = parallelOptions(1000);
   // Three elements fit into a single output block.
-  options.maxOutputBlockMemory =
-      ad_utility::MemorySize::bytes(3 * sizeof(size_t));
+  options.outputBlockSize = OutputBlockSize::both(
+      1000, ad_utility::MemorySize::bytes(3 * sizeof(size_t)));
   auto blocks = parallelBlockMergeToRange<false>(
       SizeRuns{runs, 16}, std::less<>{}, options, makeScheduler(4));
   size_t numElements = 0;
@@ -673,7 +684,7 @@ TEST(ParallelBlockMerge, chunksWithoutAnyOutputBlockDoNotHang) {
   auto mergeWithSplitters = [&runs](SizeVec splitters) {
     ad_utility::InputRangeTypeErased<SizeVec> blocks{std::make_unique<State>(
         SizeRuns{runs, 8}, std::less<>{}, parallelOptions(8), makeScheduler(4),
-        nullptr, std::move(splitters), 2)};
+        nullptr, Splitters<size_t>{std::move(splitters)}, 2)};
     SizeVec result;
     for (const auto& block : blocks) {
       EXPECT_FALSE(block.empty());
