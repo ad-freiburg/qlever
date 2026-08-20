@@ -85,7 +85,7 @@ NARY_EXPRESSION(
 template <SpatialJoinType::Enum Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
-    FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
+    FV<ad_utility::WktGeometricRelation<Relation>, GeoPointOrWktValueGetter>);
 
 // The actual `geof:relate` expression is currently unimplemented (see
 // `WktDe9imRelation` in `GeoSparqlHelpers.h`), it is only usable via query

@@ -88,6 +88,16 @@ const auto wktLiteralIri =
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b);
 
+// Evaluate one of the `geof:sf...`-style relations directly on a pair of
+// geometries via their DE-9IM matrix (as opposed to rewriting to a
+// `SpatialJoin`). `std::nullopt` if either geometry could not be parsed.
+// `Relation` must not be `WITHIN_DIST` or `DE9IM`. Defined in
+// `GeometryInfoHelpersImpl.h` and explicitly instantiated in the .cpp file for
+// the other eight relations to avoid including that header here.
+template <SpatialJoinType::Enum Relation>
+std::optional<bool> georel(const GeoPointOrWkt& left,
+                           const GeoPointOrWkt& right);
+
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
@@ -309,16 +319,16 @@ class WktSimplify {
 template <SpatialJoinType::Enum Relation>
 class WktGeometricRelation {
  public:
-  ValueId operator()(
-      // TODO<ullingerc> For implementation, use a new appropriate value getter
-      // for geometry literals and points.
-      [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
-      [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
-    AD_THROW(
-        "Geometric relations via the `geof:sfIntersects` ... functions are "
-        "currently only implemented for a subset of all possible queries. More "
-        "details on GeoSPARQL support can be found in the QLever Docs "
-        "(https://docs.qlever.dev/geosparql/).");
+  ValueId operator()(const std::optional<GeoPointOrWkt>& geoLeft,
+                     const std::optional<GeoPointOrWkt>& geoRight) const {
+    if (!geoLeft.has_value() || !geoRight.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto result = detail::georel<Relation>(geoLeft.value(), geoRight.value());
+    if (!result.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromBool(result.value());
   }
 };
 

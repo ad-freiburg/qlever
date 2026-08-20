@@ -102,3 +102,20 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
 }  // namespace detail
 
 }  // namespace ad_utility
+
+// Explicit instantiations of `georel` for the eight `geof:sf...` relations to
+// avoid linker problems (and to avoid including `GeometryInfoHelpersImpl.h`
+// from the header).
+#define QL_INSTANTIATE_GEOREL(joinType)                        \
+  template std::optional<bool>                                 \
+  ad_utility::detail::georel<SpatialJoinType::Enum::joinType>( \
+      const ad_utility::GeoPointOrWkt&, const ad_utility::GeoPointOrWkt&);
+
+QL_INSTANTIATE_GEOREL(INTERSECTS);
+QL_INSTANTIATE_GEOREL(CONTAINS);
+QL_INSTANTIATE_GEOREL(COVERS);
+QL_INSTANTIATE_GEOREL(CROSSES);
+QL_INSTANTIATE_GEOREL(TOUCHES);
+QL_INSTANTIATE_GEOREL(EQUALS);
+QL_INSTANTIATE_GEOREL(OVERLAPS);
+QL_INSTANTIATE_GEOREL(WITHIN);

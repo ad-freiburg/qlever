@@ -586,12 +586,6 @@ struct UtilGeomForDE9IMVisitor {
 
 static constexpr UtilGeomForDE9IMVisitor utilGeomForDE9IM;
 
-inline DBox neutralBoundingBox() {
-  static constexpr CoordType dMin = std::numeric_limits<CoordType>::lowest();
-  static constexpr CoordType dMax = std::numeric_limits<CoordType>::max();
-  return DBox{{dMin, dMin}, {dMax, dMax}};
-}
-
 inline DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
   auto lSorted = std::visit(utilGeomForDE9IM, left);
   auto rSorted = std::visit(utilGeomForDE9IM, right);
@@ -600,11 +594,12 @@ inline DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
     for (const auto& entryRight : rSorted) {
       m += std::visit(
           [](const auto& a, const auto& b) {
+            // `libspatialjoin` only provides `DE9IM(Point, XSortedLine)` and
+            // `DE9IM(Point, XSortedPolygon)` overloads (not the reverse
+            // argument order), so swap and transpose the resulting matrix
+            // whenever the point is the second argument.
             if constexpr (SimilarTo<decltype(b), DPoint>) {
               return DE9IM(b, a).transpose();
-            } else if constexpr (SimilarTo<decltype(a), DXSortedLine> &&
-                                 SimilarTo<decltype(b), DXSortedLine>) {
-              return DE9IM(a, b, neutralBoundingBox(), neutralBoundingBox());
             } else {
               return DE9IM(a, b);
             }
@@ -659,8 +654,7 @@ inline bool DE9IMatrixSatisfies(DE9IMatrix m, std::optional<uint8_t> dimLeft,
     // either geometry is unknown (a mixed geometry collection), we cannot
     // apply this dimension-dependent check and conservatively treat only the
     // line-line case as a potential match.
-    if (!dimLeft.has_value() || !dimRight.has_value() ||
-        dimLeft == dimRight) {
+    if (!dimLeft.has_value() || !dimRight.has_value() || dimLeft == dimRight) {
       return dimLeft == 1 && dimRight == 1 && m.II() == D0;
     }
     return dimLeft < dimRight ? (m.II() && m.IE()) : (m.II() && m.EI());
