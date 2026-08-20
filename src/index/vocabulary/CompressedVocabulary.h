@@ -112,17 +112,19 @@ CPP_template(typename UnderlyingVocabulary,
   // matches `indices`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
-    auto compressed = underlyingVocabulary_.lookupBatch(indices);
-    AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
+    // Still encoded; decompression into the PMR arena happens below.
+    auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
+    AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size());
 
     auto buffer = std::make_unique<ql::pmr::monotonic_buffer_resource>();
     std::vector<std::string_view> views;
     views.reserve(indices.size());
 
-    for (const auto& idxAndWord : ::ranges::views::zip(indices, *compressed)) {
-      const auto& [idx, word] = idxAndWord;
+    for (const auto& idxAndCompressedWord :
+         ::ranges::views::zip(indices, *compressedWords)) {
+      const auto& [idx, compressedWord] = idxAndCompressedWord;
       std::string decompressed =
-          compressionWrapper_.decompress(word, getDecoderIdx(idx));
+          compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
       char* mem = static_cast<char*>(buffer->allocate(decompressed.size()));
       std::memcpy(mem, decompressed.data(), decompressed.size());
       views.emplace_back(mem, decompressed.size());
