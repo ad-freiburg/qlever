@@ -596,6 +596,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // processing had been allowed without access token).
   bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
 
+  // We always want to call `serverProcessHelpers::requireValidAccessToken`
+  // with the same `accessTokenOk`.
+  auto requireValidAccessToken = absl::bind_front(
+      &serverProcessHelpers::requireValidAccessToken, accessTokenOk);
+
   // Check if the current command is selected in the parameters from the
   // `parsedHttpRequest.parameters_`. If so, log this information via
   // `dispatchLog()` and return true. Return false otherwise.
@@ -700,7 +705,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Prometheus metrics scrape endpoint.
   if (parsedHttpRequest.path_ == "/metrics") {
-    requireValidAccessToken(accessTokenOk, "metrics");
+    requireValidAccessToken("metrics");
     if (!metricsReader_) {
       response = createNotFoundResponse(
           "Metrics not enabled (use --enable-metrics)", request);
@@ -712,7 +717,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Set description of KB index.
   if (auto description = checkParameter("index-description", std::nullopt)) {
-    requireValidAccessToken(accessTokenOk, "index-description");
+    requireValidAccessToken("index-description");
     AD_LOG_INFO << "Setting index description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setKbName(std::string{description.value()});
@@ -721,7 +726,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 
   // Set description of text index.
   if (auto description = checkParameter("text-description", std::nullopt)) {
-    requireValidAccessToken(accessTokenOk, "text-description");
+    requireValidAccessToken("text-description");
     AD_LOG_INFO << "Setting text description to: \"" << description.value()
                 << "\"" << std::endl;
     index.setTextName(std::string{description.value()});
@@ -731,7 +736,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // Set one or several of the runtime parameters.
   for (auto key : globalRuntimeParameters.rlock()->getKeys()) {
     if (auto value = checkParameter(key, std::nullopt)) {
-      requireValidAccessToken(accessTokenOk, "setting runtime parameters");
+      requireValidAccessToken("setting runtime parameters");
       AD_LOG_INFO << "Setting runtime parameter \"" << key << "\""
                   << " to value \"" << value.value() << "\"" << std::endl;
       globalRuntimeParameters.wlock()->setFromString(
@@ -821,9 +826,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "following update was sent instead of an query: ",
         dummy);
   };
-  auto visitUpdate = [&index, &visitOperation,
-                      &accessTokenOk](Update update) -> Awaitable<void> {
-    requireValidAccessToken(accessTokenOk, "SPARQL Update");
+  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
+                         Update update) -> Awaitable<void> {
+    requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
     // needs it.
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
@@ -839,8 +844,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         "following query was sent instead of an update: ",
         tracer);
   };
-  auto visitGraphStore = [&request, &visitOperation, &accessTokenOk, &index](
-                             GraphStoreOperation operation) -> Awaitable<void> {
+  auto visitGraphStore =
+      [&request, &visitOperation, &requireValidAccessToken,
+       &index](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
@@ -851,8 +857,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
       AD_CORRECTNESS_CHECK(
           ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
-      requireValidAccessToken(accessTokenOk,
-                              "Update from Graph Store Protocol");
+      requireValidAccessToken("Update from Graph Store Protocol");
     }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
