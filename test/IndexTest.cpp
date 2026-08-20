@@ -1252,7 +1252,7 @@ TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
   EXPECT_THAT(logStream.str(),
               ::testing::HasSubstr(
                   "Key \"locale\" is missing in the metadata. This is probably "
-                  "and old index build that is no longer supported"));
+                  "an old index build that is no longer supported"));
 }
 
 // _____________________________________________________________________________

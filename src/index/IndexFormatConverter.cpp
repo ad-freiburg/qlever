@@ -660,8 +660,8 @@ std::string conversionDescription() {
       "else "
       "changes. The index that is converted is not modified.\n\nNote that "
       "rebuilding the index from its input files is still the recommended way "
-      "to move to a new index format, because only that also profits from the "
-      "improvements that came with it");
+      "to move to a new index format, because it also profits from all "
+      "improvements to the index building since the index was built.");
 }
 
 // _____________________________________________________________________________
@@ -690,11 +690,16 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
                                  const std::string& newBasename) {
   AD_CONTRACT_CHECK(!oldBasename.empty() && !newBasename.empty(),
                     "The base names of the indexes must not be empty");
-  AD_CONTRACT_CHECK(
-      fs::path{oldBasename}.lexically_normal() !=
-          fs::path{newBasename}.lexically_normal(),
-      "The base name of the converted index has to differ from the base name "
-      "of the index that is converted");
+  // NOTE: This is a user-facing error and not a requirement violation, because
+  // passing the same base name twice is an easy mistake to make on the command
+  // line of `qlever-convert-index`.
+  if (fs::path{oldBasename}.lexically_normal() ==
+      fs::path{newBasename}.lexically_normal()) {
+    throw std::runtime_error{
+        "The base name of the converted index has to differ from the base "
+        "name of the index that is converted, because the index that is "
+        "converted is not modified"};
+  }
   checkThatTheSupportedFormatsAreUpToDate();
 
   auto configuration = readAndCheckConfiguration(oldBasename);

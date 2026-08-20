@@ -1419,9 +1419,9 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
               << "As a third alternative, the `qlever-convert-index` binary "
                  "can rewrite this index into the current index format, which "
                  "is much faster than rebuilding it. Note that rebuilding the "
-                 "index is still the recommended way, because only that also "
-                 "profits from the improvements that came with the new index "
-                 "format."
+                 "index is still the recommended way, because it also profits "
+                 "from all improvements to the index building since this "
+                 "index was built."
               << std::endl;
         }
       }
@@ -1474,7 +1474,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   } else {
     AD_LOG_ERROR
         << "Key \"locale\" is missing in the metadata. This is probably "
-           "and old index build that is no longer supported by QLever. "
+           "an old index build that is no longer supported by QLever. "
            "Please rebuild your index\n";
     throw std::runtime_error(
         "Missing required key \"locale\" in index build's metadata");

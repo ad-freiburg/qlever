@@ -488,6 +488,19 @@ TEST_F(IndexFormatConverterTest, emptyBasenamesAreARequirementViolation) {
                                HasSubstr("must not be empty"));
 }
 
+// _____________________________________________________________________________
+TEST_F(IndexFormatConverterTest, equalBasenamesAreAUserFacingError) {
+  // The comparison normalizes the paths, so also a spelled-differently base
+  // name of the same index is caught.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      convertIndexToCurrentFormat(oldBasename_, oldBasename_),
+      HasSubstr("has to differ from the base name"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      convertIndexToCurrentFormat(oldBasename_,
+                                  absl::StrCat("./", oldBasename_)),
+      HasSubstr("has to differ from the base name"));
+}
+
 // A fixture for the conversion of indexes with properties that the checked-in
 // index in the previous format (see `oldIndexDirectory` above) does not have:
 // permutations with more than one block, empty permutations, and a relation
