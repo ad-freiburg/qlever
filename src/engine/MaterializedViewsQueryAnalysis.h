@@ -68,6 +68,26 @@ struct ByCacheKeyInfo {
 };
 using ByCacheKeyInfoPtr = std::shared_ptr<const ByCacheKeyInfo>;
 
+// A reusable, per-view cache-key "template" for a fixed first column,
+// computed once when the view is loaded (see `QueryPatternCache::analyzeView`)
+// by planning the view's own query with a real, sampled value (see
+// `sampleFirstColumnValue` in the .cpp) substituted for its first column, in
+// place of the value that any particular later query fixes it to. Substituting
+// a real query value's serialized form for `placeholderValue_`'s in
+// `cacheKeyTemplate_` (see `addCacheKeysWithFixedFirstColumn`) cheaply
+// reproduces the cache key that a full replan with that value would produce --
+// PROVIDED the plan has the same shape for both, which is not guaranteed (e.g.
+// if cost-based planning picks a different join order due to a different
+// value's estimated selectivity). This is a greedy performance optimization
+// over replanning per candidate value: on a mismatch, the guessed cache key
+// simply matches nothing in `QueryPatternCache::byCacheKey_` later, the same
+// outcome as any other case that is not eligible for the rewrite.
+struct FixedFirstColumnCacheKeyTemplate {
+  ad_utility::HashMap<size_t, size_t> colMapping_;
+  std::string cacheKeyTemplate_;
+  TripleComponent placeholderValue_;
+};
+
 // Cache keys of views whose first column is fixed to a value taken from the
 // query that is currently being planned. Unlike the cache keys in
 // `QueryPatternCache::byCacheKey_` these cannot be computed when a view is
@@ -107,6 +127,11 @@ class QueryPatternCache {
 
   ad_utility::HashMap<std::string, ByCacheKeyInfoPtr> byCacheKey_;
 
+  // Precomputed fixed-first-column cache-key templates, one entry per view
+  // whose first column can be fixed at all (see `substituteFirstColumn`).
+  ad_utility::HashMap<ViewPtr, std::vector<FixedFirstColumnCacheKeyTemplate>>
+      fixedFirstColumnTemplates_;
+
   // NOTE: When a new data structure for caching is added here, the unloading
   // should also be implemented in the `removeView` method.
  public:
@@ -141,6 +166,23 @@ class QueryPatternCache {
       parsedQuery::MaterializedViewQuery::RequestedColumns columns) const;
 
   ByCacheKeyInfoPtr lookupByCacheKey(const std::string& cacheKey) const;
+
+  // For each view with a `FixedFirstColumnCacheKeyTemplate` whose first column
+  // can be fixed to a value occurring in `triples`, substitute that value into
+  // the template (see `FixedFirstColumnCacheKeyTemplate`) and add it to
+  // `result`. Candidate values are found by looking at the query triples whose
+  // predicate and position (subject or object) match a top-level triple of the
+  // view's query in which the first column's variable occurs.
+  //
+  // Unlike computing the cache key of the view's own query with a value
+  // substituted from scratch (which requires a full replan per candidate
+  // value), this only does a cheap string substitution into a template that
+  // was already planned once when the view was loaded, so it is fast enough to
+  // run for every query, regardless of whether the dynamic-programming or the
+  // greedy query planner is used.
+  void addCacheKeysWithFixedFirstColumn(
+      const parsedQuery::BasicGraphPattern& triples,
+      ViewCacheKeysWithFixedFirstColumn& result) const;
 
  private:
   // Helper for `analyzeView`, that checks for a simple chain. It returns `true`
@@ -199,23 +241,6 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 // top-level triple. See the implementation for the full list of reasons.
 bool substituteFirstColumn(ParsedQuery& parsed, const Variable& variable,
                            const TripleComponent& value);
-
-// For each of `views` whose first column can be fixed to a value occurring in
-// `triples`, compute the cache key of the view's own query with that value
-// substituted (see `substituteFirstColumn`) and add it to `result`. Candidate
-// values are found by looking at the query triples whose predicate and
-// position (subject or object) match a top-level triple of the view's query in
-// which the first column's variable occurs.
-//
-// This has to plan the view's query once per candidate value, so it is only
-// worthwhile for queries that the dynamic programming query planner handles:
-// it turns the cache-key based rewriting, which is exhaustive under dynamic
-// programming because every subset of the query's triples is built as a
-// `QueryExecutionTree`, into one that also covers a fixed first column.
-void addCacheKeysWithFixedFirstColumn(
-    QueryExecutionContext* qec, const std::vector<ViewPtr>& views,
-    const parsedQuery::BasicGraphPattern& triples,
-    ViewCacheKeysWithFixedFirstColumn& result);
 
 // Hash map for the `BIND`-to-column map.
 using BindExpressionAndTargetCol = ad_utility::HashMap<std::string, size_t>;

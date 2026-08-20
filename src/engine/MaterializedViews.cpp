@@ -871,21 +871,8 @@ void MaterializedViewsManager::registerCacheKeysWithFixedFirstColumn(
     QueryExecutionContext* qec,
     const parsedQuery::BasicGraphPattern& triples) const {
   if (qec == nullptr || triples._triples.empty() ||
-      qec->disableMaterializedViewRewriting() || qec->disableCaching()) {
-    return;
-  }
-  // Only a snapshot of the views is taken under the lock: computing the cache
-  // keys plans the views' own queries, which must not hold this lock (see
-  // `MaterializedViewsManager::makeIndexScan`).
-  std::vector<materializedViewsQueryAnalysis::ViewPtr> views;
-  {
-    auto lock = loadedViews_.rlock();
-    views.reserve(lock->views_.size());
-    for (const auto& view : lock->views_ | ql::views::values) {
-      views.push_back(view);
-    }
-  }
-  if (views.empty()) {
+      qec->disableMaterializedViewRewriting() || qec->disableCaching() ||
+      !hasLoadedViews()) {
     return;
   }
   auto& perQuery = qec->viewCacheKeysWithFixedFirstColumn();
@@ -893,8 +880,13 @@ void MaterializedViewsManager::registerCacheKeysWithFixedFirstColumn(
     perQuery = std::make_shared<
         materializedViewsQueryAnalysis::ViewCacheKeysWithFixedFirstColumn>();
   }
-  materializedViewsQueryAnalysis::addCacheKeysWithFixedFirstColumn(
-      qec, views, triples, *perQuery);
+  // Unlike a full replan per candidate value, substituting into the views'
+  // precomputed cache-key templates is cheap (just string replacement), so it
+  // can safely happen right here under the read lock, without the
+  // snapshot-then-unlock dance that planning would otherwise require (see
+  // `MaterializedViewsManager::makeIndexScan`).
+  loadedViews_.rlock()->queryPatternCache_.addCacheKeysWithFixedFirstColumn(
+      triples, *perQuery);
 }
 
 // _____________________________________________________________________________

@@ -9,6 +9,8 @@
 
 #include "engine/MaterializedViewsQueryAnalysis.h"
 
+#include <absl/strings/str_replace.h>
+
 #include <algorithm>
 #include <optional>
 #include <variant>
@@ -17,6 +19,8 @@
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/VariableToColumnMap.h"
+#include "index/ExportIds.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/VariableCounter.h"
 #include "util/Algorithm.h"
@@ -24,6 +28,64 @@
 #include "util/VariantRangeFilter.h"
 
 namespace materializedViewsQueryAnalysis {
+
+namespace {
+
+// A real value for `view`'s first column, read directly from the view's own
+// materialized data (its smallest value, since the view is sorted on this
+// column), for use as the placeholder when computing a reusable
+// `FixedFirstColumnCacheKeyTemplate`. A synthetic value that provably does not
+// occur in the view (e.g. a reserved-namespace IRI) would not do: the query
+// planner's cost estimates for a scan depend on the actual selectivity of the
+// fixed value, so planning with a value that is known upfront to match zero
+// rows can pick a different (degenerate) plan shape than planning with a
+// value that occurs for real -- which is what every actual candidate value
+// from a user query, fixing a column of a view built to answer queries about
+// that column, is expected to look like. Returns `std::nullopt` if the view is
+// empty or its data cannot be read back as a `TripleComponent` (should not
+// normally happen).
+std::optional<TripleComponent> sampleFirstColumnValue(
+    QueryExecutionContext* qec, const MaterializedView& view) {
+  const auto& varToCol = view.variableToColumnMap();
+  MaterializedView::ColumnMapping identityColMap;
+  for (const auto& col : varToCol | ql::views::values) {
+    identityColMap.insert({col.columnIndex_, col.columnIndex_});
+  }
+  auto scan = view.makeIndexScan(qec, varToCol, identityColMap);
+  auto readFirstRow =
+      [&](const auto& idTable,
+          const LocalVocab& localVocab) -> std::optional<TripleComponent> {
+    if (idTable.numRows() == 0) {
+      return std::nullopt;
+    }
+    auto literalOrIri = ql::exportIds::idToLiteralOrIri(
+        qec->getIndex(), idTable(0, 0), localVocab);
+    if (!literalOrIri.has_value()) {
+      return std::nullopt;
+    }
+    return literalOrIri->isIri() ? TripleComponent{literalOrIri->getIri()}
+                                 : TripleComponent{literalOrIri->getLiteral()};
+  };
+  auto result = scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  if (result->isFullyMaterialized()) {
+    return readFirstRow(result->idTableView(), result->localVocab());
+  }
+  for (auto& [idTable, localVocab] : result->idTables()) {
+    return readFirstRow(idTable, localVocab);
+  }
+  return std::nullopt;
+}
+
+// The exact substring that `IndexScan::getCacheKeyImpl` (and any other
+// operation that embeds a fixed `TripleComponent` the same way) produces for a
+// triple component fixed to `value`. Anchored on `= "..."` so that replacing
+// it can only ever touch an actually-embedded value, never unrelated cache-key
+// syntax (column counts, operation names, etc.).
+std::string cacheKeyValueAnchor(const TripleComponent& value) {
+  return absl::StrCat(" = \"", toRdfLiteral(value), "\"");
+}
+
+}  // namespace
 
 // _____________________________________________________________________________
 std::vector<MaterializedViewJoinReplacement>
@@ -404,6 +466,32 @@ bool QueryPatternCache::analyzeView(ViewPtr view, QueryExecutionContext* qec) {
   bool cacheKeyAdded = insert(full);
   cacheKeyAdded = insert(withoutInvariant) || cacheKeyAdded;
 
+  // If the view's first column can be fixed at all (see
+  // `substituteFirstColumn`), precompute a `FixedFirstColumnCacheKeyTemplate`
+  // once here, so that fixing it to an actual value later, for any number of
+  // queries, is a cheap string substitution instead of a full replan (see
+  // `addCacheKeysWithFixedFirstColumn`).
+  if (qec != nullptr && view->firstColumnVariable().has_value()) {
+    if (auto placeholder = sampleFirstColumnValue(qec, *view);
+        placeholder.has_value()) {
+      auto [fixedFull, fixedWithoutInvariant] =
+          view->computeCacheKey(qec, placeholder.value());
+      std::vector<FixedFirstColumnCacheKeyTemplate> templates;
+      auto addTemplate = [&templates, &placeholder](auto& cacheKeyAndCol) {
+        if (cacheKeyAndCol.has_value()) {
+          templates.push_back({std::move(cacheKeyAndCol.value().columnMapping_),
+                               std::move(cacheKeyAndCol.value().cacheKey_),
+                               placeholder.value()});
+        }
+      };
+      addTemplate(fixedFull);
+      addTemplate(fixedWithoutInvariant);
+      if (!templates.empty()) {
+        fixedFirstColumnTemplates_.insert({view, std::move(templates)});
+      }
+    }
+  }
+
   if (parsed.value().isAggregatingQuery()) {
     explainIgnore(
         "The view's query aggregates (GROUP BY, either explicit or implicit "
@@ -504,6 +592,9 @@ void QueryPatternCache::removeView(ViewPtr view) {
     AD_CORRECTNESS_CHECK(pair.second != nullptr);
     return pair.second->view_ == view;
   });
+
+  // Remove `view`'s fixed-first-column cache-key template, if any.
+  fixedFirstColumnTemplates_.erase(view);
 }
 
 // _____________________________________________________________________________
@@ -600,12 +691,29 @@ std::vector<FirstColumnAnchor> firstColumnAnchors(const ParsedQuery& parsed,
 }
 
 // Hard cap on the number of candidate values considered per view and query.
-// Each one costs a full (but small) run of the query planner on the view's own
-// query, and the anchors already restrict the candidates to the fixed values
-// that occur with the right predicate in the right position, of which a real
-// query has one or two. ponytail: fixed constant, promote to a runtime
-// parameter only if a real workload needs it tuned.
+// The anchors already restrict the candidates to the fixed values that occur
+// with the right predicate in the right position, of which a real query has
+// one or two; this is just a defensive bound against a pathological query
+// (e.g. a huge `VALUES` clause). ponytail: fixed constant, promote to a
+// runtime parameter only if a real workload needs it tuned.
 constexpr size_t kMaxCandidateValuesPerView = 8;
+
+// Cheaply approximate the cache key that a full replan of a view's query with
+// its first column fixed to `value` would produce, by substituting `value`
+// for the sampled placeholder value that `cacheKeyTemplate` was planned with
+// once (see `sampleFirstColumnValue` and `QueryPatternCache::analyzeView`).
+// This is exact whenever the plan's shape does not depend on which value is
+// fixed (the common case for a view's own, typically small, defining query);
+// if it does not hold for a particular value, the result simply matches
+// nothing real later on -- see `FixedFirstColumnCacheKeyTemplate`.
+std::string substituteValueInCacheKeyTemplate(
+    const FixedFirstColumnCacheKeyTemplate& cacheKeyTemplate,
+    const TripleComponent& value) {
+  return absl::StrReplaceAll(
+      cacheKeyTemplate.cacheKeyTemplate_,
+      {{cacheKeyValueAnchor(cacheKeyTemplate.placeholderValue_),
+        cacheKeyValueAnchor(value)}});
+}
 
 }  // namespace
 
@@ -678,16 +786,15 @@ bool substituteFirstColumn(ParsedQuery& parsed, const Variable& variable,
 }
 
 // _____________________________________________________________________________
-void addCacheKeysWithFixedFirstColumn(
-    QueryExecutionContext* qec, const std::vector<ViewPtr>& views,
+void QueryPatternCache::addCacheKeysWithFixedFirstColumn(
     const parsedQuery::BasicGraphPattern& triples,
-    ViewCacheKeysWithFixedFirstColumn& result) {
-  for (const auto& view : views) {
+    ViewCacheKeysWithFixedFirstColumn& result) const {
+  for (const auto& [view, templates] : fixedFirstColumnTemplates_) {
     const auto& parsed = view->parsedQuery();
     auto variable = view->firstColumnVariable();
-    if (!parsed.has_value() || !variable.has_value()) {
-      continue;
-    }
+    // A template only ever gets stored for a view with a parsed query and a
+    // first-column variable, see `analyzeView`.
+    AD_CORRECTNESS_CHECK(parsed.has_value() && variable.has_value());
     auto anchors = firstColumnAnchors(parsed.value(), variable.value());
     if (anchors.empty()) {
       continue;
@@ -715,21 +822,14 @@ void addCacheKeysWithFixedFirstColumn(
     }
 
     for (const auto& value : values) {
-      // A key that is already known (from an earlier graph pattern of the same
-      // query, or from the view's other key) is kept.
-      auto insert = [&result, &view, &value](auto& cacheKeyAndCol) {
-        if (!cacheKeyAndCol.has_value()) {
-          return;
-        }
+      for (const auto& cacheKeyTemplate : templates) {
+        // A key that is already known (from an earlier graph pattern of the
+        // same query, or from the view's other template) is kept.
         result.keys_.insert(
-            {std::move(cacheKeyAndCol.value().cacheKey_),
-             std::make_shared<ByCacheKeyInfo>(ByCacheKeyInfo{
-                 view, std::move(cacheKeyAndCol.value().columnMapping_),
-                 value})});
-      };
-      auto [full, withoutInvariant] = view->computeCacheKey(qec, value);
-      insert(full);
-      insert(withoutInvariant);
+            {substituteValueInCacheKeyTemplate(cacheKeyTemplate, value),
+             std::make_shared<ByCacheKeyInfo>(
+                 ByCacheKeyInfo{view, cacheKeyTemplate.colMapping_, value})});
+      }
     }
   }
 }
