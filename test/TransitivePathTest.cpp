@@ -16,6 +16,7 @@
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/ValuesForTesting.h"
+#include "global/Constants.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -933,6 +934,57 @@ TEST_P(TransitivePathTest, bothBoundToVar) {
       testCaseFunc, std::move(leftOpTable), std::move(rightOpTable));
 }
 
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, amountOfPayloadColumnsExceedsStaticLimit) {
+  // This tests the specific behaviour of the code when there are more payload
+  // columns given as defined in `DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE`.
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {1, 4},
+      {4, 3},
+      {4, 4},
+  });
+
+  auto rightOpTable = makeIdTableFromVector({{3}});
+
+  auto expected = makeIdTableFromVector({{4, 3}, {1, 3}});
+
+  std::vector<std::optional<Variable>> sideVariables = {Variable{"?target"}};
+
+  for (size_t col = 1; col < DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE + 2;
+       col++) {
+    auto colPayloadId = V(10 + col);
+    rightOpTable.addEmptyColumn();
+    rightOpTable.at(0, col) = colPayloadId;
+
+    expected.addEmptyColumn();
+    expected.at(0, col + 1) = colPayloadId;
+    expected.at(1, col + 1) = colPayloadId;
+    sideVariables.emplace_back(
+        std::optional{Variable{"?x" + std::to_string(col)}});
+  }
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 0, sideVariables, left, right, 1,
+            std::numeric_limits<size_t>::max(), forceFullyMaterialized);
+
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(rightOpTable));
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, amountOfPayloadColumnsExceedsStaticLimitBothBound) {
+  // This tests the specific behaviour of the code when the amount of payload
+  // columns from both sides totals beyond
+  // `DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE`.
+}
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
   auto sub = makeIdTableFromVector({
