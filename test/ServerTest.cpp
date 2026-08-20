@@ -45,6 +45,27 @@ auto expectForbiddenError = [](auto call, auto messageMatcher,
     EXPECT_THAT(e.what(), messageMatcher);
   }
 };
+
+// Expect that calling `fn()` throws with a message stating that `actionName`
+// requires a valid access token.
+auto expectRequiresValidAccessToken = [](std::string_view actionName, auto fn,
+                                         ad_utility::source_location l =
+                                             AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      fn(), testing::HasSubstr(
+                absl::StrCat(actionName, " requires a valid access token")));
+};
+
+// Build a GET request for `target` with an `access-token` Bearer header
+// attached.
+auto makeGetRequestWithAccessToken = [](std::string target,
+                                        std::string accessToken) {
+  auto request = makeGetRequest(std::move(target));
+  request.set(http::field::authorization, "Bearer " + accessToken);
+  return request;
+};
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -374,22 +395,19 @@ TEST(ServerTest, metricsEndpoint) {
                           ad_utility::source_location l =
                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto request = makeGetRequest("/metrics");
-    if (accessToken.has_value()) {
-      request.set(http::field::authorization, "Bearer " + accessToken.value());
-    }
+    auto request =
+        accessToken.has_value()
+            ? makeGetRequestWithAccessToken("/metrics", accessToken.value())
+            : makeGetRequest("/metrics");
     auto response = server.process(request);
 
     EXPECT_THAT(response, responseMatcher);
     EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };
-  auto expectRequiresAccessToken = [&](auto& server,
-                                       ad_utility::source_location l =
-                                           AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        expectMetrics(std::nullopt, server, testing::_, testing::_),
-        testing::HasSubstr("metrics requires a valid access token"));
+  auto expectMetricsRequiresAccessToken = [&](auto& server) {
+    expectRequiresValidAccessToken("metrics", [&] {
+      expectMetrics(std::nullopt, server, testing::_, testing::_);
+    });
   };
   auto UpdateRequest = [](std::string update) {
     return makeRequest(
@@ -419,19 +437,19 @@ TEST(ServerTest, metricsEndpoint) {
   };
   {
     auto server = makeServerWithMetrics(nullptr);
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
     expectMetrics("accessToken", server, StatusIs(http::status::not_found),
                   testing::StrEq("Metrics not enabled (use --enable-metrics)"));
   }
   {
     auto server = makeServerWithMetrics(std::make_shared<FakeMetricsReader>());
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
     expectMetrics("accessToken", server, StatusIs(http::status::ok),
                   testing::HasSubstr("fake_counter 42"));
   }
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
   }
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
@@ -518,23 +536,16 @@ TEST(ServerTest, clearDeltaTriples) {
   EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
   expectCounts(DeltaTriplesCount{1, 0});
 
-  auto clearRequest = [](std::optional<std::string> accessToken) {
-    auto request = makeGetRequest("/?cmd=clear-delta-triples");
-    if (accessToken.has_value()) {
-      request.set(http::field::authorization, "Bearer " + accessToken.value());
-    }
-    return request;
-  };
-
   // The command requires a valid access token.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      server.process(clearRequest(std::nullopt)),
-      testing::HasSubstr("clear-delta-triples requires a valid access token"));
+  expectRequiresValidAccessToken("clear-delta-triples", [&] {
+    server.process(makeGetRequest("/?cmd=clear-delta-triples"));
+  });
   expectCounts(DeltaTriplesCount{1, 0});
 
   // With a valid access token, the delta triples are cleared and the response
   // reports the (now empty) resulting counts.
-  auto response = server.process(clearRequest("accessToken"));
+  auto response = server.process(makeGetRequestWithAccessToken(
+      "/?cmd=clear-delta-triples", "accessToken"));
   EXPECT_THAT(response, StatusIs(http::status::ok));
   EXPECT_THAT(responseBodyAsJson(std::move(response)),
               testing::Optional(testing::Eq(
@@ -570,23 +581,16 @@ TEST(ServerTest, vacuumDeltaTriples) {
   EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
   expectCounts(DeltaTriplesCount{1, 0});
 
-  auto vacuumRequest = [](std::optional<std::string> accessToken) {
-    auto request = makeGetRequest("/?cmd=vacuum-delta-triples");
-    if (accessToken.has_value()) {
-      request.set(http::field::authorization, "Bearer " + accessToken.value());
-    }
-    return request;
-  };
-
   // The command requires a valid access token.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      server.process(vacuumRequest(std::nullopt)),
-      testing::HasSubstr("vacuum-delta-triples requires a valid access token"));
+  expectRequiresValidAccessToken("vacuum-delta-triples", [&] {
+    server.process(makeGetRequest("/?cmd=vacuum-delta-triples"));
+  });
   expectCounts(DeltaTriplesCount{1, 0});
 
   // With a valid access token, the redundant insertion is vacuumed away and
   // the response reports the resulting stats.
-  auto response = server.process(vacuumRequest("accessToken"));
+  auto response = server.process(makeGetRequestWithAccessToken(
+      "/?cmd=vacuum-delta-triples", "accessToken"));
   EXPECT_THAT(response, StatusIs(http::status::ok));
   auto body = responseBodyAsJson(std::move(response));
   ASSERT_TRUE(body.has_value());
