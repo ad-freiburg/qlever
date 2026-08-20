@@ -198,11 +198,11 @@ class SplitVocabulary {
     std::vector<VocabBatchOwner> owners;
     owners.reserve(markerLookups.numNonemptyMarkers_);
     for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
-      if (markerLookups.lookupResultByMarker[marker] == nullptr) {
+      if (markerLookups.lookupResultByMarker_[marker] == nullptr) {
         continue;
       }
       scatterVocabBatchLookupResult(
-          std::move(markerLookups.lookupResultByMarker[marker]),
+          std::move(markerLookups.lookupResultByMarker_[marker]),
           resultPositionByMarker[marker], viewsInInputOrder, owners);
     }
     return keepAliveVocabBatch(std::move(owners), std::move(viewsInInputOrder));
@@ -296,7 +296,8 @@ class SplitVocabulary {
     // One marker: return that batch. Mixed markers cannot share one buffer.
     if (markerLookups.numNonemptyMarkers_ == 1) {
       return std::move(
-          markerLookups.lookupResultByMarker_[markerLookups.lastNonemptyMarker_]);
+          markerLookups
+              .lookupResultByMarker_[markerLookups.lastNonemptyMarker_]);
     }
     return mergeMarkerBatchesInInputOrder(indices, std::move(markerLookups));
   }
