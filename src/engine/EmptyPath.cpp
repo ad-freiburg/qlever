@@ -402,7 +402,6 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   for (IdTable& part : scanIndex(std::move(ids))) {
     matches.insertAtEnd(part);
   }
-  ql::span<const Id> matchedIds = matches.getColumn(0);
 
   IdTable result{getResultWidth(), allocator()};
   result.reserve(std::min(chunkSize_, table.numRows()));
